@@ -880,6 +880,42 @@ def test_stream_sanitizes_thread_id():
     assert not passed_config["configurable"]
 
 
+def test_stream_forwards_context():
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = []
+    remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+
+    context = {"user_id": "user-123"}
+    list(
+        remote_pregel.stream(
+            {"input": {"messages": []}},
+            {"configurable": {"thread_id": "thread_2"}},
+            context=context,
+        )
+    )
+
+    _, kwargs = mock_sync_client.runs.stream.call_args
+    assert kwargs["context"] == context
+
+
+def test_invoke_forwards_context():
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = [
+        StreamPart(event="values", data={"messages": []})
+    ]
+    remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+
+    context = {"user_id": "user-123"}
+    remote_pregel.invoke(
+        {"input": {"messages": []}},
+        {"configurable": {"thread_id": "thread_1"}},
+        context=context,
+    )
+
+    _, kwargs = mock_sync_client.runs.stream.call_args
+    assert kwargs["context"] == context
+
+
 @pytest.mark.anyio
 async def test_ainvoke():
     # set up test
@@ -906,6 +942,47 @@ async def test_ainvoke():
     )
 
     assert result == {"messages": [{"type": "human", "content": "world"}]}
+
+
+@pytest.mark.anyio
+async def test_astream_forwards_context():
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = []
+    mock_async_client.runs.stream.return_value = async_iter
+    remote_pregel = RemoteGraph("test_graph_id", client=mock_async_client)
+
+    context = {"user_id": "user-123"}
+    async for _ in remote_pregel.astream(
+        {"input": {"messages": []}},
+        {"configurable": {"thread_id": "thread_1"}},
+        context=context,
+    ):
+        pass
+
+    _, kwargs = mock_async_client.runs.stream.call_args
+    assert kwargs["context"] == context
+
+
+@pytest.mark.anyio
+async def test_ainvoke_forwards_context():
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = [
+        StreamPart(event="values", data={"messages": []})
+    ]
+    mock_async_client.runs.stream.return_value = async_iter
+    remote_pregel = RemoteGraph("test_graph_id", client=mock_async_client)
+
+    context = {"user_id": "user-123"}
+    await remote_pregel.ainvoke(
+        {"input": {"messages": []}},
+        {"configurable": {"thread_id": "thread_1"}},
+        context=context,
+    )
+
+    _, kwargs = mock_async_client.runs.stream.call_args
+    assert kwargs["context"] == context
 
 
 @pytest.mark.skip(
