@@ -646,16 +646,16 @@ def _update_auth_path(
     # Check faux packages first (higher priority)
     for faux_path, (_, destpath) in local_deps.faux_pkgs.items():
         if resolved.is_relative_to(faux_path):
-            new_path = f"{destpath}/{resolved.relative_to(faux_path)}:{attr_str}"
+            rel = resolved.relative_to(faux_path).as_posix()
+            new_path = f"{destpath}/{rel}:{attr_str}"
             auth_conf["path"] = new_path
             return
 
     # Check real packages
     for real_path in local_deps.real_pkgs:
         if resolved.is_relative_to(real_path):
-            new_path = (
-                f"/deps/{real_path.name}/{resolved.relative_to(real_path)}:{attr_str}"
-            )
+            rel = resolved.relative_to(real_path).as_posix()
+            new_path = f"/deps/{real_path.name}/{rel}:{attr_str}"
             auth_conf["path"] = new_path
             return
 
@@ -689,16 +689,16 @@ def _update_encryption_path(
     # Check faux packages first (higher priority)
     for faux_path, (_, destpath) in local_deps.faux_pkgs.items():
         if resolved.is_relative_to(faux_path):
-            new_path = f"{destpath}/{resolved.relative_to(faux_path)}:{attr_str}"
+            rel = resolved.relative_to(faux_path).as_posix()
+            new_path = f"{destpath}/{rel}:{attr_str}"
             encryption_conf["path"] = new_path
             return
 
     # Check real packages
     for real_path in local_deps.real_pkgs:
         if resolved.is_relative_to(real_path):
-            new_path = (
-                f"/deps/{real_path.name}/{resolved.relative_to(real_path)}:{attr_str}"
-            )
+            rel = resolved.relative_to(real_path).as_posix()
+            new_path = f"/deps/{real_path.name}/{rel}:{attr_str}"
             encryption_conf["path"] = new_path
             return
 
