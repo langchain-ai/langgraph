@@ -187,6 +187,43 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         loaded = self.serde.loads_typed((type_, checkpoint))
         return (loaded["ts"], checkpoint_id)
 
+    def _resolve_before_order_key(
+        self,
+        cur: sqlite3.Cursor,
+        config: RunnableConfig | None,
+        before: RunnableConfig | None,
+    ) -> tuple[str, str] | None:
+        if before is None:
+            return None
+        before_checkpoint_id = get_checkpoint_id(before)
+        if before_checkpoint_id is None:
+            return None
+
+        before_configurable = before.get("configurable", {})
+        thread_id = before_configurable.get("thread_id")
+        if thread_id is None and config is not None:
+            thread_id = str(config["configurable"]["thread_id"])
+        if thread_id is None:
+            return None
+
+        checkpoint_ns = before_configurable.get("checkpoint_ns")
+        if checkpoint_ns is None:
+            checkpoint_ns = (
+                config["configurable"].get("checkpoint_ns", "")
+                if config is not None
+                else ""
+            )
+
+        cur.execute(
+            "SELECT checkpoint_id, type, checkpoint FROM checkpoints WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+            (thread_id, checkpoint_ns, before_checkpoint_id),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+
+        return self._checkpoint_order_key(row[0], row[1], row[2])
+
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database.
 
@@ -342,7 +379,8 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             >>> print(checkpoints)
             [CheckpointTuple(...), ...]
         """
-        where, param_values = search_where(config, filter, before)
+        before_checkpoint_id = get_checkpoint_id(before) if before is not None else None
+        where, param_values = search_where(config, filter, None)
         query = f"""SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata
         FROM checkpoints
         {where}"""
@@ -353,6 +391,17 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 key=lambda row: self._checkpoint_order_key(row[2], row[4], row[5]),
                 reverse=True,
             )
+            before_key = self._resolve_before_order_key(cur, config, before)
+            if before_checkpoint_id is not None:
+                if before_key is not None:
+                    rows = [
+                        row
+                        for row in rows
+                        if self._checkpoint_order_key(row[2], row[4], row[5])
+                        < before_key
+                    ]
+                else:
+                    rows = [row for row in rows if row[2] < before_checkpoint_id]
             if limit is not None:
                 rows = rows[:limit]
             for (

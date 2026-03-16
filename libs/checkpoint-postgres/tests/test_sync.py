@@ -270,7 +270,7 @@ def test_equal_timestamp_order_uses_checkpoint_id_tiebreak(
         checkpoint_b["ts"] = checkpoint_a["ts"]
 
         stored_a = saver.put(config, checkpoint_a, {}, {})
-        saver.put(stored_a, checkpoint_b, {}, {})
+        stored_b = saver.put(stored_a, checkpoint_b, {}, {})
 
         latest = saver.get_tuple(config)
         listed = list(saver.list(config))
@@ -282,13 +282,34 @@ def test_equal_timestamp_order_uses_checkpoint_id_tiebreak(
             "checkpoint-a",
         ]
 
-        # search by config (defaults to checkpoints across all namespaces)
-        search_results_5 = list(saver.list({"configurable": {"thread_id": "thread-2"}}))
-        assert len(search_results_5) == 2
-        assert {
-            search_results_5[0].config["configurable"]["checkpoint_ns"],
-            search_results_5[1].config["configurable"]["checkpoint_ns"],
-        } == {"", "inner"}
+        paged = list(saver.list(config, before=stored_b))
+        assert [item.checkpoint["id"] for item in paged] == ["checkpoint-a"]
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+def test_before_pagination_uses_timestamp_tiebreak(
+    saver_name: str,
+) -> None:
+    with _saver(saver_name) as saver:
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-before",
+                "checkpoint_ns": "",
+            }
+        }
+        checkpoint_older = empty_checkpoint()
+        checkpoint_older["id"] = "z-older"
+        checkpoint_older["ts"] = "2024-01-01T00:00:00.000000+00:00"
+
+        checkpoint_newer = create_checkpoint(checkpoint_older, {}, 1)
+        checkpoint_newer["id"] = "a-newer"
+        checkpoint_newer["ts"] = "2024-01-02T00:00:00.000000+00:00"
+
+        stored_older = saver.put(config, checkpoint_older, {}, {})
+        stored_newer = saver.put(stored_older, checkpoint_newer, {}, {})
+
+        paged = list(saver.list(config, before=stored_newer))
+        assert [item.checkpoint["id"] for item in paged] == ["z-older"]
 
 
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])

@@ -101,6 +101,43 @@ class PostgresSaver(BasePostgresSaver):
         if self.pipe:
             self.pipe.sync()
 
+    def _resolve_before_order_key(
+        self,
+        cur: Cursor[DictRow],
+        config: RunnableConfig | None,
+        before: RunnableConfig | None,
+    ) -> tuple[str, str] | None:
+        if before is None:
+            return None
+        before_checkpoint_id = get_checkpoint_id(before)
+        if before_checkpoint_id is None:
+            return None
+
+        before_configurable = before.get("configurable", {})
+        thread_id = before_configurable.get("thread_id")
+        if thread_id is None and config is not None:
+            thread_id = config["configurable"].get("thread_id")
+        if thread_id is None:
+            return None
+
+        checkpoint_ns = before_configurable.get("checkpoint_ns")
+        if checkpoint_ns is None:
+            checkpoint_ns = (
+                config["configurable"].get("checkpoint_ns", "")
+                if config is not None
+                else ""
+            )
+
+        cur.execute(
+            "SELECT checkpoint FROM checkpoints WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s",
+            (thread_id, checkpoint_ns, before_checkpoint_id),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+
+        return (row["checkpoint"]["ts"], before_checkpoint_id)
+
     def list(
         self,
         config: RunnableConfig | None,
@@ -141,20 +178,38 @@ class PostgresSaver(BasePostgresSaver):
             >>> print(checkpoints)
             [CheckpointTuple(...), ...]
         """
-        where, args = self._search_where(config, filter, before)
+        before_checkpoint_id = get_checkpoint_id(before) if before is not None else None
+        where, args = self._search_where(config, filter, None)
         query = (
             self.SELECT_SQL
             + where
             + " ORDER BY checkpoint->>'ts' DESC, checkpoint_id DESC"
         )
         params = list(args)
-        if limit is not None:
+        if limit is not None and before_checkpoint_id is None:
             query += " LIMIT %s"
             params.append(int(limit))
         # if we change this to use .stream() we need to make sure to close the cursor
         with self._cursor() as cur:
             cur.execute(query, params)
             values = cur.fetchall()
+            before_key = self._resolve_before_order_key(cur, config, before)
+            if before_checkpoint_id is not None:
+                if before_key is not None:
+                    values = [
+                        value
+                        for value in values
+                        if (value["checkpoint"]["ts"], value["checkpoint_id"])
+                        < before_key
+                    ]
+                else:
+                    values = [
+                        value
+                        for value in values
+                        if value["checkpoint_id"] < before_checkpoint_id
+                    ]
+                if limit is not None:
+                    values = values[:limit]
             if not values:
                 return
             # migrate pending sends if necessary
