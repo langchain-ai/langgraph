@@ -73,3 +73,52 @@ func TestInputAndStatePrimitivesCompatible(t *testing.T) {
 		t.Fatalf("unexpected logs: %#v", result.Logs)
 	}
 }
+
+func (w *primitiveWorkflow) startNoFinishNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	state.Logs = append(state.Logs, "start")
+	return ag.Command{
+		Update: state,
+		Goto: []ag.Send{
+			{Node: w.middleNoFinishNode, NodeInput: "from_start"},
+		},
+	}, nil
+}
+
+func (w *primitiveWorkflow) middleNoFinishNode(ctx *ag.Context, input string, state primitiveState) (ag.Command, error) {
+	state.Logs = append(state.Logs, "middle:"+input)
+	state.Count += 1
+	state.Done = "stopped"
+	// No goto and no finish node configured: run should end automatically.
+	return ag.Command{Update: state}, nil
+}
+
+func TestRunEndsWithoutFinishNode(t *testing.T) {
+	workflow := &primitiveWorkflow{}
+	graph := ag.NewAdvancedStateGraph[primitiveState]()
+
+	graph.AddEntryNode(workflow.startNoFinishNode)
+	graph.AddNode(workflow.middleNoFinishNode)
+
+	handler, err := graph.Compile().Start(nil, primitiveState{
+		Count: 7,
+		Logs:  []string{},
+		Done:  "",
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	result, err := handler.WaitForResult()
+	if err != nil {
+		t.Fatalf("result failed: %v", err)
+	}
+	if result.Done != "stopped" {
+		t.Fatalf("unexpected done: %v", result.Done)
+	}
+	if result.Count != 8 {
+		t.Fatalf("unexpected count: %v", result.Count)
+	}
+	if len(result.Logs) != 2 || result.Logs[0] != "start" || result.Logs[1] != "middle:from_start" {
+		t.Fatalf("unexpected logs: %#v", result.Logs)
+	}
+}

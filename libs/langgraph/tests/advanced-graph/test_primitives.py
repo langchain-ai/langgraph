@@ -44,3 +44,23 @@ async def test_input_and_state_primitives_are_compatible() -> None:
         "middle:input=from_start",
         "finish:input=from_middle",
     ]
+
+
+async def test_run_ends_without_finish_node() -> None:
+    graph = AdvancedStateGraph(PrimitiveState)
+
+    async def start_node(state: PrimitiveState) -> Command:
+        state["logs"].append("start")
+        return Command(update=state, goto=Send("middle_node", "from_start"))
+
+    async def middle_node(input: str, state: PrimitiveState) -> dict[str, object]:
+        state["logs"].append(f"middle:{input}")
+        return {"counter": state["counter"] + 1, "logs": state["logs"], "done": "stopped"}
+
+    graph.add_entry_node(start_node)
+    graph.add_node(middle_node)
+
+    result = await graph.compile().ainvoke({"counter": 7, "logs": [], "done": None})
+    assert result["counter"] == 8
+    assert result["done"] == "stopped"
+    assert result["logs"] == ["start", "middle:from_start"]

@@ -130,11 +130,9 @@ class AdvancedStateGraph(Generic[StateT]):
     def compile(self) -> CompiledGraphEngine[StateT]:
         if self._entry_point is None:
             raise ValueError("Entry point is not set")
-        if self._finish_point is None:
-            raise ValueError("Finish point is not set")
         if self._entry_point not in self._nodes:
             raise ValueError(f"Entry point node `{self._entry_point}` does not exist")
-        if self._finish_point not in self._nodes:
+        if self._finish_point is not None and self._finish_point not in self._nodes:
             raise ValueError(f"Finish point node `{self._finish_point}` does not exist")
         return CompiledGraphEngine(
             nodes=dict(self._nodes),
@@ -153,7 +151,7 @@ class CompiledGraphEngine(Generic[StateT]):
         nodes: dict[str, Callable[..., Any]],
         async_channels: dict[str, _ChannelSpec],
         entry_point: str,
-        finish_point: str,
+        finish_point: str | None,
     ) -> None:
         self._nodes = nodes
         self._async_channels = async_channels
@@ -220,7 +218,7 @@ class _GraphEngineRun:
         nodes: dict[str, Callable[..., Any]],
         async_channel_specs: dict[str, _ChannelSpec],
         entry_point: str,
-        finish_point: str,
+        finish_point: str | None,
     ) -> None:
         self._nodes = nodes
         self._entry_point = entry_point
@@ -235,12 +233,13 @@ class _GraphEngineRun:
         self.context = Context(self)
 
     async def run(self, initial_state: StateT) -> StateT:
+        finish_point = self._finish_point or ""
         loop = asyncio.get_running_loop()
         result_obj = await loop.run_in_executor(
             _advanced_graph_executor(),
             self._rust_engine.run_graph_py,
             self._entry_point,
-            self._finish_point,
+            finish_point,
             initial_state,
             self._execute_node_for_rust,
         )
