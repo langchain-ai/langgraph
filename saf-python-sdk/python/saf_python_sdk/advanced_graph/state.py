@@ -350,14 +350,9 @@ class _GraphEngineRun:
         return event
 
     def _run_awaitable_in_worker(self, awaitable: Coroutine[Any, Any, Any]) -> Any:
-        loop = cast(
-            asyncio.AbstractEventLoop | None,
-            getattr(self._local, "worker_loop", None),
-        )
-        if loop is None or loop.is_closed():
-            loop = asyncio.new_event_loop()
-            self._local.worker_loop = loop
-        return loop.run_until_complete(awaitable)
+        # Create and close a dedicated loop per execution to avoid
+        # interpreter-shutdown warnings from lingering thread-local loops.
+        return asyncio.run(awaitable)
 
 
 def _normalize_result_to_sends(result: Any, *, default_input: Any) -> list[Send]:
