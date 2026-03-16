@@ -57,7 +57,7 @@ While LangGraph can be used standalone, it also integrates seamlessly with any L
 
 To improve your LLM application development, pair LangGraph with:
 
-- [Deep Agents](https://github.com/langchain-ai/deepagents) *(new!)* – Build agents that can plan, use subagents, and leverage file systems for complex tasks
+- [Deep Agents](https://github.com/langchain-ai/deepagents) *(new!)* – Build agents that can plan, use subagents, and leverage file systems for complex tasks.
 - [LangChain](https://docs.langchain.com/oss/python/langchain/overview) – Provides integrations and composable components to streamline LLM application development.
 - [LangSmith](https://www.langchain.com/langsmith) – Helpful for agent evals and observability. Debug poor-performing LLM app runs, evaluate agent trajectories, gain visibility in production, and improve performance over time.
 - [LangSmith Deployment](https://docs.langchain.com/langsmith/deployments) – Deploy and scale agents effortlessly with a purpose-built deployment platform for long-running, stateful workflows. Discover, reuse, configure, and share agents across teams – and iterate quickly with visual prototyping in [LangSmith Studio](https://docs.langchain.com/langsmith/studio).
@@ -67,7 +67,7 @@ To improve your LLM application development, pair LangGraph with:
 
 ## Additional resources
 
-- [Guides](https://docs.langchain.com/oss/python/langgraph/overview) – Quick, actionable code snippets for topics such as streaming, adding memory & persistence, and design patterns (e.g. branching, subgraphs, etc.).
+- [Guides](https://docs.langchain.com/oss/python/learn) – Quick, actionable code snippets for topics such as streaming, adding memory & persistence, and design patterns (e.g. branching, subgraphs, etc.).
 - [API Reference](https://reference.langchain.com/python/langgraph) – Detailed reference on core classes, methods, how to use the graph and checkpointing APIs, and higher-level prebuilt components.
 - [Examples](https://docs.langchain.com/oss/python/langgraph/agentic-rag) – Guided examples on getting started with LangGraph.
 - [LangChain Academy](https://academy.langchain.com/courses/intro-to-langgraph) – Learn the basics of LangGraph in our free, structured course.
