@@ -15,14 +15,7 @@ from saf_python_sdk.advanced_graph import (
     timer_condition,
 )
 from saf_python_sdk.types import Command, Send
-
-try:
-    from langgraph.graph import END, START, StateGraph  # type: ignore
-
-    HAS_STATEGRAPH = True
-except Exception:
-    HAS_STATEGRAPH = False
-    END = START = StateGraph = None  # type: ignore
+from langgraph.graph import END, START, StateGraph
 
 RUNS = 100
 MIDDLE_COUNT = 10
@@ -95,71 +88,65 @@ def build_advanced_sequential() -> Any:
     return graph.compile()
 
 
-def _build_stategraph_suites() -> list[tuple[str, Any]]:
-    if not HAS_STATEGRAPH:
-        return []
+def build_stategraph_parallel() -> Any:
+    graph = StateGraph(dict)
 
-    def build_stategraph_parallel() -> Any:
-        graph = StateGraph(dict)
+    async def start_node(state: dict[str, Any]) -> None:
+        _ = state
 
-        async def start_node(state: dict[str, Any]) -> None:
+    async def end_node(state: dict[str, Any]) -> dict[str, Any]:
+        out = dict(state)
+        out["done"] = True
+        return out
+
+    graph.add_node("start_node", start_node)
+    for i in range(MIDDLE_COUNT):
+
+        async def middle_node(state: dict[str, Any], idx: int = i) -> None:
+            _ = idx
             _ = state
+            await asyncio.sleep(SLEEP_SECONDS)
 
-        async def end_node(state: dict[str, Any]) -> dict[str, Any]:
-            out = dict(state)
-            out["done"] = True
-            return out
+        graph.add_node(f"middle_{i}", middle_node)
+    graph.add_node("end_node", end_node)
 
-        graph.add_node("start_node", start_node)
-        for i in range(MIDDLE_COUNT):
+    graph.add_edge(START, "start_node")
+    for i in range(MIDDLE_COUNT):
+        graph.add_edge("start_node", f"middle_{i}")
+        graph.add_edge(f"middle_{i}", "end_node")
+    graph.add_edge("end_node", END)
+    return graph.compile()
 
-            async def middle_node(state: dict[str, Any], idx: int = i) -> None:
-                _ = idx
-                _ = state
-                await asyncio.sleep(SLEEP_SECONDS)
 
-            graph.add_node(f"middle_{i}", middle_node)
-        graph.add_node("end_node", end_node)
-        graph.add_edge(START, "start_node")
-        for i in range(MIDDLE_COUNT):
-            graph.add_edge("start_node", f"middle_{i}")
-            graph.add_edge(f"middle_{i}", "end_node")
-        graph.add_edge("end_node", END)
-        return graph.compile()
+def build_stategraph_sequential() -> Any:
+    graph = StateGraph(dict)
 
-    def build_stategraph_sequential() -> Any:
-        graph = StateGraph(dict)
+    async def start_node(state: dict[str, Any]) -> None:
+        _ = state
 
-        async def start_node(state: dict[str, Any]) -> None:
+    async def end_node(state: dict[str, Any]) -> dict[str, Any]:
+        out = dict(state)
+        out["done"] = True
+        return out
+
+    graph.add_node("start_node", start_node)
+    for i in range(MIDDLE_COUNT):
+
+        async def middle_node(state: dict[str, Any], idx: int = i) -> None:
+            _ = idx
             _ = state
+            await asyncio.sleep(SLEEP_SECONDS)
 
-        async def end_node(state: dict[str, Any]) -> dict[str, Any]:
-            out = dict(state)
-            out["done"] = True
-            return out
+        graph.add_node(f"middle_{i}", middle_node)
+    graph.add_node("end_node", end_node)
 
-        graph.add_node("start_node", start_node)
-        for i in range(MIDDLE_COUNT):
-
-            async def middle_node(state: dict[str, Any], idx: int = i) -> None:
-                _ = idx
-                _ = state
-                await asyncio.sleep(SLEEP_SECONDS)
-
-            graph.add_node(f"middle_{i}", middle_node)
-        graph.add_node("end_node", end_node)
-        graph.add_edge(START, "start_node")
-        graph.add_edge("start_node", "middle_0")
-        for i in range(MIDDLE_COUNT - 1):
-            graph.add_edge(f"middle_{i}", f"middle_{i+1}")
-        graph.add_edge(f"middle_{MIDDLE_COUNT - 1}", "end_node")
-        graph.add_edge("end_node", END)
-        return graph.compile()
-
-    return [
-        ("state-graph-parallel", build_stategraph_parallel()),
-        ("state-graph-sequential", build_stategraph_sequential()),
-    ]
+    graph.add_edge(START, "start_node")
+    graph.add_edge("start_node", "middle_0")
+    for i in range(MIDDLE_COUNT - 1):
+        graph.add_edge(f"middle_{i}", f"middle_{i+1}")
+    graph.add_edge(f"middle_{MIDDLE_COUNT - 1}", "end_node")
+    graph.add_edge("end_node", END)
+    return graph.compile()
 
 
 async def run_benchmark(name: str, compiled: Any) -> float:
@@ -176,14 +163,13 @@ async def main() -> None:
     suites = [
         ("advanced-graph-parallel", build_advanced_parallel()),
         ("advanced-graph-sequential", build_advanced_sequential()),
+        ("state-graph-parallel", build_stategraph_parallel()),
+        ("state-graph-sequential", build_stategraph_sequential()),
     ]
-    suites.extend(_build_stategraph_suites())
     print(
         f"runs={RUNS}, middle_nodes={MIDDLE_COUNT}, sleep={SLEEP_SECONDS}s, "
         f"blocking_sleep={BLOCKING_SECONDS}s, state_bytes={STATE_BYTES}"
     )
-    if not HAS_STATEGRAPH:
-        print("stategraph benchmarks skipped (langgraph not installed)")
     for name, compiled in suites:
         elapsed = await run_benchmark(name, compiled)
         print(f"{name}: {elapsed:.3f}s")
