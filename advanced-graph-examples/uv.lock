@@ -1,0 +1,25 @@
+version = 1
+revision = 3
+requires-python = "==3.13.*"
+
+[[package]]
+name = "advanced-graph-examples"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "saf-python-sdk" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "saf-python-sdk", specifier = ">=0.1.1" }]
+
+[package.metadata.requires-dev]
+dev = []
+
+[[package]]
+name = "saf-python-sdk"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/56/73bcc01ff0fbf67fdfd22c2b06f31a7331fd2f6fe27f682da296027891f7/saf_python_sdk-0.1.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:920eaf3451d52b62a20ffbad5d9e881c0645f89f5efedf540f5b5d9b65768005", size = 502816, upload-time = "2026-03-16T23:09:46.081Z" },
+]

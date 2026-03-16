@@ -1,8 +1,8 @@
 import pytest
 from typing_extensions import TypedDict
 
-from langgraph.advanced_graph import AdvancedStateGraph, Context
-from langgraph.types import Command, Send
+from saf_python_sdk.advanced_graph import AdvancedStateGraph, Context
+from saf_python_sdk.types import Command, Send
 
 pytestmark = pytest.mark.anyio
 
@@ -64,3 +64,4 @@ async def test_run_ends_without_finish_node() -> None:
     assert result["counter"] == 8
     assert result["done"] == "stopped"
     assert result["logs"] == ["start", "middle:from_start"]
+

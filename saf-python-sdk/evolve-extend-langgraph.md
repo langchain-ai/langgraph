@@ -32,10 +32,9 @@ Sub-agents also cannot simply be modeled as subgraphs, because subgraphs today e
 
 The closest workaround today is double texting, but it has a fundamental flaw: when a new audio input arrives, the previous one is interrupted and canceled rather than being allowed to gracefully complete. The workflow code itself should have the control to decide whether to stop running.
 
-LangGraph is, at its core, a general-purpose workflow engine. Although we focus primarily on agent development, none of the primitives it offers are exclusive to agents or dedicated solely to agentic use cases. Conversely, there is nothing that a general-purpose workflow engine provides that we can safely assume agent development will _never_ need. 
+LangGraph is, at its core, a general-purpose workflow engine. Although we focus primarily on agent development, none of the primitives it offers are exclusive to agents or dedicated solely to agentic use cases. Conversely, there is nothing that a general-purpose workflow engine provides that we can safely assume agent development will _never_ need.
 
 The difference is probably only priority. For example, durable timer where a step can sleep for hours, days or months before resuming. Traditional workflow engines — those built for general microservice orchestration(which doesn't need streaming) -- they may need durable timers. In the agent development world today, most agents are still relatively simple. There are not yet many scenarios that require a step to wait for hours or days before proceeding.
-
 
 ## Deriving What's Needed from First Principles
 
@@ -47,7 +46,7 @@ Starting from the simple. A developer could write a simple `main` function — a
 
 But if that machine crashes, you probably do not want the process to start over from scratch. You want it to resume from the last step that completed successfully. And if a step fails, you might want it to retry automatically before giving up.
 
-LangGraph handles this case very well. 
+LangGraph handles this case very well.
 
 There is an important constraint worth calling out explicitly: LangGraph requires the developer to organize their code into **nodes**, which serve as the boundaries at which checkpoints can be taken. This is a constraint shared by every workflow engine — it is simply not feasible to persist a checkpoint after every single line of arbitrary code.
 
@@ -59,9 +58,9 @@ This is precisely why LangGraph's superstep restriction feels awkward in practic
 
 Multiple threads and processes do, however, need to coordinate with each other. In concurrent programming, channels are an essential primitive precisely because they provide a safe, structured way for threads to communicate and synchronize without relying on shared mutable memory — avoiding data races and deadlocks. In some cases, threads may use locking for coordination, but the preferred approach is message passing through channels.
 
-NOTE: "channel" is overloaded term here as it's also an internal term within current LangGraph pregel algorithm. 
+NOTE: "channel" is overloaded term here as it's also an internal term within current LangGraph pregel algorithm.
 
-LangGraph already has a mechanism that is closely related: `interrupt`. A run can be interrupted, and then another run can resume it. If we look at this through the lens of channels, `interrupt` is essentially a **channel with size 0** — a synchronous rendezvous point where one side blocks until the other side is ready. 
+LangGraph already has a mechanism that is closely related: `interrupt`. A run can be interrupted, and then another run can resume it. If we look at this through the lens of channels, `interrupt` is essentially a **channel with size 0** — a synchronous rendezvous point where one side blocks until the other side is ready.
 
 The natural extension:
 
@@ -97,7 +96,6 @@ Branch 2:  a → b2 → b22 → ...
 
 Each branch advances at its own pace. `b1` finishing triggers `b11` immediately, without waiting for `b2`.
 
-
 No API change is needed from the user's perspective — the graph definition stays the same. The change is in the execution semantics: the engine no longer forces all parallel nodes to synchronize at each step boundary. Each branch is checkpointed independently, so if `b1 → b11` completes while `b2` is still running, `b11`'s result is already persisted.
 
 This is necessary for the next one -- Light-weight Interrupt: Only Block the Current Node. Because we want to let other nodes continue to run while a node is waiting on something.
@@ -118,13 +116,12 @@ The `wait_for` call takes a channel name and optionally a count `N`, meaning "wa
 
 See [test_sub_agents.py](../libs/langgraph/tests/advanced-graph/test_sub_agents.py)
 
-
 ### P2: likely needed
 #### subGraph redesign
 #### durable timers
 #### more flexiable waiting conditions on interrupts
 #### locking on state fields
 
-
 ### P3: future needed or nice to have
 #### RPC
+

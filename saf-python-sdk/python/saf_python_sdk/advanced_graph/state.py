@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import atexit
 import asyncio
-import os
 import inspect
+import os
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Callable, Coroutine, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Generic, TypeVar, cast
 
-from langgraph_rust_core import PyRustEngine  # type: ignore[import-untyped]
+from saf_python_sdk.langgraph_rust_core import PyRustEngine  # type: ignore[import-untyped]
 
-from langgraph.types import Command, Send
+from saf_python_sdk.types import Command, Send
 
 StateT = TypeVar("StateT")
 
@@ -53,7 +53,7 @@ def _advanced_graph_executor() -> ThreadPoolExecutor:
             worker_count = max(worker_count, 1)
             _EXECUTOR = ThreadPoolExecutor(
                 max_workers=worker_count,
-                thread_name_prefix="langgraph-advanced-py",
+                thread_name_prefix="saf-advanced-py",
             )
             atexit.register(_shutdown_advanced_graph_executor)
         return _EXECUTOR
@@ -359,6 +359,7 @@ class _GraphEngineRun:
             self._local.worker_loop = loop
         return loop.run_until_complete(awaitable)
 
+
 def _normalize_result_to_sends(result: Any, *, default_input: Any) -> list[Send]:
     if result is None:
         return []
@@ -542,3 +543,4 @@ def _invoke_node(node: Callable[..., Any], ctx: Context, node_input: Any, state:
         return node(node_input, state)
 
     return node(ctx, node_input, state)
+

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "saf-python-sdk"
+version = "0.1.1"
+description = "Standalone advanced graph runtime powered by Rust engine"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "LangGraph Contributors" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.maturin]
+python-source = "python"
+module-name = "saf_python_sdk.langgraph_rust_core"
+bindings = "pyo3"
+features = ["python-bindings"]
+

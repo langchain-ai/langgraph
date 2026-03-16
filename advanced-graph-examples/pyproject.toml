@@ -1,0 +1,11 @@
+[project]
+name = "advanced-graph-examples"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "saf-python-sdk>=0.1.1",
+]
+
+[tool.uv]
+dev-dependencies = []
+

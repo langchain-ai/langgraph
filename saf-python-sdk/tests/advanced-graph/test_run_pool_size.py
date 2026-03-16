@@ -8,8 +8,8 @@ def test_run_pool_size_one_still_allows_parallel_runs() -> None:
 import asyncio
 import time
 from typing_extensions import TypedDict
-from langgraph.advanced_graph import AdvancedStateGraph, Context, timer_condition
-from langgraph.types import Command, Send
+from saf_python_sdk.advanced_graph import AdvancedStateGraph, Context, timer_condition
+from saf_python_sdk.types import Command, Send
 
 
 class RunState(TypedDict):
@@ -53,3 +53,4 @@ asyncio.run(main())
     )
     elapsed = float(completed.stdout.strip().splitlines()[-1])
     assert elapsed < 0.35, completed.stdout
+
