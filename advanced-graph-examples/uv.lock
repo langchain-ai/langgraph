@@ -18,8 +18,8 @@ dev = []
 
 [[package]]
 name = "saf-python-sdk"
-version = "0.1.1"
+version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/56/73bcc01ff0fbf67fdfd22c2b06f31a7331fd2f6fe27f682da296027891f7/saf_python_sdk-0.1.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:920eaf3451d52b62a20ffbad5d9e881c0645f89f5efedf540f5b5d9b65768005", size = 502816, upload-time = "2026-03-16T23:09:46.081Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/43/2a86cdc8a1fbb185b9ce4642f0e3676acc168d48ed2e68d4ead6ad57e95e/saf_python_sdk-0.1.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:9035ab6ede9884b5588925c47d5b8be2c1c107becf5d6f88e0ebb39f4e8fac3b", size = 517053, upload-time = "2026-03-16T23:49:25.661Z" },
 ]
