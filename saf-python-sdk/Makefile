@@ -27,5 +27,7 @@ test_run_pool_size:
 	$(TEST_BASE) tests/advanced-graph/test_run_pool_size.py
 
 test-benchmark:
+	# Increase per-process file descriptor limit for high-concurrency benchmark runs.
+	ulimit -n 65536 || true; \
 	uv run --python $(PYTHON_VERSION) --with anyio --with typing_extensions --with pydantic --with langgraph python tests/advanced-graph/benchmark_stategraph_vs_advancedgraph.py
 
