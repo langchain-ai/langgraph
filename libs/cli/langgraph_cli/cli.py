@@ -764,7 +764,7 @@ def _deploy_base_options(
 @cli.group(
     cls=DeployGroup,
     help=(
-        "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
+        "[Beta] Build and deploy a LangGraph image to LangSmith Deployment.\n\n"
         "This command is in beta and under active development. "
         "Expect frequent updates and improvements.\n\n"
         "Run from the root of your LangGraph project (where langgraph.json "
@@ -1122,7 +1122,7 @@ def _deploy(
                 )
             else:
                 click.secho(
-                    "   Check status in the LangSmith Deployments dashboard.",
+                    "   Check status in the LangSmith Deployment dashboard.",
                     fg="yellow",
                 )
 
@@ -1165,22 +1165,42 @@ def _call_host_backend_with_optional_tenant(
     in-place so all subsequent calls through the same instance are
     tenant-aware.
     """
-    try:
-        return operation(client)
-    except HostBackendError as err:
-        if err.status_code == 403 and "requires workspace specification" in err.message:
-            click.secho(
-                "Your API key is org-scoped and requires a workspace ID.",
-                fg="yellow",
-            )
-            click.secho(
-                "Find your workspace ID in LangSmith under Settings > Workspaces.",
-                fg="yellow",
-            )
-            tenant_id = click.prompt("Workspace ID")
-            client._client.headers["X-Tenant-ID"] = tenant_id
+    prompted_for_tenant = False
+
+    while True:
+        try:
             return operation(client)
-        raise
+        except HostBackendError as err:
+            if (
+                not prompted_for_tenant
+                and err.status_code == 403
+                and "requires workspace specification" in err.message
+            ):
+                click.secho(
+                    "Your API key is org-scoped and requires a workspace ID.",
+                    fg="yellow",
+                )
+                click.secho(
+                    "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                    fg="yellow",
+                )
+                client._client.headers["X-Tenant-ID"] = click.prompt("Workspace ID")
+                prompted_for_tenant = True
+                continue
+            if err.status_code == 403 and "not enabled" in err.message.lower():
+                from urllib.parse import urlparse
+
+                smith_host = "smith.langchain.com"
+                parsed = urlparse(client._base_url)
+                if (parsed.hostname or "").startswith("eu."):
+                    smith_host = "eu.smith.langchain.com"
+                raise HostBackendError(
+                    "LangSmith Deployment is not enabled for this organization. "
+                    f"Enable it at https://{smith_host}/host/deployments"
+                    " (ensure this matches the organization for your API key).",
+                    status_code=403,
+                ) from None
+            raise
 
 
 @OPT_HOST_API_KEY
