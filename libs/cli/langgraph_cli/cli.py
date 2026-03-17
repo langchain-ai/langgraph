@@ -13,6 +13,7 @@ import tempfile
 import time
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 import click
 import click.exceptions
@@ -26,10 +27,11 @@ from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
+from langgraph_cli.helpers import format_log_entry, level_fg, resolve_deployment_id
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
-from langgraph_cli.util import warn_non_wolfi_distro
+from langgraph_cli.util import format_deployments_table, warn_non_wolfi_distro
 from langgraph_cli.version import __version__
 
 RESERVED_ENV_VARS = frozenset(
@@ -287,6 +289,33 @@ OPT_API_VERSION = click.option(
     help="API server version to use for the base image. If unspecified, the latest version will be used.",
 )
 
+OPT_HOST_API_KEY = click.option(
+    "--api-key",
+    envvar="LANGGRAPH_HOST_API_KEY",
+    help=(
+        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
+        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
+    ),
+)
+
+
+OPT_HOST_DEPLOYMENT_NAME = click.option(
+    "--name",
+    envvar=_DEPLOYMENT_NAME_ENV,
+    help=(
+        "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
+        "environment variable or .env file. Defaults to current directory name "
+        "if --deployment-id is not provided."
+    ),
+)
+
+OPT_HOST_URL = click.option(
+    "--host-url",
+    envvar="LANGGRAPH_HOST_URL",
+    default="https://api.host.langchain.com",
+    hidden=True,
+)
+
 OPT_ENGINE_RUNTIME_MODE = click.option(
     "--engine-runtime-mode",
     type=click.Choice(["combined_queue_worker", "distributed"]),
@@ -295,7 +324,67 @@ OPT_ENGINE_RUNTIME_MODE = click.option(
 )
 
 
-@click.group()
+class NestedHelpGroup(click.Group):
+    """Click group that shows one level of nested subcommands in top-level help."""
+
+    def format_commands(
+        self, ctx: click.Context, formatter: click.HelpFormatter
+    ) -> None:
+        command_entries: list[tuple[str, click.Command]] = []
+        # Collect the top-level commands first, then append one level of nested
+        # subcommands using names like "deploy list" so they show up in the
+        # top-level help output.
+        for command_name in self.list_commands(ctx):
+            command = self.get_command(ctx, command_name)
+            if command is None or command.hidden:
+                continue
+            command_entries.append((command_name, command))
+            if isinstance(command, click.Group):
+                # Build a child context so Click resolves the subcommands the same
+                # way it would for the nested group itself.
+                sub_ctx = click.Context(command, info_name=command_name, parent=ctx)
+                for subcommand_name in command.list_commands(sub_ctx):
+                    subcommand = command.get_command(sub_ctx, subcommand_name)
+                    if subcommand is None or subcommand.hidden:
+                        continue
+                    command_entries.append(
+                        (f"{command_name} {subcommand_name}", subcommand)
+                    )
+
+        # Compute the available width for help text up front so we can truncate
+        # descriptions before handing them to Click. That keeps each command on
+        # a single line instead of allowing wrapped descriptions.
+        command_width = max((len(name) for name, _ in command_entries), default=0)
+        help_width = max(formatter.width - command_width - 6, 10)
+        rows = [
+            (name, command.get_short_help_str(help_width))
+            for name, command in command_entries
+        ]
+
+        if rows:
+            # Render the flattened command list using Click's standard
+            # definition-list formatter so alignment stays consistent with the
+            # rest of the CLI help output.
+            with formatter.section("Commands"):
+                formatter.write_dl(rows)
+
+
+class DeployGroup(NestedHelpGroup):
+    """Group that treats leading '-' args as passthrough docker flags."""
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        result = super().parse_args(ctx, args)
+        if ctx._protected_args and ctx._protected_args[0].startswith("-"):
+            # Click stores the would-be subcommand in _protected_args; if it looks
+            # like an option (e.g. --build-arg) treat it as passthrough docker
+            # args instead of insisting on a nested command.
+            ctx.args = [*ctx._protected_args, *ctx.args]
+            ctx._protected_args = []
+            return ctx.args
+        return result
+
+
+@click.group(cls=NestedHelpGroup)
 @click.version_option(version=__version__, prog_name="LangGraph CLI")
 def cli():
     pass
@@ -593,84 +682,115 @@ def build(
         )
 
 
-@click.option(
-    "--api-key",
-    envvar="LANGGRAPH_HOST_API_KEY",
+def _deploy_base_options(
+    func: Callable | None = None,
+    *,
+    include_docker_args: bool = True,
+    validate_config_path: bool = True,
+):
+    """Apply shared deploy flags.
+
+    The group shares most options but should not consume subcommands, so the
+    docker build args are only attached when requested.
+    """
+
+    def _apply(target: Callable) -> Callable:
+        decorators = [
+            OPT_HOST_API_KEY,
+            OPT_HOST_DEPLOYMENT_NAME,
+            click.option(
+                "--deployment-id",
+                help=(
+                    "ID of an existing deployment to update. If omitted, "
+                    "--name is used to find or create the deployment."
+                ),
+            ),
+            click.option(
+                "--deployment-type",
+                type=click.Choice(["dev", "prod"]),
+                default="dev",
+                show_default=True,
+                help="Deployment type (used when creating a new deployment).",
+            ),
+            click.option(
+                "--no-wait",
+                is_flag=True,
+                default=False,
+                help="Skip waiting for deployment status.",
+            ),
+            OPT_VERBOSE,
+            OPT_HOST_URL,
+            click.option("--image-name", hidden=True),
+            click.option(
+                "--tag",
+                "-t",
+                default="latest",
+                show_default=True,
+                help="Tag to use for the pushed deployment image.",
+            ),
+            click.option(
+                "--config",
+                "-c",
+                default=DEFAULT_CONFIG,
+                hidden=True,
+                type=click.Path(
+                    exists=validate_config_path,
+                    file_okay=True,
+                    dir_okay=False,
+                    resolve_path=True,
+                    path_type=pathlib.Path,
+                ),
+            ),
+            click.option("--pull/--no-pull", default=True, hidden=True),
+            click.option("--base-image", hidden=True),
+            click.option("--install-command", hidden=True),
+            click.option("--build-command", hidden=True),
+            click.option("--api-version", type=str, hidden=True),
+        ]
+        if include_docker_args:
+            # Only attach build args to the default command; on the group they
+            # would capture subcommand names like `list` before Click resolves
+            # them, making those subcommands unreachable.
+            decorators.append(
+                click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
+            )
+        for decorator in reversed(decorators):
+            target = decorator(target)
+        return target
+
+    return _apply(func) if func is not None else _apply
+
+
+@cli.group(
+    cls=DeployGroup,
     help=(
-        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
-        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
-    ),
-)
-@click.option(
-    "--name",
-    envvar="LANGSMITH_DEPLOYMENT_NAME",
-    help=(
-        "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
-        "environment variable or .env file. Defaults to current directory name "
-        "if --deployment-id is not provided."
-    ),
-)
-@click.option(
-    "--deployment-id",
-    help=(
-        "ID of an existing deployment to update. If omitted, "
-        "--name is used to find or create the deployment."
-    ),
-)
-@click.option(
-    "--deployment-type",
-    type=click.Choice(["dev", "prod"]),
-    default="dev",
-    show_default=True,
-    help="Deployment type (used when creating a new deployment).",
-)
-@click.option(
-    "--no-wait",
-    is_flag=True,
-    default=False,
-    help="Skip waiting for deployment status.",
-)
-@OPT_VERBOSE
-@click.option(
-    "--host-url",
-    envvar="LANGGRAPH_HOST_URL",
-    default="https://api.host.langchain.com",
-    hidden=True,
-)
-@click.option("--image-name", hidden=True)
-@click.option("--image-tag", default="latest", hidden=True)
-@click.option(
-    "--config",
-    "-c",
-    default=DEFAULT_CONFIG,
-    hidden=True,
-    type=click.Path(
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        resolve_path=True,
-        path_type=pathlib.Path,
-    ),
-)
-@click.option("--pull/--no-pull", default=True, hidden=True)
-@click.option("--base-image", hidden=True)
-@click.option("--install-command", hidden=True)
-@click.option("--build-command", hidden=True)
-@click.option("--api-version", type=str, hidden=True)
-@click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
-@cli.command(
-    help=(
-        "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
+        "[Beta] Build and deploy a LangGraph image to LangSmith Deployment.\n\n"
         "This command is in beta and under active development. "
         "Expect frequent updates and improvements.\n\n"
         "Run from the root of your LangGraph project (where langgraph.json "
         "is located). This command also accepts build flags (--base-image, "
-        "--pull, etc.). See 'langgraph build --help' for details."
+        "--config, --pull, etc.). See 'langgraph build --help' for details."
     ),
-    context_settings=dict(ignore_unknown_options=True),
+    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
+    invoke_without_command=True,  # allow `deploy` click group to execute without command
 )
+@_deploy_base_options(include_docker_args=False, validate_config_path=False)
+@click.pass_context
 @log_command
-def deploy(
+def deploy(ctx: click.Context, **_: object):
+    # We register deploy as both a group and a command here.
+    # if we detect no subcommand, we run _deploy (basically run langgraph deploy as a top level command)
+    # otherwise, we return None here and click will proceed to actually run the subcommand (list or delete)
+    if ctx.invoked_subcommand is not None:
+        return
+    docker_build_args = tuple(ctx.args)
+    ctx.args = []  # Prevent Click from re-processing passthrough args later.
+    return ctx.forward(_deploy, docker_build_args=docker_build_args)
+
+
+@_deploy_base_options()
+@click.command(context_settings=dict(ignore_unknown_options=True))
+def _deploy(
     config: pathlib.Path,
     pull: bool,
     verbose: bool,
@@ -681,7 +801,7 @@ def deploy(
     deployment_type: str,
     name: str | None,
     image_name: str | None,
-    image_tag: str,
+    tag: str,
     base_image: str | None,
     install_command: str | None,
     build_command: str | None,
@@ -697,15 +817,6 @@ def deploy(
     warn_non_wolfi_distro(config_json)
 
     env_vars = _parse_env_from_config(config_json, config)
-
-    if not api_key:
-        for key_name in _API_KEY_ENV_NAMES:
-            val = env_vars.get(key_name) or os.environ.get(key_name)
-            if val:
-                api_key = val
-                break
-    if not api_key:
-        api_key = click.prompt("Host API key", hide_input=True)
 
     if not deployment_id and not name:
         name = env_vars.get(_DEPLOYMENT_NAME_ENV)
@@ -743,55 +854,21 @@ def deploy(
         def log_step(message: str) -> None:
             click.secho(message, fg="cyan")
 
-        client = HostBackendClient(host_url, api_key)
+        client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
         step = 1
         needs_creation = False
 
         if deployment_id:
             log_step(f"{step}. Using deployment {deployment_id}")
-            try:
-                client.get_deployment(deployment_id)
-            except HostBackendError as err:
-                if (
-                    err.status_code == 403
-                    and "requires workspace specification" in err.message
-                ):
-                    click.secho(
-                        "Your API key is org-scoped and requires a workspace ID.",
-                        fg="yellow",
-                    )
-                    click.secho(
-                        "Find your workspace ID in LangSmith under Settings > Workspaces.",
-                        fg="yellow",
-                    )
-                    tenant_id = click.prompt("Workspace ID")
-                    client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
-                    client.get_deployment(deployment_id)
-                else:
-                    raise
+            _call_host_backend_with_optional_tenant(
+                client, lambda c: c.get_deployment(deployment_id)
+            )
             step += 1
         else:
             log_step(f"{step}. Looking up deployment '{name}'")
-            try:
-                existing = client.list_deployments(name_contains=name)
-            except HostBackendError as err:
-                if (
-                    err.status_code == 403
-                    and "requires workspace specification" in err.message
-                ):
-                    click.secho(
-                        "Your API key is org-scoped and requires a workspace ID.",
-                        fg="yellow",
-                    )
-                    click.secho(
-                        "Find your workspace ID in LangSmith under Settings > Workspaces.",
-                        fg="yellow",
-                    )
-                    tenant_id = click.prompt("Workspace ID")
-                    client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
-                    existing = client.list_deployments(name_contains=name)
-                else:
-                    raise
+            existing = _call_host_backend_with_optional_tenant(
+                client, lambda c: c.list_deployments(name_contains=name)
+            )
             found_id = None
             if isinstance(existing, dict):
                 for dep in existing.get("resources", []):
@@ -905,7 +982,7 @@ def deploy(
             normalized_registry = normalized_registry.split("//", 1)[1]
         repo_seed = image_name or name or config.parent.name
         repo_name = _normalize_image_name(repo_seed)
-        tag_value = _normalize_image_tag(image_tag)
+        tag_value = _normalize_image_tag(tag)
         remote_image = f"{normalized_registry}/{repo_name}:{tag_value}"
 
         registry_host = normalized_registry.split("/")[0]
@@ -1045,9 +1122,145 @@ def deploy(
                 )
             else:
                 click.secho(
-                    "   Check status in the LangSmith Deployments dashboard.",
+                    "   Check status in the LangSmith Deployment dashboard.",
                     fg="yellow",
                 )
+
+
+def _create_host_backend_client(
+    host_url: str | None,
+    api_key: str | None,
+    env_vars: dict[str, str] | None = None,
+) -> HostBackendClient:
+    if env_vars is None:
+        env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
+    resolved_api_key = api_key
+    if not resolved_api_key:
+        for key_name in _API_KEY_ENV_NAMES:
+            val = env_vars.get(key_name)
+            if val:
+                resolved_api_key = val
+                break
+            val = os.environ.get(key_name)
+            if val:
+                resolved_api_key = val
+                break
+    if not resolved_api_key:
+        click.secho(
+            "No LangSmith API key found. Create one at Settings > API Keys in LangSmith.",
+            fg="yellow",
+        )
+        resolved_api_key = click.prompt("Enter LangSmith API key", hide_input=True)
+    return HostBackendClient(host_url, resolved_api_key)
+
+
+def _call_host_backend_with_optional_tenant(
+    client: HostBackendClient,
+    operation: Callable[[HostBackendClient], object],
+) -> object:
+    """Run *operation*, prompting for a workspace ID on org-scoped 403s.
+
+    On success the original *client* is returned as-is.  If the user is
+    prompted for a workspace ID, the tenant header is set on *client*
+    in-place so all subsequent calls through the same instance are
+    tenant-aware.
+    """
+    prompted_for_tenant = False
+
+    while True:
+        try:
+            return operation(client)
+        except HostBackendError as err:
+            if (
+                not prompted_for_tenant
+                and err.status_code == 403
+                and "requires workspace specification" in err.message
+            ):
+                click.secho(
+                    "Your API key is org-scoped and requires a workspace ID.",
+                    fg="yellow",
+                )
+                click.secho(
+                    "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                    fg="yellow",
+                )
+                client._client.headers["X-Tenant-ID"] = click.prompt("Workspace ID")
+                prompted_for_tenant = True
+                continue
+            if err.status_code == 403 and "not enabled" in err.message.lower():
+                from urllib.parse import urlparse
+
+                smith_host = "smith.langchain.com"
+                parsed = urlparse(client._base_url)
+                if (parsed.hostname or "").startswith("eu."):
+                    smith_host = "eu.smith.langchain.com"
+                raise HostBackendError(
+                    "LangSmith Deployment is not enabled for this organization. "
+                    f"Enable it at https://{smith_host}/host/deployments"
+                    " (ensure this matches the organization for your API key).",
+                    status_code=403,
+                ) from None
+            raise
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--name-contains",
+    default="",
+    help="Only show deployments whose names contain this value.",
+)
+@deploy.command("list", help="[Beta] List LangSmith Deployments.")
+def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -> None:
+    client = _create_host_backend_client(host_url, api_key)
+    response = _call_host_backend_with_optional_tenant(
+        client,
+        lambda c: c.list_deployments(name_contains=name_contains),
+    )
+    resources = response.get("resources", []) if isinstance(response, dict) else []
+    deployments = [item for item in resources if isinstance(item, dict)]
+    if not deployments:
+        click.echo("No deployments found.")
+        return
+    click.echo(format_deployments_table(deployments))
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Delete without prompting for confirmation.",
+)
+@click.argument("deployment_id")
+@deploy.command(
+    "delete",
+    help=(
+        "[Beta] Delete a LangSmith Deployment.\n\n"
+        "Use the `deploy list` command to list deployment IDs."
+    ),
+)
+def deploy_delete(
+    api_key: str | None, host_url: str | None, force: bool, deployment_id: str
+) -> None:
+    if not force:
+        response = click.prompt(
+            click.style(
+                f"Are you sure you want to delete deployment ID {deployment_id}? (Y/n)",
+                fg="yellow",
+            ),
+            default="Y",
+            show_default=False,
+        )
+        if response.strip().lower() not in {"y", "yes"}:
+            raise click.Abort()
+    client = _create_host_backend_client(host_url, api_key)
+    _call_host_backend_with_optional_tenant(
+        client,
+        lambda c: c.delete_deployment(deployment_id),
+    )
+    click.secho(f"Deleted deployment {deployment_id}.", fg="green")
 
 
 def _normalize_image_name(value: str | None) -> str:
@@ -1074,6 +1287,180 @@ def _normalize_image_tag(value: str) -> str:
             "Image tag may only contain characters A-Z, a-z, 0-9, '_', '-', '.'"
         )
     return value
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_DEPLOYMENT_NAME
+@click.option(
+    "--deployment-id",
+    help="Deployment ID. If omitted, --name is used to find the deployment.",
+)
+@click.option(
+    "--type",
+    "log_type",
+    type=click.Choice(["deploy", "build"]),
+    default="deploy",
+    show_default=True,
+    help=(
+        "Log stream to fetch: 'deploy' shows agent server runtime logs; "
+        "'build' shows build logs (for deployments built remotely)."
+    ),
+)
+@click.option(
+    "--revision-id",
+    help="Specific revision ID. For build logs, defaults to latest revision.",
+)
+@click.option(
+    "--level",
+    type=click.Choice(
+        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
+    ),
+    help="Filter by log level.",
+)
+@click.option(
+    "--limit",
+    type=int,
+    default=100,
+    show_default=True,
+    help="Max log entries to fetch.",
+)
+@click.option(
+    "--query",
+    "-q",
+    help="Search string filter.",
+)
+@click.option(
+    "--start-time",
+    help="ISO8601 start time (e.g. 2026-03-08T00:00:00Z).",
+)
+@click.option(
+    "--end-time",
+    help="ISO8601 end time. (e.g. 2026-03-08T00:00:00Z)",
+)
+@click.option(
+    "--follow",
+    "-f",
+    is_flag=True,
+    default=False,
+    help="Continuously poll for new logs.",
+)
+@OPT_HOST_URL
+@deploy.command(
+    "logs",
+    help=(
+        "[Beta] Fetch LangSmith Deployment logs. Use 'deploy' for agent runtime "
+        "logs, or 'build' for remote build logs."
+    ),
+)
+@log_command
+def deploy_logs(
+    api_key: str | None,
+    name: str | None,
+    deployment_id: str | None,
+    log_type: str,
+    revision_id: str | None,
+    level: str | None,
+    limit: int,
+    query: str | None,
+    start_time: str | None,
+    end_time: str | None,
+    follow: bool,
+    host_url: str,
+):
+    env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
+    client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
+    if not deployment_id and not name:
+        name = env_vars.get(_DEPLOYMENT_NAME_ENV)
+    dep_id = _call_host_backend_with_optional_tenant(
+        client, lambda c: resolve_deployment_id(c, deployment_id, name)
+    )
+
+    if log_type == "build" and not revision_id:
+        revisions_resp = client.list_revisions(dep_id, limit=1)
+        resources = (
+            revisions_resp.get("resources", [])
+            if isinstance(revisions_resp, dict)
+            else []
+        )
+        if not resources:
+            raise click.ClickException(
+                "No revisions found for this deployment. Cannot fetch build logs."
+            )
+        revision_id = str(resources[0]["id"])
+        click.secho(f"Using latest revision: {revision_id}", fg="cyan")
+
+    payload: dict = {"limit": limit, "order": "desc"}
+    if level:
+        payload["level"] = level.upper()
+    if query:
+        payload["query"] = query
+    if start_time:
+        payload["start_time"] = start_time
+    if end_time:
+        payload["end_time"] = end_time
+
+    def _fetch(request_payload: dict) -> list[dict]:
+        if log_type == "build":
+            resp = client.get_build_logs(dep_id, revision_id, request_payload)
+        else:
+            resp = client.get_deploy_logs(dep_id, request_payload, revision_id)
+
+        if isinstance(resp, dict):
+            return resp.get("logs", [])
+        return []
+
+    def _print_entries(entries: list[dict], *, reverse: bool = False) -> None:
+        iterable = reversed(entries) if reverse else entries
+        for entry in iterable:
+            line = format_log_entry(entry)
+            fg = level_fg(entry.get("level", ""))
+            click.secho(line, fg=fg)
+
+    def _fetch_and_print(request_payload: dict, *, reverse: bool = False) -> list[dict]:
+        entries = _fetch(request_payload)
+        _print_entries(entries, reverse=reverse)
+        return entries
+
+    def _fetch_and_print_new(request_payload: dict, seen_ids: set[str]) -> list[dict]:
+        entries = _fetch(request_payload)
+        new = [e for e in entries if e.get("id", "") not in seen_ids]
+        if new:
+            _print_entries(new)
+            seen_ids.update(e.get("id", "") for e in new)
+        return new
+
+    # initial log fetch will be newest -> oldest, so we need to reverse
+    entries = _fetch_and_print(payload, reverse=True)
+
+    if not follow:
+        if not entries:
+            click.secho("No log entries found.", fg="yellow")
+        return
+
+    payload["order"] = "asc"
+    seen_ids: set[str] = {e.get("id", "") for e in entries if e.get("id")}
+
+    def _update_start_time(ts) -> None:
+        if ts is None:
+            return
+        if isinstance(ts, (int, float)):
+            dt = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
+            payload["start_time"] = dt.isoformat()
+        else:
+            payload["start_time"] = str(ts)
+
+    if entries:
+        # entries are in descending order here, so index 0 is the newest log
+        _update_start_time(entries[0].get("timestamp"))
+
+    try:
+        while True:
+            time.sleep(2)
+            new_entries = _fetch_and_print_new(payload, seen_ids)
+            if new_entries:
+                _update_start_time(new_entries[-1].get("timestamp"))
+    except KeyboardInterrupt:
+        click.echo("\nStopped.")
 
 
 def _get_docker_ignore_content() -> str:

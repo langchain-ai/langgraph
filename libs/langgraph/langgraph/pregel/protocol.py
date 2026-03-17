@@ -117,7 +117,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
         version: Literal["v2"],
-    ) -> Iterator[StreamPart[OutputT, StateT]]: ...
+    ) -> Iterator[StreamPart[StateT, OutputT]]: ...
 
     @overload
     @abstractmethod
@@ -161,7 +161,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
         version: Literal["v2"],
-    ) -> AsyncIterator[StreamPart[OutputT, StateT]]: ...
+    ) -> AsyncIterator[StreamPart[StateT, OutputT]]: ...
 
     @overload
     @abstractmethod

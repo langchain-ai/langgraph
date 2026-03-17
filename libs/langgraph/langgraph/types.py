@@ -335,7 +335,7 @@ StreamPart = TypeAliasType(
     | CheckpointStreamPart[StateT]
     | TasksStreamPart
     | DebugStreamPart[StateT],
-    type_params=(OutputT, StateT),
+    type_params=(StateT, OutputT),
 )
 """A discriminated union of all v2 stream part types.
 
