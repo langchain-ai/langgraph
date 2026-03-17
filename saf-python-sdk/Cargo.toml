@@ -8,6 +8,10 @@ name = "langgraph_rust_core"
 path = "../rust-core/src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+python-bindings = []
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
