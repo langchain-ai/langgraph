@@ -19,12 +19,17 @@ void rc_engine_free(Engine* ptr);
 char* rc_add_async_channel(Engine* ptr, const char* channel);
 char* rc_publish_json(Engine* ptr, const char* channel, const char* value_json);
 char* rc_wait_any_of_json(Engine* ptr, const char* any_of_json);
+char* rc_start_stream(Engine* ptr, const char* stream_mode);
+char* rc_receive_stream_json(Engine* ptr);
+char* rc_send_custom_stream_event(Engine* ptr, const char* value_json);
+char* rc_close_stream(Engine* ptr);
 char* rc_run_graph_json(
     Engine* ptr,
     const char* entry_point,
     const char* finish_point,
     const char* initial_state_json,
     const char* initial_input_json,
+    const char* stream_mode,
     unsigned long user_data,
     rc_node_callback_t callback
 );

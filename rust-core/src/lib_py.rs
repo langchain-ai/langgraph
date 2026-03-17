@@ -107,6 +107,35 @@ impl PyRustEngine {
             .map_err(|e| PyValueError::new_err(format!("Serialize event failed: {e}")))
     }
 
+    fn start_stream(&self, stream_mode: Option<&str>) -> PyResult<()> {
+        self.inner
+            .start_stream(stream_mode)
+            .map_err(PyValueError::new_err)
+    }
+
+    fn receive_stream_obj(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        match run_loop_block_on(self.inner.receive_stream_async()) {
+            Some(value) => {
+                let event_json = serde_json::to_string(&value)
+                    .map_err(|e| PyValueError::new_err(format!("Serialize event failed: {e}")))?;
+                json_string_to_py_obj(py, &event_json)
+            }
+            None => Ok(py.None()),
+        }
+    }
+
+    fn send_custom_stream_event_obj(&self, py: Python<'_>, value: Py<PyAny>) -> PyResult<()> {
+        let value_json = py_obj_to_json_string(py, &value.bind(py))?;
+        let parsed: Value = serde_json::from_str(&value_json)
+            .map_err(|e| PyValueError::new_err(format!("Invalid Python JSON value: {e}")))?;
+        self.inner.send_custom_stream_event(parsed);
+        Ok(())
+    }
+
+    fn close_stream(&self) {
+        self.inner.close_stream();
+    }
+
     fn run_graph_py(
         &self,
         py: Python<'_>,
@@ -114,18 +143,28 @@ impl PyRustEngine {
         finish_point: &str,
         initial_state: Py<PyAny>,
         callback: Py<PyAny>,
+        stream_mode: Option<&str>,
     ) -> PyResult<Py<PyAny>> {
         let state = Arc::new(initial_state);
         let callback = Arc::new(callback);
         let entry_point = entry_point.to_string();
         let finish_point = finish_point.to_string();
+        self.inner
+            .start_stream(stream_mode)
+            .map_err(PyValueError::new_err)?;
         let (done_tx, done_rx) = mpsc::channel::<Result<(), String>>();
         let state_for_run = Arc::clone(&state);
         let engine = self.inner.clone();
         run_loop_spawn(async move {
-            let run_result =
-                run_graph_scheduler(entry_point, finish_point, callback, state_for_run, engine)
-                    .await;
+            let run_result = run_graph_scheduler(
+                entry_point,
+                finish_point,
+                callback,
+                state_for_run,
+                engine.clone(),
+            )
+            .await;
+            engine.close_stream();
             let _ = done_tx.send(run_result);
         })
         .map_err(PyValueError::new_err)?;
@@ -222,7 +261,8 @@ async fn run_graph_scheduler(
                             let outcome = engine_for_wait.wait_request_async(&wait).await;
                             match outcome {
                                 Ok(event) => {
-                                    let _ = tx_wait.send(SchedulerEventPy::Resume { node, arg, event });
+                                    let _ =
+                                        tx_wait.send(SchedulerEventPy::Resume { node, arg, event });
                                 }
                                 Err(e) => {
                                     let _ = tx_wait.send(SchedulerEventPy::WaitError(e));
@@ -261,21 +301,19 @@ fn spawn_node_task(
     node_pool_execute(move || {
         let node_for_result = node.clone();
         let arg_for_result = Python::with_gil(|py| arg.clone_ref(py));
-        let outcome = Python::with_gil(
-            |py| -> Result<NodeExecutionPy, String> {
-                let callback_bound = callback.as_ref().bind(py);
-                let payload_obj = callback_bound
-                    .call1((node.as_str(), arg, (*state_for_task).clone_ref(py)))
-                    .map_err(|e| format!("callback failed for node `{node}`: {e}"))?;
-                let payload = parse_node_outcome(py, &payload_obj)
-                    .map_err(|e| format!("invalid callback payload for `{node}`: {e}"))?;
-                Ok(NodeExecutionPy {
-                    node: node_for_result,
-                    arg: arg_for_result,
-                    outcome: payload,
-                })
-            },
-        );
+        let outcome = Python::with_gil(|py| -> Result<NodeExecutionPy, String> {
+            let callback_bound = callback.as_ref().bind(py);
+            let payload_obj = callback_bound
+                .call1((node.as_str(), arg, (*state_for_task).clone_ref(py)))
+                .map_err(|e| format!("callback failed for node `{node}`: {e}"))?;
+            let payload = parse_node_outcome(py, &payload_obj)
+                .map_err(|e| format!("invalid callback payload for `{node}`: {e}"))?;
+            Ok(NodeExecutionPy {
+                node: node_for_result,
+                arg: arg_for_result,
+                outcome: payload,
+            })
+        });
         let _ = tx.send(SchedulerEventPy::Node(outcome));
     })
 }
@@ -294,8 +332,8 @@ fn parse_node_outcome(
     if let Some(wait_obj) = suspended_item {
         let wait_json = py_obj_to_json_string(py, &wait_obj)
             .map_err(|e| format!("failed to encode suspend payload: {e}"))?;
-        let wait: WaitRequest =
-            serde_json::from_str(&wait_json).map_err(|e| format!("invalid suspend payload: {e}"))?;
+        let wait: WaitRequest = serde_json::from_str(&wait_json)
+            .map_err(|e| format!("invalid suspend payload: {e}"))?;
         return Ok(NodeOutcome::Suspended { wait });
     }
 
@@ -345,10 +383,10 @@ fn wrap_resume_arg(arg: &Py<PyAny>, event: &WaitEvent) -> Result<Py<PyAny>, Stri
         wrapper
             .set_item("__lg_resume_arg__", arg.clone_ref(py))
             .map_err(|e| format!("failed to set resume arg: {e}"))?;
-        let event_json =
-            serde_json::to_string(event).map_err(|e| format!("failed to encode wait event: {e}"))?;
-        let event_obj =
-            json_string_to_py_obj(py, &event_json).map_err(|e| format!("failed to parse event: {e}"))?;
+        let event_json = serde_json::to_string(event)
+            .map_err(|e| format!("failed to encode wait event: {e}"))?;
+        let event_obj = json_string_to_py_obj(py, &event_json)
+            .map_err(|e| format!("failed to parse event: {e}"))?;
         wrapper
             .set_item("__lg_resume_event__", event_obj.bind(py))
             .map_err(|e| format!("failed to set resume event: {e}"))?;

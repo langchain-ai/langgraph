@@ -230,7 +230,11 @@ async fn run_graph_scheduler_json(
                         tokio::spawn(async move {
                             match engine_for_wait.wait_request_async(&wait).await {
                                 Ok(event) => {
-                                    let _ = tx_wait.send(SchedulerEventJson::Resume { node, arg, event });
+                                    let _ = tx_wait.send(SchedulerEventJson::Resume {
+                                        node,
+                                        arg,
+                                        event,
+                                    });
                                 }
                                 Err(e) => {
                                     let _ = tx_wait.send(SchedulerEventJson::WaitError(e));
@@ -385,6 +389,86 @@ pub unsafe extern "C" fn rc_wait_any_of_json(
 #[no_mangle]
 /// # Safety
 /// `ptr` must be a valid engine pointer from `rc_engine_new`.
+/// `stream_mode` must be null or a valid null-terminated UTF-8 string pointer.
+pub unsafe extern "C" fn rc_start_stream(
+    ptr: *mut Engine,
+    stream_mode: *const c_char,
+) -> *mut c_char {
+    if ptr.is_null() {
+        return into_c_ptr("{\"ok\":false,\"error\":\"null engine pointer\"}".to_string());
+    }
+    let mode = if stream_mode.is_null() {
+        None
+    } else {
+        match cstr_to_str(stream_mode) {
+            Ok(v) => Some(v),
+            Err(e) => return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+        }
+    };
+    match (*ptr).start_stream(mode) {
+        Ok(()) => into_c_ptr("{\"ok\":true}".to_string()),
+        Err(e) => into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+    }
+}
+
+#[no_mangle]
+/// # Safety
+/// `ptr` must be a valid engine pointer from `rc_engine_new`.
+pub unsafe extern "C" fn rc_receive_stream_json(ptr: *mut Engine) -> *mut c_char {
+    if ptr.is_null() {
+        return into_c_ptr("{\"ok\":false,\"error\":\"null engine pointer\"}".to_string());
+    }
+    let event = run_loop_block_on((*ptr).receive_stream_async());
+    match event {
+        Some(value) => match serde_json::to_string(&value) {
+            Ok(s) => into_c_ptr(format!("{{\"ok\":true,\"has_event\":true,\"event\":{s}}}")),
+            Err(e) => into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+        },
+        None => into_c_ptr("{\"ok\":true,\"has_event\":false}".to_string()),
+    }
+}
+
+#[no_mangle]
+/// # Safety
+/// `ptr` must be a valid engine pointer from `rc_engine_new`.
+/// `value_json` must be a valid null-terminated UTF-8 string pointer.
+pub unsafe extern "C" fn rc_send_custom_stream_event(
+    ptr: *mut Engine,
+    value_json: *const c_char,
+) -> *mut c_char {
+    if ptr.is_null() {
+        return into_c_ptr("{\"ok\":false,\"error\":\"null engine pointer\"}".to_string());
+    }
+    let value_json = match cstr_to_str(value_json) {
+        Ok(v) => v,
+        Err(e) => return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+    };
+    let value: Value = match serde_json::from_str(value_json) {
+        Ok(v) => v,
+        Err(e) => {
+            return into_c_ptr(format!(
+                "{{\"ok\":false,\"error\":\"invalid JSON value: {e}\"}}"
+            ))
+        }
+    };
+    (*ptr).send_custom_stream_event(value);
+    into_c_ptr("{\"ok\":true}".to_string())
+}
+
+#[no_mangle]
+/// # Safety
+/// `ptr` must be a valid engine pointer from `rc_engine_new`.
+pub unsafe extern "C" fn rc_close_stream(ptr: *mut Engine) -> *mut c_char {
+    if ptr.is_null() {
+        return into_c_ptr("{\"ok\":false,\"error\":\"null engine pointer\"}".to_string());
+    }
+    (*ptr).close_stream();
+    into_c_ptr("{\"ok\":true}".to_string())
+}
+
+#[no_mangle]
+/// # Safety
+/// `ptr` must be a valid engine pointer from `rc_engine_new`.
 /// `entry_point`, `finish_point`, and `initial_state_json` must be valid null-terminated UTF-8 pointers.
 /// `callback` must be a valid function pointer that returns a malloc-allocated C string.
 pub unsafe extern "C" fn rc_run_graph_json(
@@ -393,6 +477,7 @@ pub unsafe extern "C" fn rc_run_graph_json(
     finish_point: *const c_char,
     initial_state_json: *const c_char,
     initial_input_json: *const c_char,
+    stream_mode: *const c_char,
     user_data: libc::c_ulong,
     callback: Option<CNodeCallback>,
 ) -> *mut c_char {
@@ -434,6 +519,18 @@ pub unsafe extern "C" fn rc_run_graph_json(
             ))
         }
     };
+    let stream_mode = if stream_mode.is_null() {
+        None
+    } else {
+        match cstr_to_str(stream_mode) {
+            Ok(v) => Some(v.to_string()),
+            Err(e) => return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+        }
+    };
+
+    if let Err(e) = (*ptr).start_stream(stream_mode.as_deref()) {
+        return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}"));
+    }
 
     let (tx, rx) = mpsc::channel::<Result<Value, String>>();
     let user_data = CUserData(user_data);
@@ -444,11 +541,12 @@ pub unsafe extern "C" fn rc_run_graph_json(
             finish_point,
             initial_state,
             initial_input,
-            run_engine,
+            run_engine.clone(),
             user_data,
             callback,
         )
         .await;
+        run_engine.close_stream();
         let _ = tx.send(out);
     });
     if let Err(e) = submit {

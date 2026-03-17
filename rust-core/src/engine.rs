@@ -10,7 +10,7 @@ use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
-use tokio::sync::Notify;
+use tokio::sync::{mpsc as tokio_mpsc, Mutex as AsyncMutex, Notify};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind")]
@@ -283,6 +283,13 @@ pub fn merge_json_update(state: &mut Value, update: Option<Value>) {
 pub struct Engine {
     channels: Arc<StdMutex<HashMap<String, VecDeque<serde_json::Value>>>>,
     channel_notify: Arc<Notify>,
+    stream: Arc<StdMutex<Option<StreamChannel>>>,
+}
+
+#[derive(Clone)]
+struct StreamChannel {
+    sender: tokio_mpsc::UnboundedSender<serde_json::Value>,
+    receiver: Arc<AsyncMutex<tokio_mpsc::UnboundedReceiver<serde_json::Value>>>,
 }
 
 impl Engine {
@@ -295,6 +302,60 @@ impl Engine {
         debug_log(&format!("Engine::add_async_channel(name={name})"));
         let mut channels = self.channels.lock().expect("channels mutex poisoned");
         channels.entry(name.to_owned()).or_default();
+    }
+
+    pub fn start_stream(&self, stream_mode: Option<&str>) -> Result<(), String> {
+        let mode = stream_mode.and_then(|m| {
+            let trimmed = m.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        });
+        let mut stream = self.stream.lock().expect("stream mutex poisoned");
+        if let Some(mode) = mode {
+            if mode != "custom" {
+                return Err(format!(
+                    "unsupported stream_mode `{mode}`, only `custom` is supported"
+                ));
+            }
+            let (sender, receiver) = tokio_mpsc::unbounded_channel();
+            *stream = Some(StreamChannel {
+                sender,
+                receiver: Arc::new(AsyncMutex::new(receiver)),
+            });
+        } else {
+            *stream = None;
+        }
+        Ok(())
+    }
+
+    pub fn close_stream(&self) {
+        let mut stream = self.stream.lock().expect("stream mutex poisoned");
+        *stream = None;
+    }
+
+    pub fn send_custom_stream_event(&self, value: serde_json::Value) {
+        let sender = {
+            let stream = self.stream.lock().expect("stream mutex poisoned");
+            stream.as_ref().map(|s| s.sender.clone())
+        };
+        if let Some(tx) = sender {
+            let _ = tx.send(value);
+        }
+    }
+
+    pub async fn receive_stream_async(&self) -> Option<serde_json::Value> {
+        let receiver = {
+            let stream = self.stream.lock().expect("stream mutex poisoned");
+            stream.as_ref().map(|s| Arc::clone(&s.receiver))
+        };
+        let Some(receiver) = receiver else {
+            return None;
+        };
+        let mut guard = receiver.lock().await;
+        guard.recv().await
     }
 
     pub fn publish_json(&self, channel: &str, value: serde_json::Value) -> Result<(), String> {
@@ -339,7 +400,10 @@ impl Engine {
         }
     }
 
-    pub async fn wait_for_any_of_async(&self, any_of: &AnyOfCondition) -> Result<WaitEvent, String> {
+    pub async fn wait_for_any_of_async(
+        &self,
+        any_of: &AnyOfCondition,
+    ) -> Result<WaitEvent, String> {
         debug_log(&format!(
             "Engine::wait_for_any_of_async(conditions={})",
             any_of.conditions.len()
@@ -398,11 +462,7 @@ impl Engine {
         run_loop_block_on(self.wait_for_any_of_async(any_of))
     }
 
-    fn try_take_channel_event(
-        &self,
-        channel: &str,
-        n: usize,
-    ) -> Result<Option<WaitEvent>, String> {
+    fn try_take_channel_event(&self, channel: &str, n: usize) -> Result<Option<WaitEvent>, String> {
         let mut channels = self.channels.lock().expect("channels mutex poisoned");
         let queue = channels
             .get_mut(channel)

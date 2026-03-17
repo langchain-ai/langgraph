@@ -128,6 +128,59 @@ func (e *RustEngine) AddAsyncChannel(channel string) error {
 	return parseRustStatus(resp)
 }
 
+func (e *RustEngine) StartStream(streamMode string) error {
+	var cmode *C.char
+	if streamMode != "" {
+		cmode = C.CString(streamMode)
+		defer C.free(unsafe.Pointer(cmode))
+	}
+	resp := C.rc_start_stream(e.ptr, cmode)
+	return parseRustStatus(resp)
+}
+
+func (e *RustEngine) ReceiveStream() (any, bool, error) {
+	resp := C.rc_receive_stream_json(e.ptr)
+	defer C.rc_string_free(resp)
+
+	raw := C.GoString(resp)
+	var status struct {
+		OK       bool            `json:"ok"`
+		Error    string          `json:"error"`
+		HasEvent bool            `json:"has_event"`
+		Event    json.RawMessage `json:"event"`
+	}
+	if err := json.Unmarshal([]byte(raw), &status); err != nil {
+		return nil, false, fmt.Errorf("decode rust stream response: %w", err)
+	}
+	if !status.OK {
+		return nil, false, fmt.Errorf("rust stream failed: %s", status.Error)
+	}
+	if !status.HasEvent {
+		return nil, false, nil
+	}
+	var event any
+	if err := json.Unmarshal(status.Event, &event); err != nil {
+		return nil, false, fmt.Errorf("decode stream event: %w", err)
+	}
+	return coerceJSONValue(event), true, nil
+}
+
+func (e *RustEngine) SendCustomStreamEvent(value any) error {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal stream event: %w", err)
+	}
+	cval := C.CString(string(payload))
+	defer C.free(unsafe.Pointer(cval))
+	resp := C.rc_send_custom_stream_event(e.ptr, cval)
+	return parseRustStatus(resp)
+}
+
+func (e *RustEngine) CloseStream() error {
+	resp := C.rc_close_stream(e.ptr)
+	return parseRustStatus(resp)
+}
+
 func (e *RustEngine) Publish(channel string, value any) error {
 	payload, err := json.Marshal(value)
 	if err != nil {
@@ -173,6 +226,7 @@ func (e *RustEngine) WaitAnyOf(cond AnyOfCondition) (WaitEvent, error) {
 func (e *RustEngine) RunGraph(
 	entryPoint string,
 	finishPoint string,
+	streamMode string,
 	initialState any,
 	initialInput any,
 	exec func(node string, nodeInput any, state map[string]any) (Command, error),
@@ -189,10 +243,17 @@ func (e *RustEngine) RunGraph(
 	cfinish := C.CString(finishPoint)
 	cinitial := C.CString(string(initialJSON))
 	cinitialInput := C.CString(string(initialInputJSON))
+	var cstreamMode *C.char
+	if streamMode != "" {
+		cstreamMode = C.CString(streamMode)
+	}
 	defer C.free(unsafe.Pointer(centry))
 	defer C.free(unsafe.Pointer(cfinish))
 	defer C.free(unsafe.Pointer(cinitial))
 	defer C.free(unsafe.Pointer(cinitialInput))
+	if cstreamMode != nil {
+		defer C.free(unsafe.Pointer(cstreamMode))
+	}
 
 	callbackID := registerRunGraphCallbackCtx(&runGraphCallbackCtx{exec: exec})
 	defer unregisterRunGraphCallbackCtx(callbackID)
@@ -203,6 +264,7 @@ func (e *RustEngine) RunGraph(
 		cfinish,
 		cinitial,
 		cinitialInput,
+		cstreamMode,
 		C.ulong(callbackID),
 		(C.rc_node_callback_t)(C.goNodeCallback),
 	)

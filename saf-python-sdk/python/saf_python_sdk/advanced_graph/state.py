@@ -162,12 +162,15 @@ class CompiledGraphEngine(Generic[StateT]):
         handler = await self.astart(initial_state)
         return await handler
 
-    async def astart(self, initial_state: StateT) -> GraphRunHandler[StateT]:
+    async def astart(
+        self, initial_state: StateT, *, stream_mode: str | None = None
+    ) -> GraphRunHandler[StateT]:
         run = _GraphEngineRun(
             nodes=self._nodes,
             async_channel_specs=self._async_channels,
             entry_point=self._entry_point,
             finish_point=self._finish_point,
+            stream_mode=stream_mode,
         )
         task = asyncio.create_task(run.run(initial_state))
         return GraphRunHandler(run=run, task=task)
@@ -191,6 +194,9 @@ class Context:
     async def apublish_to_channel(self, channel: str, value: Any) -> None:
         await self._run.publish(channel, value)
 
+    def send_custom_stream_event(self, value: Any) -> None:
+        self._run.send_custom_stream_event(value)
+
 
 class GraphRunHandler(Generic[StateT]):
     """Handle for an active in-memory run."""
@@ -203,6 +209,16 @@ class GraphRunHandler(Generic[StateT]):
         if self._task.done():
             raise RuntimeError("Run has already completed")
         await self._run.publish(channel, value)
+
+    async def receive_stream(self) -> Any | None:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            _advanced_graph_executor(),
+            self._run.receive_stream_sync,
+        )
+
+    def close_stream(self) -> None:
+        self._run.close_stream_sync()
 
     async def aresult(self) -> StateT:
         return await self._task
@@ -219,10 +235,12 @@ class _GraphEngineRun:
         async_channel_specs: dict[str, _ChannelSpec],
         entry_point: str,
         finish_point: str | None,
+        stream_mode: str | None,
     ) -> None:
         self._nodes = nodes
         self._entry_point = entry_point
         self._finish_point = finish_point
+        self._stream_mode = stream_mode
         self._rust_engine = PyRustEngine()
         for name in async_channel_specs:
             self._rust_engine.add_async_channel(name)
@@ -242,6 +260,7 @@ class _GraphEngineRun:
             finish_point,
             initial_state,
             self._execute_node_for_rust,
+            self._stream_mode,
         )
         self._state = result_obj
         return cast(StateT, self._state)
@@ -304,6 +323,15 @@ class _GraphEngineRun:
 
     def _publish_sync(self, channel: str, value: Any) -> None:
         self._rust_engine.publish_obj(channel, value)
+
+    def send_custom_stream_event(self, value: Any) -> None:
+        self._rust_engine.send_custom_stream_event_obj(value)
+
+    def receive_stream_sync(self) -> Any | None:
+        return self._rust_engine.receive_stream_obj()
+
+    def close_stream_sync(self) -> None:
+        self._rust_engine.close_stream()
 
     def _execute_node_for_rust(
         self, node_name: str, node_input: Any, state: Any

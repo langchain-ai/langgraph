@@ -111,6 +111,10 @@ func (c *Context) PublishToChannel(channel string, value any) error {
 	return c.engine.Publish(channel, value)
 }
 
+func (c *Context) SendCustomStreamEvent(value any) error {
+	return c.engine.SendCustomStreamEvent(value)
+}
+
 type Handler[StateT any] struct {
 	engine *RustEngine
 	done   chan resultOrErr[StateT]
@@ -130,7 +134,29 @@ func (h *Handler[StateT]) WaitForResult() (StateT, error) {
 	return res.state, res.err
 }
 
-func (g *CompiledGraph[StateT]) Start(initialInput any, initialState StateT) (*Handler[StateT], error) {
+func (h *Handler[StateT]) ReceiveStream() (any, error) {
+	event, hasEvent, err := h.engine.ReceiveStream()
+	if err != nil {
+		return nil, err
+	}
+	if !hasEvent {
+		return nil, nil
+	}
+	return event, nil
+}
+
+func (h *Handler[StateT]) CloseStream() error {
+	return h.engine.CloseStream()
+}
+
+func (g *CompiledGraph[StateT]) Start(initialInput any, initialState StateT, streamMode ...string) (*Handler[StateT], error) {
+	resolvedStreamMode := ""
+	if len(streamMode) > 1 {
+		return nil, fmt.Errorf("start accepts at most one stream mode")
+	}
+	if len(streamMode) == 1 {
+		resolvedStreamMode = streamMode[0]
+	}
 	engine := NewRustEngine()
 	for _, ch := range g.asyncChannels {
 		if err := engine.AddAsyncChannel(ch); err != nil {
@@ -147,6 +173,7 @@ func (g *CompiledGraph[StateT]) Start(initialInput any, initialState StateT) (*H
 		rawState, err := engine.RunGraph(
 			g.entryPoint,
 			g.finishPoint,
+			resolvedStreamMode,
 			initialState,
 			initialInput,
 			func(node string, nodeInput any, fallbackState map[string]any) (Command, error) {
