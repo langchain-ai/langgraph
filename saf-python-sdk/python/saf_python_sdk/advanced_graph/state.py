@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Generic, TypeVar, cast
 
-from saf_python_sdk.langgraph_rust_core import PyRustEngine  # type: ignore[import-untyped]
+from saf_python_sdk.rust_core_cffi import PyRustEngine
 
 from saf_python_sdk.types import Command, Send
 
@@ -211,11 +211,15 @@ class GraphRunHandler(Generic[StateT]):
         await self._run.publish(channel, value)
 
     async def receive_stream(self) -> Any | None:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            _advanced_graph_executor(),
-            self._run.receive_stream_sync,
-        )
+        while True:
+            loop = asyncio.get_running_loop()
+            event = await loop.run_in_executor(
+                _advanced_graph_executor(),
+                self._run.receive_stream_sync,
+            )
+            if event is not None or self._task.done():
+                return event
+            await asyncio.sleep(0.005)
 
     def close_stream(self) -> None:
         self._run.close_stream_sync()
