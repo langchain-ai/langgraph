@@ -7535,6 +7535,7 @@ async def test_tags_stream_mode_messages() -> None:
         (
             _AnyIdAIMessageChunk(content="foo", chunk_position="last"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 1,
                 "langgraph_node": "call_model",
                 "langgraph_triggers": ("branch:to:call_model",),
@@ -7576,6 +7577,7 @@ async def test_stream_mode_messages_command() -> None:
         (
             _AnyIdHumanMessage(content="foo"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 1,
                 "langgraph_node": "my_node",
                 "langgraph_triggers": ("branch:to:my_node",),
@@ -7586,6 +7588,7 @@ async def test_stream_mode_messages_command() -> None:
         (
             _AnyIdHumanMessage(content="bar"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 2,
                 "langgraph_node": "my_other_node",
                 "langgraph_triggers": ("branch:to:my_other_node",),
