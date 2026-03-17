@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Generic, TypeVar, cast
 
-from saf_python_sdk.rust_core_cffi import PyRustEngine
+from saf_python_sdk.langgraph_rust_core import PyRustEngine  # type: ignore[import-untyped]
 
 from saf_python_sdk.types import Command, Send
 
