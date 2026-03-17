@@ -62,6 +62,31 @@ pub enum NodeOutcome<U, A> {
     Suspended { wait: WaitRequest },
 }
 
+#[derive(Debug, Deserialize)]
+struct CallbackSendPayloadJson {
+    node: String,
+    #[serde(default)]
+    arg: Value,
+}
+
+#[derive(Debug, Deserialize)]
+struct CallbackNodeExecResultJsonWire {
+    update: Option<Value>,
+    #[serde(default)]
+    sends: Vec<CallbackSendPayloadJson>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CallbackEnvelopeIn {
+    ok: bool,
+    #[serde(default)]
+    payload: Option<CallbackNodeExecResultJsonWire>,
+    #[serde(default)]
+    suspend: Option<WaitRequest>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
 type Task = Box<dyn FnOnce() + Send + 'static>;
 
 fn debug_enabled() -> bool {
@@ -648,4 +673,35 @@ fn wrap_resume_arg(arg: Value, event: WaitEvent) -> Value {
         "__lg_resume_arg__": arg,
         "__lg_resume_event__": event,
     })
+}
+
+pub fn parse_callback_envelope_json(
+    raw: &str,
+    node_name: &str,
+) -> Result<NodeOutcome<Value, Value>, String> {
+    let parsed: CallbackEnvelopeIn = serde_json::from_str(raw)
+        .map_err(|e| format!("decode callback envelope for `{node_name}` failed: {e}"))?;
+    if !parsed.ok {
+        return Err(parsed
+            .error
+            .unwrap_or_else(|| format!("callback reported error for `{node_name}`")));
+    }
+    if let Some(wait) = parsed.suspend {
+        return Ok(NodeOutcome::Suspended { wait });
+    }
+    let payload = parsed
+        .payload
+        .ok_or_else(|| format!("callback payload missing for `{node_name}`"))?;
+    let sends = payload
+        .sends
+        .into_iter()
+        .map(|s| SendPayload {
+            node: s.node,
+            arg: s.arg,
+        })
+        .collect();
+    Ok(NodeOutcome::Completed(NodeExecResult {
+        update: payload.update,
+        sends,
+    }))
 }

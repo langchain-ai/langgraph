@@ -1,37 +1,11 @@
 use crate::engine::{
-    run_graph_json_with_callback, run_loop_block_on, run_loop_spawn, AnyOfCondition, Engine,
-    NodeExecResult, NodeOutcome, SendPayload, WaitRequest,
+    parse_callback_envelope_json, run_graph_json_with_callback, run_loop_block_on, run_loop_spawn,
+    AnyOfCondition, Engine, NodeOutcome,
 };
-use serde::Deserialize;
 use serde_json::Value;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::mpsc;
-
-#[derive(Debug, Deserialize)]
-struct SendPayloadJson {
-    node: String,
-    #[serde(default)]
-    arg: Value,
-}
-
-#[derive(Debug, Deserialize)]
-struct NodeExecResultJsonWire {
-    update: Option<Value>,
-    #[serde(default)]
-    sends: Vec<SendPayloadJson>,
-}
-
-#[derive(Debug, Deserialize)]
-struct CallbackEnvelopeIn {
-    ok: bool,
-    #[serde(default)]
-    payload: Option<NodeExecResultJsonWire>,
-    #[serde(default)]
-    suspend: Option<WaitRequest>,
-    #[serde(default)]
-    error: Option<String>,
-}
 
 type CNodeCallback = unsafe extern "C" fn(
     user_data: libc::c_ulong,
@@ -39,9 +13,6 @@ type CNodeCallback = unsafe extern "C" fn(
     arg_json: *mut c_char,
     state_json: *mut c_char,
 ) -> *mut c_char;
-
-#[derive(Clone, Copy)]
-struct CUserData(libc::c_ulong);
 
 fn cstr_to_str<'a>(ptr: *const c_char) -> Result<&'a str, String> {
     if ptr.is_null() {
@@ -59,37 +30,6 @@ fn into_c_ptr(s: String) -> *mut c_char {
             .expect("static string is valid")
             .into_raw(),
     }
-}
-
-fn parse_c_callback_result(
-    raw: String,
-    node_name: &str,
-) -> Result<NodeOutcome<Value, Value>, String> {
-    let parsed: CallbackEnvelopeIn = serde_json::from_str(&raw)
-        .map_err(|e| format!("decode callback envelope for `{node_name}` failed: {e}"))?;
-    if !parsed.ok {
-        return Err(parsed
-            .error
-            .unwrap_or_else(|| format!("callback reported error for `{node_name}`")));
-    }
-    if let Some(wait) = parsed.suspend {
-        return Ok(NodeOutcome::Suspended { wait });
-    }
-    let payload = parsed
-        .payload
-        .ok_or_else(|| format!("callback payload missing for `{node_name}`"))?;
-    let sends = payload
-        .sends
-        .into_iter()
-        .map(|s| SendPayload {
-            node: s.node,
-            arg: s.arg,
-        })
-        .collect();
-    Ok(NodeOutcome::Completed(NodeExecResult {
-        update: payload.update,
-        sends,
-    }))
 }
 
 #[no_mangle]
@@ -351,7 +291,7 @@ pub unsafe extern "C" fn rc_run_graph_json(
     }
 
     let (tx, rx) = mpsc::channel::<Result<Value, String>>();
-    let user_data = CUserData(user_data);
+    let user_data_bits = user_data;
     let run_engine = (*ptr).clone();
     let submit = run_loop_spawn(async move {
         let callback_wrapper = move |node: String,
@@ -370,7 +310,7 @@ pub unsafe extern "C" fn rc_run_graph_json(
                 CString::new(state_json).map_err(|e| format!("invalid state JSON bytes: {e}"))?;
             let out_ptr = unsafe {
                 callback(
-                    user_data.0,
+                    user_data_bits,
                     node_c.as_ptr() as *mut c_char,
                     arg_c.as_ptr() as *mut c_char,
                     state_c.as_ptr() as *mut c_char,
@@ -385,7 +325,7 @@ pub unsafe extern "C" fn rc_run_graph_json(
             unsafe {
                 libc::free(out_ptr.cast());
             }
-            parse_c_callback_result(out_raw, &node)
+            parse_callback_envelope_json(&out_raw, &node)
         };
         let out = run_graph_json_with_callback(
             entry_point,
