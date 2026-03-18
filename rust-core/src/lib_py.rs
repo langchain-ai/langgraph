@@ -1,6 +1,6 @@
 #[cfg(feature = "python-bindings")]
 use crate::engine::{
-    node_pool_execute, run_loop_block_on, run_loop_spawn, AnyOfCondition, Engine, NodeExecResult,
+    run_graph_with_callback, run_loop_block_on, AnyOfCondition, Engine, NodeExecResult,
     NodeOutcome, SendPayload, WaitCondition, WaitEvent, WaitRequest,
 };
 #[cfg(feature = "python-bindings")]
@@ -14,11 +14,7 @@ use pyo3::types::{PyDict, PyList, PyTuple};
 #[cfg(feature = "python-bindings")]
 use serde_json::Value;
 #[cfg(feature = "python-bindings")]
-use std::sync::mpsc;
-#[cfg(feature = "python-bindings")]
 use std::sync::Arc;
-#[cfg(feature = "python-bindings")]
-use tokio::sync::mpsc as tokio_mpsc;
 
 #[cfg(feature = "python-bindings")]
 #[pyclass]
@@ -50,11 +46,7 @@ impl PyRustEngine {
 
     fn publish_obj(&self, py: Python<'_>, channel: &str, value: Py<PyAny>) -> PyResult<()> {
         let value_json = py_obj_to_json_string(py, &value.bind(py))?;
-        let parsed: Value = serde_json::from_str(&value_json)
-            .map_err(|e| PyValueError::new_err(format!("Invalid Python JSON value: {e}")))?;
-        self.inner
-            .publish_json(channel, parsed)
-            .map_err(PyValueError::new_err)
+        self.publish_json(channel, &value_json)
     }
 
     fn wait_any_of_json(&self, any_of_json: &str) -> PyResult<String> {
@@ -89,12 +81,7 @@ impl PyRustEngine {
 
     fn wait_any_of_obj(&self, py: Python<'_>, any_of_payload: Py<PyAny>) -> PyResult<Py<PyAny>> {
         let payload_json = py_obj_to_json_string(py, &any_of_payload.bind(py))?;
-        let any_of: AnyOfCondition = serde_json::from_str(&payload_json)
-            .map_err(|e| PyValueError::new_err(format!("Invalid any_of payload: {e}")))?;
-        let event = run_loop_block_on(self.inner.wait_for_any_of_async(&any_of))
-            .map_err(PyValueError::new_err)?;
-        let event_json = serde_json::to_string(&event)
-            .map_err(|e| PyValueError::new_err(format!("Serialize event failed: {e}")))?;
+        let event_json = self.wait_any_of_json(&payload_json)?;
         json_string_to_py_obj(py, &event_json)
     }
 
@@ -107,6 +94,7 @@ impl PyRustEngine {
             .map_err(|e| PyValueError::new_err(format!("Serialize event failed: {e}")))
     }
 
+    #[pyo3(signature = (stream_mode=None))]
     fn start_stream(&self, stream_mode: Option<&str>) -> PyResult<()> {
         self.inner
             .start_stream(stream_mode)
@@ -114,7 +102,8 @@ impl PyRustEngine {
     }
 
     fn receive_stream_obj(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        match run_loop_block_on(self.inner.receive_stream_async()) {
+        let event = py.allow_threads(|| run_loop_block_on(self.inner.receive_stream_async()));
+        match event {
             Some(value) => {
                 let event_json = serde_json::to_string(&value)
                     .map_err(|e| PyValueError::new_err(format!("Serialize event failed: {e}")))?;
@@ -136,6 +125,7 @@ impl PyRustEngine {
         self.inner.close_stream();
     }
 
+    #[pyo3(signature = (entry_point, finish_point, initial_state, callback, stream_mode=None))]
     fn run_graph_py(
         &self,
         py: Python<'_>,
@@ -145,184 +135,74 @@ impl PyRustEngine {
         callback: Py<PyAny>,
         stream_mode: Option<&str>,
     ) -> PyResult<Py<PyAny>> {
-        let state = Arc::new(initial_state);
+        if let Some(mode) = stream_mode {
+            self.inner
+                .start_stream(Some(mode))
+                .map_err(PyValueError::new_err)?;
+        }
+
+        let engine = self.inner.clone();
         let callback = Arc::new(callback);
         let entry_point = entry_point.to_string();
         let finish_point = finish_point.to_string();
-        self.inner
-            .start_stream(stream_mode)
-            .map_err(PyValueError::new_err)?;
-        let (done_tx, done_rx) = mpsc::channel::<Result<(), String>>();
-        let state_for_run = Arc::clone(&state);
-        let engine = self.inner.clone();
-        run_loop_spawn(async move {
-            let run_result = run_graph_scheduler(
-                entry_point,
-                finish_point,
-                callback,
-                state_for_run,
-                engine.clone(),
-            )
-            .await;
-            engine.close_stream();
-            let _ = done_tx.send(run_result);
-        })
-        .map_err(PyValueError::new_err)?;
-        let run_result = py
-            .allow_threads(move || done_rx.recv())
-            .map_err(|e| PyValueError::new_err(format!("run-loop recv failed: {e}")))?;
-        run_result.map_err(PyValueError::new_err)?;
-        Ok((*state).clone_ref(py))
-    }
-}
+        let initial_state = Arc::new(initial_state);
+        let initial_input = Arc::clone(&initial_state);
 
-#[cfg(feature = "python-bindings")]
-enum SchedulerEventPy {
-    Node(Result<NodeExecutionPy, String>),
-    Resume {
-        node: String,
-        arg: Py<PyAny>,
-        event: WaitEvent,
-    },
-    WaitError(String),
-}
-
-struct NodeExecutionPy {
-    node: String,
-    arg: Py<PyAny>,
-    outcome: NodeOutcome<Py<PyAny>, Py<PyAny>>,
-}
-
-#[cfg(feature = "python-bindings")]
-async fn run_graph_scheduler(
-    entry_point: String,
-    finish_point: String,
-    callback: Arc<Py<PyAny>>,
-    state: Arc<Py<PyAny>>,
-    engine: Engine,
-) -> Result<(), String> {
-    let (tx, mut rx) = tokio_mpsc::unbounded_channel::<SchedulerEventPy>();
-    let initial_arg = Python::with_gil(|py| (*state).clone_ref(py));
-    let callback_for_spawn = Arc::clone(&callback);
-    let state_for_spawn = Arc::clone(&state);
-    let tx_for_spawn = tx.clone();
-    let state_for_merge = Arc::clone(&state);
-    let mut active: usize = 1;
-    let mut waiting: usize = 0;
-    spawn_node_task(
-        entry_point,
-        initial_arg,
-        tx_for_spawn.clone(),
-        Arc::clone(&callback_for_spawn),
-        Arc::clone(&state_for_spawn),
-    )?;
-
-    while active > 0 || waiting > 0 {
-        let event = rx
-            .recv()
-            .await
-            .ok_or_else(|| "scheduler event channel closed".to_string())?;
-        match event {
-            SchedulerEventPy::Node(result) => {
-                active = active.saturating_sub(1);
-                let exec = result?;
-                match exec.outcome {
-                    NodeOutcome::Completed(node_result) => {
+        let run_result =
+            py.allow_threads(move || {
+                run_loop_block_on(run_graph_with_callback(
+                    entry_point,
+                    finish_point,
+                    initial_state,
+                    initial_input,
+                    engine.clone(),
+                    {
+                        let callback = Arc::clone(&callback);
+                    move |node: String,
+                          arg: Arc<Py<PyAny>>,
+                          state_snapshot: Arc<Py<PyAny>>|
+                          -> Result<NodeOutcome<Arc<Py<PyAny>>, Arc<Py<PyAny>>>, String> {
+                        Python::with_gil(|py| -> Result<NodeOutcome<Arc<Py<PyAny>>, Arc<Py<PyAny>>>, String> {
+                            let callback_bound = callback.as_ref().bind(py);
+                            let payload_obj = callback_bound
+                                .call1((
+                                    node.as_str(),
+                                    arg.as_ref().clone_ref(py),
+                                    state_snapshot.as_ref().clone_ref(py),
+                                ))
+                                .map_err(|e| format!("callback failed for node `{node}`: {e}"))?;
+                            parse_node_outcome_arc(py, &payload_obj).map_err(|e| {
+                                format!("invalid callback payload for `{node}`: {e}")
+                            })
+                        })
+                    }
+                    },
+                |state: &mut Arc<Py<PyAny>>, update: Option<Arc<Py<PyAny>>>| -> Result<(), String> {
                         Python::with_gil(|py| -> Result<(), String> {
-                            if let Some(update) = node_result.update {
-                                apply_update_to_state(py, state_for_merge.as_ref(), &update)
-                                    .map_err(|e| {
-                                        format!("state merge failed for `{}`: {e}", exec.node)
-                                    })?;
+                            if let Some(update) = update {
+                            apply_update_to_state(py, state.as_ref(), update.as_ref())
+                                    .map_err(|e| format!("state merge failed: {e}"))?;
                             }
                             Ok(())
-                        })?;
-                        if exec.node == finish_point {
-                            break;
-                        }
-                        for send in node_result.sends {
-                            active += 1;
-                            spawn_node_task(
-                                send.node,
-                                send.arg,
-                                tx_for_spawn.clone(),
-                                Arc::clone(&callback_for_spawn),
-                                Arc::clone(&state_for_spawn),
-                            )?;
-                        }
-                    }
-                    NodeOutcome::Suspended { wait } => {
-                        waiting += 1;
-                        let tx_wait = tx_for_spawn.clone();
-                        let node = exec.node;
-                        let arg = exec.arg;
-                        let engine_for_wait = engine.clone();
-                        tokio::spawn(async move {
-                            let outcome = engine_for_wait.wait_request_async(&wait).await;
-                            match outcome {
-                                Ok(event) => {
-                                    let _ =
-                                        tx_wait.send(SchedulerEventPy::Resume { node, arg, event });
-                                }
-                                Err(e) => {
-                                    let _ = tx_wait.send(SchedulerEventPy::WaitError(e));
-                                }
-                            }
-                        });
-                    }
-                }
-            }
-            SchedulerEventPy::Resume { node, arg, event } => {
-                waiting = waiting.saturating_sub(1);
-                active += 1;
-                let resume_arg = wrap_resume_arg(&arg, &event)?;
-                spawn_node_task(
-                    node,
-                    resume_arg,
-                    tx_for_spawn.clone(),
-                    Arc::clone(&callback_for_spawn),
-                    Arc::clone(&state_for_spawn),
-                )?;
-            }
-            SchedulerEventPy::WaitError(e) => return Err(e),
-        }
+                        })
+                    },
+                |arg: Arc<Py<PyAny>>, event: WaitEvent| -> Result<Arc<Py<PyAny>>, String> {
+                    wrap_resume_arg(arg.as_ref(), &event).map(Arc::new)
+                    },
+                ))
+            });
+
+        self.inner.close_stream();
+        let out = run_result.map_err(PyValueError::new_err)?;
+        Ok(out.as_ref().clone_ref(py))
     }
-    Ok(())
 }
 
 #[cfg(feature = "python-bindings")]
-fn spawn_node_task(
-    node: String,
-    arg: Py<PyAny>,
-    tx: tokio_mpsc::UnboundedSender<SchedulerEventPy>,
-    callback: Arc<Py<PyAny>>,
-    state_for_task: Arc<Py<PyAny>>,
-) -> Result<(), String> {
-    node_pool_execute(move || {
-        let node_for_result = node.clone();
-        let arg_for_result = Python::with_gil(|py| arg.clone_ref(py));
-        let outcome = Python::with_gil(|py| -> Result<NodeExecutionPy, String> {
-            let callback_bound = callback.as_ref().bind(py);
-            let payload_obj = callback_bound
-                .call1((node.as_str(), arg, (*state_for_task).clone_ref(py)))
-                .map_err(|e| format!("callback failed for node `{node}`: {e}"))?;
-            let payload = parse_node_outcome(py, &payload_obj)
-                .map_err(|e| format!("invalid callback payload for `{node}`: {e}"))?;
-            Ok(NodeExecutionPy {
-                node: node_for_result,
-                arg: arg_for_result,
-                outcome: payload,
-            })
-        });
-        let _ = tx.send(SchedulerEventPy::Node(outcome));
-    })
-}
-
-#[cfg(feature = "python-bindings")]
-fn parse_node_outcome(
+fn parse_node_outcome_arc(
     py: Python<'_>,
     payload_obj: &Bound<'_, PyAny>,
-) -> Result<NodeOutcome<Py<PyAny>, Py<PyAny>>, String> {
+) -> Result<NodeOutcome<Arc<Py<PyAny>>, Arc<Py<PyAny>>>, String> {
     let payload_dict = payload_obj
         .downcast::<PyDict>()
         .map_err(|_| "payload must be a dict".to_string())?;
@@ -341,7 +221,7 @@ fn parse_node_outcome(
         .get_item("update")
         .map_err(|e| format!("failed to read update: {e}"))?;
     let update = match update_item {
-        Some(v) if !v.is_none() => Some(v.unbind()),
+        Some(v) if !v.is_none() => Some(Arc::new(v.unbind())),
         _ => None,
     };
 
@@ -365,9 +245,9 @@ fn parse_node_outcome(
         let node = node_obj
             .extract::<String>()
             .map_err(|e| format!("send.node must be string: {e}"))?;
-        let arg: Py<PyAny> = match send_dict.get_item("arg") {
-            Ok(Some(v)) => v.unbind(),
-            Ok(None) => Python::with_gil(|py| py.None()),
+        let arg: Arc<Py<PyAny>> = match send_dict.get_item("arg") {
+            Ok(Some(v)) => Arc::new(v.unbind()),
+            Ok(None) => Arc::new(Python::with_gil(|py| py.None())),
             Err(e) => return Err(format!("failed to read send.arg: {e}")),
         };
         sends.push(SendPayload { node, arg });

@@ -211,11 +211,9 @@ class GraphRunHandler(Generic[StateT]):
         await self._run.publish(channel, value)
 
     async def receive_stream(self) -> Any | None:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            _advanced_graph_executor(),
-            self._run.receive_stream_sync,
-        )
+        # Use a separate thread pool from graph execution to avoid deadlock
+        # when LANGGRAPH_ADVANCED_GRAPH_PY_THREADS is configured to 1.
+        return await asyncio.to_thread(self._run.receive_stream_sync)
 
     def close_stream(self) -> None:
         self._run.close_stream_sync()
@@ -244,6 +242,9 @@ class _GraphEngineRun:
         self._rust_engine = PyRustEngine()
         for name in async_channel_specs:
             self._rust_engine.add_async_channel(name)
+        self._stream_ready = threading.Event()
+        if self._stream_mode is None:
+            self._stream_ready.set()
         self._tasks: set[asyncio.Task[list[Send]]] = set()
         self._finished = False
         self._state: Any = None
@@ -252,16 +253,24 @@ class _GraphEngineRun:
 
     async def run(self, initial_state: StateT) -> StateT:
         finish_point = self._finish_point or ""
+        if self._stream_mode is not None:
+            try:
+                self._rust_engine.start_stream(self._stream_mode)
+            finally:
+                self._stream_ready.set()
         loop = asyncio.get_running_loop()
-        result_obj = await loop.run_in_executor(
-            _advanced_graph_executor(),
-            self._rust_engine.run_graph_py,
-            self._entry_point,
-            finish_point,
-            initial_state,
-            self._execute_node_for_rust,
-            self._stream_mode,
-        )
+        try:
+            result_obj = await loop.run_in_executor(
+                _advanced_graph_executor(),
+                self._rust_engine.run_graph_py,
+                self._entry_point,
+                finish_point,
+                initial_state,
+                self._execute_node_for_rust,
+                None,
+            )
+        finally:
+            self._stream_ready.set()
         self._state = result_obj
         return cast(StateT, self._state)
 
@@ -328,6 +337,7 @@ class _GraphEngineRun:
         self._rust_engine.send_custom_stream_event_obj(value)
 
     def receive_stream_sync(self) -> Any | None:
+        self._stream_ready.wait()
         return self._rust_engine.receive_stream_obj()
 
     def close_stream_sync(self) -> None:

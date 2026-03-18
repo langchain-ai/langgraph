@@ -116,8 +116,9 @@ func (c *Context) SendCustomStreamEvent(value any) error {
 }
 
 type Handler[StateT any] struct {
-	engine *RustEngine
-	done   chan resultOrErr[StateT]
+	engine       *RustEngine
+	done         chan resultOrErr[StateT]
+	streamReadyC chan struct{}
 }
 
 type resultOrErr[StateT any] struct {
@@ -135,6 +136,7 @@ func (h *Handler[StateT]) WaitForResult() (StateT, error) {
 }
 
 func (h *Handler[StateT]) ReceiveStream() (any, error) {
+	<-h.streamReadyC
 	event, hasEvent, err := h.engine.ReceiveStream()
 	if err != nil {
 		return nil, err
@@ -146,6 +148,7 @@ func (h *Handler[StateT]) ReceiveStream() (any, error) {
 }
 
 func (h *Handler[StateT]) CloseStream() error {
+	<-h.streamReadyC
 	return h.engine.CloseStream()
 }
 
@@ -165,15 +168,27 @@ func (g *CompiledGraph[StateT]) Start(initialInput any, initialState StateT, str
 	}
 
 	handler := &Handler[StateT]{
-		engine: engine,
-		done:   make(chan resultOrErr[StateT], 1),
+		engine:       engine,
+		done:         make(chan resultOrErr[StateT], 1),
+		streamReadyC: make(chan struct{}),
 	}
 	go func() {
 		defer engine.Close()
+		streamModeForRun := resolvedStreamMode
+		if resolvedStreamMode != "" {
+			if err := engine.StartStream(resolvedStreamMode); err != nil {
+				close(handler.streamReadyC)
+				handler.done <- resultOrErr[StateT]{err: err}
+				close(handler.done)
+				return
+			}
+			streamModeForRun = ""
+		}
+		close(handler.streamReadyC)
 		rawState, err := engine.RunGraph(
 			g.entryPoint,
 			g.finishPoint,
-			resolvedStreamMode,
+			streamModeForRun,
 			initialState,
 			initialInput,
 			func(node string, nodeInput any, fallbackState map[string]any) (Command, error) {

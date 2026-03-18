@@ -491,3 +491,253 @@ impl Engine {
         }))
     }
 }
+
+#[derive(Debug, Deserialize)]
+struct CallbackSendPayloadJson {
+    node: String,
+    #[serde(default)]
+    arg: Value,
+}
+
+#[derive(Debug, Deserialize)]
+struct CallbackNodeExecResultJsonWire {
+    update: Option<Value>,
+    #[serde(default)]
+    sends: Vec<CallbackSendPayloadJson>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CallbackEnvelopeIn {
+    ok: bool,
+    #[serde(default)]
+    payload: Option<CallbackNodeExecResultJsonWire>,
+    #[serde(default)]
+    suspend: Option<WaitRequest>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+enum SchedulerEvent<U, A> {
+    Node(Result<NodeExecution<U, A>, String>),
+    Resume {
+        node: String,
+        arg: A,
+        event: WaitEvent,
+    },
+    WaitError(String),
+}
+
+struct NodeExecution<U, A> {
+    node: String,
+    arg: A,
+    outcome: NodeOutcome<U, A>,
+}
+
+fn spawn_node_task<State, U, A, F>(
+    node: String,
+    arg: A,
+    state_snapshot: State,
+    tx: tokio_mpsc::UnboundedSender<SchedulerEvent<U, A>>,
+    callback: Arc<F>,
+) -> Result<(), String>
+where
+    State: Send + 'static,
+    U: Send + 'static,
+    A: Clone + Send + 'static,
+    F: Fn(String, A, State) -> Result<NodeOutcome<U, A>, String> + Send + Sync + 'static,
+{
+    node_pool_execute(move || {
+        let node_for_result = node.clone();
+        let arg_for_result = arg.clone();
+        let result = callback(node, arg, state_snapshot).map(|outcome| NodeExecution {
+            node: node_for_result,
+            arg: arg_for_result,
+            outcome,
+        });
+        let _ = tx.send(SchedulerEvent::Node(result));
+    })
+}
+
+pub async fn run_graph_with_callback<State, U, A, FCallback, FMerge, FWrap>(
+    entry_point: String,
+    finish_point: String,
+    initial_state: State,
+    initial_input: A,
+    engine: Engine,
+    callback: FCallback,
+    merge_update: FMerge,
+    wrap_resume_arg: FWrap,
+) -> Result<State, String>
+where
+    State: Clone + Send + 'static,
+    U: Send + 'static,
+    A: Clone + Send + 'static,
+    FCallback: Fn(String, A, State) -> Result<NodeOutcome<U, A>, String> + Send + Sync + 'static,
+    FMerge: Fn(&mut State, Option<U>) -> Result<(), String> + Send + Sync + 'static,
+    FWrap: Fn(A, WaitEvent) -> Result<A, String> + Send + Sync + 'static,
+{
+    let callback = Arc::new(callback);
+    let merge_update = Arc::new(merge_update);
+    let wrap_resume_arg = Arc::new(wrap_resume_arg);
+
+    let (tx, mut rx) = tokio_mpsc::unbounded_channel::<SchedulerEvent<U, A>>();
+    let state = Arc::new(StdMutex::new(initial_state));
+    let tx_for_spawn = tx.clone();
+    let state_for_spawn = Arc::clone(&state);
+    let mut active: usize = 1;
+    let mut waiting: usize = 0;
+
+    spawn_node_task(
+        entry_point,
+        initial_input,
+        state_for_spawn
+            .lock()
+            .expect("state mutex poisoned")
+            .clone(),
+        tx_for_spawn.clone(),
+        Arc::clone(&callback),
+    )?;
+
+    while active > 0 || waiting > 0 {
+        let evt = rx
+            .recv()
+            .await
+            .ok_or_else(|| "scheduler event channel closed".to_string())?;
+        match evt {
+            SchedulerEvent::Node(result) => {
+                active = active.saturating_sub(1);
+                let exec = result?;
+                match exec.outcome {
+                    NodeOutcome::Completed(node_result) => {
+                        let mut guard = state.lock().expect("state mutex poisoned");
+                        merge_update(&mut guard, node_result.update)?;
+                        drop(guard);
+
+                        if exec.node == finish_point {
+                            break;
+                        }
+
+                        for send in node_result.sends {
+                            active += 1;
+                            let snapshot = state_for_spawn
+                                .lock()
+                                .expect("state mutex poisoned")
+                                .clone();
+                            spawn_node_task(
+                                send.node,
+                                send.arg,
+                                snapshot,
+                                tx_for_spawn.clone(),
+                                Arc::clone(&callback),
+                            )?;
+                        }
+                    }
+                    NodeOutcome::Suspended { wait } => {
+                        waiting += 1;
+                        let tx_wait = tx_for_spawn.clone();
+                        let node = exec.node;
+                        let arg = exec.arg;
+                        let engine_for_wait = engine.clone();
+                        tokio::spawn(async move {
+                            match engine_for_wait.wait_request_async(&wait).await {
+                                Ok(event) => {
+                                    let _ =
+                                        tx_wait.send(SchedulerEvent::Resume { node, arg, event });
+                                }
+                                Err(e) => {
+                                    let _ = tx_wait.send(SchedulerEvent::WaitError(e));
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+            SchedulerEvent::Resume { node, arg, event } => {
+                waiting = waiting.saturating_sub(1);
+                active += 1;
+                let snapshot = state_for_spawn
+                    .lock()
+                    .expect("state mutex poisoned")
+                    .clone();
+                let resume_arg = wrap_resume_arg(arg, event)?;
+                spawn_node_task(
+                    node,
+                    resume_arg,
+                    snapshot,
+                    tx_for_spawn.clone(),
+                    Arc::clone(&callback),
+                )?;
+            }
+            SchedulerEvent::WaitError(e) => return Err(e),
+        }
+    }
+
+    let final_state = state.lock().expect("state mutex poisoned").clone();
+    Ok(final_state)
+}
+
+pub async fn run_graph_json_with_callback<F>(
+    entry_point: String,
+    finish_point: String,
+    initial_state: Value,
+    initial_input: Value,
+    engine: Engine,
+    callback: F,
+) -> Result<Value, String>
+where
+    F: Fn(String, Value, Value) -> Result<NodeOutcome<Value, Value>, String>
+        + Send
+        + Sync
+        + 'static,
+{
+    run_graph_with_callback(
+        entry_point,
+        finish_point,
+        initial_state,
+        initial_input,
+        engine,
+        callback,
+        |state: &mut Value, update: Option<Value>| {
+            merge_json_update(state, update);
+            Ok(())
+        },
+        |arg: Value, event: WaitEvent| {
+            Ok(serde_json::json!({
+                "__lg_resume_arg__": arg,
+                "__lg_resume_event__": event,
+            }))
+        },
+    )
+    .await
+}
+
+pub fn parse_callback_envelope_json(
+    raw: &str,
+    node_name: &str,
+) -> Result<NodeOutcome<Value, Value>, String> {
+    let parsed: CallbackEnvelopeIn = serde_json::from_str(raw)
+        .map_err(|e| format!("decode callback envelope for `{node_name}` failed: {e}"))?;
+    if !parsed.ok {
+        return Err(parsed
+            .error
+            .unwrap_or_else(|| format!("callback reported error for `{node_name}`")));
+    }
+    if let Some(wait) = parsed.suspend {
+        return Ok(NodeOutcome::Suspended { wait });
+    }
+    let payload = parsed
+        .payload
+        .ok_or_else(|| format!("callback payload missing for `{node_name}`"))?;
+    let sends = payload
+        .sends
+        .into_iter()
+        .map(|s| SendPayload {
+            node: s.node,
+            arg: s.arg,
+        })
+        .collect();
+    Ok(NodeOutcome::Completed(NodeExecResult {
+        update: payload.update,
+        sends,
+    }))
+}

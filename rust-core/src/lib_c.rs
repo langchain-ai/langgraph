@@ -1,39 +1,11 @@
 use crate::engine::{
-    merge_json_update, node_pool_execute, run_loop_block_on, run_loop_spawn, AnyOfCondition,
-    Engine, NodeExecResult, NodeOutcome, SendPayload, WaitEvent, WaitRequest,
+    parse_callback_envelope_json, run_graph_json_with_callback, run_loop_block_on, run_loop_spawn,
+    AnyOfCondition, Engine, NodeOutcome,
 };
-use serde::Deserialize;
 use serde_json::Value;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc as tokio_mpsc;
-
-#[derive(Debug, Deserialize)]
-struct SendPayloadJson {
-    node: String,
-    #[serde(default)]
-    arg: Value,
-}
-
-#[derive(Debug, Deserialize)]
-struct NodeExecResultJsonWire {
-    update: Option<Value>,
-    #[serde(default)]
-    sends: Vec<SendPayloadJson>,
-}
-
-#[derive(Debug, Deserialize)]
-struct CallbackEnvelopeIn {
-    ok: bool,
-    #[serde(default)]
-    payload: Option<NodeExecResultJsonWire>,
-    #[serde(default)]
-    suspend: Option<WaitRequest>,
-    #[serde(default)]
-    error: Option<String>,
-}
 
 type CNodeCallback = unsafe extern "C" fn(
     user_data: libc::c_ulong,
@@ -41,9 +13,6 @@ type CNodeCallback = unsafe extern "C" fn(
     arg_json: *mut c_char,
     state_json: *mut c_char,
 ) -> *mut c_char;
-
-#[derive(Clone, Copy)]
-struct CUserData(libc::c_ulong);
 
 fn cstr_to_str<'a>(ptr: *const c_char) -> Result<&'a str, String> {
     if ptr.is_null() {
@@ -61,217 +30,6 @@ fn into_c_ptr(s: String) -> *mut c_char {
             .expect("static string is valid")
             .into_raw(),
     }
-}
-
-fn parse_c_callback_result(
-    raw: String,
-    node_name: &str,
-) -> Result<NodeOutcome<Value, Value>, String> {
-    let parsed: CallbackEnvelopeIn = serde_json::from_str(&raw)
-        .map_err(|e| format!("decode callback envelope for `{node_name}` failed: {e}"))?;
-    if !parsed.ok {
-        return Err(parsed
-            .error
-            .unwrap_or_else(|| format!("callback reported error for `{node_name}`")));
-    }
-    if let Some(wait) = parsed.suspend {
-        return Ok(NodeOutcome::Suspended { wait });
-    }
-    let payload = parsed
-        .payload
-        .ok_or_else(|| format!("callback payload missing for `{node_name}`"))?;
-    let sends = payload
-        .sends
-        .into_iter()
-        .map(|s| SendPayload {
-            node: s.node,
-            arg: s.arg,
-        })
-        .collect();
-    Ok(NodeOutcome::Completed(NodeExecResult {
-        update: payload.update,
-        sends,
-    }))
-}
-
-enum SchedulerEventJson {
-    Node(Result<NodeExecutionJson, String>),
-    Resume {
-        node: String,
-        arg: Value,
-        event: WaitEvent,
-    },
-    WaitError(String),
-}
-
-struct NodeExecutionJson {
-    node: String,
-    arg: Value,
-    outcome: NodeOutcome<Value, Value>,
-}
-
-fn spawn_json_node_task(
-    node: String,
-    arg: Value,
-    state_snapshot: Value,
-    tx: tokio_mpsc::UnboundedSender<SchedulerEventJson>,
-    user_data_bits: libc::c_ulong,
-    callback: CNodeCallback,
-) -> Result<(), String> {
-    node_pool_execute(move || {
-        let node_for_result = node.clone();
-        let arg_for_result = arg.clone();
-        let result = (|| -> Result<NodeExecutionJson, String> {
-            let node_c =
-                CString::new(node.clone()).map_err(|e| format!("invalid node name: {e}"))?;
-            let arg_json = serde_json::to_string(&arg)
-                .map_err(|e| format!("serialize arg for `{node}` failed: {e}"))?;
-            let state_json = serde_json::to_string(&state_snapshot)
-                .map_err(|e| format!("serialize state for `{node}` failed: {e}"))?;
-            let arg_c =
-                CString::new(arg_json).map_err(|e| format!("invalid arg JSON bytes: {e}"))?;
-            let state_c =
-                CString::new(state_json).map_err(|e| format!("invalid state JSON bytes: {e}"))?;
-            let out_ptr = unsafe {
-                callback(
-                    user_data_bits,
-                    node_c.as_ptr() as *mut c_char,
-                    arg_c.as_ptr() as *mut c_char,
-                    state_c.as_ptr() as *mut c_char,
-                )
-            };
-            if out_ptr.is_null() {
-                return Err(format!("callback returned null for `{node}`"));
-            }
-            let out_raw = unsafe { CStr::from_ptr(out_ptr) }
-                .to_string_lossy()
-                .into_owned();
-            unsafe {
-                libc::free(out_ptr.cast());
-            }
-            let payload = parse_c_callback_result(out_raw, &node)?;
-            Ok(NodeExecutionJson {
-                node: node_for_result,
-                arg: arg_for_result,
-                outcome: payload,
-            })
-        })();
-        let _ = tx.send(SchedulerEventJson::Node(result));
-    })
-}
-
-async fn run_graph_scheduler_json(
-    entry_point: String,
-    finish_point: String,
-    initial_state: Value,
-    initial_input: Value,
-    engine: Engine,
-    user_data: CUserData,
-    callback: CNodeCallback,
-) -> Result<Value, String> {
-    let (tx, mut rx) = tokio_mpsc::unbounded_channel::<SchedulerEventJson>();
-    let state = Arc::new(Mutex::new(initial_state));
-    let user_data_bits = user_data.0;
-    let tx_for_spawn = tx.clone();
-    let state_for_spawn = Arc::clone(&state);
-    let state_for_merge = Arc::clone(&state);
-    let mut active: usize = 1;
-    let mut waiting: usize = 0;
-    spawn_json_node_task(
-        entry_point,
-        initial_input,
-        state_for_spawn
-            .lock()
-            .expect("state mutex poisoned")
-            .clone(),
-        tx_for_spawn.clone(),
-        user_data_bits,
-        callback,
-    )?;
-    while active > 0 || waiting > 0 {
-        let evt = rx
-            .recv()
-            .await
-            .ok_or_else(|| "scheduler event channel closed".to_string())?;
-        match evt {
-            SchedulerEventJson::Node(result) => {
-                active = active.saturating_sub(1);
-                let exec = result?;
-                match exec.outcome {
-                    NodeOutcome::Completed(node_result) => {
-                        let mut guard = state_for_merge.lock().expect("state mutex poisoned");
-                        merge_json_update(&mut guard, node_result.update);
-                        drop(guard);
-                        if exec.node == finish_point {
-                            break;
-                        }
-                        for send in node_result.sends {
-                            active += 1;
-                            let snapshot = state_for_spawn
-                                .lock()
-                                .expect("state mutex poisoned")
-                                .clone();
-                            spawn_json_node_task(
-                                send.node,
-                                send.arg,
-                                snapshot,
-                                tx_for_spawn.clone(),
-                                user_data_bits,
-                                callback,
-                            )?;
-                        }
-                    }
-                    NodeOutcome::Suspended { wait } => {
-                        waiting += 1;
-                        let tx_wait = tx_for_spawn.clone();
-                        let node = exec.node;
-                        let arg = exec.arg;
-                        let engine_for_wait = engine.clone();
-                        tokio::spawn(async move {
-                            match engine_for_wait.wait_request_async(&wait).await {
-                                Ok(event) => {
-                                    let _ = tx_wait.send(SchedulerEventJson::Resume {
-                                        node,
-                                        arg,
-                                        event,
-                                    });
-                                }
-                                Err(e) => {
-                                    let _ = tx_wait.send(SchedulerEventJson::WaitError(e));
-                                }
-                            }
-                        });
-                    }
-                }
-            }
-            SchedulerEventJson::Resume { node, arg, event } => {
-                waiting = waiting.saturating_sub(1);
-                active += 1;
-                let snapshot = state_for_spawn
-                    .lock()
-                    .expect("state mutex poisoned")
-                    .clone();
-                spawn_json_node_task(
-                    node,
-                    wrap_resume_arg(arg, event),
-                    snapshot,
-                    tx_for_spawn.clone(),
-                    user_data_bits,
-                    callback,
-                )?;
-            }
-            SchedulerEventJson::WaitError(e) => return Err(e),
-        }
-    }
-    let final_state = state.lock().expect("state mutex poisoned").clone();
-    Ok(final_state)
-}
-
-fn wrap_resume_arg(arg: Value, event: WaitEvent) -> Value {
-    serde_json::json!({
-        "__lg_resume_arg__": arg,
-        "__lg_resume_event__": event,
-    })
 }
 
 #[no_mangle]
@@ -528,22 +286,56 @@ pub unsafe extern "C" fn rc_run_graph_json(
         }
     };
 
-    if let Err(e) = (*ptr).start_stream(stream_mode.as_deref()) {
-        return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}"));
+    if let Some(mode) = stream_mode.as_deref() {
+        if let Err(e) = (*ptr).start_stream(Some(mode)) {
+            return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}"));
+        }
     }
 
     let (tx, rx) = mpsc::channel::<Result<Value, String>>();
-    let user_data = CUserData(user_data);
+    let user_data_bits = user_data;
     let run_engine = (*ptr).clone();
     let submit = run_loop_spawn(async move {
-        let out = run_graph_scheduler_json(
+        let callback_wrapper = move |node: String,
+                                     arg: Value,
+                                     state_snapshot: Value|
+              -> Result<NodeOutcome<Value, Value>, String> {
+            let node_c =
+                CString::new(node.clone()).map_err(|e| format!("invalid node name: {e}"))?;
+            let arg_json = serde_json::to_string(&arg)
+                .map_err(|e| format!("serialize arg for `{node}` failed: {e}"))?;
+            let state_json = serde_json::to_string(&state_snapshot)
+                .map_err(|e| format!("serialize state for `{node}` failed: {e}"))?;
+            let arg_c =
+                CString::new(arg_json).map_err(|e| format!("invalid arg JSON bytes: {e}"))?;
+            let state_c =
+                CString::new(state_json).map_err(|e| format!("invalid state JSON bytes: {e}"))?;
+            let out_ptr = unsafe {
+                callback(
+                    user_data_bits,
+                    node_c.as_ptr() as *mut c_char,
+                    arg_c.as_ptr() as *mut c_char,
+                    state_c.as_ptr() as *mut c_char,
+                )
+            };
+            if out_ptr.is_null() {
+                return Err(format!("callback returned null for `{node}`"));
+            }
+            let out_raw = unsafe { CStr::from_ptr(out_ptr) }
+                .to_string_lossy()
+                .into_owned();
+            unsafe {
+                libc::free(out_ptr.cast());
+            }
+            parse_callback_envelope_json(&out_raw, &node)
+        };
+        let out = run_graph_json_with_callback(
             entry_point,
             finish_point,
             initial_state,
             initial_input,
             run_engine.clone(),
-            user_data,
-            callback,
+            callback_wrapper,
         )
         .await;
         run_engine.close_stream();

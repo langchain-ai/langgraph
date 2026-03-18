@@ -100,3 +100,10 @@ dmypy.json
 .turbo
 .editorconfig
 .scratch
+
+# macOS debug symbol bundles generated during local Rust builds
+saf-python-sdk/python/saf_python_sdk/*.dSYM/
+
+# Local PyO3 extension artifacts for saf-python-sdk
+saf-python-sdk/python/saf_python_sdk/langgraph_rust_core*.so
+saf-python-sdk/python/saf_python_sdk/langgraph_rust_core*.pyd
