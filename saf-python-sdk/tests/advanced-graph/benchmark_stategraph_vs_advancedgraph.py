@@ -40,7 +40,7 @@ def build_advanced_parallel() -> Any:
         return Command(goto=sends)
 
     async def end_node(ctx: Any, state: dict[str, Any]) -> dict[str, Any]:
-        await ctx.wait_for(channel_condition(done_channel, n=MIDDLE_COUNT))
+        await ctx.wait_for(channel_condition(done_channel, min=MIDDLE_COUNT))
         out = dict(state)
         out["done"] = True
         return out
@@ -161,7 +161,7 @@ def build_advanced_parallel_blocking() -> Any:
         return Command(goto=sends)
 
     async def end_node_blocking(ctx: Any, state: dict[str, Any]) -> dict[str, Any]:
-        await ctx.wait_for(channel_condition(done_channel, n=MIDDLE_COUNT))
+        await ctx.wait_for(channel_condition(done_channel, min=MIDDLE_COUNT))
         out = dict(state)
         out["done"] = True
         return out

@@ -64,9 +64,9 @@ func (w *lunchWorkflow) llmNode(ctx *ag.Context, _ any, _ lunchState) (ag.Comman
 func (w *lunchWorkflow) waitNode(ctx *ag.Context, _ any, state lunchState) (ag.Command, error) {
 	event, err := ctx.WaitFor(
 		ag.AnyOf(
-			ag.ChannelCondition{Channel: "tool_completion_channel", N: 1},
-			ag.ChannelCondition{Channel: "subagent_completion_channel", N: 1},
-			ag.ChannelCondition{Channel: "user_input_channel", N: 1},
+			ag.ChannelCondition{Channel: "tool_completion_channel"},
+			ag.ChannelCondition{Channel: "subagent_completion_channel"},
+			ag.ChannelCondition{Channel: "user_input_channel"},
 			ag.TimerCondition{Seconds: 1},
 		),
 	)

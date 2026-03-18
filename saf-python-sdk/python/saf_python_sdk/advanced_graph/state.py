@@ -26,7 +26,8 @@ class _ChannelSpec:
 @dataclass(frozen=True)
 class ChannelCondition:
     channel: str
-    n: int = 1
+    min: int = 1
+    max: int = 0
 
 
 @dataclass(frozen=True)
@@ -288,7 +289,9 @@ class _GraphEngineRun:
 
     async def wait_for(self, target: WaitCondition | AnyOfCondition) -> Any:
         if isinstance(target, ChannelCondition):
-            value = await self._wait_for_channel_values(target.channel, n=target.n)
+            value = await self._wait_for_channel_values(
+                target.channel, min=target.min, max=target.max
+            )
             return {
                 "condition": "channel",
                 "channel": target.channel,
@@ -305,15 +308,22 @@ class _GraphEngineRun:
             return await self._wait_for_any_of(target)
         raise ValueError(f"Unsupported wait condition type: {type(target)!r}")
 
-    async def _wait_for_channel_values(self, channel: str, n: int) -> Any:
-        if n < 1:
-            raise ValueError("wait_for count `n` must be >= 1")
+    async def _wait_for_channel_values(
+        self, channel: str, min: int, max: int = 0
+    ) -> Any:
+        if min < 1:
+            raise ValueError("wait_for count `min` must be >= 1")
+        if max < 0:
+            raise ValueError("wait_for max count `max` must be >= 0")
+        if max != 0 and max < min:
+            raise ValueError("wait_for max count `max` must be 0 or >= min")
         loop = asyncio.get_running_loop()
         event = await loop.run_in_executor(
             _advanced_graph_executor(),
             self._rust_engine.wait_channel,
             channel,
-            n,
+            min,
+            max,
         )
         return event["value"]
 
@@ -437,10 +447,14 @@ def _normalize_goto(goto: Any, *, default_input: Any) -> list[Send]:
     return []
 
 
-def channel_condition(channel: str, n: int = 1) -> ChannelCondition:
-    if n < 1:
-        raise ValueError("channel_condition `n` must be >= 1")
-    return ChannelCondition(channel=channel, n=n)
+def channel_condition(channel: str, min: int = 1, max: int = 0) -> ChannelCondition:
+    if min < 1:
+        raise ValueError("channel_condition `min` must be >= 1")
+    if max < 0:
+        raise ValueError("channel_condition `max` must be >= 0")
+    if max != 0 and max < min:
+        raise ValueError("channel_condition `max` must be 0 or >= min")
+    return ChannelCondition(channel=channel, min=min, max=max)
 
 
 def timer_condition(
@@ -478,7 +492,12 @@ def any_of(*conditions: WaitCondition) -> AnyOfCondition:
 
 def _condition_to_rust(condition: WaitCondition) -> dict[str, Any]:
     if isinstance(condition, ChannelCondition):
-        return {"kind": "channel", "channel": condition.channel, "n": condition.n}
+        return {
+            "kind": "channel",
+            "channel": condition.channel,
+            "min": condition.min,
+            "max": condition.max,
+        }
     if isinstance(condition, TimerCondition):
         return {"kind": "timer", "seconds": condition.seconds}
     raise TypeError(f"Unsupported condition type: {type(condition)!r}")

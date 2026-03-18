@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -120,5 +121,73 @@ func TestRunEndsWithoutFinishNode(t *testing.T) {
 	}
 	if len(result.Logs) != 2 || result.Logs[0] != "start" || result.Logs[1] != "middle:from_start" {
 		t.Fatalf("unexpected logs: %#v", result.Logs)
+	}
+}
+
+func (w *primitiveWorkflow) startWaitBatchNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	if err := ctx.PublishToChannel("events", "a"); err != nil {
+		return ag.Command{}, err
+	}
+	if err := ctx.PublishToChannel("events", "b"); err != nil {
+		return ag.Command{}, err
+	}
+	if err := ctx.PublishToChannel("events", "c"); err != nil {
+		return ag.Command{}, err
+	}
+	return ag.Command{
+		Update: state,
+		Goto: []ag.Send{
+			{Node: w.waitBatchNode, NodeInput: nil},
+		},
+	}, nil
+}
+
+func (w *primitiveWorkflow) waitBatchNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	event, err := ctx.WaitFor(ag.AnyOf(ag.ChannelCondition{
+		Channel: "events",
+		Min:     2,
+		Max:     4,
+	}))
+	if err != nil {
+		return ag.Command{}, err
+	}
+	var values []string
+	if err := json.Unmarshal(event.Value, &values); err != nil {
+		return ag.Command{}, err
+	}
+	state.Count = len(values)
+	state.Logs = values
+	state.Done = "ok"
+	return ag.Command{Update: state}, nil
+}
+
+func TestChannelWaitRespectsMaxM(t *testing.T) {
+	workflow := &primitiveWorkflow{}
+	graph := ag.NewAdvancedStateGraph[primitiveState]()
+	graph.AddAsyncChannel("events")
+	graph.AddEntryNode(workflow.startWaitBatchNode)
+	graph.AddFinishNode(workflow.waitBatchNode)
+
+	handler, err := graph.Compile().Start(nil, primitiveState{
+		Count: 0,
+		Logs:  []string{},
+		Done:  "",
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	result, err := handler.WaitForResult()
+	if err != nil {
+		t.Fatalf("result failed: %v", err)
+	}
+	if result.Count != 3 {
+		t.Fatalf("unexpected count: %v", result.Count)
+	}
+	if len(result.Logs) != 3 || result.Logs[0] != "a" || result.Logs[1] != "b" || result.Logs[2] != "c" {
+		t.Fatalf("unexpected logs: %#v", result.Logs)
+	}
+	if result.Done != "ok" {
+		t.Fatalf("unexpected done: %v", result.Done)
 	}
 }

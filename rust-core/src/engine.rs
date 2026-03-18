@@ -16,7 +16,12 @@ use tokio::sync::{mpsc as tokio_mpsc, Mutex as AsyncMutex, Notify};
 #[serde(tag = "kind")]
 pub enum WaitCondition {
     #[serde(rename = "channel")]
-    Channel { channel: String, n: usize },
+    Channel {
+        channel: String,
+        min: usize,
+        #[serde(default)]
+        max: usize,
+    },
     #[serde(rename = "timer")]
     Timer { seconds: f64 },
 }
@@ -379,12 +384,15 @@ impl Engine {
     pub async fn wait_for_async(&self, cond: &WaitCondition) -> Result<WaitEvent, String> {
         debug_log(&format!("Engine::wait_for_async(cond={cond:?})"));
         match cond {
-            WaitCondition::Channel { channel, n } => {
-                if *n < 1 {
-                    return Err("channel condition n must be >= 1".to_string());
+            WaitCondition::Channel { channel, min, max } => {
+                if *min < 1 {
+                    return Err("channel condition min must be >= 1".to_string());
+                }
+                if *max != 0 && *max < *min {
+                    return Err("channel condition max must be 0 or >= min".to_string());
                 }
                 loop {
-                    if let Some(event) = self.try_take_channel_event(channel, *n)? {
+                    if let Some(event) = self.try_take_channel_event(channel, *min, *max)? {
                         return Ok(event);
                     }
                     self.channel_notify.notified().await;
@@ -425,11 +433,14 @@ impl Engine {
 
         loop {
             for cond in &any_of.conditions {
-                if let WaitCondition::Channel { channel, n } = cond {
-                    if *n < 1 {
-                        return Err("channel condition n must be >= 1".to_string());
+                if let WaitCondition::Channel { channel, min, max } = cond {
+                    if *min < 1 {
+                        return Err("channel condition min must be >= 1".to_string());
                     }
-                    if let Some(event) = self.try_take_channel_event(channel, *n)? {
+                    if *max != 0 && *max < *min {
+                        return Err("channel condition max must be 0 or >= min".to_string());
+                    }
+                    if let Some(event) = self.try_take_channel_event(channel, *min, *max)? {
                         return Ok(event);
                     }
                 }
@@ -462,15 +473,21 @@ impl Engine {
         run_loop_block_on(self.wait_for_any_of_async(any_of))
     }
 
-    fn try_take_channel_event(&self, channel: &str, n: usize) -> Result<Option<WaitEvent>, String> {
+    fn try_take_channel_event(
+        &self,
+        channel: &str,
+        min: usize,
+        max: usize,
+    ) -> Result<Option<WaitEvent>, String> {
         let mut channels = self.channels.lock().expect("channels mutex poisoned");
         let queue = channels
             .get_mut(channel)
             .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
-        if queue.len() < n {
+        if queue.len() < min {
             return Ok(None);
         }
-        if n == 1 {
+        let take_count = if max == 0 { min } else { queue.len().min(max) };
+        if take_count == 1 {
             if let Some(value) = queue.pop_front() {
                 return Ok(Some(WaitEvent::Channel {
                     channel: channel.to_string(),
@@ -479,8 +496,8 @@ impl Engine {
             }
             return Ok(None);
         }
-        let mut values = Vec::with_capacity(n);
-        for _ in 0..n {
+        let mut values = Vec::with_capacity(take_count);
+        for _ in 0..take_count {
             if let Some(v) = queue.pop_front() {
                 values.push(v);
             }

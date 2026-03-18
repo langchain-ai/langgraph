@@ -11,18 +11,20 @@ type WaitCondition interface {
 
 type ChannelCondition struct {
 	Channel string
-	N       int
+	Min     int
+	Max     int
 }
 
 func (c ChannelCondition) toAny() map[string]any {
-	n := c.N
-	if n <= 0 {
-		n = 1
+	min := c.Min
+	if min <= 0 {
+		min = 1
 	}
 	return map[string]any{
 		"kind":    "channel",
 		"channel": c.Channel,
-		"n":       n,
+		"min":     min,
+		"max":     c.Max,
 	}
 }
 

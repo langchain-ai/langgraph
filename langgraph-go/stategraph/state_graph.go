@@ -26,7 +26,7 @@ func (c *Context) Interrupt(name string) (any, error) {
 	}
 	event, err := c.inner.WaitFor(ag.AnyOf(ag.ChannelCondition{
 		Channel: internalInterruptChannel,
-		N:       1,
+		Min:     1,
 	}))
 	if err != nil {
 		if waitReq, ok := ag.AsErrWaitRequested(err); ok {
@@ -172,7 +172,7 @@ func (g *BasicStateGraph[StateT]) Compile() *CompiledBasicStateGraph[StateT] {
 						if len(cond.Conditions) == 0 {
 							cond = ag.AnyOf(ag.ChannelCondition{
 								Channel: internalInterruptChannel,
-								N:       1,
+								Min:     1,
 							})
 						}
 						return ag.Command{}, ag.ErrWaitRequested{Condition: cond}
@@ -202,7 +202,7 @@ func (g *BasicStateGraph[StateT]) Compile() *CompiledBasicStateGraph[StateT] {
 				needed := len(levels[nextStep-1])
 				_, err := ctx.WaitFor(ag.AnyOf(ag.ChannelCondition{
 					Channel: internalBarrierChannel,
-					N:       needed,
+					Min:     needed,
 				}))
 				if err != nil {
 					return ag.Command{}, err

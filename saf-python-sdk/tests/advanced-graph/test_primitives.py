@@ -1,7 +1,7 @@
 import pytest
 from typing_extensions import TypedDict
 
-from saf_python_sdk.advanced_graph import AdvancedStateGraph, Context
+from saf_python_sdk.advanced_graph import AdvancedStateGraph, Context, channel_condition
 from saf_python_sdk.types import Command, Send
 
 pytestmark = pytest.mark.anyio
@@ -64,4 +64,29 @@ async def test_run_ends_without_finish_node() -> None:
     assert result["counter"] == 8
     assert result["done"] == "stopped"
     assert result["logs"] == ["start", "middle:from_start"]
+
+
+async def test_channel_wait_respects_max_m() -> None:
+    graph = AdvancedStateGraph(PrimitiveState)
+    graph.add_async_channel("events", list[str])
+
+    async def start_node(ctx: Context, state: PrimitiveState) -> Command:
+        ctx.publish_to_channel("events", "a")
+        ctx.publish_to_channel("events", "b")
+        ctx.publish_to_channel("events", "c")
+        return Command(update=state, goto=Send("wait_node", None))
+
+    async def wait_node(ctx: Context, _input: None, state: PrimitiveState) -> dict[str, object]:
+        event = await ctx.wait_for(channel_condition("events", min=2, max=4))
+        values = event["value"]
+        assert isinstance(values, list)
+        return {"counter": len(values), "logs": values, "done": "ok"}
+
+    graph.add_entry_node(start_node)
+    graph.add_finish_node(wait_node)
+
+    result = await graph.compile().ainvoke({"counter": 0, "logs": [], "done": None})
+    assert result["counter"] == 3
+    assert result["logs"] == ["a", "b", "c"]
+    assert result["done"] == "ok"
 

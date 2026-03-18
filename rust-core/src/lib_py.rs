@@ -45,19 +45,18 @@ impl PyRustEngine {
             .map_err(PyValueError::new_err)
     }
 
-    fn wait_any_of_json(&self, any_of_json: &str) -> PyResult<String> {
-        let any_of: AnyOfCondition = serde_json::from_str(any_of_json)
-            .map_err(|e| PyValueError::new_err(format!("Invalid any_of JSON: {e}")))?;
-        let event = run_loop_block_on(self.inner.wait_for_any_of_async(&any_of))
-            .map_err(PyValueError::new_err)?;
-        serde_json::to_string(&event)
-            .map_err(|e| PyValueError::new_err(format!("Serialize event failed: {e}")))
-    }
-
-    fn wait_channel(&self, py: Python<'_>, channel: &str, n: usize) -> PyResult<Py<PyAny>> {
+    #[pyo3(signature = (channel, min, max=None))]
+    fn wait_channel(
+        &self,
+        py: Python<'_>,
+        channel: &str,
+        min: usize,
+        max: Option<usize>,
+    ) -> PyResult<Py<PyAny>> {
         let cond = WaitCondition::Channel {
             channel: channel.to_string(),
-            n,
+            min,
+            max: max.unwrap_or(0),
         };
         let event =
             run_loop_block_on(self.inner.wait_for_async(&cond)).map_err(PyValueError::new_err)?;
@@ -77,8 +76,17 @@ impl PyRustEngine {
 
     fn wait_any_of_obj(&self, py: Python<'_>, any_of_payload: Py<PyAny>) -> PyResult<Py<PyAny>> {
         let payload_json = py_obj_to_json_string(py, &any_of_payload.bind(py))?;
-        let event_json = self.wait_any_of_json(&payload_json)?;
+        let event_json = self._wait_any_of_json(&payload_json)?;
         json_string_to_py_obj(py, &event_json)
+    }
+
+    fn _wait_any_of_json(&self, any_of_json: &str) -> PyResult<String> {
+        let any_of: AnyOfCondition = serde_json::from_str(any_of_json)
+            .map_err(|e| PyValueError::new_err(format!("Invalid any_of JSON: {e}")))?;
+        let event = run_loop_block_on(self.inner.wait_for_any_of_async(&any_of))
+            .map_err(PyValueError::new_err)?;
+        serde_json::to_string(&event)
+            .map_err(|e| PyValueError::new_err(format!("Serialize event failed: {e}")))
     }
 
     fn wait_condition_json(&self, cond_json: &str) -> PyResult<String> {
