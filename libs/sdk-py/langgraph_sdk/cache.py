@@ -7,9 +7,11 @@ Values must be JSON-serializable (dicts, lists, strings, numbers, booleans,
 
 from __future__ import annotations
 
+import functools
+import inspect
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypeVar, get_type_hints, overload
 
 T = TypeVar("T")
 
@@ -50,6 +52,7 @@ __all__ = [
     "cache_get",
     "cache_set",
     "swr",
+    "swr_cached",
 ]
 
 
@@ -138,3 +141,113 @@ async def swr(
     return await _api_swr(
         key, loader, fresh_for=fresh_for, max_age=max_age, model=model
     )
+
+
+def _build_cache_key(
+    qualname: str, sig: inspect.Signature, args: tuple, kwargs: dict[str, Any]
+) -> str:
+    parts: list[str] = [qualname]
+    if args or kwargs:
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+        for value in bound.arguments.values():
+            parts.append(str(value))
+    return ":".join(parts)
+
+
+def _get_model_from_hints(func: Callable[..., Any]) -> type | None:
+    try:
+        hints = get_type_hints(func)
+    except Exception:
+        return None
+    ret = hints.get("return")
+    if ret is None:
+        return None
+    try:
+        from pydantic import BaseModel
+    except ImportError:
+        return None
+    if isinstance(ret, type) and issubclass(ret, BaseModel):
+        return ret
+    return None
+
+
+@overload
+def swr_cached(
+    fn: Callable[..., Awaitable[T]],
+    /,
+) -> Callable[..., Awaitable[SWRResult[T]]]: ...
+
+
+@overload
+def swr_cached(
+    *,
+    key: str | Callable[..., str] | None = ...,
+    fresh_for: timedelta | None = ...,
+    max_age: timedelta | None = ...,
+    model: type[T] | None = ...,
+) -> Callable[
+    [Callable[..., Awaitable[T]]], Callable[..., Awaitable[SWRResult[T]]]
+]: ...
+
+
+def swr_cached(
+    fn=None,
+    *,
+    key=None,
+    fresh_for=None,
+    max_age=None,
+    model=None,
+):
+    """Decorator that wraps an async function with :func:`swr` caching.
+
+    Can be used with or without parentheses::
+
+        @swr_cached
+        async def fetch_config():
+            ...
+
+        @swr_cached(fresh_for=timedelta(minutes=5))
+        async def fetch_profile(user_id: str) -> Profile:
+            ...
+
+    The cache key is auto-derived from the function's qualified name and
+    stringified call arguments. Override with ``key=`` (a static string
+    or a callable that receives the same arguments as the decorated function).
+
+    If the return annotation is a Pydantic `BaseModel` subclass and
+    ``model`` is not provided, the model is inferred automatically.
+    """
+
+    def decorator(
+        func: Callable[..., Awaitable[T]],
+    ) -> Callable[..., Awaitable[SWRResult[T]]]:
+        sig = inspect.signature(func)
+        resolved_model = model
+        if resolved_model is None:
+            resolved_model = _get_model_from_hints(func)
+
+        @functools.wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> SWRResult[T]:
+            if key is None:
+                qualname = getattr(func, "__qualname__", None) or getattr(
+                    func, "__name__", "unknown"
+                )
+                cache_key = _build_cache_key(qualname, sig, args, kwargs)
+            elif callable(key):
+                cache_key = key(*args, **kwargs)
+            else:
+                cache_key = key
+            return await swr(
+                cache_key,
+                lambda: func(*args, **kwargs),
+                fresh_for=fresh_for,
+                max_age=max_age,
+                model=resolved_model,
+            )
+
+        return wrapper
+
+    if fn is not None:
+        return decorator(fn)
+    return decorator
