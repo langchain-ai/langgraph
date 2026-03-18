@@ -37,14 +37,23 @@ func (c *Context) Interrupt(name string) (any, error) {
 		}
 		return nil, err
 	}
-	if len(event.Value) == 0 {
+	if len(event.Conditions) == 0 || !event.Conditions[0].Met {
 		return nil, nil
+	}
+	values := event.Conditions[0].Values
+	if len(values) == 0 {
+		return nil, nil
+	}
+	rawValue := values[0]
+	valueBytes, err := json.Marshal(rawValue)
+	if err != nil {
+		return nil, fmt.Errorf("encode interrupt `%s` value: %w", name, err)
 	}
 
 	var payload interruptPayload
-	if err := json.Unmarshal(event.Value, &payload); err != nil {
+	if err := json.Unmarshal(valueBytes, &payload); err != nil {
 		var value any
-		if err := json.Unmarshal(event.Value, &value); err != nil {
+		if err := json.Unmarshal(valueBytes, &value); err != nil {
 			return nil, fmt.Errorf("decode interrupt `%s` value: %w", name, err)
 		}
 		return value, nil

@@ -1,7 +1,12 @@
 import pytest
 from typing_extensions import TypedDict
 
-from saf_python_sdk.advanced_graph import AdvancedStateGraph, Context, channel_condition
+from saf_python_sdk.advanced_graph import (
+    AdvancedStateGraph,
+    Context,
+    any_of,
+    channel_condition,
+)
 from saf_python_sdk.types import Command, Send
 
 pytestmark = pytest.mark.anyio
@@ -77,8 +82,8 @@ async def test_channel_wait_respects_max_m() -> None:
         return Command(update=state, goto=Send("wait_node", None))
 
     async def wait_node(ctx: Context, _input: None, state: PrimitiveState) -> dict[str, object]:
-        event = await ctx.wait_for(channel_condition("events", min=2, max=4))
-        values = event["value"]
+        result = await ctx.wait_for(channel_condition("events", min=2, max=4))
+        values = result.conditions[0].values or []
         assert isinstance(values, list)
         return {"counter": len(values), "logs": values, "done": "ok"}
 
@@ -88,5 +93,56 @@ async def test_channel_wait_respects_max_m() -> None:
     result = await graph.compile().ainvoke({"counter": 0, "logs": [], "done": None})
     assert result["counter"] == 3
     assert result["logs"] == ["a", "b", "c"]
+    assert result["done"] == "ok"
+
+
+async def test_any_of_consumes_all_ready_channels() -> None:
+    graph = AdvancedStateGraph(PrimitiveState)
+    graph.add_async_channel("alpha", str)
+    graph.add_async_channel("beta", str)
+
+    async def start_node(ctx: Context, state: PrimitiveState) -> Command:
+        ctx.publish_to_channel("alpha", "a1")
+        ctx.publish_to_channel("beta", "b1")
+        return Command(update=state, goto=Send("wait_node", None))
+
+    async def wait_node(ctx: Context, _input: None, state: PrimitiveState) -> Command:
+        first = await ctx.wait_for(
+            any_of(channel_condition("alpha"), channel_condition("beta"))
+        )
+        assert len(first.conditions) == 2
+        assert first.conditions[0].met is True
+        assert first.conditions[0].channel_name == "alpha"
+        assert first.conditions[0].values == ["a1"]
+        assert first.conditions[1].met is True
+        assert first.conditions[1].channel_name == "beta"
+        assert first.conditions[1].values == ["b1"]
+        ctx.publish_to_channel("beta", "b2")
+        return Command(
+            update={"counter": 1, "logs": ["matched=2"], "done": None},
+            goto=Send("verify_node", None),
+        )
+
+    async def verify_node(
+        ctx: Context, _input: None, state: PrimitiveState
+    ) -> dict[str, object]:
+        second = await ctx.wait_for(channel_condition("beta"))
+        values = second.conditions[0].values or []
+        return {
+            "counter": 2,
+            "logs": [*state["logs"], f"beta={values[0]}"],
+            "done": "ok",
+        }
+
+    graph.add_entry_node(start_node)
+    graph.add_node(wait_node)
+    graph.add_finish_node(verify_node)
+
+    result = await graph.compile().ainvoke({"counter": 0, "logs": [], "done": None})
+    assert result["counter"] == 2
+    assert result["logs"] == [
+        "matched=2",
+        "beta=b2",
+    ]
     assert result["done"] == "ok"
 

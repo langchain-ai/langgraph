@@ -75,16 +75,25 @@ func (w *lunchWorkflow) waitNode(ctx *ag.Context, _ any, state lunchState) (ag.C
 	}
 
 	output := append([]string(nil), state.Output...)
-	if event.Condition == "channel" {
-		payload := ag.DecodeString(event.Value)
-		switch event.Channel {
-		case "tool_completion_channel":
-			output = append(output, "tool: "+payload)
-		case "subagent_completion_channel":
-			output = append(output, "sub_agent: "+payload)
-		case "user_input_channel":
-			output = append(output, "user_input: "+payload)
+	hadChannel := false
+	for _, cond := range event.Conditions {
+		if !cond.Met || cond.ChannelName == "" {
+			continue
 		}
+		for _, raw := range cond.Values {
+			payload, _ := raw.(string)
+			switch cond.ChannelName {
+			case "tool_completion_channel":
+				output = append(output, "tool: "+payload)
+			case "subagent_completion_channel":
+				output = append(output, "sub_agent: "+payload)
+			case "user_input_channel":
+				output = append(output, "user_input: "+payload)
+			}
+		}
+		hadChannel = true
+	}
+	if hadChannel {
 		state.Output = output
 		return ag.Command{Goto: []ag.Send{{Node: w.llmNode}}, Update: state}, nil
 	}

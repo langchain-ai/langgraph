@@ -92,7 +92,7 @@ def build_main_agent(planner: MockLLM, sub_agent: Any) -> Any:
 
     async def wait_node(ctx: Context, state: MainAgentState) -> Command:
         # Lightweight interrupt: only this node blocks for the next relevant signal.
-        event = await ctx.wait_for(
+        result = await ctx.wait_for(
             any_of(
                 channel_condition("tool_completion_channel"),
                 channel_condition("subagent_completion_channel"),
@@ -100,21 +100,33 @@ def build_main_agent(planner: MockLLM, sub_agent: Any) -> Any:
                 timer_condition(seconds=1),
             )
         )
-        if event["condition"] == "channel":
-            channel = event["channel"]
-            payload = event["value"]
-            if channel == "tool_completion_channel":
-                state["output"].append(f"tool: {payload}")
-            elif channel == "subagent_completion_channel":
-                state["output"].append(f"sub_agent: {payload}")
-            elif channel == "user_input_channel":
-                state["output"].append(f"user_input: {payload}")
+        had_channel_update = False
+        for item in result.conditions:
+            if not item.met:
+                continue
+            if item.channel_name == "tool_completion_channel":
+                payloads = item.values or []
+                for payload in payloads:
+                    state["output"].append(f"tool: {payload}")
+                had_channel_update = True
+            elif item.channel_name == "subagent_completion_channel":
+                payloads = item.values or []
+                for payload in payloads:
+                    state["output"].append(f"sub_agent: {payload}")
+                had_channel_update = True
+            elif item.channel_name == "user_input_channel":
+                payloads = item.values or []
+                for payload in payloads:
+                    state["output"].append(f"user_input: {payload}")
+                had_channel_update = True
+
+        if had_channel_update:
             # State changed -> ask planner what to do next.
             return Command(update=state, goto=Send("llm_node", None))
-        else:
-            state["output"].append("timer: no updates yet")
-            # No meaningful state change -> keep waiting without calling planner.
-            return Command(update=state, goto=Send("wait_node", None))
+
+        state["output"].append("timer: no updates yet")
+        # No meaningful state change -> keep waiting without calling planner.
+        return Command(update=state, goto=Send("wait_node", None))
 
     async def tool_node(ctx: Context, tool_input: str) -> None:
         await asyncio.sleep(0.1)

@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -143,7 +142,7 @@ func (w *primitiveWorkflow) startWaitBatchNode(ctx *ag.Context, _ any, state pri
 }
 
 func (w *primitiveWorkflow) waitBatchNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
-	event, err := ctx.WaitFor(ag.AnyOf(ag.ChannelCondition{
+	result, err := ctx.WaitFor(ag.AnyOf(ag.ChannelCondition{
 		Channel: "events",
 		Min:     2,
 		Max:     4,
@@ -151,9 +150,13 @@ func (w *primitiveWorkflow) waitBatchNode(ctx *ag.Context, _ any, state primitiv
 	if err != nil {
 		return ag.Command{}, err
 	}
-	var values []string
-	if err := json.Unmarshal(event.Value, &values); err != nil {
-		return ag.Command{}, err
+	if len(result.Conditions) != 1 || !result.Conditions[0].Met {
+		return ag.Command{}, fmt.Errorf("expected one met condition")
+	}
+	values := make([]string, 0, len(result.Conditions[0].Values))
+	for _, v := range result.Conditions[0].Values {
+		s, _ := v.(string)
+		values = append(values, s)
 	}
 	state.Count = len(values)
 	state.Logs = values
@@ -185,6 +188,103 @@ func TestChannelWaitRespectsMaxM(t *testing.T) {
 		t.Fatalf("unexpected count: %v", result.Count)
 	}
 	if len(result.Logs) != 3 || result.Logs[0] != "a" || result.Logs[1] != "b" || result.Logs[2] != "c" {
+		t.Fatalf("unexpected logs: %#v", result.Logs)
+	}
+	if result.Done != "ok" {
+		t.Fatalf("unexpected done: %v", result.Done)
+	}
+}
+
+func (w *primitiveWorkflow) startAnyOfTwoChannelsNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	if err := ctx.PublishToChannel("alpha", "a1"); err != nil {
+		return ag.Command{}, err
+	}
+	if err := ctx.PublishToChannel("beta", "b1"); err != nil {
+		return ag.Command{}, err
+	}
+	return ag.Command{
+		Update: state,
+		Goto: []ag.Send{
+			{Node: w.waitAnyOfTwoChannelsNode, NodeInput: nil},
+		},
+	}, nil
+}
+
+func (w *primitiveWorkflow) waitAnyOfTwoChannelsNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	first, err := ctx.WaitFor(ag.AnyOf(
+		ag.ChannelCondition{Channel: "alpha"},
+		ag.ChannelCondition{Channel: "beta"},
+	))
+	if err != nil {
+		return ag.Command{}, err
+	}
+	if len(first.Conditions) != 2 {
+		return ag.Command{}, fmt.Errorf("expected 2 condition results, got %d", len(first.Conditions))
+	}
+	if !first.Conditions[0].Met || first.Conditions[0].ChannelName != "alpha" || len(first.Conditions[0].Values) != 1 || first.Conditions[0].Values[0] != "a1" {
+		return ag.Command{}, fmt.Errorf("unexpected first condition result: %#v", first.Conditions[0])
+	}
+	if !first.Conditions[1].Met || first.Conditions[1].ChannelName != "beta" || len(first.Conditions[1].Values) != 1 || first.Conditions[1].Values[0] != "b1" {
+		return ag.Command{}, fmt.Errorf("unexpected second condition result: %#v", first.Conditions[1])
+	}
+	if err := ctx.PublishToChannel("beta", "b2"); err != nil {
+		return ag.Command{}, err
+	}
+	state.Count = 1
+	state.Logs = []string{
+		"matched=2",
+	}
+	return ag.Command{
+		Update: state,
+		Goto: []ag.Send{
+			{Node: w.verifyBetaAfterAnyOfNode, NodeInput: nil},
+		},
+	}, nil
+}
+
+func (w *primitiveWorkflow) verifyBetaAfterAnyOfNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	second, err := ctx.WaitFor(ag.AnyOf(
+		ag.ChannelCondition{Channel: "beta"},
+	))
+	if err != nil {
+		return ag.Command{}, err
+	}
+	if len(second.Conditions) != 1 || !second.Conditions[0].Met || second.Conditions[0].ChannelName != "beta" || len(second.Conditions[0].Values) != 1 {
+		return ag.Command{}, fmt.Errorf("unexpected beta condition result: %#v", second.Conditions)
+	}
+	payload, _ := second.Conditions[0].Values[0].(string)
+	state.Count = 2
+	state.Logs = append(state.Logs, fmt.Sprintf("beta=%s", payload))
+	state.Done = "ok"
+	return ag.Command{Update: state}, nil
+}
+
+func TestAnyOfConsumesAllReadyChannels(t *testing.T) {
+	workflow := &primitiveWorkflow{}
+	graph := ag.NewAdvancedStateGraph[primitiveState]()
+	graph.AddAsyncChannel("alpha")
+	graph.AddAsyncChannel("beta")
+	graph.AddEntryNode(workflow.startAnyOfTwoChannelsNode)
+	graph.AddNode(workflow.waitAnyOfTwoChannelsNode)
+	graph.AddFinishNode(workflow.verifyBetaAfterAnyOfNode)
+
+	handler, err := graph.Compile().Start(nil, primitiveState{
+		Count: 0,
+		Logs:  []string{},
+		Done:  "",
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	result, err := handler.WaitForResult()
+	if err != nil {
+		t.Fatalf("result failed: %v", err)
+	}
+	if result.Count != 2 {
+		t.Fatalf("unexpected count: %v", result.Count)
+	}
+	if len(result.Logs) != 2 || result.Logs[0] != "matched=2" || result.Logs[1] != "beta=b2" {
 		t.Fatalf("unexpected logs: %#v", result.Logs)
 	}
 	if result.Done != "ok" {

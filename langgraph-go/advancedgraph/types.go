@@ -58,6 +58,16 @@ type WaitEvent struct {
 	Seconds   float64         `json:"seconds,omitempty"`
 }
 
+type ConditionResult struct {
+	Met         bool   `json:"met"`
+	ChannelName string `json:"channel_name,omitempty"`
+	Values      []any  `json:"values,omitempty"`
+}
+
+type WaitForResult struct {
+	Conditions []ConditionResult `json:"conditions"`
+}
+
 type Send struct {
 	Node      any
 	NodeInput any

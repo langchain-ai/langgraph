@@ -98,13 +98,13 @@ type Context struct {
 	resumeEvent *WaitEvent
 }
 
-func (c *Context) WaitFor(cond AnyOfCondition) (WaitEvent, error) {
+func (c *Context) WaitFor(cond AnyOfCondition) (WaitForResult, error) {
 	if c.resumeEvent != nil {
 		event := *c.resumeEvent
 		c.resumeEvent = nil
-		return event, nil
+		return waitForResultFromRaw(cond, event), nil
 	}
-	return WaitEvent{}, ErrWaitRequested{Condition: cond}
+	return WaitForResult{}, ErrWaitRequested{Condition: cond}
 }
 
 func (c *Context) PublishToChannel(channel string, value any) error {
@@ -389,4 +389,78 @@ func unwrapResumeInput(input any) (any, *WaitEvent) {
 		return rawArg, nil
 	}
 	return rawArg, &event
+}
+
+func waitForResultFromRaw(cond AnyOfCondition, event WaitEvent) WaitForResult {
+	result := WaitForResult{
+		Conditions: make([]ConditionResult, len(cond.Conditions)),
+	}
+
+	if event.Condition == "timer" {
+		for i, raw := range cond.Conditions {
+			if kind, _ := raw["kind"].(string); kind == "timer" {
+				result.Conditions[i] = ConditionResult{Met: true}
+				break
+			}
+		}
+		return result
+	}
+
+	if event.Condition != "channel" {
+		return result
+	}
+
+	if event.Channel == "__any_of__" {
+		var matched []struct {
+			Channel string `json:"channel"`
+			Value   any    `json:"value"`
+		}
+		_ = json.Unmarshal(event.Value, &matched)
+		cursor := 0
+		for i, raw := range cond.Conditions {
+			kind, _ := raw["kind"].(string)
+			if kind != "channel" || cursor >= len(matched) {
+				continue
+			}
+			channelName, _ := raw["channel"].(string)
+			if channelName == matched[cursor].Channel {
+				result.Conditions[i] = ConditionResult{
+					Met:         true,
+					ChannelName: channelName,
+					Values:      toValues(matched[cursor].Value),
+				}
+				cursor++
+			}
+		}
+		return result
+	}
+
+	var value any
+	_ = json.Unmarshal(event.Value, &value)
+	for i, raw := range cond.Conditions {
+		kind, _ := raw["kind"].(string)
+		if kind != "channel" {
+			continue
+		}
+		channelName, _ := raw["channel"].(string)
+		if channelName == event.Channel {
+			result.Conditions[i] = ConditionResult{
+				Met:         true,
+				ChannelName: channelName,
+				Values:      toValues(value),
+			}
+			break
+		}
+	}
+	return result
+}
+
+func toValues(value any) []any {
+	if value == nil {
+		return []any{}
+	}
+	if vals, ok := value.([]any); ok {
+		return vals
+	}
+	return []any{value}
 }

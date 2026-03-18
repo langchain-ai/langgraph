@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 use std::env;
@@ -432,18 +433,8 @@ impl Engine {
         }
 
         loop {
-            for cond in &any_of.conditions {
-                if let WaitCondition::Channel { channel, min, max } = cond {
-                    if *min < 1 {
-                        return Err("channel condition min must be >= 1".to_string());
-                    }
-                    if *max != 0 && *max < *min {
-                        return Err("channel condition max must be 0 or >= min".to_string());
-                    }
-                    if let Some(event) = self.try_take_channel_event(channel, *min, *max)? {
-                        return Ok(event);
-                    }
-                }
+            if let Some(event) = self.try_take_any_of_channel_events(any_of)? {
+                return Ok(event);
             }
 
             if let Some(seconds) = min_timer {
@@ -507,6 +498,89 @@ impl Engine {
             value: serde_json::Value::Array(values),
         }))
     }
+
+    fn try_take_any_of_channel_events(
+        &self,
+        any_of: &AnyOfCondition,
+    ) -> Result<Option<WaitEvent>, String> {
+        let mut channels = self.channels.lock().expect("channels mutex poisoned");
+        let mut consumed_per_channel: HashMap<String, usize> = HashMap::new();
+        let mut plans: Vec<(String, usize)> = Vec::new();
+
+        for cond in &any_of.conditions {
+            let WaitCondition::Channel { channel, min, max } = cond else {
+                continue;
+            };
+            if *min < 1 {
+                return Err("channel condition min must be >= 1".to_string());
+            }
+            if *max != 0 && *max < *min {
+                return Err("channel condition max must be 0 or >= min".to_string());
+            }
+
+            let queue = channels
+                .get(channel)
+                .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
+            let already_planned = consumed_per_channel.get(channel).copied().unwrap_or(0);
+            let available = queue.len().saturating_sub(already_planned);
+            if available < *min {
+                continue;
+            }
+
+            let take_count = if *max == 0 { *min } else { available.min(*max) };
+            plans.push((channel.clone(), take_count));
+            consumed_per_channel
+                .entry(channel.clone())
+                .and_modify(|v| *v += take_count)
+                .or_insert(take_count);
+        }
+
+        if plans.is_empty() {
+            return Ok(None);
+        }
+
+        if plans.len() == 1 {
+            let (channel, take_count) = &plans[0];
+            let queue = channels
+                .get_mut(channel)
+                .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
+            let value = pop_queue_value(queue, *take_count);
+            return Ok(Some(WaitEvent::Channel {
+                channel: channel.clone(),
+                value,
+            }));
+        }
+
+        let mut matched = Vec::with_capacity(plans.len());
+        for (channel, take_count) in plans {
+            let queue = channels
+                .get_mut(&channel)
+                .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
+            let value = pop_queue_value(queue, take_count);
+            matched.push(json!({
+                "channel": channel,
+                "value": value,
+            }));
+        }
+
+        Ok(Some(WaitEvent::Channel {
+            channel: "__any_of__".to_string(),
+            value: Value::Array(matched),
+        }))
+    }
+}
+
+fn pop_queue_value(queue: &mut VecDeque<Value>, take_count: usize) -> Value {
+    if take_count == 1 {
+        return queue.pop_front().unwrap_or(Value::Null);
+    }
+    let mut values = Vec::with_capacity(take_count);
+    for _ in 0..take_count {
+        if let Some(v) = queue.pop_front() {
+            values.push(v);
+        }
+    }
+    Value::Array(values)
 }
 
 #[derive(Debug, Deserialize)]
