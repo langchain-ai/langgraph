@@ -119,12 +119,12 @@ def _restore_message_metadata(
     if not isinstance(message, dict):
         return data
     message_id = message.get("id")
-    if not isinstance(message_id, str):
-        return data
-    if isinstance(metadata, dict):
-        metadata_by_message_id[message_id] = metadata
-        return (message, metadata)
-    return (message, metadata_by_message_id.get(message_id))
+    if isinstance(message_id, str):
+        if isinstance(metadata, dict):
+            metadata_by_message_id[message_id] = metadata
+        else:
+            metadata = metadata_by_message_id.get(message_id)
+    return (message, metadata)
 
 
 def _merge_values_patch(

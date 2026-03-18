@@ -603,6 +603,7 @@ class TestV2StreamAsync:
             assert isinstance(metadata, dict)
             assert "langgraph_node" in metadata
 
+    @NEEDS_CONTEXTVARS
     @pytest.mark.anyio
     async def test_messages_streaming_compact_dedupes_metadata(self) -> None:
         graph = _make_streaming_messages_graph().compile()
