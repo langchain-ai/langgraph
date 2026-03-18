@@ -36,17 +36,13 @@ impl PyRustEngine {
         self.inner.add_async_channel(name);
     }
 
-    fn publish_json(&self, channel: &str, value_json: &str) -> PyResult<()> {
-        let value: Value = serde_json::from_str(value_json)
-            .map_err(|e| PyValueError::new_err(format!("Invalid JSON value: {e}")))?;
-        self.inner
-            .publish_json(channel, value)
-            .map_err(PyValueError::new_err)
-    }
-
     fn publish_obj(&self, py: Python<'_>, channel: &str, value: Py<PyAny>) -> PyResult<()> {
         let value_json = py_obj_to_json_string(py, &value.bind(py))?;
-        self.publish_json(channel, &value_json)
+        let parsed: Value = serde_json::from_str(&value_json)
+            .map_err(|e| PyValueError::new_err(format!("Invalid Python JSON value: {e}")))?;
+        self.inner
+            .publish_json(channel, parsed)
+            .map_err(PyValueError::new_err)
     }
 
     fn wait_any_of_json(&self, any_of_json: &str) -> PyResult<String> {
