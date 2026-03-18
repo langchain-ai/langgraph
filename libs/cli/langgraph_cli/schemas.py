@@ -632,11 +632,15 @@ class Config(TypedDict, total=False):
     """
 
     pip_installer: str | None
-    """Optional. Python package installer to use ('auto', 'pip', 'uv').
-    
+    """Optional. Python package installer to use ('auto', 'pip', 'uv', 'uv_lock').
+
     - 'auto' (default): Use uv for supported base images, otherwise pip
     - 'pip': Force use of pip regardless of base image support
     - 'uv': Force use of uv (will fail if base image doesn't support it)
+    - 'uv_lock': Use uv with a uv.lock file for reproducible builds. Requires
+      a uv.lock and pyproject.toml in the project root. Third-party dependencies
+      are exported from the lock file and installed with constraints validation,
+      then local packages are installed as editable without re-resolving.
     """
 
     dockerfile_lines: list[str]

@@ -270,6 +270,16 @@ def test_validate_config_pip_installer():
     )
     assert config["pip_installer"] == "uv"
 
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "pip_installer": "uv_lock",
+        }
+    )
+    assert config["pip_installer"] == "uv_lock"
+
     # Missing pip_installer should default to "auto"
     config = validate_config(
         {
@@ -291,7 +301,7 @@ def test_validate_config_pip_installer():
             }
         )
     assert "Invalid pip_installer: 'conda'" in str(exc_info.value)
-    assert "Must be 'auto', 'pip', or 'uv'" in str(exc_info.value)
+    assert "Must be 'auto', 'pip', 'uv', or 'uv_lock'" in str(exc_info.value)
 
     with pytest.raises(click.UsageError) as exc_info:
         validate_config(
@@ -1076,6 +1086,142 @@ def test_config_to_docker_pip_installer():
         PATH_TO_CONFIG, config_default, base_image="langchain/langgraph-api:0.2.47"
     )
     assert "uv pip install --system " in docker_default
+
+
+def test_config_to_docker_uv_lock():
+    """Test that pip_installer='uv_lock' generates correct Dockerfile."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.touch()
+
+        # Create pyproject.toml and uv.lock
+        (tmpdir_path / "pyproject.toml").write_text(
+            '[project]\nname = "myproject"\nversion = "0.1"\n'
+        )
+        (tmpdir_path / "uv.lock").write_text("# uv lock file\n")
+
+        # Create the graph file directory
+        graphs_dir = tmpdir_path / "graphs"
+        graphs_dir.mkdir()
+        (graphs_dir / "agent.py").touch()
+
+        graphs = {"agent": "./graphs/agent.py:graph"}
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+                "pip_installer": "uv_lock",
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        # Should use uv pip install
+        assert "uv pip install --system" in docker
+        # Should have the uv export step
+        assert (
+            "uv export --frozen --no-hashes --no-emit-project --no-emit-workspace"
+            in docker
+        )
+        assert "ADD pyproject.toml /tmp/uv_export/pyproject.toml" in docker
+        assert "ADD uv.lock /tmp/uv_export/uv.lock" in docker
+        assert "-r /tmp/uv_requirements.txt" in docker
+        # Local deps should use --no-deps
+        assert "--no-deps -e ." in docker
+        # Should still have uv cleanup
+        assert "rm /usr/bin/uv /usr/bin/uvx" in docker
+
+
+def test_config_to_docker_uv_lock_missing_lockfile():
+    """Test that uv_lock fails when uv.lock is missing."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.touch()
+
+        # Create pyproject.toml but NOT uv.lock
+        (tmpdir_path / "pyproject.toml").write_text(
+            '[project]\nname = "myproject"\nversion = "0.1"\n'
+        )
+
+        graphs = {"agent": "./graphs/agent.py:graph"}
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+                "pip_installer": "uv_lock",
+            }
+        )
+        with pytest.raises(click.UsageError, match="no uv.lock file found"):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.47"
+            )
+
+
+def test_config_to_docker_uv_lock_missing_pyproject():
+    """Test that uv_lock fails when pyproject.toml is missing."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.touch()
+
+        # Create uv.lock but NOT pyproject.toml
+        # We need a setup.py so "." is treated as a real package
+        (tmpdir_path / "uv.lock").write_text("# uv lock file\n")
+        (tmpdir_path / "setup.py").write_text("")
+
+        graphs_dir = tmpdir_path / "graphs"
+        graphs_dir.mkdir()
+        (graphs_dir / "agent.py").touch()
+
+        graphs = {"agent": "./graphs/agent.py:graph"}
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+                "pip_installer": "uv_lock",
+            }
+        )
+        with pytest.raises(click.UsageError, match="no pyproject.toml found"):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.47"
+            )
+
+
+def test_config_to_docker_uv_lock_old_image():
+    """Test that uv_lock fails with an old base image."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.touch()
+
+        (tmpdir_path / "pyproject.toml").write_text(
+            '[project]\nname = "myproject"\nversion = "0.1"\n'
+        )
+        (tmpdir_path / "uv.lock").write_text("# uv lock file\n")
+
+        graphs_dir = tmpdir_path / "graphs"
+        graphs_dir.mkdir()
+        (graphs_dir / "agent.py").touch()
+
+        graphs = {"agent": "./graphs/agent.py:graph"}
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+                "pip_installer": "uv_lock",
+            }
+        )
+        with pytest.raises(ValueError, match="requires a base image with uv support"):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.46"
+            )
 
 
 def test_config_retain_build_tools():

@@ -258,10 +258,10 @@ def validate_config(config: Config) -> Config:
             )
 
     if pip_installer := config.get("pip_installer"):
-        if pip_installer not in ["auto", "pip", "uv"]:
+        if pip_installer not in ["auto", "pip", "uv", "uv_lock"]:
             raise click.UsageError(
                 f"Invalid pip_installer: '{pip_installer}'. "
-                "Must be 'auto', 'pip', or 'uv'."
+                "Must be 'auto', 'pip', 'uv', or 'uv_lock'."
             )
 
     # Validate auth config
@@ -921,12 +921,33 @@ def python_config_to_docker(
             pip_installer = "uv"
         else:
             pip_installer = "pip"
-    if pip_installer == "uv":
+    if pip_installer in ("uv", "uv_lock"):
         install_cmd = "uv pip install --system"
     elif pip_installer == "pip":
         install_cmd = "pip install"
     else:
         raise ValueError(f"Invalid pip_installer: {pip_installer}")
+
+    # Validate uv_lock requirements
+    uv_lock_path: pathlib.Path | None = None
+    if pip_installer == "uv_lock":
+        if not _image_supports_uv(base_image):
+            raise ValueError(
+                "pip_installer 'uv_lock' requires a base image with uv support "
+                "(langchain/langgraph-api >= 0.2.47)"
+            )
+        uv_lock_path = config_path.parent / "uv.lock"
+        if not uv_lock_path.exists():
+            raise click.UsageError(
+                f"pip_installer is 'uv_lock' but no uv.lock file found at "
+                f"{uv_lock_path}. Ensure a uv.lock file exists in the project root."
+            )
+        pyproject_path = config_path.parent / "pyproject.toml"
+        if not pyproject_path.exists():
+            raise click.UsageError(
+                f"pip_installer is 'uv_lock' but no pyproject.toml found at "
+                f"{pyproject_path}. A pyproject.toml is required alongside uv.lock."
+            )
 
     # configure pip
     local_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
@@ -1023,12 +1044,24 @@ ADD {relpath} /deps/{name}
         else ""
     )
 
+    # For uv_lock: export locked deps and install them before local packages
+    uv_lock_str = ""
+    if pip_installer == "uv_lock":
+        uv_lock_str = f"""# -- Installing dependencies from uv.lock --
+ADD pyproject.toml /tmp/uv_export/pyproject.toml
+ADD uv.lock /tmp/uv_export/uv.lock
+RUN cd /tmp/uv_export && uv export --frozen --no-hashes --no-emit-project --no-emit-workspace -o /tmp/uv_requirements.txt
+RUN {global_reqs_pip_install} -r /tmp/uv_requirements.txt
+RUN rm -rf /tmp/uv_export /tmp/uv_requirements.txt
+# -- End of uv.lock dependencies install --"""
+
     installs = f"{os.linesep}{os.linesep}".join(
         filter(
             None,
             [
                 install_node_str,
                 pip_config_file_str,
+                uv_lock_str,
                 pip_pkgs_str,
                 pip_reqs_str,
                 local_pkgs_str,
@@ -1094,6 +1127,9 @@ ADD {relpath} /deps/{name}
 
     # Add main dockerfile content
     dep_vname = "$$dep" if escape_variables else "$dep"
+    # For uv_lock, deps are already installed from the lock file export,
+    # so install local packages without re-resolving dependencies.
+    local_install_flags = "--no-deps -e ." if pip_installer == "uv_lock" else "-e ."
     docker_file_contents.extend(
         [
             f"FROM {image_str}",
@@ -1107,7 +1143,7 @@ ADD {relpath} /deps/{name}
             echo "Installing {dep_vname}"; \
             if [ -d "{dep_vname}" ]; then \
                 echo "Installing {dep_vname}"; \
-                (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
+                (cd "{dep_vname}" && {global_reqs_pip_install} {local_install_flags}); \
             fi; \
         done""",
             "# -- End of local dependencies install --",
@@ -1119,7 +1155,8 @@ ADD {relpath} /deps/{name}
             _get_pip_cleanup_lines(
                 install_cmd=install_cmd,
                 to_uninstall=build_tools_to_uninstall,
-                pip_installer=pip_installer,
+                # uv_lock uses uv under the hood
+                pip_installer="uv" if pip_installer == "uv_lock" else pip_installer,
             ),
             "",
             f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
