@@ -7,11 +7,18 @@ Values must be JSON-serializable (dicts, lists, strings, numbers, booleans,
 
 from __future__ import annotations
 
+import dataclasses
+import enum
 import functools
 import inspect
-from collections.abc import Awaitable, Callable
-from datetime import timedelta
+from collections.abc import Awaitable, Callable, Mapping
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from pathlib import PurePath
 from typing import Any, Generic, Literal, TypeVar, get_type_hints, overload
+from uuid import UUID
+
+import orjson
 
 T = TypeVar("T")
 
@@ -144,15 +151,166 @@ async def swr(
 
 
 def _build_cache_key(
-    qualname: str, sig: inspect.Signature, args: tuple, kwargs: dict[str, Any]
+    module: str,
+    qualname: str,
+    sig: inspect.Signature,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
 ) -> str:
-    parts: list[str] = [qualname]
-    if args or kwargs:
-        bound = sig.bind(*args, **kwargs)
-        bound.apply_defaults()
-        for value in bound.arguments.values():
-            parts.append(str(value))
-    return ":".join(parts)
+    bound = sig.bind(*args, **kwargs)
+    bound.apply_defaults()
+    payload = {
+        "module": module,
+        "qualname": qualname,
+        "args": [
+            {
+                "name": name,
+                "value": _normalize_cache_key_value(value, name=name, path=name),
+            }
+            for name, value in bound.arguments.items()
+        ],
+    }
+    return orjson.dumps(payload, option=orjson.OPT_SORT_KEYS).decode()
+
+
+def _type_identifier(tp: type[Any]) -> str:
+    return f"{tp.__module__}.{tp.__qualname__}"
+
+
+def _stable_key_dump(value: Any) -> bytes:
+    return orjson.dumps(value, option=orjson.OPT_SORT_KEYS)
+
+
+def _normalize_cache_key_value(
+    value: Any,
+    *,
+    name: str | None = None,
+    path: str = "value",
+) -> Any:
+    if name in {"self", "cls"}:
+        cls = value if isinstance(value, type) else type(value)
+        return {"class": _type_identifier(cls), "kind": name}
+
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+
+    if isinstance(value, bytes):
+        return {"hex": value.hex(), "kind": "bytes"}
+
+    if isinstance(value, (datetime, date, time)):
+        return {"kind": type(value).__name__, "value": value.isoformat()}
+
+    if isinstance(value, timedelta):
+        return {"kind": "timedelta", "value": value.total_seconds()}
+
+    if isinstance(value, Decimal):
+        return {"kind": "decimal", "value": str(value)}
+
+    if isinstance(value, UUID):
+        return {"kind": "uuid", "value": str(value)}
+
+    if isinstance(value, PurePath):
+        return {"kind": "path", "value": str(value)}
+
+    if isinstance(value, enum.Enum):
+        return {
+            "kind": "enum",
+            "type": _type_identifier(type(value)),
+            "value": _normalize_cache_key_value(value.value, path=f"{path}.value"),
+        }
+
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {
+            "fields": {
+                field.name: _normalize_cache_key_value(
+                    getattr(value, field.name),
+                    path=f"{path}.{field.name}",
+                )
+                for field in dataclasses.fields(value)
+            },
+            "kind": "dataclass",
+            "type": _type_identifier(type(value)),
+        }
+
+    if hasattr(value, "model_dump") and callable(value.model_dump):
+        if isinstance(value, type):
+            raise TypeError(
+                f"Cannot auto-generate a stable cache key for `{path}` from the "
+                f"type object {value!r}. Pass `key=` to `swr_cached` instead."
+            )
+        return {
+            "kind": "model",
+            "type": _type_identifier(type(value)),
+            "value": _normalize_cache_key_value(
+                value.model_dump(mode="json"),
+                path=path,
+            ),
+        }
+
+    if hasattr(value, "dict") and callable(value.dict):
+        if isinstance(value, type):
+            raise TypeError(
+                f"Cannot auto-generate a stable cache key for `{path}` from the "
+                f"type object {value!r}. Pass `key=` to `swr_cached` instead."
+            )
+        return {
+            "kind": "model",
+            "type": _type_identifier(type(value)),
+            "value": _normalize_cache_key_value(value.dict(), path=path),
+        }
+
+    if isinstance(value, Mapping):
+        items = [
+            {
+                "key": _normalize_cache_key_value(key, path=f"{path}.<key>"),
+                "value": _normalize_cache_key_value(
+                    item,
+                    path=f"{path}[{key!r}]",
+                ),
+            }
+            for key, item in value.items()
+        ]
+        items.sort(key=lambda item: _stable_key_dump(item["key"]))
+        return {"items": items, "kind": "mapping"}
+
+    if isinstance(value, tuple):
+        return {
+            "items": [
+                _normalize_cache_key_value(item, path=f"{path}[{index}]")
+                for index, item in enumerate(value)
+            ],
+            "kind": "tuple",
+        }
+
+    if isinstance(value, list):
+        return {
+            "items": [
+                _normalize_cache_key_value(item, path=f"{path}[{index}]")
+                for index, item in enumerate(value)
+            ],
+            "kind": "list",
+        }
+
+    if isinstance(value, (set, frozenset)):
+        items = [_normalize_cache_key_value(item, path=f"{path}[]") for item in value]
+        items.sort(key=_stable_key_dump)
+        return {"items": items, "kind": type(value).__name__}
+
+    if isinstance(value, type):
+        return {"kind": "type", "type": _type_identifier(value)}
+
+    if type(value).__repr__ is object.__repr__:
+        raise TypeError(
+            f"Cannot auto-generate a stable cache key for `{path}` of type "
+            f"`{_type_identifier(type(value))}`. Pass `key=` to `swr_cached` "
+            "instead."
+        )
+
+    return {
+        "kind": "repr",
+        "repr": repr(value),
+        "type": _type_identifier(type(value)),
+    }
 
 
 def _get_model_from_hints(func: Callable[..., Any]) -> type | None:
@@ -211,9 +369,12 @@ def swr_cached(
         async def fetch_profile(user_id: str) -> Profile:
             ...
 
-    The cache key is auto-derived from the function's qualified name and
-    stringified call arguments. Override with ``key=`` (a static string
-    or a callable that receives the same arguments as the decorated function).
+    The cache key is auto-derived from the function's module, qualified name,
+    and a structured serialization of the bound call arguments. For methods,
+    ``self`` and ``cls`` are keyed by class identity rather than object
+    instance identity. Override with ``key=`` (a static string or a callable
+    that receives the same arguments as the decorated function) when method
+    state matters or arguments are not stably serializable.
 
     If the return annotation is a Pydantic `BaseModel` subclass and
     ``model`` is not provided, the model is inferred automatically.
@@ -230,10 +391,11 @@ def swr_cached(
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> SWRResult[T]:
             if key is None:
+                module = getattr(func, "__module__", None) or "unknown"
                 qualname = getattr(func, "__qualname__", None) or getattr(
                     func, "__name__", "unknown"
                 )
-                cache_key = _build_cache_key(qualname, sig, args, kwargs)
+                cache_key = _build_cache_key(module, qualname, sig, args, kwargs)
             elif callable(key):
                 cache_key = key(*args, **kwargs)
             else:

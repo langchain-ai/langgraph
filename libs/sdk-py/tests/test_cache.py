@@ -1,6 +1,8 @@
+import inspect
 from datetime import timedelta
 from unittest.mock import AsyncMock
 
+import orjson
 import pytest
 
 import langgraph_sdk.cache as cache_module
@@ -75,7 +77,7 @@ async def test_swr_defaults(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_swr_cached_no_parens(monkeypatch):
-    """@swr_cached without parentheses uses qualname as key."""
+    """`@swr_cached` without parentheses uses a structured auto-derived key."""
     forwarded = {}
 
     async def fake_swr(key, loader, *, fresh_for, max_age, model):  # noqa: ARG001
@@ -90,9 +92,14 @@ async def test_swr_cached_no_parens(monkeypatch):
         return {"debug": True}
 
     result = await fetch_config()
+    cache_key = orjson.loads(forwarded["key"])
 
     assert result == {"debug": True}
-    assert forwarded["key"] == "test_swr_cached_no_parens.<locals>.fetch_config"
+    assert cache_key == {
+        "args": [],
+        "module": fetch_config.__module__,
+        "qualname": fetch_config.__qualname__,
+    }
     assert forwarded["model"] is None
 
 
@@ -121,7 +128,7 @@ async def test_swr_cached_with_options(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_swr_cached_key_includes_args(monkeypatch):
-    """Arguments are appended to the auto-derived cache key."""
+    """Arguments are serialized structurally into the auto-derived cache key."""
     forwarded = {}
 
     async def fake_swr(key, loader, *, fresh_for, max_age, model):  # noqa: ARG001
@@ -135,9 +142,44 @@ async def test_swr_cached_key_includes_args(monkeypatch):
         return {"id": user_id}
 
     await fetch_profile("abc123")
+    cache_key = orjson.loads(forwarded["key"])
+    assert cache_key["args"] == [{"name": "user_id", "value": "abc123"}]
 
-    expected_prefix = "test_swr_cached_key_includes_args.<locals>.fetch_profile"
-    assert forwarded["key"] == f"{expected_prefix}:abc123"
+
+def test_build_cache_key_distinguishes_modules():
+    async def fetch_profile(user_id: str): ...
+
+    sig = inspect.signature(fetch_profile)
+    key_one = cache_module._build_cache_key(
+        "alpha.module", "fetch_profile", sig, ("1",), {}
+    )
+    key_two = cache_module._build_cache_key(
+        "beta.module", "fetch_profile", sig, ("1",), {}
+    )
+
+    assert key_one != key_two
+
+
+def test_build_cache_key_distinguishes_argument_boundaries():
+    async def fetch_profile(left: str, right: str): ...
+
+    sig = inspect.signature(fetch_profile)
+    key_one = cache_module._build_cache_key(
+        "alpha.module",
+        "fetch_profile",
+        sig,
+        ("a:b", "c"),
+        {},
+    )
+    key_two = cache_module._build_cache_key(
+        "alpha.module",
+        "fetch_profile",
+        sig,
+        ("a", "b:c"),
+        {},
+    )
+
+    assert key_one != key_two
 
 
 @pytest.mark.asyncio
@@ -176,6 +218,51 @@ async def test_swr_cached_explicit_key_callable(monkeypatch):
 
     await fetch_repo("langchain-ai", "langgraph")
     assert forwarded["key"] == "repo:langchain-ai/langgraph"
+
+
+@pytest.mark.asyncio
+async def test_swr_cached_method_key_uses_class_identity(monkeypatch):
+    forwarded = []
+
+    async def fake_swr(key, loader, *, fresh_for, max_age, model):  # noqa: ARG001
+        forwarded.append(key)
+        return await loader()
+
+    monkeypatch.setattr(cache_module, "_api_swr", fake_swr)
+
+    class Client:
+        @swr_cached
+        async def fetch_repo(self, repo: str):
+            return {"repo": repo}
+
+    await Client().fetch_repo("langgraph")
+    await Client().fetch_repo("langgraph")
+
+    assert forwarded[0] == forwarded[1]
+    cache_key = orjson.loads(forwarded[0])
+    assert cache_key["args"][0] == {
+        "name": "self",
+        "value": {
+            "class": f"{Client.__module__}.{Client.__qualname__}",
+            "kind": "self",
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_swr_cached_rejects_unstable_object_args():
+    class Unstable:
+        pass
+
+    @swr_cached
+    async def fetch_profile(user: Unstable):
+        return {"user_type": type(user).__name__}
+
+    with pytest.raises(
+        TypeError,
+        match="Cannot auto-generate a stable cache key for `user`",
+    ):
+        await fetch_profile(Unstable())
 
 
 @pytest.mark.asyncio
