@@ -1123,6 +1123,76 @@ async def test_subgraph_time_travel_to_first_interrupt_async(
     assert "step_a" not in called
     assert "ask_1" in called
 
+@NEEDS_CONTEXTVARS
+async def test_subgraph_time_travel_to_first_interrupt_and_resume_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Time travel to a subgraph checkpoint at the FIRST interrupt (async)."""
+
+    called: list[str] = []
+
+    async def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    async def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    async def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt (ask_1)
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    # Capture subgraph state at the first interrupt
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config_at_first = parent_state.tasks[0].state.config
+
+    # Resume through both interrupts to complete
+    await graph.ainvoke(Command(resume="answer_1"), config)
+    await graph.ainvoke(Command(resume="answer_2"), config)
+
+    # --- Scenario 1: Replay from subgraph checkpoint at 1st interrupt ---
+    called.clear()
+    replay_result = await graph.ainvoke(None, sub_config_at_first)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 1?"
+    assert "step_a" not in called
+    assert "ask_1" in called
+
+    # Resume from first interrupt
+    result = await graph.ainvoke(Command(resume="answer_1_new"), config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+
+
 
 @NEEDS_CONTEXTVARS
 async def test_subgraph_time_travel_to_second_interrupt_async(
