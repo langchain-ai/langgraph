@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "saf-python-sdk"
-version = "0.1.2"
+version = "0.1.3"
 description = "Standalone advanced graph runtime powered by Rust engine"
 readme = "README.md"
 requires-python = ">=3.10"

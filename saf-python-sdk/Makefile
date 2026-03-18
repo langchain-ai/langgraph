@@ -8,8 +8,9 @@ TEST_BASE = uv run --python $(PYTHON_VERSION) --with pytest --with anyio --with 
 publish-to-pypi-saf-python-sdk:
 	@test -n "$(PYPI_TOKEN)" || (echo "PYPI_TOKEN is required"; exit 1)
 	cd "$(CURDIR)" && \
+	PATH="$(HOME)/.cargo/bin:$$PATH" \
 	MATURIN_PYPI_TOKEN="$(PYPI_TOKEN)" \
-	uvx maturin publish --repository $(PYPI_REPOSITORY) --non-interactive --skip-existing --no-sdist
+	uv run --with maturin maturin publish --repository $(PYPI_REPOSITORY) --non-interactive --skip-existing --no-sdist
 
 all-tests:
 	$(TEST_BASE) tests/advanced-graph/test_*.py
