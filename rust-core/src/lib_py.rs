@@ -64,8 +64,11 @@ impl PyRustEngine {
             min,
             max: max.unwrap_or(0),
         };
-        let event =
-            run_loop_block_on(self.inner.wait_for_async(&cond)).map_err(PyValueError::new_err)?;
+        let any_of = AnyOfCondition {
+            conditions: vec![cond],
+        };
+        let event = run_loop_block_on(self.inner.wait_for_any_of_async(&any_of))
+            .map_err(PyValueError::new_err)?;
         let event_json = serde_json::to_string(&event)
             .map_err(|e| PyValueError::new_err(format!("Serialize event failed: {e}")))?;
         json_string_to_py_obj(py, &event_json)
@@ -73,8 +76,11 @@ impl PyRustEngine {
 
     fn wait_timer(&self, py: Python<'_>, seconds: f64) -> PyResult<Py<PyAny>> {
         let cond = WaitCondition::Timer { seconds };
-        let event =
-            run_loop_block_on(self.inner.wait_for_async(&cond)).map_err(PyValueError::new_err)?;
+        let any_of = AnyOfCondition {
+            conditions: vec![cond],
+        };
+        let event = run_loop_block_on(self.inner.wait_for_any_of_async(&any_of))
+            .map_err(PyValueError::new_err)?;
         let event_json = serde_json::to_string(&event)
             .map_err(|e| PyValueError::new_err(format!("Serialize event failed: {e}")))?;
         json_string_to_py_obj(py, &event_json)
@@ -98,8 +104,11 @@ impl PyRustEngine {
     fn wait_condition_json(&self, cond_json: &str) -> PyResult<String> {
         let cond: WaitCondition = serde_json::from_str(cond_json)
             .map_err(|e| PyValueError::new_err(format!("Invalid condition JSON: {e}")))?;
-        let event =
-            run_loop_block_on(self.inner.wait_for_async(&cond)).map_err(PyValueError::new_err)?;
+        let any_of = AnyOfCondition {
+            conditions: vec![cond],
+        };
+        let event = run_loop_block_on(self.inner.wait_for_any_of_async(&any_of))
+            .map_err(PyValueError::new_err)?;
         serde_json::to_string(&event)
             .map_err(|e| PyValueError::new_err(format!("Serialize event failed: {e}")))
     }

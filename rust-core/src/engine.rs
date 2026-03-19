@@ -160,11 +160,11 @@ where
     pool.execute(task)
 }
 
-pub fn run_loop_pool_execute<F>(task: F) -> Result<(), String>
+fn _run_loop_pool_execute<F>(task: F) -> Result<(), String>
 where
     F: FnOnce() + Send + 'static,
 {
-    debug_log("run_loop_pool_execute() called");
+    debug_log("_run_loop_pool_execute() called");
     run_runtime().spawn_blocking(task);
     Ok(())
 }
@@ -200,7 +200,7 @@ fn run_runtime() -> &'static Runtime {
     })
 }
 
-pub fn run_scheduler_loop<U: Send + 'static, A: Send + 'static, FSpawn, FMerge>(
+fn _run_scheduler_loop<U: Send + 'static, A: Send + 'static, FSpawn, FMerge>(
     entry_point: String,
     finish_point: &str,
     initial_arg: A,
@@ -212,7 +212,7 @@ where
     FSpawn: FnMut(String, A) -> Result<(), String>,
     FMerge: FnMut(&str, Option<U>) -> Result<(), String>,
 {
-    debug_log("run_scheduler_loop() started");
+    debug_log("_run_scheduler_loop() started");
     let mut active: usize = 1;
     debug_log("scheduling initial entry node");
     spawn(entry_point, initial_arg)?;
@@ -246,20 +246,20 @@ where
         }
     }
 
-    debug_log("run_scheduler_loop() finished");
+    debug_log("_run_scheduler_loop() finished");
     Ok(())
 }
 
-pub fn merge_json_update(state: &mut Value, update: Option<Value>) {
-    debug_log("merge_json_update() called");
+fn _merge_json_update(state: &mut Value, update: Option<Value>) {
+    debug_log("_merge_json_update() called");
     let Some(update_value) = update else {
-        debug_log("merge_json_update(): no update payload");
+        debug_log("_merge_json_update(): no update payload");
         return;
     };
     match (&mut *state, update_value) {
         (Value::Object(state_obj), Value::Object(update_obj)) => {
             debug_log(&format!(
-                "merge_json_update(): object merge with {} keys",
+                "_merge_json_update(): object merge with {} keys",
                 update_obj.len()
             ));
             for (k, v) in update_obj {
@@ -268,7 +268,7 @@ pub fn merge_json_update(state: &mut Value, update: Option<Value>) {
         }
         (Value::Object(state_obj), Value::Array(entries)) => {
             debug_log(&format!(
-                "merge_json_update(): tuple-list merge with {} entries",
+                "_merge_json_update(): tuple-list merge with {} entries",
                 entries.len()
             ));
             for entry in entries {
@@ -281,7 +281,7 @@ pub fn merge_json_update(state: &mut Value, update: Option<Value>) {
                 }
             }
         }
-        _ => debug_log("merge_json_update(): unsupported update shape, ignored"),
+        _ => debug_log("_merge_json_update(): unsupported update shape, ignored"),
     }
 }
 
@@ -410,37 +410,18 @@ impl Engine {
         Ok(())
     }
 
-    pub async fn wait_request_async(&self, wait: &WaitRequest) -> Result<WaitEvent, String> {
+    async fn _wait_request_async(&self, wait: &WaitRequest) -> Result<WaitEvent, String> {
         match wait {
-            WaitRequest::Condition { condition } => self.wait_for_async(condition).await,
+            WaitRequest::Condition { condition } => {
+                debug_log(&format!(
+                    "Engine::_wait_request_async(single_condition={condition:?})"
+                ));
+                let any_of = AnyOfCondition {
+                    conditions: vec![condition.clone()],
+                };
+                self.wait_for_any_of_async(&any_of).await
+            }
             WaitRequest::AnyOf { any_of } => self.wait_for_any_of_async(any_of).await,
-        }
-    }
-
-    pub async fn wait_for_async(&self, cond: &WaitCondition) -> Result<WaitEvent, String> {
-        debug_log(&format!("Engine::wait_for_async(cond={cond:?})"));
-        match cond {
-            WaitCondition::Channel { channel, min, max } => {
-                if *min < 1 {
-                    return Err("channel condition min must be >= 1".to_string());
-                }
-                if *max != 0 && *max < *min {
-                    return Err("channel condition max must be 0 or >= min".to_string());
-                }
-                loop {
-                    if let Some(event) = self.try_take_channel_event(channel, *min, *max)? {
-                        return Ok(event);
-                    }
-                    self.channel_notify.notified().await;
-                }
-            }
-            WaitCondition::Timer { seconds } => {
-                if *seconds <= 0.0 {
-                    return Err("timer condition must be > 0".to_string());
-                }
-                tokio::time::sleep(Duration::from_secs_f64(*seconds)).await;
-                Ok(WaitEvent::Timer { seconds: *seconds })
-            }
         }
     }
 
@@ -489,49 +470,6 @@ impl Engine {
                 self.channel_notify.notified().await;
             }
         }
-    }
-
-    pub fn wait_for(&self, cond: &WaitCondition) -> Result<WaitEvent, String> {
-        run_loop_block_on(self.wait_for_async(cond))
-    }
-
-    pub fn wait_for_any_of(&self, any_of: &AnyOfCondition) -> Result<WaitEvent, String> {
-        run_loop_block_on(self.wait_for_any_of_async(any_of))
-    }
-
-    fn try_take_channel_event(
-        &self,
-        channel: &str,
-        min: usize,
-        max: usize,
-    ) -> Result<Option<WaitEvent>, String> {
-        let mut channels = self.channels.lock().expect("channels mutex poisoned");
-        let queue = channels
-            .get_mut(channel)
-            .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
-        if queue.len() < min {
-            return Ok(None);
-        }
-        let take_count = if max == 0 { min } else { queue.len().min(max) };
-        if take_count == 1 {
-            if let Some(value) = queue.pop_front() {
-                return Ok(Some(WaitEvent::Channel {
-                    channel: channel.to_string(),
-                    value,
-                }));
-            }
-            return Ok(None);
-        }
-        let mut values = Vec::with_capacity(take_count);
-        for _ in 0..take_count {
-            if let Some(v) = queue.pop_front() {
-                values.push(v);
-            }
-        }
-        Ok(Some(WaitEvent::Channel {
-            channel: channel.to_string(),
-            value: serde_json::Value::Array(values),
-        }))
     }
 
     fn try_take_any_of_channel_events(
@@ -765,7 +703,7 @@ where
                         let arg = exec.arg;
                         let engine_for_wait = engine.clone();
                         tokio::spawn(async move {
-                            match engine_for_wait.wait_request_async(&wait).await {
+                            match engine_for_wait._wait_request_async(&wait).await {
                                 Ok(event) => {
                                     let _ =
                                         tx_wait.send(SchedulerEvent::Resume { node, arg, event });
@@ -824,7 +762,7 @@ where
         engine,
         callback,
         |state: &mut Value, update: Option<Value>| {
-            merge_json_update(state, update);
+            _merge_json_update(state, update);
             Ok(())
         },
         |arg: Value, event: WaitEvent| {
