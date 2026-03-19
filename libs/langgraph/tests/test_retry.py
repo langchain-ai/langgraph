@@ -5,6 +5,7 @@ from typing_extensions import TypedDict
 
 from langgraph.graph import START, StateGraph
 from langgraph.pregel._retry import _checkpoint_ns_for_parent_command, _should_retry_on
+from langgraph.runtime import Runtime
 from langgraph.types import RetryPolicy
 
 
@@ -168,10 +169,15 @@ def test_graph_with_single_retry_policy():
         foo: str
 
     attempt_count = 0
+    attempt_numbers: list[int] = []
+    first_attempt_times: list[float | None] = []
 
-    def failing_node(state: State):
+    def failing_node(state: State, runtime: Runtime):
         nonlocal attempt_count
         attempt_count += 1
+        assert runtime.execution_info.node_attempt == attempt_count
+        attempt_numbers.append(runtime.execution_info.node_attempt)
+        first_attempt_times.append(runtime.execution_info.node_first_attempt_time)
         if attempt_count < 3:  # Fail the first two attempts
             raise ValueError("Intentional failure")
         return {"foo": "success"}
@@ -203,11 +209,40 @@ def test_graph_with_single_retry_policy():
 
     # Verify retry behavior
     assert attempt_count == 3  # The node should have been tried 3 times
+    assert attempt_numbers == [1, 2, 3]
+    assert len(first_attempt_times) == 3
+    assert first_attempt_times[0] is not None
+    assert first_attempt_times[1] == first_attempt_times[0]
+    assert first_attempt_times[2] == first_attempt_times[0]
     assert result["foo"] == "other_node"  # Final result should be from other_node
 
     # Verify the sleep intervals
     call_args_list = [args[0][0] for args in mock_sleep.call_args_list]
     assert call_args_list == [0.01, 0.02]
+
+
+def test_runtime_execution_info_defaults_without_retry():
+    """Test execution_info defaults when no retry and no config are provided."""
+
+    class State(TypedDict):
+        foo: str
+
+    captured = {}
+
+    def node(state: State, runtime: Runtime):
+        captured["node_attempt"] = runtime.execution_info.node_attempt
+        captured["node_first_attempt_time"] = (
+            runtime.execution_info.node_first_attempt_time
+        )
+        return {"foo": "ok"}
+
+    graph = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
+
+    result = graph.invoke({"foo": ""})
+
+    assert result["foo"] == "ok"
+    assert captured["node_attempt"] == 1
+    assert isinstance(captured["node_first_attempt_time"], float)
 
 
 def test_graph_with_jitter_retry_policy():
