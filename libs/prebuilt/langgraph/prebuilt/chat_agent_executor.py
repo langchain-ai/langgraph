@@ -33,7 +33,7 @@ from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
-from langgraph.graph.message import add_messages
+from langgraph.graph.message import RemoveMessage, add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import RemainingSteps
 from langgraph.runtime import Runtime
@@ -269,6 +269,88 @@ def _validate_chat_history(
         error_code=ErrorCode.INVALID_CHAT_HISTORY,
     )
     raise ValueError(error_message)
+
+
+def _is_reasoning_only(msg: AIMessage) -> bool:
+    """Return True if the message contains only reasoning blocks and no tool calls.
+
+    An AIMessage is "reasoning-only" when its content is a non-empty list whose
+    every item has `type="reasoning"`, and it carries no `tool_calls`.  These
+    messages represent incomplete assistant turns — the actual text or
+    function-call output that must follow a reasoning block is absent.
+
+    Empty-content messages (`content=[]` or `content=""`) are intentionally
+    excluded: they do not contain reasoning blocks and therefore do not trigger
+    the OpenAI `BadRequestError` that `filter_orphaned_reasoning_messages`
+    targets.
+    """
+    if msg.tool_calls:
+        return False
+    content = msg.content
+    if not isinstance(content, list) or not content:
+        return False
+    return all(
+        isinstance(block, dict) and block.get("type") == "reasoning"
+        for block in content
+    )
+
+
+def filter_orphaned_reasoning_messages(
+    state: dict[str, Any],
+) -> dict[str, list[RemoveMessage]] | None:
+    """Remove orphaned reasoning-only AIMessages from conversation history.
+
+    Some LLM providers (e.g. OpenAI with the Responses API) require that every
+    reasoning block in the message history be immediately followed by the
+    assistant output it produced.  When a client aborts a streaming response
+    mid-flight, LangGraph may persist an `AIMessage` whose content consists
+    only of `type="reasoning"` blocks with no accompanying text or tool-call
+    output.  Replaying that orphaned message on the next turn causes a provider
+    error such as::
+
+        BadRequestError: Item 'rs_...' of type 'reasoning' was provided
+        without its required following item.
+
+    This function is designed to be used as a `pre_model_hook` in
+    `create_react_agent`.  It scans ``state["messages"]`` for such orphaned
+    messages and returns `RemoveMessage` entries to delete them before the
+    model is called.  If no orphaned messages are found it returns `None` so
+    the state is left unchanged.
+
+    Example::
+
+        from langgraph.prebuilt import create_react_agent
+        from langgraph.prebuilt.chat_agent_executor import (
+            filter_orphaned_reasoning_messages,
+        )
+
+        agent = create_react_agent(
+            model,
+            tools,
+            pre_model_hook=filter_orphaned_reasoning_messages,
+        )
+
+    Args:
+        state: The current agent state dict.  Must contain a ``"messages"`` key
+            holding the conversation history.
+
+    Returns:
+        A dict ``{"messages": [RemoveMessage(...), ...]}`` for each orphaned
+        message found, or ``None`` if no orphaned messages are present.
+    """
+    messages = state.get("messages", [])
+
+    orphaned_ids: list[str] = []
+    for msg in messages:
+        if not isinstance(msg, AIMessage) or not _is_reasoning_only(msg):
+            continue
+        if msg.id is not None:
+            orphaned_ids.append(msg.id)
+
+    if not orphaned_ids:
+        return None
+
+    return {"messages": [RemoveMessage(id=msg_id) for msg_id in orphaned_ids]}
 
 
 @deprecated(
@@ -1008,6 +1090,7 @@ create_tool_calling_executor = create_react_agent
 __all__ = [
     "create_react_agent",
     "create_tool_calling_executor",
+    "filter_orphaned_reasoning_messages",
     "AgentState",
     "AgentStatePydantic",
     "AgentStateWithStructuredResponse",
