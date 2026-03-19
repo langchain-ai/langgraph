@@ -289,7 +289,8 @@ pub fn merge_json_update(state: &mut Value, update: Option<Value>) {
 pub struct Engine {
     channels: Arc<StdMutex<HashMap<String, VecDeque<serde_json::Value>>>>,
     channel_notify: Arc<Notify>,
-    stream: Arc<StdMutex<Option<StreamChannel>>>,
+    custom_output_stream_names: Arc<StdMutex<Vec<String>>>,
+    streams: Arc<StdMutex<Option<HashMap<String, StreamChannel>>>>,
 }
 
 #[derive(Clone)]
@@ -310,6 +311,21 @@ impl Engine {
         channels.entry(name.to_owned()).or_default();
     }
 
+    pub fn add_custom_output_stream(&self, name: &str) -> Result<(), String> {
+        let stream_name = name.trim();
+        if stream_name.is_empty() {
+            return Err("custom output stream name cannot be empty".to_string());
+        }
+        let mut names = self
+            .custom_output_stream_names
+            .lock()
+            .expect("custom output stream names mutex poisoned");
+        if !names.iter().any(|n| n == stream_name) {
+            names.push(stream_name.to_string());
+        }
+        Ok(())
+    }
+
     pub fn start_stream(&self, stream_mode: Option<&str>) -> Result<(), String> {
         let mode = stream_mode.and_then(|m| {
             let trimmed = m.trim();
@@ -319,43 +335,62 @@ impl Engine {
                 Some(trimmed)
             }
         });
-        let mut stream = self.stream.lock().expect("stream mutex poisoned");
+        let mut streams = self.streams.lock().expect("streams mutex poisoned");
         if let Some(mode) = mode {
             if mode != "custom" {
                 return Err(format!(
                     "unsupported stream_mode `{mode}`, only `custom` is supported"
                 ));
             }
-            let (sender, receiver) = tokio_mpsc::unbounded_channel();
-            *stream = Some(StreamChannel {
-                sender,
-                receiver: Arc::new(AsyncMutex::new(receiver)),
-            });
+            let stream_names = {
+                self.custom_output_stream_names
+                    .lock()
+                    .expect("custom output stream names mutex poisoned")
+                    .clone()
+            };
+            let mut by_name = HashMap::new();
+            for stream_name in stream_names {
+                let (sender, receiver) = tokio_mpsc::unbounded_channel();
+                by_name.insert(
+                    stream_name,
+                    StreamChannel {
+                        sender,
+                        receiver: Arc::new(AsyncMutex::new(receiver)),
+                    },
+                );
+            }
+            *streams = Some(by_name);
         } else {
-            *stream = None;
+            *streams = None;
         }
         Ok(())
     }
 
-    pub fn close_stream(&self) {
-        let mut stream = self.stream.lock().expect("stream mutex poisoned");
-        *stream = None;
+    pub fn close_all_streams(&self) {
+        let mut streams = self.streams.lock().expect("streams mutex poisoned");
+        *streams = None;
     }
 
-    pub fn send_custom_stream_event(&self, value: serde_json::Value) {
+    pub fn send_custom_stream_event(&self, stream_name: &str, value: serde_json::Value) {
         let sender = {
-            let stream = self.stream.lock().expect("stream mutex poisoned");
-            stream.as_ref().map(|s| s.sender.clone())
+            let streams = self.streams.lock().expect("streams mutex poisoned");
+            streams
+                .as_ref()
+                .and_then(|m| m.get(stream_name))
+                .map(|s| s.sender.clone())
         };
         if let Some(tx) = sender {
             let _ = tx.send(value);
         }
     }
 
-    pub async fn receive_stream_async(&self) -> Option<serde_json::Value> {
+    pub async fn receive_stream_async(&self, stream_name: &str) -> Option<serde_json::Value> {
         let receiver = {
-            let stream = self.stream.lock().expect("stream mutex poisoned");
-            stream.as_ref().map(|s| Arc::clone(&s.receiver))
+            let streams = self.streams.lock().expect("streams mutex poisoned");
+            streams
+                .as_ref()
+                .and_then(|m| m.get(stream_name))
+                .map(|s| Arc::clone(&s.receiver))
         };
         let Some(receiver) = receiver else {
             return None;

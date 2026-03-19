@@ -13,6 +13,7 @@ type nodeExecutor func(ctx *Context, input any, state map[string]any) (Command, 
 type AdvancedStateGraph[StateT any] struct {
 	nodes         map[string]nodeExecutor
 	asyncChannels []string
+	customStreams []string
 	entryPoint    string
 	finishPoint   string
 	stateType     reflect.Type
@@ -53,6 +54,10 @@ func (g *AdvancedStateGraph[StateT]) AddAsyncChannel(name string) {
 	g.asyncChannels = append(g.asyncChannels, name)
 }
 
+func (g *AdvancedStateGraph[StateT]) AddCustomOutputStream(name string) {
+	g.customStreams = append(g.customStreams, name)
+}
+
 func (g *AdvancedStateGraph[StateT]) AddEntryNode(fn any) string {
 	name := NodeName(fn)
 	return g.AddEntryNodeAs(name, fn)
@@ -79,6 +84,7 @@ func (g *AdvancedStateGraph[StateT]) Compile() *CompiledGraph[StateT] {
 	return &CompiledGraph[StateT]{
 		nodes:         g.nodes,
 		asyncChannels: g.asyncChannels,
+		customStreams: g.customStreams,
 		entryPoint:    g.entryPoint,
 		finishPoint:   g.finishPoint,
 		stateType:     g.stateType,
@@ -88,6 +94,7 @@ func (g *AdvancedStateGraph[StateT]) Compile() *CompiledGraph[StateT] {
 type CompiledGraph[StateT any] struct {
 	nodes         map[string]nodeExecutor
 	asyncChannels []string
+	customStreams []string
 	entryPoint    string
 	finishPoint   string
 	stateType     reflect.Type
@@ -111,8 +118,8 @@ func (c *Context) PublishToChannel(channel string, value any) error {
 	return c.engine.Publish(channel, value)
 }
 
-func (c *Context) SendCustomStreamEvent(value any) error {
-	return c.engine.SendCustomStreamEvent(value)
+func (c *Context) SendCustomStreamEvent(streamName string, value any) error {
+	return c.engine.SendCustomStreamEvent(streamName, value)
 }
 
 type Handler[StateT any] struct {
@@ -135,9 +142,9 @@ func (h *Handler[StateT]) WaitForResult() (StateT, error) {
 	return res.state, res.err
 }
 
-func (h *Handler[StateT]) ReceiveStream() (any, error) {
+func (h *Handler[StateT]) ReceiveStream(streamName string) (any, error) {
 	<-h.streamReadyC
-	event, hasEvent, err := h.engine.ReceiveStream()
+	event, hasEvent, err := h.engine.ReceiveStream(streamName)
 	if err != nil {
 		return nil, err
 	}
@@ -147,9 +154,9 @@ func (h *Handler[StateT]) ReceiveStream() (any, error) {
 	return event, nil
 }
 
-func (h *Handler[StateT]) CloseStream() error {
+func (h *Handler[StateT]) CloseAllStreams() error {
 	<-h.streamReadyC
-	return h.engine.CloseStream()
+	return h.engine.CloseAllStreams()
 }
 
 func (g *CompiledGraph[StateT]) Start(initialInput any, initialState StateT, streamMode ...string) (*Handler[StateT], error) {
@@ -163,6 +170,11 @@ func (g *CompiledGraph[StateT]) Start(initialInput any, initialState StateT, str
 	engine := NewRustEngine()
 	for _, ch := range g.asyncChannels {
 		if err := engine.AddAsyncChannel(ch); err != nil {
+			return nil, err
+		}
+	}
+	for _, streamName := range g.customStreams {
+		if err := engine.AddCustomOutputStream(streamName); err != nil {
 			return nil, err
 		}
 	}

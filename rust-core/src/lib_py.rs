@@ -36,6 +36,12 @@ impl PyRustEngine {
         self.inner.add_async_channel(name);
     }
 
+    fn add_custom_output_stream(&self, stream_name: &str) -> PyResult<()> {
+        self.inner
+            .add_custom_output_stream(stream_name)
+            .map_err(PyValueError::new_err)
+    }
+
     fn publish_obj(&self, py: Python<'_>, channel: &str, value: Py<PyAny>) -> PyResult<()> {
         let value_json = py_obj_to_json_string(py, &value.bind(py))?;
         let parsed: Value = serde_json::from_str(&value_json)
@@ -105,8 +111,9 @@ impl PyRustEngine {
             .map_err(PyValueError::new_err)
     }
 
-    fn receive_stream_obj(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let event = py.allow_threads(|| run_loop_block_on(self.inner.receive_stream_async()));
+    fn receive_stream_obj(&self, py: Python<'_>, stream_name: &str) -> PyResult<Py<PyAny>> {
+        let event =
+            py.allow_threads(|| run_loop_block_on(self.inner.receive_stream_async(stream_name)));
         match event {
             Some(value) => {
                 let event_json = serde_json::to_string(&value)
@@ -117,16 +124,21 @@ impl PyRustEngine {
         }
     }
 
-    fn send_custom_stream_event_obj(&self, py: Python<'_>, value: Py<PyAny>) -> PyResult<()> {
+    fn send_custom_stream_event_obj(
+        &self,
+        py: Python<'_>,
+        stream_name: &str,
+        value: Py<PyAny>,
+    ) -> PyResult<()> {
         let value_json = py_obj_to_json_string(py, &value.bind(py))?;
         let parsed: Value = serde_json::from_str(&value_json)
             .map_err(|e| PyValueError::new_err(format!("Invalid Python JSON value: {e}")))?;
-        self.inner.send_custom_stream_event(parsed);
+        self.inner.send_custom_stream_event(stream_name, parsed);
         Ok(())
     }
 
-    fn close_stream(&self) {
-        self.inner.close_stream();
+    fn close_all_streams(&self) {
+        self.inner.close_all_streams();
     }
 
     #[pyo3(signature = (entry_point, finish_point, initial_state, callback, stream_mode=None))]
@@ -196,7 +208,7 @@ impl PyRustEngine {
                 ))
             });
 
-        self.inner.close_stream();
+        self.inner.close_all_streams();
         let out = run_result.map_err(PyValueError::new_err)?;
         Ok(out.as_ref().clone_ref(py))
     }

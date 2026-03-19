@@ -93,6 +93,7 @@ class AdvancedStateGraph(Generic[StateT]):
         self.state_schema = state_schema
         self._nodes: dict[str, Callable[..., Any]] = {}
         self._async_channels: dict[str, _ChannelSpec] = {}
+        self._custom_output_streams: dict[str, _ChannelSpec] = {}
         self._entry_point: str | None = None
         self._finish_point: str | None = None
 
@@ -122,6 +123,15 @@ class AdvancedStateGraph(Generic[StateT]):
             raise ValueError(f"Channel `{name}` already exists")
         self._async_channels[name] = _ChannelSpec(typ=typ)
 
+    def add_custom_outout_stream(self, name: str, typ: Any) -> None:
+        if name in self._custom_output_streams:
+            raise ValueError(f"Custom output stream `{name}` already exists")
+        self._custom_output_streams[name] = _ChannelSpec(typ=typ)
+
+    # Alias with corrected spelling.
+    def add_custom_output_stream(self, name: str, typ: Any) -> None:
+        self.add_custom_outout_stream(name, typ)
+
     def add_entry_node(self, node: Callable[..., Any]) -> str:
         node_name = self.add_node(node)
         self._entry_point = self._resolve_node_name(node_name)
@@ -150,6 +160,7 @@ class AdvancedStateGraph(Generic[StateT]):
         return CompiledGraphEngine(
             nodes=dict(self._nodes),
             async_channels=dict(self._async_channels),
+            custom_output_streams=dict(self._custom_output_streams),
             entry_point=self._entry_point,
             finish_point=self._finish_point,
         )
@@ -163,11 +174,13 @@ class CompiledGraphEngine(Generic[StateT]):
         *,
         nodes: dict[str, Callable[..., Any]],
         async_channels: dict[str, _ChannelSpec],
+        custom_output_streams: dict[str, _ChannelSpec],
         entry_point: str,
         finish_point: str | None,
     ) -> None:
         self._nodes = nodes
         self._async_channels = async_channels
+        self._custom_output_streams = custom_output_streams
         self._entry_point = entry_point
         self._finish_point = finish_point
 
@@ -181,6 +194,7 @@ class CompiledGraphEngine(Generic[StateT]):
         run = _GraphEngineRun(
             nodes=self._nodes,
             async_channel_specs=self._async_channels,
+            custom_output_stream_specs=self._custom_output_streams,
             entry_point=self._entry_point,
             finish_point=self._finish_point,
             stream_mode=stream_mode,
@@ -207,8 +221,8 @@ class Context:
     async def apublish_to_channel(self, channel: str, value: Any) -> None:
         await self._run.publish(channel, value)
 
-    def send_custom_stream_event(self, value: Any) -> None:
-        self._run.send_custom_stream_event(value)
+    def send_custom_stream_event(self, stream_name: str, value: Any) -> None:
+        self._run.send_custom_stream_event(stream_name, value)
 
 
 class GraphRunHandler(Generic[StateT]):
@@ -223,13 +237,13 @@ class GraphRunHandler(Generic[StateT]):
             raise RuntimeError("Run has already completed")
         await self._run.publish(channel, value)
 
-    async def receive_stream(self) -> Any | None:
+    async def receive_stream(self, stream_name: str) -> Any | None:
         # Use a separate thread pool from graph execution to avoid deadlock
         # when LANGGRAPH_ADVANCED_GRAPH_PY_THREADS is configured to 1.
-        return await asyncio.to_thread(self._run.receive_stream_sync)
+        return await asyncio.to_thread(self._run.receive_stream_sync, stream_name)
 
-    def close_stream(self) -> None:
-        self._run.close_stream_sync()
+    def close_all_streams(self) -> None:
+        self._run.close_all_streams_sync()
 
     async def aresult(self) -> StateT:
         return await self._task
@@ -244,6 +258,7 @@ class _GraphEngineRun:
         *,
         nodes: dict[str, Callable[..., Any]],
         async_channel_specs: dict[str, _ChannelSpec],
+        custom_output_stream_specs: dict[str, _ChannelSpec],
         entry_point: str,
         finish_point: str | None,
         stream_mode: str | None,
@@ -255,6 +270,8 @@ class _GraphEngineRun:
         self._rust_engine = PyRustEngine()
         for name in async_channel_specs:
             self._rust_engine.add_async_channel(name)
+        for stream_name in custom_output_stream_specs:
+            self._rust_engine.add_custom_output_stream(stream_name)
         self._stream_ready = threading.Event()
         if self._stream_mode is None:
             self._stream_ready.set()
@@ -361,15 +378,15 @@ class _GraphEngineRun:
     def _publish_sync(self, channel: str, value: Any) -> None:
         self._rust_engine.publish_obj(channel, value)
 
-    def send_custom_stream_event(self, value: Any) -> None:
-        self._rust_engine.send_custom_stream_event_obj(value)
+    def send_custom_stream_event(self, stream_name: str, value: Any) -> None:
+        self._rust_engine.send_custom_stream_event_obj(stream_name, value)
 
-    def receive_stream_sync(self) -> Any | None:
+    def receive_stream_sync(self, stream_name: str) -> Any | None:
         self._stream_ready.wait()
-        return self._rust_engine.receive_stream_obj()
+        return self._rust_engine.receive_stream_obj(stream_name)
 
-    def close_stream_sync(self) -> None:
-        self._rust_engine.close_stream()
+    def close_all_streams_sync(self) -> None:
+        self._rust_engine.close_all_streams()
 
     def _execute_node_for_rust(
         self, node_name: str, node_input: Any, state: Any

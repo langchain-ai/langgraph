@@ -147,6 +147,27 @@ pub unsafe extern "C" fn rc_wait_any_of_json(
 #[no_mangle]
 /// # Safety
 /// `ptr` must be a valid engine pointer from `rc_engine_new`.
+/// `stream_name` must be a valid null-terminated UTF-8 string pointer.
+pub unsafe extern "C" fn rc_add_custom_output_stream(
+    ptr: *mut Engine,
+    stream_name: *const c_char,
+) -> *mut c_char {
+    if ptr.is_null() {
+        return into_c_ptr("{\"ok\":false,\"error\":\"null engine pointer\"}".to_string());
+    }
+    let stream_name = match cstr_to_str(stream_name) {
+        Ok(v) => v,
+        Err(e) => return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+    };
+    match (*ptr).add_custom_output_stream(stream_name) {
+        Ok(()) => into_c_ptr("{\"ok\":true}".to_string()),
+        Err(e) => into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+    }
+}
+
+#[no_mangle]
+/// # Safety
+/// `ptr` must be a valid engine pointer from `rc_engine_new`.
 /// `stream_mode` must be null or a valid null-terminated UTF-8 string pointer.
 pub unsafe extern "C" fn rc_start_stream(
     ptr: *mut Engine,
@@ -172,11 +193,19 @@ pub unsafe extern "C" fn rc_start_stream(
 #[no_mangle]
 /// # Safety
 /// `ptr` must be a valid engine pointer from `rc_engine_new`.
-pub unsafe extern "C" fn rc_receive_stream_json(ptr: *mut Engine) -> *mut c_char {
+/// `stream_name` must be a valid null-terminated UTF-8 string pointer.
+pub unsafe extern "C" fn rc_receive_stream_json(
+    ptr: *mut Engine,
+    stream_name: *const c_char,
+) -> *mut c_char {
     if ptr.is_null() {
         return into_c_ptr("{\"ok\":false,\"error\":\"null engine pointer\"}".to_string());
     }
-    let event = run_loop_block_on((*ptr).receive_stream_async());
+    let stream_name = match cstr_to_str(stream_name) {
+        Ok(v) => v,
+        Err(e) => return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+    };
+    let event = run_loop_block_on((*ptr).receive_stream_async(stream_name));
     match event {
         Some(value) => match serde_json::to_string(&value) {
             Ok(s) => into_c_ptr(format!("{{\"ok\":true,\"has_event\":true,\"event\":{s}}}")),
@@ -189,14 +218,20 @@ pub unsafe extern "C" fn rc_receive_stream_json(ptr: *mut Engine) -> *mut c_char
 #[no_mangle]
 /// # Safety
 /// `ptr` must be a valid engine pointer from `rc_engine_new`.
+/// `stream_name` must be a valid null-terminated UTF-8 string pointer.
 /// `value_json` must be a valid null-terminated UTF-8 string pointer.
 pub unsafe extern "C" fn rc_send_custom_stream_event(
     ptr: *mut Engine,
+    stream_name: *const c_char,
     value_json: *const c_char,
 ) -> *mut c_char {
     if ptr.is_null() {
         return into_c_ptr("{\"ok\":false,\"error\":\"null engine pointer\"}".to_string());
     }
+    let stream_name = match cstr_to_str(stream_name) {
+        Ok(v) => v,
+        Err(e) => return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+    };
     let value_json = match cstr_to_str(value_json) {
         Ok(v) => v,
         Err(e) => return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
@@ -209,18 +244,18 @@ pub unsafe extern "C" fn rc_send_custom_stream_event(
             ))
         }
     };
-    (*ptr).send_custom_stream_event(value);
+    (*ptr).send_custom_stream_event(stream_name, value);
     into_c_ptr("{\"ok\":true}".to_string())
 }
 
 #[no_mangle]
 /// # Safety
 /// `ptr` must be a valid engine pointer from `rc_engine_new`.
-pub unsafe extern "C" fn rc_close_stream(ptr: *mut Engine) -> *mut c_char {
+pub unsafe extern "C" fn rc_close_all_streams(ptr: *mut Engine) -> *mut c_char {
     if ptr.is_null() {
         return into_c_ptr("{\"ok\":false,\"error\":\"null engine pointer\"}".to_string());
     }
-    (*ptr).close_stream();
+    (*ptr).close_all_streams();
     into_c_ptr("{\"ok\":true}".to_string())
 }
 
@@ -338,7 +373,7 @@ pub unsafe extern "C" fn rc_run_graph_json(
             callback_wrapper,
         )
         .await;
-        run_engine.close_stream();
+        run_engine.close_all_streams();
         let _ = tx.send(out);
     });
     if let Err(e) = submit {

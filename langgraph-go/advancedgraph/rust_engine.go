@@ -128,6 +128,13 @@ func (e *RustEngine) AddAsyncChannel(channel string) error {
 	return parseRustStatus(resp)
 }
 
+func (e *RustEngine) AddCustomOutputStream(streamName string) error {
+	cname := C.CString(streamName)
+	defer C.free(unsafe.Pointer(cname))
+	resp := C.rc_add_custom_output_stream(e.ptr, cname)
+	return parseRustStatus(resp)
+}
+
 func (e *RustEngine) StartStream(streamMode string) error {
 	var cmode *C.char
 	if streamMode != "" {
@@ -138,8 +145,10 @@ func (e *RustEngine) StartStream(streamMode string) error {
 	return parseRustStatus(resp)
 }
 
-func (e *RustEngine) ReceiveStream() (any, bool, error) {
-	resp := C.rc_receive_stream_json(e.ptr)
+func (e *RustEngine) ReceiveStream(streamName string) (any, bool, error) {
+	cname := C.CString(streamName)
+	defer C.free(unsafe.Pointer(cname))
+	resp := C.rc_receive_stream_json(e.ptr, cname)
 	defer C.rc_string_free(resp)
 
 	raw := C.GoString(resp)
@@ -165,19 +174,21 @@ func (e *RustEngine) ReceiveStream() (any, bool, error) {
 	return coerceJSONValue(event), true, nil
 }
 
-func (e *RustEngine) SendCustomStreamEvent(value any) error {
+func (e *RustEngine) SendCustomStreamEvent(streamName string, value any) error {
 	payload, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("marshal stream event: %w", err)
 	}
+	cname := C.CString(streamName)
 	cval := C.CString(string(payload))
+	defer C.free(unsafe.Pointer(cname))
 	defer C.free(unsafe.Pointer(cval))
-	resp := C.rc_send_custom_stream_event(e.ptr, cval)
+	resp := C.rc_send_custom_stream_event(e.ptr, cname, cval)
 	return parseRustStatus(resp)
 }
 
-func (e *RustEngine) CloseStream() error {
-	resp := C.rc_close_stream(e.ptr)
+func (e *RustEngine) CloseAllStreams() error {
+	resp := C.rc_close_all_streams(e.ptr)
 	return parseRustStatus(resp)
 }
 

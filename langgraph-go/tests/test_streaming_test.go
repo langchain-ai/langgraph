@@ -15,11 +15,11 @@ type streamState struct {
 type streamWorkflow struct{}
 
 func (w *streamWorkflow) startNode(ctx *ag.Context, _ any, state streamState) (ag.Command, error) {
-	if err := ctx.SendCustomStreamEvent(map[string]any{"step": "start", "value": 1}); err != nil {
+	if err := ctx.SendCustomStreamEvent("high", map[string]any{"step": "start", "value": 1}); err != nil {
 		return ag.Command{}, err
 	}
 	time.Sleep(80 * time.Millisecond)
-	if err := ctx.SendCustomStreamEvent(map[string]any{"step": "start", "value": 2}); err != nil {
+	if err := ctx.SendCustomStreamEvent("regular", map[string]any{"step": "start", "value": 2}); err != nil {
 		return ag.Command{}, err
 	}
 	return ag.Command{
@@ -38,6 +38,8 @@ func (w *streamWorkflow) finishNode(ctx *ag.Context, _ any, state streamState) (
 func TestCustomStreamReceiveAndClose(t *testing.T) {
 	workflow := &streamWorkflow{}
 	graph := ag.NewAdvancedStateGraph[streamState]()
+	graph.AddCustomOutputStream("high")
+	graph.AddCustomOutputStream("regular")
 	graph.AddEntryNode(workflow.startNode)
 	graph.AddFinishNode(workflow.finishNode)
 
@@ -46,7 +48,7 @@ func TestCustomStreamReceiveAndClose(t *testing.T) {
 		t.Fatalf("start failed: %v", err)
 	}
 
-	event, err := handler.ReceiveStream()
+	event, err := handler.ReceiveStream("high")
 	if err != nil {
 		t.Fatalf("receive stream failed: %v", err)
 	}
@@ -61,11 +63,23 @@ func TestCustomStreamReceiveAndClose(t *testing.T) {
 		t.Fatalf("unexpected stream event payload: %#v", eventMap)
 	}
 
-	if err := handler.CloseStream(); err != nil {
-		t.Fatalf("close stream failed: %v", err)
+	eventRegular, err := handler.ReceiveStream("regular")
+	if err != nil {
+		t.Fatalf("receive regular stream failed: %v", err)
+	}
+	eventRegularMap, ok := eventRegular.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected regular event type: %T", eventRegular)
+	}
+	if eventRegularMap["value"] != float64(2) {
+		t.Fatalf("unexpected regular stream payload: %#v", eventRegularMap)
 	}
 
-	closedEvent, err := handler.ReceiveStream()
+	if err := handler.CloseAllStreams(); err != nil {
+		t.Fatalf("close all streams failed: %v", err)
+	}
+
+	closedEvent, err := handler.ReceiveStream("high")
 	if err != nil {
 		t.Fatalf("receive stream after close failed: %v", err)
 	}
@@ -85,6 +99,7 @@ func TestCustomStreamReceiveAndClose(t *testing.T) {
 func TestOnlyCustomStreamModeSupported(t *testing.T) {
 	workflow := &streamWorkflow{}
 	graph := ag.NewAdvancedStateGraph[streamState]()
+	graph.AddCustomOutputStream("regular")
 	graph.AddEntryNode(workflow.startNode)
 	graph.AddFinishNode(workflow.finishNode)
 
