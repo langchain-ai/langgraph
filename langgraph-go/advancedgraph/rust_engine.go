@@ -80,7 +80,7 @@ func goNodeCallback(userData C.ulong, node *C.char, argJSON *C.char, stateJSON *
 	cmd, err := ctx.exec(nodeName, nodeInput, state)
 	if err != nil {
 		if waitReq, ok := AsErrWaitRequested(err); ok {
-			return cCallbackEnvelopeSuspend(waitReq.Condition)
+			return cCallbackEnvelopeSuspend(waitReq.Target)
 		}
 		return cCallbackEnvelopeError(err.Error())
 	}
@@ -234,6 +234,35 @@ func (e *RustEngine) WaitAnyOf(cond AnyOfCondition) (WaitEvent, error) {
 	return event, nil
 }
 
+func (e *RustEngine) WaitAllOf(cond AllOfCondition) (WaitEvent, error) {
+	payload, err := json.Marshal(cond)
+	if err != nil {
+		return WaitEvent{}, fmt.Errorf("marshal all_of: %w", err)
+	}
+	cpayload := C.CString(string(payload))
+	defer C.free(unsafe.Pointer(cpayload))
+	resp := C.rc_wait_all_of_json(e.ptr, cpayload)
+	defer C.rc_string_free(resp)
+
+	raw := C.GoString(resp)
+	var status struct {
+		OK    bool            `json:"ok"`
+		Error string          `json:"error"`
+		Event json.RawMessage `json:"event"`
+	}
+	if err := json.Unmarshal([]byte(raw), &status); err != nil {
+		return WaitEvent{}, fmt.Errorf("decode rust wait response: %w", err)
+	}
+	if !status.OK {
+		return WaitEvent{}, fmt.Errorf("rust wait failed: %s", status.Error)
+	}
+	var event WaitEvent
+	if err := json.Unmarshal(status.Event, &event); err != nil {
+		return WaitEvent{}, fmt.Errorf("decode wait event: %w", err)
+	}
+	return event, nil
+}
+
 func (e *RustEngine) RunGraph(
 	entryPoint string,
 	finishPoint string,
@@ -309,13 +338,29 @@ func cCallbackEnvelopeError(message string) *C.char {
 	return C.CString(string(raw))
 }
 
-func cCallbackEnvelopeSuspend(cond AnyOfCondition) *C.char {
-	raw, _ := json.Marshal(map[string]any{
-		"ok": true,
-		"suspend": map[string]any{
+func cCallbackEnvelopeSuspend(target WaitTarget) *C.char {
+	if target == nil {
+		return cCallbackEnvelopeError("wait requested with nil target")
+	}
+	kind := target.waitKind()
+	if kind != "any_of" && kind != "all_of" {
+		return cCallbackEnvelopeError(fmt.Sprintf("unsupported wait target kind `%s`", kind))
+	}
+	var payload map[string]any
+	if kind == "any_of" {
+		payload = map[string]any{
 			"kind":   "any_of",
-			"any_of": cond,
-		},
+			"any_of": AnyOfCondition{Conditions: target.waitConditions()},
+		}
+	} else {
+		payload = map[string]any{
+			"kind":   "all_of",
+			"all_of": AllOfCondition{Conditions: target.waitConditions()},
+		}
+	}
+	raw, _ := json.Marshal(map[string]any{
+		"ok":      true,
+		"suspend": payload,
 	})
 	return C.CString(string(raw))
 }

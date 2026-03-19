@@ -32,7 +32,7 @@ func (c *Context) Interrupt(name string) (any, error) {
 		if waitReq, ok := ag.AsErrWaitRequested(err); ok {
 			return nil, errInterruptRequested{
 				Name:      name,
-				Condition: waitReq.Condition,
+				Condition: waitReq.Target,
 			}
 		}
 		return nil, err
@@ -73,7 +73,7 @@ func (c *Context) Interrupt(name string) (any, error) {
 
 type errInterruptRequested struct {
 	Name      string
-	Condition ag.AnyOfCondition
+	Condition ag.WaitTarget
 }
 
 func (e errInterruptRequested) Error() string {
@@ -178,13 +178,13 @@ func (g *BasicStateGraph[StateT]) Compile() *CompiledBasicStateGraph[StateT] {
 				if err != nil {
 					if interruptReq, ok := asErrInterruptRequested(err); ok {
 						cond := interruptReq.Condition
-						if len(cond.Conditions) == 0 {
+						if cond == nil {
 							cond = ag.AnyOf(ag.ChannelCondition{
 								Channel: internalInterruptChannel,
 								Min:     1,
 							})
 						}
-						return ag.Command{}, ag.ErrWaitRequested{Condition: cond}
+						return ag.Command{}, ag.ErrWaitRequested{Target: cond}
 					}
 					return ag.Command{}, err
 				}

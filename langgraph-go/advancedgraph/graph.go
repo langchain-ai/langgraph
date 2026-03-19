@@ -105,13 +105,16 @@ type Context struct {
 	resumeEvent *WaitEvent
 }
 
-func (c *Context) WaitFor(cond AnyOfCondition) (WaitForResult, error) {
+func (c *Context) WaitFor(target WaitTarget) (WaitForResult, error) {
+	if target == nil {
+		return WaitForResult{}, fmt.Errorf("wait target cannot be nil")
+	}
 	if c.resumeEvent != nil {
 		event := *c.resumeEvent
 		c.resumeEvent = nil
-		return waitForResultFromRaw(cond, event), nil
+		return waitForResultFromRaw(target, event), nil
 	}
-	return WaitForResult{}, ErrWaitRequested{Condition: cond}
+	return WaitForResult{}, ErrWaitRequested{Target: target}
 }
 
 func (c *Context) PublishToChannel(channel string, value any) error {
@@ -403,16 +406,26 @@ func unwrapResumeInput(input any) (any, *WaitEvent) {
 	return rawArg, &event
 }
 
-func waitForResultFromRaw(cond AnyOfCondition, event WaitEvent) WaitForResult {
+func waitForResultFromRaw(target WaitTarget, event WaitEvent) WaitForResult {
+	conditions := target.waitConditions()
 	result := WaitForResult{
-		Conditions: make([]ConditionResult, len(cond.Conditions)),
+		Conditions: make([]ConditionResult, len(conditions)),
+	}
+	if target.waitKind() == "all_of" {
+		for i, cond := range conditions {
+			if isTimerCondition(cond) {
+				result.Conditions[i] = ConditionResult{Met: true}
+			}
+		}
 	}
 
 	if event.Condition == "timer" {
-		for i, raw := range cond.Conditions {
-			if kind, _ := raw["kind"].(string); kind == "timer" {
+		for i, cond := range conditions {
+			if isTimerCondition(cond) {
 				result.Conditions[i] = ConditionResult{Met: true}
-				break
+				if target.waitKind() == "any_of" {
+					break
+				}
 			}
 		}
 		return result
@@ -422,19 +435,18 @@ func waitForResultFromRaw(cond AnyOfCondition, event WaitEvent) WaitForResult {
 		return result
 	}
 
-	if event.Channel == "__any_of__" {
+	if event.Channel == "__any_of__" || event.Channel == "__all_of__" {
 		var matched []struct {
 			Channel string `json:"channel"`
 			Value   any    `json:"value"`
 		}
 		_ = json.Unmarshal(event.Value, &matched)
 		cursor := 0
-		for i, raw := range cond.Conditions {
-			kind, _ := raw["kind"].(string)
-			if kind != "channel" || cursor >= len(matched) {
+		for i, cond := range conditions {
+			channelName, ok := channelNameOfCondition(cond)
+			if !ok || cursor >= len(matched) {
 				continue
 			}
-			channelName, _ := raw["channel"].(string)
 			if channelName == matched[cursor].Channel {
 				result.Conditions[i] = ConditionResult{
 					Met:         true,
@@ -449,12 +461,11 @@ func waitForResultFromRaw(cond AnyOfCondition, event WaitEvent) WaitForResult {
 
 	var value any
 	_ = json.Unmarshal(event.Value, &value)
-	for i, raw := range cond.Conditions {
-		kind, _ := raw["kind"].(string)
-		if kind != "channel" {
+	for i, cond := range conditions {
+		channelName, ok := channelNameOfCondition(cond)
+		if !ok {
 			continue
 		}
-		channelName, _ := raw["channel"].(string)
 		if channelName == event.Channel {
 			result.Conditions[i] = ConditionResult{
 				Met:         true,
@@ -465,6 +476,29 @@ func waitForResultFromRaw(cond AnyOfCondition, event WaitEvent) WaitForResult {
 		}
 	}
 	return result
+}
+
+func isTimerCondition(cond WaitCondition) bool {
+	switch cond.(type) {
+	case TimerCondition, *TimerCondition:
+		return true
+	default:
+		return false
+	}
+}
+
+func channelNameOfCondition(cond WaitCondition) (string, bool) {
+	switch c := cond.(type) {
+	case ChannelCondition:
+		return c.Channel, true
+	case *ChannelCondition:
+		if c == nil {
+			return "", false
+		}
+		return c.Channel, true
+	default:
+		return "", false
+	}
 }
 
 func toValues(value any) []any {

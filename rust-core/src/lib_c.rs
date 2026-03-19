@@ -1,6 +1,6 @@
 use crate::engine::{
     parse_callback_envelope_json, run_graph_json_with_callback, run_loop_block_on, run_loop_spawn,
-    AnyOfCondition, Engine, NodeOutcome,
+    AllOfCondition, AnyOfCondition, Engine, NodeOutcome,
 };
 use serde_json::Value;
 use std::ffi::{CStr, CString};
@@ -135,6 +135,39 @@ pub unsafe extern "C" fn rc_wait_any_of_json(
         }
     };
     let result = run_loop_block_on((*ptr).wait_for_any_of_async(&any_of));
+    match result {
+        Ok(event) => match serde_json::to_string(&event) {
+            Ok(s) => into_c_ptr(format!("{{\"ok\":true,\"event\":{s}}}")),
+            Err(e) => into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+        },
+        Err(e) => into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+    }
+}
+
+#[no_mangle]
+/// # Safety
+/// `ptr` must be a valid engine pointer from `rc_engine_new`.
+/// `all_of_json` must be a valid null-terminated UTF-8 string pointer.
+pub unsafe extern "C" fn rc_wait_all_of_json(
+    ptr: *mut Engine,
+    all_of_json: *const c_char,
+) -> *mut c_char {
+    if ptr.is_null() {
+        return into_c_ptr("{\"ok\":false,\"error\":\"null engine pointer\"}".to_string());
+    }
+    let all_of_json = match cstr_to_str(all_of_json) {
+        Ok(v) => v,
+        Err(e) => return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+    };
+    let all_of: AllOfCondition = match serde_json::from_str(all_of_json) {
+        Ok(v) => v,
+        Err(e) => {
+            return into_c_ptr(format!(
+                "{{\"ok\":false,\"error\":\"invalid all_of JSON: {e}\"}}"
+            ))
+        }
+    };
+    let result = run_loop_block_on((*ptr).wait_for_all_of_async(&all_of));
     match result {
         Ok(event) => match serde_json::to_string(&event) {
             Ok(s) => into_c_ptr(format!("{{\"ok\":true,\"event\":{s}}}")),

@@ -20,6 +20,7 @@ char* rc_add_async_channel(Engine* ptr, const char* channel);
 char* rc_add_custom_output_stream(Engine* ptr, const char* stream_name);
 char* rc_publish_json(Engine* ptr, const char* channel, const char* value_json);
 char* rc_wait_any_of_json(Engine* ptr, const char* any_of_json);
+char* rc_wait_all_of_json(Engine* ptr, const char* all_of_json);
 char* rc_start_stream(Engine* ptr, const char* stream_mode);
 char* rc_receive_stream_json(Engine* ptr, const char* stream_name);
 char* rc_send_custom_stream_event(Engine* ptr, const char* stream_name, const char* value_json);

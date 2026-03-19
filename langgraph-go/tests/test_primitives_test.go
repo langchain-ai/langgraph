@@ -291,3 +291,139 @@ func TestAnyOfConsumesAllReadyChannels(t *testing.T) {
 		t.Fatalf("unexpected done: %v", result.Done)
 	}
 }
+
+func (w *primitiveWorkflow) startAllOfTwoChannelsNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	if err := ctx.PublishToChannel("alpha", "a1"); err != nil {
+		return ag.Command{}, err
+	}
+	return ag.Command{
+		Update: state,
+		Goto: []ag.Send{
+			{Node: w.waitAllOfTwoChannelsNode, NodeInput: nil},
+		},
+	}, nil
+}
+
+func (w *primitiveWorkflow) waitAllOfTwoChannelsNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	result, err := ctx.WaitFor(ag.AllOf(
+		ag.ChannelCondition{Channel: "alpha"},
+		ag.ChannelCondition{Channel: "beta"},
+	))
+	if err != nil {
+		return ag.Command{}, err
+	}
+	if len(result.Conditions) != 2 {
+		return ag.Command{}, fmt.Errorf("expected 2 condition results, got %d", len(result.Conditions))
+	}
+	if !result.Conditions[0].Met || result.Conditions[0].ChannelName != "alpha" || len(result.Conditions[0].Values) != 1 || result.Conditions[0].Values[0] != "a1" {
+		return ag.Command{}, fmt.Errorf("unexpected alpha condition result: %#v", result.Conditions[0])
+	}
+	if !result.Conditions[1].Met || result.Conditions[1].ChannelName != "beta" || len(result.Conditions[1].Values) != 1 || result.Conditions[1].Values[0] != "b1" {
+		return ag.Command{}, fmt.Errorf("unexpected beta condition result: %#v", result.Conditions[1])
+	}
+	state.Count = 2
+	state.Logs = []string{"all_of_channels_ok"}
+	state.Done = "ok"
+	return ag.Command{Update: state}, nil
+}
+
+func TestAllOfWaitsUntilAllChannelsAreReady(t *testing.T) {
+	workflow := &primitiveWorkflow{}
+	graph := ag.NewAdvancedStateGraph[primitiveState]()
+	graph.AddAsyncChannel("alpha")
+	graph.AddAsyncChannel("beta")
+	graph.AddEntryNode(workflow.startAllOfTwoChannelsNode)
+	graph.AddFinishNode(workflow.waitAllOfTwoChannelsNode)
+
+	handler, err := graph.Compile().Start(nil, primitiveState{
+		Count: 0,
+		Logs:  []string{},
+		Done:  "",
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	if err := handler.PublishToChannel("beta", "b1"); err != nil {
+		t.Fatalf("publish beta failed: %v", err)
+	}
+
+	result, err := handler.WaitForResult()
+	if err != nil {
+		t.Fatalf("result failed: %v", err)
+	}
+	if result.Count != 2 {
+		t.Fatalf("unexpected count: %v", result.Count)
+	}
+	if len(result.Logs) != 1 || result.Logs[0] != "all_of_channels_ok" {
+		t.Fatalf("unexpected logs: %#v", result.Logs)
+	}
+	if result.Done != "ok" {
+		t.Fatalf("unexpected done: %v", result.Done)
+	}
+}
+
+func (w *primitiveWorkflow) startAllOfChannelTimerNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	if err := ctx.PublishToChannel("alpha", "a1"); err != nil {
+		return ag.Command{}, err
+	}
+	return ag.Command{
+		Update: state,
+		Goto: []ag.Send{
+			{Node: w.waitAllOfChannelTimerNode, NodeInput: nil},
+		},
+	}, nil
+}
+
+func (w *primitiveWorkflow) waitAllOfChannelTimerNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	result, err := ctx.WaitFor(ag.AllOf(
+		ag.ChannelCondition{Channel: "alpha"},
+		ag.TimerCondition{Seconds: 0.05},
+	))
+	if err != nil {
+		return ag.Command{}, err
+	}
+	if len(result.Conditions) != 2 {
+		return ag.Command{}, fmt.Errorf("expected 2 condition results, got %d", len(result.Conditions))
+	}
+	if !result.Conditions[0].Met || result.Conditions[0].ChannelName != "alpha" || len(result.Conditions[0].Values) != 1 || result.Conditions[0].Values[0] != "a1" {
+		return ag.Command{}, fmt.Errorf("unexpected channel condition result: %#v", result.Conditions[0])
+	}
+	if !result.Conditions[1].Met {
+		return ag.Command{}, fmt.Errorf("timer condition should be met: %#v", result.Conditions[1])
+	}
+	state.Count = 1
+	state.Logs = []string{"all_of_channel_timer_ok"}
+	state.Done = "ok"
+	return ag.Command{Update: state}, nil
+}
+
+func TestAllOfChannelAndTimerMarksBothConditions(t *testing.T) {
+	workflow := &primitiveWorkflow{}
+	graph := ag.NewAdvancedStateGraph[primitiveState]()
+	graph.AddAsyncChannel("alpha")
+	graph.AddEntryNode(workflow.startAllOfChannelTimerNode)
+	graph.AddFinishNode(workflow.waitAllOfChannelTimerNode)
+
+	handler, err := graph.Compile().Start(nil, primitiveState{
+		Count: 0,
+		Logs:  []string{},
+		Done:  "",
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	result, err := handler.WaitForResult()
+	if err != nil {
+		t.Fatalf("result failed: %v", err)
+	}
+	if result.Count != 1 {
+		t.Fatalf("unexpected count: %v", result.Count)
+	}
+	if len(result.Logs) != 1 || result.Logs[0] != "all_of_channel_timer_ok" {
+		t.Fatalf("unexpected logs: %#v", result.Logs)
+	}
+	if result.Done != "ok" {
+		t.Fatalf("unexpected done: %v", result.Done)
+	}
+}

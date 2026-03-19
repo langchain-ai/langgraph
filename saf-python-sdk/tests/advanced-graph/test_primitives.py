@@ -4,8 +4,10 @@ from typing_extensions import TypedDict
 from saf_python_sdk.advanced_graph import (
     AdvancedStateGraph,
     Context,
+    all_of,
     any_of,
     channel_condition,
+    timer_condition,
 )
 from saf_python_sdk.types import Command, Send
 
@@ -144,5 +146,73 @@ async def test_any_of_consumes_all_ready_channels() -> None:
         "matched=2",
         "beta=b2",
     ]
+    assert result["done"] == "ok"
+
+
+async def test_all_of_waits_until_all_channels_are_ready() -> None:
+    graph = AdvancedStateGraph(PrimitiveState)
+    graph.add_async_channel("alpha", str)
+    graph.add_async_channel("beta", str)
+
+    async def start_node(ctx: Context, state: PrimitiveState) -> Command:
+        ctx.publish_to_channel("alpha", "a1")
+        return Command(
+            update=state,
+            goto=[Send("wait_node", None), Send("publish_beta_node", None)],
+        )
+
+    async def publish_beta_node(ctx: Context, _input: None, state: PrimitiveState) -> Command:
+        await ctx.wait_for(timer_condition(seconds=0.02))
+        ctx.publish_to_channel("beta", "b1")
+        return Command(update=state)
+
+    async def wait_node(ctx: Context, _input: None, state: PrimitiveState) -> dict[str, object]:
+        waited = await ctx.wait_for(
+            all_of(channel_condition("alpha"), channel_condition("beta"))
+        )
+        assert len(waited.conditions) == 2
+        assert waited.conditions[0].met is True
+        assert waited.conditions[0].channel_name == "alpha"
+        assert waited.conditions[0].values == ["a1"]
+        assert waited.conditions[1].met is True
+        assert waited.conditions[1].channel_name == "beta"
+        assert waited.conditions[1].values == ["b1"]
+        return {"counter": 1, "logs": ["all_of_channels"], "done": "ok"}
+
+    graph.add_entry_node(start_node)
+    graph.add_node(publish_beta_node)
+    graph.add_finish_node(wait_node)
+
+    result = await graph.compile().ainvoke({"counter": 0, "logs": [], "done": None})
+    assert result["counter"] == 1
+    assert result["logs"] == ["all_of_channels"]
+    assert result["done"] == "ok"
+
+
+async def test_all_of_channel_and_timer_marks_both_conditions() -> None:
+    graph = AdvancedStateGraph(PrimitiveState)
+    graph.add_async_channel("alpha", str)
+
+    async def start_node(ctx: Context, state: PrimitiveState) -> Command:
+        ctx.publish_to_channel("alpha", "a1")
+        return Command(update=state, goto=Send("wait_node", None))
+
+    async def wait_node(ctx: Context, _input: None, state: PrimitiveState) -> dict[str, object]:
+        waited = await ctx.wait_for(
+            all_of(channel_condition("alpha"), timer_condition(seconds=0.02))
+        )
+        assert len(waited.conditions) == 2
+        assert waited.conditions[0].met is True
+        assert waited.conditions[0].channel_name == "alpha"
+        assert waited.conditions[0].values == ["a1"]
+        assert waited.conditions[1].met is True
+        return {"counter": 1, "logs": ["all_of_channel_timer"], "done": "ok"}
+
+    graph.add_entry_node(start_node)
+    graph.add_finish_node(wait_node)
+
+    result = await graph.compile().ainvoke({"counter": 0, "logs": [], "done": None})
+    assert result["counter"] == 1
+    assert result["logs"] == ["all_of_channel_timer"]
     assert result["done"] == "ok"
 

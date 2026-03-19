@@ -2,7 +2,7 @@
 PYPI_REPOSITORY ?= pypi
 PYPI_TOKEN ?=
 PYTHON_VERSION ?= 3.13
-TEST_BASE = uv run --python $(PYTHON_VERSION) --with pytest --with anyio --with typing_extensions --with pydantic --with langgraph pytest -q -s
+TEST_BASE = uv run --python $(PYTHON_VERSION) --reinstall-package saf-python-sdk --with pytest --with anyio --with typing_extensions --with pydantic --with langgraph pytest -q -s
 
 .PHONY: publish-to-pypi-saf-python-sdk all-tests test_primitives test_sub_agents test_update_elision test_run_pool_size test-benchmark
 publish-to-pypi-saf-python-sdk:

@@ -41,6 +41,11 @@ class AnyOfCondition:
 
 
 @dataclass(frozen=True)
+class AllOfCondition:
+    conditions: tuple[WaitCondition, ...]
+
+
+@dataclass(frozen=True)
 class ConditionResult:
     met: bool
     channel_name: str | None = None
@@ -209,7 +214,9 @@ class Context:
     def __init__(self, run: _GraphEngineRun) -> None:
         self._run = run
 
-    async def wait_for(self, target: WaitCondition | AnyOfCondition) -> WaitForResult:
+    async def wait_for(
+        self, target: WaitCondition | AnyOfCondition | AllOfCondition
+    ) -> WaitForResult:
         resumed = self._run._consume_resume_event(target)
         if resumed is not None:
             return resumed
@@ -316,7 +323,9 @@ class _GraphEngineRun:
     def publish_nowait(self, channel: str, value: Any) -> None:
         self._publish_sync(channel, value)
 
-    async def wait_for(self, target: WaitCondition | AnyOfCondition) -> WaitForResult:
+    async def wait_for(
+        self, target: WaitCondition | AnyOfCondition | AllOfCondition
+    ) -> WaitForResult:
         if isinstance(target, ChannelCondition):
             value = await self._wait_for_channel_values(
                 target.channel, min=target.min, max=target.max
@@ -341,6 +350,9 @@ class _GraphEngineRun:
         if isinstance(target, AnyOfCondition):
             raw_event = await self._wait_for_any_of(target)
             return _wait_for_result_from_any_of_event(target, raw_event)
+        if isinstance(target, AllOfCondition):
+            raw_event = await self._wait_for_all_of(target)
+            return _wait_for_result_from_all_of_event(target, raw_event)
         raise ValueError(f"Unsupported wait condition type: {type(target)!r}")
 
     async def _wait_for_channel_values(
@@ -372,6 +384,19 @@ class _GraphEngineRun:
         return await loop.run_in_executor(
             _advanced_graph_executor(),
             self._rust_engine.wait_any_of_obj,
+            payload,
+        )
+
+    async def _wait_for_all_of(self, condition: AllOfCondition) -> dict[str, Any]:
+        if not condition.conditions:
+            raise ValueError("all_of() requires at least one condition")
+        payload = {
+            "conditions": [_condition_to_rust(cond) for cond in condition.conditions]
+        }
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            _advanced_graph_executor(),
+            self._rust_engine.wait_all_of_obj,
             payload,
         )
 
@@ -426,7 +451,7 @@ class _GraphEngineRun:
         self._local.resume_event = event
 
     def _consume_resume_event(
-        self, target: WaitCondition | AnyOfCondition
+        self, target: WaitCondition | AnyOfCondition | AllOfCondition
     ) -> WaitForResult | None:
         event = cast(dict[str, Any] | None, getattr(self._local, "resume_event", None))
         if event is None:
@@ -527,6 +552,12 @@ def any_of(*conditions: WaitCondition) -> AnyOfCondition:
     return AnyOfCondition(conditions=tuple(conditions))
 
 
+def all_of(*conditions: WaitCondition) -> AllOfCondition:
+    if not conditions:
+        raise ValueError("all_of() requires at least one condition")
+    return AllOfCondition(conditions=tuple(conditions))
+
+
 def _normalize_channel_values(value: Any) -> list[Any]:
     if isinstance(value, list):
         return value
@@ -534,7 +565,7 @@ def _normalize_channel_values(value: Any) -> list[Any]:
 
 
 def _wait_for_result_from_resume_event(
-    target: WaitCondition | AnyOfCondition, event: dict[str, Any]
+    target: WaitCondition | AnyOfCondition | AllOfCondition, event: dict[str, Any]
 ) -> WaitForResult:
     if isinstance(target, ChannelCondition):
         return WaitForResult(
@@ -548,6 +579,8 @@ def _wait_for_result_from_resume_event(
         )
     if isinstance(target, TimerCondition):
         return WaitForResult(conditions=[ConditionResult(met=True)])
+    if isinstance(target, AllOfCondition):
+        return _wait_for_result_from_all_of_event(target, event)
     return _wait_for_result_from_any_of_event(target, event)
 
 
@@ -603,6 +636,52 @@ def _wait_for_result_from_any_of_event(
     return WaitForResult(conditions=results)
 
 
+def _wait_for_result_from_all_of_event(
+    target: AllOfCondition, event: dict[str, Any]
+) -> WaitForResult:
+    results = [ConditionResult(met=False) for _ in target.conditions]
+    condition = event.get("condition")
+
+    # all_of completion implies all timer conditions are satisfied.
+    for idx, cond in enumerate(target.conditions):
+        if isinstance(cond, TimerCondition):
+            results[idx] = ConditionResult(met=True)
+
+    if condition != "channel":
+        return WaitForResult(conditions=results)
+
+    channel = cast(str | None, event.get("channel"))
+    value = event.get("value")
+
+    if channel == "__all_of__" and isinstance(value, list):
+        matched_by_channel: dict[str, Any] = {}
+        for item in value:
+            if isinstance(item, dict) and isinstance(item.get("channel"), str):
+                matched_by_channel[cast(str, item["channel"])] = item.get("value")
+
+        for idx, cond in enumerate(target.conditions):
+            if not isinstance(cond, ChannelCondition):
+                continue
+            if cond.channel not in matched_by_channel:
+                continue
+            results[idx] = ConditionResult(
+                met=True,
+                channel_name=cond.channel,
+                values=_normalize_channel_values(matched_by_channel[cond.channel]),
+            )
+        return WaitForResult(conditions=results)
+
+    for idx, cond in enumerate(target.conditions):
+        if isinstance(cond, ChannelCondition) and cond.channel == channel:
+            results[idx] = ConditionResult(
+                met=True,
+                channel_name=cond.channel,
+                values=_normalize_channel_values(value),
+            )
+            break
+    return WaitForResult(conditions=results)
+
+
 def _condition_to_rust(condition: WaitCondition) -> dict[str, Any]:
     if isinstance(condition, ChannelCondition):
         return {
@@ -616,11 +695,20 @@ def _condition_to_rust(condition: WaitCondition) -> dict[str, Any]:
     raise TypeError(f"Unsupported condition type: {type(condition)!r}")
 
 
-def _target_to_suspend_payload(target: WaitCondition | AnyOfCondition) -> dict[str, Any]:
+def _target_to_suspend_payload(
+    target: WaitCondition | AnyOfCondition | AllOfCondition,
+) -> dict[str, Any]:
     if isinstance(target, AnyOfCondition):
         return {
             "kind": "any_of",
             "any_of": {
+                "conditions": [_condition_to_rust(cond) for cond in target.conditions]
+            },
+        }
+    if isinstance(target, AllOfCondition):
+        return {
+            "kind": "all_of",
+            "all_of": {
                 "conditions": [_condition_to_rust(cond) for cond in target.conditions]
             },
         }

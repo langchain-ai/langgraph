@@ -3,10 +3,12 @@ package advancedgraph
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"reflect"
 )
 
 type WaitCondition interface {
-	toAny() map[string]any
+	json.Marshaler
 }
 
 type ChannelCondition struct {
@@ -15,40 +17,128 @@ type ChannelCondition struct {
 	Max     int
 }
 
-func (c ChannelCondition) toAny() map[string]any {
+type channelConditionJSON struct {
+	Kind    string `json:"kind"`
+	Channel string `json:"channel"`
+	Min     int    `json:"min"`
+	Max     int    `json:"max"`
+}
+
+func (c ChannelCondition) MarshalJSON() ([]byte, error) {
 	min := c.Min
 	if min <= 0 {
 		min = 1
 	}
-	return map[string]any{
-		"kind":    "channel",
-		"channel": c.Channel,
-		"min":     min,
-		"max":     c.Max,
-	}
+	return json.Marshal(channelConditionJSON{
+		Kind:    "channel",
+		Channel: c.Channel,
+		Min:     min,
+		Max:     c.Max,
+	})
 }
 
 type TimerCondition struct {
 	Seconds float64
 }
 
-func (t TimerCondition) toAny() map[string]any {
-	return map[string]any{
-		"kind":    "timer",
-		"seconds": t.Seconds,
-	}
+type timerConditionJSON struct {
+	Kind    string  `json:"kind"`
+	Seconds float64 `json:"seconds"`
+}
+
+func (t TimerCondition) MarshalJSON() ([]byte, error) {
+	return json.Marshal(timerConditionJSON{
+		Kind:    "timer",
+		Seconds: t.Seconds,
+	})
 }
 
 type AnyOfCondition struct {
-	Conditions []map[string]any `json:"conditions"`
+	Conditions []WaitCondition
+}
+
+type AllOfCondition struct {
+	Conditions []WaitCondition
+}
+
+type WaitTarget interface {
+	waitKind() string
+	waitConditions() []WaitCondition
+}
+
+func (a AnyOfCondition) waitKind() string {
+	return "any_of"
+}
+
+func (a AnyOfCondition) waitConditions() []WaitCondition {
+	return a.Conditions
+}
+
+func (a AllOfCondition) waitKind() string {
+	return "all_of"
+}
+
+func (a AllOfCondition) waitConditions() []WaitCondition {
+	return a.Conditions
 }
 
 func AnyOf(conditions ...WaitCondition) AnyOfCondition {
-	result := AnyOfCondition{Conditions: make([]map[string]any, 0, len(conditions))}
-	for _, cond := range conditions {
-		result.Conditions = append(result.Conditions, cond.toAny())
+	return AnyOfCondition{Conditions: append([]WaitCondition{}, conditions...)}
+}
+
+func AllOf(conditions ...WaitCondition) AllOfCondition {
+	return AllOfCondition{Conditions: append([]WaitCondition{}, conditions...)}
+}
+
+func (a AnyOfCondition) MarshalJSON() ([]byte, error) {
+	result := struct {
+		Conditions []json.RawMessage `json:"conditions"`
+	}{
+		Conditions: make([]json.RawMessage, 0, len(a.Conditions)),
 	}
-	return result
+	for i, cond := range a.Conditions {
+		if isNilWaitCondition(cond) {
+			return nil, fmt.Errorf("any_of condition[%d] is nil", i)
+		}
+		raw, err := cond.MarshalJSON()
+		if err != nil {
+			return nil, fmt.Errorf("encode any_of condition[%d]: %w", i, err)
+		}
+		result.Conditions = append(result.Conditions, json.RawMessage(raw))
+	}
+	return json.Marshal(result)
+}
+
+func (a AllOfCondition) MarshalJSON() ([]byte, error) {
+	result := struct {
+		Conditions []json.RawMessage `json:"conditions"`
+	}{
+		Conditions: make([]json.RawMessage, 0, len(a.Conditions)),
+	}
+	for i, cond := range a.Conditions {
+		if isNilWaitCondition(cond) {
+			return nil, fmt.Errorf("all_of condition[%d] is nil", i)
+		}
+		raw, err := cond.MarshalJSON()
+		if err != nil {
+			return nil, fmt.Errorf("encode all_of condition[%d]: %w", i, err)
+		}
+		result.Conditions = append(result.Conditions, json.RawMessage(raw))
+	}
+	return json.Marshal(result)
+}
+
+func isNilWaitCondition(cond WaitCondition) bool {
+	if cond == nil {
+		return true
+	}
+	v := reflect.ValueOf(cond)
+	switch v.Kind() {
+	case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map, reflect.Func:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 type WaitEvent struct {
@@ -79,7 +169,7 @@ type Command struct {
 }
 
 type ErrWaitRequested struct {
-	Condition AnyOfCondition
+	Target WaitTarget
 }
 
 func (e ErrWaitRequested) Error() string {

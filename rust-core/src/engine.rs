@@ -33,6 +33,11 @@ pub struct AnyOfCondition {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AllOfCondition {
+    pub conditions: Vec<WaitCondition>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "condition")]
 pub enum WaitEvent {
     #[serde(rename = "channel")]
@@ -51,6 +56,8 @@ pub enum WaitRequest {
     Condition { condition: WaitCondition },
     #[serde(rename = "any_of")]
     AnyOf { any_of: AnyOfCondition },
+    #[serde(rename = "all_of")]
+    AllOf { all_of: AllOfCondition },
 }
 
 pub struct SendPayload<A> {
@@ -422,6 +429,7 @@ impl Engine {
                 self.wait_for_any_of_async(&any_of).await
             }
             WaitRequest::AnyOf { any_of } => self.wait_for_any_of_async(any_of).await,
+            WaitRequest::AllOf { all_of } => self.wait_for_all_of_async(all_of).await,
         }
     }
 
@@ -438,15 +446,8 @@ impl Engine {
         }
 
         let started = Instant::now();
-        let mut min_timer: Option<f64> = None;
-        for cond in &any_of.conditions {
-            if let WaitCondition::Timer { seconds } = cond {
-                if *seconds <= 0.0 {
-                    return Err("timer condition must be > 0".to_string());
-                }
-                min_timer = Some(min_timer.map_or(*seconds, |x| x.min(*seconds)));
-            }
-        }
+        let timer_bounds = validate_wait_conditions(&any_of.conditions)?;
+        let min_timer = timer_bounds.min_seconds;
 
         loop {
             if let Some(event) = self.try_take_any_of_channel_events(any_of)? {
@@ -472,75 +473,205 @@ impl Engine {
         }
     }
 
+    pub async fn wait_for_all_of_async(
+        &self,
+        all_of: &AllOfCondition,
+    ) -> Result<WaitEvent, String> {
+        debug_log(&format!(
+            "Engine::wait_for_all_of_async(conditions={})",
+            all_of.conditions.len()
+        ));
+        if all_of.conditions.is_empty() {
+            return Err("all_of requires at least one condition".to_string());
+        }
+
+        let started = Instant::now();
+        let timer_bounds = validate_wait_conditions(&all_of.conditions)?;
+        let max_timer = timer_bounds.max_seconds;
+        let has_channel_condition = all_of
+            .conditions
+            .iter()
+            .any(|c| matches!(c, WaitCondition::Channel { .. }));
+
+        let mut consumed_channel_event: Option<WaitEvent> = None;
+        let mut channels_met = !has_channel_condition;
+
+        loop {
+            if !channels_met {
+                if let Some(event) = self.try_take_all_of_channel_events(all_of)? {
+                    consumed_channel_event = Some(event);
+                    channels_met = true;
+                }
+            }
+
+            let timers_met = if let Some(seconds) = max_timer {
+                started.elapsed() >= Duration::from_secs_f64(seconds)
+            } else {
+                true
+            };
+
+            if channels_met && timers_met {
+                if let Some(event) = consumed_channel_event {
+                    return Ok(event);
+                }
+                return Ok(WaitEvent::Timer {
+                    seconds: max_timer.unwrap_or(0.0),
+                });
+            }
+
+            if !channels_met && !timers_met {
+                let timeout = Duration::from_secs_f64(max_timer.unwrap_or(0.0));
+                let elapsed = started.elapsed();
+                let remaining = timeout.saturating_sub(elapsed);
+                tokio::select! {
+                    _ = self.channel_notify.notified() => {}
+                    _ = tokio::time::sleep(remaining) => {}
+                }
+            } else if !channels_met {
+                self.channel_notify.notified().await;
+            } else {
+                let timeout = Duration::from_secs_f64(max_timer.unwrap_or(0.0));
+                let elapsed = started.elapsed();
+                let remaining = timeout.saturating_sub(elapsed);
+                tokio::time::sleep(remaining).await;
+            }
+        }
+    }
+
     fn try_take_any_of_channel_events(
         &self,
         any_of: &AnyOfCondition,
     ) -> Result<Option<WaitEvent>, String> {
         let mut channels = self.channels.lock().expect("channels mutex poisoned");
-        let mut consumed_per_channel: HashMap<String, usize> = HashMap::new();
-        let mut plans: Vec<(String, usize)> = Vec::new();
-
-        for cond in &any_of.conditions {
-            let WaitCondition::Channel { channel, min, max } = cond else {
-                continue;
-            };
-            if *min < 1 {
-                return Err("channel condition min must be >= 1".to_string());
-            }
-            if *max != 0 && *max < *min {
-                return Err("channel condition max must be 0 or >= min".to_string());
-            }
-
-            let queue = channels
-                .get(channel)
-                .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
-            let already_planned = consumed_per_channel.get(channel).copied().unwrap_or(0);
-            let available = queue.len().saturating_sub(already_planned);
-            if available < *min {
-                continue;
-            }
-
-            let take_count = if *max == 0 { *min } else { available.min(*max) };
-            plans.push((channel.clone(), take_count));
-            consumed_per_channel
-                .entry(channel.clone())
-                .and_modify(|v| *v += take_count)
-                .or_insert(take_count);
-        }
-
+        let plans = collect_channel_plans(&channels, &any_of.conditions, false)?;
         if plans.is_empty() {
             return Ok(None);
         }
 
-        if plans.len() == 1 {
-            let (channel, take_count) = &plans[0];
-            let queue = channels
-                .get_mut(channel)
-                .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
-            let value = pop_queue_value(queue, *take_count);
-            return Ok(Some(WaitEvent::Channel {
-                channel: channel.clone(),
-                value,
-            }));
-        }
-
-        let mut matched = Vec::with_capacity(plans.len());
-        for (channel, take_count) in plans {
-            let queue = channels
-                .get_mut(&channel)
-                .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
-            let value = pop_queue_value(queue, take_count);
-            matched.push(json!({
-                "channel": channel,
-                "value": value,
-            }));
-        }
-
-        Ok(Some(WaitEvent::Channel {
-            channel: "__any_of__".to_string(),
-            value: Value::Array(matched),
-        }))
+        build_channel_wait_event(&mut channels, plans, "__any_of__").map(Some)
     }
+
+    fn try_take_all_of_channel_events(
+        &self,
+        all_of: &AllOfCondition,
+    ) -> Result<Option<WaitEvent>, String> {
+        let mut channels = self.channels.lock().expect("channels mutex poisoned");
+        let plans = collect_channel_plans(&channels, &all_of.conditions, true)?;
+        if plans.is_empty() {
+            return Ok(None);
+        }
+        build_channel_wait_event(&mut channels, plans, "__all_of__").map(Some)
+    }
+}
+
+struct TimerBounds {
+    min_seconds: Option<f64>,
+    max_seconds: Option<f64>,
+}
+
+fn validate_wait_conditions(conditions: &[WaitCondition]) -> Result<TimerBounds, String> {
+    let mut min_timer: Option<f64> = None;
+    let mut max_timer: Option<f64> = None;
+    for cond in conditions {
+        match cond {
+            WaitCondition::Timer { seconds } => {
+                if *seconds <= 0.0 {
+                    return Err("timer condition must be > 0".to_string());
+                }
+                min_timer = Some(min_timer.map_or(*seconds, |x| x.min(*seconds)));
+                max_timer = Some(max_timer.map_or(*seconds, |x| x.max(*seconds)));
+            }
+            WaitCondition::Channel { min, max, .. } => {
+                if *min < 1 {
+                    return Err("channel condition min must be >= 1".to_string());
+                }
+                if *max != 0 && *max < *min {
+                    return Err("channel condition max must be 0 or >= min".to_string());
+                }
+            }
+        }
+    }
+    Ok(TimerBounds {
+        min_seconds: min_timer,
+        max_seconds: max_timer,
+    })
+}
+
+fn collect_channel_plans(
+    channels: &HashMap<String, VecDeque<Value>>,
+    conditions: &[WaitCondition],
+    require_all_channels: bool,
+) -> Result<Vec<(String, usize)>, String> {
+    let mut consumed_per_channel: HashMap<String, usize> = HashMap::new();
+    let mut plans: Vec<(String, usize)> = Vec::new();
+    let mut channel_condition_count = 0usize;
+
+    for cond in conditions {
+        let WaitCondition::Channel { channel, min, max } = cond else {
+            continue;
+        };
+        channel_condition_count += 1;
+        let queue = channels
+            .get(channel)
+            .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
+        let already_planned = consumed_per_channel.get(channel).copied().unwrap_or(0);
+        let available = queue.len().saturating_sub(already_planned);
+        if available < *min {
+            if require_all_channels {
+                return Ok(Vec::new());
+            }
+            continue;
+        }
+
+        let take_count = if *max == 0 { *min } else { available.min(*max) };
+        plans.push((channel.clone(), take_count));
+        consumed_per_channel
+            .entry(channel.clone())
+            .and_modify(|v| *v += take_count)
+            .or_insert(take_count);
+    }
+
+    if require_all_channels && channel_condition_count > 0 && plans.len() != channel_condition_count
+    {
+        return Ok(Vec::new());
+    }
+
+    Ok(plans)
+}
+
+fn build_channel_wait_event(
+    channels: &mut HashMap<String, VecDeque<Value>>,
+    plans: Vec<(String, usize)>,
+    aggregate_channel_name: &str,
+) -> Result<WaitEvent, String> {
+    if plans.len() == 1 {
+        let (channel, take_count) = &plans[0];
+        let queue = channels
+            .get_mut(channel)
+            .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
+        let value = pop_queue_value(queue, *take_count);
+        return Ok(WaitEvent::Channel {
+            channel: channel.clone(),
+            value,
+        });
+    }
+
+    let mut matched = Vec::with_capacity(plans.len());
+    for (channel, take_count) in plans {
+        let queue = channels
+            .get_mut(&channel)
+            .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
+        let value = pop_queue_value(queue, take_count);
+        matched.push(json!({
+            "channel": channel,
+            "value": value,
+        }));
+    }
+
+    Ok(WaitEvent::Channel {
+        channel: aggregate_channel_name.to_string(),
+        value: Value::Array(matched),
+    })
 }
 
 fn pop_queue_value(queue: &mut VecDeque<Value>, take_count: usize) -> Value {
