@@ -216,3 +216,35 @@ async def test_all_of_channel_and_timer_marks_both_conditions() -> None:
     assert result["logs"] == ["all_of_channel_timer"]
     assert result["done"] == "ok"
 
+
+async def test_is_resume_avoids_duplicate_side_effects() -> None:
+    graph = AdvancedStateGraph(PrimitiveState)
+    db_writes: list[str] = []
+
+    async def start_node(state: PrimitiveState) -> Command:
+        return Command(
+            update={"counter": 0, "logs": [], "done": None},
+            goto=Send("wait_node", None),
+        )
+
+    async def wait_node(ctx: Context, _input: None, state: PrimitiveState) -> Command:
+        if not ctx.IsResume():
+            # Simulate one-time side effect (e.g. database write).
+            db_writes.append("write")
+        await ctx.wait_for(timer_condition(seconds=0.02))
+        state["logs"].append(f"resume={ctx.IsResume()}")
+        return Command(update=state, goto=Send("finish_node", None))
+
+    async def finish_node(_input: None, state: PrimitiveState) -> dict[str, object]:
+        return {"counter": state["counter"], "logs": state["logs"], "done": "ok"}
+
+    graph.add_entry_node(start_node)
+    graph.add_node(wait_node)
+    graph.add_finish_node(finish_node)
+
+    result = await graph.compile().ainvoke({"counter": 0, "logs": [], "done": None})
+    assert db_writes == ["write"]
+    assert result["counter"] == 0
+    assert result["logs"] == ["resume=True"]
+    assert result["done"] == "ok"
+

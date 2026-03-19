@@ -103,6 +103,7 @@ type CompiledGraph[StateT any] struct {
 type Context struct {
 	engine      *RustEngine
 	resumeEvent *WaitEvent
+	isResume    bool
 }
 
 func (c *Context) WaitFor(target WaitTarget) (WaitForResult, error) {
@@ -115,6 +116,10 @@ func (c *Context) WaitFor(target WaitTarget) (WaitForResult, error) {
 		return waitForResultFromRaw(target, event), nil
 	}
 	return WaitForResult{}, ErrWaitRequested{Target: target}
+}
+
+func (c *Context) IsResume() bool {
+	return c.isResume
 }
 
 func (c *Context) PublishToChannel(channel string, value any) error {
@@ -215,7 +220,15 @@ func (g *CompiledGraph[StateT]) Start(initialInput any, initialState StateT, str
 					return Command{}, fmt.Errorf("node `%s` expected map state argument", node)
 				}
 				resolvedInput, resumeEvent := unwrapResumeInput(nodeInput)
-				return fn(&Context{engine: engine, resumeEvent: resumeEvent}, resolvedInput, fallbackState)
+				return fn(
+					&Context{
+						engine:      engine,
+						resumeEvent: resumeEvent,
+						isResume:    resumeEvent != nil,
+					},
+					resolvedInput,
+					fallbackState,
+				)
 			},
 		)
 		if err != nil {

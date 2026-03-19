@@ -222,6 +222,13 @@ class Context:
             return resumed
         raise WaitRequested(_target_to_suspend_payload(target))
 
+    def is_resume(self) -> bool:
+        return self._run._is_resume_execution()
+
+    # Go-style alias.
+    def IsResume(self) -> bool:
+        return self.is_resume()
+
     def publish_to_channel(self, channel: str, value: Any) -> None:
         self._run.publish_nowait(channel, value)
 
@@ -418,6 +425,7 @@ class _GraphEngineRun:
     ) -> dict[str, Any]:
         node_input, resume_event = _unwrap_resume_input(node_input)
         self._set_resume_event(resume_event)
+        self._set_is_resume(resume_event is not None)
         if node_name not in self._nodes:
             raise ValueError(f"Unknown node `{node_name}`")
         node = self._nodes[node_name]
@@ -431,6 +439,7 @@ class _GraphEngineRun:
             return {"suspend": suspend.payload}
         finally:
             self._set_resume_event(None)
+            self._set_is_resume(False)
 
         if isinstance(result, Command):
             update = result.update
@@ -449,6 +458,12 @@ class _GraphEngineRun:
 
     def _set_resume_event(self, event: dict[str, Any] | None) -> None:
         self._local.resume_event = event
+
+    def _set_is_resume(self, is_resume: bool) -> None:
+        self._local.is_resume = is_resume
+
+    def _is_resume_execution(self) -> bool:
+        return bool(getattr(self._local, "is_resume", False))
 
     def _consume_resume_event(
         self, target: WaitCondition | AnyOfCondition | AllOfCondition

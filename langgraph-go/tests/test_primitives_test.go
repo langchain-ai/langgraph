@@ -8,6 +8,7 @@ import (
 )
 
 type primitiveWorkflow struct {
+	dbWriteCount int
 }
 
 type primitiveState struct {
@@ -421,6 +422,70 @@ func TestAllOfChannelAndTimerMarksBothConditions(t *testing.T) {
 		t.Fatalf("unexpected count: %v", result.Count)
 	}
 	if len(result.Logs) != 1 || result.Logs[0] != "all_of_channel_timer_ok" {
+		t.Fatalf("unexpected logs: %#v", result.Logs)
+	}
+	if result.Done != "ok" {
+		t.Fatalf("unexpected done: %v", result.Done)
+	}
+}
+
+func (w *primitiveWorkflow) startResumeFlagNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	state.Logs = []string{}
+	state.Count = 0
+	return ag.Command{
+		Update: state,
+		Goto: []ag.Send{
+			{Node: w.resumeFlagNode, NodeInput: nil},
+		},
+	}, nil
+}
+
+func (w *primitiveWorkflow) resumeFlagNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	if !ctx.IsResume() {
+		// Simulate one-time side effect (e.g. DB write).
+		w.dbWriteCount += 1
+	}
+	if _, err := ctx.WaitFor(ag.AnyOf(ag.TimerCondition{Seconds: 0.02})); err != nil {
+		return ag.Command{}, err
+	}
+	state.Logs = append(state.Logs, fmt.Sprintf("resume=%v", ctx.IsResume()))
+	return ag.Command{
+		Update: state,
+		Goto: []ag.Send{
+			{Node: w.finishResumeFlagNode, NodeInput: nil},
+		},
+	}, nil
+}
+
+func (w *primitiveWorkflow) finishResumeFlagNode(_ *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	state.Done = "ok"
+	return ag.Command{Update: state}, nil
+}
+
+func TestIsResumeAvoidsDuplicateSideEffects(t *testing.T) {
+	workflow := &primitiveWorkflow{}
+	graph := ag.NewAdvancedStateGraph[primitiveState]()
+	graph.AddEntryNode(workflow.startResumeFlagNode)
+	graph.AddNode(workflow.resumeFlagNode)
+	graph.AddFinishNode(workflow.finishResumeFlagNode)
+
+	handler, err := graph.Compile().Start(nil, primitiveState{
+		Count: 0,
+		Logs:  []string{},
+		Done:  "",
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	result, err := handler.WaitForResult()
+	if err != nil {
+		t.Fatalf("result failed: %v", err)
+	}
+	if workflow.dbWriteCount != 1 {
+		t.Fatalf("db write should happen once, got=%v", workflow.dbWriteCount)
+	}
+	if len(result.Logs) != 1 || result.Logs[0] != "resume=true" {
 		t.Fatalf("unexpected logs: %#v", result.Logs)
 	}
 	if result.Done != "ok" {
