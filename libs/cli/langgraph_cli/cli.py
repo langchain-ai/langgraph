@@ -377,6 +377,17 @@ class DeployGroup(NestedHelpGroup):
     """Group that treats leading '-' args as passthrough docker flags."""
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        """Treat leading option-like subcommand tokens as passthrough args.
+
+        Click stores the unresolved nested command token on the context after
+        ``Group.parse_args()`` runs, but the backing attribute changed across
+        supported Click versions. Click 8.1.x stores the value directly on
+        ``protected_args``, while Click 8.2+ stores it on ``_protected_args``
+        and exposes ``protected_args`` as a deprecated compatibility property.
+        Since this package allows ``click>=8.1.7``, we need to check both
+        names to support the full version range without relying on one
+        version-specific internal detail.
+        """
         result = super().parse_args(ctx, args)
         protected_args = ctx.__dict__.get("protected_args")
         if protected_args is None:
