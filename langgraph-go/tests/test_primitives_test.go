@@ -2,13 +2,17 @@ package tests
 
 import (
 	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	ag "github.com/langchain-ai/langgraph/langgraph-go/advancedgraph"
 )
 
 type primitiveWorkflow struct {
 	dbWriteCount int
+	intervalMu   sync.Mutex
+	intervals    map[string][2]time.Time
 }
 
 type primitiveState struct {
@@ -490,5 +494,96 @@ func TestIsResumeAvoidsDuplicateSideEffects(t *testing.T) {
 	}
 	if result.Done != "ok" {
 		t.Fatalf("unexpected done: %v", result.Done)
+	}
+}
+
+func (w *primitiveWorkflow) startLockedWorkersNode(_ *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	w.intervalMu.Lock()
+	w.intervals = map[string][2]time.Time{}
+	w.intervalMu.Unlock()
+	return ag.Command{
+		Update: state,
+		Goto: []ag.Send{
+			{Node: w.lockedWorkerANode, NodeInput: nil},
+			{Node: w.lockedWorkerBNode, NodeInput: nil},
+			{Node: w.waitLockedWorkersNode, NodeInput: nil},
+		},
+	}, nil
+}
+
+func (w *primitiveWorkflow) lockedWorkerANode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	start := time.Now()
+	time.Sleep(40 * time.Millisecond)
+	end := time.Now()
+	w.intervalMu.Lock()
+	w.intervals["a"] = [2]time.Time{start, end}
+	w.intervalMu.Unlock()
+	if err := ctx.PublishToChannel("done", "a"); err != nil {
+		return ag.Command{}, err
+	}
+	return ag.Command{Update: state}, nil
+}
+
+func (w *primitiveWorkflow) lockedWorkerBNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	start := time.Now()
+	time.Sleep(40 * time.Millisecond)
+	end := time.Now()
+	w.intervalMu.Lock()
+	w.intervals["b"] = [2]time.Time{start, end}
+	w.intervalMu.Unlock()
+	if err := ctx.PublishToChannel("done", "b"); err != nil {
+		return ag.Command{}, err
+	}
+	return ag.Command{Update: state}, nil
+}
+
+func (w *primitiveWorkflow) waitLockedWorkersNode(ctx *ag.Context, _ any, state primitiveState) (ag.Command, error) {
+	if _, err := ctx.WaitFor(ag.AnyOf(ag.ChannelCondition{Channel: "done", Min: 2})); err != nil {
+		return ag.Command{}, err
+	}
+	return ag.Command{
+		Update: state,
+		Goto:   []ag.Send{{Node: w.finishResumeFlagNode, NodeInput: nil}},
+	}, nil
+}
+
+func TestStateFieldLockingSerializesConflictingNodes(t *testing.T) {
+	workflow := &primitiveWorkflow{}
+	graph := ag.NewAdvancedStateGraph[primitiveState]()
+	graph.AddAsyncChannel("done")
+	graph.AddEntryNode(workflow.startLockedWorkersNode)
+	graph.AddNode(
+		workflow.lockedWorkerANode,
+		ag.NodeStateOption{LockedFields: []string{"counter"}},
+	)
+	graph.AddNode(
+		workflow.lockedWorkerBNode,
+		ag.NodeStateOption{LockedFields: []string{"counter"}},
+	)
+	graph.AddNode(workflow.waitLockedWorkersNode)
+	graph.AddFinishNode(workflow.finishResumeFlagNode)
+
+	handler, err := graph.Compile().Start(nil, primitiveState{
+		Count: 0,
+		Logs:  []string{},
+		Done:  "",
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	if _, err := handler.WaitForResult(); err != nil {
+		t.Fatalf("result failed: %v", err)
+	}
+
+	workflow.intervalMu.Lock()
+	ia, okA := workflow.intervals["a"]
+	ib, okB := workflow.intervals["b"]
+	workflow.intervalMu.Unlock()
+	if !okA || !okB {
+		t.Fatalf("missing worker intervals: %#v", workflow.intervals)
+	}
+	serialized := !ia[1].After(ib[0]) || !ib[1].After(ia[0])
+	if !serialized {
+		t.Fatalf("expected serialized execution, got overlap: a=%v..%v b=%v..%v", ia[0], ia[1], ib[0], ib[1])
 	}
 }

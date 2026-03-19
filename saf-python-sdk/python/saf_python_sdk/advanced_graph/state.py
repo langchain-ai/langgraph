@@ -24,6 +24,11 @@ class _ChannelSpec:
 
 
 @dataclass(frozen=True)
+class NodeStateOption:
+    locked_fields: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ChannelCondition:
     channel: str
     min: int = 1
@@ -97,6 +102,7 @@ class AdvancedStateGraph(Generic[StateT]):
     def __init__(self, state_schema: type[StateT]) -> None:
         self.state_schema = state_schema
         self._nodes: dict[str, Callable[..., Any]] = {}
+        self._node_options: dict[str, NodeStateOption] = {}
         self._async_channels: dict[str, _ChannelSpec] = {}
         self._custom_output_streams: dict[str, _ChannelSpec] = {}
         self._entry_point: str | None = None
@@ -106,6 +112,8 @@ class AdvancedStateGraph(Generic[StateT]):
         self,
         name_or_node: str | Callable[..., Any],
         node: Callable[..., Any] | None = None,
+        *,
+        state_option: dict[str, Any] | NodeStateOption | None = None,
     ) -> str:
         if node is None:
             if not callable(name_or_node):
@@ -121,6 +129,7 @@ class AdvancedStateGraph(Generic[StateT]):
         if node_name in self._nodes:
             raise ValueError(f"Node `{node_name}` already exists")
         self._nodes[node_name] = node_fn
+        self._node_options[node_name] = _normalize_node_state_option(state_option)
         return node_name
 
     def add_async_channel(self, name: str, typ: Any) -> None:
@@ -137,13 +146,23 @@ class AdvancedStateGraph(Generic[StateT]):
     def add_custom_output_stream(self, name: str, typ: Any) -> None:
         self.add_custom_outout_stream(name, typ)
 
-    def add_entry_node(self, node: Callable[..., Any]) -> str:
-        node_name = self.add_node(node)
+    def add_entry_node(
+        self,
+        node: Callable[..., Any],
+        *,
+        state_option: dict[str, Any] | NodeStateOption | None = None,
+    ) -> str:
+        node_name = self.add_node(node, state_option=state_option)
         self._entry_point = self._resolve_node_name(node_name)
         return node_name
 
-    def add_finish_node(self, node: Callable[..., Any]) -> str:
-        node_name = self.add_node(node)
+    def add_finish_node(
+        self,
+        node: Callable[..., Any],
+        *,
+        state_option: dict[str, Any] | NodeStateOption | None = None,
+    ) -> str:
+        node_name = self.add_node(node, state_option=state_option)
         self._finish_point = self._resolve_node_name(node_name)
         return node_name
 
@@ -164,6 +183,7 @@ class AdvancedStateGraph(Generic[StateT]):
             raise ValueError(f"Finish point node `{self._finish_point}` does not exist")
         return CompiledGraphEngine(
             nodes=dict(self._nodes),
+            node_options=dict(self._node_options),
             async_channels=dict(self._async_channels),
             custom_output_streams=dict(self._custom_output_streams),
             entry_point=self._entry_point,
@@ -178,12 +198,14 @@ class CompiledGraphEngine(Generic[StateT]):
         self,
         *,
         nodes: dict[str, Callable[..., Any]],
+        node_options: dict[str, NodeStateOption],
         async_channels: dict[str, _ChannelSpec],
         custom_output_streams: dict[str, _ChannelSpec],
         entry_point: str,
         finish_point: str | None,
     ) -> None:
         self._nodes = nodes
+        self._node_options = node_options
         self._async_channels = async_channels
         self._custom_output_streams = custom_output_streams
         self._entry_point = entry_point
@@ -200,6 +222,7 @@ class CompiledGraphEngine(Generic[StateT]):
             nodes=self._nodes,
             async_channel_specs=self._async_channels,
             custom_output_stream_specs=self._custom_output_streams,
+            node_options=self._node_options,
             entry_point=self._entry_point,
             finish_point=self._finish_point,
             stream_mode=stream_mode,
@@ -273,12 +296,14 @@ class _GraphEngineRun:
         nodes: dict[str, Callable[..., Any]],
         async_channel_specs: dict[str, _ChannelSpec],
         custom_output_stream_specs: dict[str, _ChannelSpec],
+        node_options: dict[str, NodeStateOption],
         entry_point: str,
         finish_point: str | None,
         stream_mode: str | None,
     ) -> None:
         self._nodes = nodes
         self._entry_point = entry_point
+        self._node_options = node_options
         self._finish_point = finish_point
         self._stream_mode = stream_mode
         self._rust_engine = PyRustEngine()
@@ -312,6 +337,7 @@ class _GraphEngineRun:
                 initial_state,
                 self._execute_node_for_rust,
                 None,
+                _node_locked_fields_payload(self._node_options),
             )
         finally:
             self._stream_ready.set()
@@ -522,6 +548,43 @@ def _normalize_goto(goto: Any, *, default_input: Any) -> list[Send]:
                 sends.append(Send(item, default_input))
         return sends
     return []
+
+
+def _normalize_node_state_option(
+    state_option: dict[str, Any] | NodeStateOption | None,
+) -> NodeStateOption:
+    if state_option is None:
+        return NodeStateOption()
+    if isinstance(state_option, NodeStateOption):
+        return state_option
+    if not isinstance(state_option, dict):
+        raise TypeError("state_option must be a dict or NodeStateOption")
+    locked_fields_raw = state_option.get("locked_fields", ())
+    if locked_fields_raw is None:
+        return NodeStateOption()
+    if not isinstance(locked_fields_raw, Sequence) or isinstance(
+        locked_fields_raw, (str, bytes)
+    ):
+        raise TypeError("state_option['locked_fields'] must be a sequence of strings")
+    locked_fields: list[str] = []
+    for field in locked_fields_raw:
+        if not isinstance(field, str):
+            raise TypeError("locked field names must be strings")
+        if not field:
+            continue
+        locked_fields.append(field)
+    return NodeStateOption(locked_fields=tuple(locked_fields))
+
+
+def _node_locked_fields_payload(
+    node_options: dict[str, NodeStateOption],
+) -> dict[str, list[str]]:
+    payload: dict[str, list[str]] = {}
+    for node_name, option in node_options.items():
+        if not option.locked_fields:
+            continue
+        payload[node_name] = list(option.locked_fields)
+    return payload
 
 
 def channel_condition(channel: str, min: int = 1, max: int = 0) -> ChannelCondition:

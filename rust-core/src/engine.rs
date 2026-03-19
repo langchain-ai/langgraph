@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_json::Value;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 use std::future::Future;
 use std::sync::mpsc;
@@ -723,12 +723,19 @@ enum SchedulerEvent<U, A> {
 }
 
 struct NodeExecution<U, A> {
+    execution_id: u64,
     node: String,
     arg: A,
     outcome: NodeOutcome<U, A>,
 }
 
+struct PendingNodeExecution<A> {
+    node: String,
+    arg: A,
+}
+
 fn spawn_node_task<State, U, A, F>(
+    execution_id: u64,
     node: String,
     arg: A,
     state_snapshot: State,
@@ -745,12 +752,120 @@ where
         let node_for_result = node.clone();
         let arg_for_result = arg.clone();
         let result = callback(node, arg, state_snapshot).map(|outcome| NodeExecution {
+            execution_id,
             node: node_for_result,
             arg: arg_for_result,
             outcome,
         });
         let _ = tx.send(SchedulerEvent::Node(result));
     })
+}
+
+fn try_spawn_or_enqueue<State, U, A, F, FLock>(
+    node: String,
+    arg: A,
+    pending: &mut VecDeque<PendingNodeExecution<A>>,
+    locked_fields: &mut HashSet<String>,
+    execution_locks: &mut HashMap<u64, Vec<String>>,
+    next_execution_id: &mut u64,
+    active: &mut usize,
+    state_for_spawn: &Arc<StdMutex<State>>,
+    tx_for_spawn: &tokio_mpsc::UnboundedSender<SchedulerEvent<U, A>>,
+    callback: &Arc<F>,
+    locked_fields_for_node: &Arc<FLock>,
+) -> Result<(), String>
+where
+    State: Clone + Send + 'static,
+    U: Send + 'static,
+    A: Clone + Send + 'static,
+    F: Fn(String, A, State) -> Result<NodeOutcome<U, A>, String> + Send + Sync + 'static,
+    FLock: Fn(&str) -> Vec<String> + Send + Sync + 'static,
+{
+    let requested = locked_fields_for_node(node.as_str())
+        .into_iter()
+        .filter(|field| !field.is_empty())
+        .collect::<Vec<_>>();
+    let conflict = requested.iter().any(|field| locked_fields.contains(field));
+    if conflict {
+        debug_log(&format!(
+            "enqueue node={} due to lock conflict (requested={:?})",
+            node, requested
+        ));
+        pending.push_back(PendingNodeExecution { node, arg });
+        return Ok(());
+    }
+    for field in &requested {
+        locked_fields.insert(field.clone());
+    }
+    let execution_id = *next_execution_id;
+    *next_execution_id = next_execution_id.saturating_add(1);
+    execution_locks.insert(execution_id, requested);
+    *active = active.saturating_add(1);
+    let snapshot = state_for_spawn
+        .lock()
+        .expect("state mutex poisoned")
+        .clone();
+    spawn_node_task(
+        execution_id,
+        node,
+        arg,
+        snapshot,
+        tx_for_spawn.clone(),
+        Arc::clone(callback),
+    )
+}
+
+fn drain_pending<State, U, A, F, FLock>(
+    pending: &mut VecDeque<PendingNodeExecution<A>>,
+    locked_fields: &mut HashSet<String>,
+    execution_locks: &mut HashMap<u64, Vec<String>>,
+    next_execution_id: &mut u64,
+    active: &mut usize,
+    state_for_spawn: &Arc<StdMutex<State>>,
+    tx_for_spawn: &tokio_mpsc::UnboundedSender<SchedulerEvent<U, A>>,
+    callback: &Arc<F>,
+    locked_fields_for_node: &Arc<FLock>,
+) -> Result<(), String>
+where
+    State: Clone + Send + 'static,
+    U: Send + 'static,
+    A: Clone + Send + 'static,
+    F: Fn(String, A, State) -> Result<NodeOutcome<U, A>, String> + Send + Sync + 'static,
+    FLock: Fn(&str) -> Vec<String> + Send + Sync + 'static,
+{
+    if pending.is_empty() {
+        return Ok(());
+    }
+    loop {
+        let mut progressed = false;
+        let round = pending.len();
+        for _ in 0..round {
+            let Some(item) = pending.pop_front() else {
+                continue;
+            };
+            let active_before = *active;
+            try_spawn_or_enqueue(
+                item.node,
+                item.arg,
+                pending,
+                locked_fields,
+                execution_locks,
+                next_execution_id,
+                active,
+                state_for_spawn,
+                tx_for_spawn,
+                callback,
+                locked_fields_for_node,
+            )?;
+            if *active > active_before {
+                progressed = true;
+            }
+        }
+        if !progressed {
+            break;
+        }
+    }
+    Ok(())
 }
 
 pub async fn run_graph_with_callback<State, U, A, FCallback, FMerge, FWrap>(
@@ -762,6 +877,7 @@ pub async fn run_graph_with_callback<State, U, A, FCallback, FMerge, FWrap>(
     callback: FCallback,
     merge_update: FMerge,
     wrap_resume_arg: FWrap,
+    locked_fields_for_node: impl Fn(&str) -> Vec<String> + Send + Sync + 'static,
 ) -> Result<State, String>
 where
     State: Clone + Send + 'static,
@@ -774,23 +890,31 @@ where
     let callback = Arc::new(callback);
     let merge_update = Arc::new(merge_update);
     let wrap_resume_arg = Arc::new(wrap_resume_arg);
+    let locked_fields_for_node = Arc::new(locked_fields_for_node);
 
     let (tx, mut rx) = tokio_mpsc::unbounded_channel::<SchedulerEvent<U, A>>();
     let state = Arc::new(StdMutex::new(initial_state));
     let tx_for_spawn = tx.clone();
     let state_for_spawn = Arc::clone(&state);
-    let mut active: usize = 1;
+    let mut active: usize = 0;
     let mut waiting: usize = 0;
+    let mut next_execution_id: u64 = 1;
+    let mut pending: VecDeque<PendingNodeExecution<A>> = VecDeque::new();
+    let mut locked_fields: HashSet<String> = HashSet::new();
+    let mut execution_locks: HashMap<u64, Vec<String>> = HashMap::new();
 
-    spawn_node_task(
+    try_spawn_or_enqueue(
         entry_point,
         initial_input,
-        state_for_spawn
-            .lock()
-            .expect("state mutex poisoned")
-            .clone(),
-        tx_for_spawn.clone(),
-        Arc::clone(&callback),
+        &mut pending,
+        &mut locked_fields,
+        &mut execution_locks,
+        &mut next_execution_id,
+        &mut active,
+        &state_for_spawn,
+        &tx_for_spawn,
+        &callback,
+        &locked_fields_for_node,
     )?;
 
     while active > 0 || waiting > 0 {
@@ -802,6 +926,11 @@ where
             SchedulerEvent::Node(result) => {
                 active = active.saturating_sub(1);
                 let exec = result?;
+                if let Some(fields) = execution_locks.remove(&exec.execution_id) {
+                    for field in fields {
+                        locked_fields.remove(&field);
+                    }
+                }
                 match exec.outcome {
                     NodeOutcome::Completed(node_result) => {
                         let mut guard = state.lock().expect("state mutex poisoned");
@@ -813,17 +942,18 @@ where
                         }
 
                         for send in node_result.sends {
-                            active += 1;
-                            let snapshot = state_for_spawn
-                                .lock()
-                                .expect("state mutex poisoned")
-                                .clone();
-                            spawn_node_task(
+                            try_spawn_or_enqueue(
                                 send.node,
                                 send.arg,
-                                snapshot,
-                                tx_for_spawn.clone(),
-                                Arc::clone(&callback),
+                                &mut pending,
+                                &mut locked_fields,
+                                &mut execution_locks,
+                                &mut next_execution_id,
+                                &mut active,
+                                &state_for_spawn,
+                                &tx_for_spawn,
+                                &callback,
+                                &locked_fields_for_node,
                             )?;
                         }
                     }
@@ -849,22 +979,34 @@ where
             }
             SchedulerEvent::Resume { node, arg, event } => {
                 waiting = waiting.saturating_sub(1);
-                active += 1;
-                let snapshot = state_for_spawn
-                    .lock()
-                    .expect("state mutex poisoned")
-                    .clone();
                 let resume_arg = wrap_resume_arg(arg, event)?;
-                spawn_node_task(
+                try_spawn_or_enqueue(
                     node,
                     resume_arg,
-                    snapshot,
-                    tx_for_spawn.clone(),
-                    Arc::clone(&callback),
+                    &mut pending,
+                    &mut locked_fields,
+                    &mut execution_locks,
+                    &mut next_execution_id,
+                    &mut active,
+                    &state_for_spawn,
+                    &tx_for_spawn,
+                    &callback,
+                    &locked_fields_for_node,
                 )?;
             }
             SchedulerEvent::WaitError(e) => return Err(e),
         }
+        drain_pending(
+            &mut pending,
+            &mut locked_fields,
+            &mut execution_locks,
+            &mut next_execution_id,
+            &mut active,
+            &state_for_spawn,
+            &tx_for_spawn,
+            &callback,
+            &locked_fields_for_node,
+        )?;
     }
 
     let final_state = state.lock().expect("state mutex poisoned").clone();
@@ -878,6 +1020,7 @@ pub async fn run_graph_json_with_callback<F>(
     initial_input: Value,
     engine: Engine,
     callback: F,
+    locked_fields_by_node: HashMap<String, Vec<String>>,
 ) -> Result<Value, String>
 where
     F: Fn(String, Value, Value) -> Result<NodeOutcome<Value, Value>, String>
@@ -902,6 +1045,7 @@ where
                 "__lg_resume_event__": event,
             }))
         },
+        move |node: &str| locked_fields_by_node.get(node).cloned().unwrap_or_default(),
     )
     .await
 }

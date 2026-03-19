@@ -3,6 +3,7 @@ use crate::engine::{
     AllOfCondition, AnyOfCondition, Engine, NodeOutcome,
 };
 use serde_json::Value;
+use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::mpsc;
@@ -304,6 +305,7 @@ pub unsafe extern "C" fn rc_run_graph_json(
     initial_state_json: *const c_char,
     initial_input_json: *const c_char,
     stream_mode: *const c_char,
+    node_locked_fields_json: *const c_char,
     user_data: libc::c_ulong,
     callback: Option<CNodeCallback>,
 ) -> *mut c_char {
@@ -351,6 +353,22 @@ pub unsafe extern "C" fn rc_run_graph_json(
         match cstr_to_str(stream_mode) {
             Ok(v) => Some(v.to_string()),
             Err(e) => return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+        }
+    };
+    let node_locked_fields: HashMap<String, Vec<String>> = if node_locked_fields_json.is_null() {
+        HashMap::new()
+    } else {
+        let payload = match cstr_to_str(node_locked_fields_json) {
+            Ok(v) => v,
+            Err(e) => return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+        };
+        match serde_json::from_str(payload) {
+            Ok(v) => v,
+            Err(e) => {
+                return into_c_ptr(format!(
+                    "{{\"ok\":false,\"error\":\"invalid node_locked_fields JSON: {e}\"}}"
+                ))
+            }
         }
     };
 
@@ -404,6 +422,7 @@ pub unsafe extern "C" fn rc_run_graph_json(
             initial_input,
             run_engine.clone(),
             callback_wrapper,
+            node_locked_fields,
         )
         .await;
         run_engine.close_all_streams();

@@ -10,8 +10,28 @@ import (
 
 type nodeExecutor func(ctx *Context, input any, state map[string]any) (Command, error)
 
+type nodeConfig struct {
+	lockedFields []string
+}
+
+type NodeOption interface {
+	applyToNodeConfig(*nodeConfig)
+}
+
+type NodeStateOption struct {
+	LockedFields []string
+}
+
+func (o NodeStateOption) applyToNodeConfig(cfg *nodeConfig) {
+	if cfg == nil {
+		return
+	}
+	cfg.lockedFields = append(cfg.lockedFields[:0], o.LockedFields...)
+}
+
 type AdvancedStateGraph[StateT any] struct {
 	nodes         map[string]nodeExecutor
+	nodeOptions   map[string]nodeConfig
 	asyncChannels []string
 	customStreams []string
 	entryPoint    string
@@ -25,20 +45,21 @@ func NewAdvancedStateGraph[StateT any]() *AdvancedStateGraph[StateT] {
 		panic(fmt.Sprintf("StateT must be a struct, got %s", stateType.String()))
 	}
 	return &AdvancedStateGraph[StateT]{
-		nodes:     make(map[string]nodeExecutor),
-		stateType: stateType,
+		nodes:       make(map[string]nodeExecutor),
+		nodeOptions: make(map[string]nodeConfig),
+		stateType:   stateType,
 	}
 }
 
 // AddNode keeps `fn` as `any` because advanced graph nodes can have different
 // input argument types per node, while only `StateT` is globally constrained.
 // We validate and adapt node signatures at runtime in compileNodeExecutor.
-func (g *AdvancedStateGraph[StateT]) AddNode(fn any) string {
+func (g *AdvancedStateGraph[StateT]) AddNode(fn any, nodeOption ...NodeOption) string {
 	name := NodeName(fn)
-	return g.AddNodeAs(name, fn)
+	return g.AddNodeAs(name, fn, nodeOption...)
 }
 
-func (g *AdvancedStateGraph[StateT]) AddNodeAs(name string, fn any) string {
+func (g *AdvancedStateGraph[StateT]) AddNodeAs(name string, fn any, nodeOption ...NodeOption) string {
 	if _, exists := g.nodes[name]; exists {
 		panic(fmt.Sprintf("node `%s` already exists", name))
 	}
@@ -47,6 +68,7 @@ func (g *AdvancedStateGraph[StateT]) AddNodeAs(name string, fn any) string {
 		panic(err)
 	}
 	g.nodes[name] = exec
+	g.nodeOptions[name] = resolveNodeConfig(nodeOption...)
 	return name
 }
 
@@ -58,24 +80,24 @@ func (g *AdvancedStateGraph[StateT]) AddCustomOutputStream(name string) {
 	g.customStreams = append(g.customStreams, name)
 }
 
-func (g *AdvancedStateGraph[StateT]) AddEntryNode(fn any) string {
+func (g *AdvancedStateGraph[StateT]) AddEntryNode(fn any, nodeOption ...NodeOption) string {
 	name := NodeName(fn)
-	return g.AddEntryNodeAs(name, fn)
+	return g.AddEntryNodeAs(name, fn, nodeOption...)
 }
 
-func (g *AdvancedStateGraph[StateT]) AddEntryNodeAs(name string, fn any) string {
-	name = g.AddNodeAs(name, fn)
+func (g *AdvancedStateGraph[StateT]) AddEntryNodeAs(name string, fn any, nodeOption ...NodeOption) string {
+	name = g.AddNodeAs(name, fn, nodeOption...)
 	g.entryPoint = name
 	return name
 }
 
-func (g *AdvancedStateGraph[StateT]) AddFinishNode(fn any) string {
+func (g *AdvancedStateGraph[StateT]) AddFinishNode(fn any, nodeOption ...NodeOption) string {
 	name := NodeName(fn)
-	return g.AddFinishNodeAs(name, fn)
+	return g.AddFinishNodeAs(name, fn, nodeOption...)
 }
 
-func (g *AdvancedStateGraph[StateT]) AddFinishNodeAs(name string, fn any) string {
-	name = g.AddNodeAs(name, fn)
+func (g *AdvancedStateGraph[StateT]) AddFinishNodeAs(name string, fn any, nodeOption ...NodeOption) string {
+	name = g.AddNodeAs(name, fn, nodeOption...)
 	g.finishPoint = name
 	return name
 }
@@ -83,6 +105,7 @@ func (g *AdvancedStateGraph[StateT]) AddFinishNodeAs(name string, fn any) string
 func (g *AdvancedStateGraph[StateT]) Compile() *CompiledGraph[StateT] {
 	return &CompiledGraph[StateT]{
 		nodes:         g.nodes,
+		nodeOptions:   g.nodeOptions,
 		asyncChannels: g.asyncChannels,
 		customStreams: g.customStreams,
 		entryPoint:    g.entryPoint,
@@ -93,6 +116,7 @@ func (g *AdvancedStateGraph[StateT]) Compile() *CompiledGraph[StateT] {
 
 type CompiledGraph[StateT any] struct {
 	nodes         map[string]nodeExecutor
+	nodeOptions   map[string]nodeConfig
 	asyncChannels []string
 	customStreams []string
 	entryPoint    string
@@ -211,6 +235,7 @@ func (g *CompiledGraph[StateT]) Start(initialInput any, initialState StateT, str
 			streamModeForRun,
 			initialState,
 			initialInput,
+			g.nodeLockedFields(),
 			func(node string, nodeInput any, fallbackState map[string]any) (Command, error) {
 				fn, ok := g.nodes[node]
 				if !ok {
@@ -241,6 +266,37 @@ func (g *CompiledGraph[StateT]) Start(initialInput any, initialState StateT, str
 		close(handler.done)
 	}()
 	return handler, nil
+}
+
+func (g *CompiledGraph[StateT]) nodeLockedFields() map[string][]string {
+	result := make(map[string][]string, len(g.nodeOptions))
+	for nodeName, option := range g.nodeOptions {
+		if len(option.lockedFields) == 0 {
+			continue
+		}
+		fields := make([]string, 0, len(option.lockedFields))
+		for _, field := range option.lockedFields {
+			if field == "" {
+				continue
+			}
+			fields = append(fields, field)
+		}
+		if len(fields) > 0 {
+			result[nodeName] = fields
+		}
+	}
+	return result
+}
+
+func resolveNodeConfig(nodeOption ...NodeOption) nodeConfig {
+	cfg := nodeConfig{}
+	for _, option := range nodeOption {
+		if option == nil {
+			panic("node option cannot be nil")
+		}
+		option.applyToNodeConfig(&cfg)
+	}
+	return cfg
 }
 
 func NodeName(fn any) string {

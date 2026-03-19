@@ -6,6 +6,28 @@ package advancedgraph
 #include "langgraph_rust_core.h"
 #include <stdlib.h>
 extern char* goNodeCallback(unsigned long user_data, char* node, char* arg_json, char* state_json);
+static inline char* rc_run_graph_json_with_go_callback(
+    Engine* ptr,
+    const char* entry_point,
+    const char* finish_point,
+    const char* initial_state_json,
+    const char* initial_input_json,
+    const char* stream_mode,
+    const char* node_locked_fields_json,
+    unsigned long user_data
+) {
+    return rc_run_graph_json(
+        ptr,
+        entry_point,
+        finish_point,
+        initial_state_json,
+        initial_input_json,
+        stream_mode,
+        node_locked_fields_json,
+        user_data,
+        goNodeCallback
+    );
+}
 */
 import "C"
 
@@ -269,6 +291,7 @@ func (e *RustEngine) RunGraph(
 	streamMode string,
 	initialState any,
 	initialInput any,
+	nodeLockedFields map[string][]string,
 	exec func(node string, nodeInput any, state map[string]any) (Command, error),
 ) (map[string]any, error) {
 	initialJSON, err := json.Marshal(initialState)
@@ -279,10 +302,15 @@ func (e *RustEngine) RunGraph(
 	if err != nil {
 		return nil, fmt.Errorf("marshal initial input: %w", err)
 	}
+	lockedFieldsJSON, err := json.Marshal(nodeLockedFields)
+	if err != nil {
+		return nil, fmt.Errorf("marshal node locked fields: %w", err)
+	}
 	centry := C.CString(entryPoint)
 	cfinish := C.CString(finishPoint)
 	cinitial := C.CString(string(initialJSON))
 	cinitialInput := C.CString(string(initialInputJSON))
+	clockedFields := C.CString(string(lockedFieldsJSON))
 	var cstreamMode *C.char
 	if streamMode != "" {
 		cstreamMode = C.CString(streamMode)
@@ -291,6 +319,7 @@ func (e *RustEngine) RunGraph(
 	defer C.free(unsafe.Pointer(cfinish))
 	defer C.free(unsafe.Pointer(cinitial))
 	defer C.free(unsafe.Pointer(cinitialInput))
+	defer C.free(unsafe.Pointer(clockedFields))
 	if cstreamMode != nil {
 		defer C.free(unsafe.Pointer(cstreamMode))
 	}
@@ -298,15 +327,15 @@ func (e *RustEngine) RunGraph(
 	callbackID := registerRunGraphCallbackCtx(&runGraphCallbackCtx{exec: exec})
 	defer unregisterRunGraphCallbackCtx(callbackID)
 
-	resp := C.rc_run_graph_json(
+	resp := C.rc_run_graph_json_with_go_callback(
 		e.ptr,
 		centry,
 		cfinish,
 		cinitial,
 		cinitialInput,
 		cstreamMode,
+		clockedFields,
 		C.ulong(callbackID),
-		(C.rc_node_callback_t)(C.goNodeCallback),
 	)
 	defer C.rc_string_free(resp)
 

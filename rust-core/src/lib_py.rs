@@ -14,6 +14,8 @@ use pyo3::types::{PyDict, PyList, PyTuple};
 #[cfg(feature = "python-bindings")]
 use serde_json::Value;
 #[cfg(feature = "python-bindings")]
+use std::collections::HashMap;
+#[cfg(feature = "python-bindings")]
 use std::sync::Arc;
 
 #[cfg(feature = "python-bindings")]
@@ -165,7 +167,7 @@ impl PyRustEngine {
         self.inner.close_all_streams();
     }
 
-    #[pyo3(signature = (entry_point, finish_point, initial_state, callback, stream_mode=None))]
+    #[pyo3(signature = (entry_point, finish_point, initial_state, callback, stream_mode=None, node_locked_fields=None))]
     fn run_graph_py(
         &self,
         py: Python<'_>,
@@ -174,6 +176,7 @@ impl PyRustEngine {
         initial_state: Py<PyAny>,
         callback: Py<PyAny>,
         stream_mode: Option<&str>,
+        node_locked_fields: Option<Py<PyAny>>,
     ) -> PyResult<Py<PyAny>> {
         if let Some(mode) = stream_mode {
             self.inner
@@ -187,6 +190,15 @@ impl PyRustEngine {
         let finish_point = finish_point.to_string();
         let initial_state = Arc::new(initial_state);
         let initial_input = Arc::clone(&initial_state);
+        let locked_fields_by_node: HashMap<String, Vec<String>> =
+            if let Some(locked_fields_obj) = node_locked_fields {
+                let json_str = py_obj_to_json_string(py, &locked_fields_obj.bind(py))?;
+                serde_json::from_str(&json_str).map_err(|e| {
+                    PyValueError::new_err(format!("invalid node_locked_fields payload: {e}"))
+                })?
+            } else {
+                HashMap::new()
+            };
 
         let run_result =
             py.allow_threads(move || {
@@ -229,6 +241,7 @@ impl PyRustEngine {
                 |arg: Arc<Py<PyAny>>, event: WaitEvent| -> Result<Arc<Py<PyAny>>, String> {
                     wrap_resume_arg(arg.as_ref(), &event).map(Arc::new)
                     },
+                move |node: &str| locked_fields_by_node.get(node).cloned().unwrap_or_default(),
                 ))
             });
 

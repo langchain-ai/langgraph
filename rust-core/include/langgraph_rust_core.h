@@ -32,6 +32,7 @@ char* rc_run_graph_json(
     const char* initial_state_json,
     const char* initial_input_json,
     const char* stream_mode,
+    const char* node_locked_fields_json,
     unsigned long user_data,
     rc_node_callback_t callback
 );

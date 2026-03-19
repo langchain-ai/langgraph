@@ -1,3 +1,5 @@
+import asyncio
+import time
 import pytest
 from typing_extensions import TypedDict
 
@@ -247,4 +249,57 @@ async def test_is_resume_avoids_duplicate_side_effects() -> None:
     assert result["counter"] == 0
     assert result["logs"] == ["resume=True"]
     assert result["done"] == "ok"
+
+
+async def test_state_field_locking_serializes_conflicting_nodes() -> None:
+    graph = AdvancedStateGraph(PrimitiveState)
+    graph.add_async_channel("done", str)
+    intervals: dict[str, tuple[float, float]] = {}
+
+    async def start_node(state: PrimitiveState) -> Command:
+        return Command(
+            update=state,
+            goto=[
+                Send("worker_a", None),
+                Send("worker_b", None),
+                Send("wait_node", None),
+            ],
+        )
+
+    async def worker_a(ctx: Context, _input: None, state: PrimitiveState) -> Command:
+        started = time.perf_counter()
+        await asyncio.sleep(0.04)
+        ended = time.perf_counter()
+        intervals["a"] = (started, ended)
+        ctx.publish_to_channel("done", "a")
+        return Command(update=state)
+
+    async def worker_b(ctx: Context, _input: None, state: PrimitiveState) -> Command:
+        started = time.perf_counter()
+        await asyncio.sleep(0.04)
+        ended = time.perf_counter()
+        intervals["b"] = (started, ended)
+        ctx.publish_to_channel("done", "b")
+        return Command(update=state)
+
+    async def wait_node(ctx: Context, _input: None, state: PrimitiveState) -> Command:
+        await ctx.wait_for(channel_condition("done", min=2))
+        return Command(update=state, goto=Send("finish_node", None))
+
+    async def finish_node(_input: None, state: PrimitiveState) -> dict[str, object]:
+        return {"counter": state["counter"], "logs": state["logs"], "done": "ok"}
+
+    graph.add_entry_node(start_node)
+    graph.add_node(worker_a, state_option={"locked_fields": ["counter"]})
+    graph.add_node(worker_b, state_option={"locked_fields": ["counter"]})
+    graph.add_node(wait_node)
+    graph.add_finish_node(finish_node)
+
+    result = await graph.compile().ainvoke({"counter": 0, "logs": [], "done": None})
+    assert result["done"] == "ok"
+    assert "a" in intervals and "b" in intervals
+    a_start, a_end = intervals["a"]
+    b_start, b_end = intervals["b"]
+    serialized = (a_end <= b_start) or (b_end <= a_start)
+    assert serialized, f"expected serialized execution, got overlap: a={intervals['a']} b={intervals['b']}"
 
