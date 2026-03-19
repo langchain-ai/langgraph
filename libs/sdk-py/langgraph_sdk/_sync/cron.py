@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import Any
 
+from langgraph_sdk._shared.utilities import _resolve_timezone
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import (
     All,
@@ -64,6 +65,7 @@ class SyncCronClient:
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
         enabled: bool | None = None,
+        timezone: str | tzinfo | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         stream_subgraphs: bool | None = None,
         stream_resumable: bool | None = None,
@@ -78,7 +80,7 @@ class SyncCronClient:
             assistant_id: The assistant ID or graph name to use for the cron job.
                 If using graph name, will default to first assistant created from that graph.
             schedule: The cron schedule to execute this job on.
-                Schedules are interpreted in UTC.
+                Schedules are interpreted in UTC unless a timezone is specified.
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
@@ -92,6 +94,7 @@ class SyncCronClient:
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             enabled: Whether the cron job is enabled. By default, it is considered enabled.
+            timezone: IANA timezone for the cron schedule. Accepts a string (e.g. 'America/New_York') or a ``datetime.tzinfo`` instance (e.g. ``ZoneInfo("America/New_York")``).
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             stream_resumable: Whether to persist the stream chunks in order to resume the stream later.
@@ -144,6 +147,7 @@ class SyncCronClient:
             "multitask_strategy": multitask_strategy,
             "end_time": end_time.isoformat() if end_time else None,
             "enabled": enabled,
+            "timezone": _resolve_timezone(timezone),
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "stream_resumable": stream_resumable,
@@ -174,6 +178,7 @@ class SyncCronClient:
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
         enabled: bool | None = None,
+        timezone: str | tzinfo | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         stream_subgraphs: bool | None = None,
         stream_resumable: bool | None = None,
@@ -187,7 +192,7 @@ class SyncCronClient:
             assistant_id: The assistant ID or graph name to use for the cron job.
                 If using graph name, will default to first assistant created from that graph.
             schedule: The cron schedule to execute this job on.
-                Schedules are interpreted in UTC.
+                Schedules are interpreted in UTC unless a timezone is specified.
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
@@ -205,6 +210,7 @@ class SyncCronClient:
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             enabled: Whether the cron job is enabled. By default, it is considered enabled.
+            timezone: IANA timezone for the cron schedule. Accepts a string (e.g. 'America/New_York') or a ``datetime.tzinfo`` instance (e.g. ``ZoneInfo("America/New_York")``).
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             stream_resumable: Whether to persist the stream chunks in order to resume the stream later.
@@ -259,6 +265,7 @@ class SyncCronClient:
             "multitask_strategy": multitask_strategy,
             "end_time": end_time.isoformat() if end_time else None,
             "enabled": enabled,
+            "timezone": _resolve_timezone(timezone),
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "stream_resumable": stream_resumable,
@@ -313,6 +320,7 @@ class SyncCronClient:
         interrupt_after: All | list[str] | None = None,
         on_run_completed: OnCompletionBehavior | None = None,
         enabled: bool | None = None,
+        timezone: str | tzinfo | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         stream_subgraphs: bool | None = None,
         stream_resumable: bool | None = None,
@@ -325,7 +333,7 @@ class SyncCronClient:
         Args:
             cron_id: The cron ID to update.
             schedule: The cron schedule to execute this job on.
-                Schedules are interpreted in UTC.
+                Schedules are interpreted in UTC unless a timezone is specified.
             end_time: The end date to stop running the cron.
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
@@ -339,6 +347,7 @@ class SyncCronClient:
                 after execution. 'keep' creates a new thread for each execution but does not
                 clean them up.
             enabled: Enable or disable the cron job.
+            timezone: IANA timezone for the cron schedule. Accepts a string (e.g. 'America/New_York') or a ``datetime.tzinfo`` instance (e.g. ``ZoneInfo("America/New_York")``).
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             stream_resumable: Whether to persist the stream chunks in order to resume the stream later.
@@ -373,6 +382,7 @@ class SyncCronClient:
             "interrupt_after": interrupt_after,
             "on_run_completed": on_run_completed,
             "enabled": enabled,
+            "timezone": _resolve_timezone(timezone),
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "stream_resumable": stream_resumable,
@@ -451,7 +461,7 @@ class SyncCronClient:
             ]
             ```
         """
-        payload = {
+        payload: dict[str, Any] = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,
             "enabled": enabled,
