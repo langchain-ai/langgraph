@@ -71,6 +71,10 @@ SKIP_RERAISE_SET: weakref.WeakSet[concurrent.futures.Future | asyncio.Future] = 
 class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
     event: E
     callback: weakref.ref[Callable[[PregelExecutableTask, BaseException | None], None]]
+    # Stop condition is injected by PregelRunner instead of hard-coded here.
+    # This lets the runner treat graph-error-handled exceptions as non-fatal
+    # so `on_done` does not trigger an early stop for those futures.
+    should_stop: Callable[[set[F]], bool]
     counter: int
     done: set[F]
     lock: threading.Lock
@@ -81,6 +85,7 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
         callback: weakref.ref[
             Callable[[PregelExecutableTask, BaseException | None], None]
         ],
+        should_stop: Callable[[set[F]], bool],
         future_type: type[F],
         # used for generic typing, newer py supports FutureDict[...](...)
     ) -> None:
@@ -88,6 +93,7 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
         self.lock = threading.Lock()
         self.event = event
         self.callback = callback
+        self.should_stop = should_stop
         self.counter = 0
         self.done: set[F] = set()
 
@@ -108,6 +114,7 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
         task: PregelExecutableTask,
         fut: F,
     ) -> None:
+        # Called automatically by future.add_done_callback registered in __setitem__.
         try:
             if cb := self.callback():
                 cb(task, _exception(fut))
@@ -115,7 +122,9 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
             with self.lock:
                 self.done.add(fut)
                 self.counter -= 1
-                if self.counter == 0 or _should_stop_others(self.done):
+                # Wake waiter when all tracked futures are done, or when runner-level
+                # stop condition is met (for example, a non-handled fatal exception).
+                if self.counter == 0 or self.should_stop(self.done):
                     self.event.set()
 
 
@@ -131,11 +140,42 @@ class PregelRunner:
         put_writes: weakref.ref[Callable[[str, Sequence[tuple[str, Any]]], None]],
         use_astream: bool = False,
         node_finished: Callable[[str], None] | None = None,
+        graph_error_handler_node: str | None = None,
+        graph_error_trigger_channel: str | None = None,
+        graph_error_info_channel: str | None = None,
     ) -> None:
         self.submit = submit
         self.put_writes = put_writes
         self.use_astream = use_astream
         self.node_finished = node_finished
+        self.graph_error_handler_node = graph_error_handler_node
+        self.graph_error_trigger_channel = graph_error_trigger_channel
+        self.graph_error_info_channel = graph_error_info_channel
+        if self.graph_error_handler_node is not None and (
+            self.graph_error_trigger_channel is None
+            or self.graph_error_info_channel is None
+        ):
+            raise ValueError(
+                "graph_error_handler_node requires both "
+                "graph_error_trigger_channel and graph_error_info_channel"
+            )
+        # Exception object ids that are already routed to graph-level error handler.
+        # These ids are consulted by stop/panic checks to avoid re-raising handled
+        # exceptions via the normal fatal path in the same run.
+        self._handled_exception_ids: set[int] = set()
+        # Per-superstep latch to emit exactly one handler trigger write
+        # (`branch:to:<handler>`) even if multiple tasks fail in that step.
+        # Reset at the beginning of each tick/atick call.
+        self._graph_error_routed = False
+
+    def _should_route_to_graph_error_handler(self, task: PregelExecutableTask) -> bool:
+        # Route non-handler task failures to graph-level error handler when configured.
+        # Handler self-failures are intentionally excluded to avoid recursive handling.
+        if self.graph_error_handler_node is None:
+            return False
+        if task.name == self.graph_error_handler_node:
+            return False
+        return True
 
     def tick(
         self,
@@ -150,10 +190,14 @@ class PregelRunner:
             PregelExecutableTask | None,
         ],
     ) -> Iterator[None]:
+        self._graph_error_routed = False
         tasks = tuple(tasks)
         futures = FuturesDict(
             callback=weakref.WeakMethod(self.commit),
             event=threading.Event(),
+            should_stop=partial(
+                _should_stop_others, handled_exception_ids=self._handled_exception_ids
+            ),
             future_type=concurrent.futures.Future,
         )
         # give control back to the caller
@@ -182,11 +226,12 @@ class PregelRunner:
             except Exception as exc:
                 self.commit(t, exc)
                 if reraise and futures:
-                    # will be re-raised after futures are done
-                    fut: concurrent.futures.Future = concurrent.futures.Future()
-                    fut.set_exception(exc)
-                    futures.done.add(fut)
-                elif reraise:
+                    if id(exc) not in self._handled_exception_ids:
+                        # will be re-raised after futures are done
+                        fut: concurrent.futures.Future = concurrent.futures.Future()
+                        fut.set_exception(exc)
+                        futures.done.add(fut)
+                elif reraise and id(exc) not in self._handled_exception_ids:
                     if tb := exc.__traceback__:
                         while tb.tb_next is not None and any(
                             tb.tb_frame.f_code.co_filename.endswith(name)
@@ -233,17 +278,26 @@ class PregelRunner:
             )
             if not done:
                 break  # timed out
+            done_for_stop: set[concurrent.futures.Future[Any]] = set()
             for fut in done:
                 task = futures.pop(fut)
                 if task is None:
                     # waiter task finished, schedule another
                     if inflight and get_waiter is not None:
                         futures[get_waiter()] = None
+                elif (
+                    exc := _exception(fut)
+                ) and self._should_route_to_graph_error_handler(task):
+                    self._handled_exception_ids.add(id(exc))
+                else:
+                    done_for_stop.add(fut)
             else:
                 # remove references to loop vars
                 del fut, task
             # maybe stop other tasks
-            if _should_stop_others(done):
+            if _should_stop_others(
+                done_for_stop, handled_exception_ids=self._handled_exception_ids
+            ):
                 break
             # give control back to the caller
             yield
@@ -258,6 +312,7 @@ class PregelRunner:
             _panic_or_proceed(
                 futures.done.union(f for f, t in futures.items() if t is not None),
                 panic=reraise,
+                handled_exception_ids=self._handled_exception_ids,
             )
         except Exception as exc:
             if tb := exc.__traceback__:
@@ -282,6 +337,7 @@ class PregelRunner:
             Awaitable[PregelExecutableTask | None],
         ],
     ) -> AsyncIterator[None]:
+        self._graph_error_routed = False
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
@@ -291,6 +347,9 @@ class PregelRunner:
         futures = FuturesDict(
             callback=weakref.WeakMethod(self.commit),
             event=asyncio.Event(),
+            should_stop=partial(
+                _should_stop_others, handled_exception_ids=self._handled_exception_ids
+            ),
             future_type=asyncio.Future,
         )
         # give control back to the caller
@@ -322,11 +381,12 @@ class PregelRunner:
             except Exception as exc:
                 self.commit(t, exc)
                 if reraise and futures:
-                    # will be re-raised after futures are done
-                    fut: asyncio.Future = loop.create_future()
-                    fut.set_exception(exc)
-                    futures.done.add(fut)
-                elif reraise:
+                    if id(exc) not in self._handled_exception_ids:
+                        # will be re-raised after futures are done
+                        fut: asyncio.Future = loop.create_future()
+                        fut.set_exception(exc)
+                        futures.done.add(fut)
+                elif reraise and id(exc) not in self._handled_exception_ids:
                     if tb := exc.__traceback__:
                         while tb.tb_next is not None and any(
                             tb.tb_frame.f_code.co_filename.endswith(name)
@@ -381,17 +441,26 @@ class PregelRunner:
             )
             if not done:
                 break  # timed out
+            done_for_stop: set[asyncio.Future[Any]] = set()
             for fut in done:
                 task = futures.pop(fut)
                 if task is None:
                     # waiter task finished, schedule another
                     if inflight and get_waiter is not None:
                         futures[get_waiter()] = None
+                elif (
+                    exc := _exception(fut)
+                ) and self._should_route_to_graph_error_handler(task):
+                    self._handled_exception_ids.add(id(exc))
+                else:
+                    done_for_stop.add(fut)
             else:
                 # remove references to loop vars
                 del fut, task
             # maybe stop other tasks
-            if _should_stop_others(done):
+            if _should_stop_others(
+                done_for_stop, handled_exception_ids=self._handled_exception_ids
+            ):
                 break
             # give control back to the caller
             yield
@@ -411,6 +480,7 @@ class PregelRunner:
                 futures.done.union(f for f, t in futures.items() if t is not None),
                 timeout_exc_cls=asyncio.TimeoutError,
                 panic=reraise,
+                handled_exception_ids=self._handled_exception_ids,
             )
         except Exception as exc:
             if tb := exc.__traceback__:
@@ -446,6 +516,16 @@ class PregelRunner:
             else:
                 # save error to checkpointer
                 task.writes.append((ERROR, exception))
+                if self._should_route_to_graph_error_handler(task):
+                    error_info_channel = cast(str, self.graph_error_info_channel)
+                    task.writes.append((error_info_channel, task.name))
+                    # Redundant with tick/atick path by design: commit() may run before
+                    # or after loop-side checks, so we mark here as a race-safe fallback.
+                    self._handled_exception_ids.add(id(exception))
+                    if not self._graph_error_routed:
+                        trigger_channel = cast(str, self.graph_error_trigger_channel)
+                        task.writes.append((trigger_channel, None))
+                        self._graph_error_routed = True
                 self.put_writes()(task.id, task.writes)  # type: ignore[misc]
         else:
             if self.node_finished and (
@@ -461,6 +541,8 @@ class PregelRunner:
 
 def _should_stop_others(
     done: set[F],
+    *,
+    handled_exception_ids: set[int] | None = None,
 ) -> bool:
     """Check if any task failed, if so, cancel all other tasks.
     GraphInterrupts are not considered failures."""
@@ -468,7 +550,11 @@ def _should_stop_others(
         if fut.cancelled():
             continue
         elif exc := fut.exception():
-            if not isinstance(exc, GraphBubbleUp) and fut not in SKIP_RERAISE_SET:
+            if (
+                id(exc) not in (handled_exception_ids or set())
+                and not isinstance(exc, GraphBubbleUp)
+                and fut not in SKIP_RERAISE_SET
+            ):
                 return True
 
     return False
@@ -492,6 +578,7 @@ def _panic_or_proceed(
     *,
     timeout_exc_cls: type[Exception] = TimeoutError,
     panic: bool = True,
+    handled_exception_ids: set[int] | None = None,
 ) -> None:
     """Cancel remaining tasks if any failed, re-raise exception if panic is True."""
     done: set[concurrent.futures.Future[Any] | asyncio.Future[Any]] = set()
@@ -508,6 +595,8 @@ def _panic_or_proceed(
         # if any task failed
         fut = done.pop()
         if exc := _exception(fut):
+            if id(exc) in (handled_exception_ids or set()):
+                continue
             # cancel all pending tasks
             while inflight:
                 inflight.pop().cancel()

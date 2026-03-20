@@ -23,6 +23,12 @@ class ExecutionInfo(NamedTuple):
     node_first_attempt_time: float | None = None
     """Unix timestamp (seconds) for when the first attempt started."""
 
+    from_node_names: tuple[str, ...] | None = None
+    """Failed source node names aggregated for graph-level error handler."""
+
+    from_node_errors: tuple[BaseException, ...] | None = None
+    """Failed source node exceptions aggregated for graph-level error handler."""
+
     def patch(self, **overrides: Any) -> ExecutionInfo:
         """Return a new execution info object with selected fields replaced."""
         return self._replace(**overrides)

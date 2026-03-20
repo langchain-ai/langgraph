@@ -1,12 +1,18 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import ERROR, GRAPH_ERROR_INFO
 from langgraph.graph import START, StateGraph
+from langgraph.pregel._algo import (
+    _read_errors_for_task_ids_from_pending_writes,
+    _read_failed_node_names_from_pending_writes,
+)
 from langgraph.pregel._retry import _checkpoint_ns_for_parent_command, _should_retry_on
 from langgraph.runtime import Runtime
-from langgraph.types import RetryPolicy
+from langgraph.types import Command, RetryPolicy
 
 
 def test_should_retry_on_single_exception():
@@ -393,3 +399,206 @@ def test_graph_with_max_attempts_exceeded():
         graph.invoke({"foo": ""})
 
     mock_sleep.assert_called_with(0.01)
+
+
+def test_graph_error_handler_runs_after_retry_exhaustion():
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+    captured: dict[str, object] = {}
+
+    def always_failing_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("Always fails")
+
+    def err_handler_node(state: State, runtime: Runtime) -> State:
+        captured["from_node_names"] = runtime.execution_info.from_node_names
+        captured["from_node_errors"] = runtime.execution_info.from_node_errors
+        return {"foo": "handled"}
+
+    def after_handler(state: State) -> State:
+        return {"foo": f"{state['foo']}_after"}
+
+    retry_policy = RetryPolicy(
+        max_attempts=2,
+        initial_interval=0.01,
+        jitter=False,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("always_failing", always_failing_node, retry_policy=retry_policy)
+        .set_graph_error_handler("err_handler", err_handler_node)
+        .add_node("after_handler", after_handler)
+        .add_edge(START, "always_failing")
+        .add_edge("err_handler", "after_handler")
+        .compile()
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke({"foo": ""})
+
+    assert attempts == 2
+    assert result["foo"] == "handled_after"
+    assert captured["from_node_names"] == ("always_failing",)
+    assert isinstance(captured["from_node_errors"], tuple)
+    assert len(captured["from_node_errors"]) == 1
+    assert isinstance(captured["from_node_errors"][0], BaseException)
+
+
+def test_graph_error_handler_can_route_with_command():
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+
+    def always_failing_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("Always fails")
+
+    def err_handler_node(state: State) -> Command:
+        return Command(update={"foo": "handled"}, goto="next_node")
+
+    def next_node(state: State) -> State:
+        return {"foo": f"{state['foo']}_next"}
+
+    retry_policy = RetryPolicy(
+        max_attempts=1,
+        initial_interval=0.01,
+        jitter=False,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("always_failing", always_failing_node, retry_policy=retry_policy)
+        .set_graph_error_handler(
+            "err_handler",
+            err_handler_node,
+            destinations=("next_node",),
+        )
+        .add_node("next_node", next_node)
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    result = graph.invoke({"foo": ""})
+    assert attempts == 1
+    assert result["foo"] == "handled_next"
+
+
+def test_graph_error_handler_failure_fails_run():
+    class State(TypedDict):
+        foo: str
+
+    def always_failing_node(state: State) -> State:
+        raise ValueError("Always fails")
+
+    def err_handler_node(state: State) -> State:
+        raise RuntimeError("handler failed")
+
+    graph = (
+        StateGraph(State)
+        .add_node("always_failing", always_failing_node)
+        .set_graph_error_handler("err_handler", err_handler_node)
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    with pytest.raises(RuntimeError, match="handler failed"):
+        graph.invoke({"foo": ""})
+
+
+def test_graph_error_handler_handles_subgraph_internal_failure():
+    class SubState(TypedDict):
+        foo: str
+
+    class ParentState(TypedDict):
+        foo: str
+
+    parent_handler_called = False
+
+    def sub_fail_node(state: SubState) -> SubState:
+        raise ValueError("subgraph boom")
+
+    def parent_handler(state: ParentState) -> ParentState:
+        nonlocal parent_handler_called
+        parent_handler_called = True
+        return {"foo": "handled_by_parent"}
+
+    subgraph = (
+        StateGraph(SubState)
+        .add_node("sub_fail_node", sub_fail_node)
+        .add_edge(START, "sub_fail_node")
+        .compile()
+    )
+
+    parent_graph = (
+        StateGraph(ParentState)
+        .add_node("subgraph_node", subgraph)
+        .set_graph_error_handler("parent_handler", parent_handler)
+        .add_edge(START, "subgraph_node")
+        .compile()
+    )
+
+    result = parent_graph.invoke({"foo": ""})
+    assert result["foo"] == "handled_by_parent"
+    assert parent_handler_called is True
+
+
+def test_graph_error_handler_error_context_survives_checkpoint_resume():
+    class State(TypedDict):
+        foo: str
+
+    captured: dict[str, object] = {}
+
+    def always_failing_node(state: State) -> State:
+        raise RuntimeError("failed before handler")
+
+    def err_handler_node(state: State, runtime: Runtime) -> State:
+        captured["from_node_names"] = runtime.execution_info.from_node_names
+        captured["from_node_errors"] = runtime.execution_info.from_node_errors
+        return {"foo": "handled_after_resume"}
+
+    checkpointer = InMemorySaver()
+    config = {"configurable": {"thread_id": "graph-error-resume"}}
+    graph = (
+        StateGraph(State)
+        .add_node("always_failing", always_failing_node)
+        .set_graph_error_handler("err_handler", err_handler_node)
+        .add_edge(START, "always_failing")
+        .compile(checkpointer=checkpointer, interrupt_before=["err_handler"])
+    )
+
+    # First run pauses before handler, after failure context is checkpointed.
+    graph.invoke({"foo": ""}, config)
+    # Resume should execute handler and recover serialized error context.
+    result = graph.invoke(None, config)
+
+    assert result["foo"] == "handled_after_resume"
+    assert captured["from_node_names"] == ("always_failing",)
+    assert isinstance(captured["from_node_errors"], tuple)
+    assert len(captured["from_node_errors"]) == 1
+    assert isinstance(captured["from_node_errors"][0], BaseException)
+
+
+def test_graph_error_info_supports_multiple_failures_from_pending_writes():
+    pending_writes = [
+        ("task_a", GRAPH_ERROR_INFO, "fail_a"),
+        ("task_b", GRAPH_ERROR_INFO, "fail_b"),
+        ("task_a", ERROR, ValueError("a failed")),
+        ("task_b", ERROR, KeyError("b failed")),
+    ]
+
+    failed_node_names = _read_failed_node_names_from_pending_writes(pending_writes)
+    assert failed_node_names == [("task_a", "fail_a"), ("task_b", "fail_b")]
+    errors = _read_errors_for_task_ids_from_pending_writes(
+        pending_writes, tuple(task_id for task_id, _ in failed_node_names)
+    )
+    assert len(errors) == 2
+    assert isinstance(errors[0], ValueError)
+    assert isinstance(errors[1], KeyError)
