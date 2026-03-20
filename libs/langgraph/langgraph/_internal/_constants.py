@@ -14,6 +14,8 @@ ERROR = sys.intern("__error__")
 # for errors raised by nodes
 GRAPH_ERROR_INFO = sys.intern("__graph_error_info__")
 # for graph-level error handler context: failed node names
+# value format in channel state: `Sequence[str]`
+# value format in pending writes: `(task_id, GRAPH_ERROR_INFO, node_name: str)`
 NO_WRITES = sys.intern("__no_writes__")
 # marker to signal node didn't write anything
 TASKS = sys.intern("__pregel_tasks")
