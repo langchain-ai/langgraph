@@ -677,9 +677,7 @@ def prepare_single_task(
                     )
                     if proc.is_graph_error_handler:
                         failed_node_names_with_task_ids = (
-                            _read_failed_node_names_from_pending_writes(
-                                pending_writes
-                            )
+                            _read_failed_node_names_from_pending_writes(pending_writes)
                         )
                         if failed_node_names_with_task_ids:
                             names = tuple(
@@ -695,8 +693,9 @@ def prepare_single_task(
                                     ),
                                 )
                             )
-                        elif failed_node_names := _read_failed_node_names_from_graph_info_channel(
-                            channels
+                        elif (
+                            failed_node_names
+                            := _read_failed_node_names_from_graph_info_channel(channels)
                         ):
                             names = tuple(failed_node_names)
                             errors = tuple(
@@ -784,8 +783,6 @@ def _read_failed_node_names_from_graph_info_channel(
         value = channel.get()
     except EmptyChannelError:
         return []
-    if isinstance(value, str):
-        return [value]
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         return [item for item in value if isinstance(item, str)]
     return []

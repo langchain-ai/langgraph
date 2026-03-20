@@ -286,9 +286,9 @@ class PregelRunner:
                     if inflight and get_waiter is not None:
                         futures[get_waiter()] = None
                 elif (
-                    exc := _exception(fut)
+                    task_exc := _exception(fut)
                 ) and self._should_route_to_graph_error_handler(task):
-                    self._handled_exception_ids.add(id(exc))
+                    self._handled_exception_ids.add(id(task_exc))
                 else:
                     done_for_stop.add(fut)
             else:
@@ -449,9 +449,9 @@ class PregelRunner:
                     if inflight and get_waiter is not None:
                         futures[get_waiter()] = None
                 elif (
-                    exc := _exception(fut)
+                    task_exc := _exception(fut)
                 ) and self._should_route_to_graph_error_handler(task):
-                    self._handled_exception_ids.add(id(exc))
+                    self._handled_exception_ids.add(id(task_exc))
                 else:
                     done_for_stop.add(fut)
             else:

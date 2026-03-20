@@ -521,13 +521,16 @@ def test_graph_error_handler_handles_subgraph_internal_failure():
         foo: str
 
     parent_handler_called = False
+    captured: dict[str, object] = {}
 
     def sub_fail_node(state: SubState) -> SubState:
         raise ValueError("subgraph boom")
 
-    def parent_handler(state: ParentState) -> ParentState:
+    def parent_handler(state: ParentState, runtime: Runtime) -> ParentState:
         nonlocal parent_handler_called
         parent_handler_called = True
+        captured["from_node_names"] = runtime.execution_info.from_node_names
+        captured["from_node_errors"] = runtime.execution_info.from_node_errors
         return {"foo": "handled_by_parent"}
 
     subgraph = (
@@ -548,6 +551,10 @@ def test_graph_error_handler_handles_subgraph_internal_failure():
     result = parent_graph.invoke({"foo": ""})
     assert result["foo"] == "handled_by_parent"
     assert parent_handler_called is True
+    assert captured["from_node_names"] == ("subgraph_node",)
+    assert isinstance(captured["from_node_errors"], tuple)
+    assert len(captured["from_node_errors"]) == 1
+    assert isinstance(captured["from_node_errors"][0], BaseException)
 
 
 def test_graph_error_handler_error_context_survives_checkpoint_resume():
