@@ -727,6 +727,9 @@ class Pregel(
     name: str = "LangGraph"
 
     trigger_to_nodes: Mapping[str, Sequence[str]]
+    graph_error_handler_node: str | None = None
+    graph_error_trigger_channel: str | None = None
+    graph_error_info_channel: str | None = None
 
     def __init__(
         self,
@@ -751,6 +754,9 @@ class Pregel(
         context_schema: type[ContextT] | None = None,
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
+        graph_error_handler_node: str | None = None,
+        graph_error_trigger_channel: str | None = None,
+        graph_error_info_channel: str | None = None,
         name: str = "LangGraph",
         stream_transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
@@ -798,6 +804,9 @@ class Pregel(
         self.context_schema = context_schema
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
+        self.graph_error_handler_node = graph_error_handler_node
+        self.graph_error_trigger_channel = graph_error_trigger_channel
+        self.graph_error_info_channel = graph_error_info_channel
         self.name = name
         self.stream_transformers: tuple[Callable[[tuple[str, ...]], Any], ...] = tuple(
             stream_transformers or ()
@@ -2845,6 +2854,9 @@ class Pregel(
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
+                    graph_error_handler_node=self.graph_error_handler_node,
+                    graph_error_trigger_channel=self.graph_error_trigger_channel,
+                    graph_error_info_channel=self.graph_error_info_channel,
                 )
                 # enable subgraph streaming
                 if subgraphs:
@@ -3287,6 +3299,9 @@ class Pregel(
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     use_astream=do_stream,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
+                    graph_error_handler_node=self.graph_error_handler_node,
+                    graph_error_trigger_channel=self.graph_error_trigger_channel,
+                    graph_error_info_channel=self.graph_error_info_channel,
                 )
                 # enable subgraph streaming
                 if subgraphs:

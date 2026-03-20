@@ -138,6 +138,9 @@ class PregelNode:
     metadata: Mapping[str, Any] | None
     """Metadata to attach to the node for tracing."""
 
+    is_graph_error_handler: bool
+    """Whether this node is registered as a graph-level error handler."""
+
     subgraphs: Sequence[PregelProtocol]
     """Subgraphs used by the node."""
 
@@ -153,6 +156,7 @@ class PregelNode:
         bound: Runnable[Any, Any] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        is_graph_error_handler: bool = False,
         subgraphs: Sequence[PregelProtocol] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
     ) -> None:
@@ -169,6 +173,7 @@ class PregelNode:
         self.timeout = coerce_timeout_policy(timeout)
         self.tags = tags
         self.metadata = metadata
+        self.is_graph_error_handler = is_graph_error_handler
         if subgraphs is not None:
             self.subgraphs = subgraphs
         elif self.bound is not DEFAULT_BOUND:

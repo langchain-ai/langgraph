@@ -12,6 +12,8 @@ RESUME = sys.intern("__resume__")
 # for values passed to resume a node after an interrupt
 ERROR = sys.intern("__error__")
 # for errors raised by nodes
+GRAPH_ERROR_INFO = sys.intern("__graph_error_info__")
+# for graph-level error handler context: failed node names
 NO_WRITES = sys.intern("__no_writes__")
 # marker to signal node didn't write anything
 TASKS = sys.intern("__pregel_tasks")

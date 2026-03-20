@@ -34,6 +34,7 @@ from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
 from langgraph._internal import _serde
 from langgraph._internal._constants import (
+    GRAPH_ERROR_INFO,
     INTERRUPT,
     NS_END,
     NS_SEP,
@@ -56,6 +57,7 @@ from langgraph.channels.named_barrier_value import (
     NamedBarrierValue,
     NamedBarrierValueAfterFinish,
 )
+from langgraph.channels.topic import Topic
 from langgraph.constants import END, START, TAG_HIDDEN
 from langgraph.errors import (
     ErrorCode,
@@ -244,6 +246,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self.managed = {}
         self.compiled = False
         self.waiting_edges = set()
+        self.graph_error_handler_node: str | None = None
 
         self.state_schema = state_schema
         self.input_schema = cast(type[InputT], input_schema or state_schema)
@@ -805,6 +808,86 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         return self
 
+    def set_graph_error_handler(
+        self,
+        node: str | StateNode[NodeInputT, ContextT],
+        action: StateNode[NodeInputT, ContextT] | None = None,
+        *,
+        metadata: dict[str, Any] | None = None,
+        input_schema: type[NodeInputT] | None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        destinations: dict[str, str] | tuple[str, ...] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> Self:
+        """Set a graph-level error handler node.
+
+        When a node fails (after node retry policies are exhausted), execution
+        routes to this handler instead of failing immediately.
+
+        If the handler succeeds, graph execution continues according to normal graph
+        semantics (regular edges and/or `Command` routing). If the handler fails,
+        the graph run fails with that handler error (the handler is not recursively
+        re-handled).
+
+        In a superstep with concurrent nodes (for example A/B/C/D), if A and B fail
+        while C and D continue, the handler is triggered once in the next step and
+        receives aggregated failure context for the failed nodes.
+        Even if multiple nodes fail in the same superstep, only one handler trigger
+        is emitted for that step.
+
+        Args:
+            node: The handler function/runnable, or the handler node name.
+
+                If a string is provided, it is treated as node name and `action`
+                is used as the handler implementation. If `action` is omitted,
+                the named node must already exist.
+            action: The handler implementation when `node` is a string.
+            metadata: Metadata associated with the handler node.
+            input_schema: Input schema for the handler node.
+
+                Defaults to the graph state schema when omitted.
+            retry_policy: Retry policy for the handler node.
+
+                If a sequence is provided, the first matching policy is applied.
+            destinations: Optional destination hints for rendering.
+
+                Useful when the handler returns `Command` in edgeless graphs.
+                This only affects visualization and not execution semantics.
+
+        Returns:
+            Self: The instance of the `StateGraph`, allowing for method chaining.
+        """
+        handler_name_hint = node if isinstance(node, str) else _get_node_name(node)
+        if (
+            self.graph_error_handler_node is not None
+            and self.graph_error_handler_node != handler_name_hint
+        ):
+            raise ValueError(
+                f"Graph error handler already set to `{self.graph_error_handler_node}`."
+            )
+
+        if isinstance(node, str) and action is None:
+            if node not in self.nodes:
+                raise ValueError(f"Need to add_node `{node}` first")
+            handler_name = node
+        else:
+            cast(Any, self).add_node(
+                node,
+                action,
+                metadata=metadata,
+                input_schema=input_schema,
+                retry_policy=retry_policy,
+                destinations=destinations,
+                **kwargs,
+            )
+            handler_name = node if isinstance(node, str) else _get_node_name(node)
+
+        spec = self.nodes[handler_name]
+        spec.is_graph_error_handler = True
+
+        self.graph_error_handler_node = handler_name
+        return self
+
     def add_edge(self, start_key: str | list[str], end_key: str) -> Self:
         """Add a directed edge from the start node (or list of start nodes) to the end node.
 
@@ -1051,6 +1134,13 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             for node in interrupt:
                 if node not in self.nodes:
                     raise ValueError(f"Interrupt node `{node}` not found")
+        if (
+            self.graph_error_handler_node
+            and self.graph_error_handler_node not in self.nodes
+        ):
+            raise ValueError(
+                f"Graph error handler `{self.graph_error_handler_node}` not found"
+            )
 
         self.compiled = True
         return self
@@ -1164,6 +1254,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 key for key, val in self.channels.items() if not is_managed_value(val)
             ]
         )
+        graph_error_trigger_channel = (
+            _CHANNEL_BRANCH_TO.format(self.graph_error_handler_node)
+            if self.graph_error_handler_node
+            else None
+        )
 
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
@@ -1174,6 +1269,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 **self.channels,
                 **self.managed,
                 START: EphemeralValue(self.input_schema),
+                **(
+                    {GRAPH_ERROR_INFO: Topic(Any, accumulate=False)}
+                    if self.graph_error_handler_node
+                    else {}
+                ),
             },
             input_channels=START,
             stream_mode="updates",
@@ -1186,6 +1286,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             debug=debug,
             store=store,
             cache=cache,
+            graph_error_handler_node=self.graph_error_handler_node,
+            graph_error_trigger_channel=graph_error_trigger_channel,
+            graph_error_info_channel=(
+                GRAPH_ERROR_INFO if self.graph_error_handler_node else None
+            ),
             name=name or "LangGraph",
             stream_transformers=transformers,
         )
@@ -1360,6 +1465,7 @@ class CompiledStateGraph(
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
+                is_graph_error_handler=node.is_graph_error_handler,
                 bound=node.runnable,  # type: ignore[arg-type]
                 timeout=node.timeout,
             )
