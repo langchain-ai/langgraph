@@ -462,7 +462,6 @@ def build(
 # ---------------------------------------------------------------------------
 
 
-
 def _get_docker_ignore_content() -> str:
     """Return the content of a .dockerignore file.
 
