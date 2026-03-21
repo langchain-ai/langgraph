@@ -231,6 +231,38 @@ def format_deployments_table(deployments: Sequence[dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
+def format_revisions_table(revisions: Sequence[dict[str, object]]) -> str:
+    headers = ("Revision ID", "Status", "Created At")
+    latest_deployed_seen = False
+    rows = []
+    for revision in revisions:
+        status = str(revision.get("status", "-") or "-")
+        if status == "DEPLOYED":
+            if latest_deployed_seen:
+                status = "REPLACED"
+            else:
+                latest_deployed_seen = True
+        rows.append(
+            (
+                str(revision.get("id", "-") or "-"),
+                status,
+                str(revision.get("created_at", "-") or "-"),
+            )
+        )
+
+    widths = [
+        max(len(headers[index]), *(len(row[index]) for row in rows))
+        for index in range(len(headers))
+    ]
+
+    def format_row(row: Sequence[str]) -> str:
+        return "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
+
+    lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
+    lines.extend(format_row(row) for row in rows)
+    return "\n".join(lines)
+
+
 def format_timestamp(ts) -> str:
     """Convert a timestamp (epoch ms or string) to a readable string."""
     if isinstance(ts, (int, float)):
@@ -1024,13 +1056,27 @@ class DeployGroup(NestedHelpGroup):
     """Group that treats leading '-' args as passthrough docker flags."""
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        """Treat leading option-like subcommand tokens as passthrough args.
+
+        Click stores the unresolved nested command token on the context after
+        `Group.parse_args()` runs, but the backing attribute changed across
+        supported Click versions. Click 8.1.x stores the value directly on
+        `protected_args`, while Click 8.2+ stores it on `_protected_args`
+        and exposes `protected_args` as a deprecated compatibility property.
+        Since this package allows `click>=8.1.7`, we need to check both
+        names to support the full version range without relying on one
+        version-specific internal detail.
+        """
         result = super().parse_args(ctx, args)
-        if ctx._protected_args and ctx._protected_args[0].startswith("-"):
-            # Click stores the would-be subcommand in _protected_args; if it looks
-            # like an option (e.g. --build-arg) treat it as passthrough docker
-            # args instead of insisting on a nested command.
-            ctx.args = [*ctx._protected_args, *ctx.args]
-            ctx._protected_args = []
+        protected_args = ctx.__dict__.get("protected_args")
+        if protected_args is None:
+            protected_args = ctx.__dict__.get("_protected_args", [])
+        if protected_args and protected_args[0].startswith("-"):
+            ctx.args = [*protected_args, *ctx.args]
+            if "protected_args" in ctx.__dict__:
+                ctx.protected_args = []
+            elif "_protected_args" in ctx.__dict__:
+                ctx._protected_args = []
             return ctx.args
         return result
 
@@ -1343,6 +1389,51 @@ def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -
         click.echo("No deployments found.")
         return
     click.echo(format_deployments_table(deployments))
+
+
+# ---------------------------------------------------------------------------
+# deploy revisions
+# ---------------------------------------------------------------------------
+
+
+@deploy.group(
+    "revisions", cls=NestedHelpGroup, help="[Beta] Manage deployment revisions."
+)
+def deploy_revisions() -> None:
+    pass
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--limit",
+    type=int,
+    default=10,
+    show_default=True,
+    help="Maximum number of revisions to return.",
+)
+@click.argument("deployment_id")
+@deploy_revisions.command(
+    "list",
+    help=(
+        "[Beta] List revisions for a LangSmith Deployment.\n\n"
+        "Use the `deploy list` command to list deployment IDs."
+    ),
+)
+def deploy_revisions_list(
+    api_key: str | None, host_url: str | None, limit: int, deployment_id: str
+) -> None:
+    client = _create_host_backend_client(host_url, api_key)
+    response = _call_host_backend_with_optional_tenant(
+        client,
+        lambda c: c.list_revisions(deployment_id, limit=limit),
+    )
+    resources = response.get("resources", []) if isinstance(response, dict) else []
+    revisions = [item for item in resources if isinstance(item, dict)]
+    if not revisions:
+        click.echo(f"No revisions found for deployment {deployment_id}.")
+        return
+    click.echo(format_revisions_table(revisions))
 
 
 # ---------------------------------------------------------------------------
