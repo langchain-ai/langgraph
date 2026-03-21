@@ -6,12 +6,12 @@ import click
 import httpx
 import pytest
 
-from langgraph_cli.cli import (
+from langgraph_cli.deploy import (
     _call_host_backend_with_optional_tenant,
     _docker_config_for_token,
-    _normalize_image_name,
-    _normalize_image_tag,
     _parse_env_from_config,
+    normalize_image_name,
+    normalize_image_tag,
 )
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 
@@ -40,47 +40,47 @@ class TestDockerConfigForToken:
 
 class TestNormalizeImageName:
     def test_simple_name(self):
-        assert _normalize_image_name("myapp") == "myapp"
+        assert normalize_image_name("myapp") == "myapp"
 
     def test_uppercase_lowered(self):
-        assert _normalize_image_name("MyApp") == "myapp"
+        assert normalize_image_name("MyApp") == "myapp"
 
     def test_special_chars_replaced(self):
-        assert _normalize_image_name("my app!@#v2") == "my-app-v2"
+        assert normalize_image_name("my app!@#v2") == "my-app-v2"
 
     def test_dots_and_hyphens_kept(self):
-        assert _normalize_image_name("my-app.v2") == "my-app.v2"
+        assert normalize_image_name("my-app.v2") == "my-app.v2"
 
     def test_leading_trailing_stripped(self):
-        assert _normalize_image_name("--my-app..") == "my-app"
+        assert normalize_image_name("--my-app..") == "my-app"
 
     def test_empty_string_returns_app(self):
-        assert _normalize_image_name("") == "app"
+        assert normalize_image_name("") == "app"
 
     def test_none_returns_app(self):
-        assert _normalize_image_name(None) == "app"
+        assert normalize_image_name(None) == "app"
 
     def test_all_invalid_chars_returns_app(self):
-        assert _normalize_image_name("!!!") == "app"
+        assert normalize_image_name("!!!") == "app"
 
 
 class TestNormalizeImageTag:
     def test_valid_tag(self):
-        assert _normalize_image_tag("v1.2.3") == "v1.2.3"
+        assert normalize_image_tag("v1.2.3") == "v1.2.3"
 
     def test_empty_defaults_to_latest(self):
-        assert _normalize_image_tag("") == "latest"
+        assert normalize_image_tag("") == "latest"
 
     def test_alphanumeric_and_special(self):
-        assert _normalize_image_tag("my_tag-1.0") == "my_tag-1.0"
+        assert normalize_image_tag("my_tag-1.0") == "my_tag-1.0"
 
     def test_invalid_chars_raises(self):
         with pytest.raises(click.UsageError, match="Image tag may only contain"):
-            _normalize_image_tag("v1.0:bad")
+            normalize_image_tag("v1.0:bad")
 
     def test_spaces_raises(self):
         with pytest.raises(click.UsageError, match="Image tag may only contain"):
-            _normalize_image_tag("has space")
+            normalize_image_tag("has space")
 
 
 class TestParseEnvFromConfig:
