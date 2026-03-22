@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from langgraph.checkpoint.conformance.capabilities import (
     Capability,
     DetectedCapabilities,
@@ -97,9 +99,15 @@ async def validate(
                     if progress and progress.on_capability_start:
                         progress.on_capability_start(cap.value, True)
 
+                    runner_kwargs: dict[str, Any] = {
+                        "on_test_result": progress.on_test_result if progress else None,
+                    }
+                    # Pass factory for restart-safety tests
+                    if cap == Capability.PUT_WRITES:
+                        runner_kwargs["saver_factory"] = registered.factory
                     passed, failed, failures = await runner(
                         saver,
-                        on_test_result=progress.on_test_result if progress else None,
+                        **runner_kwargs,
                     )
 
                     if progress and progress.on_capability_end:
