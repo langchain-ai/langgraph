@@ -11,6 +11,8 @@ import pytest
 from langgraph_cli.config import (
     _BUILD_TOOLS,
     _get_pip_cleanup_lines,
+    _has_js_http_apps,
+    _is_js_http_app,
     config_to_compose,
     config_to_docker,
     default_base_image,
@@ -148,6 +150,148 @@ def test_validate_config():
                 "http": {"app": "../../examples/my_app.py"},
             }
         )
+
+
+def test_validate_config_http_apps():
+    """Test validation of http.apps field."""
+    # Valid http.apps config
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "http": {
+                "apps": {
+                    "/dashboard": "./dashboard.py:app",
+                    "/ext": "./extension.js:app",
+                    "/conduit": "some-npm-package:app",
+                }
+            },
+        }
+    )
+    assert config["http"]["apps"] == {
+        "/dashboard": "./dashboard.py:app",
+        "/ext": "./extension.js:app",
+        "/conduit": "some-npm-package:app",
+    }
+
+    # Valid with both app and apps
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "http": {
+                "app": "./custom_routes.py:app",
+                "apps": {
+                    "/dashboard": "./dashboard.py:app",
+                },
+            },
+        }
+    )
+    assert config["http"]["app"] == "./custom_routes.py:app"
+    assert config["http"]["apps"] == {"/dashboard": "./dashboard.py:app"}
+
+    # Invalid prefix (doesn't start with /)
+    with pytest.raises(ValueError, match="Invalid http.apps prefix"):
+        validate_config(
+            {
+                "python_version": "3.12",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "http": {"apps": {"dashboard": "./dashboard.py:app"}},
+            }
+        )
+
+    # Invalid app path (no colon separator)
+    with pytest.raises(ValueError, match="Invalid http.apps format"):
+        validate_config(
+            {
+                "python_version": "3.12",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "http": {"apps": {"/dashboard": "./dashboard.py"}},
+            }
+        )
+
+    # Empty apps dict is fine (no-op)
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "http": {"apps": {}},
+        }
+    )
+    assert config["http"]["apps"] == {}
+
+    # None apps is fine
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "http": {"apps": None},
+        }
+    )
+    assert config["http"]["apps"] is None
+
+
+def test_is_js_http_app():
+    """Test _is_js_http_app detection logic."""
+    # Python files are not JS
+    assert not _is_js_http_app("./dashboard.py:app")
+    assert not _is_js_http_app("./app.pyx:app")
+
+    # JS/TS files are JS
+    assert _is_js_http_app("./extension.js:app")
+    assert _is_js_http_app("./extension.ts:app")
+    assert _is_js_http_app("./extension.mts:app")
+    assert _is_js_http_app("./extension.mjs:app")
+    assert _is_js_http_app("./extension.cts:app")
+    assert _is_js_http_app("./extension.cjs:app")
+
+    # npm package references (bare module names) are JS
+    assert _is_js_http_app("some-npm-package:app")
+    assert _is_js_http_app("@scope/package:app")
+
+    # File paths without extensions that start with . or / are not JS
+    assert not _is_js_http_app("./mymodule:app")
+
+
+def test_has_js_http_apps():
+    """Test _has_js_http_apps config detection."""
+    # No http config
+    assert not _has_js_http_apps({})
+
+    # No apps field
+    assert not _has_js_http_apps({"http": {}})
+
+    # Empty apps
+    assert not _has_js_http_apps({"http": {"apps": {}}})
+
+    # Python-only apps
+    assert not _has_js_http_apps(
+        {"http": {"apps": {"/dashboard": "./dashboard.py:app"}}}
+    )
+
+    # JS apps
+    assert _has_js_http_apps({"http": {"apps": {"/ext": "./extension.js:app"}}})
+
+    # npm package
+    assert _has_js_http_apps({"http": {"apps": {"/conduit": "some-npm-package:app"}}})
+
+    # Mixed
+    assert _has_js_http_apps(
+        {
+            "http": {
+                "apps": {
+                    "/dashboard": "./dashboard.py:app",
+                    "/ext": "./extension.js:app",
+                }
+            }
+        }
+    )
 
 
 def test_validate_config_image_distro():
@@ -489,6 +633,111 @@ WORKDIR /deps/outer-unit_tests/unit_tests\
         ),
         "examples": str((pathlib.Path(__file__).parent / "../../examples").resolve()),
     }
+
+
+def test_config_to_docker_with_http_apps_python():
+    """Test Docker generation with http.apps containing Python apps."""
+    graphs = {"agent": "./agent.py:graph"}
+    actual_docker_stdin, additional_contexts = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": [".", "../../examples"],
+                "graphs": graphs,
+                "http": {
+                    "apps": {
+                        "/dashboard": "../../examples/my_app.py:app",
+                    }
+                },
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    # Python http.apps paths should be rewritten to container paths
+    assert "LANGGRAPH_HTTP" in actual_docker_stdin
+    assert "/deps/examples/my_app.py:app" in actual_docker_stdin
+    assert "/dashboard" in actual_docker_stdin
+    # No Node.js installation for Python-only apps
+    assert "install-node" not in actual_docker_stdin
+
+
+def test_config_to_docker_with_http_apps_js():
+    """Test Docker generation with http.apps containing JS apps triggers Node install."""
+    graphs = {"agent": "./agent.py:graph"}
+    # Use npm package references to avoid needing actual JS files on disk
+    actual_docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": graphs,
+                "http": {
+                    "apps": {
+                        "/ext": "my-js-package:app",
+                    }
+                },
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    # JS http.apps should trigger Node.js installation
+    assert "install-node" in actual_docker_stdin
+    assert "NODE_VERSION=20" in actual_docker_stdin
+    assert "LANGGRAPH_HTTP" in actual_docker_stdin
+
+
+def test_config_to_docker_with_http_apps_npm_package():
+    """Test Docker generation with http.apps containing npm package triggers Node install."""
+    graphs = {"agent": "./agent.py:graph"}
+    actual_docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": graphs,
+                "http": {
+                    "apps": {
+                        "/conduit": "some-npm-package:app",
+                    }
+                },
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    # npm package should trigger Node.js installation
+    assert "install-node" in actual_docker_stdin
+    assert "NODE_VERSION=20" in actual_docker_stdin
+    assert "LANGGRAPH_HTTP" in actual_docker_stdin
+    # npm package path should not be rewritten
+    assert "some-npm-package:app" in actual_docker_stdin
+
+
+def test_config_to_docker_with_http_apps_mixed():
+    """Test Docker generation with mixed Python and JS http.apps."""
+    graphs = {"agent": "./agent.py:graph"}
+    actual_docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": [".", "../../examples"],
+                "graphs": graphs,
+                "http": {
+                    "app": "../../examples/my_app.py:app",
+                    "apps": {
+                        "/dashboard": "../../examples/my_app.py:app",
+                        "/conduit": "some-npm-package:app",
+                    },
+                },
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    # Should have both Python path rewriting and Node.js installation
+    assert "install-node" in actual_docker_stdin
+    assert "NODE_VERSION=20" in actual_docker_stdin
+    assert "LANGGRAPH_HTTP" in actual_docker_stdin
+    # Python paths should be rewritten
+    assert "/deps/examples/my_app.py:app" in actual_docker_stdin
 
 
 def test_config_to_docker_outside_path():
