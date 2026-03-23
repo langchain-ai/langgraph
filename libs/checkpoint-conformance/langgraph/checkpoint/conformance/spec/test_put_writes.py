@@ -290,6 +290,14 @@ async def test_put_writes_idempotent_across_restart(
     assert pre_count == 1, f"Expected 1 write before restart, got {pre_count}"
 
     if saver_factory is not None:
+        # Close the original saver first to simulate a true restart —
+        # persistent backends should flush/release their connections
+        # before a second instance opens.
+        if hasattr(saver, "__aexit__"):
+            await saver.__aexit__(None, None, None)
+        elif hasattr(saver, "aclose"):
+            await saver.aclose()
+
         # Re-open the saver — simulates process restart
         gen = saver_factory()
         saver2 = await gen.__anext__()
