@@ -2813,3 +2813,1405 @@ async def test_replay_from_first_invocation_checkpoint(
     await graph.ainvoke(None, before_sub_1st.config)
     # Should see empty state — no prior subgraph checkpoints exist
     assert observed[0] == ("sub_step", {"value": []})
+
+
+# ---------------------------------------------------------------------------
+# Section 9: Replay from interrupt checkpoint and resume
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_replay_from_interrupt_checkpoint_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replay from the checkpoint WHERE the interrupt fired, then resume."""
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("What is your input?")
+        return {"value": [f"human:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_human", ask_human)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_human")
+        .add_edge("ask_human", "node_b")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    interrupt_state = await graph.aget_state(config)
+    interrupt_config = interrupt_state.config
+
+    result = await graph.ainvoke(Command(resume="hello"), config)
+    assert result == {"value": ["a", "human:hello", "b"]}
+
+    called.clear()
+    replay_result = await graph.ainvoke(None, interrupt_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "What is your input?"
+    assert "ask_human" in called
+    assert "node_a" not in called
+
+    final = await graph.ainvoke(Command(resume="replayed_answer"), config)
+    assert "human:replayed_answer" in final["value"]
+    assert "b" in final["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_fork_from_interrupt_checkpoint_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Fork from the checkpoint WHERE the interrupt fired, then resume."""
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("What is your input?")
+        return {"value": [f"human:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_human", ask_human)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_human")
+        .add_edge("ask_human", "node_b")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    interrupt_state = await graph.aget_state(config)
+    interrupt_config = interrupt_state.config
+
+    await graph.ainvoke(Command(resume="hello"), config)
+
+    called.clear()
+    fork_config = await graph.aupdate_state(
+        interrupt_config, {"value": ["forked"]}
+    )
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert "ask_human" in called
+    assert "node_a" not in called
+
+    final = await graph.ainvoke(Command(resume="forked_answer"), fork_config)
+    assert "human:forked_answer" in final["value"]
+    assert "b" in final["value"]
+    assert "forked" in final["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_sequential_interrupts_replay_from_first_then_resume_both(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Two sequential interrupt nodes. Replay from the first interrupt
+    checkpoint, then resume through both with new answers."""
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"a1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"a2:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "node_b")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    first_interrupt_config = (await graph.aget_state(config)).config
+
+    result = await graph.ainvoke(Command(resume="ans1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    result = await graph.ainvoke(Command(resume="ans2"), config)
+    assert result == {"value": ["a", "a1:ans1", "a2:ans2", "b"]}
+
+    called.clear()
+    replay_result = await graph.ainvoke(None, first_interrupt_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 1?"
+    assert "node_a" not in called
+    assert "ask_1" in called
+
+    result = await graph.ainvoke(Command(resume="new_ans1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    result = await graph.ainvoke(Command(resume="new_ans2"), config)
+    assert "a1:new_ans1" in result["value"]
+    assert "a2:new_ans2" in result["value"]
+    assert "b" in result["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_sequential_interrupts_fork_from_first_then_resume_both(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Two sequential interrupt nodes. Fork from the first interrupt
+    checkpoint, then resume through both with new answers."""
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"a1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"a2:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "node_b")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    first_interrupt_config = (await graph.aget_state(config)).config
+
+    await graph.ainvoke(Command(resume="ans1"), config)
+    await graph.ainvoke(Command(resume="ans2"), config)
+
+    called.clear()
+    fork_config = await graph.aupdate_state(
+        first_interrupt_config, {"value": ["forked"]}
+    )
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "Question 1?"
+    assert "node_a" not in called
+
+    result = await graph.ainvoke(Command(resume="new_ans1"), fork_config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    result = await graph.ainvoke(Command(resume="new_ans2"), fork_config)
+    assert "a1:new_ans1" in result["value"]
+    assert "a2:new_ans2" in result["value"]
+    assert "forked" in result["value"]
+    assert "b" in result["value"]
+
+
+# ---------------------------------------------------------------------------
+# Section 10: Subgraph replay-from-interrupt-checkpoint and resume
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_subgraph_replay_from_interrupt_checkpoint_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replay from the subgraph's own interrupt checkpoint, then resume."""
+
+    called: list[str] = []
+
+    def router(state: State) -> State:
+        called.append("router")
+        return {"value": ["routed"]}
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post(state: State) -> State:
+        called.append("post")
+        return {"value": ["post"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("router", router)
+        .add_node("executor", subgraph)
+        .add_node("post", post)
+        .add_edge(START, "router")
+        .add_edge("router", "executor")
+        .add_edge("executor", "post")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="original"), config)
+
+    called.clear()
+    replay_result = await graph.ainvoke(None, sub_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Provide input:"
+    assert "step_a" not in called
+    assert "ask_human" in called
+
+    called.clear()
+    final = await graph.ainvoke(Command(resume="replayed_answer"), config)
+    assert "human:replayed_answer" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post" in called
+    assert "post" in final["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_subgraph_fork_from_interrupt_checkpoint_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Fork from the subgraph's interrupt checkpoint, then resume."""
+
+    called: list[str] = []
+
+    def router(state: State) -> State:
+        called.append("router")
+        return {"value": ["routed"]}
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post(state: State) -> State:
+        called.append("post")
+        return {"value": ["post"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("router", router)
+        .add_node("executor", subgraph)
+        .add_node("post", post)
+        .add_edge(START, "router")
+        .add_edge("router", "executor")
+        .add_edge("executor", "post")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="original"), config)
+
+    called.clear()
+    fork_config = await graph.aupdate_state(sub_config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert "step_a" not in called
+    assert "ask_human" in called
+
+    called.clear()
+    final = await graph.ainvoke(Command(resume="forked_answer"), fork_config)
+    assert "human:forked_answer" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post" in called
+    assert "post" in final["value"]
+    assert "forked" in final["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_subgraph_sequential_interrupts_replay_from_first_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph with two sequential interrupts. Replay from the first
+    interrupt checkpoint, then resume through both."""
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config_at_first = parent_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="answer_1"), config)
+    await graph.ainvoke(Command(resume="answer_2"), config)
+
+    called.clear()
+    replay_result = await graph.ainvoke(None, sub_config_at_first)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 1?"
+    assert "step_a" not in called
+    assert "ask_1" in called
+
+    result = await graph.ainvoke(Command(resume="new_ans1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    result = await graph.ainvoke(Command(resume="new_ans2"), config)
+    assert "ask_1:new_ans1" in result["value"]
+    assert "ask_2:new_ans2" in result["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_subgraph_sequential_interrupts_fork_from_first_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph with two sequential interrupts. Fork from the first
+    interrupt checkpoint, then resume through both."""
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config_at_first = parent_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="answer_1"), config)
+    await graph.ainvoke(Command(resume="answer_2"), config)
+
+    called.clear()
+    fork_config = await graph.aupdate_state(
+        sub_config_at_first, {"value": ["forked"]}
+    )
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "Question 1?"
+    assert "step_a" not in called
+    assert "ask_1" in called
+
+    result = await graph.ainvoke(Command(resume="new_ans1"), fork_config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    result = await graph.ainvoke(Command(resume="new_ans2"), fork_config)
+    assert "ask_1:new_ans1" in result["value"]
+    assert "ask_2:new_ans2" in result["value"]
+    assert "forked" in result["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_subgraph_interrupt_as_first_node_replay_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph where the FIRST node has an interrupt. Replay then resume."""
+
+    called: list[str] = []
+
+    def ask(state: State) -> State:
+        called.append("ask")
+        answer = interrupt("Question?")
+        return {"value": [f"ask:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["b"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("ask", ask)
+        .add_node("step_b", step_b)
+        .add_edge(START, "ask")
+        .add_edge("ask", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question?"
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="original"), config)
+
+    called.clear()
+    replay_result = await graph.ainvoke(None, sub_config)
+    assert "__interrupt__" in replay_result
+    assert "ask" in called
+
+    called.clear()
+    final = await graph.ainvoke(Command(resume="replayed"), config)
+    assert "ask:replayed" in final["value"]
+    assert "step_b" in called
+    assert "b" in final["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_subgraph_interrupt_as_first_node_fork_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph where the FIRST node has an interrupt. Fork then resume."""
+
+    called: list[str] = []
+
+    def ask(state: State) -> State:
+        called.append("ask")
+        answer = interrupt("Question?")
+        return {"value": [f"ask:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["b"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("ask", ask)
+        .add_node("step_b", step_b)
+        .add_edge(START, "ask")
+        .add_edge("ask", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question?"
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="original"), config)
+
+    called.clear()
+    fork_config = await graph.aupdate_state(sub_config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert "ask" in called
+
+    called.clear()
+    final = await graph.ainvoke(Command(resume="forked"), fork_config)
+    assert "ask:forked" in final["value"]
+    assert "step_b" in called
+    assert "b" in final["value"]
+    assert "forked" in final["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_3_levels_replay_from_innermost_interrupt_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """3 levels deep: replay from innermost interrupt checkpoint, then resume."""
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["a"]}
+
+    def ask(state: State) -> State:
+        called.append("ask")
+        answer = interrupt("Question?")
+        return {"value": [f"ask:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["b"]}
+
+    inner = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask", ask)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask")
+        .add_edge("ask", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    middle = (
+        StateGraph(State)
+        .add_node("inner", inner)
+        .add_edge(START, "inner")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("outer", middle)
+        .add_edge(START, "outer")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question?"
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    mid_state = parent_state.tasks[0].state
+    inner_config = mid_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="original"), config)
+
+    called.clear()
+    replay_result = await graph.ainvoke(None, inner_config)
+    assert "__interrupt__" in replay_result
+    assert "step_a" not in called
+    assert "ask" in called
+
+    called.clear()
+    final = await graph.ainvoke(Command(resume="replayed"), config)
+    assert "ask:replayed" in final["value"]
+    assert "step_b" in called
+    assert "b" in final["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_3_levels_sequential_interrupts_replay_from_first_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """3 levels deep with two sequential interrupts. Replay from the first
+    interrupt checkpoint, then resume through both."""
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    inner = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    middle = (
+        StateGraph(State)
+        .add_node("inner", inner)
+        .add_edge(START, "inner")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("outer", middle)
+        .add_edge(START, "outer")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    mid_state = parent_state.tasks[0].state
+    inner_config_at_first = mid_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="answer_1"), config)
+    await graph.ainvoke(Command(resume="answer_2"), config)
+
+    called.clear()
+    replay_result = await graph.ainvoke(None, inner_config_at_first)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 1?"
+    assert "step_a" not in called
+    assert "ask_1" in called
+
+    result = await graph.ainvoke(Command(resume="new_ans1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    result = await graph.ainvoke(Command(resume="new_ans2"), config)
+    assert "ask_1:new_ans1" in result["value"]
+    assert "ask_2:new_ans2" in result["value"]
+
+
+# ---------------------------------------------------------------------------
+# Section 11: Additional coverage gaps
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_replay_from_interrupt_checkpoint_refires(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replay from the checkpoint WHERE the interrupt fired. No resume."""
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("What is your input?")
+        return {"value": [f"human:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_human", ask_human)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_human")
+        .add_edge("ask_human", "node_b")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    history = [s async for s in graph.aget_state_history(config)]
+    interrupt_checkpoint = next(
+        s
+        for s in history
+        if s.next == ("ask_human",)
+        and s.tasks
+        and any(t.interrupts for t in s.tasks)
+    )
+
+    await graph.ainvoke(Command(resume="hello"), config)
+
+    called.clear()
+    replay_result = await graph.ainvoke(None, interrupt_checkpoint.config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "What is your input?"
+    assert "ask_human" in called
+    assert "node_a" not in called
+    assert "node_b" not in called
+
+    called.clear()
+    replay_result2 = await graph.ainvoke(None, interrupt_checkpoint.config)
+    assert "__interrupt__" in replay_result2
+    assert replay_result2["__interrupt__"][0].value == "What is your input?"
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_multiple_interrupts_in_one_node_replay_from_interrupt_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Single node with two interrupt() calls. Replay from the first
+    interrupt checkpoint, then resume through both."""
+
+    def multi_interrupt_node(state: State) -> State:
+        answer1 = interrupt("First question?")
+        answer2 = interrupt("Second question?")
+        return {"value": [f"a1:{answer1}", f"a2:{answer2}"]}
+
+    def after(state: State) -> State:
+        return {"value": ["done"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask", multi_interrupt_node)
+        .add_node("after", after)
+        .add_edge(START, "ask")
+        .add_edge("ask", "after")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "First question?"
+
+    first_interrupt_config = (await graph.aget_state(config)).config
+
+    result = await graph.ainvoke(Command(resume="ans1"), config)
+    assert result["__interrupt__"][0].value == "Second question?"
+
+    result = await graph.ainvoke(Command(resume="ans2"), config)
+    assert result == {"value": ["a1:ans1", "a2:ans2", "done"]}
+
+    replay_result = await graph.ainvoke(None, first_interrupt_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "First question?"
+
+    result = await graph.ainvoke(Command(resume="new1"), config)
+    assert result["__interrupt__"][0].value == "Second question?"
+
+    result = await graph.ainvoke(Command(resume="new2"), config)
+    assert "a1:new1" in result["value"]
+    assert "a2:new2" in result["value"]
+    assert "done" in result["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_multiple_interrupts_in_one_node_fork_from_interrupt_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Single node with two interrupt() calls. Fork from the first
+    interrupt checkpoint, then resume through both."""
+
+    def multi_interrupt_node(state: State) -> State:
+        answer1 = interrupt("First question?")
+        answer2 = interrupt("Second question?")
+        return {"value": [f"a1:{answer1}", f"a2:{answer2}"]}
+
+    def after(state: State) -> State:
+        return {"value": ["done"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask", multi_interrupt_node)
+        .add_node("after", after)
+        .add_edge(START, "ask")
+        .add_edge("ask", "after")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "First question?"
+
+    first_interrupt_config = (await graph.aget_state(config)).config
+
+    await graph.ainvoke(Command(resume="ans1"), config)
+    await graph.ainvoke(Command(resume="ans2"), config)
+
+    fork_config = await graph.aupdate_state(
+        first_interrupt_config, {"value": ["forked"]}
+    )
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "First question?"
+
+    result = await graph.ainvoke(Command(resume="new1"), fork_config)
+    assert result["__interrupt__"][0].value == "Second question?"
+
+    result = await graph.ainvoke(Command(resume="new2"), fork_config)
+    assert "a1:new1" in result["value"]
+    assert "a2:new2" in result["value"]
+    assert "forked" in result["value"]
+    assert "done" in result["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_copy_fork_from_interrupt_checkpoint_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """__copy__ fork from the interrupt checkpoint, then resume."""
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("What is your input?")
+        return {"value": [f"human:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_human", ask_human)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_human")
+        .add_edge("ask_human", "node_b")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    interrupt_state = await graph.aget_state(config)
+    interrupt_config = interrupt_state.config
+
+    await graph.ainvoke(Command(resume="hello"), config)
+
+    called.clear()
+    copy_config = await graph.aupdate_state(
+        interrupt_config, None, as_node="__copy__"
+    )
+
+    copy_state = await graph.aget_state(copy_config)
+    assert copy_state.metadata["source"] == "fork"
+
+    fork_result = await graph.ainvoke(None, copy_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "What is your input?"
+    assert "ask_human" in called
+    assert "node_a" not in called
+
+    final = await graph.ainvoke(Command(resume="copy_answer"), copy_config)
+    assert "human:copy_answer" in final["value"]
+    assert "b" in final["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_subgraph_resume_with_sub_config_after_replay(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replay from subgraph interrupt checkpoint, then resume using sub_config."""
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post(state: State) -> State:
+        called.append("post")
+        return {"value": ["post"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", subgraph)
+        .add_node("post", post)
+        .add_edge(START, "executor")
+        .add_edge("executor", "post")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="original"), config)
+
+    called.clear()
+    replay_result = await graph.ainvoke(None, sub_config)
+    assert "__interrupt__" in replay_result
+
+    called.clear()
+    final = await graph.ainvoke(
+        Command(resume="sub_config_answer"), sub_config
+    )
+    assert "human:sub_config_answer" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post" in called
+    assert "post" in final["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_subgraph_resume_with_sub_config_after_fork(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Fork from subgraph interrupt checkpoint, then resume using fork_config."""
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post(state: State) -> State:
+        called.append("post")
+        return {"value": ["post"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", subgraph)
+        .add_node("post", post)
+        .add_edge(START, "executor")
+        .add_edge("executor", "post")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="original"), config)
+
+    called.clear()
+    fork_config = await graph.aupdate_state(sub_config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+
+    called.clear()
+    final = await graph.ainvoke(
+        Command(resume="fork_config_answer"), fork_config
+    )
+    assert "human:fork_config_answer" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post" in called
+    assert "post" in final["value"]
+    assert "forked" in final["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_subgraph_multiple_parent_nodes_after_replay_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph followed by multiple parent nodes. Replay then resume."""
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post_1(state: State) -> State:
+        called.append("post_1")
+        return {"value": ["p1"]}
+
+    def post_2(state: State) -> State:
+        called.append("post_2")
+        return {"value": ["p2"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", subgraph)
+        .add_node("post_1", post_1)
+        .add_node("post_2", post_2)
+        .add_edge(START, "executor")
+        .add_edge("executor", "post_1")
+        .add_edge("post_1", "post_2")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    completed = await graph.ainvoke(Command(resume="original"), config)
+    assert "p1" in completed["value"]
+    assert "p2" in completed["value"]
+
+    called.clear()
+    replay_result = await graph.ainvoke(None, sub_config)
+    assert "__interrupt__" in replay_result
+
+    called.clear()
+    final = await graph.ainvoke(Command(resume="replayed"), config)
+    assert "human:replayed" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post_1" in called
+    assert "p1" in final["value"]
+    assert "post_2" in called
+    assert "p2" in final["value"]
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async tests",
+)
+async def test_subgraph_multiple_parent_nodes_after_fork_then_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph followed by multiple parent nodes. Fork then resume."""
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post_1(state: State) -> State:
+        called.append("post_1")
+        return {"value": ["p1"]}
+
+    def post_2(state: State) -> State:
+        called.append("post_2")
+        return {"value": ["p2"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", subgraph)
+        .add_node("post_1", post_1)
+        .add_node("post_2", post_2)
+        .add_edge(START, "executor")
+        .add_edge("executor", "post_1")
+        .add_edge("post_1", "post_2")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="original"), config)
+
+    called.clear()
+    fork_config = await graph.aupdate_state(sub_config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+
+    called.clear()
+    final = await graph.ainvoke(
+        Command(resume="forked_answer"), fork_config
+    )
+    assert "human:forked_answer" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post_1" in called
+    assert "p1" in final["value"]
+    assert "post_2" in called
+    assert "p2" in final["value"]
+    assert "forked" in final["value"]

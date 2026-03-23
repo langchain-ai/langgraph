@@ -3180,3 +3180,1690 @@ def test_subgraph_called_in_loop_loads_state_on_replay(
 
     assert len(observed) == 1
     assert observed[0] == ("sub_step", {"sub_trail": ["s", "s", "s"]})
+
+
+# ---------------------------------------------------------------------------
+# Section 9: Replay from interrupt checkpoint and resume
+#
+# Previous tests replay from BEFORE the interrupt node (next=("ask_human",))
+# but never from the interrupt checkpoint itself followed by a resume.
+# This section covers the gap: replay from the checkpoint where the interrupt
+# actually fired, then resume with a new answer to continue execution.
+# ---------------------------------------------------------------------------
+
+
+def test_replay_from_interrupt_checkpoint_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replay from the checkpoint WHERE the interrupt fired (not before),
+    then resume. The interrupt re-fires, and resume should work normally.
+
+    Graph: START --> node_a --> ask_human (interrupt) --> node_b --> END
+    """
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("What is your input?")
+        return {"value": [f"human:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_human", ask_human)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_human")
+        .add_edge("ask_human", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    # Capture the checkpoint where the interrupt fired
+    interrupt_state = graph.get_state(config)
+    interrupt_config = interrupt_state.config
+
+    # Resume to complete the graph
+    result = graph.invoke(Command(resume="hello"), config)
+    assert result == {"value": ["a", "human:hello", "b"]}
+
+    # Replay from the interrupt checkpoint (not before it)
+    called.clear()
+    replay_result = graph.invoke(None, interrupt_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "What is your input?"
+    assert "ask_human" in called
+    assert "node_a" not in called  # before checkpoint
+
+    # Resume after replay — should complete normally
+    final = graph.invoke(Command(resume="replayed_answer"), config)
+    assert "human:replayed_answer" in final["value"]
+    assert "b" in final["value"]
+
+
+def test_fork_from_interrupt_checkpoint_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Fork from the checkpoint WHERE the interrupt fired, then resume.
+
+    Graph: START --> node_a --> ask_human (interrupt) --> node_b --> END
+    """
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("What is your input?")
+        return {"value": [f"human:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_human", ask_human)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_human")
+        .add_edge("ask_human", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    # Capture interrupt checkpoint
+    interrupt_state = graph.get_state(config)
+    interrupt_config = interrupt_state.config
+
+    # Resume to complete
+    graph.invoke(Command(resume="hello"), config)
+
+    # Fork from the interrupt checkpoint
+    called.clear()
+    fork_config = graph.update_state(interrupt_config, {"value": ["forked"]})
+    fork_result = graph.invoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert "ask_human" in called
+    assert "node_a" not in called
+
+    # Resume the forked interrupt
+    final = graph.invoke(Command(resume="forked_answer"), fork_config)
+    assert "human:forked_answer" in final["value"]
+    assert "b" in final["value"]
+    assert "forked" in final["value"]
+
+
+def test_sequential_interrupts_replay_from_first_then_resume_both(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Two sequential interrupt nodes. After completing both, replay from the
+    checkpoint at the FIRST interrupt, then resume through both with new answers.
+
+    Graph: START --> node_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> node_b --> END
+    """
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"a1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"a2:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt
+    result = graph.invoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    # Capture checkpoint at first interrupt
+    first_interrupt_config = graph.get_state(config).config
+
+    # Resume first → hit second
+    result = graph.invoke(Command(resume="ans1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    # Resume second → complete
+    result = graph.invoke(Command(resume="ans2"), config)
+    assert result == {"value": ["a", "a1:ans1", "a2:ans2", "b"]}
+
+    # Replay from the first interrupt checkpoint
+    called.clear()
+    replay_result = graph.invoke(None, first_interrupt_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 1?"
+    assert "node_a" not in called
+    assert "ask_1" in called
+
+    # Resume first interrupt with new answer
+    result = graph.invoke(Command(resume="new_ans1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    # Resume second interrupt with new answer
+    result = graph.invoke(Command(resume="new_ans2"), config)
+    assert "a1:new_ans1" in result["value"]
+    assert "a2:new_ans2" in result["value"]
+    assert "b" in result["value"]
+
+
+def test_sequential_interrupts_fork_from_first_then_resume_both(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Two sequential interrupt nodes. Fork from the first interrupt checkpoint,
+    then resume through both with new answers.
+
+    Graph: START --> node_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> node_b --> END
+    """
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"a1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"a2:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt
+    result = graph.invoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    # Capture checkpoint at first interrupt
+    first_interrupt_config = graph.get_state(config).config
+
+    # Resume first → hit second → complete
+    graph.invoke(Command(resume="ans1"), config)
+    graph.invoke(Command(resume="ans2"), config)
+
+    # Fork from the first interrupt checkpoint
+    called.clear()
+    fork_config = graph.update_state(first_interrupt_config, {"value": ["forked"]})
+    fork_result = graph.invoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "Question 1?"
+    assert "node_a" not in called
+
+    # Resume first interrupt with new answer
+    result = graph.invoke(Command(resume="new_ans1"), fork_config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    # Resume second interrupt with new answer
+    result = graph.invoke(Command(resume="new_ans2"), fork_config)
+    assert "a1:new_ans1" in result["value"]
+    assert "a2:new_ans2" in result["value"]
+    assert "forked" in result["value"]
+    assert "b" in result["value"]
+
+
+def test_sequential_interrupts_replay_from_second_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Two sequential interrupt nodes. Replay from the SECOND interrupt
+    checkpoint, then resume to complete.
+
+    Graph: START --> node_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> node_b --> END
+    """
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"a1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"a2:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt, resume, hit second
+    graph.invoke({"value": []}, config)
+    result = graph.invoke(Command(resume="ans1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    # Capture checkpoint at second interrupt
+    second_interrupt_config = graph.get_state(config).config
+
+    # Resume second → complete
+    graph.invoke(Command(resume="ans2"), config)
+
+    # Replay from second interrupt checkpoint
+    called.clear()
+    replay_result = graph.invoke(None, second_interrupt_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 2?"
+    assert "node_a" not in called
+    assert "ask_1" not in called
+    assert "ask_2" in called
+
+    # Resume with new answer
+    result = graph.invoke(Command(resume="new_ans2"), config)
+    assert "a2:new_ans2" in result["value"]
+    assert "b" in result["value"]
+
+
+# ---------------------------------------------------------------------------
+# Section 10: Subgraph replay-from-interrupt-checkpoint and resume
+#
+# These tests cover the critical gap: replaying or forking from a subgraph's
+# own interrupt checkpoint (obtained via get_state(subgraphs=True)), then
+# resuming to continue execution through the full parent graph.
+# ---------------------------------------------------------------------------
+
+
+def test_subgraph_replay_from_interrupt_checkpoint_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replay from the subgraph's own interrupt checkpoint, then resume.
+
+    Architecture:
+      Parent:  START --> router --> executor (subgraph, checkpointer=True) --> post --> END
+      Executor: START --> step_a --> ask_human (interrupt) --> step_b --> END
+    """
+
+    called: list[str] = []
+
+    def router(state: State) -> State:
+        called.append("router")
+        return {"value": ["routed"]}
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post(state: State) -> State:
+        called.append("post")
+        return {"value": ["post"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("router", router)
+        .add_node("executor", subgraph)
+        .add_node("post", post)
+        .add_edge(START, "router")
+        .add_edge("router", "executor")
+        .add_edge("executor", "post")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Provide input:"
+
+    # Capture the subgraph's checkpoint at the interrupt
+    parent_state = graph.get_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    # Resume to complete
+    completed = graph.invoke(Command(resume="original"), config)
+    assert "human:original" in completed["value"]
+    assert "post" in completed["value"]
+
+    # Replay from the subgraph's interrupt checkpoint
+    called.clear()
+    replay_result = graph.invoke(None, sub_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Provide input:"
+    assert "step_a" not in called  # before checkpoint
+    assert "ask_human" in called
+    assert "router" not in called
+
+    # Resume after replay — should complete the full graph
+    called.clear()
+    final = graph.invoke(Command(resume="replayed_answer"), config)
+    assert "human:replayed_answer" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post" in called
+    assert "post" in final["value"]
+
+
+def test_subgraph_fork_from_interrupt_checkpoint_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Fork from the subgraph's interrupt checkpoint, then resume.
+
+    Architecture:
+      Parent:  START --> router --> executor (subgraph, checkpointer=True) --> post --> END
+      Executor: START --> step_a --> ask_human (interrupt) --> step_b --> END
+    """
+
+    called: list[str] = []
+
+    def router(state: State) -> State:
+        called.append("router")
+        return {"value": ["routed"]}
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post(state: State) -> State:
+        called.append("post")
+        return {"value": ["post"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("router", router)
+        .add_node("executor", subgraph)
+        .add_node("post", post)
+        .add_edge(START, "router")
+        .add_edge("router", "executor")
+        .add_edge("executor", "post")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    # Capture subgraph's checkpoint
+    parent_state = graph.get_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    # Resume to complete
+    graph.invoke(Command(resume="original"), config)
+
+    # Fork from the subgraph's interrupt checkpoint
+    called.clear()
+    fork_config = graph.update_state(sub_config, {"value": ["forked"]})
+    fork_result = graph.invoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert "step_a" not in called
+    assert "ask_human" in called
+
+    # Resume the forked interrupt
+    called.clear()
+    final = graph.invoke(Command(resume="forked_answer"), fork_config)
+    assert "human:forked_answer" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post" in called
+    assert "post" in final["value"]
+    assert "forked" in final["value"]
+
+
+def test_subgraph_sequential_interrupts_replay_from_first_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph with two sequential interrupts. After completing both,
+    replay from the subgraph checkpoint at the FIRST interrupt, then
+    resume through both with new answers.
+
+    This is the exact scenario that exposed the bug: replaying from the
+    first interrupt in a subgraph where no after_tick() ran, then trying
+    to resume.
+
+    Architecture:
+      Parent:    START --> executor (subgraph, checkpointer=True) --> END
+      Executor:  START --> step_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> END
+    """
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt
+    result = graph.invoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    # Capture subgraph checkpoint at first interrupt
+    parent_state = graph.get_state(config, subgraphs=True)
+    sub_config_at_first = parent_state.tasks[0].state.config
+
+    # Resume through both interrupts to complete
+    graph.invoke(Command(resume="answer_1"), config)
+    graph.invoke(Command(resume="answer_2"), config)
+
+    # Replay from subgraph checkpoint at first interrupt
+    called.clear()
+    replay_result = graph.invoke(None, sub_config_at_first)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 1?"
+    assert "step_a" not in called
+    assert "ask_1" in called
+
+    # Resume first interrupt with new answer
+    result = graph.invoke(Command(resume="new_ans1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    # Resume second interrupt with new answer
+    result = graph.invoke(Command(resume="new_ans2"), config)
+    assert "ask_1:new_ans1" in result["value"]
+    assert "ask_2:new_ans2" in result["value"]
+
+
+def test_subgraph_sequential_interrupts_fork_from_first_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph with two sequential interrupts. Fork from the subgraph
+    checkpoint at the FIRST interrupt, then resume through both.
+
+    Architecture:
+      Parent:    START --> executor (subgraph, checkpointer=True) --> END
+      Executor:  START --> step_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> END
+    """
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt
+    result = graph.invoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    # Capture subgraph checkpoint at first interrupt
+    parent_state = graph.get_state(config, subgraphs=True)
+    sub_config_at_first = parent_state.tasks[0].state.config
+
+    # Resume through both to complete
+    graph.invoke(Command(resume="answer_1"), config)
+    graph.invoke(Command(resume="answer_2"), config)
+
+    # Fork from subgraph checkpoint at first interrupt
+    called.clear()
+    fork_config = graph.update_state(sub_config_at_first, {"value": ["forked"]})
+    fork_result = graph.invoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "Question 1?"
+    assert "step_a" not in called
+    assert "ask_1" in called
+
+    # Resume first interrupt with new answer
+    result = graph.invoke(Command(resume="new_ans1"), fork_config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    # Resume second interrupt with new answer
+    result = graph.invoke(Command(resume="new_ans2"), fork_config)
+    assert "ask_1:new_ans1" in result["value"]
+    assert "ask_2:new_ans2" in result["value"]
+    assert "forked" in result["value"]
+
+
+def test_subgraph_sequential_interrupts_replay_from_second_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph with two sequential interrupts. After completing both,
+    replay from the subgraph checkpoint at the SECOND interrupt, then resume.
+
+    Architecture:
+      Parent:    START --> executor (subgraph, checkpointer=True) --> END
+      Executor:  START --> step_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> END
+    """
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt, resume, hit second
+    graph.invoke({"value": []}, config)
+    result = graph.invoke(Command(resume="answer_1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    # Capture subgraph checkpoint at second interrupt
+    parent_state = graph.get_state(config, subgraphs=True)
+    sub_config_at_second = parent_state.tasks[0].state.config
+
+    # Resume second to complete
+    graph.invoke(Command(resume="answer_2"), config)
+
+    # Replay from subgraph checkpoint at second interrupt
+    called.clear()
+    replay_result = graph.invoke(None, sub_config_at_second)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 2?"
+    assert "step_a" not in called
+    assert "ask_1" not in called
+    assert "ask_2" in called
+
+    # Resume with new answer
+    result = graph.invoke(Command(resume="new_ans2"), config)
+    assert "ask_2:new_ans2" in result["value"]
+
+
+def test_subgraph_interrupt_as_first_node_replay_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph where the FIRST node has an interrupt (no prior node).
+    This is the most minimal repro of the bug: no after_tick() ever runs
+    before the interrupt fires during replay.
+
+    Architecture:
+      Parent:    START --> executor (subgraph, checkpointer=True) --> END
+      Executor:  START --> ask (interrupt) --> step_b --> END
+    """
+
+    called: list[str] = []
+
+    def ask(state: State) -> State:
+        called.append("ask")
+        answer = interrupt("Question?")
+        return {"value": [f"ask:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["b"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("ask", ask)
+        .add_node("step_b", step_b)
+        .add_edge(START, "ask")
+        .add_edge("ask", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question?"
+
+    # Capture subgraph checkpoint
+    parent_state = graph.get_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    # Resume to complete
+    graph.invoke(Command(resume="original"), config)
+
+    # Replay from subgraph checkpoint (ask is the first/only interrupting node)
+    called.clear()
+    replay_result = graph.invoke(None, sub_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question?"
+    assert "ask" in called
+
+    # Resume after replay
+    called.clear()
+    final = graph.invoke(Command(resume="replayed"), config)
+    assert "ask:replayed" in final["value"]
+    assert "step_b" in called
+    assert "b" in final["value"]
+
+
+def test_subgraph_interrupt_as_first_node_fork_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Same as above but using fork instead of replay.
+
+    Architecture:
+      Parent:    START --> executor (subgraph, checkpointer=True) --> END
+      Executor:  START --> ask (interrupt) --> step_b --> END
+    """
+
+    called: list[str] = []
+
+    def ask(state: State) -> State:
+        called.append("ask")
+        answer = interrupt("Question?")
+        return {"value": [f"ask:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["b"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("ask", ask)
+        .add_node("step_b", step_b)
+        .add_edge(START, "ask")
+        .add_edge("ask", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question?"
+
+    # Capture subgraph checkpoint
+    parent_state = graph.get_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    # Resume to complete
+    graph.invoke(Command(resume="original"), config)
+
+    # Fork from subgraph checkpoint
+    called.clear()
+    fork_config = graph.update_state(sub_config, {"value": ["forked"]})
+    fork_result = graph.invoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert "ask" in called
+
+    # Resume the forked interrupt
+    called.clear()
+    final = graph.invoke(Command(resume="forked"), fork_config)
+    assert "ask:forked" in final["value"]
+    assert "step_b" in called
+    assert "b" in final["value"]
+    assert "forked" in final["value"]
+
+
+def test_3_levels_replay_from_innermost_interrupt_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """3 levels deep: replay from the innermost subgraph's interrupt checkpoint
+    and then resume through the full graph.
+
+    Architecture:
+      Parent:  START --> outer (subgraph, checkpointer=True) --> END
+      Outer:   START --> inner (subgraph, checkpointer=True) --> END
+      Inner:   START --> step_a --> ask (interrupt) --> step_b --> END
+    """
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["a"]}
+
+    def ask(state: State) -> State:
+        called.append("ask")
+        answer = interrupt("Question?")
+        return {"value": [f"ask:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["b"]}
+
+    inner = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask", ask)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask")
+        .add_edge("ask", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    middle = (
+        StateGraph(State)
+        .add_node("inner", inner)
+        .add_edge(START, "inner")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("outer", middle)
+        .add_edge(START, "outer")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question?"
+
+    # Capture innermost subgraph checkpoint
+    parent_state = graph.get_state(config, subgraphs=True)
+    mid_state = parent_state.tasks[0].state
+    inner_config = mid_state.tasks[0].state.config
+
+    # Resume to complete
+    graph.invoke(Command(resume="original"), config)
+
+    # Replay from innermost checkpoint
+    called.clear()
+    replay_result = graph.invoke(None, inner_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question?"
+    assert "step_a" not in called
+    assert "ask" in called
+
+    # Resume after replay — full graph should complete
+    called.clear()
+    final = graph.invoke(Command(resume="replayed"), config)
+    assert "ask:replayed" in final["value"]
+    assert "step_b" in called
+    assert "b" in final["value"]
+
+
+def test_3_levels_sequential_interrupts_replay_from_first_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """3 levels deep with two sequential interrupts in the innermost subgraph.
+    Replay from the first interrupt checkpoint, then resume through both.
+
+    Architecture:
+      Parent:  START --> outer (subgraph, checkpointer=True) --> END
+      Outer:   START --> inner (subgraph, checkpointer=True) --> END
+      Inner:   START --> step_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> END
+    """
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    inner = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    middle = (
+        StateGraph(State)
+        .add_node("inner", inner)
+        .add_edge(START, "inner")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("outer", middle)
+        .add_edge(START, "outer")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt
+    result = graph.invoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    # Capture innermost checkpoint at first interrupt
+    parent_state = graph.get_state(config, subgraphs=True)
+    mid_state = parent_state.tasks[0].state
+    inner_config_at_first = mid_state.tasks[0].state.config
+
+    # Resume through both interrupts to complete
+    graph.invoke(Command(resume="answer_1"), config)
+    graph.invoke(Command(resume="answer_2"), config)
+
+    # Replay from innermost checkpoint at first interrupt
+    called.clear()
+    replay_result = graph.invoke(None, inner_config_at_first)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 1?"
+    assert "step_a" not in called
+    assert "ask_1" in called
+
+    # Resume first with new answer
+    result = graph.invoke(Command(resume="new_ans1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    # Resume second with new answer
+    result = graph.invoke(Command(resume="new_ans2"), config)
+    assert "ask_1:new_ans1" in result["value"]
+    assert "ask_2:new_ans2" in result["value"]
+
+
+# ---------------------------------------------------------------------------
+# Section 11: Additional coverage gaps
+#
+# 1. Replay from the interrupt checkpoint itself (no resume) — non-fork variant
+#    of test_fork_from_interrupt_checkpoint_refires
+# 2. Multiple interrupts in one node — replay from interrupt checkpoint
+# 3. __copy__ fork from interrupt checkpoint then resume
+# 4. Subgraph resume using sub_config vs thread config after replay
+# 5. Parent with multiple nodes after subgraph
+# ---------------------------------------------------------------------------
+
+
+def test_replay_from_interrupt_checkpoint_refires(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replay from the checkpoint WHERE the interrupt fired (not before it).
+    The interrupt re-fires. No resume — just verify replay semantics.
+
+    Complements test_fork_from_interrupt_checkpoint_refires (line 379) which
+    covers the fork path but not the plain replay path.
+
+    Graph: START --> node_a --> ask_human (interrupt) --> node_b --> END
+    """
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("What is your input?")
+        return {"value": [f"human:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_human", ask_human)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_human")
+        .add_edge("ask_human", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    # Find the interrupt checkpoint (has interrupts in tasks)
+    history = list(graph.get_state_history(config))
+    interrupt_checkpoint = next(
+        s
+        for s in history
+        if s.next == ("ask_human",)
+        and s.tasks
+        and any(t.interrupts for t in s.tasks)
+    )
+
+    # Resume to complete
+    graph.invoke(Command(resume="hello"), config)
+
+    # Replay from the interrupt checkpoint — interrupt should re-fire
+    called.clear()
+    replay_result = graph.invoke(None, interrupt_checkpoint.config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "What is your input?"
+    assert "ask_human" in called
+    assert "node_a" not in called
+    assert "node_b" not in called
+
+    # Replay again — should be stable
+    called.clear()
+    replay_result2 = graph.invoke(None, interrupt_checkpoint.config)
+    assert "__interrupt__" in replay_result2
+    assert replay_result2["__interrupt__"][0].value == "What is your input?"
+
+
+def test_multiple_interrupts_in_one_node_replay_from_interrupt_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """A single node with two sequential interrupt() calls. Replay from the
+    checkpoint at the FIRST interrupt, then resume through both.
+
+    Graph: START --> ask (interrupt x2) --> after --> END
+    """
+
+    def multi_interrupt_node(state: State) -> State:
+        answer1 = interrupt("First question?")
+        answer2 = interrupt("Second question?")
+        return {"value": [f"a1:{answer1}", f"a2:{answer2}"]}
+
+    def after(state: State) -> State:
+        return {"value": ["done"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask", multi_interrupt_node)
+        .add_node("after", after)
+        .add_edge(START, "ask")
+        .add_edge("ask", "after")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Hit first interrupt
+    result = graph.invoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "First question?"
+
+    # Capture checkpoint at first interrupt
+    first_interrupt_config = graph.get_state(config).config
+
+    # Resume first → hit second
+    result = graph.invoke(Command(resume="ans1"), config)
+    assert result["__interrupt__"][0].value == "Second question?"
+
+    # Resume second → complete
+    result = graph.invoke(Command(resume="ans2"), config)
+    assert result == {"value": ["a1:ans1", "a2:ans2", "done"]}
+
+    # Replay from the first interrupt checkpoint
+    replay_result = graph.invoke(None, first_interrupt_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "First question?"
+
+    # Resume first with new answer
+    result = graph.invoke(Command(resume="new1"), config)
+    assert result["__interrupt__"][0].value == "Second question?"
+
+    # Resume second with new answer
+    result = graph.invoke(Command(resume="new2"), config)
+    assert "a1:new1" in result["value"]
+    assert "a2:new2" in result["value"]
+    assert "done" in result["value"]
+
+
+def test_multiple_interrupts_in_one_node_fork_from_interrupt_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """A single node with two sequential interrupt() calls. Fork from the
+    checkpoint at the FIRST interrupt, then resume through both.
+
+    Graph: START --> ask (interrupt x2) --> after --> END
+    """
+
+    def multi_interrupt_node(state: State) -> State:
+        answer1 = interrupt("First question?")
+        answer2 = interrupt("Second question?")
+        return {"value": [f"a1:{answer1}", f"a2:{answer2}"]}
+
+    def after(state: State) -> State:
+        return {"value": ["done"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask", multi_interrupt_node)
+        .add_node("after", after)
+        .add_edge(START, "ask")
+        .add_edge("ask", "after")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Hit first interrupt
+    result = graph.invoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "First question?"
+
+    # Capture checkpoint at first interrupt
+    first_interrupt_config = graph.get_state(config).config
+
+    # Resume through both
+    graph.invoke(Command(resume="ans1"), config)
+    graph.invoke(Command(resume="ans2"), config)
+
+    # Fork from the first interrupt checkpoint
+    fork_config = graph.update_state(first_interrupt_config, {"value": ["forked"]})
+    fork_result = graph.invoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "First question?"
+
+    # Resume first with new answer
+    result = graph.invoke(Command(resume="new1"), fork_config)
+    assert result["__interrupt__"][0].value == "Second question?"
+
+    # Resume second with new answer
+    result = graph.invoke(Command(resume="new2"), fork_config)
+    assert "a1:new1" in result["value"]
+    assert "a2:new2" in result["value"]
+    assert "forked" in result["value"]
+    assert "done" in result["value"]
+
+
+def test_copy_fork_from_interrupt_checkpoint_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """__copy__ fork from the checkpoint WHERE the interrupt fired (not before),
+    then resume. Verifies that __copy__ creates a proper fork that allows
+    resume to work.
+
+    Graph: START --> node_a --> ask_human (interrupt) --> node_b --> END
+    """
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("What is your input?")
+        return {"value": [f"human:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_human", ask_human)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_human")
+        .add_edge("ask_human", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    # Capture the interrupt checkpoint
+    interrupt_state = graph.get_state(config)
+    interrupt_config = interrupt_state.config
+
+    # Resume to complete
+    graph.invoke(Command(resume="hello"), config)
+
+    # __copy__ fork from the interrupt checkpoint
+    called.clear()
+    copy_config = graph.update_state(interrupt_config, None, as_node="__copy__")
+
+    # Verify it's a fork
+    copy_state = graph.get_state(copy_config)
+    assert copy_state.metadata["source"] == "fork"
+
+    # Invoke — interrupt should re-fire
+    fork_result = graph.invoke(None, copy_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "What is your input?"
+    assert "ask_human" in called
+    assert "node_a" not in called
+
+    # Resume with new answer
+    final = graph.invoke(Command(resume="copy_answer"), copy_config)
+    assert "human:copy_answer" in final["value"]
+    assert "b" in final["value"]
+
+
+def test_subgraph_resume_with_sub_config_after_replay(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replay from a subgraph interrupt checkpoint, then resume using the
+    sub_config (not the thread config). Tests the alternative resume path.
+
+    Architecture:
+      Parent:  START --> executor (subgraph, checkpointer=True) --> post --> END
+      Executor: START --> step_a --> ask_human (interrupt) --> step_b --> END
+    """
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post(state: State) -> State:
+        called.append("post")
+        return {"value": ["post"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", subgraph)
+        .add_node("post", post)
+        .add_edge(START, "executor")
+        .add_edge("executor", "post")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    # Capture subgraph checkpoint
+    parent_state = graph.get_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    # Resume to complete
+    graph.invoke(Command(resume="original"), config)
+
+    # Replay from subgraph checkpoint
+    called.clear()
+    replay_result = graph.invoke(None, sub_config)
+    assert "__interrupt__" in replay_result
+
+    # Resume using sub_config instead of thread config
+    called.clear()
+    final = graph.invoke(Command(resume="sub_config_answer"), sub_config)
+    assert "human:sub_config_answer" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post" in called
+    assert "post" in final["value"]
+
+
+def test_subgraph_resume_with_sub_config_after_fork(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Fork from a subgraph interrupt checkpoint, then resume using the
+    fork_config (derived from sub_config). Tests the alternative resume path.
+
+    Architecture:
+      Parent:  START --> executor (subgraph, checkpointer=True) --> post --> END
+      Executor: START --> step_a --> ask_human (interrupt) --> step_b --> END
+    """
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post(state: State) -> State:
+        called.append("post")
+        return {"value": ["post"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", subgraph)
+        .add_node("post", post)
+        .add_edge(START, "executor")
+        .add_edge("executor", "post")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    # Capture subgraph checkpoint
+    parent_state = graph.get_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    # Resume to complete
+    graph.invoke(Command(resume="original"), config)
+
+    # Fork from subgraph checkpoint
+    called.clear()
+    fork_config = graph.update_state(sub_config, {"value": ["forked"]})
+    fork_result = graph.invoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+
+    # Resume using fork_config
+    called.clear()
+    final = graph.invoke(Command(resume="fork_config_answer"), fork_config)
+    assert "human:fork_config_answer" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post" in called
+    assert "post" in final["value"]
+    assert "forked" in final["value"]
+
+
+def test_subgraph_multiple_parent_nodes_after_replay_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph followed by multiple parent nodes. Replay from subgraph
+    interrupt checkpoint, resume, and verify ALL parent nodes complete.
+
+    Architecture:
+      Parent:  START --> executor (subgraph, checkpointer=True) --> post_1 --> post_2 --> END
+      Executor: START --> step_a --> ask_human (interrupt) --> step_b --> END
+    """
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post_1(state: State) -> State:
+        called.append("post_1")
+        return {"value": ["p1"]}
+
+    def post_2(state: State) -> State:
+        called.append("post_2")
+        return {"value": ["p2"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", subgraph)
+        .add_node("post_1", post_1)
+        .add_node("post_2", post_2)
+        .add_edge(START, "executor")
+        .add_edge("executor", "post_1")
+        .add_edge("post_1", "post_2")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    # Capture subgraph checkpoint
+    parent_state = graph.get_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    # Resume to complete
+    completed = graph.invoke(Command(resume="original"), config)
+    assert "p1" in completed["value"]
+    assert "p2" in completed["value"]
+
+    # Replay from subgraph checkpoint
+    called.clear()
+    replay_result = graph.invoke(None, sub_config)
+    assert "__interrupt__" in replay_result
+
+    # Resume — all parent nodes should complete
+    called.clear()
+    final = graph.invoke(Command(resume="replayed"), config)
+    assert "human:replayed" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post_1" in called
+    assert "p1" in final["value"]
+    assert "post_2" in called
+    assert "p2" in final["value"]
+
+
+def test_subgraph_multiple_parent_nodes_after_fork_then_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Same as above but using fork instead of replay.
+
+    Architecture:
+      Parent:  START --> executor (subgraph, checkpointer=True) --> post_1 --> post_2 --> END
+      Executor: START --> step_a --> ask_human (interrupt) --> step_b --> END
+    """
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    def post_1(state: State) -> State:
+        called.append("post_1")
+        return {"value": ["p1"]}
+
+    def post_2(state: State) -> State:
+        called.append("post_2")
+        return {"value": ["p2"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", subgraph)
+        .add_node("post_1", post_1)
+        .add_node("post_2", post_2)
+        .add_edge(START, "executor")
+        .add_edge("executor", "post_1")
+        .add_edge("post_1", "post_2")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    # Capture subgraph checkpoint
+    parent_state = graph.get_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    # Resume to complete
+    graph.invoke(Command(resume="original"), config)
+
+    # Fork from subgraph checkpoint
+    called.clear()
+    fork_config = graph.update_state(sub_config, {"value": ["forked"]})
+    fork_result = graph.invoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+
+    # Resume — all parent nodes should complete
+    called.clear()
+    final = graph.invoke(Command(resume="forked_answer"), fork_config)
+    assert "human:forked_answer" in final["value"]
+    assert "step_b" in called
+    assert "sub_b" in final["value"]
+    assert "post_1" in called
+    assert "p1" in final["value"]
+    assert "post_2" in called
+    assert "p2" in final["value"]
+    assert "forked" in final["value"]
