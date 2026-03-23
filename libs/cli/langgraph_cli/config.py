@@ -287,6 +287,18 @@ def validate_config(config: Config) -> Config:
                     f"Invalid http.app format: '{http_conf['app']}'. "
                     "Must be in format './path/to/file.py:attribute_name'"
                 )
+        if "apps" in http_conf and http_conf["apps"]:
+            for prefix, app_path in http_conf["apps"].items():
+                if not prefix.startswith("/"):
+                    raise ValueError(
+                        f"Invalid http.apps prefix: '{prefix}'. Must start with '/'"
+                    )
+                if ":" not in app_path:
+                    raise ValueError(
+                        f"Invalid http.apps format for prefix '{prefix}': '{app_path}'. "
+                        "Must be in format './path/to/file:attribute_name' "
+                        "or 'package:attribute_name'"
+                    )
     if keep_pkg_tools := config.get("keep_pkg_tools"):
         if isinstance(keep_pkg_tools, list):
             for tool in keep_pkg_tools:
@@ -807,6 +819,94 @@ def _update_http_app_path(
         http_config["app"] = f"{module_str}:{attr_str}"
 
 
+_JS_EXTENSIONS = frozenset({".js", ".ts", ".mts", ".mjs", ".cts", ".cjs"})
+
+
+def _is_js_http_app(app_path: str) -> bool:
+    """Check if an http.apps entry is a JavaScript/TypeScript app or npm package."""
+    module_str = app_path.split(":")[0]
+    ext = os.path.splitext(module_str)[1]
+    if ext:
+        return ext in _JS_EXTENSIONS
+    # No extension and not a file path → npm package reference (JS)
+    if not module_str.startswith((".", "/")):
+        return True
+    return False
+
+
+def _has_js_http_apps(config: Config) -> bool:
+    """Check if any http.apps entries are JavaScript apps."""
+    http_config = config.get("http")
+    if not http_config:
+        return False
+    apps = http_config.get("apps")
+    if not apps:
+        return False
+    return any(_is_js_http_app(app_path) for app_path in apps.values())
+
+
+def _update_http_apps_paths(
+    config_path: pathlib.Path, config: Config, local_deps: LocalDeps
+) -> None:
+    """Update HTTP apps paths to point to the correct location in the Docker container.
+
+    Similar to _update_http_app_path, but handles the `http.apps` dictionary
+    which maps path prefixes to app module paths. Python app paths are rewritten
+    to container paths; npm package references are left unchanged.
+    """
+    if not (http_config := config.get("http")) or not (apps := http_config.get("apps")):
+        return
+
+    for prefix, app_str in apps.items():
+        module_str, _, attr_str = app_str.partition(":")
+        if not module_str or not attr_str:
+            message = (
+                'Import string "{import_str}" must be in format "<module>:<attribute>".'
+            )
+            raise ValueError(message.format(import_str=app_str))
+
+        # Skip npm package references (bare module names without path separators)
+        if (
+            not module_str.startswith((".", "/"))
+            and not os.path.splitext(module_str)[1]
+        ):
+            continue
+
+        if "/" in module_str or "\\" in module_str:
+            resolved = (config_path.parent / module_str).resolve()
+            if not resolved.exists():
+                raise FileNotFoundError(
+                    f"Could not find HTTP app module for prefix '{prefix}': {resolved}"
+                )
+            elif not resolved.is_file():
+                raise IsADirectoryError(
+                    f"HTTP app module must be a file for prefix '{prefix}': {resolved}"
+                )
+            else:
+                for path in local_deps.real_pkgs:
+                    if resolved.is_relative_to(path):
+                        container_path = (
+                            pathlib.Path("/deps")
+                            / path.name
+                            / resolved.relative_to(path)
+                        )
+                        module_str = container_path.as_posix()
+                        break
+                else:
+                    for faux_pkg, (_, destpath) in local_deps.faux_pkgs.items():
+                        if resolved.is_relative_to(faux_pkg):
+                            container_subpath = resolved.relative_to(faux_pkg)
+                            module_str = f"{destpath}/{container_subpath.as_posix()}"
+                            break
+                    else:
+                        raise ValueError(
+                            f"HTTP app module '{app_str}' for prefix '{prefix}' "
+                            "not found in 'dependencies' list. "
+                            "Add its containing package to 'dependencies' list."
+                        )
+            apps[prefix] = f"{module_str}:{attr_str}"
+
+
 def _get_node_pm_install_cmd(config_path: pathlib.Path, config: Config) -> str:
     def test_file(file_name):
         full_path = config_path.parent / file_name
@@ -957,6 +1057,8 @@ def python_config_to_docker(
     _update_checkpointer_path(config_path, config, local_deps)
     # Rewrite HTTP app path, so it points to the correct location in the Docker container
     _update_http_app_path(config_path, config, local_deps)
+    # Rewrite HTTP apps paths, so they point to the correct location in the Docker container
+    _update_http_apps_paths(config_path, config, local_deps)
 
     pip_pkgs_str = (
         f"RUN {local_reqs_pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
@@ -1017,9 +1119,11 @@ ADD {relpath} /deps/{name}
         for fullpath, (relpath, name) in local_deps.real_pkgs.items()
     )
 
+    has_js_apps = _has_js_http_apps(config)
     install_node_str: str = (
         "RUN /storage/install-node.sh"
-        if (config.get("ui") or config.get("node_version")) and local_deps.working_dir
+        if ((config.get("ui") or config.get("node_version")) and local_deps.working_dir)
+        or has_js_apps
         else ""
     )
 
@@ -1077,6 +1181,10 @@ ADD {relpath} /deps/{name}
                 f"RUN cd {local_deps.working_dir} && {_get_node_pm_install_cmd(config_path, config)} && tsx /api/langgraph_api/js/build.mts",
                 "# -- End of JS dependencies install --",
             ]
+        )
+    elif has_js_apps:
+        js_inst_str = (
+            f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}"
         )
     image_str = docker_tag(config, base_image, api_version)
 

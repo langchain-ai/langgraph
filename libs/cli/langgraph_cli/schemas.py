@@ -446,6 +446,25 @@ class HttpConfig(TypedDict, total=False):
     Format: "path/to/module.py:app_var"
     If provided, it can override or extend the default routes.
     """
+    apps: dict[str, str] | None
+    """Optional. Record mapping path prefix to app module path.
+
+    Each key is a URL path prefix (e.g., "/dashboard"), and each value is an
+    import path in "file:export" format (e.g., "./dashboard.py:app").
+
+    Python apps (.py) are mounted in-process as FastAPI/Starlette sub-applications.
+    JS apps (.js, .ts, .mts, .mjs) are spawned as Node.js subprocess servers
+    with a reverse proxy forwarding requests from the main server.
+    npm package references (paths not starting with . or /) are resolved as
+    npm imports in the JS subprocess.
+
+    Example:
+        {
+            "/dashboard": "./dashboard.py:app",
+            "/ext": "./extension.js:app",
+            "/conduit": "some-npm-package:app"
+        }
+    """
     disable_assistants: bool
     """Optional. If `True`, /assistants routes are removed from the server.
     

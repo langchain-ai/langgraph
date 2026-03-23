@@ -687,7 +687,7 @@
     },
     "EncryptionConfig": {
       "title": "EncryptionConfig",
-      "description": "Configuration for custom at-rest encryption logic.\n\nAllows you to implement custom encryption for sensitive data stored in the database,\nincluding metadata fields and checkpoint blobs.",
+      "description": "Configuration for custom at-rest encryption logic.\n\n    Allows you to implement custom encryption for sensitive data stored in the database,\n    including metadata fields and checkpoint blobs.",
       "type": "object",
       "properties": {
         "path": {
@@ -727,6 +727,20 @@
         "app": {
           "type": "string",
           "description": "Optional. Import path to a custom Starlette/FastAPI application to mount.\n"
+        },
+        "apps": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Record mapping path prefix to app module path.\n\nEach key is a URL path prefix (e.g., \"/dashboard\"), and each value is an\n\nPython apps (.py) are mounted in-process as FastAPI/Starlette sub-applications.\nJS apps (.js, .ts, .mts, .mjs) are spawned as Node.js subprocess servers\nwith a reverse proxy forwarding requests from the main server.\nnpm package references (paths not starting with . or /) are resolved as\nnpm imports in the JS subprocess.\n"
         },
         "configurable_headers": {
           "anyOf": [
