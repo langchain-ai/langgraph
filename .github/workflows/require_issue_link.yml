@@ -5,7 +5,7 @@
 # Maintainer override: an org member can reopen the PR or remove
 # "missing-issue-link" — both add "bypass-issue-check" and reopen.
 #
-# Dependency: tag-external-contributions.yml must apply the "external" label
+# Dependency: tag-external-prs.yml must apply the "external" label
 # first. This workflow does NOT trigger on "opened" (new PRs have no labels
 # yet, so the gate would always skip).
 

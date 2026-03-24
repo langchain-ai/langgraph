@@ -1,10 +1,10 @@
-# Automatically tag issues and pull requests as "external" or "internal"
-# based on whether the author is a member of the langchain-ai GitHub
-# organization, and apply contributor tier labels to external contributors
-# based on their merged PR history.
+# Automatically tag issues as "external" or "internal" based on whether
+# the author is a member of the langchain-ai GitHub organization, and
+# apply contributor tier labels to external contributors based on their
+# merged PR history.
 #
-# NOTE: This repo does not have a separate pr_labeler.yml — this workflow
-# handles both issues and PRs.
+# PR labeling is handled by tag-external-prs.yml.
+# PR + issue backfill lives in the backfill job below (workflow_dispatch).
 #
 # Setup Requirements:
 # 1. Create a GitHub App with permissions:
@@ -18,12 +18,10 @@
 # The GitHub App token is required to check private organization membership.
 # Without it, the workflow will fail.
 
-name: Tag External Contributions
+name: Tag External Issues
 
 on:
   issues:
-    types: [opened]
-  pull_request_target:
     types: [opened]
   workflow_dispatch:
     inputs:
@@ -44,16 +42,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.issue.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   tag-external:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name == 'issues'
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      pull-requests: write
 
     steps:
       - name: Generate GitHub App token
@@ -103,24 +100,16 @@ jobs:
               }
             }
 
-      # Apply tier label BEFORE the external/internal labels so that
-      # "trusted-contributor" is already present when the "external" labeled
-      # event fires and triggers require_issue_link.yml.
       - name: Apply contributor tier label
         if: steps.check-membership.outputs.is-external == 'true'
         uses: actions/github-script@v8
         with:
-          # Use App token so the "labeled" event propagates to downstream
-          # workflows (e.g. require_issue_link.yml).
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
-            const isPR = context.eventName === 'pull_request_target';
-            const item = isPR
-              ? context.payload.pull_request
-              : context.payload.issue;
-            const author = item.user.login;
-            const issueNumber = item.number;
+            const issue = context.payload.issue;
+            const author = issue.user.login;
+            const issueNumber = issue.number;
 
             const TRUSTED_THRESHOLD = 5;
             const LABEL_COLOR = 'b76e79';
@@ -164,8 +153,8 @@ jobs:
               console.log(`No tier label for ${author} (${mergedCount} merged PRs)`);
             }
 
-      - name: Add external label to issue
-        if: steps.check-membership.outputs.is-external == 'true' && github.event_name == 'issues'
+      - name: Add external label
+        if: steps.check-membership.outputs.is-external == 'true'
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -177,24 +166,8 @@ jobs:
             });
             console.log(`Added 'external' label to issue #${issue_number}`);
 
-      - name: Add external label to pull request
-        if: steps.check-membership.outputs.is-external == 'true' && github.event_name == 'pull_request_target'
-        uses: actions/github-script@v8
-        with:
-          # Use App token so the "labeled" event propagates to downstream
-          # workflows (e.g. require_issue_link.yml). Events created by the
-          # default GITHUB_TOKEN do not trigger additional workflow runs.
-          github-token: ${{ steps.app-token.outputs.token }}
-          script: |
-            const { owner, repo } = context.repo;
-            const issue_number = context.payload.pull_request.number;
-            await github.rest.issues.addLabels({
-              owner, repo, issue_number, labels: ['external'],
-            });
-            console.log(`Added 'external' label to PR #${issue_number}`);
-
-      - name: Add internal label to issue
-        if: steps.check-membership.outputs.is-external == 'false' && github.event_name == 'issues'
+      - name: Add internal label
+        if: steps.check-membership.outputs.is-external == 'false'
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -205,19 +178,6 @@ jobs:
               owner, repo, issue_number, labels: ['internal'],
             });
             console.log(`Added 'internal' label to issue #${issue_number}`);
-
-      - name: Add internal label to pull request
-        if: steps.check-membership.outputs.is-external == 'false' && github.event_name == 'pull_request_target'
-        uses: actions/github-script@v8
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { owner, repo } = context.repo;
-            const issue_number = context.payload.pull_request.number;
-            await github.rest.issues.addLabels({
-              owner, repo, issue_number, labels: ['internal'],
-            });
-            console.log(`Added 'internal' label to PR #${issue_number}`);
 
   backfill:
     if: github.event_name == 'workflow_dispatch'
@@ -254,7 +214,7 @@ jobs:
 
             const tierLabels = ['trusted-contributor'];
 
-            // ── Helpers (inlined from pr-labeler.js) ─────────────────────────
+            // ── Helpers ─────────────────────────────────────────────────
 
             async function ensureLabel(name) {
               try {
@@ -321,7 +281,7 @@ jobs:
               return info;
             }
 
-            // ── Setup ────────────────────────────────────────────────────────
+            // ── Setup ────────────────────────────────────────────────────
 
             for (const name of tierLabels) {
               await ensureLabel(name);
@@ -332,7 +292,7 @@ jobs:
             let processed = 0;
             let failures = 0;
 
-            // ── Backfill PRs ─────────────────────────────────────────────────
+            // ── Backfill PRs ─────────────────────────────────────────────
 
             if (backfillType === 'prs' || backfillType === 'both') {
               const prs = await github.paginate(github.rest.pulls.list, {
@@ -385,7 +345,7 @@ jobs:
               }
             }
 
-            // ── Backfill issues ──────────────────────────────────────────────
+            // ── Backfill issues ──────────────────────────────────────────
 
             if (backfillType === 'issues' || backfillType === 'both') {
               const issues = await github.paginate(github.rest.issues.listForRepo, {
