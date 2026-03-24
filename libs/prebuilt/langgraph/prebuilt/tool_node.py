@@ -380,11 +380,15 @@ def _default_handle_tool_errors(e: Exception) -> str:
     """Default error handler for tool errors.
 
     If the tool is a tool invocation error, return its message.
-    Otherwise, raise the error.
+    Otherwise, format the error using the standard error template.
+
+    This preserves the pre-1.0.1 behavior where all exceptions raised inside
+    a tool are caught and surfaced as error ToolMessages rather than
+    propagating up and crashing the graph.
     """
     if isinstance(e, ToolInvocationError):
         return e.message
-    raise e
+    return TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
 
 
 def _handle_tool_error(

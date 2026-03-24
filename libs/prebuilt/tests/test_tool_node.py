@@ -288,26 +288,59 @@ def test_tool_node_error_handling_default_invocation() -> None:
     )
 
 
-def test_tool_node_error_handling_default_exception() -> None:
+async def test_tool_node_error_handling_default_exception() -> None:
+    """Regression test for #6486: default error handling should surface exceptions
+    as error ToolMessages instead of propagating them (restores pre-1.0.1 behavior).
+    """
+    # sync: ValueError raised in tool should be caught and returned as error ToolMessage
     tn = ToolNode([tool1])
-    with pytest.raises(ValueError):
-        tn.invoke(
-            {
-                "messages": [
-                    AIMessage(
-                        "hi?",
-                        tool_calls=[
-                            {
-                                "name": "tool1",
-                                "args": {"some_val": 0, "some_other_val": "foo"},
-                                "id": "some id",
-                            },
-                        ],
-                    )
-                ]
-            },
-            config=_create_config_with_runtime(),
-        )
+    result = tn.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 0, "some_other_val": "foo"},
+                            "id": "some id",
+                        },
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    assert len(result["messages"]) == 1
+    msg = result["messages"][0]
+    assert msg.type == "tool"
+    assert msg.status == "error"
+    assert msg.tool_call_id == "some id"
+    assert TOOL_CALL_ERROR_TEMPLATE.format(error=repr(ValueError("Test error"))) == msg.content
+
+    # async: ToolException raised in tool should also be caught by default
+    result2 = await ToolNode([tool2]).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool2",
+                            "args": {"some_val": 0, "some_other_val": "bar"},
+                            "id": "some other id",
+                        },
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    assert len(result2["messages"]) == 1
+    msg2 = result2["messages"][0]
+    assert msg2.type == "tool"
+    assert msg2.status == "error"
+    assert msg2.tool_call_id == "some other id"
 
 
 async def test_tool_node_error_handling() -> None:
