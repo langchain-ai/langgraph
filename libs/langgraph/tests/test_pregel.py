@@ -6891,8 +6891,10 @@ def test_tags_stream_mode_messages() -> None:
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),
+                "_type": "generic-fake-chat-model",
                 "ls_provider": "genericfakechatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
                 "tags": ["meow"],
             },
         )
