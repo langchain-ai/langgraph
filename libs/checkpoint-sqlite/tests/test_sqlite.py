@@ -307,3 +307,49 @@ class TestSqliteSaver:
             # Nested digit-starting key via dotted path
             results = list(saver.list(None, filter={"user.123abc": "ok2"}))
             assert len(results) == 1
+
+
+def test_list_no_n_plus_one_queries() -> None:
+    """Verify SqliteSaver.list() uses 2 queries total (1 checkpoints + 1 writes), not N+1.
+    
+    Refs: https://github.com/langchain-ai/langgraph/issues/7263
+    """
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        saver.setup()
+
+        # Insert 10 checkpoints with writes
+        for i in range(10):
+            checkpoint_id = f"{i:032}.0"
+            config = {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": checkpoint_id,
+                }
+            }
+            checkpoint = empty_checkpoint()
+            metadata: CheckpointMetadata = {"step": i}
+            saver.put(config, checkpoint, metadata, {})
+
+        # Count queries using a trace callback
+        query_count = [0]
+
+        def count_queries(sql: str) -> None:
+            query_count[0] += 1
+
+        saver.conn.set_trace_callback(count_queries)
+        results = list(saver.list({"configurable": {"thread_id": "1"}}))
+
+        # With 10 checkpoints, N+1 pattern would produce 11 queries
+        # Fixed version should produce exactly 2 queries:
+        #   1. SELECT checkpoints ...
+        #   2. SELECT writes WHERE ... IN (VALUES ...) ...
+        assert len(results) == 10, f"Expected 10 checkpoints, got {len(results)}"
+        assert query_count[0] == 2, (
+            f"Expected exactly 2 queries (N+1 fix), got {query_count[0]}. "
+            f"Queries: N+1 pattern still present."
+        )
+
+        saver.conn.set_trace_callback(None)

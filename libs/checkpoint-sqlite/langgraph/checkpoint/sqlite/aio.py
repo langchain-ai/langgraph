@@ -428,53 +428,76 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         if limit is not None:
             query += " LIMIT ?"
             params = (*params, limit)
-        async with (
-            self.lock,
-            self.conn.execute(query, params) as cur,
-            self.conn.cursor() as wcur,
-        ):
-            async for (
-                thread_id,
-                checkpoint_ns,
-                checkpoint_id,
-                parent_checkpoint_id,
-                type,
-                checkpoint,
-                metadata,
-            ) in cur:
+        async with self.lock:
+            async with self.conn.execute(query, params) as cur:
+                checkpoints = [row async for row in cur]
+
+        if not checkpoints:
+            return
+
+        # Collect all (thread_id, checkpoint_ns, checkpoint_id) tuples for batched writes query
+        checkpoint_keys = [
+            (row[0], row[1], row[2])  # (thread_id, checkpoint_ns, checkpoint_id)
+            for row in checkpoints
+        ]
+
+        # Batch query: single query for all writes (fixes N+1 pattern)
+        async with self.lock:
+            conditions = " OR ".join(
+                "(thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?)"
+                for _ in checkpoint_keys
+            )
+            flat_keys = [item for keys in checkpoint_keys for item in keys]
+            async with self.conn.cursor() as wcur:
                 await wcur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
-                    (thread_id, checkpoint_ns, checkpoint_id),
+                    f"""SELECT thread_id, checkpoint_ns, checkpoint_id, task_id, channel, type, value
+                    FROM writes
+                    WHERE {conditions}
+                    ORDER BY thread_id, checkpoint_ns, checkpoint_id, task_id, idx""",
+                    flat_keys,
                 )
-                yield CheckpointTuple(
+                # Group writes by checkpoint key
+                writes_by_key: dict[tuple, list[tuple]] = {key: [] for key in checkpoint_keys}
+                async for thread_id, checkpoint_ns, checkpoint_id, task_id, channel, type, value in wcur:
+                    writes_by_key[(thread_id, checkpoint_ns, checkpoint_id)].append(
+                        (task_id, channel, self.serde.loads_typed((type, value)))
+                    )
+
+        for (
+            thread_id,
+            checkpoint_ns,
+            checkpoint_id,
+            parent_checkpoint_id,
+            type,
+            checkpoint,
+            metadata,
+        ) in checkpoints:
+            yield CheckpointTuple(
+                {
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "checkpoint_id": checkpoint_id,
+                    }
+                },
+                self.serde.loads_typed((type, checkpoint)),
+                cast(
+                    CheckpointMetadata,
+                    (json.loads(metadata) if metadata is not None else {}),
+                ),
+                (
                     {
                         "configurable": {
                             "thread_id": thread_id,
                             "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": checkpoint_id,
+                            "checkpoint_id": parent_checkpoint_id,
                         }
-                    },
-                    self.serde.loads_typed((type, checkpoint)),
-                    cast(
-                        CheckpointMetadata,
-                        (json.loads(metadata) if metadata is not None else {}),
-                    ),
-                    (
-                        {
-                            "configurable": {
-                                "thread_id": thread_id,
-                                "checkpoint_ns": checkpoint_ns,
-                                "checkpoint_id": parent_checkpoint_id,
-                            }
-                        }
-                        if parent_checkpoint_id
-                        else None
-                    ),
-                    [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        async for task_id, channel, type, value in wcur
-                    ],
-                )
+                    }
+                    if parent_checkpoint_id
+                    else None
+                ),
+                writes_by_key[(thread_id, checkpoint_ns, checkpoint_id)],
+            )
 
     async def aput(
         self,
