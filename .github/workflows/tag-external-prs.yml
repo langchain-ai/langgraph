@@ -1,0 +1,173 @@
+# Automatically tag pull requests as "external" or "internal" based on
+# whether the author is a member of the langchain-ai GitHub organization,
+# and apply contributor tier labels to external contributors based on
+# their merged PR history.
+#
+# Issue labeling is handled by tag-external-issues.yml.
+# Backfill (workflow_dispatch) also lives in tag-external-issues.yml.
+#
+# Setup Requirements:
+# 1. Create a GitHub App with permissions:
+#    - Repository: Pull requests (write)
+#    - Organization: Members (read)
+# 2. Install the app on your organization and this repository
+# 3. Add these repository secrets:
+#    - ORG_MEMBERSHIP_APP_ID: Your app's ID
+#    - ORG_MEMBERSHIP_APP_PRIVATE_KEY: Your app's private key
+#
+# The GitHub App token is required to check private organization membership.
+# Without it, the workflow will fail.
+
+name: Tag External PRs
+
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  tag-external:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.ORG_MEMBERSHIP_APP_ID }}
+          private-key: ${{ secrets.ORG_MEMBERSHIP_APP_PRIVATE_KEY }}
+
+      - name: Check if contributor is external
+        if: steps.app-token.outcome == 'success'
+        id: check-membership
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const author = context.payload.sender.login;
+            const senderType = context.payload.sender.type;
+
+            if (senderType === 'Bot') {
+              console.log(`${author} is a Bot — treating as internal`);
+              core.setOutput('is-external', 'false');
+              return;
+            }
+
+            try {
+              const membership = await github.rest.orgs.getMembershipForUser({
+                org: 'langchain-ai',
+                username: author,
+              });
+              const isExternal = membership.data.state !== 'active';
+              console.log(
+                isExternal
+                  ? `${author} has pending membership — treating as external`
+                  : `${author} is an active member of langchain-ai`,
+              );
+              core.setOutput('is-external', isExternal ? 'true' : 'false');
+            } catch (e) {
+              if (e.status === 404) {
+                console.log(`${author} is not a member of langchain-ai`);
+                core.setOutput('is-external', 'true');
+              } else {
+                throw new Error(
+                  `Membership check failed for ${author} (${e.status}): ${e.message}`,
+                );
+              }
+            }
+
+      # Apply tier label BEFORE the external label so that
+      # "trusted-contributor" is already present when the "external" labeled
+      # event fires and triggers require_issue_link.yml.
+      - name: Apply contributor tier label
+        if: steps.check-membership.outputs.is-external == 'true'
+        uses: actions/github-script@v8
+        with:
+          # Use App token so the "labeled" event propagates to downstream
+          # workflows (e.g. require_issue_link.yml).
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+            const prNumber = pr.number;
+
+            const TRUSTED_THRESHOLD = 5;
+            const LABEL_COLOR = 'b76e79';
+
+            let mergedCount;
+            try {
+              const result = await github.rest.search.issuesAndPullRequests({
+                q: `repo:${owner}/${repo} is:pr is:merged author:"${author}"`,
+                per_page: 1,
+              });
+              mergedCount = result?.data?.total_count;
+            } catch (error) {
+              if (error?.status !== 422) throw error;
+              core.warning(`Search failed for ${author}; skipping tier label.`);
+              return;
+            }
+
+            if (mergedCount == null) {
+              core.warning(`Search response missing total_count for ${author}; skipping tier label.`);
+              return;
+            }
+
+            const tierLabel = mergedCount >= TRUSTED_THRESHOLD ? 'trusted-contributor' : null;
+
+            if (tierLabel) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name: tierLabel });
+              } catch (e) {
+                if (e.status !== 404) throw e;
+                try {
+                  await github.rest.issues.createLabel({ owner, repo, name: tierLabel, color: LABEL_COLOR });
+                } catch (createErr) {
+                  if (createErr.status !== 422) throw createErr;
+                }
+              }
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: prNumber, labels: [tierLabel],
+              });
+              console.log(`Applied '${tierLabel}' to PR #${prNumber} (${mergedCount} merged PRs)`);
+            } else {
+              console.log(`No tier label for ${author} (${mergedCount} merged PRs)`);
+            }
+
+      - name: Add external label
+        if: steps.check-membership.outputs.is-external == 'true'
+        uses: actions/github-script@v8
+        with:
+          # Use App token so the "labeled" event propagates to downstream
+          # workflows (e.g. require_issue_link.yml). Events created by the
+          # default GITHUB_TOKEN do not trigger additional workflow runs.
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number, labels: ['external'],
+            });
+            console.log(`Added 'external' label to PR #${issue_number}`);
+
+      - name: Add internal label
+        if: steps.check-membership.outputs.is-external == 'false'
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number, labels: ['internal'],
+            });
+            console.log(`Added 'internal' label to PR #${issue_number}`);

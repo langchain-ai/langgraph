@@ -164,12 +164,11 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         grouped_ops, num_ops = _group_ops(ops)
         results: list[Result] = [None] * num_ops
 
-        async with _ainternal.get_connection(self.conn) as conn:
-            if self.pipe:
-                async with self.pipe:
-                    await self._execute_batch(grouped_ops, results, conn)
-            else:
-                await self._execute_batch(grouped_ops, results, conn)
+        if self.pipe:
+            async with self.pipe:
+                await self._execute_batch(grouped_ops, results)
+        else:
+            await self._execute_batch(grouped_ops, results)
 
         return results
 
@@ -410,8 +409,10 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         self,
         grouped_ops: dict,
         results: list[Result],
-        conn: AsyncConnection[DictRow],
+        conn: AsyncConnection[DictRow] | None = None,
     ) -> None:
+        # Keep `conn` for compatibility with subclasses overriding this private hook.
+        # All database I/O goes through `_cursor()`, which owns connection acquisition.
         async with self._cursor(pipeline=True) as cur:
             if GetOp in grouped_ops:
                 await self._batch_get_ops(

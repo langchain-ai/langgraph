@@ -31,7 +31,11 @@ from langgraph_cli.helpers import format_log_entry, level_fg, resolve_deployment
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
-from langgraph_cli.util import format_deployments_table, warn_non_wolfi_distro
+from langgraph_cli.util import (
+    format_deployments_table,
+    format_revisions_table,
+    warn_non_wolfi_distro,
+)
 from langgraph_cli.version import __version__
 
 RESERVED_ENV_VARS = frozenset(
@@ -331,25 +335,25 @@ class NestedHelpGroup(click.Group):
         self, ctx: click.Context, formatter: click.HelpFormatter
     ) -> None:
         command_entries: list[tuple[str, click.Command]] = []
-        # Collect the top-level commands first, then append one level of nested
-        # subcommands using names like "deploy list" so they show up in the
-        # top-level help output.
-        for command_name in self.list_commands(ctx):
-            command = self.get_command(ctx, command_name)
-            if command is None or command.hidden:
-                continue
-            command_entries.append((command_name, command))
-            if isinstance(command, click.Group):
-                # Build a child context so Click resolves the subcommands the same
-                # way it would for the nested group itself.
-                sub_ctx = click.Context(command, info_name=command_name, parent=ctx)
-                for subcommand_name in command.list_commands(sub_ctx):
-                    subcommand = command.get_command(sub_ctx, subcommand_name)
-                    if subcommand is None or subcommand.hidden:
-                        continue
-                    command_entries.append(
-                        (f"{command_name} {subcommand_name}", subcommand)
+
+        def collect_commands(
+            group: click.Group, parent_ctx: click.Context, prefix: str = ""
+        ) -> None:
+            for command_name in group.list_commands(parent_ctx):
+                command = group.get_command(parent_ctx, command_name)
+                if command is None or command.hidden:
+                    continue
+                qualified_name = f"{prefix} {command_name}" if prefix else command_name
+                command_entries.append((qualified_name, command))
+                if isinstance(command, click.Group):
+                    sub_ctx = click.Context(
+                        command,
+                        info_name=qualified_name,
+                        parent=parent_ctx,
                     )
+                    collect_commands(command, sub_ctx, qualified_name)
+
+        collect_commands(self, ctx)
 
         # Compute the available width for help text up front so we can truncate
         # descriptions before handing them to Click. That keeps each command on
@@ -373,13 +377,30 @@ class DeployGroup(NestedHelpGroup):
     """Group that treats leading '-' args as passthrough docker flags."""
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        """Treat leading option-like subcommand tokens as passthrough args.
+
+        Click stores the unresolved nested command token on the context after
+        ``Group.parse_args()`` runs, but the backing attribute changed across
+        supported Click versions. Click 8.1.x stores the value directly on
+        ``protected_args``, while Click 8.2+ stores it on ``_protected_args``
+        and exposes ``protected_args`` as a deprecated compatibility property.
+        Since this package allows ``click>=8.1.7``, we need to check both
+        names to support the full version range without relying on one
+        version-specific internal detail.
+        """
         result = super().parse_args(ctx, args)
-        if ctx._protected_args and ctx._protected_args[0].startswith("-"):
+        protected_args = ctx.__dict__.get("protected_args")
+        if protected_args is None:
+            protected_args = ctx.__dict__.get("_protected_args", [])
+        if protected_args and protected_args[0].startswith("-"):
             # Click stores the would-be subcommand in _protected_args; if it looks
             # like an option (e.g. --build-arg) treat it as passthrough docker
             # args instead of insisting on a nested command.
-            ctx.args = [*ctx._protected_args, *ctx.args]
-            ctx._protected_args = []
+            ctx.args = [*protected_args, *ctx.args]
+            if "protected_args" in ctx.__dict__:
+                ctx.protected_args = []
+            elif "_protected_args" in ctx.__dict__:
+                ctx._protected_args = []
             return ctx.args
         return result
 
@@ -786,6 +807,13 @@ def deploy(ctx: click.Context, **_: object):
     docker_build_args = tuple(ctx.args)
     ctx.args = []  # Prevent Click from re-processing passthrough args later.
     return ctx.forward(_deploy, docker_build_args=docker_build_args)
+
+
+@deploy.group(
+    "revisions", cls=NestedHelpGroup, help="[Beta] Manage deployment revisions."
+)
+def deploy_revisions() -> None:
+    pass
 
 
 @_deploy_base_options()
@@ -1223,6 +1251,39 @@ def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -
         click.echo("No deployments found.")
         return
     click.echo(format_deployments_table(deployments))
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--limit",
+    type=int,
+    default=10,
+    show_default=True,
+    help="Maximum number of revisions to return.",
+)
+@click.argument("deployment_id")
+@deploy_revisions.command(
+    "list",
+    help=(
+        "[Beta] List revisions for a LangSmith Deployment.\n\n"
+        "Use the `deploy list` command to list deployment IDs."
+    ),
+)
+def deploy_revisions_list(
+    api_key: str | None, host_url: str | None, limit: int, deployment_id: str
+) -> None:
+    client = _create_host_backend_client(host_url, api_key)
+    response = _call_host_backend_with_optional_tenant(
+        client,
+        lambda c: c.list_revisions(deployment_id, limit=limit),
+    )
+    resources = response.get("resources", []) if isinstance(response, dict) else []
+    revisions = [item for item in resources if isinstance(item, dict)]
+    if not revisions:
+        click.echo(f"No revisions found for deployment {deployment_id}.")
+        return
+    click.echo(format_revisions_table(revisions))
 
 
 @OPT_HOST_API_KEY

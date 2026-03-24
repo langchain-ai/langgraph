@@ -22,11 +22,11 @@ jobs:
         with:
           format: json
       - name: Set up Python 3.11
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: "3.11"
-          enable-cache: true
           cache-suffix: "bench"
+          working-directory: libs/langgraph
       - name: Install dependencies
         run: uv sync --group test
       - name: Download baseline
