@@ -196,8 +196,16 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
             if cancel:
                 task.cancel(self.sentinel)
         # wait for all tasks to finish
+        # Use asyncio.shield so that if the outer coroutine is cancelled while
+        # we are waiting, the wait itself is not interrupted — all background
+        # tasks are still given a chance to complete.  The CancelledError that
+        # asyncio re-delivers to this coroutine after shield() returns is caught
+        # here so that the task-exception inspection below can still run.
         if tasks:
-            await asyncio.wait(tasks)
+            try:
+                await asyncio.shield(asyncio.wait(tasks))
+            except asyncio.CancelledError:
+                pass
         # if there's already an exception being raised, don't raise another one
         if exc_type is None:
             # re-raise the first exception that occurred in a task
