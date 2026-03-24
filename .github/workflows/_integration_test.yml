@@ -46,12 +46,11 @@ jobs:
           filter: "libs/cli/**"
       - name: Set up Python ${{ matrix.python-version }}
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ matrix.python-version }}
-          enable-cache: true
           cache-suffix: "cli-integration-test"
-          ignore-nothing-to-cache: true
+          working-directory: libs/cli
       - name: Install cli globally
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
         run: pip install -e .
