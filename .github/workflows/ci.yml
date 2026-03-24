@@ -125,11 +125,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python-version }}
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: "3.13"
-          enable-cache: true
           cache-suffix: "schema-check-cli"
+          working-directory: libs/cli
       - name: Install CLI dependencies
         run: |
           cd libs/cli

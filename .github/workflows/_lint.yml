@@ -40,11 +40,11 @@ jobs:
           filter: "${{ inputs.working-directory }}/**"
       - name: Set up Python ${{ matrix.python-version }}
         if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ matrix.python-version }}
-          enable-cache: true
           cache-suffix: lint-${{ inputs.working-directory }}
+          working-directory: ${{ inputs.working-directory }}
 
       - name: Install dependencies
         if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
