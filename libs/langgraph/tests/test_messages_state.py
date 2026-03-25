@@ -208,6 +208,21 @@ def test_messages_state(state_schema):
     condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
     reason="Requires langchain_core>=0.3.11.",
 )
+def test_add_messages_format_openai_preserves_ids():
+    """Regression test: add_messages(format="langchain-openai") must preserve message IDs."""
+    left = [HumanMessage(content="hello", id="msg-1")]
+    right = [AIMessage(content="world", id="msg-2")]
+
+    result = add_messages(left, right, format="langchain-openai")
+
+    assert result[0].id == "msg-1", f"Expected 'msg-1', got {result[0].id!r}"
+    assert result[1].id == "msg-2", f"Expected 'msg-2', got {result[1].id!r}"
+
+
+@pytest.mark.skipif(
+    condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
+    reason="Requires langchain_core>=0.3.11.",
+)
 def test_messages_state_format_openai():
     class State(TypedDict):
         messages: Annotated[list[AnyMessage], add_messages(format="langchain-openai")]
