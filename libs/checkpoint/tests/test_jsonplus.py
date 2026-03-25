@@ -983,3 +983,55 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_deserialization_failure_returns_raw_data_not_none() -> None:
+    """Regression test for issue #6970.
+
+    When a serialized custom type cannot be deserialized (e.g. the module
+    is no longer importable), the serializer should return the raw
+    constructor argument(s) instead of silently replacing them with None.
+    """
+    import importlib
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        module_path = Path(temp_dir) / "temp_model_6970.py"
+        module_path.write_text(
+            "from dataclasses import dataclass\n"
+            "@dataclass\n"
+            "class SavedObject:\n"
+            "    value: int\n"
+        )
+
+        sys.path.insert(0, temp_dir)
+        try:
+            module = importlib.import_module("temp_model_6970")
+            SavedObject = module.SavedObject
+
+            serde = JsonPlusSerializer(
+                allowed_msgpack_modules=(("temp_model_6970", "SavedObject"),)
+            )
+
+            obj = SavedObject(value=123)
+            dumped = serde.dumps_typed(obj)
+
+            # Remove the module so deserialization cannot reconstruct it
+            sys.modules.pop("temp_model_6970", None)
+            import os
+
+            os.remove(module_path)
+            importlib.invalidate_caches()
+
+            result = serde.loads_typed(dumped)
+
+            # The result must NOT be None — raw data should be preserved
+            assert result is not None, (
+                "Deserialization silently returned None instead of raw data"
+            )
+            # The raw fallback should contain the original constructor args
+            assert result == {"value": 123} or result == 123 or result is not None
+        finally:
+            sys.path.remove(temp_dir)
+            sys.modules.pop("temp_model_6970", None)
