@@ -136,7 +136,7 @@ from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
-from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
+from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, RunControl, Runtime
 from langgraph.types import (
     All,
     CachePolicy,
@@ -2643,14 +2643,15 @@ class Pregel(
             if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = Runtime(
                 context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
                 execution_info=ExecutionInfo(),
+                control=parent_runtime.control or RunControl(),
             )
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
@@ -3010,14 +3011,15 @@ class Pregel(
             if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = Runtime(
                 context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
                 execution_info=ExecutionInfo(),
+                control=parent_runtime.control or RunControl(),
             )
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 

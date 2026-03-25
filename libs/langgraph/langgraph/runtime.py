@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field, replace
 from typing import Any, Generic, NamedTuple, cast
 
@@ -11,7 +12,7 @@ from langgraph.config import get_config
 from langgraph.types import _DC_KWARGS, StreamWriter
 from langgraph.typing import ContextT
 
-__all__ = ("ExecutionInfo", "Runtime", "get_runtime")
+__all__ = ("ExecutionInfo", "RunControl", "Runtime", "get_runtime")
 
 
 class ExecutionInfo(NamedTuple):
@@ -28,6 +29,36 @@ class ExecutionInfo(NamedTuple):
         return self._replace(**overrides)
 
 
+class RunControl:
+    """Run-scoped control surface for cooperative draining.
+
+    The API is synchronous on purpose so the same control object can be used
+    from both sync and async runtimes.
+    """
+
+    __slots__ = ("_drain_reason", "_drain_requested", "_lock")
+
+    def __init__(self) -> None:
+        self._drain_requested = False
+        self._drain_reason: str | None = None
+        self._lock = threading.Lock()
+
+    def request_drain(self, reason: str = "shutdown") -> None:
+        with self._lock:
+            self._drain_requested = True
+            self._drain_reason = reason
+
+    @property
+    def drain_requested(self) -> bool:
+        with self._lock:
+            return self._drain_requested
+
+    @property
+    def drain_reason(self) -> str | None:
+        with self._lock:
+            return self._drain_reason
+
+
 def _no_op_stream_writer(_: Any) -> None: ...
 
 
@@ -37,6 +68,7 @@ class _RuntimeOverrides(TypedDict, Generic[ContextT], total=False):
     stream_writer: StreamWriter
     previous: Any
     execution_info: ExecutionInfo
+    control: RunControl | None
 
 
 @dataclass(**_DC_KWARGS)
@@ -133,6 +165,9 @@ class Runtime(Generic[ContextT]):
     execution_info: ExecutionInfo = field(default_factory=ExecutionInfo)
     """Read-only execution information/metadata for the current node run."""
 
+    control: RunControl | None = field(default=None)
+    """Run-scoped control plane for cooperative draining."""
+
     def merge(self, other: Runtime[ContextT]) -> Runtime[ContextT]:
         """Merge two runtimes together.
 
@@ -146,6 +181,7 @@ class Runtime(Generic[ContextT]):
             else self.stream_writer,
             previous=self.previous if other.previous is None else other.previous,
             execution_info=other.execution_info,
+            control=other.control or self.control,
         )
 
     def override(
@@ -161,6 +197,22 @@ class Runtime(Generic[ContextT]):
             execution_info=self.execution_info.patch(**overrides),
         )
 
+    @property
+    def drain_requested(self) -> bool:
+        return self.control.drain_requested if self.control is not None else False
+
+    @property
+    def drain_reason(self) -> str | None:
+        return self.control.drain_reason if self.control is not None else None
+
+    def request_drain(self, reason: str = "shutdown") -> None:
+        if self.control is None:
+            raise RuntimeError(
+                "No run control is attached to this runtime. "
+                "Request drain from an active graph runtime."
+            )
+        self.control.request_drain(reason)
+
 
 DEFAULT_RUNTIME = Runtime(
     context=None,
@@ -168,6 +220,7 @@ DEFAULT_RUNTIME = Runtime(
     stream_writer=_no_op_stream_writer,
     previous=None,
     execution_info=ExecutionInfo(),
+    control=None,
 )
 
 

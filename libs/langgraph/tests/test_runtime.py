@@ -6,7 +6,7 @@ from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.runtime import Runtime, get_runtime
+from langgraph.runtime import RunControl, Runtime, get_runtime
 
 
 def test_injected_runtime() -> None:
@@ -76,6 +76,61 @@ def test_merge_runtime() -> None:
     assert runtime1.merge(runtime2).context.api_key == "def"
     # override only applies to non-falsy values
     assert runtime1.merge(runtime3).context.api_key == "abc"  # type: ignore
+
+
+def test_merge_runtime_preserves_run_control() -> None:
+    control = RunControl()
+    runtime1 = Runtime(control=control)
+    runtime2 = Runtime(context=None)
+
+    assert runtime1.merge(runtime2).control is control
+
+
+def test_runtime_request_drain_stops_future_steps() -> None:
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    def first_node(state: State, runtime: Runtime) -> dict[str, str]:
+        runtime.request_drain()
+        return {"first": "done"}
+
+    def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", first_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    result = graph.compile().invoke({})
+    assert result == {"first": "done"}
+
+
+@pytest.mark.anyio
+async def test_runtime_request_drain_stops_future_steps_async() -> None:
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    async def first_node(state: State, runtime: Runtime) -> dict[str, str]:
+        runtime.request_drain()
+        return {"first": "done"}
+
+    async def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", first_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    result = await graph.compile().ainvoke({})
+    assert result == {"first": "done"}
 
 
 def test_runtime_propogated_to_subgraph() -> None:

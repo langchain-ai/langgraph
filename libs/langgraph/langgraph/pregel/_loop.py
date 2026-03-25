@@ -112,6 +112,7 @@ from langgraph.pregel.debug import (
     map_debug_tasks,
 )
 from langgraph.pregel.protocol import StreamChunk, StreamProtocol
+from langgraph.runtime import Runtime
 from langgraph.types import (
     All,
     CachePolicy,
@@ -196,6 +197,7 @@ class PregelLoop:
         "input",
         "pending",
         "done",
+        "draining",
         "interrupt_before",
         "interrupt_after",
         "out_of_steps",
@@ -423,6 +425,8 @@ class PregelLoop:
         self, task: PregelExecutableTask, write_idx: int, call: Call | None = None
     ) -> PregelExecutableTask | None:
         """Accept a PUSH from a task, potentially returning a new task to start."""
+        if self._drain_requested():
+            return None
         checkpoint_id_bytes = binascii.unhexlify(self.checkpoint["id"].replace("-", ""))
         null_version = checkpoint_null_version(self.checkpoint)
         if pushed := cast(
@@ -468,6 +472,10 @@ class PregelLoop:
         # check if iteration limit is reached
         if self.step > self.stop:
             self.status = "out_of_steps"
+            return False
+
+        if self._drain_requested():
+            self.status = "draining"
             return False
 
         # prepare next tasks
@@ -586,6 +594,10 @@ class PregelLoop:
                 continue
             if task := tasks.get(tid):
                 task.writes.append((k, v))
+
+    def _drain_requested(self) -> bool:
+        runtime = self.config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+        return isinstance(runtime, Runtime) and runtime.drain_requested
 
     def _pending_interrupts(self) -> set[str]:
         """Return the set of interrupt ids that are pending without corresponding resume values."""
