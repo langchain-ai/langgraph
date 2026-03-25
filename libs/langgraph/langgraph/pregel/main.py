@@ -102,6 +102,7 @@ from langgraph.config import get_config
 from langgraph.constants import END
 from langgraph.errors import (
     ErrorCode,
+    GraphDrained,
     GraphRecursionError,
     InvalidUpdateError,
     create_error_message,
@@ -2452,6 +2453,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
         version: Literal["v2"],
@@ -2471,6 +2473,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
         version: Literal["v1"] = ...,
@@ -2489,6 +2492,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
         version: Literal["v1", "v2"] = "v1",
@@ -2650,7 +2654,7 @@ class Pregel(
                 stream_writer=stream_writer,
                 previous=None,
                 execution_info=ExecutionInfo(),
-                control=parent_runtime.control or RunControl(),
+                control=control or parent_runtime.control or RunControl(),
             )
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
@@ -2766,6 +2770,10 @@ class Pregel(
                     error_code=ErrorCode.GRAPH_RECURSION_LIMIT,
                 )
                 raise GraphRecursionError(msg)
+            elif loop.status == "draining":
+                _rt = config[CONF].get(CONFIG_KEY_RUNTIME)
+                _reason = _rt.drain_reason if isinstance(_rt, Runtime) else None
+                raise GraphDrained(_reason or "shutdown")
             # set final channel values as run output
             run_manager.on_chain_end(loop.output)
         except BaseException as e:
@@ -2785,6 +2793,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
         version: Literal["v2"],
@@ -2804,6 +2813,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
         version: Literal["v1"] = ...,
@@ -2822,6 +2832,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
         version: Literal["v1", "v2"] = "v1",
@@ -3018,7 +3029,7 @@ class Pregel(
                 stream_writer=stream_writer,
                 previous=None,
                 execution_info=ExecutionInfo(),
-                control=parent_runtime.control or RunControl(),
+                control=control or parent_runtime.control or RunControl(),
             )
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
@@ -3160,6 +3171,10 @@ class Pregel(
                     error_code=ErrorCode.GRAPH_RECURSION_LIMIT,
                 )
                 raise GraphRecursionError(msg)
+            elif loop.status == "draining":
+                _rt = config[CONF].get(CONFIG_KEY_RUNTIME)
+                _reason = _rt.drain_reason if isinstance(_rt, Runtime) else None
+                raise GraphDrained(_reason or "shutdown")
             # set final channel values as run output
             await run_manager.on_chain_end(loop.output)
         except BaseException as e:
@@ -3179,6 +3194,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         version: Literal["v2"],
         **kwargs: Any,
     ) -> GraphOutput[OutputT]: ...
@@ -3196,6 +3212,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         version: Literal["v2"],
         **kwargs: Any,
     ) -> list[StreamPart[StateT, OutputT]]: ...
@@ -3213,6 +3230,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         version: Literal["v1"] = ...,
         **kwargs: Any,
     ) -> dict[str, Any] | Any: ...
@@ -3229,6 +3247,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
@@ -3280,6 +3299,7 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
+                control=control,
                 version=version,
                 **kwargs,
             ):
@@ -3303,6 +3323,7 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
+                control=control,
                 **kwargs,
             ):
                 if stream_mode == "values":
@@ -3349,6 +3370,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         version: Literal["v2"],
         **kwargs: Any,
     ) -> GraphOutput[OutputT]: ...
@@ -3366,6 +3388,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         version: Literal["v2"],
         **kwargs: Any,
     ) -> list[StreamPart[StateT, OutputT]]: ...
@@ -3383,6 +3406,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         version: Literal["v1"] = ...,
         **kwargs: Any,
     ) -> dict[str, Any] | Any: ...
@@ -3399,6 +3423,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
@@ -3450,6 +3475,7 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
+                control=control,
                 version=version,
                 **kwargs,
             ):
@@ -3473,6 +3499,7 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
+                control=control,
                 **kwargs,
             ):
                 if stream_mode == "values":

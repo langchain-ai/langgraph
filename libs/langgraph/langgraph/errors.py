@@ -15,6 +15,7 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10
 __all__ = (
     "EmptyChannelError",
     "ErrorCode",
+    "GraphDrained",
     "GraphRecursionError",
     "InvalidUpdateError",
     "GraphBubbleUp",
@@ -40,6 +41,19 @@ def create_error_message(*, message: str, error_code: ErrorCode) -> str:
         "For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/"
         f"errors/{error_code.value}"
     )
+
+
+class GraphDrained(Exception):
+    """Raised when a graph run exits early due to a drain request.
+
+    This indicates the graph stopped cooperatively at a superstep boundary
+    because `RunControl.request_drain()` was called (e.g., in response to
+    SIGTERM). The checkpoint is saved and the run can be resumed later.
+    """
+
+    def __init__(self, reason: str = "shutdown") -> None:
+        self.reason = reason
+        super().__init__(f"Graph drained: {reason}")
 
 
 class GraphRecursionError(RecursionError):

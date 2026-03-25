@@ -1,3 +1,6 @@
+import asyncio
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -5,6 +8,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
+from langgraph.errors import GraphDrained
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import RunControl, Runtime, get_runtime
 
@@ -105,8 +109,8 @@ def test_runtime_request_drain_stops_future_steps() -> None:
     graph.add_edge("first", "second")
     graph.add_edge("second", END)
 
-    result = graph.compile().invoke({})
-    assert result == {"first": "done"}
+    with pytest.raises(GraphDrained, match="shutdown"):
+        graph.compile().invoke({})
 
 
 @pytest.mark.anyio
@@ -129,8 +133,8 @@ async def test_runtime_request_drain_stops_future_steps_async() -> None:
     graph.add_edge("first", "second")
     graph.add_edge("second", END)
 
-    result = await graph.compile().ainvoke({})
-    assert result == {"first": "done"}
+    with pytest.raises(GraphDrained, match="shutdown"):
+        await graph.compile().ainvoke({})
 
 
 def test_runtime_propogated_to_subgraph() -> None:
@@ -444,3 +448,115 @@ def test_context_coercion_pydantic_validation_errors() -> None:
         compiled.invoke(
             {"message": "test"}, context={"api_key": "sk_test", "timeout": "not_an_int"}
         )
+
+
+def test_external_drain_concurrent_sync() -> None:
+    """External thread calls request_drain() while graph is mid-execution."""
+
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    started = threading.Event()
+
+    def first_node(state: State) -> dict[str, str]:
+        started.set()
+        time.sleep(0.5)
+        return {"first": "done"}
+
+    def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", first_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    control = RunControl()
+    compiled = graph.compile()
+
+    exc_holder: list[BaseException | None] = [None]
+
+    def run_graph() -> None:
+        try:
+            compiled.invoke({}, control=control)
+        except GraphDrained as e:
+            exc_holder[0] = e
+
+    t = threading.Thread(target=run_graph)
+    t.start()
+
+    started.wait(timeout=5)
+    control.request_drain("sigterm")
+
+    t.join(timeout=10)
+
+    exc = exc_holder[0]
+    assert isinstance(exc, GraphDrained)
+    assert exc.reason == "sigterm"
+
+
+@pytest.mark.anyio
+async def test_external_drain_concurrent_async() -> None:
+    """External task calls request_drain() while graph is mid-execution."""
+
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    started = asyncio.Event()
+
+    async def first_node(state: State) -> dict[str, str]:
+        started.set()
+        await asyncio.sleep(0.5)
+        return {"first": "done"}
+
+    async def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", first_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    control = RunControl()
+    compiled = graph.compile()
+
+    async def drain_after_start() -> None:
+        await started.wait()
+        control.request_drain("sigterm")
+
+    drain_task = asyncio.create_task(drain_after_start())
+
+    with pytest.raises(GraphDrained, match="sigterm"):
+        await compiled.ainvoke({}, control=control)
+
+    await drain_task
+
+
+def test_drain_with_control_parameter_sync() -> None:
+    """Control parameter is wired through invoke -> stream."""
+
+    class State(TypedDict, total=False):
+        value: str
+
+    def node(state: State) -> dict[str, str]:
+        return {"value": "done"}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.add_edge(START, "node")
+    graph.add_edge("node", END)
+
+    # Pre-drained control should immediately stop after first step
+    control = RunControl()
+    control.request_drain("pre-drained")
+
+    # Graph has only one node in first step, so it completes that step
+    # then drain prevents any further steps
+    with pytest.raises(GraphDrained, match="pre-drained"):
+        graph.compile().invoke({}, control=control)
