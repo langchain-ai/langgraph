@@ -73,7 +73,7 @@ def map_command(cmd: Command) -> Iterator[tuple[str, str, Any]]:
                 )
     if cmd.resume is not None:
         yield (NULL_TASK_ID, RESUME, cmd.resume)
-    if cmd.update:
+    if cmd.update is not None:
         for k, v in cmd._update_as_tuples():
             yield (NULL_TASK_ID, k, v)
 
