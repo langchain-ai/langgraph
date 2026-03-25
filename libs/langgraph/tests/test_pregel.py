@@ -4966,6 +4966,54 @@ def test_interrupt_loop(sync_checkpointer: BaseCheckpointSaver):
     ]
 
 
+def test_command_resume_none(sync_checkpointer: BaseCheckpointSaver):
+    """Test that Command(resume=None) raises EmptyInputError, not UnboundLocalError.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/7034.
+    Previously, resume_is_map was only defined inside the
+    `if (resume := self.input.resume) is not None` block but referenced
+    unconditionally, causing UnboundLocalError. After the fix, the existing
+    EmptyInputError is raised instead.
+    """
+    from langgraph.errors import EmptyInputError
+
+    class State(TypedDict):
+        result: str
+
+    def checkpoint_node(state: State):
+        interrupt(None)
+        return {}
+
+    def work_node(state: State):
+        return {"result": "done"}
+
+    builder = StateGraph(State)
+    builder.add_node("checkpoint", checkpoint_node)
+    builder.add_node("work", work_node)
+    builder.add_edge(START, "checkpoint")
+    builder.add_edge("checkpoint", "work")
+    builder.add_edge("work", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt
+    assert [e for e in graph.stream({"result": ""}, config)] == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value=None,
+                    id=AnyStr(),
+                ),
+            )
+        }
+    ]
+
+    # Resume with None — previously raised UnboundLocalError, now EmptyInputError
+    with pytest.raises(EmptyInputError, match="Received empty Command input"):
+        list(graph.stream(Command(resume=None), config))
+
+
 def test_interrupt_functional(
     sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
 ) -> None:
