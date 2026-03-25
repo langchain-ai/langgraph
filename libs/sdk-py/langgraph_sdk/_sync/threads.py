@@ -10,6 +10,7 @@ from langgraph_sdk.schema import (
     Checkpoint,
     Json,
     OnConflictBehavior,
+    PruneStrategy,
     QueryParamTypes,
     SortOrder,
     StreamPart,
@@ -44,6 +45,7 @@ class SyncThreadsClient:
         self,
         thread_id: str,
         *,
+        include: Sequence[str] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -51,7 +53,10 @@ class SyncThreadsClient:
 
         Args:
             thread_id: The ID of the thread to get.
+            include: Additional fields to include in the response.
+                Supported values: `"ttl"`.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             `Thread` object.
@@ -77,8 +82,16 @@ class SyncThreadsClient:
             ```
 
         """
-
-        return self.http.get(f"/threads/{thread_id}", headers=headers, params=params)
+        query_params: dict[str, Any] = {}
+        if include:
+            query_params["include"] = ",".join(include)
+        if params:
+            query_params.update(params)
+        return self.http.get(
+            f"/threads/{thread_id}",
+            headers=headers,
+            params=query_params or None,
+        )
 
     def create(
         self,
@@ -242,6 +255,7 @@ class SyncThreadsClient:
         sort_by: ThreadSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[ThreadSelectField] | None = None,
+        extract: dict[str, str] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Thread]:
@@ -255,7 +269,17 @@ class SyncThreadsClient:
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
+            sort_by: Sort by field.
+            sort_order: Sort order.
+            select: List of fields to include in the response.
+            extract: Dictionary mapping aliases to JSONB paths to extract
+                from thread data. Paths use dot notation for nested keys and
+                bracket notation for array indices (e.g.,
+                `{"last_msg": "values.messages[-1]"}`). Extracted values are
+                returned in an `extracted` field on each thread. Maximum 10
+                paths per request.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             List of the threads matching the search parameters.
@@ -290,6 +314,8 @@ class SyncThreadsClient:
             payload["sort_order"] = sort_order
         if select:
             payload["select"] = select
+        if extract:
+            payload["extract"] = extract
         return self.http.post(
             "/threads/search", json=payload, headers=headers, params=params
         )
@@ -355,6 +381,47 @@ class SyncThreadsClient:
         """
         return self.http.post(
             f"/threads/{thread_id}/copy", json=None, headers=headers, params=params
+        )
+
+    def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: PruneStrategy = "delete",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> dict[str, Any]:
+        """Prune threads by ID.
+
+        Args:
+            thread_ids: List of thread IDs to prune.
+            strategy: The prune strategy. `"delete"` removes threads entirely.
+                `"keep_latest"` prunes old checkpoints but keeps threads and their
+                latest state. Defaults to `"delete"`.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            A dict containing `pruned_count` (number of threads pruned).
+
+        ???+ example "Example Usage"
+
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
+            result = client.threads.prune(
+                thread_ids=["thread_1", "thread_2"],
+            )
+            print(result)  # {'pruned_count': 2}
+            ```
+
+        """
+        payload: dict[str, Any] = {
+            "thread_ids": thread_ids,
+        }
+        if strategy != "delete":
+            payload["strategy"] = strategy
+        return self.http.post(
+            "/threads/prune", json=payload, headers=headers, params=params
         )
 
     def get_state(
@@ -476,7 +543,7 @@ class SyncThreadsClient:
         elif checkpoint_id:
             get_params = {"subgraphs": subgraphs}
             if params:
-                get_params = {**get_params, **params}
+                get_params = {**get_params, **dict(params)}
             return self.http.get(
                 f"/threads/{thread_id}/state/{checkpoint_id}",
                 params=get_params,
@@ -485,7 +552,7 @@ class SyncThreadsClient:
         else:
             get_params = {"subgraphs": subgraphs}
             if params:
-                get_params = {**get_params, **params}
+                get_params = {**get_params, **dict(params)}
             return self.http.get(
                 f"/threads/{thread_id}/state",
                 params=get_params,

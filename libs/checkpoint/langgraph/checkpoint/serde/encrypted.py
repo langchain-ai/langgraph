@@ -41,7 +41,7 @@ class EncryptedSerializer(SerializerProtocol):
     ) -> "EncryptedSerializer":
         """Create an `EncryptedSerializer` using AES encryption."""
         try:
-            from Crypto.Cipher import AES  # type: ignore
+            from Crypto.Cipher import AES
         except ImportError:
             raise ImportError(
                 "Pycryptodome is not installed. Please install it with `pip install pycryptodome`."

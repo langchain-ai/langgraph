@@ -19,18 +19,16 @@ jobs:
       - uses: actions/checkout@v6
       
       - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
-          # use minimum supported Python version
           python-version: "3.10"
-          enable-cache: true
           cache-suffix: "uv-lock-upgrade"
           
       - name: Run uv lock --upgrade in all Python packages
         run: make lock-upgrade
           
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v8
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore(deps): upgrade dependencies with `uv lock --upgrade`"
