@@ -90,6 +90,25 @@ def _make_messages_graph() -> StateGraph[
     return builder
 
 
+def _make_streaming_messages_graph() -> StateGraph[
+    MessagesState, None, MessagesState, MessagesState
+]:
+    model = FakeChatModel(messages=[AIMessage(content="hello world", id="ai-1")])
+
+    def call_model(state: MessagesState) -> dict[str, Any]:
+        streamed = model.stream(state["messages"])
+        message = next(streamed)
+        for chunk in streamed:
+            message += chunk
+        return {"messages": message}
+
+    builder = StateGraph(MessagesState, input_schema=MessagesState)
+    builder.add_node("call_model", call_model)
+    builder.add_edge(START, "call_model")
+    builder.add_edge("call_model", END)
+    return builder
+
+
 def _make_custom_graph() -> Any:
     @entrypoint()
     def graph(inputs: Any, *, writer: StreamWriter) -> Any:
@@ -164,6 +183,26 @@ class TestV1BackwardsCompat:
             ns, _data = chunk
             assert isinstance(ns, tuple)
 
+    def test_stream_v1_messages_keep_metadata_on_every_chunk(self) -> None:
+        graph = _make_streaming_messages_graph().compile()
+        chunks = list(graph.stream(_MSG_INPUT, stream_mode="messages"))
+        metadata = [meta for _message, meta in chunks]
+        assert len(metadata) >= 3
+        assert all(isinstance(meta, dict) for meta in metadata)
+
+    def test_stream_v1_messages_compact_dedupes_metadata(self) -> None:
+        graph = _make_streaming_messages_graph().compile()
+        chunks = list(graph.stream(_MSG_INPUT, stream_mode=["messages", "compact"]))
+        metadata = [
+            meta
+            for mode, payload in chunks
+            if mode == "messages"
+            for _message, meta in [payload]
+        ]
+        assert len(metadata) >= 3
+        assert isinstance(metadata[0], dict)
+        assert all(meta is None for meta in metadata[1:])
+
 
 # --- v2 sync stream ---
 
@@ -204,6 +243,26 @@ class TestV2Stream:
             assert isinstance(message, BaseMessage)
             assert isinstance(metadata, dict)
             assert "langgraph_node" in metadata
+
+    def test_messages_streaming_compact_dedupes_metadata(self) -> None:
+        graph = _make_streaming_messages_graph().compile()
+        chunks = list(
+            graph.stream(
+                _MSG_INPUT,
+                stream_mode=["messages", "compact"],
+                version="v2",
+            )
+        )
+        msg_chunks = [c for c in chunks if c["type"] == "messages"]
+        assert len(msg_chunks) >= 3
+        first_message, first_metadata = msg_chunks[0]["data"]
+        assert isinstance(first_message, BaseMessage)
+        assert isinstance(first_metadata, dict)
+        assert "langgraph_node" in first_metadata
+        for chunk in msg_chunks[1:]:
+            message, metadata = chunk["data"]
+            assert isinstance(message, BaseMessage)
+            assert metadata is None
 
     def test_custom(self) -> None:
         graph = _make_custom_graph()
@@ -543,6 +602,29 @@ class TestV2StreamAsync:
             assert isinstance(message, BaseMessage)
             assert isinstance(metadata, dict)
             assert "langgraph_node" in metadata
+
+    @NEEDS_CONTEXTVARS
+    @pytest.mark.anyio
+    async def test_messages_streaming_compact_dedupes_metadata(self) -> None:
+        graph = _make_streaming_messages_graph().compile()
+        chunks = [
+            c
+            async for c in graph.astream(
+                _MSG_INPUT,
+                stream_mode=["messages", "compact"],
+                version="v2",
+            )
+        ]
+        msg_chunks = [c for c in chunks if c["type"] == "messages"]
+        assert len(msg_chunks) >= 3
+        first_message, first_metadata = msg_chunks[0]["data"]
+        assert isinstance(first_message, BaseMessage)
+        assert isinstance(first_metadata, dict)
+        assert "langgraph_node" in first_metadata
+        for chunk in msg_chunks[1:]:
+            message, metadata = chunk["data"]
+            assert isinstance(message, BaseMessage)
+            assert metadata is None
 
     @NEEDS_CONTEXTVARS
     @pytest.mark.anyio

@@ -58,6 +58,7 @@ StreamMode = Literal[
     "debug",
     "custom",
     "messages-tuple",
+    "compact",
 ]
 """
 Defines the mode of streaming:
@@ -69,6 +70,7 @@ Defines the mode of streaming:
 - "tasks": Stream task start and finish events.
 - "debug": Stream detailed debug information.
 - "custom": Stream custom events.
+- "compact": Enable compact streaming payloads for other selected modes.
 """
 
 DisconnectMode = Literal["cancel", "continue"]
@@ -733,6 +735,26 @@ class ValuesStreamPart(TypedDict):
     """List of interrupts that occurred during this step."""
 
 
+class ValuesPatchPayload(TypedDict):
+    """Incremental patch payload for subgraph `values` updates."""
+
+    values: dict[str, Any]
+    """Only the changed fields since the previous `values` event for this namespace."""
+    deleted_keys: NotRequired[list[str]]
+    """Optional list of keys that were removed from the previous values snapshot."""
+
+
+class ValuesPatchStreamPart(TypedDict):
+    """Stream part emitted for incremental subgraph value patches (`values-patch`)."""
+
+    type: Literal["values-patch"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: ValuesPatchPayload
+    """Incremental state patch for the namespace."""
+
+
 class UpdatesStreamPart(TypedDict):
     """Stream part emitted for `stream_mode="updates"`."""
 
@@ -845,6 +867,7 @@ class MetadataStreamPart(TypedDict):
 
 StreamPartV2 = (
     ValuesStreamPart
+    | ValuesPatchStreamPart
     | UpdatesStreamPart
     | MessagesPartialStreamPart
     | MessagesCompleteStreamPart
