@@ -8,6 +8,10 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 
+from langgraph_sdk._shared.utilities import (
+    _parse_cron_field,
+    _validate_cron_schedule,
+)
 from langgraph_sdk.client import (
     CronClient,
     HttpClient,
@@ -483,5 +487,222 @@ def test_sync_update_with_enabled_parameter(enabled_value):
             cron_id="cron_456",
             enabled=enabled_value,
         )
+
+    assert result == cron
+
+
+# ---------------------------------------------------------------------------
+# Schedule validation tests
+# ---------------------------------------------------------------------------
+
+
+class TestParseCronField:
+    """Tests for _parse_cron_field helper."""
+
+    def test_wildcard_returns_none(self):
+        assert _parse_cron_field("*", 1, 12) is None
+
+    def test_single_value(self):
+        assert _parse_cron_field("5", 1, 31) == [5]
+
+    def test_comma_list(self):
+        assert _parse_cron_field("1,15,28", 1, 31) == [1, 15, 28]
+
+    def test_range(self):
+        assert _parse_cron_field("3-6", 1, 12) == [3, 4, 5, 6]
+
+    def test_step(self):
+        assert _parse_cron_field("*/3", 1, 12) == [1, 4, 7, 10]
+
+    def test_range_with_step(self):
+        assert _parse_cron_field("1-10/3", 1, 31) == [1, 4, 7, 10]
+
+    def test_out_of_range_filtered(self):
+        assert _parse_cron_field("30,31", 1, 12) == []
+
+
+class TestValidateCronSchedule:
+    """Tests for _validate_cron_schedule."""
+
+    # --- impossible schedules that should raise ValueError ---
+
+    def test_feb_31(self):
+        with pytest.raises(ValueError, match="never exist"):
+            _validate_cron_schedule("0 23 31 2 *")
+
+    def test_feb_30(self):
+        with pytest.raises(ValueError, match="never exist"):
+            _validate_cron_schedule("0 0 30 2 *")
+
+    def test_feb_30_and_31(self):
+        with pytest.raises(ValueError, match="never exist"):
+            _validate_cron_schedule("0 0 30,31 2 *")
+
+    def test_apr_31(self):
+        with pytest.raises(ValueError, match="never exist"):
+            _validate_cron_schedule("0 0 31 4 *")
+
+    def test_jun_31(self):
+        with pytest.raises(ValueError, match="never exist"):
+            _validate_cron_schedule("0 0 31 6 *")
+
+    def test_sep_31(self):
+        with pytest.raises(ValueError, match="never exist"):
+            _validate_cron_schedule("0 0 31 9 *")
+
+    def test_nov_31(self):
+        with pytest.raises(ValueError, match="never exist"):
+            _validate_cron_schedule("0 0 31 11 *")
+
+    def test_31st_in_all_30day_months(self):
+        """Day 31 in months 4,6,9,11 — none of these months have 31 days."""
+        with pytest.raises(ValueError, match="never exist"):
+            _validate_cron_schedule("0 0 31 4,6,9,11 *")
+
+    # --- valid schedules that should NOT raise ---
+
+    def test_valid_every_minute(self):
+        _validate_cron_schedule("* * * * *")  # should not raise
+
+    def test_valid_daily(self):
+        _validate_cron_schedule("0 0 * * *")
+
+    def test_valid_monthly_15th(self):
+        _validate_cron_schedule("0 0 15 * *")
+
+    def test_valid_jan_31(self):
+        _validate_cron_schedule("0 0 31 1 *")  # Jan has 31 days
+
+    def test_valid_mar_31(self):
+        _validate_cron_schedule("0 0 31 3 *")  # Mar has 31 days
+
+    def test_valid_feb_29(self):
+        """Feb 29 is valid — it occurs in leap years."""
+        _validate_cron_schedule("0 0 29 2 *")
+
+    def test_valid_feb_28(self):
+        _validate_cron_schedule("0 0 28 2 *")
+
+    def test_wildcard_day(self):
+        _validate_cron_schedule("0 0 * 2 *")
+
+    def test_wildcard_month(self):
+        _validate_cron_schedule("0 0 31 * *")
+
+    def test_day_range_with_some_valid(self):
+        """Day 28-31 in Feb: 28 and 29 are valid, so this should pass."""
+        _validate_cron_schedule("0 0 28-31 2 *")
+
+    def test_multiple_months_some_valid(self):
+        """Day 31 in months 1,2: Jan 31 is valid even though Feb 31 is not."""
+        _validate_cron_schedule("0 0 31 1,2 *")
+
+    def test_non_standard_format_ignored(self):
+        """Non 5-field expressions are passed through to server."""
+        _validate_cron_schedule("@daily")  # should not raise
+
+
+@pytest.mark.asyncio
+async def test_async_create_rejects_impossible_schedule():
+    """Async create should raise ValueError for impossible schedules."""
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})),
+        base_url="https://example.com",
+    ) as client:
+        cron_client = CronClient(HttpClient(client))
+        with pytest.raises(ValueError, match="never exist"):
+            await cron_client.create(
+                assistant_id="asst_123",
+                schedule="0 23 31 2 *",
+            )
+
+
+@pytest.mark.asyncio
+async def test_async_create_for_thread_rejects_impossible_schedule():
+    """Async create_for_thread should raise ValueError for impossible schedules."""
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})),
+        base_url="https://example.com",
+    ) as client:
+        cron_client = CronClient(HttpClient(client))
+        with pytest.raises(ValueError, match="never exist"):
+            await cron_client.create_for_thread(
+                thread_id="thread_123",
+                assistant_id="asst_123",
+                schedule="0 23 31 2 *",
+            )
+
+
+@pytest.mark.asyncio
+async def test_async_update_rejects_impossible_schedule():
+    """Async update should raise ValueError for impossible schedules."""
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})),
+        base_url="https://example.com",
+    ) as client:
+        cron_client = CronClient(HttpClient(client))
+        with pytest.raises(ValueError, match="never exist"):
+            await cron_client.update(
+                cron_id="cron_123",
+                schedule="0 0 31 4 *",
+            )
+
+
+def test_sync_create_rejects_impossible_schedule():
+    """Sync create should raise ValueError for impossible schedules."""
+    with httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})),
+        base_url="https://example.com",
+    ) as client:
+        cron_client = SyncCronClient(SyncHttpClient(client))
+        with pytest.raises(ValueError, match="never exist"):
+            cron_client.create(
+                assistant_id="asst_456",
+                schedule="0 0 30 2 *",
+            )
+
+
+def test_sync_create_for_thread_rejects_impossible_schedule():
+    """Sync create_for_thread should raise ValueError for impossible schedules."""
+    with httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})),
+        base_url="https://example.com",
+    ) as client:
+        cron_client = SyncCronClient(SyncHttpClient(client))
+        with pytest.raises(ValueError, match="never exist"):
+            cron_client.create_for_thread(
+                thread_id="thread_123",
+                assistant_id="asst_123",
+                schedule="0 0 30 2 *",
+            )
+
+
+def test_sync_update_rejects_impossible_schedule():
+    """Sync update should raise ValueError for impossible schedules."""
+    with httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})),
+        base_url="https://example.com",
+    ) as client:
+        cron_client = SyncCronClient(SyncHttpClient(client))
+        with pytest.raises(ValueError, match="never exist"):
+            cron_client.update(
+                cron_id="cron_456",
+                schedule="0 0 31 6 *",
+            )
+
+
+def test_sync_update_no_schedule_skips_validation():
+    """Sync update without schedule should not trigger validation."""
+    cron = _cron_response()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=cron)
+
+    with httpx.Client(
+        transport=httpx.MockTransport(handler),
+        base_url="https://example.com",
+    ) as client:
+        cron_client = SyncCronClient(SyncHttpClient(client))
+        result = cron_client.update(cron_id="cron_456", enabled=False)
 
     assert result == cron

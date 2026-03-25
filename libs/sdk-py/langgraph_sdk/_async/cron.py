@@ -8,7 +8,7 @@ from datetime import datetime, tzinfo
 from typing import Any
 
 from langgraph_sdk._async.http import HttpClient
-from langgraph_sdk._shared.utilities import _resolve_timezone
+from langgraph_sdk._shared.utilities import _resolve_timezone, _validate_cron_schedule
 from langgraph_sdk.schema import (
     All,
     Config,
@@ -135,6 +135,8 @@ class CronClient:
             )
             ```
         """
+        _validate_cron_schedule(schedule)
+
         if checkpoint_during is not None:
             warnings.warn(
                 "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
@@ -253,6 +255,8 @@ class CronClient:
             ```
 
         """
+        _validate_cron_schedule(schedule)
+
         if checkpoint_during is not None:
             warnings.warn(
                 "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
@@ -381,6 +385,9 @@ class CronClient:
             ```
 
         """
+        if schedule is not None:
+            _validate_cron_schedule(schedule)
+
         payload = {
             "schedule": schedule,
             "end_time": end_time.isoformat() if end_time else None,

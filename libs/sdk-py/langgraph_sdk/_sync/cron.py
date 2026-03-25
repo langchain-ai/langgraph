@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, tzinfo
 from typing import Any
 
-from langgraph_sdk._shared.utilities import _resolve_timezone
+from langgraph_sdk._shared.utilities import _resolve_timezone, _validate_cron_schedule
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import (
     All,
@@ -126,6 +126,8 @@ class SyncCronClient:
             )
             ```
         """
+        _validate_cron_schedule(schedule)
+
         if checkpoint_during is not None:
             warnings.warn(
                 "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
@@ -243,6 +245,8 @@ class SyncCronClient:
             ```
 
         """
+        _validate_cron_schedule(schedule)
+
         if checkpoint_during is not None:
             warnings.warn(
                 "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
@@ -370,6 +374,9 @@ class SyncCronClient:
             ```
 
         """
+        if schedule is not None:
+            _validate_cron_schedule(schedule)
+
         payload = {
             "schedule": schedule,
             "end_time": end_time.isoformat() if end_time else None,

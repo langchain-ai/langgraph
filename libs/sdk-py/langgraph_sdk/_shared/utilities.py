@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import functools
 import os
 import re
@@ -180,3 +181,81 @@ def get_asgi_transport() -> type[httpx.ASGITransport]:
     except ImportError:
         # Older versions of the server
         return httpx.ASGITransport
+
+
+def _parse_cron_field(field: str, min_val: int, max_val: int) -> list[int] | None:
+    """Parse a single cron field into a sorted list of integer values.
+
+    Returns None if the field is '*' (meaning all values).
+    """
+    if field == "*":
+        return None
+
+    values: set[int] = set()
+    for part in field.split(","):
+        if "/" in part:
+            range_part, step_str = part.split("/", 1)
+            step = int(step_str)
+            if range_part == "*":
+                start, end = min_val, max_val
+            elif "-" in range_part:
+                start, end = (int(x) for x in range_part.split("-", 1))
+            else:
+                start = int(range_part)
+                end = max_val
+            values.update(range(start, end + 1, step))
+        elif "-" in part:
+            start, end = (int(x) for x in part.split("-", 1))
+            values.update(range(start, end + 1))
+        else:
+            values.add(int(part))
+
+    return sorted(v for v in values if min_val <= v <= max_val)
+
+
+def _validate_cron_schedule(schedule: str) -> None:
+    """Validate that a cron schedule can produce at least one valid trigger time.
+
+    Raises ValueError for cron expressions that specify month/day combinations
+    which never exist (e.g., ``0 23 31 2 *`` for February 31st).
+
+    The Go cron library used by the LangGraph server silently returns a zero-value
+    time (``0001-01-01T00:00:00``) for such schedules, which causes the
+    scheduler's ``WHERE next_run_date <= NOW()`` condition to always be true,
+    triggering the cron job in an infinite loop every few seconds.
+    """
+    parts = schedule.strip().split()
+    if len(parts) != 5:
+        return  # non-standard format, let the server validate
+
+    _, _, day_field, month_field, _ = parts
+
+    # Only validate when both day-of-month and month are constrained
+    if day_field == "*" or month_field == "*":
+        return
+
+    try:
+        days = _parse_cron_field(day_field, 1, 31)
+        months = _parse_cron_field(month_field, 1, 12)
+    except (ValueError, IndexError):
+        return  # malformed, let the server validate
+
+    if not days or not months:
+        return
+
+    # Check across a full leap-year cycle (4 years) to account for Feb 29
+    for month in months:
+        max_day_in_month = max(
+            calendar.monthrange(year, month)[1] for year in range(2024, 2028)
+        )
+        for day in days:
+            if day <= max_day_in_month:
+                return  # at least one valid (month, day) combination exists
+
+    raise ValueError(
+        f"Cron schedule '{schedule}' specifies date(s) that never exist "
+        f"(day {day_field} in month {month_field}). "
+        f"The server's Go cron library would return a zero-value time for this "
+        f"schedule, causing the scheduler to trigger continuously in an infinite "
+        f"loop. See: https://github.com/langchain-ai/langgraph/issues/XXXX"
+    )
