@@ -321,7 +321,9 @@ def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
         warnings.warn(msg)
         return list(messages)
     else:
-        return convert_to_messages(convert_to_openai_messages(messages))
+        return convert_to_messages(
+            convert_to_openai_messages(messages, include_id=True)
+        )
 
 
 def push_message(
