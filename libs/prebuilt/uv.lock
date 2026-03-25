@@ -249,7 +249,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.2.20"
+version = "1.2.22"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -261,9 +261,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/db/41/6552a419fe549a79601e5a698d1d5ee2ca7fe93bb87fd624a16a8c1bdee3/langchain_core-1.2.20.tar.gz", hash = "sha256:c7ac8b976039b5832abb989fef058b88c270594ba331efc79e835df046e7dc44", size = 838330, upload-time = "2026-03-18T17:34:45.522Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b1/a3/c4cd6827a1df46c821e7214b7f7b7a28b189e6c9b84ef15c6d629c5e3179/langchain_core-1.2.22.tar.gz", hash = "sha256:8d8f726d03d3652d403da915126626bb6250747e8ba406537d849e68b9f5d058", size = 842487, upload-time = "2026-03-24T18:48:44.9Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/06/08c88ddd4d6766de4e6c43111ae8f3025df383d2a4379cb938fc571b49d4/langchain_core-1.2.20-py3-none-any.whl", hash = "sha256:b65ff678f3c3dc1f1b4d03a3af5ee3b8d51f9be5181d74eb53c6c11cd9dd5e68", size = 504215, upload-time = "2026-03-18T17:34:44.087Z" },
+    { url = "https://files.pythonhosted.org/packages/c7/a6/2ffacf0f1a3788f250e75d0b52a24896c413be11be3a6d42bcdf46fbea48/langchain_core-1.2.22-py3-none-any.whl", hash = "sha256:7e30d586b75918e828833b9ec1efc25465723566845dd652c277baf751e9c04b", size = 506829, upload-time = "2026-03-24T18:48:43.286Z" },
 ]
 
 [[package]]
@@ -1279,7 +1279,7 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.32.5"
+version = "2.33.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -1287,9 +1287,9 @@ dependencies = [
     { name = "idna" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c9/74/b3ff8e6c8446842c3f5c837e9c3dfcfe2018ea6ecef224c710c85ef728f4/requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf", size = 134517, upload-time = "2025-08-18T20:46:02.573Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/34/64/8860370b167a9721e8956ae116825caff829224fbca0ca6e7bf8ddef8430/requests-2.33.0.tar.gz", hash = "sha256:c7ebc5e8b0f21837386ad0e1c8fe8b829fa5f544d8df3b2253bff14ef29d7652", size = 134232, upload-time = "2026-03-25T15:10:41.586Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6", size = 64738, upload-time = "2025-08-18T20:46:00.542Z" },
+    { url = "https://files.pythonhosted.org/packages/56/5d/c814546c2333ceea4ba42262d8c4d55763003e767fa169adc693bd524478/requests-2.33.0-py3-none-any.whl", hash = "sha256:3324635456fa185245e24865e810cecec7b4caf933d7eb133dcde67d48cee69b", size = 65017, upload-time = "2026-03-25T15:10:40.382Z" },
 ]
 
 [[package]]
