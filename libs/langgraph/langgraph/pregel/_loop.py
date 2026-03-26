@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import binascii
 import concurrent.futures
+import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import (
@@ -169,7 +170,6 @@ class PregelLoop:
     _checkpointer_put_after_previous: (
         Callable[
             [
-                concurrent.futures.Future | None,
                 RunnableConfig,
                 Checkpoint,
                 str,
@@ -850,7 +850,6 @@ class PregelLoop:
             # ensuring checkpointers receive checkpoints in order
             self._put_checkpoint_fut = self.submit(
                 self._checkpointer_put_after_previous,
-                getattr(self, "_put_checkpoint_fut", None),
                 self.checkpoint_config,
                 copy_checkpoint(self.checkpoint),
                 self.checkpoint_metadata,
@@ -1063,6 +1062,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             durability=durability,
         )
         self.stack = ExitStack()
+        self._checkpoint_write_lock = threading.Lock()
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.put_writes
@@ -1078,16 +1078,12 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
     def _checkpointer_put_after_previous(
         self,
-        prev: concurrent.futures.Future | None,
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        try:
-            if prev is not None:
-                prev.result()
-        finally:
+        with self._checkpoint_write_lock:
             cast(BaseCheckpointSaver, self.checkpointer).put(
                 config, checkpoint, metadata, new_versions
             )
@@ -1259,6 +1255,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             durability=durability,
         )
         self.stack = AsyncExitStack()
+        self._checkpoint_write_lock = asyncio.Lock()
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.aput_writes
@@ -1274,16 +1271,12 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
 
     async def _checkpointer_put_after_previous(
         self,
-        prev: asyncio.Task | None,
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        try:
-            if prev is not None:
-                await prev
-        finally:
+        async with self._checkpoint_write_lock:
             await cast(BaseCheckpointSaver, self.checkpointer).aput(
                 config, checkpoint, metadata, new_versions
             )
