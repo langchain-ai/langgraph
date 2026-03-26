@@ -139,7 +139,34 @@ class TestMemorySaver:
             search_results_5[1].config["configurable"]["checkpoint_ns"],
         } == {"", "inner"}
 
-        # TODO: test before and limit params
+        # test before and limit params in same namespace
+        config_4 = self.memory_saver.put(
+            self.config_2,
+            create_checkpoint(self.chkpnt_2, {}, 2),
+            self.metadata_2,
+            self.chkpnt_2["channel_versions"],
+        )
+        thread_2_ns_root = {
+            "configurable": {"thread_id": "thread-2", "checkpoint_ns": ""}
+        }
+        search_results_6 = list(self.memory_saver.list(thread_2_ns_root, limit=1))
+        assert len(search_results_6) == 1
+        assert (
+            search_results_6[0].config["configurable"]["checkpoint_id"]
+            == config_4["configurable"]["checkpoint_id"]
+        )
+
+        search_results_7 = list(self.memory_saver.list(thread_2_ns_root, limit=0))
+        assert len(search_results_7) == 0
+
+        search_results_8 = list(
+            self.memory_saver.list(thread_2_ns_root, before=config_4)
+        )
+        assert len(search_results_8) == 1
+        assert (
+            search_results_8[0].config["configurable"]["checkpoint_id"]
+            == self.chkpnt_2["id"]
+        )
 
     async def test_asearch(self) -> None:
         # set up test
@@ -193,6 +220,39 @@ class TestMemorySaver:
             c async for c in self.memory_saver.alist(None, filter=query_4)
         ]
         assert len(search_results_4) == 0
+
+        # test before and limit params in same namespace
+        config_4 = self.memory_saver.put(
+            self.config_2,
+            create_checkpoint(self.chkpnt_2, {}, 2),
+            self.metadata_2,
+            self.chkpnt_2["channel_versions"],
+        )
+        thread_2_ns_root = {
+            "configurable": {"thread_id": "thread-2", "checkpoint_ns": ""}
+        }
+        search_results_5 = [
+            c async for c in self.memory_saver.alist(thread_2_ns_root, limit=1)
+        ]
+        assert len(search_results_5) == 1
+        assert (
+            search_results_5[0].config["configurable"]["checkpoint_id"]
+            == config_4["configurable"]["checkpoint_id"]
+        )
+
+        search_results_6 = [
+            c async for c in self.memory_saver.alist(thread_2_ns_root, limit=0)
+        ]
+        assert len(search_results_6) == 0
+
+        search_results_7 = [
+            c async for c in self.memory_saver.alist(thread_2_ns_root, before=config_4)
+        ]
+        assert len(search_results_7) == 1
+        assert (
+            search_results_7[0].config["configurable"]["checkpoint_id"]
+            == self.chkpnt_2["id"]
+        )
 
 
 async def test_memory_saver() -> None:
