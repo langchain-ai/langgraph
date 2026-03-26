@@ -1,5 +1,6 @@
 import operator
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import pytest
 
@@ -9,6 +10,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph.types import Overwrite
 
 pytestmark = pytest.mark.anyio
 
@@ -88,6 +90,31 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+@dataclass
+class Metrics:
+    count: int
+
+    def __add__(self, other: "Metrics") -> "Metrics":
+        return Metrics(self.count + other.count)
+
+
+def test_binop_overwrite_on_missing_unwraps_value() -> None:
+    channel = BinaryOperatorAggregate(Metrics, operator.add).from_checkpoint(MISSING)
+
+    channel.update([Overwrite(Metrics(count=42))])
+
+    assert channel.get() == Metrics(count=42)
+
+
+def test_binop_overwrite_on_missing_allows_only_one_per_superstep() -> None:
+    channel = BinaryOperatorAggregate(Metrics, operator.add).from_checkpoint(MISSING)
+
+    with pytest.raises(
+        InvalidUpdateError, match="Can receive only one Overwrite value per super-step."
+    ):
+        channel.update([Overwrite(Metrics(1)), Overwrite(Metrics(2))])
 
 
 def test_untracked_value() -> None:
