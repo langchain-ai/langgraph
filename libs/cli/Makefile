@@ -1,4 +1,4 @@
-.PHONY: test lint format test-integration update-schema
+.PHONY: test lint type format test-integration update-schema bump-version
 
 ######################
 # TESTING AND COVERAGE
@@ -29,9 +29,15 @@ lint lint_diff lint_package lint_tests:
 	[ "$(PYTHON_FILES)" = "" ] || uv run ruff check --select I $(PYTHON_FILES)
 	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE) || uv run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
 
+type:
+	mkdir -p $(MYPY_CACHE) && uv run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
+
 format format_diff:
 	uv run ruff format $(PYTHON_FILES)
 	uv run ruff check --select I --fix $(PYTHON_FILES)
 
 update-schema:
 	uv run python generate_schema.py
+
+bump-version:
+	uv run hatch version patch

@@ -1886,3 +1886,151 @@ async def test_tool_node_inject_async_all_types_with_schema() -> None:
         "foo_from_runtime=foo_value, "
         "tool_call_id=test_call_789"
     )
+
+
+async def test_tool_node_tool_runtime_generic() -> None:
+    """Test that ToolRuntime with generic type arguments is correctly injected."""
+
+    @dataclasses.dataclass
+    class MyContext:
+        some_info: str
+
+    @dec_tool
+    def get_info(rt: ToolRuntime[MyContext]):
+        """This tool returns info from context."""
+        return rt.context.some_info
+
+    # Create a mock runtime with context
+    mock_runtime = _create_mock_runtime()
+    mock_runtime.context = MyContext(some_info="test_info")
+
+    config = {"configurable": {"__pregel_runtime": mock_runtime}}
+
+    result = await ToolNode([get_info]).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "call tool",
+                    tool_calls=[
+                        {
+                            "name": "get_info",
+                            "args": {},
+                            "id": "call_1",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=config,
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.content == "test_info"
+    assert tool_message.tool_call_id == "call_1"
+
+
+def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call() -> None:
+    """Test that ToolRuntime is injected for dynamically registered tools.
+
+    Regression test for https://github.com/langchain-ai/langchain/issues/35305.
+    When a tool is dynamically provided via wrap_tool_call (not registered at
+    ToolNode init time), ToolRuntime should still be injected into the tool.
+    """
+
+    @dec_tool
+    def static_tool(x: int) -> str:
+        """A static tool registered at init."""
+        return f"static: {x}"
+
+    @dec_tool
+    def dynamic_tool_with_runtime(x: int, runtime: ToolRuntime) -> str:
+        """A dynamic tool that needs ToolRuntime injection."""
+        return f"dynamic: x={x}, tool_call_id={runtime.tool_call_id}"
+
+    def wrap_tool_call(request, execute):
+        """Middleware that swaps in a dynamic tool."""
+        if request.tool_call["name"] == "dynamic_tool_with_runtime":
+            # Override tool to the dynamic one (not registered at init)
+            new_request = request.override(tool=dynamic_tool_with_runtime)
+            return execute(new_request)
+        return execute(request)
+
+    # ToolNode only knows about static_tool at init time
+    tool_node = ToolNode(
+        [static_tool],
+        wrap_tool_call=wrap_tool_call,
+    )
+
+    # Verify the dynamic tool is NOT in the tool node's registered tools
+    assert "dynamic_tool_with_runtime" not in tool_node.tools_by_name
+
+    # Call the dynamic tool
+    tool_call = {
+        "name": "dynamic_tool_with_runtime",
+        "args": {"x": 42},
+        "id": "call_dynamic_1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = tool_node.invoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    # ToolRuntime should be injected and the tool should execute successfully
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_1"
+    assert tool_message.tool_call_id == "call_dynamic_1"
+
+
+async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() -> None:
+    """Test that ToolRuntime is injected for dynamically registered tools (async).
+
+    Async version of the regression test for
+    https://github.com/langchain-ai/langchain/issues/35305.
+    """
+
+    @dec_tool
+    def static_tool(x: int) -> str:
+        """A static tool registered at init."""
+        return f"static: {x}"
+
+    @dec_tool
+    async def dynamic_tool_with_runtime(x: int, runtime: ToolRuntime) -> str:
+        """A dynamic async tool that needs ToolRuntime injection."""
+        return f"dynamic: x={x}, tool_call_id={runtime.tool_call_id}"
+
+    async def awrap_tool_call(request, execute):
+        """Async middleware that swaps in a dynamic tool."""
+        if request.tool_call["name"] == "dynamic_tool_with_runtime":
+            new_request = request.override(tool=dynamic_tool_with_runtime)
+            return await execute(new_request)
+        return await execute(request)
+
+    # ToolNode only knows about static_tool at init time
+    tool_node = ToolNode(
+        [static_tool],
+        awrap_tool_call=awrap_tool_call,
+    )
+
+    # Verify the dynamic tool is NOT in the tool node's registered tools
+    assert "dynamic_tool_with_runtime" not in tool_node.tools_by_name
+
+    # Call the dynamic tool
+    tool_call = {
+        "name": "dynamic_tool_with_runtime",
+        "args": {"x": 42},
+        "id": "call_dynamic_2",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = await tool_node.ainvoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    # ToolRuntime should be injected and the tool should execute successfully
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_2"
+    assert tool_message.tool_call_id == "call_dynamic_2"

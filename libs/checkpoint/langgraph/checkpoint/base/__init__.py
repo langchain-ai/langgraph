@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+import copy
+import logging
+from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
 from typing import (  # noqa: UP035
     Any,
     Generic,
@@ -14,6 +16,7 @@ from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
     ERROR,
@@ -25,6 +28,7 @@ from langgraph.checkpoint.serde.types import (
 
 V = TypeVar("V", int, float, str)
 PendingWrite = tuple[str, str, Any]
+logger = logging.getLogger(__name__)
 
 
 # Marked as total=False to allow for future expansion.
@@ -51,6 +55,8 @@ class CheckpointMetadata(TypedDict, total=False):
 
     Mapping from checkpoint namespace to checkpoint ID.
     """
+    run_id: str
+    """The ID of the run that created this checkpoint."""
 
 
 ChannelVersions = dict[str, str | int | float]
@@ -118,6 +124,25 @@ class BaseCheckpointSaver(Generic[V]):
 
     Checkpointers allow LangGraph agents to persist their state
     within and across multiple interactions.
+
+    When a checkpointer is configured, you should pass a `thread_id` in the config when
+    invoking the graph:
+
+    ```python
+    config = {"configurable": {"thread_id": "my-thread"}}
+    graph.invoke(inputs, config)
+    ```
+
+    The `thread_id` is the primary key used to store and retrieve checkpoints. Without
+    it, the checkpointer cannot save state, resume from interrupts, or enable
+    time-travel debugging.
+
+    How you choose ``thread_id`` depends on your use case:
+
+    - **Single-shot workflows**: Use a unique ID (e.g., uuid4) for each run when
+        executions are independent.
+    - **Conversational memory**: Reuse the same `thread_id` across invocations
+        to accumulate state (e.g., chat history) within a conversation.
 
     Attributes:
         serde (SerializerProtocol): Serializer for encoding/decoding checkpoints.
@@ -249,6 +274,45 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
+    def delete_for_runs(
+        self,
+        run_ids: Sequence[str],
+    ) -> None:
+        """Delete all checkpoints and writes associated with the given run IDs.
+
+        Args:
+            run_ids: The run IDs whose checkpoints should be deleted.
+        """
+        raise NotImplementedError
+
+    def copy_thread(
+        self,
+        source_thread_id: str,
+        target_thread_id: str,
+    ) -> None:
+        """Copy all checkpoints and writes from one thread to another.
+
+        Args:
+            source_thread_id: The thread ID to copy from.
+            target_thread_id: The thread ID to copy to.
+        """
+        raise NotImplementedError
+
+    def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Prune checkpoints for the given threads.
+
+        Args:
+            thread_ids: The thread IDs to prune.
+            strategy: The pruning strategy. `"keep_latest"` retains only the most
+                recent checkpoint per namespace. `"delete"` removes all checkpoints.
+        """
+        raise NotImplementedError
+
     async def aget(self, config: RunnableConfig) -> Checkpoint | None:
         """Asynchronously fetch a checkpoint using the given configuration.
 
@@ -354,6 +418,45 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
+    async def adelete_for_runs(
+        self,
+        run_ids: Sequence[str],
+    ) -> None:
+        """Asynchronously delete all checkpoints and writes for the given run IDs.
+
+        Args:
+            run_ids: The run IDs whose checkpoints should be deleted.
+        """
+        raise NotImplementedError
+
+    async def acopy_thread(
+        self,
+        source_thread_id: str,
+        target_thread_id: str,
+    ) -> None:
+        """Asynchronously copy all checkpoints and writes from one thread to another.
+
+        Args:
+            source_thread_id: The thread ID to copy from.
+            target_thread_id: The thread ID to copy to.
+        """
+        raise NotImplementedError
+
+    async def aprune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Asynchronously prune checkpoints for the given threads.
+
+        Args:
+            thread_ids: The thread IDs to prune.
+            strategy: The pruning strategy. `"keep_latest"` retains only the most
+                recent checkpoint per namespace. `"delete"` removes all checkpoints.
+        """
+        raise NotImplementedError
+
     def get_next_version(self, current: V | None, channel: None) -> V:
         """Generate the next version ID for a channel.
 
@@ -374,6 +477,37 @@ class BaseCheckpointSaver(Generic[V]):
             return 1
         else:
             return current + 1
+
+    def with_allowlist(
+        self, extra_allowlist: Collection[tuple[str, ...]]
+    ) -> BaseCheckpointSaver[V]:
+        """Return a shallow clone with a derived msgpack allowlist."""
+        serde = _with_msgpack_allowlist(self.serde, extra_allowlist)
+        if serde is self.serde:
+            return self
+        clone = copy.copy(self)
+        clone.serde = maybe_add_typed_methods(serde)
+        return clone
+
+
+def _with_msgpack_allowlist(
+    serde: SerializerProtocol, extra_allowlist: Collection[tuple[str, ...]]
+) -> SerializerProtocol:
+    if isinstance(serde, JsonPlusSerializer):
+        return serde.with_msgpack_allowlist(extra_allowlist)
+    if isinstance(serde, EncryptedSerializer):
+        inner = serde.serde
+        if isinstance(inner, JsonPlusSerializer):
+            updated_inner = inner.with_msgpack_allowlist(extra_allowlist)
+            if updated_inner is inner:
+                return serde
+            return EncryptedSerializer(serde.cipher, updated_inner)
+    logger.warning(
+        "Serializer %s does not support msgpack allowlist. "
+        "Strict msgpack deserialization will not be enforced.",
+        type(serde).__name__,
+    )
+    return serde
 
 
 class EmptyChannelError(Exception):

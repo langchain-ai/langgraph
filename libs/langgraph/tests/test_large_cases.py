@@ -1396,8 +1396,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
+                "_type": "generic-fake-chat-model",
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
             },
         ),
         (
@@ -1456,8 +1458,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
+                "_type": "generic-fake-chat-model",
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
             },
         ),
     ]
@@ -1505,8 +1509,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
+                "_type": "generic-fake-chat-model",
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
             },
         ),
     ]
@@ -3038,7 +3044,7 @@ def test_message_graph(
     # add an extra message as if it came from "tools" node
     app_w_interrupt.update_state(config, ("ai", "an extra message"), as_node="tools")
 
-    # extra message is coerced BaseMessge and appended
+    # extra message is coerced BaseMessage and appended
     # now the next node is "agent" per the graph edges
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
@@ -3271,7 +3277,7 @@ def test_root_graph(
                     content="result for query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id="00000000-0000-4000-8000-000000000024",
+                    id="00000000-0000-4000-8000-000000000004",
                 )
             ]
         },
@@ -3294,7 +3300,7 @@ def test_root_graph(
                     content="result for another",
                     name="search_api",
                     tool_call_id="tool_call456",
-                    id="00000000-0000-4000-8000-000000000030",
+                    id="00000000-0000-4000-8000-000000000005",
                 )
             ]
         },
@@ -3762,7 +3768,7 @@ def test_root_graph(
     # add an extra message as if it came from "tools" node
     app_w_interrupt.update_state(config, ("ai", "an extra message"), as_node="tools")
 
-    # extra message is coerced BaseMessge and appended
+    # extra message is coerced BaseMessage and appended
     # now the next node is "agent" per the graph edges
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
@@ -3898,7 +3904,7 @@ def test_root_graph(
         "__root__": [
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000051",
+                id="00000000-0000-4000-8000-000000000008",
             ),
             AIMessage(
                 content="",
@@ -3918,7 +3924,7 @@ def test_root_graph(
             ),
             AIMessage(content="answer", id="ai2"),
             AIMessage(
-                content="an extra message", id="00000000-0000-4000-8000-000000000066"
+                content="an extra message", id="00000000-0000-4000-8000-000000000010"
             ),
             HumanMessage(content="what is weather in la"),
         ],
@@ -6875,8 +6881,10 @@ def test_weather_subgraph(
                     "langgraph_path": ("__pregel_pull", "router_node"),
                     "langgraph_checkpoint_ns": AnyStr("router_node:"),
                     "checkpoint_ns": AnyStr("router_node:"),
+                    "_type": "fake-messages-list-chat-model",
                     "ls_provider": "fakemessageslistchatmodel",
                     "ls_model_type": "chat",
+                    "ls_integration": "langchain_chat_model",
                 },
             ),
         ),
@@ -6901,8 +6909,10 @@ def test_weather_subgraph(
                     "langgraph_path": ("__pregel_pull", "model_node"),
                     "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                     "checkpoint_ns": AnyStr("weather_graph:"),
+                    "_type": "fake-messages-list-chat-model",
                     "ls_provider": "fakemessageslistchatmodel",
                     "ls_model_type": "chat",
+                    "ls_integration": "langchain_chat_model",
                 },
             ),
         ),
@@ -6936,8 +6946,10 @@ def test_weather_subgraph(
                 "langgraph_path": ("__pregel_pull", "router_node"),
                 "langgraph_checkpoint_ns": AnyStr("router_node:"),
                 "checkpoint_ns": AnyStr("router_node:"),
+                "_type": "fake-messages-list-chat-model",
                 "ls_provider": "fakemessageslistchatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
             },
         ),
     ]

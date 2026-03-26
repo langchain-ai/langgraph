@@ -1,6 +1,6 @@
 from typing import Any, Literal, TypedDict
 
-Distros = Literal["debian", "wolfi", "bullseye", "bookworm"]
+Distros = Literal["debian", "wolfi", "bookworm"]
 MiddlewareOrders = Literal["auth_first", "middleware_first"]
 
 
@@ -107,17 +107,19 @@ class StoreConfig(TypedDict, total=False):
 class ThreadTTLConfig(TypedDict, total=False):
     """Configure a default TTL for checkpointed data within threads."""
 
-    strategy: Literal["delete"]
-    """Strategy to use for deleting checkpointed data.
-    
-    Choices:
-      - "delete": Delete all checkpoints for a thread after TTL expires.
+    strategy: Literal["delete", "keep_latest"]
+    """Action taken when a thread exceeds its TTL.
+
+    - "delete": Remove the thread and all its data entirely.
+    - "keep_latest": Prune old checkpoints but keep the thread and its latest state.
     """
     default_ttl: float | None
     """Default TTL (time-to-live) in minutes for checkpointed data."""
     sweep_interval_minutes: int | None
     """Interval in minutes between sweep iterations.
     If omitted, a default interval will be used (typically ~ 5 minutes)."""
+    sweep_limit: int | None
+    """Maximum number of threads to process per sweep iteration. Defaults to 1000."""
 
 
 class SerdeConfig(TypedDict, total=False):
@@ -126,7 +128,7 @@ class SerdeConfig(TypedDict, total=False):
     If omitted, no serde is set up (the object store will still be present, however)."""
 
     allowed_json_modules: list[list[str]] | bool | None
-    """Optional. List of allowed python modules to de-serialize custom objects from.
+    """Optional. List of allowed python modules to de-serialize custom objects from JSON.
     
     If provided, only the specified modules will be allowed to be deserialized.
     If omitted, no modules are allowed, and the object returned will simply be a json object OR
@@ -146,7 +148,34 @@ class SerdeConfig(TypedDict, total=False):
     Example:
     {...
         "serde": {
-            "allowed_json_modules": true
+            "allowed_json_modules": True
+        }
+    }
+
+    """
+    allowed_msgpack_modules: list[list[str]] | bool | None
+    """Optional. List of allowed python modules to de-serialize custom objects from msgpack.
+
+    Known safe types (langgraph.checkpoint.serde.jsonplus.SAFE_MSGPACK_TYPES) are always
+    allowed regardless of this setting. Use this to allowlist your custom Pydantic models,
+    dataclasses, and other user-defined types.
+
+    If True (default), unregistered types will log a warning but still be deserialized.
+    If None, only known safe types will be deserialized; unregistered types will be blocked.
+
+    Example - allowlist specific types (no warnings for these):
+    {...
+        "serde": {
+            "allowed_msgpack_modules": [
+                ["my_agent.models", "MyState"],
+            ]
+        }
+    }
+
+    Example - strict mode (only safe types allowed):
+    {...
+        "serde": {
+            "allowed_msgpack_modules": null
         }
     }
     
@@ -165,6 +194,26 @@ class CheckpointerConfig(TypedDict, total=False):
     If omitted, no checkpointer is set up (the object store will still be present, however).
     """
 
+    path: str
+    """Import path to an async context manager that yields a `BaseCheckpointSaver`
+    instance.
+
+    The referenced object should be an `@asynccontextmanager`-decorated function
+    so that the server can properly manage the checkpointer's lifecycle (e.g.
+    opening and closing connections).
+
+    Examples:
+    - "./my_checkpointer.py:create_checkpointer"
+    - "my_package.checkpointer:create_checkpointer"
+
+    When provided, this replaces the default checkpointer.
+
+    You can use the `langgraph-checkpoint-conformance` package
+    (https://pypi.org/project/langgraph-checkpoint-conformance/) to run simple
+    conformance tests against your custom checkpointer and catch
+    incompatibilities early.
+    """
+
     ttl: ThreadTTLConfig | None
     """Optional. Defines the TTL (time-to-live) behavior configuration.
     
@@ -173,7 +222,7 @@ class CheckpointerConfig(TypedDict, total=False):
     """
     serde: SerdeConfig | None
     """Optional. Defines the serde configuration.
-    
+
     If provided, the checkpointer will apply serde settings according to the configuration.
     If omitted, no serde behavior is configured.
 
@@ -233,6 +282,27 @@ class SecurityConfig(TypedDict, total=False):
     """
 
 
+class CacheConfig(TypedDict, total=False):
+    cache_keys: list[str]
+    """Optional. List of header keys to use for caching.
+    
+    Example:
+        ["user_id", "workspace_id"]
+    """
+    ttl_seconds: int
+    """Optional. Time-to-live in seconds for cached items.
+    
+    Example:
+        3600
+    """
+    max_size: int
+    """Optional. Maximum size of the cache.
+    
+    Example:
+        100
+    """
+
+
 class AuthConfig(TypedDict, total=False):
     """Configuration for custom authentication logic and how it integrates into the OpenAPI spec."""
 
@@ -267,6 +337,36 @@ class AuthConfig(TypedDict, total=False):
             "security": [
                 {"OAuth2": ["me"]}
             ]
+        }
+    """
+    cache: CacheConfig
+    """Optional. Cache configuration for the server.
+    
+    Example:
+        {
+            "cache_keys": ["user_id", "workspace_id"],
+            "ttl_seconds": 3600,
+            "max_size": 100
+        }
+    """
+
+
+class EncryptionConfig(TypedDict, total=False):
+    """Configuration for custom at-rest encryption logic.
+
+    Allows you to implement custom encryption for sensitive data stored in the database,
+    including metadata fields and checkpoint blobs."""
+
+    path: str
+    """Required. Path to an instance of the Encryption() class that implements custom encryption handlers.
+
+    Format: "path/to/file.py:my_encryption"
+
+    Example:
+        {
+            "encryption": {
+                "path": "./encryption.py:my_encryption"
+            }
         }
     """
 
@@ -310,7 +410,7 @@ class CorsConfig(TypedDict, total=False):
     """
 
 
-class ConfigurableHeaderConfig(TypedDict):
+class ConfigurableHeaderConfig(TypedDict, total=False):
     """Customize which headers to include as configurable values in your runs.
 
     By default, omits x-api-key, x-tenant-id, and x-service-key.
@@ -321,7 +421,7 @@ class ConfigurableHeaderConfig(TypedDict):
     """
 
     includes: list[str] | None
-    """Headers to include (if not also matches against an 'exludes' pattern.
+    """Headers to include (if not also matched against an 'excludes' pattern).
 
     Examples:
         - 'user-agent'
@@ -367,7 +467,12 @@ class HttpConfig(TypedDict, total=False):
     Default is False.
     """
     disable_mcp: bool
-    """Optional. If `True`, /mcp routes are removed, disabling the MCP server.
+    """Optional. If `True`, /mcp routes are removed, disabling default support to expose the deployment as an MCP server.
+    
+    Default is False.
+    """
+    disable_a2a: bool
+    """Optional. If `True`, /a2a routes are removed, disabling default support to expose the deployment as an agent-to-agent (A2A) server.
     
     Default is False.
     """
@@ -376,6 +481,17 @@ class HttpConfig(TypedDict, total=False):
     
     Set to True to disable the following endpoints: /openapi.json, /info, /metrics, /docs.
     This will also make the /ok endpoint skip any DB or other checks, always returning {"ok": True}.
+    
+    Default is False.
+    """
+    disable_ui: bool
+    """Optional. If `True`, /ui routes are removed, disabling the UI server.
+    
+    Default is False.
+    """
+    disable_webhooks: bool
+    """Optional. If `True`, webhooks are disabled. Runs created with an associated webhook will
+    still be executed, but the webhook event will not be sent.
     
     Default is False.
     """
@@ -408,6 +524,67 @@ class HttpConfig(TypedDict, total=False):
 
     Default is False. This flag only affects authentication behavior
     if `app` is provided and contains custom routes.
+    """
+    mount_prefix: str
+    """Optional. URL prefix to prepend to all the routes.
+    
+    Example:
+        "/api"
+    """
+
+
+class WebhookUrlPolicy(TypedDict, total=False):
+    require_https: bool
+    """Enforce HTTPS scheme for absolute URLs; reject `http://` when true."""
+    allowed_domains: list[str]
+    """Hostname allowlist. Supports exact hosts and wildcard subdomains.
+
+    Use entries like "hooks.example.com" or "*.mycorp.com". The wildcard only
+    matches subdomains ("foo.mycorp.com"), not the apex ("mycorp.com"). When
+    empty or omitted, any public host is allowed (subject to SSRF IP checks).
+    """
+    allowed_ports: list[int]
+    """Explicit port allowlist for absolute URLs.
+
+    If set, requests must use one of these ports. Defaults are respected when
+    a port is not present in the URL (443 for https, 80 for http).
+    """
+    max_url_length: int
+    """Maximum permitted URL length in characters; longer inputs are rejected early."""
+    disable_loopback: bool
+    """Disallow relative URLs (internal loopback calls) when true."""
+
+
+class GraphDef(TypedDict, total=False):
+    """Definition of a graph with additional metadata."""
+
+    path: str
+    """Required. Import path to the graph object.
+
+    Format: "path/to/file.py:object_name"
+    """
+    description: str | None
+    """Optional. A description of the graph's purpose and functionality.
+
+    This description is surfaced in the API and can help users understand what the graph does.
+    """
+
+
+class WebhooksConfig(TypedDict, total=False):
+    env_prefix: str
+    """Required prefix for environment variables referenced in header templates.
+
+    Acts as an allowlist boundary to prevent leaking arbitrary environment
+    variables. Defaults to "LG_WEBHOOK_" when omitted.
+    """
+    url: WebhookUrlPolicy
+    """URL validation policy for user-supplied webhook endpoints."""
+    headers: dict[str, str]
+    """Static headers to include with webhook requests.
+
+    Values may contain templates of the form "${{ env.VAR }}". On startup, these
+    are resolved via the process environment after verifying `VAR` starts with
+    `env_prefix`. Mixed literals and multiple templates are allowed.
     """
 
 
@@ -443,7 +620,7 @@ class Config(TypedDict, total=False):
     image_distro: Distros | None
     """Optional. Linux distribution for the base image.
     
-    Must be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.
+    Must be one of 'wolfi', 'debian', or 'bookworm'.
     If omitted, defaults to 'debian' ('latest').
     """
 
@@ -483,19 +660,23 @@ class Config(TypedDict, total=False):
     Defaults to an empty list, meaning no additional packages installed beyond your base environment.
     """
 
-    graphs: dict[str, str]
+    graphs: dict[str, str | GraphDef]
     """Optional. Named definitions of graphs, each pointing to a Python object.
 
-    
+
     Graphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context
     managers that accept a single configuration argument (of type RunnableConfig) and return a pregel object
     (instance of Stategraph, etc.).
-    
-    Keys are graph names, values are "path/to/file.py:object_name".
+
+    Keys are graph names, values are either "path/to/file.py:object_name" strings
+    or objects with a "path" key and optional "description" key.
     Example:
         {
             "mygraph": "graphs/my_graph.py:graph_definition",
-            "anothergraph": "graphs/another.py:get_graph"
+            "anothergraph": {
+                "path": "graphs/another.py:get_graph",
+                "description": "A graph that does X"
+            }
         }
     """
 
@@ -524,13 +705,26 @@ class Config(TypedDict, total=False):
     """
 
     auth: AuthConfig | None
-    """Optional. Custom authentication config, including the path to your Python auth logic and 
+    """Optional. Custom authentication config, including the path to your Python auth logic and
     the OpenAPI security definitions it uses.
+    """
+
+    encryption: EncryptionConfig | None
+    """Optional. Custom at-rest encryption config, including the path to your Python encryption logic.
+
+    Allows you to implement custom encryption for sensitive data stored in the database.
     """
 
     http: HttpConfig | None
     """Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed
     and how cross-origin requests are handled.
+    """
+
+    webhooks: WebhooksConfig | None
+    """Optional. Webhooks configuration for outbound event delivery.
+
+    Forwarded into the container as `LANGGRAPH_WEBHOOKS`. See `WebhooksConfig`
+    for URL policy and header templating details.
     """
 
     ui: dict[str, str] | None
@@ -547,9 +741,11 @@ class Config(TypedDict, total=False):
 
 __all__ = [
     "Config",
+    "GraphDef",
     "StoreConfig",
     "CheckpointerConfig",
     "AuthConfig",
+    "EncryptionConfig",
     "HttpConfig",
     "MiddlewareOrders",
     "Distros",

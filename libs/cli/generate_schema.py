@@ -15,10 +15,12 @@ import msgspec
 
 from langgraph_cli.schemas import (
     AuthConfig,
+    CacheConfig,
     CheckpointerConfig,
     Config,
     ConfigurableHeaderConfig,
     CorsConfig,
+    GraphDef,
     HttpConfig,
     IndexConfig,
     SecurityConfig,
@@ -26,6 +28,8 @@ from langgraph_cli.schemas import (
     StoreConfig,
     ThreadTTLConfig,
     TTLConfig,
+    WebhooksConfig,
+    WebhookUrlPolicy,
 )
 
 
@@ -105,17 +109,21 @@ def add_descriptions_to_schema(schema, cls):
             # Find the class that corresponds to this definition
             for potential_cls in [
                 Config,
+                GraphDef,
                 StoreConfig,
                 IndexConfig,
                 AuthConfig,
                 SecurityConfig,
                 HttpConfig,
                 CorsConfig,
+                CacheConfig,
                 ThreadTTLConfig,
                 CheckpointerConfig,
                 SerdeConfig,
                 TTLConfig,
                 ConfigurableHeaderConfig,
+                WebhooksConfig,
+                WebhookUrlPolicy,
             ]:
                 if potential_cls.__name__ == def_name:
                     add_descriptions_to_schema(def_schema, potential_cls)

@@ -329,8 +329,9 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         FROM checkpoints
         {where}
         ORDER BY checkpoint_id DESC"""
-        if limit:
-            query += f" LIMIT {limit}"
+        if limit is not None:
+            query += " LIMIT ?"
+            param_values = (*param_values, limit)
         with self.cursor(transaction=False) as cur, closing(self.conn.cursor()) as wcur:
             cur.execute(query, param_values)
             for (

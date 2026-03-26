@@ -15,12 +15,12 @@ The module implements design patterns for:
 
 Key Components:
 
-- `ToolNode`: Main class for executing tools in LangGraph workflows
-- `InjectedState`: Annotation for injecting graph state into tools
-- `InjectedStore`: Annotation for injecting persistent store into tools
-- `ToolRuntime`: Runtime information for tools, bundling together `state`, `context`,
+- [`ToolNode`][langgraph.prebuilt.ToolNode]: Main class for executing tools in LangGraph workflows
+- [`InjectedState`][langgraph.prebuilt.InjectedState]: Annotation for injecting graph state into tools
+- [`InjectedStore`][langgraph.prebuilt.InjectedStore]: Annotation for injecting persistent store into tools
+- [`ToolRuntime`][langgraph.prebuilt.ToolRuntime]: Runtime information for tools, bundling together `state`, `context`,
     `config`, `stream_writer`, `tool_call_id`, and `store`
-- `tools_condition`: Utility function for conditional routing based on tool calls
+- [`tools_condition`][langgraph.prebuilt.tools_condition]: Utility function for conditional routing based on tool calls
 
 Typical Usage:
     ```python
@@ -121,6 +121,8 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
     """Possible overrides for ToolCallRequest.override() method."""
 
     tool_call: ToolCall
+    tool: BaseTool
+    state: Any
 
 
 @dataclass
@@ -170,8 +172,12 @@ class ToolCallRequest:
         This follows an immutable pattern, leaving the original request unchanged.
 
         Args:
-            **overrides: Keyword arguments for attributes to override. Supported keys:
-                - tool_call: Tool call dict with name, args, and id
+            **overrides: Keyword arguments for attributes to override.
+
+                Supported keys:
+
+                - tool_call: Tool call dict with `name`, `args`, and `id`
+                - state: Agent state (`dict`, `list`, or `BaseModel`)
 
         Returns:
             New ToolCallRequest instance with specified overrides applied.
@@ -616,8 +622,16 @@ class ToolNode(RunnableCallable):
     persistent storage, and control flow. Manages parallel execution,
     error handling.
 
+    Use `ToolNode` when building custom workflows that require fine-grained control over
+    tool execution—for example, custom routing logic, specialized error handling, or
+    non-standard agent architectures.
+
+    For standard ReAct-style agents, use [`create_agent`][langchain.agents.create_agent]
+    instead. It uses `ToolNode` internally with sensible defaults for the agent loop,
+    conditional routing, and error handling.
+
     Input Formats:
-        1. Graph state with `messages` key that has a list of messages:
+        1. **Graph state** with `messages` key that has a list of messages:
             - Common representation for agentic workflows
             - Supports custom messages key via `messages_key` parameter
 
@@ -910,7 +924,7 @@ class ToolNode(RunnableCallable):
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime)
+        injected_call = self._inject_tool_args(call, request.runtime, tool)
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
@@ -1063,7 +1077,7 @@ class ToolNode(RunnableCallable):
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime)
+        injected_call = self._inject_tool_args(call, request.runtime, tool)
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
@@ -1269,6 +1283,7 @@ class ToolNode(RunnableCallable):
         self,
         tool_call: ToolCall,
         tool_runtime: ToolRuntime,
+        tool: BaseTool | None = None,
     ) -> ToolCall:
         """Inject graph state, store, and runtime into tool call arguments.
 
@@ -1287,6 +1302,9 @@ class ToolNode(RunnableCallable):
                 Must contain 'name', 'args', 'id', and 'type' fields.
             tool_runtime: The ToolRuntime instance containing all runtime context
                 (state, config, store, context, stream_writer) to inject into tools.
+            tool: Optional tool instance. When provided, allows injection for
+                dynamically registered tools that are not in self.tools_by_name
+                (e.g., tools added via middleware's wrap_tool_call).
 
         Returns:
             A new ToolCall dictionary with the same structure as the input but with
@@ -1300,10 +1318,12 @@ class ToolNode(RunnableCallable):
             This method is called automatically during tool execution. It should not
             be called from outside the `ToolNode`.
         """
-        if tool_call["name"] not in self.tools_by_name:
-            return tool_call
-
         injected = self._injected_args.get(tool_call["name"])
+        if not injected and tool is not None:
+            # For dynamically registered tools (e.g., added via middleware's
+            # wrap_tool_call), compute injected args on-the-fly since they
+            # were not present during ToolNode initialization.
+            injected = _get_all_injected_args(tool)
         if not injected:
             return tool_call
 
@@ -1519,16 +1539,23 @@ def tools_condition(
 class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     """Runtime context automatically injected into tools.
 
-    When a tool function has a parameter named `tool_runtime` with type hint
+    !!! note
+
+        This is distinct from `Runtime` (from `langgraph.runtime`), which is injected
+        into graph nodes and middleware. `ToolRuntime` includes additional tool-specific
+        attributes like `config`, `state`, and `tool_call_id` that `Runtime` does not
+        have.
+
+    When a tool function has a parameter named `runtime` with type hint
     `ToolRuntime`, the tool execution system will automatically inject an instance
     containing:
 
     - `state`: The current graph state
     - `tool_call_id`: The ID of the current tool call
     - `config`: `RunnableConfig` for the current execution
-    - `context`: Runtime context (from langgraph `Runtime`)
-    - `store`: `BaseStore` instance for persistent storage (from langgraph `Runtime`)
-    - `stream_writer`: `StreamWriter` for streaming output (from langgraph `Runtime`)
+    - `context`: Runtime context (shared with `Runtime`)
+    - `store`: `BaseStore` instance for persistent storage (shared with `Runtime`)
+    - `stream_writer`: `StreamWriter` for streaming output (shared with `Runtime`)
 
     No `Annotated` wrapper is needed - just use `runtime: ToolRuntime`
     as a parameter.
@@ -1750,6 +1777,12 @@ def _is_injection(
     origin_ = get_origin(type_arg)
     if origin_ is Union or origin_ is Annotated:
         return any(_is_injection(ta, injection_type) for ta in get_args(type_arg))
+
+    if origin_ is not None and (
+        origin_ is injection_type
+        or (isinstance(origin_, type) and issubclass(origin_, injection_type))
+    ):
+        return True
     return False
 
 
