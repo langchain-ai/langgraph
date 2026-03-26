@@ -25,12 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Python $${ env.PYTHON_VERSION }}
-        uses: astral-sh/setup-uv@v7
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          enable-cache: true
           cache-suffix: "release"
+          working-directory: ${{ inputs.working-directory }}
 
       # We want to keep this build stage *separate* from the release stage,
       # so that there's no sharing of permissions between them.
@@ -82,7 +82,7 @@ jobs:
           path: ${{ inputs.working-directory }}/dist/
 
       - name: Publish to test PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # release/v1
         with:
           packages-dir: ${{ inputs.working-directory }}/dist/
           verbose: true
