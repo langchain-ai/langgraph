@@ -276,7 +276,7 @@ jobs:
           path: ${{ inputs.working-directory }}/dist/
 
       - name: Publish package distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # release/v1
         with:
           packages-dir: ${{ inputs.working-directory }}/dist/
           verbose: true
@@ -317,7 +317,7 @@ jobs:
           path: ${{ inputs.working-directory }}/dist/
 
       - name: Create Tag
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
         with:
           artifacts: "dist/*"
           token: ${{ secrets.GITHUB_TOKEN }}
