@@ -321,6 +321,29 @@ def test_messages_state_format_openai():
     assert result == {"messages": expected}
 
 
+@pytest.mark.skipif(
+    condition=not (
+        CORE_MAJOR >= 1 or (CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3
+    ),
+    reason="Requires langchain_core>=0.3.11.",
+)
+def test_messages_state_format_openai_preserves_additional_kwargs():
+    """Test that format='langchain-openai' preserves custom additional_kwargs."""
+    left = [
+        AIMessage(
+            id="msg-1",
+            content="hello",
+            additional_kwargs={"widgets": [{"type": "carousel", "items": [1, 2, 3]}]},
+        )
+    ]
+    result = add_messages([], left, format="langchain-openai")
+
+    assert result[0].id == "msg-1"
+    assert result[0].additional_kwargs.get("widgets") == [
+        {"type": "carousel", "items": [1, 2, 3]}
+    ]
+
+
 def test_remove_all_messages():
     # simple removal
     left = [HumanMessage(content="Hello"), AIMessage(content="Hi there!")]
