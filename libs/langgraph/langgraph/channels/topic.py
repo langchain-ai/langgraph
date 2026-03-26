@@ -57,7 +57,10 @@ class Topic(
         """Return a copy of the channel."""
         empty = self.__class__(self.typ, self.accumulate)
         empty.key = self.key
-        empty.values = self.values.copy()
+        # Guard against self.values being None (can happen when
+        # from_checkpoint receives a None value from a corrupted or
+        # partially-written checkpoint).  Fixes #6791.
+        empty.values = self.values.copy() if self.values is not None else []
         return empty
 
     def checkpoint(self) -> list[Value]:
@@ -66,7 +69,11 @@ class Topic(
     def from_checkpoint(self, checkpoint: list[Value]) -> Self:
         empty = self.__class__(self.typ, self.accumulate)
         empty.key = self.key
-        if checkpoint is not MISSING:
+        # Treat None the same as MISSING: a None entry in channel_values means
+        # the channel was never written, so we fall back to the default empty
+        # list rather than propagating None into self.values (which would later
+        # crash copy() with AttributeError).  Fixes #6791.
+        if checkpoint is not MISSING and checkpoint is not None:
             if isinstance(checkpoint, tuple):
                 # backwards compatibility
                 empty.values = checkpoint[1]
