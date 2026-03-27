@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 
 if sys.version_info >= (3, 13):
     ContextT = TypeVar("ContextT", default=None)
@@ -162,6 +162,12 @@ class _ExecutionRuntime(_ServerRuntimeBase[ContextT], Generic[ContextT]):
     Only available during `threads.create_run`.
     """
 
+    previous: Any = field(default=None)
+    """The previous return value for the given thread.
+
+    Only available with the functional API when a checkpointer is provided.
+    """
+
 
 @dataclass(kw_only=True, slots=True, frozen=True)
 class _ReadRuntime(_ServerRuntimeBase[ContextT], Generic[ContextT]):
@@ -173,6 +179,18 @@ class _ReadRuntime(_ServerRuntimeBase[ContextT], Generic[ContextT]):
 
     !!! warning "Beta"
         This API is in beta and may change in future releases.
+    """
+
+    context: Any = field(default=None)
+    """Placeholder for compatibility with ``runtime_to_proto``.
+
+    Always ``None`` for non-execution contexts.
+    """
+
+    previous: Any = field(default=None)
+    """Placeholder for compatibility with ``runtime_to_proto``.
+
+    Always ``None`` for non-execution contexts.
     """
 
 
