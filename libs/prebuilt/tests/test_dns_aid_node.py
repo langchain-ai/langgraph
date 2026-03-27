@@ -24,7 +24,7 @@ def _mock_discovery_result(agents: list[dict]) -> MagicMock:
 SAMPLE_AGENTS = [
     {
         "name": "search-agent",
-        "target_host": "search.example.com",
+        "endpoint": "search.example.com",
         "port": 443,
         "protocol": "a2a",
         "capabilities": ["search", "summarize"],
@@ -33,7 +33,7 @@ SAMPLE_AGENTS = [
     },
     {
         "name": "code-agent",
-        "target_host": "code.example.com",
+        "endpoint": "code.example.com",
         "port": 443,
         "protocol": "mcp",
         "capabilities": ["code", "debug", "test"],
@@ -42,7 +42,7 @@ SAMPLE_AGENTS = [
     },
     {
         "name": "general-agent",
-        "target_host": "general.example.com",
+        "endpoint": "general.example.com",
         "port": 443,
         "protocol": "https",
         "capabilities": ["search", "code", "summarize", "translate"],

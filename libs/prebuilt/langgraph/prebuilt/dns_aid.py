@@ -50,7 +50,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional, Sequence
+from typing import Any
 
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field
@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 def _import_dns_aid() -> Any:
     """Lazy import dns_aid, raising a clear error if not installed."""
     try:
-        import dns_aid
+        import dns_aid  # type: ignore[import-not-found]
 
         return dns_aid
     except ImportError:
@@ -74,7 +74,7 @@ def _import_dns_aid() -> Any:
 def _import_create_backend() -> Any:
     """Lazy import the dns_aid backend factory."""
     try:
-        from dns_aid.backends import create_backend
+        from dns_aid.backends import create_backend  # type: ignore[import-not-found]
 
         return create_backend
     except ImportError:
@@ -100,9 +100,7 @@ def _import_httpx() -> Any:
 class AgentInvokeInput(BaseModel):
     """Input schema for invoking a discovered agent."""
 
-    query: str = Field(
-        ..., description="The query or message to send to the agent"
-    )
+    query: str = Field(..., description="The query or message to send to the agent")
 
 
 @dataclass
@@ -153,7 +151,7 @@ def _create_agent_tool(agent: DiscoveredAgent) -> BaseTool:
         desc_parts.append(f"Capabilities: {caps_str}.")
     description = " ".join(desc_parts)
 
-    scheme = "https" if agent.port == 443 else "http"
+    scheme = "https" if agent.protocol in ("https", "mcp") else "http"
     base_url = f"{scheme}://{agent.endpoint}:{agent.port}"
 
     async def _ainvoke_agent(query: str) -> str:
@@ -168,7 +166,12 @@ def _create_agent_tool(agent: DiscoveredAgent) -> BaseTool:
                 if response.status_code == 200:
                     return json.dumps(response.json())
             except Exception:
-                pass
+                logger.debug(
+                    "DNS-AID: LangServe invoke failed for '%s' at %s",
+                    agent.name,
+                    base_url,
+                    exc_info=True,
+                )
 
             # Fallback: try A2A-style message
             try:
@@ -193,13 +196,15 @@ def _create_agent_tool(agent: DiscoveredAgent) -> BaseTool:
                 if response.status_code == 200:
                     return json.dumps(response.json())
             except Exception:
-                pass
+                logger.debug(
+                    "DNS-AID: A2A invoke failed for '%s' at %s",
+                    agent.name,
+                    base_url,
+                    exc_info=True,
+                )
 
             return json.dumps(
-                {
-                    "error": f"Failed to invoke agent '{agent.name}' "
-                    f"at {base_url}"
-                }
+                {"error": f"Failed to invoke agent '{agent.name}' at {base_url}"}
             )
 
     def _invoke_agent(query: str) -> str:
@@ -398,9 +403,7 @@ async def publish_graph(
         backend=resolved_backend,
     )
 
-    logger.info(
-        "DNS-AID: Published graph '%s' at %s", name, domain
-    )
+    logger.info("DNS-AID: Published graph '%s' at %s", name, domain)
     return result.model_dump()
 
 
@@ -439,12 +442,8 @@ async def unpublish_graph(
     )
 
     if deleted:
-        logger.info(
-            "DNS-AID: Unpublished graph '%s' from %s", name, domain
-        )
+        logger.info("DNS-AID: Unpublished graph '%s' from %s", name, domain)
     else:
-        logger.warning(
-            "DNS-AID: Graph '%s' not found at %s", name, domain
-        )
+        logger.warning("DNS-AID: Graph '%s' not found at %s", name, domain)
 
     return deleted

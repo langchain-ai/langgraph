@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -113,9 +111,7 @@ class TestDiscoverAgents:
             "count": 2,
         }
 
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import:
+        with patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import:
             mock_dns_aid = MagicMock()
             mock_dns_aid.discover = AsyncMock(return_value=mock_result)
             mock_import.return_value = mock_dns_aid
@@ -134,9 +130,7 @@ class TestDiscoverAgents:
         mock_result = MagicMock()
         mock_result.model_dump.return_value = {"agents": []}
 
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import:
+        with patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import:
             mock_dns_aid = MagicMock()
             mock_dns_aid.discover = AsyncMock(return_value=mock_result)
             mock_import.return_value = mock_dns_aid
@@ -159,9 +153,7 @@ class TestDiscoverAgents:
         mock_result = MagicMock()
         mock_result.model_dump.return_value = {"agents": []}
 
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import:
+        with patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import:
             mock_dns_aid = MagicMock()
             mock_dns_aid.discover = AsyncMock(return_value=mock_result)
             mock_import.return_value = mock_dns_aid
@@ -191,9 +183,7 @@ class TestDiscoverTools:
             ],
         }
 
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import:
+        with patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import:
             mock_dns_aid = MagicMock()
             mock_dns_aid.discover = AsyncMock(return_value=mock_result)
             mock_import.return_value = mock_dns_aid
@@ -208,9 +198,7 @@ class TestDiscoverTools:
         mock_result = MagicMock()
         mock_result.model_dump.return_value = {"agents": []}
 
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import:
+        with patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import:
             mock_dns_aid = MagicMock()
             mock_dns_aid.discover = AsyncMock(return_value=mock_result)
             mock_import.return_value = mock_dns_aid
@@ -231,9 +219,7 @@ class TestPublishGraph:
             "agent": {"name": "my-graph"},
         }
 
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import:
+        with patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import:
             mock_dns_aid = MagicMock()
             mock_dns_aid.publish = AsyncMock(return_value=mock_result)
             mock_import.return_value = mock_dns_aid
@@ -261,9 +247,7 @@ class TestPublishGraph:
         mock_result = MagicMock()
         mock_result.model_dump.return_value = {"success": True}
 
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import:
+        with patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import:
             mock_dns_aid = MagicMock()
             mock_dns_aid.publish = AsyncMock(return_value=mock_result)
             mock_import.return_value = mock_dns_aid
@@ -286,9 +270,7 @@ class TestPublishGraph:
         mock_result = MagicMock()
         mock_result.model_dump.return_value = {"success": True}
 
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import:
+        with patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import:
             mock_dns_aid = MagicMock()
             mock_dns_aid.publish = AsyncMock(return_value=mock_result)
             mock_import.return_value = mock_dns_aid
@@ -313,9 +295,7 @@ class TestPublishGraph:
         mock_result.model_dump.return_value = {"success": True}
         mock_backend = MagicMock()
 
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import:
+        with patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import:
             mock_dns_aid = MagicMock()
             mock_dns_aid.publish = AsyncMock(return_value=mock_result)
             mock_import.return_value = mock_dns_aid
@@ -337,17 +317,14 @@ class TestPublishGraph:
         mock_result.model_dump.return_value = {"success": True}
         mock_backend_instance = MagicMock()
 
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import, patch(
-            "langgraph.prebuilt.dns_aid._import_create_backend"
-        ) as mock_create:
+        with (
+            patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import,
+            patch("langgraph.prebuilt.dns_aid._import_create_backend") as mock_create,
+        ):
             mock_dns_aid = MagicMock()
             mock_dns_aid.publish = AsyncMock(return_value=mock_result)
             mock_import.return_value = mock_dns_aid
-            mock_create.return_value = MagicMock(
-                return_value=mock_backend_instance
-            )
+            mock_create.return_value = MagicMock(return_value=mock_backend_instance)
 
             await publish_graph(
                 MagicMock(),
@@ -366,9 +343,7 @@ class TestUnpublishGraph:
 
     @pytest.mark.asyncio
     async def test_unpublishes_successfully(self) -> None:
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import:
+        with patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import:
             mock_dns_aid = MagicMock()
             mock_dns_aid.unpublish = AsyncMock(return_value=True)
             mock_import.return_value = mock_dns_aid
@@ -385,9 +360,7 @@ class TestUnpublishGraph:
 
     @pytest.mark.asyncio
     async def test_returns_false_when_not_found(self) -> None:
-        with patch(
-            "langgraph.prebuilt.dns_aid._import_dns_aid"
-        ) as mock_import:
+        with patch("langgraph.prebuilt.dns_aid._import_dns_aid") as mock_import:
             mock_dns_aid = MagicMock()
             mock_dns_aid.unpublish = AsyncMock(return_value=False)
             mock_import.return_value = mock_dns_aid

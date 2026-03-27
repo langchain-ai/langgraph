@@ -7,15 +7,19 @@ TTL-aware caching to minimize DNS lookups.
 Usage in a StateGraph:
     .. code-block:: python
 
+        from typing import Any
         from langgraph.graph import StateGraph, MessagesState
-        from langgraph.prebuilt.dns_aid_node import DnsAidResolverNode
+        from langgraph.prebuilt.dns_aid_node import DnsAidResolverNode, ResolverResult
+
+        class AgentState(MessagesState):
+            dns_aid_result: ResolverResult | None = None
 
         resolver = DnsAidResolverNode(
             domain="agents.example.com",
             required_capabilities=["search"],
         )
 
-        graph = StateGraph(MessagesState)
+        graph = StateGraph(AgentState)
         graph.add_node("resolve", resolver)
         graph.add_node("agent", agent_node)
         graph.add_edge("resolve", "agent")
@@ -37,8 +41,9 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Any, Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +51,7 @@ logger = logging.getLogger(__name__)
 def _import_dns_aid() -> Any:
     """Lazy import dns_aid."""
     try:
-        import dns_aid
+        import dns_aid  # type: ignore[import-not-found]
 
         return dns_aid
     except ImportError:
@@ -160,15 +165,17 @@ class DnsAidResolverNode:
         agents = []
         result_dict = result.model_dump()
         for agent_data in result_dict.get("agents", []):
-            agents.append({
-                "name": agent_data.get("name", "unknown"),
-                "target_host": agent_data.get("target_host", ""),
-                "port": agent_data.get("port", 443),
-                "protocol": agent_data.get("protocol", "https"),
-                "capabilities": agent_data.get("capabilities", []),
-                "version": agent_data.get("version", ""),
-                "description": agent_data.get("description", ""),
-            })
+            agents.append(
+                {
+                    "name": agent_data.get("name", "unknown"),
+                    "endpoint": agent_data.get("endpoint", ""),
+                    "port": agent_data.get("port", 443),
+                    "protocol": agent_data.get("protocol", "https"),
+                    "capabilities": agent_data.get("capabilities", []),
+                    "version": agent_data.get("version", ""),
+                    "description": agent_data.get("description", ""),
+                }
+            )
 
         if self.cache_ttl > 0:
             self._cache[key] = CachedDiscovery(
@@ -200,9 +207,7 @@ class DnsAidResolverNode:
 
         return matching
 
-    def _rank_agents(
-        self, agents: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def _rank_agents(self, agents: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Rank matching agents by capability coverage (more caps = better match).
 
         Agents with more capabilities matching the required set are ranked higher.
@@ -222,16 +227,14 @@ class DnsAidResolverNode:
 
         return sorted(agents, key=score, reverse=True)
 
-    async def _dispatch(
-        self, agent: dict[str, Any], query: str
-    ) -> str:
+    async def _dispatch(self, agent: dict[str, Any], query: str) -> str:
         """Invoke the selected agent with a query."""
         httpx = _import_httpx()
 
-        host = agent.get("target_host", "")
+        host = agent.get("endpoint", "")
         port = agent.get("port", 443)
         protocol = agent.get("protocol", "https")
-        scheme = "https" if port == 443 else "http"
+        scheme = "https" if protocol in ("https", "mcp") else "http"
         base_url = f"{scheme}://{host}:{port}"
 
         async with httpx.AsyncClient(timeout=self.dispatch_timeout) as client:
@@ -244,7 +247,12 @@ class DnsAidResolverNode:
                 if response.status_code == 200:
                     return json.dumps(response.json())
             except Exception:
-                pass
+                logger.debug(
+                    "DNS-AID resolver: LangServe invoke failed for '%s' at %s",
+                    agent.get("name"),
+                    base_url,
+                    exc_info=True,
+                )
 
             # Try A2A message/send
             if protocol == "a2a":
@@ -265,11 +273,16 @@ class DnsAidResolverNode:
                     if response.status_code == 200:
                         return json.dumps(response.json())
                 except Exception:
-                    pass
+                    logger.debug(
+                        "DNS-AID resolver: A2A invoke failed for '%s' at %s",
+                        agent.get("name"),
+                        base_url,
+                        exc_info=True,
+                    )
 
-            return json.dumps({
-                "error": f"Failed to invoke agent '{agent.get('name')}' at {base_url}"
-            })
+            return json.dumps(
+                {"error": f"Failed to invoke agent '{agent.get('name')}' at {base_url}"}
+            )
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         """Execute the resolver node.
@@ -325,10 +338,12 @@ class DnsAidResolverNode:
             }
 
         best = ranked[0]
+        best_protocol = best.get("protocol", "https")
+        best_scheme = "https" if best_protocol in ("https", "mcp") else "http"
         result = ResolverResult(
             agent_name=best.get("name", ""),
-            agent_endpoint=f"https://{best.get('target_host')}:{best.get('port')}",
-            agent_protocol=best.get("protocol", ""),
+            agent_endpoint=f"{best_scheme}://{best.get('endpoint')}:{best.get('port')}",
+            agent_protocol=best_protocol,
             capabilities=best.get("capabilities", []),
         )
 
