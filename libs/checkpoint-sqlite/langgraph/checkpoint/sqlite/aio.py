@@ -307,6 +307,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     value BLOB,
                     PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
                 );
+                CREATE TABLE IF NOT EXISTS checkpoint_deleted_threads (
+                    thread_id TEXT PRIMARY KEY
+                );
                 """
             ):
                 await self.conn.commit()
@@ -504,9 +507,20 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         serialized_metadata = json.dumps(
             get_checkpoint_metadata(config, metadata), ensure_ascii=False
         ).encode("utf-8", "ignore")
-        async with (
-            self.lock,
-            self.conn.execute(
+        async with self.lock, self.conn.cursor() as cur:
+            await cur.execute(
+                "SELECT 1 FROM checkpoint_deleted_threads WHERE thread_id = ?",
+                (str(thread_id),),
+            )
+            if await cur.fetchone():
+                return {
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "checkpoint_id": checkpoint["id"],
+                    }
+                }
+            await cur.execute(
                 "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     str(config["configurable"]["thread_id"]),
@@ -517,8 +531,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     serialized_checkpoint,
                     serialized_metadata,
                 ),
-            ),
-        ):
+            )
             await self.conn.commit()
         return {
             "configurable": {
@@ -552,6 +565,12 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         )
         await self.setup()
         async with self.lock, self.conn.cursor() as cur:
+            await cur.execute(
+                "SELECT 1 FROM checkpoint_deleted_threads WHERE thread_id = ?",
+                (str(config["configurable"]["thread_id"]),),
+            )
+            if await cur.fetchone():
+                return
             await cur.executemany(
                 query,
                 [
@@ -578,7 +597,12 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         Returns:
             None
         """
+        await self.setup()
         async with self.lock, self.conn.cursor() as cur:
+            await cur.execute(
+                "INSERT OR IGNORE INTO checkpoint_deleted_threads (thread_id) VALUES (?)",
+                (str(thread_id),),
+            )
             await cur.execute(
                 "DELETE FROM checkpoints WHERE thread_id = ?",
                 (str(thread_id),),

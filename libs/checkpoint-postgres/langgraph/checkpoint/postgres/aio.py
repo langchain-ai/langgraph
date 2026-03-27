@@ -267,6 +267,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 blob_values[k] = copy["channel_values"].pop(k)
 
         async with self._cursor(pipeline=True) as cur:
+            await cur.execute(
+                self.CHECK_CHECKPOINT_DELETED_THREAD_SQL,
+                (thread_id,),
+            )
+            if await cur.fetchone():
+                return next_config
             if blob_versions := {
                 k: v for k, v in new_versions.items() if k in blob_values
             }:
@@ -324,6 +330,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
             writes,
         )
         async with self._cursor(pipeline=True) as cur:
+            await cur.execute(
+                self.CHECK_CHECKPOINT_DELETED_THREAD_SQL,
+                (config["configurable"]["thread_id"],),
+            )
+            if await cur.fetchone():
+                return
             await cur.executemany(query, params)
 
     async def adelete_thread(self, thread_id: str) -> None:
@@ -336,6 +348,10 @@ class AsyncPostgresSaver(BasePostgresSaver):
             None
         """
         async with self._cursor(pipeline=True) as cur:
+            await cur.execute(
+                self.INSERT_CHECKPOINT_DELETED_THREAD_SQL,
+                (str(thread_id),),
+            )
             await cur.execute(
                 "DELETE FROM checkpoints WHERE thread_id = %s",
                 (str(thread_id),),
