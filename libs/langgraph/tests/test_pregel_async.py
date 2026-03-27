@@ -225,13 +225,13 @@ async def test_request_drain_breaks_acall_scheduling(
 
     @entrypoint(checkpointer=async_checkpointer)
     async def graph(x: int, *, runtime: Runtime) -> int:
-        fut = child(x)
         runtime.request_drain()
+        fut = child(x)
         return await fut
 
     config = {"configurable": {"thread_id": "drain-call-async"}}
 
-    with pytest.raises(TypeError, match="A future is required for source argument"):
+    with pytest.raises(RuntimeError, match="Task not scheduled"):
         await graph.ainvoke(1, config=config)
 
 
