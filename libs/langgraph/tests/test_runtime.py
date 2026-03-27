@@ -538,6 +538,186 @@ async def test_external_drain_concurrent_async() -> None:
     await drain_task
 
 
+@pytest.mark.anyio
+async def test_drain_then_cancel_after_graceful_timeout() -> None:
+    """Simulate: drain requested -> node still running -> graceful timeout -> cancel.
+
+    This shows what happens when a long-running node doesn't finish within
+    the graceful period after drain is requested.
+    """
+
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    node_started = asyncio.Event()
+    node_cancelled = asyncio.Event()
+    node_finished = asyncio.Event()
+
+    async def slow_node(state: State) -> dict[str, str]:
+        node_started.set()
+        try:
+            await asyncio.sleep(30)  # very long operation
+        except asyncio.CancelledError:
+            node_cancelled.set()
+            raise
+        node_finished.set()
+        return {"first": "done"}
+
+    async def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", slow_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    control = RunControl()
+    compiled = graph.compile()
+
+    # Phase 1: start graph
+    graph_task = asyncio.create_task(compiled.ainvoke({}, control=control))
+
+    # Phase 2: wait for node to start, then request drain
+    await node_started.wait()
+    control.request_drain("sigterm")
+
+    # Phase 3: graceful timeout — node is still running, cancel after 1s
+    graceful_timeout = 1.0
+    await asyncio.sleep(graceful_timeout)
+
+    assert not node_finished.is_set(), "node should still be running"
+    assert not node_cancelled.is_set(), "node should not be cancelled yet"
+
+    # Phase 4: force cancel
+    graph_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await graph_task
+
+    # The node received CancelledError at the await point
+    assert node_cancelled.is_set(), "node should have received CancelledError"
+    assert not node_finished.is_set(), "node should NOT have finished normally"
+
+
+@pytest.mark.anyio
+async def test_cancel_ainvoke_with_async_node() -> None:
+    """Cancel ainvoke running an async node: CancelledError is delivered
+    at the await point and the node stops immediately."""
+
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    node_started = asyncio.Event()
+    node_cancelled = False
+    node_finished = False
+
+    async def slow_async_node(state: State) -> dict[str, str]:
+        nonlocal node_cancelled, node_finished
+        node_started.set()
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            node_cancelled = True
+            raise
+        node_finished = True
+        return {"first": "done"}
+
+    async def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", slow_async_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    compiled = graph.compile()
+    graph_task = asyncio.create_task(compiled.ainvoke({}))
+
+    await node_started.wait()
+    graph_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await graph_task
+
+    assert node_cancelled, "async node received CancelledError at await point"
+    assert not node_finished, "async node did NOT run to completion"
+
+
+@pytest.mark.anyio
+async def test_cancel_ainvoke_with_sync_node() -> None:
+    """Cancel ainvoke running a sync node.
+
+    Sync nodes in ainvoke run on a separate thread (via run_coroutine_threadsafe),
+    NOT on the event loop thread. Cancelling the asyncio task disconnects from
+    the thread, but the thread keeps running as an orphan and completes on its own.
+
+    Key difference from async nodes:
+    - async node: CancelledError stops the coroutine at an await point
+    - sync node: cancel only disconnects asyncio; the thread runs to completion
+
+    In shutdown case, we will ignore this because the instance will be destroyed soon.
+    """
+
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    node_started = threading.Event()
+    node_finished = threading.Event()
+
+    def slow_sync_node(state: State) -> dict[str, str]:
+        node_started.set()
+        time.sleep(1)
+        node_finished.set()
+        return {"first": "done"}
+
+    def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", slow_sync_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    control = RunControl()
+    compiled = graph.compile()
+
+    graph_task = asyncio.create_task(compiled.ainvoke({}, control=control))
+
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, node_started.wait, 5)
+
+    # Node is now running time.sleep(1) on a background thread.
+    # Cancel disconnects the asyncio side; drain is set for good measure.
+    graph_task.cancel()
+    control.request_drain("sigterm")
+
+    with pytest.raises(asyncio.CancelledError):
+        await graph_task
+
+    # At this point the asyncio task is done, but the sync node's thread
+    # is still running (orphaned). It hasn't finished yet.
+    assert not node_finished.is_set(), (
+        "sync node should still be running in its background thread"
+    )
+
+    # Wait for the orphaned thread to complete on its own.
+    await loop.run_in_executor(None, node_finished.wait, 5)
+
+    assert node_finished.is_set(), (
+        "orphaned thread eventually completed — cancel() only disconnected "
+        "asyncio, the thread itself was never interrupted"
+    )
+
+
 def test_drain_with_control_parameter_sync() -> None:
     """Control parameter is wired through invoke -> stream."""
 
