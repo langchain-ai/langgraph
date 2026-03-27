@@ -139,7 +139,45 @@ class TestMemorySaver:
             search_results_5[1].config["configurable"]["checkpoint_ns"],
         } == {"", "inner"}
 
-        # TODO: test before and limit params
+        # test before and limit params
+        # set up two checkpoints in the same thread and namespace
+        config_thread: RunnableConfig = {
+            "configurable": {"thread_id": "thread-3", "checkpoint_ns": ""}
+        }
+        config_after_cp1 = self.memory_saver.put(
+            config_thread,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        config_after_cp2 = self.memory_saver.put(
+            config_after_cp1,
+            self.chkpnt_2,
+            self.metadata_2,
+            self.chkpnt_2["channel_versions"],
+        )
+
+        # limit=1 should return only the latest checkpoint
+        search_results_limit1 = list(self.memory_saver.list(config_thread, limit=1))
+        assert len(search_results_limit1) == 1
+        assert (
+            search_results_limit1[0].config["configurable"]["checkpoint_id"]
+            == config_after_cp2["configurable"]["checkpoint_id"]
+        )
+
+        # limit=0 should return no checkpoints
+        search_results_limit0 = list(self.memory_saver.list(config_thread, limit=0))
+        assert len(search_results_limit0) == 0
+
+        # before= should return only checkpoints older than the referenced checkpoint
+        search_results_before = list(
+            self.memory_saver.list(config_thread, before=config_after_cp2)
+        )
+        assert len(search_results_before) == 1
+        assert (
+            search_results_before[0].config["configurable"]["checkpoint_id"]
+            == config_after_cp1["configurable"]["checkpoint_id"]
+        )
 
     async def test_asearch(self) -> None:
         # set up test
@@ -193,6 +231,50 @@ class TestMemorySaver:
             c async for c in self.memory_saver.alist(None, filter=query_4)
         ]
         assert len(search_results_4) == 0
+
+        # test before and limit params
+        # set up two checkpoints in the same thread and namespace
+        config_thread: RunnableConfig = {
+            "configurable": {"thread_id": "thread-3", "checkpoint_ns": ""}
+        }
+        config_after_cp1 = self.memory_saver.put(
+            config_thread,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        config_after_cp2 = self.memory_saver.put(
+            config_after_cp1,
+            self.chkpnt_2,
+            self.metadata_2,
+            self.chkpnt_2["channel_versions"],
+        )
+
+        # limit=1 should return only the latest checkpoint
+        search_results_limit1 = [
+            c async for c in self.memory_saver.alist(config_thread, limit=1)
+        ]
+        assert len(search_results_limit1) == 1
+        assert (
+            search_results_limit1[0].config["configurable"]["checkpoint_id"]
+            == config_after_cp2["configurable"]["checkpoint_id"]
+        )
+
+        # limit=0 should return no checkpoints
+        search_results_limit0 = [
+            c async for c in self.memory_saver.alist(config_thread, limit=0)
+        ]
+        assert len(search_results_limit0) == 0
+
+        # before= should return only checkpoints older than the referenced checkpoint
+        search_results_before = [
+            c async for c in self.memory_saver.alist(config_thread, before=config_after_cp2)
+        ]
+        assert len(search_results_before) == 1
+        assert (
+            search_results_before[0].config["configurable"]["checkpoint_id"]
+            == config_after_cp1["configurable"]["checkpoint_id"]
+        )
 
 
 async def test_memory_saver() -> None:
