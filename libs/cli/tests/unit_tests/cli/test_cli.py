@@ -9,6 +9,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
+import langgraph_cli.cli as cli_module
 from langgraph_cli.cli import cli, prepare_args_and_stdin
 from langgraph_cli.config import Config, _get_pip_cleanup_lines, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
@@ -285,6 +286,374 @@ def test_version_option() -> None:
     assert "LangGraph CLI, version" in result.output, (
         "Expected version information in output"
     )
+
+
+def test_top_level_help_shows_deploy_subcommands() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "deploy" in result.output
+    assert "deploy list" in result.output
+    assert "deploy delete" in result.output
+    assert "deploy revisions" in result.output
+    assert "deploy revisions list" in result.output
+    assert "[Beta] List LangSmith Deployments." in result.output
+
+
+def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["--help"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    deploy_line = next(line for line in lines if line.strip().startswith("deploy"))
+    deploy_list_line = next(
+        line for line in lines if line.strip().startswith("deploy list")
+    )
+
+    assert not lines[lines.index(deploy_line) + 1].startswith("               ")
+    assert "..." in deploy_line
+    assert "[Beta] List LangSmith Deployments." in deploy_list_line
+
+
+def test_deploy_list_command(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def list_deployments(self, name_contains: str = ""):
+            captured["name_contains"] = name_contains
+            return {
+                "resources": [
+                    {
+                        "id": "dep-123",
+                        "name": "alpha",
+                        "source_config": {"custom_url": "https://alpha.example.com"},
+                    },
+                    {
+                        "id": "dep-456",
+                        "name": "beta",
+                        "source_config": {"custom_url": "https://beta.example.com"},
+                    },
+                ]
+            }
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "--name-contains",
+            "alp",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+        "name_contains": "alp",
+    }
+    assert "Deployment ID" in result.output
+    assert "Deployment Name" in result.output
+    assert "Deployment URL" in result.output
+    assert "dep-123" in result.output
+    assert "https://beta.example.com" in result.output
+
+
+def test_deploy_list_command_no_results(monkeypatch) -> None:
+    runner = CliRunner()
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_deployments(self, name_contains: str = ""):
+            return {"resources": []}
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == "No deployments found."
+
+
+def test_deploy_revisions_list_command(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def list_revisions(self, deployment_id: str, limit: int = 1):
+            captured["deployment_id"] = deployment_id
+            captured["limit"] = str(limit)
+            return {
+                "resources": [
+                    {
+                        "id": "rev-123",
+                        "status": "CREATING",
+                        "created_at": "2023-11-07T05:31:56Z",
+                    },
+                    {
+                        "id": "rev-456",
+                        "status": "DEPLOYED",
+                        "created_at": "2023-11-08T10:00:00Z",
+                    },
+                ]
+            }
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "revisions",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+        "deployment_id": "dep-123",
+        "limit": "10",
+    }
+    assert "Revision ID" in result.output
+    assert "Status" in result.output
+    assert "Created At" in result.output
+    assert "rev-123" in result.output
+    assert "2023-11-08T10:00:00Z" in result.output
+
+
+def test_deploy_revisions_list_command_no_results(monkeypatch) -> None:
+    runner = CliRunner()
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_revisions(self, deployment_id: str, limit: int = 1):
+            return {"resources": []}
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "revisions",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == "No revisions found for deployment dep-123."
+
+
+def test_deploy_revisions_list_command_with_explicit_limit(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_revisions(self, deployment_id: str, limit: int = 1):
+            captured["deployment_id"] = deployment_id
+            captured["limit"] = str(limit)
+            return {"resources": []}
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "revisions",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "--limit",
+            "25",
+            "dep-123",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {"deployment_id": "dep-123", "limit": "25"}
+    assert result.output.strip() == "No revisions found for deployment dep-123."
+
+
+def test_deploy_revisions_list_missing_deployment_id_shows_usage() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["deploy", "revisions", "list"])
+
+    assert result.exit_code == 2, result.output
+    assert "Missing argument 'DEPLOYMENT_ID'" in result.output
+
+
+def test_deploy_delete_command(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def delete_deployment(self, deployment_id: str):
+            captured["deployment_id"] = deployment_id
+            return None
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "delete",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+        input="y\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+        "deployment_id": "dep-123",
+    }
+    assert (
+        "Are you sure you want to delete deployment ID dep-123? (Y/n):" in result.output
+    )
+    assert result.output.strip().endswith("Deleted deployment dep-123.")
+
+
+def test_deploy_delete_command_cancelled(monkeypatch) -> None:
+    runner = CliRunner()
+    deleted = False
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def delete_deployment(self, deployment_id: str):
+            nonlocal deleted
+            deleted = True
+            return None
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "delete",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+        input="n\n",
+    )
+
+    assert result.exit_code == 1, result.output
+    assert not deleted
+    assert "Aborted!" in result.output
+
+
+def test_deploy_delete_command_force(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def delete_deployment(self, deployment_id: str):
+            captured["deployment_id"] = deployment_id
+            return None
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "delete",
+            "--force",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Are you sure you want to delete deployment ID dep-123?" not in result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+        "deployment_id": "dep-123",
+    }
+    assert result.output.strip() == "Deleted deployment dep-123."
 
 
 def test_dockerfile_command_basic() -> None:
@@ -822,3 +1191,139 @@ def test_prepare_args_and_stdin_with_api_version_and_image() -> None:
     # When image is provided, api_version should be ignored for the image
     # but the stdin should not contain a build section (since image is provided)
     assert "pull_policy: build" not in actual_stdin
+
+
+def test_dockerfile_command_distributed_mode() -> None:
+    """Test the 'dockerfile' command with --engine-runtime-mode distributed."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            [
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--engine-runtime-mode",
+                "distributed",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "✅ Created: Dockerfile" in result.output
+
+        assert save_path.exists()
+        with open(save_path) as f:
+            dockerfile = f.read()
+            assert "FROM langchain/langgraph-executor:3.11" in dockerfile
+
+
+def test_dockerfile_command_combined_mode() -> None:
+    """Test the 'dockerfile' command with --engine-runtime-mode combined_queue_worker."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            [
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--engine-runtime-mode",
+                "combined_queue_worker",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert save_path.exists()
+        with open(save_path) as f:
+            dockerfile = f.read()
+            assert "FROM langchain/langgraph-api:3.11" in dockerfile
+
+
+def test_dockerfile_command_distributed_with_explicit_base_image() -> None:
+    """Test distributed mode with explicit --base-image overrides executor default."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            [
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--engine-runtime-mode",
+                "distributed",
+                "--base-image",
+                "my-custom-executor:latest",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert save_path.exists()
+        with open(save_path) as f:
+            dockerfile = f.read()
+            assert "FROM my-custom-executor:latest" in dockerfile
+
+
+def test_prepare_args_and_stdin_distributed_mode() -> None:
+    """Test prepare_args_and_stdin with distributed mode includes all services."""
+    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config = validate_config(
+        Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
+    )
+    port = 8000
+
+    actual_args, actual_stdin = prepare_args_and_stdin(
+        capabilities=DEFAULT_DOCKER_CAPABILITIES,
+        config_path=config_path,
+        config=config,
+        docker_compose=None,
+        port=port,
+        watch=False,
+        engine_runtime_mode="distributed",
+    )
+
+    # API service should use langgraph-api base image
+    assert "FROM langchain/langgraph-api:" in actual_stdin
+
+    # Distributed mode sets N_JOBS_PER_WORKER=0 on the API service
+    assert 'N_JOBS_PER_WORKER: "0"' in actual_stdin
+
+    # Orchestrator service present
+    assert "langgraph-orchestrator:" in actual_stdin
+
+    # Executor service present with correct base image
+    assert "langgraph-executor:" in actual_stdin
+    assert "FROM langchain/langgraph-executor:" in actual_stdin
+    assert "executor_entrypoint.sh" in actual_stdin

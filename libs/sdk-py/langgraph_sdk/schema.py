@@ -385,6 +385,8 @@ class Cron(TypedDict):
     """The end date to stop running the cron."""
     schedule: str
     """The schedule to run, cron format."""
+    timezone: str | None
+    """IANA timezone for the cron schedule (e.g. 'America/New_York'). Defaults to null, which is treated as UTC."""
     created_at: datetime
     """The time the cron was created."""
     updated_at: datetime
@@ -406,6 +408,8 @@ class CronUpdate(TypedDict, total=False):
 
     schedule: str
     """The cron schedule to execute this job on."""
+    timezone: str
+    """IANA timezone for the cron schedule (e.g. 'America/New_York')."""
     end_time: datetime
     """The end date to stop running the cron."""
     input: Input
@@ -482,6 +486,7 @@ CronSelectField = Literal[
     "thread_id",
     "end_time",
     "schedule",
+    "timezone",
     "created_at",
     "updated_at",
     "user_id",
@@ -586,6 +591,275 @@ class StreamPart(NamedTuple):
     """The data payload associated with the event."""
     id: str | None = None
     """The ID of the event."""
+
+
+StreamVersion = Literal["v1", "v2"]
+"""Stream format version.
+
+- `"v1"`: Traditional format — raw SSE `StreamPart` NamedTuples.
+- `"v2"`: Each event is a typed dict with `type`, `ns`, and `data` keys.
+"""
+
+
+# --- Typed payload dicts (JSON-deserialized from the server) ---
+
+
+class TaskPayload(TypedDict):
+    """Payload for a task start event."""
+
+    id: str
+    """Unique identifier for this task."""
+    name: str
+    """Name of the node being executed."""
+    input: Any
+    """Input data passed to the task."""
+    triggers: list[str]
+    """List of triggers that caused this task to be executed (e.g. channel writes)."""
+
+
+class TaskResultPayload(TypedDict):
+    """Payload for a task result event."""
+
+    id: str
+    """Unique identifier for this task."""
+    name: str
+    """Name of the node that was executed."""
+    error: str | None
+    """Error message if the task failed, otherwise `None`."""
+    interrupts: list[dict[str, Any]]
+    """List of interrupts that occurred during task execution."""
+    result: dict[str, Any]
+    """Mapping of channel names to the values written by this task."""
+
+
+class CheckpointTaskPayload(TypedDict):
+    """A task entry within a `CheckpointPayload`.
+
+    The keys present depend on the task's state:
+
+    - **Error:** `id`, `name`, `error`, `state`
+    - **Has result:** `id`, `name`, `result`, `interrupts`, `state`
+    - **Pending:** `id`, `name`, `interrupts`, `state`
+    """
+
+    id: str
+    """Unique identifier for this task."""
+    name: str
+    """Name of the node being executed."""
+    error: NotRequired[str]
+    """Error message, present only if the task failed."""
+    result: NotRequired[Any]
+    """Result of the task, present only if the task completed successfully."""
+    interrupts: NotRequired[list[dict[str, Any]]]
+    """List of interrupts, present when the task has been interrupted or completed."""
+    state: dict[str, Any] | None
+    """Snapshot of the subgraph state. `None` if not a subgraph."""
+
+
+class CheckpointPayload(TypedDict):
+    """Payload for a checkpoint event."""
+
+    config: dict[str, Any] | None
+    """Configuration for this checkpoint, including the `thread_id` and `checkpoint_id`."""
+    metadata: dict[str, Any]
+    """Metadata associated with this checkpoint (e.g. step number, source, writes)."""
+    values: dict[str, Any]
+    """Current state values at the time of this checkpoint."""
+    next: list[str]
+    """Names of the nodes scheduled to execute next."""
+    parent_config: dict[str, Any] | None
+    """Configuration of the parent checkpoint, or `None` if this is the first checkpoint."""
+    tasks: list[CheckpointTaskPayload]
+    """List of tasks associated with this checkpoint."""
+
+
+class _DebugCheckpointPayload(TypedDict):
+    step: int
+    """The step number in the graph execution."""
+    timestamp: str
+    """ISO 8601 timestamp of when this event occurred."""
+    type: Literal["checkpoint"]
+    """Event type discriminator, always `"checkpoint"`."""
+    payload: CheckpointPayload
+    """The checkpoint payload."""
+
+
+class _DebugTaskPayload(TypedDict):
+    step: int
+    """The step number in the graph execution."""
+    timestamp: str
+    """ISO 8601 timestamp of when this event occurred."""
+    type: Literal["task"]
+    """Event type discriminator, always `"task"`."""
+    payload: TaskPayload
+    """The task start payload."""
+
+
+class _DebugTaskResultPayload(TypedDict):
+    step: int
+    """The step number in the graph execution."""
+    timestamp: str
+    """ISO 8601 timestamp of when this event occurred."""
+    type: Literal["task_result"]
+    """Event type discriminator, always `"task_result"`."""
+    payload: TaskResultPayload
+    """The task result payload."""
+
+
+DebugPayload = _DebugCheckpointPayload | _DebugTaskPayload | _DebugTaskResultPayload
+"""Wrapper payload for debug events. Discriminate on `type`."""
+
+
+class RunMetadataPayload(TypedDict):
+    """Payload for the `metadata` control event."""
+
+    run_id: str
+    """The unique identifier of the run."""
+
+
+# --- v2 stream part TypedDicts ---
+
+
+class ValuesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="values"`."""
+
+    type: Literal["values"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: dict[str, Any]
+    """Full state values after the step."""
+    interrupts: list[dict[str, Any]]
+    """List of interrupts that occurred during this step."""
+
+
+class UpdatesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="updates"`."""
+
+    type: Literal["updates"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: dict[str, Any]
+    """Mapping of node names to their outputs."""
+
+
+class MessagesPartialStreamPart(TypedDict):
+    """Stream part emitted for partial message chunks (`messages/partial`)."""
+
+    type: Literal["messages/partial"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: list[dict[str, Any]]
+    """List of partial message chunk dicts."""
+
+
+class MessagesCompleteStreamPart(TypedDict):
+    """Stream part emitted for complete messages (`messages/complete`)."""
+
+    type: Literal["messages/complete"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: list[dict[str, Any]]
+    """List of complete message dicts."""
+
+
+class MessagesMetadataStreamPart(TypedDict):
+    """Stream part emitted for message metadata (`messages/metadata`)."""
+
+    type: Literal["messages/metadata"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: dict[str, Any]
+    """Metadata dict for the message (e.g. `langgraph_step`, `langgraph_node`)."""
+
+
+class MessagesTupleStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="messages"` (raw message+metadata pair)."""
+
+    type: Literal["messages"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: list[dict[str, Any]]
+    """Two-element list of `[message_dict, metadata_dict]`."""
+
+
+class CustomStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="custom"`."""
+
+    type: Literal["custom"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: Any
+    """User-defined data passed to `StreamWriter` inside a node."""
+
+
+class CheckpointsStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="checkpoints"`."""
+
+    type: Literal["checkpoints"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: CheckpointPayload
+    """The checkpoint payload."""
+
+
+class TasksStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="tasks"`."""
+
+    type: Literal["tasks"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: TaskPayload | TaskResultPayload
+    """Task start or task result payload."""
+
+
+class DebugStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="debug"`."""
+
+    type: Literal["debug"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: DebugPayload
+    """The debug event payload."""
+
+
+class MetadataStreamPart(TypedDict):
+    """Control event with `run_id` and other run metadata."""
+
+    type: Literal["metadata"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path (empty for root graph)."""
+    data: RunMetadataPayload
+    """The run metadata payload."""
+
+
+StreamPartV2 = (
+    ValuesStreamPart
+    | UpdatesStreamPart
+    | MessagesPartialStreamPart
+    | MessagesCompleteStreamPart
+    | MessagesMetadataStreamPart
+    | MessagesTupleStreamPart
+    | CustomStreamPart
+    | CheckpointsStreamPart
+    | TasksStreamPart
+    | DebugStreamPart
+    | MetadataStreamPart
+)
+"""Discriminated union of all v2 stream part types.
+
+Use `part["type"]` to narrow the type.
+"""
 
 
 class Send(TypedDict):

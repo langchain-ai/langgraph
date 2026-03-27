@@ -134,7 +134,7 @@ class SyncStoreClient:
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
 
-        query_params = {"key": key, "namespace": ".".join(namespace)}
+        query_params: dict[str, Any] = {"key": key, "namespace": ".".join(namespace)}
         if refresh_ttl is not None:
             query_params["refresh_ttl"] = refresh_ttl
         if params:
