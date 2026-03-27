@@ -89,7 +89,7 @@ async def put_test_checkpoint(
     vals = channel_values or {}
     cv = channel_versions
     if cv is None and vals:
-        cv = {k: 1 for k in vals}
+        cv: ChannelVersions = {k: 1 for k in vals}
         cp["channel_versions"] = cv
     nv = new_versions
     if nv is None:

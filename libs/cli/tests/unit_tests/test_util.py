@@ -4,6 +4,7 @@ from langgraph_cli.util import (
     _extract_deployment_url,
     clean_empty_lines,
     format_deployments_table,
+    format_revisions_table,
     warn_non_wolfi_distro,
 )
 
@@ -224,3 +225,34 @@ def test_format_deployments_table():
     assert "alpha" in output
     assert "https://alpha.example.com" in output
     assert "dep-456" in output
+
+
+def test_format_revisions_table():
+    output = format_revisions_table(
+        [
+            {
+                "id": "rev-123",
+                "status": "DEPLOYED",
+                "created_at": "2023-11-09T10:00:00Z",
+            },
+            {
+                "id": "rev-456",
+                "status": "CREATING",
+                "created_at": "2023-11-07T05:31:56Z",
+            },
+            {
+                "id": "rev-789",
+                "status": "DEPLOYED",
+                "created_at": "2023-11-08T10:00:00Z",
+            },
+        ]
+    )
+    assert "Revision ID" in output
+    assert "Status" in output
+    assert "Created At" in output
+    assert "rev-123" in output
+    assert "CREATING" in output
+    assert "2023-11-07T05:31:56Z" in output
+    assert "rev-456" in output
+    assert "rev-789" in output
+    assert "REPLACED" in output
