@@ -4,7 +4,7 @@ import asyncio
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -25,6 +25,7 @@ from psycopg_pool import AsyncConnectionPool
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
+from langgraph.store.postgres.base import PoolConfig
 
 Conn = _ainternal.Conn  # For backward compatibility
 
@@ -60,24 +61,48 @@ class AsyncPostgresSaver(BasePostgresSaver):
         *,
         pipeline: bool = False,
         serde: SerializerProtocol | None = None,
+        pool_config: PoolConfig | None = None,
     ) -> AsyncIterator[AsyncPostgresSaver]:
         """Create a new AsyncPostgresSaver instance from a connection string.
 
         Args:
             conn_string: The Postgres connection info string.
-            pipeline: whether to use AsyncPipeline
+            pipeline: whether to use AsyncPipeline. Ignored when `pool_config` is provided.
+            serde: The serializer to use for serializing and deserializing checkpoints.
+            pool_config: Configuration for the connection pool. If provided, a
+                `psycopg_pool.AsyncConnectionPool` is created and used instead of a
+                single connection. This overrides the `pipeline` argument.
 
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
         """
-        async with await AsyncConnection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
-            if pipeline:
-                async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
-            else:
-                yield cls(conn=conn, serde=serde)
+        if pool_config is not None:
+            pc = pool_config.copy()
+            async with cast(
+                AsyncConnectionPool[AsyncConnection[DictRow]],
+                AsyncConnectionPool(
+                    conn_string,
+                    min_size=pc.pop("min_size", 1),
+                    max_size=pc.pop("max_size", None),
+                    kwargs={
+                        "autocommit": True,
+                        "prepare_threshold": 0,
+                        "row_factory": dict_row,
+                        **(pc.pop("kwargs", None) or {}),
+                    },
+                    **cast(dict, pc),
+                ),
+            ) as pool:
+                yield cls(conn=pool, serde=serde)
+        else:
+            async with await AsyncConnection.connect(
+                conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            ) as conn:
+                if pipeline:
+                    async with conn.pipeline() as pipe:
+                        yield cls(conn=conn, pipe=pipe, serde=serde)
+                else:
+                    yield cls(conn=conn, serde=serde)
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
