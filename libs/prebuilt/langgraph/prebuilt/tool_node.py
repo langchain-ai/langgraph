@@ -390,11 +390,9 @@ def _default_handle_tool_errors(e: Exception) -> str:
 def _handle_tool_error(
     e: Exception,
     *,
-    flag: bool
-    | str
-    | Callable[..., str]
-    | type[Exception]
-    | tuple[type[Exception], ...],
+    flag: (
+        bool | str | Callable[..., str] | type[Exception] | tuple[type[Exception], ...]
+    ),
 ) -> str:
     """Generate error message content based on exception handling configuration.
 
@@ -740,11 +738,13 @@ class ToolNode(RunnableCallable):
         *,
         name: str = "tools",
         tags: list[str] | None = None,
-        handle_tool_errors: bool
-        | str
-        | Callable[..., str]
-        | type[Exception]
-        | tuple[type[Exception], ...] = _default_handle_tool_errors,
+        handle_tool_errors: (
+            bool
+            | str
+            | Callable[..., str]
+            | type[Exception]
+            | tuple[type[Exception], ...]
+        ) = _default_handle_tool_errors,
         messages_key: str = "messages",
         wrap_tool_call: ToolCallWrapper | None = None,
         awrap_tool_call: AsyncToolCallWrapper | None = None,
@@ -1355,12 +1355,12 @@ class ToolNode(RunnableCallable):
             if isinstance(state, dict):
                 for tool_arg, state_field in injected.state.items():
                     injected_args[tool_arg] = (
-                        state[state_field] if state_field else state
+                        state.get(state_field) if state_field else state
                     )
             else:
                 for tool_arg, state_field in injected.state.items():
                     injected_args[tool_arg] = (
-                        getattr(state, state_field) if state_field else state
+                        getattr(state, state_field, None) if state_field else state
                     )
 
         # Inject store
