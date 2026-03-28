@@ -1725,3 +1725,36 @@ async def test_saved_checkpoint_state_graph_async(
         )
         == history[0]
     )
+
+
+def test_copy_checkpoint_channel_values_isolation() -> None:
+    """Mutating channel_values in a copied checkpoint must not affect the original.
+
+    Regression test for shallow-copy bug: copy_checkpoint() used dict.copy()
+    for channel_values, which only copies the top-level dict. Mutable values
+    (lists, dicts) inside channel_values were shared between original and copy.
+    This caused silent data corruption when pending sends (stored as a list in
+    channel_values["__pregel_tasks"]) were mutated after copying.
+    """
+    from langgraph.pregel._checkpoint import copy_checkpoint, empty_checkpoint
+
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"]["__pregel_tasks"] = ["send_a", "send_b"]
+    checkpoint["channel_values"]["messages"] = ["hello"]
+
+    copied = copy_checkpoint(checkpoint)
+
+    # Mutate lists in the copy — must not affect original
+    copied["channel_values"]["__pregel_tasks"].append("send_c")
+    copied["channel_values"]["messages"].append("world")
+
+    assert checkpoint["channel_values"]["__pregel_tasks"] == ["send_a", "send_b"]
+    assert checkpoint["channel_values"]["messages"] == ["hello"]
+
+    # Mutate lists in the original — must not affect copy
+    checkpoint["channel_values"]["__pregel_tasks"].clear()
+    assert copied["channel_values"]["__pregel_tasks"] == [
+        "send_a",
+        "send_b",
+        "send_c",
+    ]
