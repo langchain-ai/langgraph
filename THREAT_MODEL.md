@@ -2,6 +2,8 @@
 
 > Generated: 2026-03-28 | Commit: 0ba22143 | Scope: Full monorepo (all libs/) | Visibility: Open Source | Mode: Deep
 
+> **Disclaimer:** This threat model is automatically generated to help developers and security researchers understand where trust is placed in this system and where boundaries exist. It is experimental, subject to change, and not an authoritative security reference — findings should be validated before acting on them. The analysis may be incomplete or contain inaccuracies. We welcome suggestions and corrections to improve this document.
+
 For vulnerability reporting, see the [GitHub Security Advisories](https://github.com/langchain-ai/langgraph/security/advisories) page.
 
 ## Scope
