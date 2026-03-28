@@ -864,22 +864,11 @@ class ToolNode(RunnableCallable):
             Command | list[ToolMessage] | dict[str, list[ToolMessage]]
         ] = []
 
-        # combine all parent commands with goto into a single parent command
-        parent_command: Command | None = None
+        parent_commands: list[Command] = []
         for output in outputs:
             if isinstance(output, Command):
-                if (
-                    output.graph is Command.PARENT
-                    and isinstance(output.goto, list)
-                    and all(isinstance(send, Send) for send in output.goto)
-                ):
-                    if parent_command:
-                        parent_command = replace(
-                            parent_command,
-                            goto=cast("list[Send]", parent_command.goto) + output.goto,
-                        )
-                    else:
-                        parent_command = Command(graph=Command.PARENT, goto=output.goto)
+                if output.graph is Command.PARENT:
+                    parent_commands.append(output)
                 else:
                     combined_outputs.append(output)
             else:
@@ -887,9 +876,50 @@ class ToolNode(RunnableCallable):
                     [output] if input_type == "list" else {self._messages_key: [output]}
                 )
 
-        if parent_command:
-            combined_outputs.append(parent_command)
+        if len(parent_commands) == 1:
+            combined_outputs.append(parent_commands[0])
+        elif parent_commands:
+            combined_outputs.append(self._combine_parent_commands(parent_commands))
         return combined_outputs
+
+    def _combine_parent_commands(self, commands: list[Command]) -> Command:
+        updates: list[tuple[str, Any]] = []
+        goto_targets: list[Send | str] = []
+        seen_gotos: set[str] = set()
+        resume: dict[str, Any] | Any | None = None
+
+        for command in commands:
+            updates.extend(command._update_as_tuples())
+
+            if command.resume is not None and resume is None:
+                resume = command.resume
+
+            if isinstance(command.goto, (str, Send)):
+                command_gotos = [command.goto]
+            else:
+                command_gotos = list(command.goto)
+
+            for goto in command_gotos:
+                if isinstance(goto, str):
+                    if goto not in seen_gotos:
+                        seen_gotos.add(goto)
+                        goto_targets.append(goto)
+                else:
+                    goto_targets.append(goto)
+
+        if not goto_targets:
+            merged_goto: Send | Sequence[Send | str] | str = ()
+        elif len(goto_targets) == 1:
+            merged_goto = goto_targets[0]
+        else:
+            merged_goto = goto_targets
+
+        return Command(
+            graph=Command.PARENT,
+            update=updates or None,
+            resume=resume,
+            goto=merged_goto,
+        )
 
     def _execute_tool_sync(
         self,
