@@ -486,7 +486,7 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
                 raise ValueError(msg)
 
             exception_type = type_hints[first_param.name]
-            if Exception in exception_type.__mro__:
+            if isinstance(exception_type, type) and issubclass(exception_type, Exception):
                 return (exception_type,)
             msg = (
                 f"Arbitrary types are not supported in the error handler "
