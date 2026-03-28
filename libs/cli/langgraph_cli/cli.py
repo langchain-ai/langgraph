@@ -1853,6 +1853,7 @@ def dev(
         port,
         not no_reload,
         graphs,
+        reload_excludes=["**/.langgraph_api/*", "**/.langgraph_api/**/*"],
         n_jobs_per_worker=n_jobs_per_worker,
         open_browser=not no_browser,
         debug_port=debug_port,
