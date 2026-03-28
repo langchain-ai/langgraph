@@ -29,6 +29,12 @@ from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 Conn = _ainternal.Conn  # For backward compatibility
 
 
+@asynccontextmanager
+async def _noop_async_lock() -> AsyncIterator[None]:
+    """No-op async context manager used when locking is unnecessary."""
+    yield
+
+
 class AsyncPostgresSaver(BasePostgresSaver):
     """Asynchronous checkpointer that stores checkpoints in a Postgres database."""
 
@@ -360,13 +366,21 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the AsyncPostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
-        async with self.lock, _ainternal.get_connection(self.conn) as conn:
+        is_pooled_conn = isinstance(self.conn, AsyncConnectionPool)
+        # With AsyncConnectionPool, each _cursor() call checks out its own connection.
+        # The pool does not hand out the same connection concurrently, so a shared lock
+        # across calls is unnecessary here.
+        lock_cm = _noop_async_lock() if is_pooled_conn else self.lock
+        async with _ainternal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
                 # used at a time
                 try:
-                    async with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                    async with (
+                        lock_cm,
+                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                    ):
                         yield cur
                 finally:
                     if pipeline:
@@ -376,6 +390,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
                     async with (
+                        lock_cm,
                         conn.pipeline(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
@@ -383,12 +398,16 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 else:
                     # Use connection's transaction context manager when pipeline mode not supported
                     async with (
+                        lock_cm,
                         conn.transaction(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
                         yield cur
             else:
-                async with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                async with (
+                    lock_cm,
+                    conn.cursor(binary=True, row_factory=dict_row) as cur,
+                ):
                     yield cur
 
     async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
