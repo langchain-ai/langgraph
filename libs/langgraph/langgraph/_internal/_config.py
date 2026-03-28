@@ -28,7 +28,16 @@ from langgraph._internal._constants import (
     NS_SEP,
 )
 
-DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10000"))
+class _DefaultRecursionLimit(int):
+    """Sentinel int subclass to distinguish LangGraph's default recursion
+    limit from a user-provided value of the same magnitude."""
+
+    pass
+
+
+DEFAULT_RECURSION_LIMIT = _DefaultRecursionLimit(
+    int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10000"))
+)
 
 
 def recast_checkpoint_ns(ns: str) -> str:
@@ -139,7 +148,7 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
                 else:
                     raise NotImplementedError
             elif key == "recursion_limit":
-                if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
+                if not isinstance(config["recursion_limit"], _DefaultRecursionLimit):
                     base["recursion_limit"] = config["recursion_limit"]
             else:
                 base[key] = config[key]  # type: ignore[literal-required]
@@ -293,7 +302,7 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
             {
                 k: v.copy() if k in COPIABLE_KEYS else v  # type: ignore[attr-defined]
                 for k, v in var_config.items()
-                if _is_not_empty(v)
+                if _is_not_empty(v) and k != "recursion_limit"
             },
         )
     for config in configs:

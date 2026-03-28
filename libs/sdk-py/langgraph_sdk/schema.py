@@ -183,7 +183,7 @@ class Config(TypedDict, total=False):
 
     recursion_limit: int
     """
-    Maximum number of times a call can recurse. If not provided, defaults to 25.
+    Maximum number of times a call can recurse. If not provided, defaults to 10000.
     """
 
     configurable: dict[str, Any]
