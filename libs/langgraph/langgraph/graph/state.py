@@ -5,7 +5,7 @@ import logging
 import typing
 import warnings
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Hashable, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Mapping, Sequence
 from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
@@ -845,7 +845,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         path: Callable[..., Hashable | Sequence[Hashable]]
         | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
         | Runnable[Any, Hashable | Sequence[Hashable]],
-        path_map: dict[Hashable, str] | list[str] | None = None,
+        path_map: Mapping[Hashable, str] | list[str] | None = None,
     ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
