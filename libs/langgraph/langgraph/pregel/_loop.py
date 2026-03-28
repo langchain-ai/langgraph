@@ -17,6 +17,7 @@ from types import TracebackType
 from typing import (
     Any,
     Literal,
+    NamedTuple,
     TypeVar,
     cast,
 )
@@ -42,6 +43,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_CHECKPOINT_WRITE_BUFFER_SIZE,
     CONFIG_KEY_REPLAY_STATE,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RESUMING,
@@ -128,6 +130,16 @@ P = ParamSpec("P")
 
 
 WritesT = Sequence[tuple[str, Any]]
+
+CHECKPOINT_WRITE_BUFFER_SIZE = 4
+
+
+class _CheckpointWriteItem(NamedTuple):
+    config: RunnableConfig
+    checkpoint: Checkpoint
+    metadata: CheckpointMetadata
+    new_versions: ChannelVersions
+    event: asyncio.Event | None  # set when write completes; for durability="sync"
 
 
 def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
@@ -1266,11 +1278,27 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
                 signature(checkpointer.aput_writes).parameters.get("task_path")
                 is not None
             )
+            buffer_size = config.get(CONF, {}).get(
+                CONFIG_KEY_CHECKPOINT_WRITE_BUFFER_SIZE,
+                CHECKPOINT_WRITE_BUFFER_SIZE,
+            )
+            self._checkpoint_queue: asyncio.Queue[_CheckpointWriteItem | None] = (
+                asyncio.Queue(maxsize=buffer_size)
+            )
+            self._checkpoint_writer_task: asyncio.Task | None = None
+            self._checkpoint_write_error: BaseException | None = None
+            self._checkpoint_written_event: asyncio.Event | None = None
+            self._pending_checkpoint_item: _CheckpointWriteItem | None = None
         else:
             self.checkpointer_get_next_version = increment
             self._checkpointer_put_after_previous = None  # type: ignore[assignment]
             self.checkpointer_put_writes = None
             self.checkpointer_put_writes_accepts_task_path = False
+            self._checkpoint_queue = None  # type: ignore[assignment]
+            self._checkpoint_writer_task = None
+            self._checkpoint_write_error = None
+            self._checkpoint_written_event = None
+            self._pending_checkpoint_item = None
 
     async def _checkpointer_put_after_previous(
         self,
@@ -1287,6 +1315,143 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             await cast(BaseCheckpointSaver, self.checkpointer).aput(
                 config, checkpoint, metadata, new_versions
             )
+
+    async def _checkpoint_writer(self) -> None:
+        """Single writer draining the checkpoint queue in FIFO order."""
+        assert self._checkpoint_queue is not None
+        checkpointer = cast(BaseCheckpointSaver, self.checkpointer)
+        while True:
+            item = await self._checkpoint_queue.get()
+            if item is None:  # shutdown sentinel
+                self._checkpoint_queue.task_done()
+                break
+            try:
+                await checkpointer.aput(
+                    item.config, item.checkpoint, item.metadata, item.new_versions
+                )
+            except BaseException as exc:
+                self._checkpoint_write_error = exc
+                if item.event is not None:
+                    item.event.set()  # unblock sync-durability waiter
+                self._checkpoint_queue.task_done()
+                # Drain remaining items so their waiters unblock
+                while True:
+                    try:
+                        remaining = self._checkpoint_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    if remaining is None:
+                        self._checkpoint_queue.task_done()
+                        break
+                    if remaining.event is not None:
+                        remaining.event.set()
+                    self._checkpoint_queue.task_done()
+                return
+            else:
+                if item.event is not None:
+                    item.event.set()
+                self._checkpoint_queue.task_done()
+
+    def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
+        if self._checkpoint_write_error is not None:
+            raise self._checkpoint_write_error
+        # assign step and parents
+        exiting = metadata is self.checkpoint_metadata
+        if exiting and self.checkpoint["id"] == self.checkpoint_id_saved:
+            # checkpoint already saved
+            return
+        if not exiting:
+            metadata["step"] = self.step
+            metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
+            self.checkpoint_metadata = metadata
+        # do checkpoint?
+        do_checkpoint = self._checkpointer_put_after_previous is not None and (
+            exiting or self.durability != "exit"
+        )
+        # create new checkpoint
+        self.checkpoint = create_checkpoint(
+            self.checkpoint,
+            self.channels if do_checkpoint else None,
+            self.step,
+            id=self.checkpoint["id"] if exiting else None,
+            updated_channels=self.updated_channels,
+        )
+        # sanitize TASK channel in the checkpoint before saving (durability=="exit")
+        if TASKS in self.checkpoint["channel_values"] and any(
+            isinstance(channel, UntrackedValue) for channel in self.channels.values()
+        ):
+            sanitized_tasks = [
+                sanitize_untracked_values_in_send(value, self.channels)
+                if isinstance(value, Send)
+                else value
+                for value in self.checkpoint["channel_values"][TASKS]
+            ]
+            self.checkpoint["channel_values"][TASKS] = sanitized_tasks
+        # bail if no checkpointer
+        if do_checkpoint and self._checkpointer_put_after_previous is not None:
+            self.prev_checkpoint_config = (
+                self.checkpoint_config
+                if CONFIG_KEY_CHECKPOINT_ID in self.checkpoint_config[CONF]
+                and self.checkpoint_config[CONF][CONFIG_KEY_CHECKPOINT_ID]
+                else None
+            )
+            self.checkpoint_config = {
+                **self.checkpoint_config,
+                CONF: {
+                    **self.checkpoint_config[CONF],
+                    CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
+                        CONFIG_KEY_CHECKPOINT_NS, ""
+                    ),
+                },
+            }
+
+            channel_versions = self.checkpoint["channel_versions"].copy()
+            new_versions = get_new_channel_versions(
+                self.checkpoint_previous_versions, channel_versions
+            )
+            self.checkpoint_previous_versions = channel_versions
+
+            # Enqueue checkpoint write (non-blocking attempt)
+            event = asyncio.Event() if self.durability == "sync" else None
+            self._checkpoint_written_event = event
+            item = _CheckpointWriteItem(
+                self.checkpoint_config,
+                copy_checkpoint(self.checkpoint),
+                self.checkpoint_metadata,
+                new_versions,
+                event,
+            )
+            try:
+                self._checkpoint_queue.put_nowait(item)
+            except asyncio.QueueFull:
+                # Store for async drain in aafter_tick (backpressure)
+                self._pending_checkpoint_item = item
+
+            self.checkpoint_config = {
+                **self.checkpoint_config,
+                CONF: {
+                    **self.checkpoint_config[CONF],
+                    CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
+                },
+            }
+        if not exiting:
+            # increment step
+            self.step += 1
+
+    async def aafter_tick(self) -> None:
+        """Async after_tick with queue backpressure for checkpoint writes."""
+        if self._checkpoint_write_error is not None:
+            raise self._checkpoint_write_error
+        # Run sync after_tick (calls overridden _put_checkpoint which enqueues)
+        self.after_tick()
+        # Backpressure: if put_nowait failed due to full queue, do blocking put
+        if self._pending_checkpoint_item is not None:
+            assert self._checkpoint_queue is not None
+            await self._checkpoint_queue.put(self._pending_checkpoint_item)
+            self._pending_checkpoint_item = None
+        # Re-check: writer may have failed during the blocking put above
+        if self._checkpoint_write_error is not None:
+            raise self._checkpoint_write_error
 
     async def amatch_cached_writes(self) -> Sequence[PregelExecutableTask]:
         if self.cache is None:
@@ -1387,6 +1552,40 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )
+        # Push writer shutdown callback (fires AFTER _suppress_interrupt,
+        # BEFORE executor exit during stack unwind)
+        if self._checkpoint_queue is not None:
+
+            async def _shutdown_checkpoint_writer() -> None:
+                writer_dead = (
+                    self._checkpoint_writer_task is not None
+                    and self._checkpoint_writer_task.done()
+                )
+                if not writer_dead:
+                    # Flush any pending item from _suppress_interrupt's
+                    # _put_checkpoint
+                    if self._pending_checkpoint_item is not None:
+                        await self._checkpoint_queue.put(self._pending_checkpoint_item)
+                        self._pending_checkpoint_item = None
+                    # Send shutdown sentinel
+                    await self._checkpoint_queue.put(None)
+                    # Wait for all queued items to be processed
+                    await self._checkpoint_queue.join()
+                # Wait for writer task to exit
+                if self._checkpoint_writer_task is not None:
+                    await self._checkpoint_writer_task
+                # Propagate any write error
+                if self._checkpoint_write_error is not None:
+                    raise self._checkpoint_write_error
+
+            self.stack.push_async_callback(_shutdown_checkpoint_writer)
+
+        # Start writer task
+        if self._checkpoint_queue is not None:
+            self._checkpoint_writer_task = asyncio.create_task(
+                self._checkpoint_writer(), name="checkpoint_writer"
+            )
+
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
         )

@@ -3126,10 +3126,15 @@ class Pregel(
                                 _state_mapper,
                             ):
                                 yield o
-                        loop.after_tick()
-                        # wait for checkpoint
-                        if durability_ == "sync":
-                            await cast(asyncio.Future, loop._put_checkpoint_fut)
+                        await loop.aafter_tick()
+                        # wait for checkpoint (sync durability)
+                        if (
+                            durability_ == "sync"
+                            and loop._checkpoint_written_event is not None
+                        ):
+                            await loop._checkpoint_written_event.wait()
+                            if loop._checkpoint_write_error is not None:
+                                raise loop._checkpoint_write_error
                 finally:
                     # ensure waiter doesn't remain pending on cancel/shutdown
                     if _cleanup_waiter is not None:
