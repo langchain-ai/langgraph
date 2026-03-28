@@ -1355,12 +1355,12 @@ class ToolNode(RunnableCallable):
             if isinstance(state, dict):
                 for tool_arg, state_field in injected.state.items():
                     injected_args[tool_arg] = (
-                        state[state_field] if state_field else state
+                        state.get(state_field) if state_field else state
                     )
             else:
                 for tool_arg, state_field in injected.state.items():
                     injected_args[tool_arg] = (
-                        getattr(state, state_field) if state_field else state
+                        getattr(state, state_field, None) if state_field else state
                     )
 
         # Inject store
