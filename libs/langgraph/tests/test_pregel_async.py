@@ -214,6 +214,27 @@ async def test_checkpoint_errors() -> None:
             pass
 
 
+async def test_request_drain_breaks_acall_scheduling(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    from langgraph.runtime import Runtime
+
+    @task
+    async def child(x: int) -> int:
+        return x + 1
+
+    @entrypoint(checkpointer=async_checkpointer)
+    async def graph(x: int, *, runtime: Runtime) -> int:
+        runtime.request_drain()
+        fut = child(x)
+        return await fut
+
+    config = {"configurable": {"thread_id": "drain-call-async"}}
+
+    with pytest.raises(RuntimeError, match="Task not scheduled"):
+        await graph.ainvoke(1, config=config)
+
+
 async def test_py_async_with_cancel_behavior() -> None:
     """This test confirms that in all versions of Python we support, __aexit__
     is not cancelled when the coroutine containing the async with block is cancelled."""

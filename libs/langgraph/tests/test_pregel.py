@@ -120,6 +120,25 @@ def test_graph_validation() -> None:
         graph.invoke({"hello": "there"})
 
 
+def test_request_drain_breaks_call_scheduling(sync_checkpointer: BaseCheckpointSaver):
+    from langgraph.runtime import Runtime
+
+    @task
+    def child(x: int) -> int:
+        return x + 1
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def graph(x: int, *, runtime: Runtime) -> int:
+        runtime.request_drain()
+        fut = child(x)
+        return fut.result()
+
+    config = {"configurable": {"thread_id": "drain-call-sync"}}
+
+    with pytest.raises(TypeError, match="A future is required for source argument"):
+        graph.invoke(1, config=config)
+
+
 def test_invalid_checkpointer_type() -> None:
     class State(TypedDict):
         foo: str
