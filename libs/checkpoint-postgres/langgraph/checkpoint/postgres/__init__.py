@@ -142,7 +142,7 @@ class PostgresSaver(BasePostgresSaver):
             [CheckpointTuple(...), ...]
         """
         where, args = self._search_where(config, filter, before)
-        query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
+        query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC, ctid DESC"
         params = list(args)
         if limit is not None:
             query += " LIMIT %s"
@@ -224,7 +224,7 @@ class PostgresSaver(BasePostgresSaver):
             where = "WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s"
         else:
             args = (thread_id, checkpoint_ns)
-            where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
+            where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC, ctid DESC LIMIT 1"
 
         with self._cursor() as cur:
             cur.execute(
