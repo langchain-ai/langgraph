@@ -139,8 +139,7 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
                 else:
                     raise NotImplementedError
             elif key == "recursion_limit":
-                if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
-                    base["recursion_limit"] = config["recursion_limit"]
+                base["recursion_limit"] = config["recursion_limit"]
             else:
                 base[key] = config[key]  # type: ignore[literal-required]
     if CONF not in base:

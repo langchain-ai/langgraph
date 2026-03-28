@@ -17,7 +17,12 @@ import langsmith
 import pytest
 from typing_extensions import NotRequired, Required, TypedDict
 
-from langgraph._internal._config import _is_not_empty, ensure_config
+from langgraph._internal._config import (
+    DEFAULT_RECURSION_LIMIT,
+    _is_not_empty,
+    ensure_config,
+    merge_configs,
+)
 from langgraph._internal._fields import (
     _is_optional_type,
     get_enhanced_type_hints,
@@ -317,3 +322,33 @@ def test_configurable_metadata():
     metadata = merged["metadata"]
     assert metadata.keys() == expected
     assert metadata["nooverride"] == 18
+
+
+def test_merge_configs_recursion_limit() -> None:
+    """Test that merge_configs preserves recursion_limit, including when it equals DEFAULT_RECURSION_LIMIT.
+
+    This is a regression test for a bug where merge_configs silently dropped
+    recursion_limit when it was explicitly set to DEFAULT_RECURSION_LIMIT (10000).
+    See: https://github.com/langchain-ai/langgraph/issues/7314
+    """
+    # Test merging recursion_limit with explicit DEFAULT_RECURSION_LIMIT value
+    result = merge_configs(
+        {"configurable": {}}, {"recursion_limit": DEFAULT_RECURSION_LIMIT}
+    )
+    assert "recursion_limit" in result
+    assert result["recursion_limit"] == DEFAULT_RECURSION_LIMIT
+
+    # Test merging recursion_limit with a different value
+    result = merge_configs({"configurable": {}}, {"recursion_limit": 9999})
+    assert "recursion_limit" in result
+    assert result["recursion_limit"] == 9999
+
+    # Test that recursion_limit from second config overrides first
+    result = merge_configs({"recursion_limit": 25}, {"recursion_limit": 100})
+    assert result["recursion_limit"] == 100
+
+    # Test that explicit DEFAULT_RECURSION_LIMIT overrides a different value
+    result = merge_configs(
+        {"recursion_limit": 25}, {"recursion_limit": DEFAULT_RECURSION_LIMIT}
+    )
+    assert result["recursion_limit"] == DEFAULT_RECURSION_LIMIT
