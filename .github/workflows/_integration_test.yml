@@ -53,7 +53,7 @@ jobs:
           working-directory: libs/cli
       - name: Install cli globally
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
-        run: pip install -e .
+        run: uv pip install -e .
       - name: Build service ${{ matrix.example.name }}
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
         working-directory: ${{ matrix.example.workdir }}
