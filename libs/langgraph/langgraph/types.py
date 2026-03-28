@@ -670,6 +670,11 @@ class Command(Generic[N], ToolOutputMixin):
             - Sequence of node names to navigate to next
             - `Send` object (to execute a node with the input provided)
             - Sequence of `Send` objects
+
+    Notes:
+        If a node has static outgoing edges (added via `add_edge`) and also
+        returns `Command(goto=...)`, both routes are scheduled. `goto` augments
+        routing; it does not suppress static edges.
     """
 
     graph: str | None = None
