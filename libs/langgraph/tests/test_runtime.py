@@ -611,22 +611,22 @@ async def test_cancel_ainvoke_with_async_node() -> None:
         first: str
         second: str
 
+    timeline: list[str] = []
     node_started = asyncio.Event()
-    node_cancelled = False
-    node_finished = False
 
     async def slow_async_node(state: State) -> dict[str, str]:
-        nonlocal node_cancelled, node_finished
+        timeline.append(f"async_node:start thread={threading.current_thread().name}")
         node_started.set()
         try:
             await asyncio.sleep(30)
         except asyncio.CancelledError:
-            node_cancelled = True
+            timeline.append("async_node:cancelled")
             raise
-        node_finished = True
+        timeline.append("async_node:finished")
         return {"first": "done"}
 
     async def second_node(state: State) -> dict[str, str]:
+        timeline.append("second_node:run")
         return {"second": "should-not-run"}
 
     graph = StateGraph(State)
@@ -640,22 +640,31 @@ async def test_cancel_ainvoke_with_async_node() -> None:
     graph_task = asyncio.create_task(compiled.ainvoke({}))
 
     await node_started.wait()
+    timeline.append("test:cancel")
     graph_task.cancel()
 
     with pytest.raises(asyncio.CancelledError):
         await graph_task
+    timeline.append("test:done")
 
-    assert node_cancelled, "async node received CancelledError at await point"
-    assert not node_finished, "async node did NOT run to completion"
+    # async node runs on the event loop thread (MainThread)
+    assert any("MainThread" in e for e in timeline if "async_node:start" in e)
+    # CancelledError was delivered at the await point — node stopped
+    assert "async_node:cancelled" in timeline
+    # Node did NOT run to completion
+    assert "async_node:finished" not in timeline
+    # Second node never ran
+    assert "second_node:run" not in timeline
 
 
 @pytest.mark.anyio
 async def test_cancel_ainvoke_with_sync_node() -> None:
     """Cancel ainvoke running a sync node.
 
-    Sync nodes in ainvoke run on a separate thread (via run_coroutine_threadsafe),
-    NOT on the event loop thread. Cancelling the asyncio task disconnects from
-    the thread, but the thread keeps running as an orphan and completes on its own.
+    Sync nodes in ainvoke run on a separate thread (via run_in_executor),
+    NOT on the event loop thread. Cancelling the asyncio task disconnects
+    from the thread future, but the thread keeps running as an orphan and
+    completes on its own.
 
     Key difference from async nodes:
     - async node: CancelledError stops the coroutine at an await point
@@ -668,16 +677,20 @@ async def test_cancel_ainvoke_with_sync_node() -> None:
         first: str
         second: str
 
+    timeline: list[str] = []
     node_started = threading.Event()
     node_finished = threading.Event()
 
     def slow_sync_node(state: State) -> dict[str, str]:
+        timeline.append(f"sync_node:start thread={threading.current_thread().name}")
         node_started.set()
         time.sleep(1)
+        timeline.append("sync_node:after_sleep")
         node_finished.set()
         return {"first": "done"}
 
     def second_node(state: State) -> dict[str, str]:
+        timeline.append("second_node:run")
         return {"second": "should-not-run"}
 
     graph = StateGraph(State)
@@ -690,31 +703,51 @@ async def test_cancel_ainvoke_with_sync_node() -> None:
     control = RunControl()
     compiled = graph.compile()
 
+    timeline.append(f"test:main thread={threading.current_thread().name}")
     graph_task = asyncio.create_task(compiled.ainvoke({}, control=control))
 
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, node_started.wait, 5)
 
-    # Node is now running time.sleep(1) on a background thread.
-    # Cancel disconnects the asyncio side; drain is set for good measure.
+    timeline.append("test:cancel+drain")
     graph_task.cancel()
     control.request_drain("sigterm")
 
     with pytest.raises(asyncio.CancelledError):
         await graph_task
+    timeline.append("test:exc=CancelledError")
 
-    # At this point the asyncio task is done, but the sync node's thread
-    # is still running (orphaned). It hasn't finished yet.
+    # Sync node runs on a background thread (asyncio_*), NOT MainThread
+    sync_start = next(e for e in timeline if "sync_node:start" in e)
+    assert "MainThread" not in sync_start, (
+        "sync node should run on a background thread, not the event loop thread"
+    )
+
+    # At this point, the asyncio task is done but the thread is orphaned.
+    # The sync node has NOT finished yet — cancel only disconnected asyncio.
     assert not node_finished.is_set(), (
         "sync node should still be running in its background thread"
     )
 
     # Wait for the orphaned thread to complete on its own.
     await loop.run_in_executor(None, node_finished.wait, 5)
+    assert node_finished.is_set()
 
-    assert node_finished.is_set(), (
-        "orphaned thread eventually completed — cancel() only disconnected "
-        "asyncio, the thread itself was never interrupted"
+    # After the orphaned thread finishes, the full timeline looks like:
+    #   test:main thread=MainThread
+    #   sync_node:start thread=asyncio_N    <- background thread
+    #   test:cancel+drain                   <- cancel + drain fired
+    #   test:exc=CancelledError             <- asyncio disconnected
+    #   sync_node:after_sleep               <- thread ran to completion anyway
+    assert "sync_node:after_sleep" in timeline
+    # Second node never ran
+    assert "second_node:run" not in timeline
+
+    # Verify timeline ordering: cancel happened before node finished
+    cancel_idx = timeline.index("test:cancel+drain")
+    sleep_idx = timeline.index("sync_node:after_sleep")
+    assert cancel_idx < sleep_idx, (
+        "cancel was issued while the sync node was still sleeping"
     )
 
 
