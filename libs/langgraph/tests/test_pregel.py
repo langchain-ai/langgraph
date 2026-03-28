@@ -5000,6 +5000,201 @@ def test_interrupt_functional(
     assert res == {"a": "foobar", "b": "bar"}
 
 
+def test_interrupt_response_type_pydantic(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test interrupt with response_type using a Pydantic model."""
+
+    class HumanResponse(BaseModel):
+        approved: bool
+        comment: str | None = None
+
+    class State(TypedDict):
+        value: str
+
+    def node(state: State) -> State:
+        response = interrupt(
+            {"message": "Please approve"},
+            response_type=HumanResponse,
+        )
+        return {"value": f"approved={response}"}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+    result = list(graph.stream({"value": "initial"}, config))
+
+    assert len(result) == 1
+    interrupt_data = result[0]["__interrupt__"]
+    assert len(interrupt_data) == 1
+    intr = interrupt_data[0]
+    assert intr.value == {"message": "Please approve"}
+    assert intr.response_schema is not None
+    assert intr.response_schema["type"] == "object"
+    assert "approved" in intr.response_schema["properties"]
+    assert "comment" in intr.response_schema["properties"]
+    assert intr.response_schema["required"] == ["approved"]
+
+
+def test_interrupt_response_type_typeddict(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test interrupt with response_type using a TypedDict."""
+
+    class FeedbackResponse(TypedDict):
+        rating: int
+        feedback: str
+
+    class State(TypedDict):
+        value: str
+
+    def node(state: State) -> State:
+        response = interrupt(
+            "Please provide feedback",
+            response_type=FeedbackResponse,
+        )
+        return {"value": f"rating={response}"}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+    result = list(graph.stream({"value": "initial"}, config))
+
+    assert len(result) == 1
+    interrupt_data = result[0]["__interrupt__"]
+    assert len(interrupt_data) == 1
+    intr = interrupt_data[0]
+    assert intr.value == "Please provide feedback"
+    assert intr.response_schema is not None
+    assert intr.response_schema["type"] == "object"
+    assert "rating" in intr.response_schema["properties"]
+    assert "feedback" in intr.response_schema["properties"]
+
+
+def test_interrupt_response_type_dataclass(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test interrupt with response_type using a dataclass."""
+
+    @dataclass
+    class EditResponse:
+        edited_text: str
+        confidence: float
+
+    class State(TypedDict):
+        value: str
+
+    def node(state: State) -> State:
+        response = interrupt(
+            {"original": "text"},
+            response_type=EditResponse,
+        )
+        return {"value": f"edited={response}"}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+    result = list(graph.stream({"value": "initial"}, config))
+
+    assert len(result) == 1
+    interrupt_data = result[0]["__interrupt__"]
+    assert len(interrupt_data) == 1
+    intr = interrupt_data[0]
+    assert intr.value == {"original": "text"}
+    assert intr.response_schema is not None
+    assert intr.response_schema["type"] == "object"
+    assert "edited_text" in intr.response_schema["properties"]
+    assert "confidence" in intr.response_schema["properties"]
+
+
+def test_interrupt_no_response_type(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test interrupt without response_type has response_schema=None."""
+
+    class State(TypedDict):
+        value: str
+
+    def node(state: State) -> State:
+        response = interrupt("Simple question")
+        return {"value": f"answer={response}"}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+    result = list(graph.stream({"value": "initial"}, config))
+
+    assert len(result) == 1
+    interrupt_data = result[0]["__interrupt__"]
+    assert len(interrupt_data) == 1
+    intr = interrupt_data[0]
+    assert intr.value == "Simple question"
+    assert intr.response_schema is None
+
+
+def test_interrupt_response_type_invalid() -> None:
+    """Test interrupt with invalid response_type raises TypeError."""
+    from langgraph._internal._pydantic import get_json_schema
+
+    # A type that cannot be converted to JSON schema
+    class NonSerializable:
+        def __init__(self, func):
+            self.func = func
+
+    with pytest.raises(TypeError, match="Cannot generate JSON schema"):
+        get_json_schema(NonSerializable)
+
+
+def test_interrupt_response_type_with_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that interrupt with response_type works correctly with resume."""
+
+    class ApprovalResponse(BaseModel):
+        approved: bool
+
+    class State(TypedDict):
+        result: str
+
+    def node(state: State) -> State:
+        response = interrupt(
+            {"action": "approve"},
+            response_type=ApprovalResponse,
+        )
+        # response is the raw resume value, not validated
+        return {"result": f"got: {response}"}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=sync_checkpointer)
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # First invocation - should interrupt
+    result = list(graph.stream({"result": ""}, config))
+    assert len(result) == 1
+    assert "__interrupt__" in result[0]
+    intr = result[0]["__interrupt__"][0]
+    assert intr.response_schema is not None
+
+    # Resume with a value
+    result = list(graph.stream(Command(resume={"approved": True}), config))
+    assert result == [{"node": {"result": "got: {'approved': True}"}}]
+
+
 def test_interrupt_task_functional(
     sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
 ) -> None:
