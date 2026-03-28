@@ -4,6 +4,7 @@ from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import (
     InjectedState,
     InjectedStore,
+    RuntimeStateField,
     ToolNode,
     ToolRuntime,
     tools_condition,
@@ -17,5 +18,6 @@ __all__ = [
     "ValidationNode",
     "InjectedState",
     "InjectedStore",
+    "RuntimeStateField",
     "ToolRuntime",
 ]
