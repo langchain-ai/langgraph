@@ -852,6 +852,13 @@ def _deploy(
         default_name = _normalize_image_name(pathlib.Path.cwd().name)
         name = click.prompt("Deployment name", default=default_name)
 
+    if name and not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9-]+", name):
+        raise click.UsageError(
+            f"Invalid deployment name '{name}'. "
+            "Names must start with a letter and contain only letters, numbers, and hyphens. "
+            "Tip: replace underscores with hyphens (e.g. 'my-deployment')."
+        )
+
     secrets = _secrets_from_env(env_vars)
 
     # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
