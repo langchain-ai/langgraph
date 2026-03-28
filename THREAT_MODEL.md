@@ -1,6 +1,6 @@
 # Threat Model: LangGraph
 
-> Generated: 2026-03-28 | Commit: 0ba22143 | Scope: Full monorepo (all libs/) | Visibility: Open Source | Mode: Deep
+> Generated: 2026-03-28 | Commit: 0ba22143 | Scope: Full monorepo (all libs/)
 
 > **Disclaimer:** This threat model is automatically generated to help developers and security researchers understand where trust is placed in this system and where boundaries exist. It is experimental, subject to change, and not an authoritative security reference — findings should be validated before acting on them. The analysis may be incomplete or contain inaccuracies. We welcome suggestions and corrections to improve this document.
 
@@ -456,7 +456,6 @@ Threats that appear valid in isolation but fall outside project responsibility b
 
 **Pattern**: 3 of 5 published advisories involve CWE-502 (insecure deserialization) in the checkpoint serialization layer. This confirms the checkpoint storage boundary (TB2) as the highest-risk area. The extensive closed advisory history (~15 deserialization bypass attempts) further validates this assessment. No new published advisories since the prior assessment (2026-03-27).
 
-Note: Only published advisories were checked (open source visibility). Linear context: N/A (open source). Dependabot alerts: not queried (open source visibility).
 
 ---
 
