@@ -321,7 +321,34 @@ def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
         warnings.warn(msg)
         return list(messages)
     else:
-        return convert_to_messages(convert_to_openai_messages(messages))
+        # Save message IDs and additional_kwargs before the OpenAI round-trip,
+        # since the conversion silently drops them.
+        original_ids = [m.id for m in messages]
+        original_additional_kwargs = [
+            dict(m.additional_kwargs) for m in messages
+        ]
+
+        formatted = convert_to_messages(
+            convert_to_openai_messages(messages, include_id=True)
+        )
+
+        # Restore any IDs or additional_kwargs lost during conversion
+        for i, msg in enumerate(formatted):
+            if i < len(original_ids) and msg.id is None:
+                msg = msg.model_copy(update={"id": original_ids[i]})
+                formatted[i] = msg
+            if i < len(original_additional_kwargs) and original_additional_kwargs[i]:
+                merged_kwargs = {
+                    **original_additional_kwargs[i],
+                    **msg.additional_kwargs,
+                }
+                if merged_kwargs != msg.additional_kwargs:
+                    msg = msg.model_copy(
+                        update={"additional_kwargs": merged_kwargs}
+                    )
+                    formatted[i] = msg
+
+        return formatted
 
 
 def push_message(
