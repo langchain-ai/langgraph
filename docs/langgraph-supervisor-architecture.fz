@@ -1,0 +1,23 @@
+User { # User
+ n1: circle label:"START"
+ n2: circle label:"END"
+ n1.handle(right) -> Supervisor.n3.handle(left)
+}
+
+Supervisor { # Supervisor Agent
+ n3: rectangle label:"Supervisor
+(analyze + route)"
+ n3.handle(top) -> Calendar.n4.handle(top) [label="Calendar task"]
+ n3.handle(bottom) -> Email.n5.handle(bottom) [label="Email task"]
+ n3.handle(right) -> User.n2.handle(left) [label="END"]
+}
+
+Calendar { # Calendar Worker
+ n4: rectangle label:"Check / update calendar"
+ n4.handle(bottom) -> Supervisor.n3.handle(top) [label="Return"]
+}
+
+Email { # Email Worker
+ n5: rectangle label:"Draft / send email"
+ n5.handle(top) -> Supervisor.n3.handle(bottom) [label="Return"]
+}
