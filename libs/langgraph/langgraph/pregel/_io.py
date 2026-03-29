@@ -81,8 +81,18 @@ def map_command(cmd: Command) -> Iterator[tuple[str, str, Any]]:
 def map_input(
     input_channels: str | Sequence[str],
     chunk: dict[str, Any] | Any | None,
+    *,
+    alias_map: dict[str, str] | None = None,
 ) -> Iterator[tuple[str, Any]]:
-    """Map input chunk to a sequence of pending writes in the form (channel, value)."""
+    """Map input chunk to a sequence of pending writes in the form (channel, value).
+
+    Args:
+        input_channels: The channel(s) to write to.
+        chunk: The input chunk to map.
+        alias_map: Optional mapping of alias -> field_name for Pydantic models with
+            aliased fields. When provided, input keys are first checked against
+            this map to translate aliases to their corresponding field names.
+    """
     if chunk is None:
         return
     elif isinstance(input_channels, str):
@@ -91,8 +101,10 @@ def map_input(
         if not isinstance(chunk, dict):
             raise TypeError(f"Expected chunk to be a dict, got {type(chunk).__name__}")
         for k in chunk:
-            if k in input_channels:
-                yield (k, chunk[k])
+            # Translate alias to field name if alias_map is provided
+            channel_key = alias_map.get(k, k) if alias_map else k
+            if channel_key in input_channels:
+                yield (channel_key, chunk[k])
             else:
                 logger.warning(f"Input channel {k} not found in {input_channels}")
 
@@ -101,6 +113,8 @@ def map_output_values(
     output_channels: str | Sequence[str],
     pending_writes: Literal[True] | Sequence[tuple[str, Any]],
     channels: Mapping[str, BaseChannel],
+    *,
+    output_alias_map: dict[str, str] | None = None,
 ) -> Iterator[dict[str, Any] | Any]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
@@ -112,13 +126,16 @@ def map_output_values(
         if pending_writes is True or {
             c for c, _ in pending_writes if c in output_channels
         }:
-            yield read_channels(channels, output_channels)
+            values = read_channels(channels, output_channels)
+            yield remap_output_keys(values, output_alias_map)
 
 
 def map_output_updates(
     output_channels: str | Sequence[str],
     tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
     cached: bool = False,
+    *,
+    output_alias_map: dict[str, str] | None = None,
 ) -> Iterator[dict[str, Any | dict[str, Any]]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     output_tasks = [
@@ -154,11 +171,14 @@ def map_output_updates(
                 updated.append(
                     (
                         task.name,
-                        {
-                            chan: value
-                            for chan, value in writes
-                            if chan in output_channels
-                        },
+                        remap_output_keys(
+                            {
+                                chan: value
+                                for chan, value in writes
+                                if chan in output_channels
+                            },
+                            output_alias_map,
+                        ),
                     )
                 )
     grouped: dict[str, Any] = {t.name: [] for t, _ in output_tasks}
@@ -172,3 +192,13 @@ def map_output_updates(
     if cached:
         grouped["__metadata__"] = {"cached": cached}
     yield grouped
+
+
+def remap_output_keys(
+    value: dict[str, Any] | Any,
+    output_alias_map: dict[str, str] | None,
+) -> dict[str, Any] | Any:
+    """Translate top-level output keys from field names to aliases."""
+    if not output_alias_map or not isinstance(value, dict):
+        return value
+    return {output_alias_map.get(k, k): v for k, v in value.items()}
