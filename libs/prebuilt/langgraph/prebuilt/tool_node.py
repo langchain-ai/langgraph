@@ -1599,6 +1599,26 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     tool_call_id: str | None
     store: BaseStore | None
 
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: Any
+    ) -> dict[str, Any]:
+        """Make ToolRuntime optional in Pydantic schemas.
+
+        When a tool function has a ``runtime: ToolRuntime`` parameter, Pydantic
+        would normally require it as a mandatory input.  Since ToolRuntime is
+        injected at execution time by :class:`ToolNode`, it must not appear as a
+        required field in the tool's input schema.  Providing a ``None`` default
+        lets standalone ``.invoke({})`` calls succeed without a ToolRuntime
+        (see `langchain-ai/langgraph#7222 <https://github.com/langchain-ai/langgraph/issues/7222>`_).
+        """
+        from pydantic_core import core_schema
+
+        return core_schema.with_default_schema(
+            core_schema.any_schema(),
+            default=None,
+        )
+
 
 class InjectedState(InjectedToolArg):
     """Annotation for injecting graph state into tool arguments.
@@ -1867,3 +1887,93 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
         store=store_arg,
         runtime=runtime_arg,
     )
+
+
+# ---------------------------------------------------------------------------
+# Patch: allow standalone tool.invoke() for tools with injected arguments
+# ---------------------------------------------------------------------------
+# langchain-core's BaseTool._parse_input excludes injected args (ToolRuntime,
+# InjectedState, InjectedStore) from the validated output when they are not
+# explicitly provided in tool_input.  This causes standalone .invoke({}) to
+# fail because the underlying function never receives the injected parameter.
+#
+# The patch below adds a fallback so that injected args default to None when
+# not provided, enabling standalone invocation without a ToolNode or graph.
+# See https://github.com/langchain-ai/langgraph/issues/7222
+# ---------------------------------------------------------------------------
+
+from langchain_core.tools.base import (  # noqa: E402
+    _is_injected_arg_type as _core_is_injected_arg_type,
+    get_fields as _get_fields,
+)
+
+_original_parse_input = BaseTool._parse_input
+
+
+def _patched_parse_input(
+    self: BaseTool, tool_input: str | dict, tool_call_id: str | None
+) -> str | dict[str, Any]:
+    """Wrap ``_parse_input`` to provide ``None`` for un-supplied injected args.
+
+    When a tool has injected parameters (e.g. ``ToolRuntime``, ``InjectedState``,
+    ``InjectedStore``) that are not present in *tool_input*, the original
+    ``_parse_input`` either raises a Pydantic ``ValidationError`` (because the
+    field is required) or silently drops the key from the validated dict (because
+    the field is not in *tool_input*).  Either way the underlying function never
+    receives the parameter and fails.
+
+    This wrapper catches both cases:
+
+    1. If ``_parse_input`` raises a ``ValidationError`` whose *only* missing
+       fields are injected args, we supply ``None`` for each of them and
+       re-validate.
+    2. After successful validation we ensure every injected-arg key appears in
+       the returned dict (defaulting to ``None``).
+    """
+    injected_keys = self._injected_args_keys
+
+    # Fast path: no injected args – just delegate.
+    if not injected_keys:
+        return _original_parse_input(self, tool_input, tool_call_id)
+
+    # When all injected args are already present in tool_input (i.e. the tool
+    # is being called via ToolNode which injects the values), delegate to the
+    # original implementation so we don't change existing behaviour.
+    if isinstance(tool_input, dict) and all(
+        k in tool_input for k in injected_keys
+    ):
+        return _original_parse_input(self, tool_input, tool_call_id)
+
+    # Standalone invocation: strip injected keys from the input, validate
+    # using only the tool_call_schema (which excludes injected fields), and
+    # then re-add injected keys with None (or the value from tool_input).
+    if isinstance(tool_input, dict):
+        user_input: str | dict[str, Any] = {
+            k: v for k, v in tool_input.items() if k not in injected_keys
+        }
+    else:
+        user_input = tool_input
+
+    # Use tool_call_schema for validation instead of args_schema.  The
+    # tool_call_schema already excludes injected arguments.
+    saved_schema = self.args_schema
+    try:
+        self.args_schema = self.tool_call_schema  # type: ignore[assignment]
+        result = _original_parse_input(self, user_input, tool_call_id)
+    finally:
+        self.args_schema = saved_schema  # type: ignore[assignment]
+
+    if not isinstance(result, dict):
+        return result
+
+    # Re-add injected keys with their provided value (from ToolNode) or None.
+    for k in injected_keys:
+        if k not in result:
+            result[k] = (
+                tool_input.get(k) if isinstance(tool_input, dict) else None
+            )
+
+    return result
+
+
+BaseTool._parse_input = _patched_parse_input  # type: ignore[assignment]
