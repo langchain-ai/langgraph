@@ -155,6 +155,48 @@ def test_graph_validation_with_command() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": "bar", "bar": "baz"}
 
 
+def test_parallel_subgraph_does_not_rewrite_unchanged_parent_keys() -> None:
+    class State(TypedDict):
+        a: int
+        b: str
+        s1: int
+        s2: int
+
+    def node_a(state: State) -> dict[str, int]:
+        return {"a": 1}
+
+    def node_b(state: State) -> dict[str, str]:
+        return {"b": "updated-by-parent"}
+
+    def subnode_1(state: State) -> dict[str, int]:
+        return {"s1": 11}
+
+    def subnode_2(state: State) -> dict[str, int]:
+        return {"s2": 22}
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node("subnode_1", subnode_1)
+    subgraph_builder.add_node("subnode_2", subnode_2)
+    subgraph_builder.add_edge(START, "subnode_1")
+    subgraph_builder.add_edge(START, "subnode_2")
+    subgraph = subgraph_builder.compile()
+
+    parent_builder = StateGraph(State)
+    parent_builder.add_node("node_a", node_a)
+    parent_builder.add_node("subgraph", subgraph)
+    parent_builder.add_node("node_b", node_b)
+    parent_builder.add_edge(START, "node_a")
+    parent_builder.add_edge("node_a", "node_b")
+    parent_builder.add_edge("node_a", "subgraph")
+    parent_builder.add_edge("node_b", END)
+    parent_builder.add_edge("subgraph", END)
+    graph = parent_builder.compile()
+
+    result = graph.invoke({"a": 0, "b": "", "s1": 0, "s2": 0})
+
+    assert result == {"a": 1, "b": "updated-by-parent", "s1": 11, "s2": 22}
+
+
 def test_checkpoint_errors() -> None:
     class FaultyGetCheckpointer(InMemorySaver):
         def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
@@ -7328,7 +7370,7 @@ def test_stream_messages_dedupe_pydantic_subgraph_interrupt(
     state = graph.get_state(thread1)
     assert state.next
 
-    # Second stream: resume — should NOT duplicate messages from first stream
+    # Second stream: resume 鈥?should NOT duplicate messages from first stream
     chunks_req1 = [
         (ns, chunk)
         for ns, chunk in graph.stream(
