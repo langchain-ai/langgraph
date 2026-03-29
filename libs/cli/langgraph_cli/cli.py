@@ -866,7 +866,11 @@ def _deploy(
         env_path = _resolve_env_path(config_json, config)
         if env_path is not None:
             set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
+            click.echo(f"Saved deployment name to {env_path}")
 
+    # Remove deployment name before converting to secrets — it's consumed above
+    # and is in RESERVED_ENV_VARS, so _secrets_from_env would warn about it.
+    env_vars.pop(_DEPLOYMENT_NAME_ENV, None)
     secrets = _secrets_from_env(env_vars)
 
     # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
