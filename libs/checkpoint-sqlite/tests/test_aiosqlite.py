@@ -1,3 +1,5 @@
+import os
+import tempfile
 from typing import Any
 
 import pytest
@@ -188,3 +190,36 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_aput_writes_is_idempotent_across_restarts(self) -> None:
+        """Replaying the same pending writes after reopening should not duplicate them."""
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file.close()
+        try:
+            async with AsyncSqliteSaver.from_conn_string(temp_file.name) as saver:
+                stored = await saver.aput(
+                    self.config_1, self.chkpnt_1, self.metadata_1, {}
+                )
+                writes = [("channel1", {"data": "value1"})]
+                task_id = "task-1"
+                await saver.aput_writes(stored, writes, task_id)
+
+            async with AsyncSqliteSaver.from_conn_string(temp_file.name) as restarted:
+                await restarted.aput_writes(stored, writes, task_id)
+
+                checkpoint = await restarted.aget_tuple(stored)
+                assert checkpoint is not None
+                assert checkpoint.pending_writes == [
+                    ("task-1", "channel1", {"data": "value1"})
+                ]
+
+                listed = [
+                    c
+                    async for c in restarted.alist(
+                        {"configurable": {"thread_id": "thread-1"}}
+                    )
+                ]
+                assert len(listed) == 1
+                assert listed[0].pending_writes == checkpoint.pending_writes
+        finally:
+            os.unlink(temp_file.name)
