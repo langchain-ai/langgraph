@@ -88,5 +88,6 @@ class StateNodeSpec(Generic[NodeInputT, ContextT]):
     input_schema: type[NodeInputT]
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None
     cache_policy: CachePolicy | None
+    is_graph_error_handler: bool = False
     ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
     defer: bool = False

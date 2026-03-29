@@ -16,6 +16,7 @@ from typing import (
     Literal,
     Optional,
 )
+from unittest.mock import patch
 from uuid import UUID
 
 import pytest
@@ -55,6 +56,7 @@ from langgraph.graph.message import MessagesState, add_messages
 from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.pregel._loop import AsyncPregelLoop
 from langgraph.pregel._runner import PregelRunner
+from langgraph.runtime import Runtime
 from langgraph.types import (
     CachePolicy,
     Command,
@@ -9633,3 +9635,48 @@ async def test_fork_does_not_apply_pending_writes(
 
     # 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+async def test_graph_error_handler_async_runtime_info() -> None:
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+    captured: dict[str, object] = {}
+
+    async def always_failing_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("Always fails async")
+
+    async def err_handler_node(state: State, runtime: Runtime) -> State:
+        captured["from_node_names"] = runtime.execution_info.from_node_names
+        captured["from_node_errors"] = runtime.execution_info.from_node_errors
+        return {"foo": "handled_async"}
+
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "always_failing",
+            always_failing_node,
+            retry_policy=RetryPolicy(
+                max_attempts=2,
+                initial_interval=0.01,
+                jitter=False,
+                retry_on=ValueError,
+            ),
+        )
+        .set_graph_error_handler("err_handler", err_handler_node)
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    with patch("asyncio.sleep"):
+        result = await graph.ainvoke({"foo": ""})
+
+    assert attempts == 2
+    assert result["foo"] == "handled_async"
+    assert captured["from_node_names"] == ("always_failing",)
+    assert isinstance(captured["from_node_errors"], tuple)
+    assert len(captured["from_node_errors"]) == 1
+    assert isinstance(captured["from_node_errors"][0], BaseException)

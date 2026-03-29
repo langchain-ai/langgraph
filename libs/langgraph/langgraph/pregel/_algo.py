@@ -46,6 +46,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
     ERROR,
+    GRAPH_ERROR_INFO,
     INTERRUPT,
     NO_WRITES,
     NS_END,
@@ -65,6 +66,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
+from langgraph.errors import EmptyChannelError
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
@@ -669,6 +671,47 @@ def prepare_single_task(
                         previous=checkpoint["channel_values"].get(PREVIOUS, None),
                         store=store,
                     )
+                    runtime = runtime.patch_execution_info(
+                        from_node_names=None,
+                        from_node_errors=None,
+                    )
+                    if proc.is_graph_error_handler:
+                        failed_node_names_with_task_ids = (
+                            _read_failed_node_names_from_pending_writes(pending_writes)
+                        )
+                        if failed_node_names_with_task_ids:
+                            names = tuple(
+                                node_name
+                                for _, node_name in failed_node_names_with_task_ids
+                            )
+                            errors = tuple(
+                                _read_errors_for_task_ids_from_pending_writes(
+                                    pending_writes,
+                                    tuple(
+                                        task_id
+                                        for task_id, _ in failed_node_names_with_task_ids
+                                    ),
+                                )
+                            )
+                        elif (
+                            failed_node_names
+                            := _read_failed_node_names_from_graph_info_channel(channels)
+                        ):
+                            names = tuple(failed_node_names)
+                            errors = tuple(
+                                _build_fallback_errors_for_failed_node_names(
+                                    names,
+                                    _read_errors_from_pending_writes(pending_writes),
+                                )
+                            )
+                        else:
+                            names = ()
+                            errors = ()
+                        if names:
+                            runtime = runtime.patch_execution_info(
+                                from_node_names=names,
+                                from_node_errors=errors,
+                            )
                     additional_config = {
                         "metadata": metadata,
                         "tags": proc.tags,
@@ -728,6 +771,74 @@ def prepare_single_task(
                     )
             else:
                 return PregelTask(task_id, name, task_path[:3])
+
+
+def _read_failed_node_names_from_graph_info_channel(
+    channels: Mapping[str, BaseChannel],
+) -> list[str]:
+    channel = channels.get(GRAPH_ERROR_INFO)
+    if channel is None:
+        return []
+    try:
+        value = channel.get()
+    except EmptyChannelError:
+        return []
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return [item for item in value if isinstance(item, str)]
+    return []
+
+
+def _read_failed_node_names_from_pending_writes(
+    pending_writes: list[PendingWrite],
+) -> list[tuple[str, str]]:
+    # Returns [(task_id, node_name)] for GRAPH_ERROR_INFO writes, in original write order.
+    failed_node_names_with_task_ids: list[tuple[str, str]] = []
+    for task_id, channel, value in reversed(pending_writes):
+        if channel != GRAPH_ERROR_INFO:
+            continue
+        if isinstance(value, str):
+            failed_node_names_with_task_ids.append((task_id, value))
+    failed_node_names_with_task_ids.reverse()
+    return failed_node_names_with_task_ids
+
+
+def _coerce_pending_error(value: Any) -> BaseException:
+    if isinstance(value, BaseException):
+        return value
+    return Exception(str(value))
+
+
+def _read_errors_from_pending_writes(
+    pending_writes: list[PendingWrite],
+) -> list[BaseException]:
+    errors: list[BaseException] = []
+    for _, channel, value in pending_writes:
+        if channel == ERROR:
+            errors.append(_coerce_pending_error(value))
+    return errors
+
+
+def _read_errors_for_task_ids_from_pending_writes(
+    pending_writes: list[PendingWrite], task_ids: tuple[str, ...]
+) -> list[BaseException]:
+    error_by_task: dict[str, BaseException] = {}
+    for task_id, channel, value in pending_writes:
+        if channel == ERROR:
+            error_by_task[task_id] = _coerce_pending_error(value)
+    return [
+        error_by_task.get(task_id, Exception(f"Error from task '{task_id}'"))
+        for task_id in task_ids
+    ]
+
+
+def _build_fallback_errors_for_failed_node_names(
+    failed_node_names: tuple[str, ...], errors: list[BaseException]
+) -> list[BaseException]:
+    if len(errors) >= len(failed_node_names):
+        return errors[: len(failed_node_names)]
+    if errors:
+        return errors + [errors[-1]] * (len(failed_node_names) - len(errors))
+    return [Exception(f"Error from node '{name}'") for name in failed_node_names]
 
 
 def prepare_push_task_functional(
