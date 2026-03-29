@@ -307,3 +307,54 @@ class TestSqliteSaver:
             # Nested digit-starting key via dotted path
             results = list(saver.list(None, filter={"user.123abc": "ok2"}))
             assert len(results) == 1
+
+
+    def test_list_batches_pending_writes_queries(self) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            for index in range(4):
+                config: RunnableConfig = {
+                    "configurable": {
+                        "thread_id": "thread-batch",
+                        "checkpoint_ns": "",
+                    }
+                }
+                metadata: CheckpointMetadata = {"index": index}
+                saved = saver.put(
+                    config,
+                    create_checkpoint(empty_checkpoint(), {}, index + 1),
+                    metadata,
+                    {},
+                )
+                saver.put_writes(
+                    saved,
+                    [("messages", [f"message-{index}"])],
+                    task_id=f"task-{index}",
+                )
+
+            queries: list[str] = []
+            saver.conn.set_trace_callback(lambda query: queries.append(query))
+            results = list(
+                saver.list({"configurable": {"thread_id": "thread-batch"}})
+            )
+
+            writes_queries = [query for query in queries if "FROM writes" in query]
+            checkpoint_queries = [
+                query for query in queries if "FROM checkpoints" in query
+            ]
+
+            assert len(results) == 4
+            assert len(checkpoint_queries) == 1
+            assert len(writes_queries) == 1
+            assert all(result.pending_writes for result in results)
+            assert [result.pending_writes[0][0] for result in results] == [
+                "task-3",
+                "task-2",
+                "task-1",
+                "task-0",
+            ]
+            assert [result.pending_writes[0][2] for result in results] == [
+                ["message-3"],
+                ["message-2"],
+                ["message-1"],
+                ["message-0"],
+            ]

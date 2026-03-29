@@ -188,3 +188,59 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+
+    async def test_alist_batches_pending_writes_queries(self) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            for index in range(4):
+                config: RunnableConfig = {
+                    "configurable": {
+                        "thread_id": "thread-batch",
+                        "checkpoint_ns": "",
+                    }
+                }
+                metadata: CheckpointMetadata = {"index": index}
+                saved = await saver.aput(
+                    config,
+                    create_checkpoint(empty_checkpoint(), {}, index + 1),
+                    metadata,
+                    {},
+                )
+                await saver.aput_writes(
+                    saved,
+                    [("messages", [f"message-{index}"])],
+                    task_id=f"task-{index}",
+                )
+
+            queries: list[str] = []
+            await saver.conn.set_trace_callback(
+                lambda query: queries.append(query)
+            )
+            results = [
+                checkpoint
+                async for checkpoint in saver.alist(
+                    {"configurable": {"thread_id": "thread-batch"}}
+                )
+            ]
+
+            writes_queries = [query for query in queries if "FROM writes" in query]
+            checkpoint_queries = [
+                query for query in queries if "FROM checkpoints" in query
+            ]
+
+            assert len(results) == 4
+            assert len(checkpoint_queries) == 1
+            assert len(writes_queries) == 1
+            assert all(result.pending_writes for result in results)
+            assert [result.pending_writes[0][0] for result in results] == [
+                "task-3",
+                "task-2",
+                "task-1",
+                "task-0",
+            ]
+            assert [result.pending_writes[0][2] for result in results] == [
+                ["message-3"],
+                ["message-2"],
+                ["message-1"],
+                ["message-0"],
+            ]

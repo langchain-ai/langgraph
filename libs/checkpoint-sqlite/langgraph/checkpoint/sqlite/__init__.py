@@ -5,6 +5,7 @@ import random
 import sqlite3
 import threading
 from collections.abc import AsyncIterator, Iterator, Sequence
+from itertools import chain
 from contextlib import closing, contextmanager
 from typing import Any, cast
 
@@ -23,6 +24,32 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from langgraph.checkpoint.sqlite.utils import search_where
+
+
+def _search_writes_query(keys: Sequence[tuple[str, str, str]]) -> tuple[str, tuple[str, ...]]:
+    clauses = " OR ".join(
+        "(thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?)"
+        for _ in keys
+    )
+    params = tuple(chain.from_iterable(keys))
+    query = (
+        "SELECT thread_id, checkpoint_ns, checkpoint_id, task_id, channel, type, value "
+        "FROM writes WHERE " + clauses + " ORDER BY thread_id, checkpoint_ns, checkpoint_id, task_id, idx"
+    )
+    return query, params
+
+
+def _group_pending_writes(
+    rows: Sequence[tuple[str, str, str, str, str, str, bytes]],
+    serde: SerializerProtocol,
+) -> dict[tuple[str, str, str], list[tuple[str, str, Any]]]:
+    grouped: dict[tuple[str, str, str], list[tuple[str, str, Any]]] = {}
+    for thread_id, checkpoint_ns, checkpoint_id, task_id, channel, type_, value in rows:
+        grouped.setdefault((thread_id, checkpoint_ns, checkpoint_id), []).append(
+            (task_id, channel, serde.loads_typed((type_, value)))
+        )
+    return grouped
+
 
 _AIO_ERROR_MSG = (
     "The SqliteSaver does not support async methods. "
@@ -333,7 +360,25 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             query += " LIMIT ?"
             param_values = (*param_values, limit)
         with self.cursor(transaction=False) as cur, closing(self.conn.cursor()) as wcur:
-            cur.execute(query, param_values)
+            rows = list(cur.execute(query, param_values))
+            keys = [
+                (thread_id, checkpoint_ns, checkpoint_id)
+                for (
+                    thread_id,
+                    checkpoint_ns,
+                    checkpoint_id,
+                    _,
+                    _,
+                    _,
+                    _,
+                ) in rows
+            ]
+            grouped_writes: dict[tuple[str, str, str], list[tuple[str, str, Any]]] = {}
+            if keys:
+                writes_query, writes_params = _search_writes_query(keys)
+                wcur.execute(writes_query, writes_params)
+                grouped_writes = _group_pending_writes(list(wcur), self.serde)
+
             for (
                 thread_id,
                 checkpoint_ns,
@@ -342,11 +387,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 type,
                 checkpoint,
                 metadata,
-            ) in cur:
-                wcur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
-                    (thread_id, checkpoint_ns, checkpoint_id),
-                )
+            ) in rows:
                 yield CheckpointTuple(
                     {
                         "configurable": {
@@ -371,10 +412,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                         if parent_checkpoint_id
                         else None
                     ),
-                    [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        for task_id, channel, type, value in wcur
-                    ],
+                    grouped_writes.get((thread_id, checkpoint_ns, checkpoint_id), []),
                 )
 
     def put(
