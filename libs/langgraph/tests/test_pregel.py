@@ -7166,6 +7166,66 @@ def test_get_stream_writer() -> None:
     ]
 
 
+async def test_get_stream_writer_async() -> None:
+    """Regression: get_stream_writer() must work inside async nodes via astream."""
+
+    class State(TypedDict):
+        foo: str
+
+    async def my_async_node(state):
+        writer = get_stream_writer()
+        writer("custom!")
+        return state
+
+    graph = (
+        StateGraph(State)
+        .add_node(my_async_node)
+        .add_edge(START, "my_async_node")
+        .compile()
+    )
+
+    chunks = [c async for c in graph.astream({"foo": "bar"}, stream_mode="custom")]
+    assert chunks == ["custom!"]
+
+    chunks = [
+        c
+        async for c in graph.astream({"foo": "bar"}, stream_mode=["custom", "updates"])
+    ]
+    assert chunks == [
+        ("custom", "custom!"),
+        ("updates", {"my_async_node": {"foo": "bar"}}),
+    ]
+
+
+async def test_get_stream_writer_async_pre311(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: get_stream_writer() must work on Python < 3.11 (no create_task context arg).
+
+    Forces ASYNCIO_ACCEPTS_CONTEXT=False to exercise the set/reset token fallback path
+    that fixes context propagation without asyncio.create_task(..., context=ctx).
+    """
+    import langgraph._internal._runnable as _runnable_mod
+
+    monkeypatch.setattr(_runnable_mod, "ASYNCIO_ACCEPTS_CONTEXT", False)
+
+    class State(TypedDict):
+        foo: str
+
+    async def my_async_node(state):
+        writer = get_stream_writer()
+        writer("custom!")
+        return state
+
+    graph = (
+        StateGraph(State)
+        .add_node(my_async_node)
+        .add_edge(START, "my_async_node")
+        .compile()
+    )
+
+    chunks = [c async for c in graph.astream({"foo": "bar"}, stream_mode="custom")]
+    assert chunks == ["custom!"]
+
+
 def test_stream_messages_dedupe_inputs() -> None:
     from langchain_core.messages import AIMessage
 
