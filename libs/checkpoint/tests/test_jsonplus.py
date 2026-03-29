@@ -35,6 +35,8 @@ from langgraph.checkpoint.serde.jsonplus import (
     JsonPlusSerializer,
     _msgpack_enc,
     _msgpack_ext_hook_to_json,
+    _warned_blocked_types,
+    _warned_unregistered_types,
 )
 from langgraph.store.base import Item
 
@@ -582,6 +584,7 @@ def test_msgpack_safe_types_no_warning(caplog: pytest.LogCaptureFixture) -> None
 
 def test_msgpack_pydantic_warns_by_default(caplog: pytest.LogCaptureFixture) -> None:
     """Pydantic models not in allowlist should log warning but still deserialize."""
+    _warned_unregistered_types.clear()
     current = _lg_msgpack.STRICT_MSGPACK_ENABLED
     _lg_msgpack.STRICT_MSGPACK_ENABLED = False
     serde = JsonPlusSerializer()
@@ -595,6 +598,12 @@ def test_msgpack_pydantic_warns_by_default(caplog: pytest.LogCaptureFixture) -> 
     assert "unregistered type" in caplog.text.lower()
     assert "allowed_msgpack_modules" in caplog.text
     assert result == obj
+
+    # Second deserialization of the same type should NOT produce another warning
+    caplog.clear()
+    result2 = serde.loads_typed(dumped)
+    assert "unregistered type" not in caplog.text.lower()
+    assert result2 == obj
     _lg_msgpack.STRICT_MSGPACK_ENABLED = current
 
 
@@ -602,6 +611,7 @@ def test_msgpack_env_strict_default(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Strict msgpack env should default to blocking unregistered types."""
+    _warned_blocked_types.clear()
     current = _lg_msgpack.STRICT_MSGPACK_ENABLED
     _lg_msgpack.STRICT_MSGPACK_ENABLED = True
     serde = JsonPlusSerializer()
@@ -639,7 +649,7 @@ def test_msgpack_allowlist_silences_warning(caplog: pytest.LogCaptureFixture) ->
 
 def test_msgpack_none_blocks_unregistered(caplog: pytest.LogCaptureFixture) -> None:
     """allowed_msgpack_modules=None should block unregistered types."""
-
+    _warned_blocked_types.clear()
     serde = JsonPlusSerializer(allowed_msgpack_modules=None)
 
     obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
@@ -657,7 +667,7 @@ def test_msgpack_allowlist_blocks_non_listed(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Allowlists should block unregistered types even if msgpack is enabled."""
-
+    _warned_blocked_types.clear()
     serde = JsonPlusSerializer(
         allowed_msgpack_modules=[("tests.test_jsonplus", "MyPydantic")]
     )
