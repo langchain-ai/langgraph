@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 import click
 import click.exceptions
 from click import secho
-from dotenv import dotenv_values
+from dotenv import dotenv_values, set_key
 
 import langgraph_cli.config
 import langgraph_cli.docker
@@ -94,14 +94,13 @@ _API_KEY_ENV_NAMES = (
 _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
 
 
-def _parse_env_from_config(
+def _resolve_env_path(
     config_json: dict, config_path: pathlib.Path
-) -> dict[str, str]:
-    """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
+) -> pathlib.Path | None:
+    """Return the .env file path implied by the config, or None for inline dicts."""
     env_field = config_json.get("env")
-    # validate_config_file will default env to {}
     if isinstance(env_field, dict) and env_field:
-        return {str(k): str(v) for k, v in env_field.items()}
+        return None
     if isinstance(env_field, str):
         env_path = (config_path.parent / env_field).resolve()
         if not env_path.exists():
@@ -109,9 +108,21 @@ def _parse_env_from_config(
                 f"Warning: env file '{env_field}' specified in langgraph.json not found.",
                 fg="yellow",
             )
-            return {}
-    else:
-        env_path = pathlib.Path.cwd() / ".env"
+            return None
+        return env_path
+    return pathlib.Path.cwd() / ".env"
+
+
+def _parse_env_from_config(
+    config_json: dict, config_path: pathlib.Path
+) -> dict[str, str]:
+    """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
+    env_field = config_json.get("env")
+    if isinstance(env_field, dict) and env_field:
+        return {str(k): str(v) for k, v in env_field.items()}
+    env_path = _resolve_env_path(config_json, config_path)
+    if env_path is None:
+        return {}
     return {k: v for k, v in dotenv_values(env_path).items() if v is not None}
 
 
@@ -851,7 +862,15 @@ def _deploy(
     if not deployment_id and not name:
         default_name = _normalize_image_name(pathlib.Path.cwd().name)
         name = click.prompt("Deployment name", default=default_name)
+        # Persist so the user doesn't have to type it again next time
+        env_path = _resolve_env_path(config_json, config)
+        if env_path is not None:
+            set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
+            click.echo(f"Saved deployment name to {env_path}")
 
+    # Remove deployment name before converting to secrets — it's consumed above
+    # and is in RESERVED_ENV_VARS, so _secrets_from_env would warn about it.
+    env_vars.pop(_DEPLOYMENT_NAME_ENV, None)
     secrets = _secrets_from_env(env_vars)
 
     # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
