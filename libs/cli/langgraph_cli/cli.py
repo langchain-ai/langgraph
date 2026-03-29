@@ -97,12 +97,19 @@ _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
 def _resolve_env_path(
     config_json: dict, config_path: pathlib.Path
 ) -> pathlib.Path | None:
-    """Return the env file path that should persist deployment metadata."""
+    """Return the .env file path implied by the config, or None for inline dicts."""
     env_field = config_json.get("env")
-    if isinstance(env_field, dict):
+    if isinstance(env_field, dict) and env_field:
         return None
     if isinstance(env_field, str):
-        return (config_path.parent / env_field).resolve()
+        env_path = (config_path.parent / env_field).resolve()
+        if not env_path.exists():
+            click.secho(
+                f"Warning: env file '{env_field}' specified in langgraph.json not found.",
+                fg="yellow",
+            )
+            return None
+        return env_path
     return pathlib.Path.cwd() / ".env"
 
 
@@ -111,19 +118,11 @@ def _parse_env_from_config(
 ) -> dict[str, str]:
     """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
     env_field = config_json.get("env")
-    # validate_config_file will default env to {}
     if isinstance(env_field, dict) and env_field:
         return {str(k): str(v) for k, v in env_field.items()}
-    if isinstance(env_field, str):
-        env_path = (config_path.parent / env_field).resolve()
-        if not env_path.exists():
-            click.secho(
-                f"Warning: env file '{env_field}' specified in langgraph.json not found.",
-                fg="yellow",
-            )
-            return {}
-    else:
-        env_path = pathlib.Path.cwd() / ".env"
+    env_path = _resolve_env_path(config_json, config_path)
+    if env_path is None:
+        return {}
     return {k: v for k, v in dotenv_values(env_path).items() if v is not None}
 
 
