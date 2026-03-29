@@ -218,7 +218,7 @@ class BaseUser(typing.Protocol):
 class StudioUser:
     """A user object that's populated from authenticated requests from the LangGraph studio.
 
-    Note: Studio auth can be disabled in your `langgraph.json` config.
+    Note: Studio auth can be disabled in your `langsmith.json` config.
 
     ```json
     {

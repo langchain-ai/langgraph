@@ -309,7 +309,7 @@ def test_validate_config_file():
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = pathlib.Path(tmpdir)
 
-        config_path = tmpdir_path / "langgraph.json"
+        config_path = tmpdir_path / "langsmith.json"
 
         node_config = {"node_version": "20", "graphs": {"agent": "./agent.js:graph"}}
         with open(config_path, "w") as f:

@@ -50,7 +50,7 @@ def temporary_config_folder(config_content: dict, levels: int = 0):
 
 def test_prepare_args_and_stdin() -> None:
     # this basically serves as an end-to-end test for using config and docker helpers
-    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config_path = pathlib.Path(__file__).parent / "langsmith.json"
     config = validate_config(
         Config(dependencies=[".", "../../.."], graphs={"agent": "agent.py:graph"})
     )
@@ -159,7 +159,7 @@ services:
         
         develop:
             watch:
-                - path: langgraph.json
+                - path: langsmith.json
                   action: rebuild
                 - path: .
                   action: rebuild
@@ -172,7 +172,7 @@ services:
 
 def test_prepare_args_and_stdin_with_image() -> None:
     # this basically serves as an end-to-end test for using config and docker helpers
-    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config_path = pathlib.Path(__file__).parent / "langsmith.json"
     config = validate_config(
         Config(dependencies=[".", "../../.."], graphs={"agent": "agent.py:graph"})
     )
@@ -263,7 +263,7 @@ services:
         
         develop:
             watch:
-                - path: langgraph.json
+                - path: langsmith.json
                   action: rebuild
                 - path: .
                   action: rebuild
@@ -1136,7 +1136,7 @@ def test_build_command_with_api_version_and_base_image() -> None:
 
 def test_prepare_args_and_stdin_with_api_version() -> None:
     """Test prepare_args_and_stdin function with api_version parameter."""
-    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config_path = pathlib.Path(__file__).parent / "langsmith.json"
     config = validate_config(
         Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
     )
@@ -1169,7 +1169,7 @@ def test_prepare_args_and_stdin_with_api_version() -> None:
 
 def test_prepare_args_and_stdin_with_api_version_and_image() -> None:
     """Test prepare_args_and_stdin function with both api_version and image parameters."""
-    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config_path = pathlib.Path(__file__).parent / "langsmith.json"
     config = validate_config(
         Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
     )
@@ -1298,7 +1298,7 @@ def test_dockerfile_command_distributed_with_explicit_base_image() -> None:
 
 def test_prepare_args_and_stdin_distributed_mode() -> None:
     """Test prepare_args_and_stdin with distributed mode includes all services."""
-    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config_path = pathlib.Path(__file__).parent / "langsmith.json"
     config = validate_config(
         Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
     )

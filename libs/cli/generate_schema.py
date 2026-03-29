@@ -2,7 +2,7 @@
 """
 Script to generate a JSON schema for the langgraph-cli Config class.
 
-This script creates a schema.json file that can be referenced in langgraph.json files
+This script creates a schema.json file that can be referenced in langsmith.json files
 to provide IDE autocompletion and validation.
 """
 
@@ -243,7 +243,7 @@ def main():
     print(
         f"You can now add '$schema: https://raw.githubusercontent.com/langchain-ai/langgraph/refs/heads/main/libs/cli/schemas/schema.json'"
         f" or '$schema: https://raw.githubusercontent.com/langchain-ai/langgraph/refs/heads/main/libs/cli/schemas/schema.{schema_version}.json'"
-        " to your langgraph.json files"
+        " to your langsmith.json files"
     )
 
 

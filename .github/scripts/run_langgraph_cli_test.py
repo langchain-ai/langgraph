@@ -165,7 +165,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--tag", type=str)
-    parser.add_argument("-c", "--config", type=str, default="./langgraph.json")
+    parser.add_argument("-c", "--config", type=str, default="./langsmith.json")
     parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args()
     try:

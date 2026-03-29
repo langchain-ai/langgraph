@@ -550,7 +550,7 @@ def _update_graph_paths(
     the host system is Windows).
 
     Args:
-        config_path: The path to the config file (e.g. `langgraph.json`).
+        config_path: The path to the config file (e.g. `langsmith.json`).
         config: The validated configuration dictionary.
         local_deps: An object containing references to local dependencies:
             - real Python packages (with a `pyproject.toml` or `setup.py`)
@@ -1280,7 +1280,7 @@ def docker_tag(
 
 
 def _calculate_relative_workdir(config_path: pathlib.Path, build_context: str) -> str:
-    """Calculate the relative path from build context to langgraph.json directory."""
+    """Calculate the relative path from build context to langsmith.json directory."""
     config_dir = config_path.parent.resolve()
     build_context_path = pathlib.Path(build_context).resolve()
 
@@ -1290,7 +1290,7 @@ def _calculate_relative_workdir(config_path: pathlib.Path, build_context: str) -
     except ValueError as _:
         raise ValueError(
             f"Configuration file {config_path} is not under the build context {build_context}. "
-            f"Please run the command from a directory that contains your langgraph.json file, "
+            f"Please run the command from a directory that contains your langsmith.json file, "
         ) from None
 
 

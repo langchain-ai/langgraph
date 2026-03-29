@@ -19,11 +19,11 @@ class Auth:
     actions.
 
     To use, create a separate python file and add the path to the file to your
-    LangGraph API configuration file (`langgraph.json`). Within that file, create
+    LangGraph API configuration file (`langsmith.json`). Within that file, create
     an instance of the Auth class and register authentication and authorization
     handlers as needed.
 
-    Example `langgraph.json` file:
+    Example `langsmith.json` file:
 
     ```json
     {

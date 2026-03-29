@@ -31,7 +31,7 @@ langgraph dev [OPTIONS]
   --no-reload               Disable auto-reload
   --debug-port INTEGER      Enable remote debugging
   --no-browser             Skip opening browser window
-  -c, --config FILE        Config file path (default: langgraph.json)
+  -c, --config FILE        Config file path (default: langsmith.json)
 ```
 
 ### `langgraph up` 🚀
@@ -64,7 +64,7 @@ langgraph dockerfile SAVE_PATH [OPTIONS]
 
 ## Configuration
 
-The CLI uses a `langgraph.json` configuration file with these key settings:
+The CLI uses a `langsmith.json` configuration file with these key settings:
 
 ```json
 {
