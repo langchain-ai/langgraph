@@ -270,6 +270,16 @@ def test_validate_config_pip_installer():
     )
     assert config["pip_installer"] == "uv"
 
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "pip_installer": "uv_lock",
+        }
+    )
+    assert config["pip_installer"] == "uv_lock"
+
     # Missing pip_installer should default to "auto"
     config = validate_config(
         {
@@ -291,7 +301,7 @@ def test_validate_config_pip_installer():
             }
         )
     assert "Invalid pip_installer: 'conda'" in str(exc_info.value)
-    assert "Must be 'auto', 'pip', or 'uv'" in str(exc_info.value)
+    assert "Must be 'auto', 'pip', 'uv', or 'uv_lock'" in str(exc_info.value)
 
     with pytest.raises(click.UsageError) as exc_info:
         validate_config(
@@ -1076,6 +1086,315 @@ def test_config_to_docker_pip_installer():
         PATH_TO_CONFIG, config_default, base_image="langchain/langgraph-api:0.2.47"
     )
     assert "uv pip install --system " in docker_default
+
+
+def test_config_to_docker_uv_lock():
+    """Test that pip_installer='uv_lock' generates correct Dockerfile."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.touch()
+
+        # Create pyproject.toml and uv.lock
+        (tmpdir_path / "pyproject.toml").write_text(
+            '[project]\nname = "myproject"\nversion = "0.1"\n'
+        )
+        (tmpdir_path / "uv.lock").write_text("# uv lock file\n")
+
+        # Create the graph file directory
+        graphs_dir = tmpdir_path / "graphs"
+        graphs_dir.mkdir()
+        (graphs_dir / "agent.py").touch()
+
+        graphs = {"agent": "./graphs/agent.py:graph"}
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+                "pip_installer": "uv_lock",
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        # Should use uv pip install
+        assert "uv pip install --system" in docker
+        # Should have the uv export step
+        assert (
+            "uv export --frozen --no-hashes --no-emit-project --no-emit-workspace"
+            in docker
+        )
+        assert "ADD pyproject.toml /tmp/uv_export/project/pyproject.toml" in docker
+        assert "ADD uv.lock /tmp/uv_export/project/uv.lock" in docker
+        assert "RUN cd /tmp/uv_export/project &&" in docker
+        assert "-r uv_requirements.txt" in docker
+        # Only the main app should use --no-deps
+        assert "--no-deps -e ." in docker
+        assert 'if [ "$dep" = "/deps/' in docker
+        # Should still have uv cleanup
+        assert "rm /usr/bin/uv /usr/bin/uvx" in docker
+
+
+def test_config_to_docker_uv_lock_copies_uv_path_sources():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_dir = tmpdir_path / "app"
+        shared_dir = tmpdir_path / "shared_pkg"
+        project_dir.mkdir()
+        shared_dir.mkdir()
+
+        config_path = project_dir / "langgraph.json"
+        config_path.touch()
+
+        (project_dir / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "app"
+                version = "0.1"
+
+                [tool.uv.sources]
+                shared-pkg = { path = "../shared_pkg", editable = true }
+                """
+            ).strip()
+            + "\n"
+        )
+        (project_dir / "uv.lock").write_text("# uv lock file\n")
+        (shared_dir / "pyproject.toml").write_text(
+            '[project]\nname = "shared-pkg"\nversion = "0.1"\n'
+        )
+
+        graphs_dir = project_dir / "graphs"
+        graphs_dir.mkdir()
+        (graphs_dir / "agent.py").touch()
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": {"agent": "./graphs/agent.py:graph"},
+                "pip_installer": "uv_lock",
+            }
+        )
+        docker, additional_contexts = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert "# syntax=docker/dockerfile:1.4" in docker
+        assert (
+            "COPY --from=uv-source-shared_pkg . /tmp/uv_export/level0/shared_pkg"
+            in docker
+        )
+        assert "RUN cd /tmp/uv_export/level0/project &&" in docker
+        assert additional_contexts == {
+            "uv-source-shared_pkg": str(shared_dir.resolve())
+        }
+
+
+def test_config_to_docker_uv_lock_only_skips_root_package_deps():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_dir = tmpdir_path / "app"
+        sibling_dir = project_dir / "deps_pkg"
+        project_dir.mkdir()
+        sibling_dir.mkdir()
+
+        config_path = project_dir / "langgraph.json"
+        config_path.touch()
+
+        (project_dir / "pyproject.toml").write_text(
+            '[project]\nname = "app"\nversion = "0.1"\n'
+        )
+        (project_dir / "uv.lock").write_text("# uv lock file\n")
+        (sibling_dir / "pyproject.toml").write_text(
+            '[project]\nname = "deps-pkg"\nversion = "0.1"\n'
+        )
+
+        graphs_dir = project_dir / "graphs"
+        graphs_dir.mkdir()
+        (graphs_dir / "agent.py").touch()
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": [".", "./deps_pkg"],
+                "graphs": {"agent": "./graphs/agent.py:graph"},
+                "pip_installer": "uv_lock",
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert 'if [ "$dep" = "/deps/app" ]; then' in docker
+        assert "--no-deps -e ." in docker
+        assert (
+            "&& PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e ."
+            in docker
+        )
+
+
+def test_config_to_docker_uv_lock_rejects_nonlocal_dependencies():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.touch()
+
+        (tmpdir_path / "pyproject.toml").write_text(
+            '[project]\nname = "myproject"\nversion = "0.1"\n'
+        )
+        (tmpdir_path / "uv.lock").write_text("# uv lock file\n")
+
+        graphs_dir = tmpdir_path / "graphs"
+        graphs_dir.mkdir()
+        (graphs_dir / "agent.py").touch()
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": [".", "langchain"],
+                "graphs": {"agent": "./graphs/agent.py:graph"},
+                "pip_installer": "uv_lock",
+            }
+        )
+
+        with pytest.raises(
+            click.UsageError, match=r"non-local `dependencies`: langchain"
+        ):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.47"
+            )
+
+
+def test_config_to_docker_uv_lock_rejects_local_requirements_txt():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_dir = tmpdir_path / "app"
+        reqs_dir = project_dir / "faux_pkg"
+        project_dir.mkdir()
+        reqs_dir.mkdir()
+
+        config_path = project_dir / "langgraph.json"
+        config_path.touch()
+
+        (project_dir / "pyproject.toml").write_text(
+            '[project]\nname = "app"\nversion = "0.1"\n'
+        )
+        (project_dir / "uv.lock").write_text("# uv lock file\n")
+        (reqs_dir / "__init__.py").touch()
+        (reqs_dir / "requirements.txt").write_text("langchain\n")
+
+        graphs_dir = project_dir / "graphs"
+        graphs_dir.mkdir()
+        (graphs_dir / "agent.py").touch()
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": [".", "./faux_pkg"],
+                "graphs": {"agent": "./graphs/agent.py:graph"},
+                "pip_installer": "uv_lock",
+            }
+        )
+
+        with pytest.raises(
+            click.UsageError,
+            match=r"local `requirements.txt` files: faux_pkg/requirements.txt",
+        ):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.47"
+            )
+
+
+def test_config_to_docker_uv_lock_missing_lockfile():
+    """Test that uv_lock fails when uv.lock is missing."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.touch()
+
+        # Create pyproject.toml but NOT uv.lock
+        (tmpdir_path / "pyproject.toml").write_text(
+            '[project]\nname = "myproject"\nversion = "0.1"\n'
+        )
+
+        graphs = {"agent": "./graphs/agent.py:graph"}
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+                "pip_installer": "uv_lock",
+            }
+        )
+        with pytest.raises(click.UsageError, match="no uv.lock file found"):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.47"
+            )
+
+
+def test_config_to_docker_uv_lock_missing_pyproject():
+    """Test that uv_lock fails when pyproject.toml is missing."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.touch()
+
+        # Create uv.lock but NOT pyproject.toml
+        # We need a setup.py so "." is treated as a real package
+        (tmpdir_path / "uv.lock").write_text("# uv lock file\n")
+        (tmpdir_path / "setup.py").write_text("")
+
+        graphs_dir = tmpdir_path / "graphs"
+        graphs_dir.mkdir()
+        (graphs_dir / "agent.py").touch()
+
+        graphs = {"agent": "./graphs/agent.py:graph"}
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+                "pip_installer": "uv_lock",
+            }
+        )
+        with pytest.raises(click.UsageError, match="no pyproject.toml found"):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.47"
+            )
+
+
+def test_config_to_docker_uv_lock_old_image():
+    """Test that uv_lock fails with an old base image."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.touch()
+
+        (tmpdir_path / "pyproject.toml").write_text(
+            '[project]\nname = "myproject"\nversion = "0.1"\n'
+        )
+        (tmpdir_path / "uv.lock").write_text("# uv lock file\n")
+
+        graphs_dir = tmpdir_path / "graphs"
+        graphs_dir.mkdir()
+        (graphs_dir / "agent.py").touch()
+
+        graphs = {"agent": "./graphs/agent.py:graph"}
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+                "pip_installer": "uv_lock",
+            }
+        )
+        with pytest.raises(ValueError, match="requires a base image with uv support"):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.46"
+            )
 
 
 def test_config_retain_build_tools():
