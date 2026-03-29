@@ -639,8 +639,10 @@ class Config(TypedDict, total=False):
     - 'uv': Force use of uv (will fail if base image doesn't support it)
     - 'uv_lock': Use uv with a uv.lock file for reproducible builds. Requires
       a uv.lock and pyproject.toml in the project root. Third-party dependencies
-      are exported from the lock file and installed with constraints validation,
-      then local packages are installed as editable without re-resolving.
+      must come from pyproject.toml/uv.lock rather than langgraph.json
+      `dependencies` or local `requirements.txt` files. Locked dependencies are
+      exported from the lock file and installed with constraints validation,
+      then the main app is installed editable without re-resolving.
     """
 
     dockerfile_lines: list[str]

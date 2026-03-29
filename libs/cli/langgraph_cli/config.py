@@ -2,12 +2,14 @@ import copy
 import json
 import os
 import pathlib
+import posixpath
 import re
 import textwrap
 from collections import Counter
 from typing import Literal, NamedTuple
 
 import click
+import tomllib
 
 from langgraph_cli.schemas import Config, Distros
 
@@ -119,6 +121,84 @@ def _parse_node_version(version_str: str) -> int:
             f"Invalid Node.js version format: {version_str}. "
             "Use major version only (e.g., '20')."
         ) from None
+
+
+class UvLockPathSource(NamedTuple):
+    ref: str
+    resolved: pathlib.Path
+    context_root: pathlib.Path | None = None
+
+
+def _iter_uv_path_source_refs(value: object) -> list[str]:
+    refs: list[str] = []
+    if isinstance(value, dict):
+        path = value.get("path")
+        if isinstance(path, str):
+            refs.append(path)
+        for nested_value in value.values():
+            refs.extend(_iter_uv_path_source_refs(nested_value))
+    elif isinstance(value, list):
+        for item in value:
+            refs.extend(_iter_uv_path_source_refs(item))
+    return refs
+
+
+def _collect_uv_lock_path_sources(
+    pyproject_path: pathlib.Path, build_context_root: pathlib.Path
+) -> list[UvLockPathSource]:
+    with pyproject_path.open("rb") as pyproject_file:
+        pyproject_data = tomllib.load(pyproject_file)
+
+    path_sources: list[UvLockPathSource] = []
+    seen_refs: set[str] = set()
+    source_entries = pyproject_data.get("tool", {}).get("uv", {}).get("sources", {})
+    for ref in _iter_uv_path_source_refs(source_entries):
+        if ref in seen_refs:
+            continue
+        seen_refs.add(ref)
+
+        if pathlib.PurePosixPath(ref).is_absolute():
+            raise click.UsageError(
+                "pip_installer 'uv_lock' does not support absolute "
+                f"[tool.uv.sources] paths: {ref}"
+            )
+
+        resolved = (pyproject_path.parent / ref).resolve()
+        if not resolved.exists():
+            raise click.UsageError(
+                "pip_installer is 'uv_lock' but "
+                f"[tool.uv.sources] path '{ref}' does not exist at {resolved}."
+            )
+
+        context_root = None
+        if (
+            resolved != build_context_root
+            and build_context_root not in resolved.parents
+        ):
+            context_root = resolved if resolved.is_dir() else resolved.parent
+
+        path_sources.append(UvLockPathSource(ref, resolved, context_root))
+
+    return path_sources
+
+
+def _count_leading_parent_segments(path_ref: str) -> int:
+    count = 0
+    for part in pathlib.PurePosixPath(path_ref).parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            count += 1
+            continue
+        break
+    return count
+
+
+def _format_path_for_error(path: pathlib.Path, root: pathlib.Path) -> str:
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
 
 
 def _is_node_graph(spec: str | dict) -> bool:
@@ -914,6 +994,7 @@ def python_config_to_docker(
     escape_variables: bool = False,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
+    config_root = config_path.parent.resolve()
     pip_installer = config.get("pip_installer", "auto")
     build_tools_to_uninstall = get_build_tools_to_uninstall(config)
     if pip_installer == "auto":
@@ -930,24 +1011,29 @@ def python_config_to_docker(
 
     # Validate uv_lock requirements
     uv_lock_path: pathlib.Path | None = None
+    pyproject_path: pathlib.Path | None = None
+    uv_lock_path_sources: list[UvLockPathSource] = []
     if pip_installer == "uv_lock":
         if not _image_supports_uv(base_image):
             raise ValueError(
                 "pip_installer 'uv_lock' requires a base image with uv support "
                 "(langchain/langgraph-api >= 0.2.47)"
             )
-        uv_lock_path = config_path.parent / "uv.lock"
+        uv_lock_path = config_root / "uv.lock"
         if not uv_lock_path.exists():
             raise click.UsageError(
                 f"pip_installer is 'uv_lock' but no uv.lock file found at "
                 f"{uv_lock_path}. Ensure a uv.lock file exists in the project root."
             )
-        pyproject_path = config_path.parent / "pyproject.toml"
+        pyproject_path = config_root / "pyproject.toml"
         if not pyproject_path.exists():
             raise click.UsageError(
                 f"pip_installer is 'uv_lock' but no pyproject.toml found at "
                 f"{pyproject_path}. A pyproject.toml is required alongside uv.lock."
             )
+        uv_lock_path_sources = _collect_uv_lock_path_sources(
+            pyproject_path, config_root
+        )
 
     # configure pip
     local_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
@@ -968,6 +1054,26 @@ def python_config_to_docker(
     # collect dependencies
     pypi_deps = [dep for dep in config["dependencies"] if not dep.startswith(".")]
     local_deps = _assemble_local_deps(config_path, config)
+    if pip_installer == "uv_lock" and (pypi_deps or local_deps.pip_reqs):
+        extra_dependency_sources = []
+        if pypi_deps:
+            extra_dependency_sources.append(
+                "non-local `dependencies`: " + ", ".join(pypi_deps)
+            )
+        if local_deps.pip_reqs:
+            extra_dependency_sources.append(
+                "local `requirements.txt` files: "
+                + ", ".join(
+                    _format_path_for_error(reqpath, config_root)
+                    for reqpath, _ in local_deps.pip_reqs
+                )
+            )
+        raise click.UsageError(
+            "pip_installer 'uv_lock' only installs dependencies captured by "
+            "pyproject.toml and uv.lock. Move these config-level dependencies "
+            "into pyproject.toml, regenerate uv.lock, and remove them from "
+            "langgraph.json:\n- " + "\n- ".join(extra_dependency_sources)
+        )
     # Rewrite graph paths, so they point to the correct location in the Docker container
     _update_graph_paths(config_path, config, local_deps)
     # Rewrite auth path, so it points to the correct location in the Docker container
@@ -1038,6 +1144,40 @@ ADD {relpath} /deps/{name}
         for fullpath, (relpath, name) in local_deps.real_pkgs.items()
     )
 
+    additional_contexts: dict[str, str] = {}
+    additional_context_names: dict[pathlib.Path, str] = {}
+    used_context_names: set[str] = set()
+
+    def register_additional_context(path: pathlib.Path, preferred_name: str) -> str:
+        if path in additional_context_names:
+            return additional_context_names[path]
+
+        name = preferred_name
+        suffix = 1
+        while name in used_context_names:
+            name = f"{preferred_name}_{suffix}"
+            suffix += 1
+
+        used_context_names.add(name)
+        additional_context_names[path] = name
+        additional_contexts[name] = str(path)
+        return name
+
+    for p in local_deps.additional_contexts:
+        if p in local_deps.real_pkgs:
+            preferred_name = local_deps.real_pkgs[p][1]
+        elif p in local_deps.faux_pkgs:
+            preferred_name = f"outer-{p.name}"
+        else:
+            raise RuntimeError(f"Unknown additional context: {p}")
+        register_additional_context(p, preferred_name)
+
+    for source in uv_lock_path_sources:
+        if source.context_root is not None:
+            register_additional_context(
+                source.context_root, f"uv-source-{source.context_root.name}"
+            )
+
     install_node_str: str = (
         "RUN /storage/install-node.sh"
         if (config.get("ui") or config.get("node_version")) and local_deps.working_dir
@@ -1047,26 +1187,63 @@ ADD {relpath} /deps/{name}
     # For uv_lock: export locked deps and install them before local packages
     uv_lock_str = ""
     if pip_installer == "uv_lock":
+        uv_export_root = "/tmp/uv_export"
+        uv_export_project_dir = posixpath.join(
+            uv_export_root,
+            *(
+                f"level{idx}"
+                for idx in range(
+                    max(
+                        (
+                            _count_leading_parent_segments(source.ref)
+                            for source in uv_lock_path_sources
+                        ),
+                        default=0,
+                    )
+                )
+            ),
+            "project",
+        )
+        uv_lock_copy_lines = [
+            f"ADD pyproject.toml {uv_export_project_dir}/pyproject.toml",
+            f"ADD uv.lock {uv_export_project_dir}/uv.lock",
+        ]
+        for source in uv_lock_path_sources:
+            destination = posixpath.normpath(
+                posixpath.join(uv_export_project_dir, source.ref)
+            )
+            if source.context_root is None:
+                add_source = (
+                    "."
+                    if source.resolved == config_root
+                    else source.resolved.relative_to(config_root).as_posix()
+                )
+                uv_lock_copy_lines.append(f"ADD {add_source} {destination}")
+            else:
+                context_name = additional_context_names[source.context_root]
+                if source.resolved.is_dir():
+                    uv_lock_copy_lines.append(
+                        f"COPY --from={context_name} . {destination}"
+                    )
+                else:
+                    uv_lock_copy_lines.append(
+                        f"COPY --from={context_name} {source.resolved.name} {destination}"
+                    )
         uv_lock_str = f"""# -- Installing dependencies from uv.lock --
-ADD pyproject.toml /tmp/uv_export/pyproject.toml
-ADD uv.lock /tmp/uv_export/uv.lock
-RUN cd /tmp/uv_export && uv export --frozen --no-hashes --no-emit-project --no-emit-workspace -o /tmp/uv_requirements.txt
-RUN {global_reqs_pip_install} -r /tmp/uv_requirements.txt
-RUN rm -rf /tmp/uv_export /tmp/uv_requirements.txt
+{os.linesep.join(uv_lock_copy_lines)}
+RUN cd {uv_export_project_dir} && uv export --frozen --no-hashes --no-emit-project --no-emit-workspace -o uv_requirements.txt
+RUN cd {uv_export_project_dir} && {global_reqs_pip_install} -r uv_requirements.txt
+RUN rm -rf {uv_export_root}
 # -- End of uv.lock dependencies install --"""
 
+    install_steps = [install_node_str, pip_config_file_str, uv_lock_str]
+    if pip_installer != "uv_lock":
+        install_steps.extend([pip_pkgs_str, pip_reqs_str])
+    install_steps.extend([local_pkgs_str, faux_pkgs_str])
     installs = f"{os.linesep}{os.linesep}".join(
         filter(
             None,
-            [
-                install_node_str,
-                pip_config_file_str,
-                uv_lock_str,
-                pip_pkgs_str,
-                pip_reqs_str,
-                local_pkgs_str,
-                faux_pkgs_str,
-            ],
+            install_steps,
         )
     )
 
@@ -1117,7 +1294,7 @@ RUN rm -rf /tmp/uv_export /tmp/uv_requirements.txt
     docker_file_contents = []
 
     # Add syntax directive if we have additional contexts (requires BuildKit frontend.contexts capability)
-    if local_deps.additional_contexts:
+    if additional_contexts:
         docker_file_contents.extend(
             [
                 "# syntax=docker/dockerfile:1.4",
@@ -1127,9 +1304,34 @@ RUN rm -rf /tmp/uv_export /tmp/uv_requirements.txt
 
     # Add main dockerfile content
     dep_vname = "$$dep" if escape_variables else "$dep"
-    # For uv_lock, deps are already installed from the lock file export,
-    # so install local packages without re-resolving dependencies.
-    local_install_flags = "--no-deps -e ." if pip_installer == "uv_lock" else "-e ."
+    primary_local_dep_dir = None
+    if config_root in local_deps.real_pkgs:
+        primary_local_dep_dir = f"/deps/{local_deps.real_pkgs[config_root][1]}"
+    elif config_root in local_deps.faux_pkgs:
+        primary_local_dep_dir = str(
+            pathlib.PurePosixPath(local_deps.faux_pkgs[config_root][1]).parent
+        )
+
+    if pip_installer == "uv_lock" and primary_local_dep_dir is not None:
+        local_deps_install_str = f"""RUN for dep in /deps/*; do \
+            echo "Installing {dep_vname}"; \
+            if [ -d "{dep_vname}" ]; then \
+                echo "Installing {dep_vname}"; \
+                if [ "{dep_vname}" = "{primary_local_dep_dir}" ]; then \
+                    (cd "{dep_vname}" && {global_reqs_pip_install} --no-deps -e .); \
+                else \
+                    (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
+                fi; \
+            fi; \
+        done"""
+    else:
+        local_deps_install_str = f"""RUN for dep in /deps/*; do \
+            echo "Installing {dep_vname}"; \
+            if [ -d "{dep_vname}" ]; then \
+                echo "Installing {dep_vname}"; \
+                (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
+            fi; \
+        done"""
     docker_file_contents.extend(
         [
             f"FROM {image_str}",
@@ -1139,13 +1341,7 @@ RUN rm -rf /tmp/uv_export /tmp/uv_requirements.txt
             installs,
             "",
             "# -- Installing all local dependencies --",
-            f"""RUN for dep in /deps/*; do \
-            echo "Installing {dep_vname}"; \
-            if [ -d "{dep_vname}" ]; then \
-                echo "Installing {dep_vname}"; \
-                (cd "{dep_vname}" && {global_reqs_pip_install} {local_install_flags}); \
-            fi; \
-        done""",
+            local_deps_install_str,
             "# -- End of local dependencies install --",
             os.linesep.join(env_vars),
             "",
@@ -1162,16 +1358,6 @@ RUN rm -rf /tmp/uv_export /tmp/uv_requirements.txt
             f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
         ]
     )
-
-    additional_contexts: dict[str, str] = {}
-    for p in local_deps.additional_contexts:
-        if p in local_deps.real_pkgs:
-            name = local_deps.real_pkgs[p][1]
-        elif p in local_deps.faux_pkgs:
-            name = f"outer-{p.name}"
-        else:
-            raise RuntimeError(f"Unknown additional context: {p}")
-        additional_contexts[name] = str(p)
 
     return os.linesep.join(docker_file_contents), additional_contexts
 

@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 import click
 import click.exceptions
 from click import secho
-from dotenv import dotenv_values
+from dotenv import dotenv_values, set_key
 
 import langgraph_cli.config
 import langgraph_cli.docker
@@ -92,6 +92,18 @@ _API_KEY_ENV_NAMES = (
 )
 
 _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
+
+
+def _resolve_env_path(
+    config_json: dict, config_path: pathlib.Path
+) -> pathlib.Path | None:
+    """Return the env file path that should persist deployment metadata."""
+    env_field = config_json.get("env")
+    if isinstance(env_field, dict):
+        return None
+    if isinstance(env_field, str):
+        return (config_path.parent / env_field).resolve()
+    return pathlib.Path.cwd() / ".env"
 
 
 def _parse_env_from_config(
