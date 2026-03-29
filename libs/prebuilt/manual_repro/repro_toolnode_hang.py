@@ -1,8 +1,10 @@
-from langchain_core.messages import AIMessage
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langgraph.prebuilt import ToolNode
 import asyncio
 from types import SimpleNamespace
+
+from langchain_core.messages import AIMessage
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+from langgraph.prebuilt import ToolNode
 
 
 async def main() -> None:

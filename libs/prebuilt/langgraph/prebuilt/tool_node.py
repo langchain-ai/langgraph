@@ -115,6 +115,8 @@ TOOL_INVOCATION_ERROR_TEMPLATE = (
     " {error}\n"
     " Please fix the error and try again."
 )
+TOOL_CALL_TIMEOUT_CONFIG_KEY = "__tool_call_timeout"
+DEFAULT_MCP_TOOL_CALL_TIMEOUT_S = 15.0
 
 
 class _ToolCallRequestOverrides(TypedDict, total=False):
@@ -379,12 +381,110 @@ class ToolInvocationError(ToolException):
 def _default_handle_tool_errors(e: Exception) -> str:
     """Default error handler for tool errors.
 
-    If the tool is a tool invocation error, return its message.
-    Otherwise, raise the error.
+    Handles:
+    - ToolInvocationError: Invalid arguments provided by the model
+    - asyncio.TimeoutError: Tool execution timeout (e.g., MCP stream timeout)
+    - ConnectionError: Network/connection failures during tool execution
+
+    Other exceptions are re-raised to propagate to the caller.
     """
     if isinstance(e, ToolInvocationError):
         return e.message
+    if isinstance(e, (asyncio.TimeoutError, ConnectionError)):
+        return TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
     raise e
+
+
+def _is_mcp_tool(tool: BaseTool) -> bool:
+    """Return True if the tool appears to be backed by langchain-mcp-adapters."""
+    if tool.__class__.__module__.startswith("langchain_mcp_adapters."):
+        return True
+
+    for attr in ("coroutine", "func"):
+        candidate = getattr(tool, attr, None)
+        module = getattr(candidate, "__module__", "")
+        if isinstance(module, str) and module.startswith("langchain_mcp_adapters."):
+            return True
+
+    return False
+
+
+def _coerce_positive_timeout(value: Any) -> float | None:
+    """Convert a timeout-like value to positive seconds if possible."""
+    if isinstance(value, (int, float)) and value > 0:
+        return float(value)
+
+    total_seconds = getattr(value, "total_seconds", None)
+    if callable(total_seconds):
+        try:
+            seconds = float(total_seconds())
+        except (TypeError, ValueError):
+            return None
+        if seconds > 0:
+            return seconds
+
+    return None
+
+
+def _get_mcp_sse_read_timeout(tool: BaseTool) -> float | None:
+    """Best-effort extraction of MCP sse_read_timeout from tool closure state."""
+    for attr in ("coroutine", "func"):
+        candidate = getattr(tool, attr, None)
+        if candidate is None:
+            continue
+
+        try:
+            closure_vars = inspect.getclosurevars(candidate)
+        except TypeError:
+            continue
+
+        connection = closure_vars.nonlocals.get("connection")
+        if not isinstance(connection, dict):
+            continue
+
+        inferred = _coerce_positive_timeout(connection.get("sse_read_timeout"))
+        if inferred is not None:
+            return inferred
+
+    return None
+
+
+def _get_tool_call_timeout(
+    config: RunnableConfig,
+    *,
+    tool: BaseTool | None = None,
+) -> float | None:
+    """Extract and validate tool call timeout from config.
+
+    Args:
+        config: The RunnableConfig containing optional timeout configuration.
+
+    Returns:
+        The timeout in seconds as a float, or None if no timeout is configured.
+        For MCP tools, prefers `sse_read_timeout` from tool configuration when
+        available, with a default fallback when it cannot be inferred.
+
+    Raises:
+        ValueError: If the timeout value is not a positive number.
+    """
+    configurable = config.get("configurable") if config else None
+    timeout_value = (
+        configurable.get(TOOL_CALL_TIMEOUT_CONFIG_KEY) if configurable else None
+    )
+    if timeout_value is not None:
+        timeout = _coerce_positive_timeout(timeout_value)
+        if timeout is not None:
+            return timeout
+
+        msg = f"Tool call timeout must be a positive number, got {timeout_value}"
+        raise ValueError(msg)
+
+    if tool and _is_mcp_tool(tool):
+        if inferred_mcp_timeout := _get_mcp_sse_read_timeout(tool):
+            return inferred_mcp_timeout
+        return DEFAULT_MCP_TOOL_CALL_TIMEOUT_S
+
+    return None
 
 
 def _handle_tool_error(
@@ -1080,7 +1180,13 @@ class ToolNode(RunnableCallable):
 
         try:
             try:
-                response = await tool.ainvoke(call_args, config)
+                timeout = _get_tool_call_timeout(config, tool=tool)
+                if timeout is not None:
+                    response = await asyncio.wait_for(
+                        tool.ainvoke(call_args, config), timeout=timeout
+                    )
+                else:
+                    response = await tool.ainvoke(call_args, config)
             except ValidationError as exc:
                 # Filter out errors for injected arguments
                 injected = self._injected_args.get(call["name"])
