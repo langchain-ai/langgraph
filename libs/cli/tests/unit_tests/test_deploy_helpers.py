@@ -85,7 +85,7 @@ class TestNormalizeImageTag:
 
 class TestParseEnvFromConfig:
     def test_env_dict(self, tmp_path):
-        config_path = tmp_path / "langgraph.json"
+        config_path = tmp_path / "langsmith.json"
         config_path.touch()
         result = _parse_env_from_config({"env": {"FOO": "bar", "NUM": 42}}, config_path)
         assert result == {"FOO": "bar", "NUM": "42"}
@@ -93,7 +93,7 @@ class TestParseEnvFromConfig:
     def test_env_string_dotenv_file(self, tmp_path):
         env_file = tmp_path / "my.env"
         env_file.write_text("KEY1=val1\nKEY2=val2\n")
-        config_path = tmp_path / "langgraph.json"
+        config_path = tmp_path / "langsmith.json"
         config_path.touch()
         result = _parse_env_from_config({"env": "my.env"}, config_path)
         assert result == {"KEY1": "val1", "KEY2": "val2"}
@@ -102,7 +102,7 @@ class TestParseEnvFromConfig:
         env_file = tmp_path / ".env"
         env_file.write_text("DEFAULT_KEY=default_val\n")
         monkeypatch.chdir(tmp_path)
-        config_path = tmp_path / "langgraph.json"
+        config_path = tmp_path / "langsmith.json"
         config_path.touch()
         result = _parse_env_from_config({}, config_path)
         assert result == {"DEFAULT_KEY": "default_val"}
@@ -112,14 +112,14 @@ class TestParseEnvFromConfig:
         env_file = tmp_path / ".env"
         env_file.write_text("MY_KEY=my_val\n")
         monkeypatch.chdir(tmp_path)
-        config_path = tmp_path / "langgraph.json"
+        config_path = tmp_path / "langsmith.json"
         config_path.touch()
         result = _parse_env_from_config({"env": {}}, config_path)
         assert result == {"MY_KEY": "my_val"}
 
     def test_env_missing_no_dotenv_returns_empty(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        config_path = tmp_path / "langgraph.json"
+        config_path = tmp_path / "langsmith.json"
         config_path.touch()
         result = _parse_env_from_config({}, config_path)
         assert result == {}
@@ -128,7 +128,7 @@ class TestParseEnvFromConfig:
         # Lines like "KEY=" produce empty string, lines like "KEY" produce None
         env_file = tmp_path / "test.env"
         env_file.write_text("GOOD=value\nEMPTY=\n")
-        config_path = tmp_path / "langgraph.json"
+        config_path = tmp_path / "langsmith.json"
         config_path.touch()
         result = _parse_env_from_config({"env": "test.env"}, config_path)
         assert "GOOD" in result

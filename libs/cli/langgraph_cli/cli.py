@@ -24,7 +24,7 @@ import langgraph_cli.config
 import langgraph_cli.docker
 from langgraph_cli.analytics import log_command
 from langgraph_cli.config import Config
-from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
+from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT, LEGACY_CONFIG
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.helpers import format_log_entry, level_fg, resolve_deployment_id
@@ -97,7 +97,7 @@ _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
 def _parse_env_from_config(
     config_json: dict, config_path: pathlib.Path
 ) -> dict[str, str]:
-    """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
+    """Resolve env vars from langsmith.json 'env' field or a .env fallback."""
     env_field = config_json.get("env")
     # validate_config_file will default env to {}
     if isinstance(env_field, dict) and env_field:
@@ -106,7 +106,7 @@ def _parse_env_from_config(
         env_path = (config_path.parent / env_field).resolve()
         if not env_path.exists():
             click.secho(
-                f"Warning: env file '{env_field}' specified in langgraph.json not found.",
+                f"Warning: env file '{env_field}' specified in langsmith.json not found.",
                 fg="yellow",
             )
             return {}
@@ -157,6 +157,47 @@ def _docker_config_for_token(registry_host: str, token: str):
         yield tmpdir
 
 
+def _resolve_config(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> pathlib.Path:
+    """Resolve config path, falling back from langsmith.json to langgraph.json."""
+    if value is not None and value not in (DEFAULT_CONFIG, LEGACY_CONFIG):
+        # User explicitly passed a config path
+        path = pathlib.Path(value).resolve()
+        if not path.exists():
+            raise click.BadParameter(
+                f"Path '{value}' does not exist.", ctx=ctx, param=param
+            )
+        return path
+
+    # Check for default config, then legacy fallback
+    default_path = pathlib.Path(DEFAULT_CONFIG).resolve()
+    if default_path.exists():
+        return default_path
+
+    legacy_path = pathlib.Path(LEGACY_CONFIG).resolve()
+    if legacy_path.exists():
+        click.secho(
+            f"Warning: '{LEGACY_CONFIG}' is deprecated. "
+            f"Rename it to '{DEFAULT_CONFIG}'.",
+            fg="yellow",
+        )
+        return legacy_path
+
+    if value is not None:
+        # User explicitly passed one of the default/legacy names but neither exists
+        raise click.BadParameter(
+            f"Path '{value}' does not exist.", ctx=ctx, param=param
+        )
+
+    raise click.BadParameter(
+        f"No config file found. Expected '{DEFAULT_CONFIG}' "
+        f"(or '{LEGACY_CONFIG}') in the current directory.",
+        ctx=ctx,
+        param=param,
+    )
+
+
 OPT_DOCKER_COMPOSE = click.option(
     "--docker-compose",
     "-d",
@@ -189,7 +230,7 @@ OPT_CONFIG = click.option(
 
     \b
     Example:
-        langgraph up -c langgraph.json
+        langgraph up -c langsmith.json
 
     \b
     Example:
@@ -220,14 +261,16 @@ OPT_CONFIG = click.option(
         }
     }
 
-    Defaults to looking for langgraph.json in the current directory.""",
+    Defaults to looking for langsmith.json in the current directory. Also accepts the legacy langgraph.json.""",
     default=DEFAULT_CONFIG,
+    callback=_resolve_config,
+    is_eager=True,
     type=click.Path(
-        exists=True,
+        exists=False,
         file_okay=True,
         dir_okay=False,
-        resolve_path=True,
-        path_type=pathlib.Path,
+        resolve_path=False,
+        path_type=str,
     ),
 )
 OPT_PORT = click.option(
@@ -645,7 +688,7 @@ def _build(
 )
 @click.option(
     "--build-command",
-    help="Custom build command to run from the langgraph.json directory. If not provided, uses default build process.",
+    help="Custom build command to run from the langsmith.json directory. If not provided, uses default build process.",
 )
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(
@@ -754,12 +797,28 @@ def _deploy_base_options(
                 "-c",
                 default=DEFAULT_CONFIG,
                 hidden=True,
-                type=click.Path(
-                    exists=validate_config_path,
-                    file_okay=True,
-                    dir_okay=False,
-                    resolve_path=True,
-                    path_type=pathlib.Path,
+                **(
+                    {
+                        "callback": _resolve_config,
+                        "is_eager": True,
+                        "type": click.Path(
+                            exists=False,
+                            file_okay=True,
+                            dir_okay=False,
+                            resolve_path=False,
+                            path_type=str,
+                        ),
+                    }
+                    if validate_config_path
+                    else {
+                        "type": click.Path(
+                            exists=False,
+                            file_okay=True,
+                            dir_okay=False,
+                            resolve_path=True,
+                            path_type=pathlib.Path,
+                        ),
+                    }
                 ),
             ),
             click.option("--pull/--no-pull", default=True, hidden=True),
@@ -788,7 +847,7 @@ def _deploy_base_options(
         "[Beta] Build and deploy a LangGraph image to LangSmith Deployment.\n\n"
         "This command is in beta and under active development. "
         "Expect frequent updates and improvements.\n\n"
-        "Run from the root of your LangGraph project (where langgraph.json "
+        "Run from the root of your LangGraph project (where langsmith.json "
         "is located). This command also accepts build flags (--base-image, "
         "--config, --pull, etc.). See 'langgraph build --help' for details."
     ),
@@ -1727,9 +1786,12 @@ def dockerfile(
 )
 @click.option(
     "--config",
-    type=click.Path(exists=True),
-    default="langgraph.json",
-    help="Path to configuration file declaring dependencies, graphs and environment variables",
+    type=click.Path(exists=False),
+    default=DEFAULT_CONFIG,
+    callback=_resolve_config,
+    is_eager=True,
+    help="Path to configuration file declaring dependencies, graphs and environment variables. "
+    "Defaults to looking for langsmith.json in the current directory. Also accepts the legacy langgraph.json.",
 )
 @click.option(
     "--n-jobs-per-worker",

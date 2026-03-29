@@ -48,7 +48,7 @@ def test_warn_non_wolfi_distro_with_debian(capsys):
         in captured.out
     )
     assert (
-        'To switch, add \'"image_distro": "wolfi"\' to your langgraph.json config file.'
+        'To switch, add \'"image_distro": "wolfi"\' to your langsmith.json config file.'
         in captured.out
     )
 
@@ -69,7 +69,7 @@ def test_warn_non_wolfi_distro_with_default_debian(capsys):
         in captured.out
     )
     assert (
-        'To switch, add \'"image_distro": "wolfi"\' to your langgraph.json config file.'
+        'To switch, add \'"image_distro": "wolfi"\' to your langsmith.json config file.'
         in captured.out
     )
 
@@ -100,7 +100,7 @@ def test_warn_non_wolfi_distro_with_other_distro(capsys):
         in captured.out
     )
     assert (
-        'To switch, add \'"image_distro": "wolfi"\' to your langgraph.json config file.'
+        'To switch, add \'"image_distro": "wolfi"\' to your langsmith.json config file.'
         in captured.out
     )
 
@@ -128,7 +128,7 @@ def test_warn_non_wolfi_distro_output_formatting():
         ),
         (
             (
-                '   To switch, add \'"image_distro": "wolfi"\' to your langgraph.json config file.',
+                '   To switch, add \'"image_distro": "wolfi"\' to your langsmith.json config file.',
             ),
             {"fg": "yellow"},
         ),

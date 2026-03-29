@@ -1,4 +1,5 @@
-DEFAULT_CONFIG = "langgraph.json"
+DEFAULT_CONFIG = "langsmith.json"
+LEGACY_CONFIG = "langgraph.json"
 DEFAULT_PORT = 8123
 
 # analytics

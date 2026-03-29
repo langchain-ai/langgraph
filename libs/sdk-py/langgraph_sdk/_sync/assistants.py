@@ -327,7 +327,7 @@ class SyncAssistantsClient:
         Useful when graph is configurable and you want to create different assistants based on different configurations.
 
         Args:
-            graph_id: The ID of the graph the assistant should use. The graph ID is normally set in your langgraph.json configuration.
+            graph_id: The ID of the graph the assistant should use. The graph ID is normally set in your langsmith.json configuration.
             config: Configuration to use for the graph.
             context: Static context to add to the assistant.
                 !!! version-added "Added in version 0.6.0"
@@ -399,7 +399,7 @@ class SyncAssistantsClient:
         Args:
             assistant_id: Assistant to update.
             graph_id: The ID of the graph the assistant should use.
-                The graph ID is normally set in your langgraph.json configuration. If `None`, assistant will keep pointing to same graph.
+                The graph ID is normally set in your langsmith.json configuration. If `None`, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
             context: Static context to add to the assistant.
                 !!! version-added "Added in version 0.6.0"
@@ -540,7 +540,7 @@ class SyncAssistantsClient:
         Args:
             metadata: Metadata to filter by. Exact match filter for each KV pair.
             graph_id: The ID of the graph to filter by.
-                The graph ID is normally set in your langgraph.json configuration.
+                The graph ID is normally set in your langsmith.json configuration.
             name: The name of the assistant to filter by.
                 The filtering logic will match assistants where 'name' is a substring (case insensitive) of the assistant name.
             limit: The maximum number of results to return.
