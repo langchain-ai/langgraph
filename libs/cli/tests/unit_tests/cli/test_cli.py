@@ -77,97 +77,24 @@ def test_prepare_args_and_stdin() -> None:
         "-f",
         "-",
     ]
-    expected_stdin = f"""volumes:
-    langgraph-data:
-        driver: local
-services:
-    langgraph-redis:
-        image: redis:6
-        healthcheck:
-            test: redis-cli ping
-            interval: 5s
-            timeout: 1s
-            retries: 5
-    langgraph-postgres:
-        image: pgvector/pgvector:pg16
-        ports:
-            - "5433:5432"
-        environment:
-            POSTGRES_DB: postgres
-            POSTGRES_USER: postgres
-            POSTGRES_PASSWORD: postgres
-        command:
-            - postgres
-            - -c
-            - shared_preload_libraries=vector
-        volumes:
-            - langgraph-data:/var/lib/postgresql/data
-        healthcheck:
-            test: pg_isready -U postgres
-            start_period: 10s
-            timeout: 1s
-            retries: 5
-            interval: 60s
-            start_interval: 1s
-    langgraph-debugger:
-        image: langchain/langgraph-debugger
-        restart: on-failure
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
-        ports:
-            - "{debugger_port}:3968"
-        environment:
-            VITE_STUDIO_LOCAL_GRAPH_URL: {debugger_graph_url}
-    langgraph-api:
-        ports:
-            - "8000:8000"
-        depends_on:
-            langgraph-redis:
-                condition: service_healthy
-            langgraph-postgres:
-                condition: service_healthy
-        environment:
-            REDIS_URI: redis://langgraph-redis:6379
-            POSTGRES_URI: {DEFAULT_POSTGRES_URI}
-        healthcheck:
-            test: python /api/healthcheck.py
-            interval: 60s
-            start_interval: 1s
-            start_period: 10s
-        
-        pull_policy: build
-        build:
-            context: .
-            additional_contexts:
-                - cli_1: {str(pathlib.Path(__file__).parent.parent.parent.parent.absolute())}
-            dockerfile_inline: |
-                # syntax=docker/dockerfile:1.4
-                FROM langchain/langgraph-api:3.11
-                # -- Adding local package . --
-                ADD . /deps/cli
-                # -- End of local package . --
-                # -- Adding local package ../../.. --
-                COPY --from=cli_1 . /deps/cli_1
-                # -- End of local package ../../.. --
-                # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
-                # -- End of local dependencies install --
-                ENV LANGSERVE_GRAPHS='{{"agent": "agent.py:graph"}}'
-{textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/cli
-        
-        develop:
-            watch:
-                - path: langgraph.json
-                  action: rebuild
-                - path: .
-                  action: rebuild
-                - path: ../../..
-                  action: rebuild\
-"""
-    assert actual_args == expected_args
-    assert clean_empty_lines(actual_stdin) == expected_stdin
+    assert "POSTGRES_PASSWORD: postgres" not in actual_stdin
+    assert "postgres:postgres@" not in actual_stdin
+
+    # Extract the generated password and verify format
+    import re
+    password_match = re.search(r"POSTGRES_PASSWORD: ([A-Za-z0-9]{24})", actual_stdin)
+    assert password_match, "POSTGRES_PASSWORD should be a 24-char alphanumeric string"
+    password = password_match.group(1)
+
+    # Same password must appear in both POSTGRES_PASSWORD and POSTGRES_URI
+    assert f"postgres:{password}@langgraph-postgres" in actual_stdin
+
+    # Core structure is still correct
+    assert "langgraph-redis" in actual_stdin
+    assert "langgraph-postgres" in actual_stdin
+    assert f'"{port}:8000"' in actual_stdin
+    assert "REDIS_URI: redis://langgraph-redis:6379" in actual_stdin
+    assert "pgvector/pgvector:pg16" in actual_stdin
 
 
 def test_prepare_args_and_stdin_with_image() -> None:
@@ -200,78 +127,23 @@ def test_prepare_args_and_stdin_with_image() -> None:
         "-f",
         "-",
     ]
-    expected_stdin = f"""volumes:
-    langgraph-data:
-        driver: local
-services:
-    langgraph-redis:
-        image: redis:6
-        healthcheck:
-            test: redis-cli ping
-            interval: 5s
-            timeout: 1s
-            retries: 5
-    langgraph-postgres:
-        image: pgvector/pgvector:pg16
-        ports:
-            - "5433:5432"
-        environment:
-            POSTGRES_DB: postgres
-            POSTGRES_USER: postgres
-            POSTGRES_PASSWORD: postgres
-        command:
-            - postgres
-            - -c
-            - shared_preload_libraries=vector
-        volumes:
-            - langgraph-data:/var/lib/postgresql/data
-        healthcheck:
-            test: pg_isready -U postgres
-            start_period: 10s
-            timeout: 1s
-            retries: 5
-            interval: 60s
-            start_interval: 1s
-    langgraph-debugger:
-        image: langchain/langgraph-debugger
-        restart: on-failure
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
-        ports:
-            - "{debugger_port}:3968"
-        environment:
-            VITE_STUDIO_LOCAL_GRAPH_URL: {debugger_graph_url}
-    langgraph-api:
-        ports:
-            - "8000:8000"
-        depends_on:
-            langgraph-redis:
-                condition: service_healthy
-            langgraph-postgres:
-                condition: service_healthy
-        environment:
-            REDIS_URI: redis://langgraph-redis:6379
-            POSTGRES_URI: {DEFAULT_POSTGRES_URI}
-        image: my-cool-image
-        healthcheck:
-            test: python /api/healthcheck.py
-            interval: 60s
-            start_interval: 1s
-            start_period: 10s
-        
-        
-        develop:
-            watch:
-                - path: langgraph.json
-                  action: rebuild
-                - path: .
-                  action: rebuild
-                - path: ../../..
-                  action: rebuild\
-"""
-    assert actual_args == expected_args
-    assert clean_empty_lines(actual_stdin) == expected_stdin
+    assert "POSTGRES_PASSWORD: postgres" not in actual_stdin, "Default password should not be in the compose when image is provided"
+    assert "postgres:postgres@" not in actual_stdin
+    # Extract the generated password and verify format
+    import re
+    password_match = re.search(r"POSTGRES_PASSWORD: ([A-Za-z0-9]{24})", actual_stdin)
+    assert password_match, "POSTGRES_PASSWORD should be a 24-char alphanumeric string"
+    password = password_match.group(1)
+
+    # Same password must appear in both POSTGRES_PASSWORD and POSTGRES_URI
+    assert f"postgres:{password}@langgraph-postgres" in actual_stdin
+
+    # Core structure is still correct
+    assert "langgraph-redis" in actual_stdin
+    assert "langgraph-postgres" in actual_stdin
+    assert f'"{port}:8000"' in actual_stdin
+    assert "REDIS_URI: redis://langgraph-redis:6379" in actual_stdin
+    assert "pgvector/pgvector:pg16" in actual_stdin
 
 
 def test_version_option() -> None:

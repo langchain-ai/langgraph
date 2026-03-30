@@ -4,13 +4,25 @@ import shutil
 from typing import Literal, NamedTuple
 
 import click.exceptions
+import secrets
+import string
 
 from langgraph_cli.exec import subp_exec
 
 ROOT = pathlib.Path(__file__).parent.resolve()
+
+
+def _generate_postgres_password() -> str:
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(24))
+
+
+
+
 DEFAULT_POSTGRES_URI = (
     "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
 )
+
 
 
 class Version(NamedTuple):
@@ -153,8 +165,9 @@ def compose_as_dict(
 ) -> dict:
     """Create a docker compose file as a dictionary in YML style."""
     if postgres_uri is None:
+        postgres_password= _generate_postgres_password()
         include_db = True
-        postgres_uri = DEFAULT_POSTGRES_URI
+        postgres_uri = f"postgres://postgres:{postgres_password}"f"@langgraph-postgres:5432/postgres?sslmode=disable"
     else:
         include_db = False
 
@@ -184,7 +197,7 @@ def compose_as_dict(
             "environment": {
                 "POSTGRES_DB": "postgres",
                 "POSTGRES_USER": "postgres",
-                "POSTGRES_PASSWORD": "postgres",
+                "POSTGRES_PASSWORD": postgres_password,
             },
             "command": ["postgres", "-c", "shared_preload_libraries=vector"],
             "volumes": ["langgraph-data:/var/lib/postgresql/data"],

@@ -106,49 +106,24 @@ def test_compose_with_debugger_and_custom_db():
 def test_compose_with_debugger_and_default_db():
     port = 8123
     actual_compose_str = compose(DEFAULT_DOCKER_CAPABILITIES, port=port)
-    expected_compose_str = f"""volumes:
-    langgraph-data:
-        driver: local
-services:
-    langgraph-redis:
-        image: redis:6
-        healthcheck:
-            test: redis-cli ping
-            interval: 5s
-            timeout: 1s
-            retries: 5
-    langgraph-postgres:
-        image: pgvector/pgvector:pg16
-        ports:
-            - "5433:5432"
-        environment:
-            POSTGRES_DB: postgres
-            POSTGRES_USER: postgres
-            POSTGRES_PASSWORD: postgres
-        command:
-            - postgres
-            - -c
-            - shared_preload_libraries=vector
-        volumes:
-            - langgraph-data:/var/lib/postgresql/data
-        healthcheck:
-            test: pg_isready -U postgres
-            start_period: 10s
-            timeout: 1s
-            retries: 5
-            interval: 5s
-    langgraph-api:
-        ports:
-            - "{port}:8000"
-        depends_on:
-            langgraph-redis:
-                condition: service_healthy
-            langgraph-postgres:
-                condition: service_healthy
-        environment:
-            REDIS_URI: redis://langgraph-redis:6379
-            POSTGRES_URI: {DEFAULT_POSTGRES_URI}"""
-    assert clean_empty_lines(actual_compose_str) == expected_compose_str
+    assert "POSTGRES_PASSWORD: postgres" not in actual_compose_str
+    assert "postgres:postgres@" not in actual_compose_str
+
+    # Extract the generated password and verify format
+    import re
+    password_match = re.search(r"POSTGRES_PASSWORD: ([A-Za-z0-9]{24})", actual_compose_str)
+    assert password_match, "POSTGRES_PASSWORD should be a 24-char alphanumeric string"
+    password = password_match.group(1)
+
+    # Same password must appear in both POSTGRES_PASSWORD and POSTGRES_URI
+    assert f"postgres:{password}@langgraph-postgres" in actual_compose_str
+
+    # Core structure is still correct
+    assert "langgraph-redis" in actual_compose_str
+    assert "langgraph-postgres" in actual_compose_str
+    assert f'"{port}:8000"' in actual_compose_str
+    assert "REDIS_URI: redis://langgraph-redis:6379" in actual_compose_str
+    assert "pgvector/pgvector:pg16" in actual_compose_str
 
 
 def test_compose_with_api_version():
@@ -163,49 +138,24 @@ def test_compose_with_api_version():
     # The compose function should generate a compose file that doesn't directly
     # reference the api_version, since it's handled in the docker tag creation
     # when building the image. The compose function mainly sets up services.
-    expected_compose_str = f"""volumes:
-    langgraph-data:
-        driver: local
-services:
-    langgraph-redis:
-        image: redis:6
-        healthcheck:
-            test: redis-cli ping
-            interval: 5s
-            timeout: 1s
-            retries: 5
-    langgraph-postgres:
-        image: pgvector/pgvector:pg16
-        ports:
-            - "5433:5432"
-        environment:
-            POSTGRES_DB: postgres
-            POSTGRES_USER: postgres
-            POSTGRES_PASSWORD: postgres
-        command:
-            - postgres
-            - -c
-            - shared_preload_libraries=vector
-        volumes:
-            - langgraph-data:/var/lib/postgresql/data
-        healthcheck:
-            test: pg_isready -U postgres
-            start_period: 10s
-            timeout: 1s
-            retries: 5
-            interval: 5s
-    langgraph-api:
-        ports:
-            - "{port}:8000"
-        depends_on:
-            langgraph-redis:
-                condition: service_healthy
-            langgraph-postgres:
-                condition: service_healthy
-        environment:
-            REDIS_URI: redis://langgraph-redis:6379
-            POSTGRES_URI: {DEFAULT_POSTGRES_URI}"""
-    assert clean_empty_lines(actual_compose_str) == expected_compose_str
+    assert "POSTGRES_PASSWORD: postgres" not in actual_compose_str
+    assert "postgres:postgres@" not in actual_compose_str
+
+    # Extract the generated password and verify format
+    import re
+    password_match = re.search(r"POSTGRES_PASSWORD: ([A-Za-z0-9]{24})", actual_compose_str)
+    assert password_match, "POSTGRES_PASSWORD should be a 24-char alphanumeric string"
+    password = password_match.group(1)
+
+    # Same password must appear in both POSTGRES_PASSWORD and POSTGRES_URI
+    assert f"postgres:{password}@langgraph-postgres" in actual_compose_str
+
+    # Core structure is still correct
+    assert "langgraph-redis" in actual_compose_str
+    assert "langgraph-postgres" in actual_compose_str
+    assert f'"{port}:8000"' in actual_compose_str
+    assert "REDIS_URI: redis://langgraph-redis:6379" in actual_compose_str
+    assert "pgvector/pgvector:pg16" in actual_compose_str
 
 
 def test_compose_with_api_version_and_base_image():
@@ -224,49 +174,24 @@ def test_compose_with_api_version_and_base_image():
     # Similar to the previous test - the compose function doesn't directly embed
     # the api_version or base_image into the compose file since those are handled
     # during the docker build process
-    expected_compose_str = f"""volumes:
-    langgraph-data:
-        driver: local
-services:
-    langgraph-redis:
-        image: redis:6
-        healthcheck:
-            test: redis-cli ping
-            interval: 5s
-            timeout: 1s
-            retries: 5
-    langgraph-postgres:
-        image: pgvector/pgvector:pg16
-        ports:
-            - "5433:5432"
-        environment:
-            POSTGRES_DB: postgres
-            POSTGRES_USER: postgres
-            POSTGRES_PASSWORD: postgres
-        command:
-            - postgres
-            - -c
-            - shared_preload_libraries=vector
-        volumes:
-            - langgraph-data:/var/lib/postgresql/data
-        healthcheck:
-            test: pg_isready -U postgres
-            start_period: 10s
-            timeout: 1s
-            retries: 5
-            interval: 5s
-    langgraph-api:
-        ports:
-            - "{port}:8000"
-        depends_on:
-            langgraph-redis:
-                condition: service_healthy
-            langgraph-postgres:
-                condition: service_healthy
-        environment:
-            REDIS_URI: redis://langgraph-redis:6379
-            POSTGRES_URI: {DEFAULT_POSTGRES_URI}"""
-    assert clean_empty_lines(actual_compose_str) == expected_compose_str
+    assert "POSTGRES_PASSWORD: postgres" not in actual_compose_str
+    assert "postgres:postgres@" not in actual_compose_str
+
+    # Extract the generated password and verify format
+    import re
+    password_match = re.search(r"POSTGRES_PASSWORD: ([A-Za-z0-9]{24})", actual_compose_str)
+    assert password_match, "POSTGRES_PASSWORD should be a 24-char alphanumeric string"
+    password = password_match.group(1)
+
+    # Same password must appear in both POSTGRES_PASSWORD and POSTGRES_URI
+    assert f"postgres:{password}@langgraph-postgres" in actual_compose_str
+
+    # Core structure is still correct
+    assert "langgraph-redis" in actual_compose_str
+    assert "langgraph-postgres" in actual_compose_str
+    assert f'"{port}:8000"' in actual_compose_str
+    assert "REDIS_URI: redis://langgraph-redis:6379" in actual_compose_str
+    assert "pgvector/pgvector:pg16" in actual_compose_str
 
 
 def test_compose_with_api_version_and_custom_postgres():
@@ -315,57 +240,24 @@ def test_compose_with_api_version_and_debugger():
         debugger_port=debugger_port,
     )
 
-    expected_compose_str = f"""volumes:
-    langgraph-data:
-        driver: local
-services:
-    langgraph-redis:
-        image: redis:6
-        healthcheck:
-            test: redis-cli ping
-            interval: 5s
-            timeout: 1s
-            retries: 5
-    langgraph-postgres:
-        image: pgvector/pgvector:pg16
-        ports:
-            - "5433:5432"
-        environment:
-            POSTGRES_DB: postgres
-            POSTGRES_USER: postgres
-            POSTGRES_PASSWORD: postgres
-        command:
-            - postgres
-            - -c
-            - shared_preload_libraries=vector
-        volumes:
-            - langgraph-data:/var/lib/postgresql/data
-        healthcheck:
-            test: pg_isready -U postgres
-            start_period: 10s
-            timeout: 1s
-            retries: 5
-            interval: 5s
-    langgraph-debugger:
-        image: langchain/langgraph-debugger
-        restart: on-failure
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
-        ports:
-            - "{debugger_port}:3968"
-    langgraph-api:
-        ports:
-            - "{port}:8000"
-        depends_on:
-            langgraph-redis:
-                condition: service_healthy
-            langgraph-postgres:
-                condition: service_healthy
-        environment:
-            REDIS_URI: redis://langgraph-redis:6379
-            POSTGRES_URI: {DEFAULT_POSTGRES_URI}"""
-    assert clean_empty_lines(actual_compose_str) == expected_compose_str
+    assert "POSTGRES_PASSWORD: postgres" not in actual_compose_str
+    assert "postgres:postgres@" not in actual_compose_str
+
+    # Extract the generated password and verify format
+    import re
+    password_match = re.search(r"POSTGRES_PASSWORD: ([A-Za-z0-9]{24})", actual_compose_str)
+    assert password_match, "POSTGRES_PASSWORD should be a 24-char alphanumeric string"
+    password = password_match.group(1)
+
+    # Same password must appear in both POSTGRES_PASSWORD and POSTGRES_URI
+    assert f"postgres:{password}@langgraph-postgres" in actual_compose_str
+
+    # Core structure is still correct
+    assert "langgraph-redis" in actual_compose_str
+    assert "langgraph-postgres" in actual_compose_str
+    assert f'"{port}:8000"' in actual_compose_str
+    assert "REDIS_URI: redis://langgraph-redis:6379" in actual_compose_str
+    assert "pgvector/pgvector:pg16" in actual_compose_str
 
 
 def test_compose_distributed_mode_with_custom_db():

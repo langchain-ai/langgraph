@@ -6,8 +6,10 @@ import re
 import textwrap
 from collections import Counter
 from typing import Literal, NamedTuple
-
+from pathlib import Path
+from dotenv import dotenv_values
 import click
+from langgraph_cli.docker import _generate_postgres_password
 
 from langgraph_cli.schemas import Config, Distros
 
@@ -33,6 +35,8 @@ DISALLOWED_BUILD_COMMAND_CHARS = [
 # This blocks background execution (cmd &) while allowing command
 # chaining (cmd1 && cmd2) which is common in build commands.
 _SINGLE_AMPERSAND_RE = re.compile(r"(?<!&)&(?:&&)*(?!&)")
+
+
 
 
 def has_disallowed_build_command_content(command: str) -> bool:
@@ -1421,8 +1425,13 @@ def config_to_compose(
                 executor_additional_contexts_str = f"""
                 additional_contexts:
 {executor_additional_contexts_str}"""
-
-            postgres_uri = "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
+                
+            postgres_password = _generate_postgres_password()
+            postgres_uri = (
+                f"postgres://postgres:{postgres_password}"
+                f"@langgraph-postgres:5432/postgres?sslmode=disable"
+            )
+                    
             result += f"""    langgraph-orchestrator:
         image: langchain/langgraph-orchestrator-licensed:latest
         depends_on:
