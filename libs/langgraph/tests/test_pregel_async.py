@@ -9756,3 +9756,49 @@ async def test_graph_error_handler_async_runtime_info() -> None:
     assert isinstance(captured["from_node_errors"], tuple)
     assert len(captured["from_node_errors"]) == 1
     assert isinstance(captured["from_node_errors"][0], BaseException)
+
+
+async def test_graph_error_handler_does_not_swallow_interrupt_concurrent() -> None:
+    """When a graph error handler is configured and a node calls interrupt()
+    concurrently with other nodes, the interrupt must still be raised — not
+    silently swallowed."""
+
+    class State(TypedDict):
+        foo: str
+
+    async def node_a(state: State) -> State:
+        val = interrupt("need human input")
+        return {"foo": f"a_{val}"}
+
+    async def node_b(state: State) -> State:
+        return {"foo": "b_done"}
+
+    async def err_handler(state: State) -> State:
+        return {"foo": "handled"}
+
+    checkpointer = InMemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("node_b", node_b)
+        .set_graph_error_handler("err_handler", err_handler)
+        .add_edge(START, "node_a")
+        .add_edge(START, "node_b")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "test-interrupt-concurrent-async"}}
+
+    result = await graph.ainvoke({"foo": ""}, config)
+
+    state = await graph.aget_state(config)
+    assert len(state.tasks) > 0
+
+    interrupts = [
+        t for t in state.tasks
+        if hasattr(t, 'interrupts') and t.interrupts
+    ]
+    assert len(interrupts) > 0, (
+        "GraphInterrupt was swallowed — interrupt() in node_a "
+        "should have paused execution"
+    )

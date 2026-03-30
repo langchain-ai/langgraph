@@ -1971,3 +1971,55 @@ def test_graph_error_info_supports_multiple_failures_from_pending_writes():
     assert len(errors) == 2
     assert isinstance(errors[0], ValueError)
     assert isinstance(errors[1], KeyError)
+
+
+def test_graph_error_handler_does_not_swallow_interrupt_concurrent():
+    """When a graph error handler is configured and a node calls interrupt()
+    concurrently with other nodes, the interrupt must still be raised — not
+    silently swallowed."""
+    from langgraph.types import interrupt, Send
+
+    class State(TypedDict):
+        foo: str
+
+    def node_a(state: State) -> State:
+        # This node uses interrupt() which raises GraphInterrupt
+        val = interrupt("need human input")
+        return {"foo": f"a_{val}"}
+
+    def node_b(state: State) -> State:
+        return {"foo": "b_done"}
+
+    def err_handler(state: State) -> State:
+        return {"foo": "handled"}
+
+    checkpointer = InMemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("node_b", node_b)
+        .set_graph_error_handler("err_handler", err_handler)
+        # Fan-out: both node_a and node_b run concurrently
+        .add_edge(START, "node_a")
+        .add_edge(START, "node_b")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "test-interrupt-concurrent"}}
+
+    # First invoke should pause at the interrupt, not silently complete
+    result = graph.invoke({"foo": ""}, config)
+
+    # The graph should have an interrupt pending
+    state = graph.get_state(config)
+    assert len(state.tasks) > 0
+
+    # There should be a pending interrupt from node_a
+    interrupts = [
+        t for t in state.tasks
+        if hasattr(t, 'interrupts') and t.interrupts
+    ]
+    assert len(interrupts) > 0, (
+        "GraphInterrupt was swallowed — interrupt() in node_a "
+        "should have paused execution"
+    )
