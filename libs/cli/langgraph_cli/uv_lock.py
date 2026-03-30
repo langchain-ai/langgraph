@@ -16,6 +16,24 @@ from langgraph_cli.schemas import Config
 
 
 @dataclass(frozen=True)
+class UvLockSourceEntry:
+    name: str
+    value: object
+    declared_root: pathlib.Path
+    pyproject_path: pathlib.Path
+
+
+@dataclass(frozen=True)
+class DiscoveredUvLockPackage:
+    name: str
+    normalized_name: str
+    root: pathlib.Path
+    pyproject_path: pathlib.Path
+    raw_dependency_specs: object
+    raw_uv_tool: object
+
+
+@dataclass(frozen=True)
 class UvLockPackage:
     name: str
     normalized_name: str
@@ -24,6 +42,13 @@ class UvLockPackage:
     package_enabled: bool
     dependency_names: tuple[str, ...]
     workspace_dependencies: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UvLockWorkspace:
+    raw_root_source_entries: object
+    packages_by_name: dict[str, DiscoveredUvLockPackage]
+    packages_by_root: dict[pathlib.Path, DiscoveredUvLockPackage]
 
 
 @dataclass(frozen=True)
@@ -85,11 +110,11 @@ def _validate_uv_lock_source_entry(
     *,
     source_name: str,
     source_value: object,
-    package_root: pathlib.Path,
+    declared_root: pathlib.Path,
     pyproject_path: pathlib.Path,
     project_root: pathlib.Path,
-    packages_by_name: dict[str, UvLockPackage],
-    packages_by_root: dict[pathlib.Path, UvLockPackage],
+    packages_by_name: dict[str, DiscoveredUvLockPackage],
+    packages_by_root: dict[pathlib.Path, DiscoveredUvLockPackage],
 ) -> set[str]:
     workspace_dependencies: set[str] = set()
     if isinstance(source_value, list):
@@ -98,7 +123,7 @@ def _validate_uv_lock_source_entry(
                 _validate_uv_lock_source_entry(
                     source_name=source_name,
                     source_value=item,
-                    package_root=package_root,
+                    declared_root=declared_root,
                     pyproject_path=pyproject_path,
                     project_root=project_root,
                     packages_by_name=packages_by_name,
@@ -121,7 +146,7 @@ def _validate_uv_lock_source_entry(
                 "marked as a workspace dependency but does not resolve to a workspace "
                 "package under project_root."
             )
-        if not package.package_enabled:
+        if not _get_uv_lock_package_enabled(package):
             raise click.UsageError(
                 "pip_installer 'uv_lock' does not support workspace dependencies "
                 f"with `tool.uv.package = false`. '{source_name}' in {pyproject_path} "
@@ -140,7 +165,7 @@ def _validate_uv_lock_source_entry(
                 f"paths: {path_ref} in {pyproject_path}."
             )
 
-        resolved = (package_root / path_ref).resolve()
+        resolved = (declared_root / path_ref).resolve()
         if project_root != resolved and project_root not in resolved.parents:
             raise click.UsageError(
                 "pip_installer 'uv_lock' only supports workspace dependencies "
@@ -168,7 +193,7 @@ def _validate_uv_lock_source_entry(
             _validate_uv_lock_source_entry(
                 source_name=source_name,
                 source_value=nested_value,
-                package_root=package_root,
+                declared_root=declared_root,
                 pyproject_path=pyproject_path,
                 project_root=project_root,
                 packages_by_name=packages_by_name,
@@ -178,16 +203,127 @@ def _validate_uv_lock_source_entry(
     return workspace_dependencies
 
 
-def _discover_uv_lock_workspace_packages(
-    project_root: pathlib.Path, pyproject_path: pathlib.Path
-) -> dict[str, UvLockPackage]:
-    root_data = _load_pyproject(pyproject_path)
-    root_source_entries = root_data.get("tool", {}).get("uv", {}).get("sources", {})
-    if not isinstance(root_source_entries, dict):
+def _get_uv_lock_package_enabled(package: DiscoveredUvLockPackage) -> bool:
+    uv_tool = package.raw_uv_tool
+    if uv_tool and not isinstance(uv_tool, dict):
+        raise click.UsageError(
+            "pip_installer 'uv_lock' requires [tool.uv] to be a table "
+            f"in {package.pyproject_path}."
+        )
+    package_enabled = (
+        uv_tool.get("package", True) if isinstance(uv_tool, dict) else True
+    )
+    if not isinstance(package_enabled, bool):
+        raise click.UsageError(
+            "pip_installer 'uv_lock' requires [tool.uv].package to be a boolean "
+            f"in {package.pyproject_path}."
+        )
+    return package_enabled
+
+
+def _get_uv_lock_source_entries(
+    package: DiscoveredUvLockPackage,
+    *,
+    project_root: pathlib.Path,
+    root_pyproject_path: pathlib.Path,
+    raw_root_source_entries: object,
+) -> tuple[UvLockSourceEntry, ...]:
+    if not isinstance(raw_root_source_entries, dict):
         raise click.UsageError(
             "pip_installer 'uv_lock' requires [tool.uv.sources] to be a table "
-            f"in {pyproject_path}."
+            f"in {root_pyproject_path}."
         )
+
+    uv_tool = package.raw_uv_tool
+    package_source_entries = (
+        uv_tool.get("sources", {}) if isinstance(uv_tool, dict) else {}
+    )
+    if not isinstance(package_source_entries, dict):
+        raise click.UsageError(
+            "pip_installer 'uv_lock' requires [tool.uv.sources] to be a table "
+            f"in {package.pyproject_path}."
+        )
+
+    source_entries: dict[str, UvLockSourceEntry] = {
+        source_name: UvLockSourceEntry(
+            name=source_name,
+            value=source_value,
+            declared_root=project_root,
+            pyproject_path=root_pyproject_path,
+        )
+        for source_name, source_value in raw_root_source_entries.items()
+    }
+    source_entries.update(
+        {
+            source_name: UvLockSourceEntry(
+                name=source_name,
+                value=source_value,
+                declared_root=package.root,
+                pyproject_path=package.pyproject_path,
+            )
+            for source_name, source_value in package_source_entries.items()
+        }
+    )
+    return tuple(source_entries.values())
+
+
+def _validate_uv_lock_package(
+    package: DiscoveredUvLockPackage,
+    *,
+    project_root: pathlib.Path,
+    root_pyproject_path: pathlib.Path,
+    raw_root_source_entries: object,
+    packages_by_name: dict[str, DiscoveredUvLockPackage],
+    packages_by_root: dict[pathlib.Path, DiscoveredUvLockPackage],
+) -> UvLockPackage:
+    dependency_names = _get_dependency_names(
+        package.raw_dependency_specs,
+        package_name=package.name,
+        pyproject_path=package.pyproject_path,
+    )
+    dependency_name_set = set(dependency_names)
+
+    workspace_dependency_names: set[str] = set()
+    for source_entry in _get_uv_lock_source_entries(
+        package,
+        project_root=project_root,
+        root_pyproject_path=root_pyproject_path,
+        raw_root_source_entries=raw_root_source_entries,
+    ):
+        if _normalize_package_name(source_entry.name) not in dependency_name_set:
+            continue
+        workspace_dependency_names.update(
+            _validate_uv_lock_source_entry(
+                source_name=source_entry.name,
+                source_value=source_entry.value,
+                declared_root=source_entry.declared_root,
+                pyproject_path=source_entry.pyproject_path,
+                project_root=project_root,
+                packages_by_name=packages_by_name,
+                packages_by_root=packages_by_root,
+            )
+        )
+
+    return UvLockPackage(
+        name=package.name,
+        normalized_name=package.normalized_name,
+        root=package.root,
+        pyproject_path=package.pyproject_path,
+        package_enabled=_get_uv_lock_package_enabled(package),
+        dependency_names=dependency_names,
+        workspace_dependencies=tuple(
+            dependency_name
+            for dependency_name in dependency_names
+            if dependency_name in workspace_dependency_names
+        ),
+    )
+
+
+def _discover_uv_lock_workspace_packages(
+    project_root: pathlib.Path, pyproject_path: pathlib.Path
+) -> UvLockWorkspace:
+    root_data = _load_pyproject(pyproject_path)
+    root_source_entries = root_data.get("tool", {}).get("uv", {}).get("sources", {})
 
     candidate_roots: list[pathlib.Path] = []
     root_project = root_data.get("project", {})
@@ -221,12 +357,10 @@ def _discover_uv_lock_workspace_packages(
             unique_roots.append(root)
             seen_roots.add(root)
 
-    packages: list[UvLockPackage] = []
-    pyproject_data_by_root: dict[pathlib.Path, dict] = {}
+    packages: list[DiscoveredUvLockPackage] = []
     for package_root in unique_roots:
         member_pyproject_path = package_root / "pyproject.toml"
         pyproject_data = _load_pyproject(member_pyproject_path)
-        pyproject_data_by_root[package_root] = pyproject_data
 
         project_data = pyproject_data.get("project", {})
         package_name = (
@@ -238,39 +372,19 @@ def _discover_uv_lock_workspace_packages(
                 f"[project].name in {member_pyproject_path}."
             )
 
-        dependency_names = _get_dependency_names(
-            project_data.get("dependencies", []),
-            package_name=package_name,
-            pyproject_path=member_pyproject_path,
-        )
-
-        uv_tool = pyproject_data.get("tool", {}).get("uv", {})
-        if uv_tool and not isinstance(uv_tool, dict):
-            raise click.UsageError(
-                "pip_installer 'uv_lock' requires [tool.uv] to be a table "
-                f"in {member_pyproject_path}."
-            )
-        package_enabled = uv_tool.get("package", True)
-        if not isinstance(package_enabled, bool):
-            raise click.UsageError(
-                "pip_installer 'uv_lock' requires [tool.uv].package to be a boolean "
-                f"in {member_pyproject_path}."
-            )
-
         packages.append(
-            UvLockPackage(
+            DiscoveredUvLockPackage(
                 name=package_name,
                 normalized_name=_normalize_package_name(package_name),
                 root=package_root,
                 pyproject_path=member_pyproject_path,
-                package_enabled=package_enabled,
-                dependency_names=dependency_names,
-                workspace_dependencies=(),
+                raw_dependency_specs=project_data.get("dependencies", []),
+                raw_uv_tool=pyproject_data.get("tool", {}).get("uv", {}),
             )
         )
 
-    packages_by_name: dict[str, UvLockPackage] = {}
-    packages_by_root: dict[pathlib.Path, UvLockPackage] = {}
+    packages_by_name: dict[str, DiscoveredUvLockPackage] = {}
+    packages_by_root: dict[pathlib.Path, DiscoveredUvLockPackage] = {}
     for package in packages:
         existing = packages_by_name.get(package.normalized_name)
         if existing is not None:
@@ -282,47 +396,11 @@ def _discover_uv_lock_workspace_packages(
         packages_by_name[package.normalized_name] = package
         packages_by_root[package.root] = package
 
-    updated_packages: dict[str, UvLockPackage] = {}
-    for package_root, pyproject_data in pyproject_data_by_root.items():
-        package_source_entries = (
-            pyproject_data.get("tool", {}).get("uv", {}).get("sources", {})
-        )
-        if not isinstance(package_source_entries, dict):
-            raise click.UsageError(
-                "pip_installer 'uv_lock' requires [tool.uv.sources] to be a table "
-                f"in {package_root / 'pyproject.toml'}."
-            )
-        source_entries = dict(root_source_entries)
-        source_entries.update(package_source_entries)
-        package = packages_by_root[package_root]
-        workspace_dependency_names: set[str] = set()
-        for source_name, source_value in source_entries.items():
-            workspace_dependency_names.update(
-                _validate_uv_lock_source_entry(
-                    source_name=source_name,
-                    source_value=source_value,
-                    package_root=package_root,
-                    pyproject_path=package_root / "pyproject.toml",
-                    project_root=project_root,
-                    packages_by_name=packages_by_name,
-                    packages_by_root=packages_by_root,
-                )
-            )
-        updated_packages[package.normalized_name] = UvLockPackage(
-            name=package.name,
-            normalized_name=package.normalized_name,
-            root=package.root,
-            pyproject_path=package.pyproject_path,
-            package_enabled=package.package_enabled,
-            dependency_names=package.dependency_names,
-            workspace_dependencies=tuple(
-                dependency_name
-                for dependency_name in package.dependency_names
-                if dependency_name in workspace_dependency_names
-            ),
-        )
-
-    return updated_packages
+    return UvLockWorkspace(
+        raw_root_source_entries=root_source_entries,
+        packages_by_name=packages_by_name,
+        packages_by_root=packages_by_root,
+    )
 
 
 def _container_workspace_root() -> pathlib.PurePosixPath:
@@ -371,9 +449,8 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
             "Ensure project_root points to a workspace root containing pyproject.toml."
         )
 
-    packages_by_name = _discover_uv_lock_workspace_packages(
-        project_root, pyproject_path
-    )
+    workspace = _discover_uv_lock_workspace_packages(project_root, pyproject_path)
+    packages_by_name = workspace.packages_by_name
     target_name = _normalize_package_name(config["package"])
     target = packages_by_name.get(target_name)
     if target is None:
@@ -385,24 +462,46 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
             f"under project_root {project_root}. Available workspace packages: "
             f"{available_packages or '(none)'}."
         )
-    if not target.package_enabled:
+    target_package = _validate_uv_lock_package(
+        target,
+        project_root=project_root,
+        root_pyproject_path=pyproject_path,
+        raw_root_source_entries=workspace.raw_root_source_entries,
+        packages_by_name=workspace.packages_by_name,
+        packages_by_root=workspace.packages_by_root,
+    )
+    if not target_package.package_enabled:
         raise click.UsageError(
             "pip_installer 'uv_lock' requires `package` to reference a buildable "
-            f"workspace package. '{target.name}' sets `tool.uv.package = false`."
+            f"workspace package. '{target_package.name}' sets `tool.uv.package = false`."
         )
 
     install_order: list[UvLockPackage] = []
     visited: set[str] = set()
+    validated_packages: dict[str, UvLockPackage] = {
+        target_package.normalized_name: target_package
+    }
 
-    def visit(package: UvLockPackage) -> None:
+    def visit(package: DiscoveredUvLockPackage) -> None:
         if package.normalized_name in visited:
             return
         visited.add(package.normalized_name)
-        for dependency_name in package.workspace_dependencies:
+        validated_package = validated_packages.get(package.normalized_name)
+        if validated_package is None:
+            validated_package = _validate_uv_lock_package(
+                package,
+                project_root=project_root,
+                root_pyproject_path=pyproject_path,
+                raw_root_source_entries=workspace.raw_root_source_entries,
+                packages_by_name=workspace.packages_by_name,
+                packages_by_root=workspace.packages_by_root,
+            )
+            validated_packages[package.normalized_name] = validated_package
+        for dependency_name in validated_package.workspace_dependencies:
             dependency = packages_by_name.get(dependency_name)
             if dependency is not None:
                 visit(dependency)
-        install_order.append(package)
+        install_order.append(validated_package)
 
     visit(target)
 
@@ -417,22 +516,22 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
             project_root=project_root,
             pyproject_path=pyproject_path,
             uv_lock_path=uv_lock_path,
-            target=target,
+            target=target_package,
             install_order=tuple(install_order),
             container_roots=container_roots,
             working_dir=str(
-                _container_root_for_uv_lock_package(project_root, target.root)
+                _container_root_for_uv_lock_package(project_root, target_package.root)
             ),
         ),
     )
     if working_dir is None:
-        working_dir = container_roots[target.root]
+        working_dir = container_roots[target_package.root]
 
     return UvLockPlan(
         project_root=project_root,
         pyproject_path=pyproject_path,
         uv_lock_path=uv_lock_path,
-        target=target,
+        target=target_package,
         install_order=tuple(install_order),
         container_roots=container_roots,
         working_dir=str(working_dir),
