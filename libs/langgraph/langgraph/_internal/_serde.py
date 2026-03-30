@@ -244,10 +244,4 @@ def _pydantic_field_types(typ: type[Any]) -> list[Any]:
             for field in typ.model_fields.values()
             if getattr(field, "annotation", None) is not None
         ]
-    if hasattr(typ, "__fields__"):
-        return [
-            field.outer_type_
-            for field in typ.__fields__.values()
-            if getattr(field, "outer_type_", None) is not None
-        ]
     return []

@@ -44,9 +44,6 @@ def get_fields(
     """Get the field names of a Pydantic model."""
     if hasattr(model, "model_fields"):
         return model.model_fields
-
-    if hasattr(model, "__fields__"):
-        return model.__fields__
     msg = f"Expected a Pydantic model. Got {type(model)}"
     raise TypeError(msg)
 
