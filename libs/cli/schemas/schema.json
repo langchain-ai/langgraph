@@ -181,17 +181,6 @@
               ],
               "description": "Optional. Control whether to retain Python packaging tools in the final image.\n\nYou can also set to true to include all packaging tools.\n"
             },
-            "package": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Optional. Workspace package name to deploy when `pip_installer` is `uv_lock`.\n\nThis must match the `[project].name` of the target workspace package under\n`project_root`.\n"
-            },
             "pip_installer": {
               "anyOf": [
                 {
@@ -206,17 +195,6 @@
                   "type": "null"
                 }
               ]
-            },
-            "project_root": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Optional. Relative path from langgraph.json to the authoritative uv workspace root.\n\nOnly supported when `pip_installer` is `uv_lock`.\nThe resolved directory must contain `pyproject.toml` and `uv.lock`.\n"
             },
             "store": {
               "anyOf": [
@@ -282,6 +260,28 @@
                 }
               ],
               "description": "Optional. Path to a pip config file (e.g., \"/etc/pip.conf\" or \"pip.ini\") for controlling\npackage installation (custom indices, credentials, etc.).\n\nOnly relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.\n"
+            },
+            "project_root": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Relative path from langgraph.json to the authoritative uv workspace root.\n\nOnly supported when `pip_installer` is `uv_lock`.\nThe resolved directory must contain `pyproject.toml` and `uv.lock`.\n"
+            },
+            "package": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Workspace package name to deploy when `pip_installer` is `uv_lock`.\n\nThis must match the `[project].name` of the target workspace package under\n`project_root`.\n"
             },
             "_INTERNAL_docker_tag": {
               "anyOf": [
@@ -434,30 +434,8 @@
               ],
               "description": "Optional. Control whether to retain Python packaging tools in the final image.\n\nYou can also set to true to include all packaging tools.\n"
             },
-            "package": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Optional. Workspace package name to deploy when `pip_installer` is `uv_lock`.\n\nThis must match the `[project].name` of the target workspace package under\n`project_root`.\n"
-            },
             "pip_installer": {
               "const": "uv_lock"
-            },
-            "project_root": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Optional. Relative path from langgraph.json to the authoritative uv workspace root.\n\nOnly supported when `pip_installer` is `uv_lock`.\nThe resolved directory must contain `pyproject.toml` and `uv.lock`.\n"
             },
             "store": {
               "anyOf": [
@@ -676,17 +654,6 @@
               ],
               "description": "Optional. Control whether to retain Python packaging tools in the final image.\n\nYou can also set to true to include all packaging tools.\n"
             },
-            "package": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Optional. Workspace package name to deploy when `pip_installer` is `uv_lock`.\n\nThis must match the `[project].name` of the target workspace package under\n`project_root`.\n"
-            },
             "pip_installer": {
               "anyOf": [
                 {
@@ -701,17 +668,6 @@
                   "type": "null"
                 }
               ]
-            },
-            "project_root": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Optional. Relative path from langgraph.json to the authoritative uv workspace root.\n\nOnly supported when `pip_installer` is `uv_lock`.\nThe resolved directory must contain `pyproject.toml` and `uv.lock`.\n"
             },
             "store": {
               "anyOf": [

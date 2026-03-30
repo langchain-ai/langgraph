@@ -3,15 +3,14 @@ import json
 import os
 import pathlib
 import re
-import shlex
 import textwrap
 from collections import Counter
 from typing import Literal, NamedTuple
 
 import click
-import tomllib
 
 from langgraph_cli.schemas import Config, Distros
+from langgraph_cli.uv_lock import python_config_to_docker_uv_lock
 
 MIN_NODE_VERSION = "20"
 DEFAULT_NODE_VERSION = "20"
@@ -121,348 +120,6 @@ def _parse_node_version(version_str: str) -> int:
             f"Invalid Node.js version format: {version_str}. "
             "Use major version only (e.g., '20')."
         ) from None
-
-
-def _normalize_package_name(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower()
-
-
-def _parse_dependency_name(
-    dependency: str, *, package_name: str, pyproject_path: pathlib.Path
-) -> str:
-    match = re.match(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)", dependency)
-    if not match:
-        raise click.UsageError(
-            "pip_installer 'uv_lock' only supports PEP 508 dependency strings "
-            f"with an explicit package name. Could not parse dependency "
-            f"{dependency!r} in {pyproject_path} for package '{package_name}'."
-        )
-    return _normalize_package_name(match.group(1))
-
-
-class UvLockPackage(NamedTuple):
-    name: str
-    normalized_name: str
-    root: pathlib.Path
-    pyproject_path: pathlib.Path
-    dependencies: tuple[str, ...]
-
-
-class UvLockPlan(NamedTuple):
-    project_root: pathlib.Path
-    pyproject_path: pathlib.Path
-    uv_lock_path: pathlib.Path
-    target: UvLockPackage
-    install_order: tuple[UvLockPackage, ...]
-    container_roots: dict[pathlib.Path, pathlib.PurePosixPath]
-    working_dir: str
-
-
-def _load_pyproject(pyproject_path: pathlib.Path) -> dict:
-    with pyproject_path.open("rb") as pyproject_file:
-        return tomllib.load(pyproject_file)
-
-
-def _discover_uv_lock_workspace_packages(
-    project_root: pathlib.Path, pyproject_path: pathlib.Path
-) -> dict[str, UvLockPackage]:
-    root_data = _load_pyproject(pyproject_path)
-
-    candidate_roots: list[pathlib.Path] = []
-    root_project = root_data.get("project", {})
-    if isinstance(root_project, dict) and isinstance(root_project.get("name"), str):
-        candidate_roots.append(project_root)
-
-    workspace_members = (
-        root_data.get("tool", {}).get("uv", {}).get("workspace", {}).get("members", [])
-    )
-    if workspace_members and not isinstance(workspace_members, list):
-        raise click.UsageError(
-            "pip_installer 'uv_lock' requires [tool.uv.workspace].members to be a list."
-        )
-
-    for pattern in workspace_members:
-        if not isinstance(pattern, str):
-            raise click.UsageError(
-                "pip_installer 'uv_lock' requires every [tool.uv.workspace].members "
-                "entry to be a string."
-            )
-        for match in sorted(project_root.glob(pattern)):
-            package_root = match if match.is_dir() else match.parent
-            package_root = package_root.resolve()
-            if (package_root / "pyproject.toml").is_file():
-                candidate_roots.append(package_root)
-
-    unique_roots: list[pathlib.Path] = []
-    seen_roots: set[pathlib.Path] = set()
-    for root in candidate_roots:
-        if root not in seen_roots:
-            unique_roots.append(root)
-            seen_roots.add(root)
-
-    packages: list[UvLockPackage] = []
-    pyproject_data_by_root: dict[pathlib.Path, dict] = {}
-    for package_root in unique_roots:
-        member_pyproject_path = package_root / "pyproject.toml"
-        pyproject_data = _load_pyproject(member_pyproject_path)
-        pyproject_data_by_root[package_root] = pyproject_data
-
-        project_data = pyproject_data.get("project", {})
-        package_name = (
-            project_data.get("name") if isinstance(project_data, dict) else None
-        )
-        if not isinstance(package_name, str) or not package_name.strip():
-            raise click.UsageError(
-                "pip_installer 'uv_lock' requires every workspace package to define "
-                f"[project].name in {member_pyproject_path}."
-            )
-
-        dependency_specs = project_data.get("dependencies", [])
-        if dependency_specs is None:
-            dependency_specs = []
-        if not isinstance(dependency_specs, list) or not all(
-            isinstance(spec, str) for spec in dependency_specs
-        ):
-            raise click.UsageError(
-                "pip_installer 'uv_lock' requires [project].dependencies to be a "
-                f"list of strings in {member_pyproject_path}."
-            )
-
-        packages.append(
-            UvLockPackage(
-                name=package_name,
-                normalized_name=_normalize_package_name(package_name),
-                root=package_root,
-                pyproject_path=member_pyproject_path,
-                dependencies=tuple(
-                    _parse_dependency_name(
-                        spec,
-                        package_name=package_name,
-                        pyproject_path=member_pyproject_path,
-                    )
-                    for spec in dependency_specs
-                ),
-            )
-        )
-
-    packages_by_name: dict[str, UvLockPackage] = {}
-    packages_by_root: dict[pathlib.Path, UvLockPackage] = {}
-    for package in packages:
-        existing = packages_by_name.get(package.normalized_name)
-        if existing is not None:
-            raise click.UsageError(
-                "pip_installer 'uv_lock' requires unique workspace package names, "
-                f"but both {existing.pyproject_path} and {package.pyproject_path} "
-                f"define '{package.name}'."
-            )
-        packages_by_name[package.normalized_name] = package
-        packages_by_root[package.root] = package
-
-    for package_root, pyproject_data in pyproject_data_by_root.items():
-        source_entries = pyproject_data.get("tool", {}).get("uv", {}).get("sources", {})
-        if not isinstance(source_entries, dict):
-            raise click.UsageError(
-                "pip_installer 'uv_lock' requires [tool.uv.sources] to be a table "
-                f"in {package_root / 'pyproject.toml'}."
-            )
-        for source_name, source_value in source_entries.items():
-            _validate_uv_lock_source_entry(
-                source_name=source_name,
-                source_value=source_value,
-                package_root=package_root,
-                pyproject_path=package_root / "pyproject.toml",
-                project_root=project_root,
-                packages_by_name=packages_by_name,
-                packages_by_root=packages_by_root,
-            )
-
-    return packages_by_name
-
-
-def _validate_uv_lock_source_entry(
-    *,
-    source_name: str,
-    source_value: object,
-    package_root: pathlib.Path,
-    pyproject_path: pathlib.Path,
-    project_root: pathlib.Path,
-    packages_by_name: dict[str, UvLockPackage],
-    packages_by_root: dict[pathlib.Path, UvLockPackage],
-) -> None:
-    if isinstance(source_value, list):
-        for item in source_value:
-            _validate_uv_lock_source_entry(
-                source_name=source_name,
-                source_value=item,
-                package_root=package_root,
-                pyproject_path=pyproject_path,
-                project_root=project_root,
-                packages_by_name=packages_by_name,
-                packages_by_root=packages_by_root,
-            )
-        return
-
-    if not isinstance(source_value, dict):
-        return
-
-    if (
-        source_value.get("workspace") is True
-        and _normalize_package_name(source_name) not in packages_by_name
-    ):
-        raise click.UsageError(
-            "pip_installer 'uv_lock' only supports workspace-local [tool.uv.sources] "
-            f"entries under project_root. '{source_name}' in {pyproject_path} is "
-            "marked as a workspace dependency but does not resolve to a workspace "
-            "package under project_root."
-        )
-
-    path_ref = source_value.get("path")
-    if isinstance(path_ref, str):
-        if (
-            pathlib.Path(path_ref).is_absolute()
-            or pathlib.PurePosixPath(path_ref).is_absolute()
-        ):
-            raise click.UsageError(
-                "pip_installer 'uv_lock' does not support absolute [tool.uv.sources] "
-                f"paths: {path_ref} in {pyproject_path}."
-            )
-
-        resolved = (package_root / path_ref).resolve()
-        if project_root != resolved and project_root not in resolved.parents:
-            raise click.UsageError(
-                "pip_installer 'uv_lock' only supports [tool.uv.sources] path "
-                "entries that resolve to workspace packages under project_root. "
-                f"'{source_name}' in {pyproject_path} points to {resolved}, which "
-                f"is outside project_root {project_root}."
-            )
-
-        if resolved not in packages_by_root:
-            raise click.UsageError(
-                "pip_installer 'uv_lock' only supports [tool.uv.sources] path "
-                "entries that resolve to workspace packages under project_root. "
-                f"'{source_name}' in {pyproject_path} points to {resolved}, which "
-                "is not a declared workspace package."
-            )
-
-    for nested_value in source_value.values():
-        _validate_uv_lock_source_entry(
-            source_name=source_name,
-            source_value=nested_value,
-            package_root=package_root,
-            pyproject_path=pyproject_path,
-            project_root=project_root,
-            packages_by_name=packages_by_name,
-            packages_by_root=packages_by_root,
-        )
-
-
-def _container_workspace_root() -> pathlib.PurePosixPath:
-    return pathlib.PurePosixPath("/deps/workspace")
-
-
-def _container_root_for_uv_lock_package(
-    project_root: pathlib.Path, package_root: pathlib.Path
-) -> pathlib.PurePosixPath:
-    container_root = _container_workspace_root()
-    relative_root = package_root.relative_to(project_root)
-    if relative_root == pathlib.Path("."):
-        return container_root
-    return container_root.joinpath(*relative_root.parts)
-
-
-def _resolve_uv_lock_container_path(
-    host_path: pathlib.Path, plan: UvLockPlan
-) -> pathlib.PurePosixPath | None:
-    for package_root in sorted(
-        plan.container_roots, key=lambda path: len(path.parts), reverse=True
-    ):
-        if host_path == package_root or package_root in host_path.parents:
-            relative_path = host_path.relative_to(package_root)
-            container_root = plan.container_roots[package_root]
-            if relative_path == pathlib.Path("."):
-                return container_root
-            return container_root.joinpath(*relative_path.parts)
-    return None
-
-
-def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLockPlan:
-    config_root = config_path.parent.resolve()
-    project_root = (config_root / config["project_root"]).resolve()
-    pyproject_path = project_root / "pyproject.toml"
-    uv_lock_path = project_root / "uv.lock"
-
-    if not uv_lock_path.exists():
-        raise click.UsageError(
-            f"pip_installer is 'uv_lock' but no uv.lock file found at {uv_lock_path}. "
-            "Ensure project_root points to a workspace root containing uv.lock."
-        )
-    if not pyproject_path.exists():
-        raise click.UsageError(
-            f"pip_installer is 'uv_lock' but no pyproject.toml found at {pyproject_path}. "
-            "Ensure project_root points to a workspace root containing pyproject.toml."
-        )
-
-    packages_by_name = _discover_uv_lock_workspace_packages(
-        project_root, pyproject_path
-    )
-    target_name = _normalize_package_name(config["package"])
-    target = packages_by_name.get(target_name)
-    if target is None:
-        available_packages = ", ".join(
-            sorted(package.name for package in packages_by_name.values())
-        )
-        raise click.UsageError(
-            f"pip_installer 'uv_lock' could not find package '{config['package']}' "
-            f"under project_root {project_root}. Available workspace packages: "
-            f"{available_packages or '(none)'}."
-        )
-
-    install_order: list[UvLockPackage] = []
-    visited: set[str] = set()
-
-    def visit(package: UvLockPackage) -> None:
-        if package.normalized_name in visited:
-            return
-        visited.add(package.normalized_name)
-        for dependency_name in package.dependencies:
-            dependency = packages_by_name.get(dependency_name)
-            if dependency is not None:
-                visit(dependency)
-        install_order.append(package)
-
-    visit(target)
-
-    container_roots = {
-        package.root: _container_root_for_uv_lock_package(project_root, package.root)
-        for package in install_order
-    }
-
-    working_dir = _resolve_uv_lock_container_path(
-        config_root,
-        UvLockPlan(
-            project_root=project_root,
-            pyproject_path=pyproject_path,
-            uv_lock_path=uv_lock_path,
-            target=target,
-            install_order=tuple(install_order),
-            container_roots=container_roots,
-            working_dir=str(
-                _container_root_for_uv_lock_package(project_root, target.root)
-            ),
-        ),
-    )
-    if working_dir is None:
-        working_dir = container_roots[target.root]
-
-    return UvLockPlan(
-        project_root=project_root,
-        pyproject_path=pyproject_path,
-        uv_lock_path=uv_lock_path,
-        target=target,
-        install_order=tuple(install_order),
-        container_roots=container_roots,
-        working_dir=str(working_dir),
-    )
 
 
 def _is_node_graph(spec: str | dict) -> bool:
@@ -614,6 +271,11 @@ def validate_config(config: Config) -> Config:
         if not config.get("python_version"):
             raise click.UsageError(
                 "pip_installer 'uv_lock' is only supported for Python deployments."
+            )
+        if config.get("node_version"):
+            raise click.UsageError(
+                "pip_installer 'uv_lock' does not support Node.js graphs or "
+                "`node_version`. Use only Python graph entrypoints."
             )
         if config["dependencies"]:
             raise click.UsageError(
@@ -1173,90 +835,60 @@ def _update_http_app_path(
         http_config["app"] = f"{module_str}:{attr_str}"
 
 
-def _rewrite_uv_lock_import_path(
-    config_path: pathlib.Path,
-    import_str: str,
-    plan: UvLockPlan,
-    *,
-    label: str,
-) -> str:
-    module_str, _, attr_str = import_str.partition(":")
-    if not module_str or not attr_str:
-        raise ValueError(
-            f'Import string "{import_str}" must be in format "<module>:<attribute>".'
+def _build_python_install_commands(
+    config: Config, install_cmd: str
+) -> tuple[str, str, str]:
+    base_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
+    local_reqs_pip_install = base_install
+    global_reqs_pip_install = base_install
+
+    if config.get("pip_config_file"):
+        local_reqs_pip_install = (
+            f"PIP_CONFIG_FILE=/pipconfig.txt {local_reqs_pip_install}"
+        )
+        global_reqs_pip_install = (
+            f"PIP_CONFIG_FILE=/pipconfig.txt {global_reqs_pip_install}"
         )
 
-    if "/" not in module_str and "\\" not in module_str:
-        return import_str
-
-    resolved = (config_path.parent / module_str).resolve()
-    if not resolved.exists():
-        raise FileNotFoundError(f"Could not find {label}: {resolved}")
-    if not resolved.is_file():
-        raise IsADirectoryError(f"{label.capitalize()} must be a file: {resolved}")
-
-    container_path = _resolve_uv_lock_container_path(resolved, plan)
-    if container_path is None:
-        raise click.UsageError(
-            f"{label.capitalize()} '{import_str}' is not inside the target package "
-            f"'{plan.target.name}' or its workspace package dependencies."
-        )
-
-    return f"{container_path.as_posix()}:{attr_str}"
-
-
-def _update_uv_lock_graph_paths(
-    config_path: pathlib.Path, config: Config, plan: UvLockPlan
-) -> None:
-    for graph_id, data in config["graphs"].items():
-        if isinstance(data, dict):
-            if "path" not in data:
-                raise ValueError(
-                    f"Graph '{graph_id}' must contain a 'path' key if it is a dictionary."
-                )
-            updated = _rewrite_uv_lock_import_path(
-                config_path,
-                data["path"],
-                plan,
-                label=f"graph '{graph_id}'",
-            )
-            config["graphs"][graph_id]["path"] = updated
-        elif isinstance(data, str):
-            config["graphs"][graph_id] = _rewrite_uv_lock_import_path(
-                config_path,
-                data,
-                plan,
-                label=f"graph '{graph_id}'",
-            )
-        else:
-            raise ValueError(
-                f"Graph '{graph_id}' must be a string or a dictionary with a 'path' key."
-            )
-
-
-def _update_uv_lock_component_path(
-    config_path: pathlib.Path,
-    config: Config,
-    plan: UvLockPlan,
-    *,
-    section: str,
-    key: str,
-    label: str,
-) -> None:
-    section_config = config.get(section)
-    if not isinstance(section_config, dict):
-        return
-
-    path_str = section_config.get(key)
-    if not isinstance(path_str, str):
-        return
-
-    section_config[key] = _rewrite_uv_lock_import_path(
-        config_path,
-        path_str,
-        plan,
-        label=label,
+    pip_config_file_str = (
+        f"ADD {config['pip_config_file']} /pipconfig.txt"
+        if config.get("pip_config_file")
+        else ""
     )
+    return local_reqs_pip_install, global_reqs_pip_install, pip_config_file_str
+
+
+def _build_runtime_env_vars(config: Config) -> list[str]:
+    env_vars = []
+
+    if (store_config := config.get("store")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
+
+    if (auth_config := config.get("auth")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
+
+    if (encryption_config := config.get("encryption")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
+
+    if (http_config := config.get("http")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
+
+    if (webhooks_config := config.get("webhooks")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
+
+    if (checkpointer_config := config.get("checkpointer")) is not None:
+        env_vars.append(
+            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
+        )
+
+    if (ui := config.get("ui")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
+
+    if (ui_config := config.get("ui_config")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
+
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    return env_vars
 
 
 def _get_node_pm_install_cmd(config_path: pathlib.Path, config: Config) -> str:
@@ -1357,209 +989,6 @@ def get_build_tools_to_uninstall(config: Config) -> tuple[str]:
         )
 
 
-def _python_config_to_docker_uv_lock(
-    config_path: pathlib.Path,
-    config: Config,
-    base_image: str,
-    api_version: str | None = None,
-    *,
-    build_tools_to_uninstall: tuple[str] | None,
-) -> tuple[str, dict[str, str]]:
-    if not _image_supports_uv(base_image):
-        raise ValueError(
-            "pip_installer 'uv_lock' requires a base image with uv support "
-            "(langchain/langgraph-api >= 0.2.47)"
-        )
-
-    config_root = config_path.parent.resolve()
-    install_cmd = "uv pip install --system"
-    global_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
-    if config.get("pip_config_file"):
-        global_reqs_pip_install = (
-            f"PIP_CONFIG_FILE=/pipconfig.txt {global_reqs_pip_install}"
-        )
-
-    pip_config_file_str = (
-        f"ADD {config['pip_config_file']} /pipconfig.txt"
-        if config.get("pip_config_file")
-        else ""
-    )
-
-    plan = _plan_uv_lock_workspace(config_path, config)
-
-    _update_uv_lock_graph_paths(config_path, config, plan)
-    _update_uv_lock_component_path(
-        config_path,
-        config,
-        plan,
-        section="auth",
-        key="path",
-        label="auth.path",
-    )
-    _update_uv_lock_component_path(
-        config_path,
-        config,
-        plan,
-        section="encryption",
-        key="path",
-        label="encryption.path",
-    )
-    _update_uv_lock_component_path(
-        config_path,
-        config,
-        plan,
-        section="checkpointer",
-        key="path",
-        label="checkpointer.path",
-    )
-    _update_uv_lock_component_path(
-        config_path,
-        config,
-        plan,
-        section="http",
-        key="app",
-        label="http.app",
-    )
-
-    additional_contexts: dict[str, str] = {}
-    workspace_context_name: str | None = None
-    if (
-        plan.project_root != config_root
-        and config_root not in plan.project_root.parents
-    ):
-        workspace_context_name = "uv-workspace-root"
-        additional_contexts[workspace_context_name] = str(plan.project_root)
-
-    def copy_from_project_root(
-        relative_path: pathlib.PurePosixPath, destination: str
-    ) -> str:
-        if workspace_context_name is not None:
-            source = relative_path.as_posix() or "."
-            return f"COPY --from={workspace_context_name} {source} {destination}"
-
-        source_path = plan.project_root / pathlib.Path(relative_path)
-        relative_source = source_path.relative_to(config_root).as_posix()
-        return f"ADD {relative_source} {destination}"
-
-    uv_export_project_dir = "/tmp/uv_export/project"
-    uv_lock_str = f"""# -- Installing dependencies from uv.lock --
-{copy_from_project_root(pathlib.PurePosixPath("pyproject.toml"), f"{uv_export_project_dir}/pyproject.toml")}
-{copy_from_project_root(pathlib.PurePosixPath("uv.lock"), f"{uv_export_project_dir}/uv.lock")}
-RUN cd {uv_export_project_dir} && uv export --package {shlex.quote(config["package"])} --frozen --no-hashes --no-emit-project --no-emit-workspace -o uv_requirements.txt
-RUN cd {uv_export_project_dir} && {global_reqs_pip_install} -r uv_requirements.txt
-RUN rm -rf /tmp/uv_export
-# -- End of uv.lock dependencies install --"""
-
-    local_pkgs_str = os.linesep.join(
-        [
-            f"""# -- Adding workspace package {package.root.relative_to(plan.project_root).as_posix() or "."} --
-{copy_from_project_root(pathlib.PurePosixPath(*package.root.relative_to(plan.project_root).parts), plan.container_roots[package.root].as_posix())}
-# -- End of workspace package {package.root.relative_to(plan.project_root).as_posix() or "."} --"""
-            for package in plan.install_order
-        ]
-    )
-
-    install_local_pkgs_str = os.linesep.join(
-        [
-            (
-                f"RUN cd {plan.container_roots[package.root].as_posix()} && "
-                f"{global_reqs_pip_install} --no-deps -e ."
-            )
-            for package in plan.install_order
-        ]
-    )
-
-    install_node_str = (
-        "RUN /storage/install-node.sh"
-        if (config.get("ui") or config.get("node_version")) and plan.working_dir
-        else ""
-    )
-    installs = f"{os.linesep}{os.linesep}".join(
-        filter(
-            None, [install_node_str, pip_config_file_str, uv_lock_str, local_pkgs_str]
-        )
-    )
-
-    env_vars = []
-
-    if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
-
-    if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
-
-    if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
-
-    if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
-
-    if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
-
-    if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
-        )
-
-    if (ui := config.get("ui")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
-
-    if (ui_config := config.get("ui_config")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
-
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
-
-    js_inst_str = ""
-    if (config.get("ui") or config.get("node_version")) and plan.working_dir:
-        js_inst_str = os.linesep.join(
-            [
-                "# -- Installing JS dependencies --",
-                f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
-                f"RUN cd {plan.working_dir} && {_get_node_pm_install_cmd(config_path, config)} && tsx /api/langgraph_api/js/build.mts",
-                "# -- End of JS dependencies install --",
-            ]
-        )
-
-    image_str = docker_tag(config, base_image, api_version)
-    docker_file_contents = []
-
-    if additional_contexts:
-        docker_file_contents.extend(
-            [
-                "# syntax=docker/dockerfile:1.4",
-                "",
-            ]
-        )
-
-    docker_file_contents.extend(
-        [
-            f"FROM {image_str}",
-            "",
-            os.linesep.join(config["dockerfile_lines"]),
-            "",
-            installs,
-            "",
-            "# -- Installing workspace packages --",
-            install_local_pkgs_str,
-            "# -- End of workspace packages install --",
-            os.linesep.join(env_vars),
-            "",
-            js_inst_str,
-            "",
-            _get_pip_cleanup_lines(
-                install_cmd=install_cmd,
-                to_uninstall=build_tools_to_uninstall,
-                pip_installer="uv",
-            ),
-            "",
-            f"WORKDIR {plan.working_dir}" if plan.working_dir else "",
-        ]
-    )
-
-    return os.linesep.join(docker_file_contents), additional_contexts
-
-
 def python_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
@@ -1577,12 +1006,19 @@ def python_config_to_docker(
         else:
             pip_installer = "pip"
     if pip_installer == "uv_lock":
-        return _python_config_to_docker_uv_lock(
+        return python_config_to_docker_uv_lock(
             config_path,
             config,
             base_image,
             api_version=api_version,
             build_tools_to_uninstall=build_tools_to_uninstall,
+            image_supports_uv=_image_supports_uv,
+            get_node_pm_install_cmd=_get_node_pm_install_cmd,
+            get_pip_cleanup_lines=_get_pip_cleanup_lines,
+            docker_tag=docker_tag,
+            build_python_install_commands=_build_python_install_commands,
+            build_runtime_env_vars=_build_runtime_env_vars,
+            default_node_version=DEFAULT_NODE_VERSION,
         )
     if pip_installer == "uv":
         install_cmd = "uv pip install --system"
@@ -1591,21 +1027,11 @@ def python_config_to_docker(
     else:
         raise ValueError(f"Invalid pip_installer: {pip_installer}")
 
-    # configure pip
-    local_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
-    global_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
-    if config.get("pip_config_file"):
-        local_reqs_pip_install = (
-            f"PIP_CONFIG_FILE=/pipconfig.txt {local_reqs_pip_install}"
-        )
-        global_reqs_pip_install = (
-            f"PIP_CONFIG_FILE=/pipconfig.txt {global_reqs_pip_install}"
-        )
-    pip_config_file_str = (
-        f"ADD {config['pip_config_file']} /pipconfig.txt"
-        if config.get("pip_config_file")
-        else ""
-    )
+    (
+        local_reqs_pip_install,
+        global_reqs_pip_install,
+        pip_config_file_str,
+    ) = _build_python_install_commands(config, install_cmd)
 
     # collect dependencies
     pypi_deps = [dep for dep in config["dependencies"] if not dep.startswith(".")]
@@ -1723,36 +1149,7 @@ ADD {relpath} /deps/{name}
         )
     )
 
-    env_vars = []
-
-    if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
-
-    if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
-
-    if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
-
-    if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
-
-    # Inject webhooks configuration if provided
-    if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
-
-    if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
-        )
-
-    if (ui := config.get("ui")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
-
-    if (ui_config := config.get("ui_config")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
-
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    env_vars = _build_runtime_env_vars(config)
 
     js_inst_str: str = ""
     if (config.get("ui") or config.get("node_version")) and local_deps.working_dir:
@@ -1806,8 +1203,7 @@ ADD {relpath} /deps/{name}
             _get_pip_cleanup_lines(
                 install_cmd=install_cmd,
                 to_uninstall=build_tools_to_uninstall,
-                # uv_lock uses uv under the hood
-                pip_installer="uv" if pip_installer == "uv_lock" else pip_installer,
+                pip_installer=pip_installer,
             ),
             "",
             f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
@@ -1846,36 +1242,7 @@ def node_config_to_docker(
 
     image_str = docker_tag(config, base_image, api_version)
 
-    env_vars: list[str] = []
-
-    if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
-
-    if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
-
-    if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
-
-    if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
-
-    # Inject webhooks configuration if provided
-    if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
-
-    if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
-        )
-
-    if ui := config.get("ui"):
-        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
-
-    if ui_config := config.get("ui_config"):
-        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
-
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    env_vars = _build_runtime_env_vars(config)
 
     # For monorepo support, we need to handle install and build commands differently
     if build_context:

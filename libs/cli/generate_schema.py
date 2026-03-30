@@ -152,11 +152,14 @@ def generate_schema():
     python_specific_props = ["python_version", "pip_config_file"]
     # Define properties specific to Node.js projects
     node_specific_props = ["node_version"]
+    uv_lock_only_props = ["project_root", "package"]
     # Define properties common to both project types
     common_props = [
         k
         for k in config_schema["properties"]
-        if k not in python_specific_props and k not in node_specific_props
+        if k not in python_specific_props
+        and k not in node_specific_props
+        and k not in uv_lock_only_props
     ]
 
     # Create legacy Python schema with python_version and pip_config_file
@@ -182,7 +185,7 @@ def generate_schema():
         "properties": {
             **{
                 k: config_schema["properties"][k].copy()
-                for k in python_specific_props + common_props
+                for k in python_specific_props + uv_lock_only_props + common_props
             },
         },
         "required": ["graphs", "pip_installer", "project_root", "package"],
