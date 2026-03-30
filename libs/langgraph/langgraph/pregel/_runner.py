@@ -287,7 +287,7 @@ class PregelRunner:
                         futures[get_waiter()] = None
                 elif (
                     task_exc := _exception(fut)
-                ) and self._should_route_to_graph_error_handler(task):
+                ) and self._should_route_to_graph_error_handler(task) and not isinstance(task_exc, GraphBubbleUp):
                     self._handled_exception_ids.add(id(task_exc))
                 else:
                     done_for_stop.add(fut)
@@ -450,7 +450,7 @@ class PregelRunner:
                         futures[get_waiter()] = None
                 elif (
                     task_exc := _exception(fut)
-                ) and self._should_route_to_graph_error_handler(task):
+                ) and self._should_route_to_graph_error_handler(task) and not isinstance(task_exc, GraphBubbleUp):
                     self._handled_exception_ids.add(id(task_exc))
                 else:
                     done_for_stop.add(fut)
