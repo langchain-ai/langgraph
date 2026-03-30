@@ -159,8 +159,8 @@ def generate_schema():
         if k not in python_specific_props and k not in node_specific_props
     ]
 
-    # Create Python schema with python_version and pip_config_file
-    python_schema = {
+    # Create legacy Python schema with python_version and pip_config_file
+    legacy_python_schema = {
         "type": "object",
         "properties": {
             # Include Python-specific properties
@@ -170,10 +170,39 @@ def generate_schema():
         },
         "required": ["dependencies", "graphs"],
     }
+    legacy_python_schema["properties"]["pip_installer"] = {
+        "anyOf": [
+            {"type": "string", "enum": ["auto", "pip", "uv"]},
+            {"type": "null"},
+        ]
+    }
+
+    uv_lock_python_schema = {
+        "type": "object",
+        "properties": {
+            **{
+                k: config_schema["properties"][k].copy()
+                for k in python_specific_props + common_props
+            },
+        },
+        "required": ["graphs", "pip_installer", "project_root", "package"],
+    }
+    uv_lock_python_schema["properties"]["pip_installer"] = {"const": "uv_lock"}
+    uv_lock_python_schema["not"] = {"required": ["dependencies"]}
 
     # Add enum constraint for python_version
-    if "python_version" in python_schema["properties"]:
-        python_schema["properties"]["python_version"]["enum"] = ["3.11", "3.12", "3.13"]
+    if "python_version" in legacy_python_schema["properties"]:
+        legacy_python_schema["properties"]["python_version"]["enum"] = [
+            "3.11",
+            "3.12",
+            "3.13",
+        ]
+    if "python_version" in uv_lock_python_schema["properties"]:
+        uv_lock_python_schema["properties"]["python_version"]["enum"] = [
+            "3.11",
+            "3.12",
+            "3.13",
+        ]
 
     # Create Node.js schema with node_version
     node_schema = {
@@ -185,6 +214,12 @@ def generate_schema():
             **{k: config_schema["properties"][k].copy() for k in common_props},
         },
         "required": ["node_version", "graphs"],
+    }
+    node_schema["properties"]["pip_installer"] = {
+        "anyOf": [
+            {"type": "string", "enum": ["auto", "pip", "uv"]},
+            {"type": "null"},
+        ]
     }
 
     # Add enum constraint for node_version
@@ -202,7 +237,7 @@ def generate_schema():
         ]
 
     # Replace the Config schema with a oneOf constraint
-    config_schema["oneOf"] = [python_schema, node_schema]
+    config_schema["oneOf"] = [legacy_python_schema, uv_lock_python_schema, node_schema]
 
     # Remove the properties field as it's now defined in the oneOf subschemas
     if "properties" in config_schema:

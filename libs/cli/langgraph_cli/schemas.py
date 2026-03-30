@@ -637,12 +637,26 @@ class Config(TypedDict, total=False):
     - 'auto' (default): Use uv for supported base images, otherwise pip
     - 'pip': Force use of pip regardless of base image support
     - 'uv': Force use of uv (will fail if base image doesn't support it)
-    - 'uv_lock': Use uv with a uv.lock file for reproducible builds. Requires
-      a uv.lock and pyproject.toml in the project root. Third-party dependencies
-      must come from pyproject.toml/uv.lock rather than langgraph.json
-      `dependencies` or local `requirements.txt` files. Locked dependencies are
-      exported from the lock file and installed with constraints validation,
-      then the main app is installed editable without re-resolving.
+    - 'uv_lock': Use a strict uv workspace deployment flow. Requires
+      `project_root` and `package`, along with `project_root/pyproject.toml`
+      and `project_root/uv.lock`. Under this mode, langgraph.json identifies
+      the deploy target only; all dependency declarations must come from
+      pyproject.toml and uv.lock, and copied local workspace packages are
+      installed with `--no-deps`.
+    """
+
+    project_root: str | None
+    """Optional. Relative path from langgraph.json to the authoritative uv workspace root.
+
+    Only supported when `pip_installer` is `uv_lock`.
+    The resolved directory must contain `pyproject.toml` and `uv.lock`.
+    """
+
+    package: str | None
+    """Optional. Workspace package name to deploy when `pip_installer` is `uv_lock`.
+
+    This must match the `[project].name` of the target workspace package under
+    `project_root`.
     """
 
     dockerfile_lines: list[str]
@@ -664,6 +678,8 @@ class Config(TypedDict, total=False):
       - str (aka "anthropic") for a PyPI package
       - "git+https://github.com/org/repo.git@main" for a Git-based package
     Defaults to an empty list, meaning no additional packages installed beyond your base environment.
+
+    This field is not supported when `pip_installer` is `uv_lock`.
     """
 
     graphs: dict[str, str | GraphDef]
