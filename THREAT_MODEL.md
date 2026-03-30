@@ -50,14 +50,23 @@ LangGraph is an open-source Python framework for building stateful, multi-actor 
 ```
 +---------------------------------------------------------------------------+
 |                        User Application                                    |
-|  +----------+   +------------+   +----------+   +-------------------+     |
-|  |User Code |-->| StateGraph |-->| ToolNode |-->| User-Registered   |     |
-|  |(nodes,   |   | / Pregel   |   |(prebuilt)|   | Tools (BaseTool)  |     |
-|  | tools)   |   |  (core)    |   +----+-----+   +-------------------+     |
-|  +----------+   +-----+------+        |                                    |
-|       |               |          InjectedState                             |
-|  @entrypoint    +-----+         InjectedStore                              |
-|  @task ---------+               ToolRuntime                                |
+|                                                                            |
+|  +-----------------------------------------------+                        |
+|  |  User Application Code                         |                       |
+|  |  (graph nodes, tools; StateGraph builder API   |                       |
+|  |   and functional API @entrypoint/@task both    |                       |
+|  |   compile to the same Pregel execution engine) |                       |
+|  +------------------------+----------------------+                        |
+|                           |                                                |
+|              +------------v-----------+                                   |
+|              |  StateGraph / Pregel    |                                   |
+|              |  (core execution engine)|                                   |
+|              +------+----------+------+                                   |
+|                     |          |                                           |
+|              InjectedState  +--v---------+                                |
+|              InjectedStore  |  ToolNode  |                                |
+|              ToolRuntime    |  (opt-in)  |                                |
+|                             +------------+                                |
 |                       |                                                    |
 | - - - - - - - - - - - | - - - - TB1: User/Framework API - - - - - - - -  |
 |                       |                                                    |
@@ -95,12 +104,12 @@ LangGraph is an open-source Python framework for building stateful, multi-actor 
 |----|-----------|-------------|-------------|----------|--------------|
 | C1 | StateGraph / Pregel | Core graph builder and execution engine with v1/v2 output, durability modes (sync/async/exit), interrupt_before/interrupt_after | framework-controlled | Yes | `StateGraph.add_node()`, `StateGraph.compile()`, `Pregel.invoke()`, `Pregel.stream()` |
 | C2 | JsonPlusSerializer | Checkpoint serialization/deserialization with msgpack, JSON, and pickle codecs; 47-entry SAFE_MSGPACK_TYPES allowlist | framework-controlled | Yes | `loads_typed()`, `dumps_typed()`, `_create_msgpack_ext_hook()`, `_reviver()` |
-| C3 | ToolNode | Dispatches LLM-generated tool calls to registered BaseTool instances; supports InjectedState/InjectedStore/ToolRuntime injection into tools | framework-controlled | Yes | `ToolNode._func()`, `_run_one()`, `_execute_tool_sync()`, `_validate_tool_call()`, `_inject_tool_args()` |
+| C3 | ToolNode | Dispatches LLM-generated tool calls to registered BaseTool instances; supports InjectedState/InjectedStore/ToolRuntime injection into tools | framework-controlled | No (explicit opt-in required) | `ToolNode._func()`, `_run_one()`, `_execute_tool_sync()`, `_validate_tool_call()`, `_inject_tool_args()` |
 | C4 | RemoteGraph | Client for remote LangGraph Server API; implements PregelProtocol | framework-controlled | No (opt-in) | `RemoteGraph.stream()`, `RemoteGraph.invoke()`, `RemoteGraph.get_state()` |
 | C5 | PostgresSaver / PostgresStore | PostgreSQL checkpoint saver, key-value store, and vector search | framework-controlled | No (opt-in) | `from_conn_string()`, `put()`, `get_tuple()`, `search()` |
 | C6 | SqliteSaver / SqliteStore | SQLite checkpoint saver, key-value store with JSON path filtering | framework-controlled | No (opt-in) | `from_conn_string()`, `put()`, `get_tuple()`, `search()` |
 | C7 | EncryptedSerializer | AES-EAX authenticated encryption wrapper for checkpoint data | framework-controlled | No (opt-in) | `from_pycryptodome_aes()`, `loads_typed()`, `dumps_typed()` |
-| C8 | CLI (langgraph_cli) | Docker-based build and deployment tooling; config schema includes WebhookUrlPolicy for SSRF protection | framework-controlled | Yes | `langgraph up`, `langgraph build`, `langgraph dev`, `langgraph new` |
+| C8 | CLI (langgraph_cli) | Docker-based build and deployment tooling; config schema includes WebhookUrlPolicy for SSRF protection | framework-controlled | No (separate install) | `langgraph up`, `langgraph build`, `langgraph dev`, `langgraph new` |
 | C9 | SDK Client (langgraph_sdk) | HTTP client for LangGraph Server API with SSE streaming and reconnection | framework-controlled | Yes | `get_client()`, `get_sync_client()`, `HttpClient.request_reconnect()`, `HttpClient.stream()` |
 | C10 | User-Registered Tools | BaseTool instances provided by users; may use InjectedState/InjectedStore/ToolRuntime annotations | user-controlled | N/A | Tool `invoke()` / `ainvoke()` methods |
 | C11 | User-Registered Nodes | Arbitrary callables added via `add_node()` or `@task`/`@entrypoint` | user-controlled | N/A | Node function signatures |
@@ -466,4 +475,5 @@ Threats that appear valid in isolation but fall outside project responsibility b
 | 2026-03-04 | Generated | Initial threat model |
 | 2026-03-04 | Updated | Added C13 (Functional API), C14 (BaseCache), DF11. Updated T1 for BaseCache/serde event hooks. Added GHSA-mhr3-j7m5-c7c9 and GHSA-9rwj-6rc7-p77c. Updated CLI config scope. Added External Context section. |
 | 2026-03-27 | Deep refinement | **Mode upgraded to Deep.** Added: Data Classification section (DC1-DC8 with detailed analysis for Critical/High entries). Added: C15 (Serde Event Hooks), C16 (Auth System). Added: Default? column to Components. Added: Classification column to Data Flows. Added: DF12-DF13 (SDK redirect flows). Added: T9 (SDK API key leak via Location redirect), T10 (EncryptedSerializer encryption bypass), T11 (unbounded checkpoint retention). Added: Validation column to Threats with flaw validation for High/Critical. Added: Investigated and Dismissed section (D1-D3: SQL injection and CLI command injection disproven). Added: Input Source Coverage section. Updated external context with GHSA-g48c-2wqr-h844 (new published advisory). Updated all code references to file:SymbolName notation. Expanded trust boundary details. |
+| 2026-03-30 | Diagram and Default? corrections | Fixed architecture diagram: merged "User Code" and "User-Registered Tools" into single "User Application Code" boundary; removed @entrypoint/@task as separate diagram elements (both compile to Pregel — authoring style, not separate component). Fixed Default? column: C3 ToolNode → No (explicit opt-in required); C8 CLI → No (separate install). |
 | 2026-03-28 | Deep update | **Added:** C17 (SDK Encryption Handlers — beta at-rest encryption framework). DC9 (SDK Encryption context metadata). TB5 (SDK Encryption Handler boundary). DF14 (ToolRuntime injection flow), DF15 (Encryption handler registration flow). D4 (Tool argument injection via InjectedState dict-splatting — disproven with 4-layer defense evidence). **Updated:** C1 description (v1/v2 output, durability modes, interrupt_before/after). C2 description (SAFE_MSGPACK_TYPES now 47 entries including langchain_core messages, Document, GetOp). C3 description (InjectedState/InjectedStore/ToolRuntime injection support, _inject_tool_args entry point). C8 description (WebhookUrlPolicy for SSRF protection). TB1 details (tool injection merge order guarantees). TB2 details (47 safe types, updated allowlist composition). TB4 details (WebhookUrlPolicy). DF4 description (injection merge semantics). T1 details (noted secure_pickle.py proposed but never merged). T4 details (Interrupt deprecated_kwargs ns parameter). Input Source Coverage (LLM output row updated with injection validation points, encryption handler row added). Out-of-Scope Threats (malicious encryption handler pattern added). Commit updated to 0ba22143. External context confirmed no new published advisories. |
