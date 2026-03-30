@@ -2572,6 +2572,8 @@ class Pregel(
 
         config = ensure_config(self.config, config)
         callback_manager = get_callback_manager_for_config(config)
+        if "ls_integration" not in callback_manager.metadata:
+            callback_manager.add_metadata({"ls_integration": "langgraph"})
         run_manager = callback_manager.on_chain_start(
             None,
             input,
@@ -2909,6 +2911,8 @@ class Pregel(
 
         config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
+        if "ls_integration" not in callback_manager.metadata:
+            callback_manager.add_metadata({"ls_integration": "langgraph"})
         run_manager = await callback_manager.on_chain_start(
             None,
             input,
