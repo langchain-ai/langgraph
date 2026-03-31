@@ -49,7 +49,7 @@ jobs:
         uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ matrix.python-version }}
-          cache-suffix: "cli-integration-test"
+          enable-cache: "false"
           working-directory: libs/cli
       - name: Install cli globally
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')

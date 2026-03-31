@@ -1390,6 +1390,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 chunk_position="last",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 1,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ("branch:to:agent",),
@@ -1409,6 +1410,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 tool_call_id="tool_call123",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 2,
                 "langgraph_node": "tools",
                 "langgraph_triggers": (PUSH,),
@@ -1452,6 +1454,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 chunk_position="last",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 3,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ("branch:to:agent",),
@@ -1474,6 +1477,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 tool_call_id="tool_call234",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
                 "langgraph_triggers": (PUSH,),
@@ -1488,6 +1492,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 tool_call_id="tool_call567",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
                 "langgraph_triggers": (PUSH,),
@@ -1503,6 +1508,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 chunk_position="last",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 5,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ("branch:to:agent",),
@@ -6874,6 +6880,7 @@ def test_weather_subgraph(
                     ],
                 ),
                 {
+                    "ls_integration": "langgraph",
                     "thread_id": "4",
                     "langgraph_step": 1,
                     "langgraph_node": "router_node",
@@ -6902,6 +6909,7 @@ def test_weather_subgraph(
                     ],
                 ),
                 {
+                    "ls_integration": "langgraph",
                     "thread_id": "4",
                     "langgraph_step": 1,
                     "langgraph_node": "model_node",
@@ -6939,6 +6947,7 @@ def test_weather_subgraph(
                 ],
             ),
             {
+                "ls_integration": "langgraph",
                 "thread_id": "5",
                 "langgraph_step": 1,
                 "langgraph_node": "router_node",
