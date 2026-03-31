@@ -28,6 +28,22 @@ By default `langgraph-checkpoint-postgres` installs `psycopg` (Psycopg 3) withou
 >     # TypeError: tuple indices must be integers or slices, not str
 > ```
 
+> [!WARNING]
+> **`thread_id` length limits:** PostgreSQL's `bpchar` index has a maximum key size (typically 2704 bytes for btree version 4). If `thread_id` exceeds this limit, you will encounter:
+> ```
+> Postgres error: Index row size exceeds btree maximum
+> ```
+> **Recommendation:** Use UUIDs or short hashes for `thread_id` values:
+> ```python
+> import uuid
+> thread_id = str(uuid.uuid4())  # Recommended — always 36 characters
+>
+> # Or a short hash for meaningful identifiers
+> import hashlib
+> thread_id = hashlib.sha256(user_id.encode()).hexdigest()[:16]  # 16-char hex
+> ```
+> If you need longer human-readable identifiers, consider encoding them (e.g., base62) or storing a mapping in a separate table.
+
 ```python
 from langgraph.checkpoint.postgres import PostgresSaver
 
