@@ -76,6 +76,7 @@ from langgraph.types import (
     CachePolicy,
     Checkpointer,
     Command,
+    OnInterruptHook,
     RetryPolicy,
     Send,
     ensure_valid_checkpointer,
@@ -831,6 +832,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
+        on_interrupt: OnInterruptHook | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -850,6 +852,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
+            on_interrupt: An optional callback that is invoked whenever the graph
+                execution is interrupted. Called with the list of `Interrupt` objects.
+
+                May be a sync function or an async coroutine function.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
@@ -910,6 +916,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             store=store,
             cache=cache,
             name=name or "LangGraph",
+            on_interrupt=on_interrupt,
         )
 
         compiled.attach_node(START, None)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from collections import deque
-from collections.abc import Callable, Hashable, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Sequence
 from dataclasses import asdict, dataclass
 from typing import (
     TYPE_CHECKING,
@@ -56,6 +56,7 @@ __all__ = (
     "Durability",
     "interrupt",
     "Overwrite",
+    "OnInterruptHook",
     "ensure_valid_checkpointer",
 )
 
@@ -108,6 +109,18 @@ StreamWriter = Callable[[Any], None]
 """`Callable` that accepts a single argument and writes it to the output stream.
 Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using `stream_mode="custom"`."""
+
+OnInterruptHook = (
+    Callable[[list["Interrupt"]], None] | Callable[[list["Interrupt"]], Awaitable[None]]
+)
+"""Callback invoked when a graph execution is interrupted.
+
+Called with the list of `Interrupt` objects whenever the graph pauses due to
+an `interrupt()` call or `interrupt_before`/`interrupt_after` configuration.
+
+May be a regular function or an async coroutine function. Async hooks are
+awaited in async graph execution; in sync execution only sync hooks are called.
+"""
 
 _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 

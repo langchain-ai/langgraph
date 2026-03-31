@@ -138,6 +138,7 @@ from langgraph.types import (
     Command,
     Durability,
     Interrupt,
+    OnInterruptHook,
     Send,
     StateSnapshot,
     StateUpdate,
@@ -622,6 +623,12 @@ class Pregel(
     context_schema: type[ContextT] | None = None
     """Specifies the schema for the context object that will be passed to the workflow."""
 
+    on_interrupt: OnInterruptHook | None = None
+    """Optional callback invoked when the graph execution is interrupted.
+
+    Called with the list of `Interrupt` objects whenever the graph pauses.
+    May be a sync or async callable."""
+
     config: RunnableConfig | None = None
 
     name: str = "LangGraph"
@@ -652,6 +659,7 @@ class Pregel(
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         name: str = "LangGraph",
+        on_interrupt: OnInterruptHook | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         if (
@@ -695,6 +703,7 @@ class Pregel(
         )
         self.cache_policy = cache_policy
         self.context_schema = context_schema
+        self.on_interrupt = on_interrupt
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.name = name
@@ -2599,6 +2608,7 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                on_interrupt=self.on_interrupt,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -2908,6 +2918,7 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                on_interrupt=self.on_interrupt,
             ) as loop:
                 # create runner
                 runner = PregelRunner(

@@ -8893,3 +8893,151 @@ def test_fork_does_not_apply_pending_writes(
 
     # Should be: 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+def test_on_interrupt_hook_with_interrupt_call(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that on_interrupt hook fires when interrupt() is called in a node."""
+    hook_calls: list[list[Interrupt]] = []
+
+    def my_on_interrupt(interrupts: list[Interrupt]) -> None:
+        hook_calls.append(interrupts)
+
+    class State(TypedDict):
+        value: str
+
+    def ask_human(state: State) -> dict:
+        answer = interrupt("what should I do?")
+        return {"value": answer}
+
+    builder = StateGraph(State)
+    builder.add_node("ask", ask_human)
+    builder.add_edge(START, "ask")
+
+    graph = builder.compile(
+        checkpointer=sync_checkpointer,
+        on_interrupt=my_on_interrupt,
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # First invocation: should trigger interrupt and call the hook
+    result = list(graph.stream({"value": ""}, config))
+    assert len(result) == 1
+    assert "__interrupt__" in result[0]
+
+    # Hook should have been called once with the interrupt data
+    assert len(hook_calls) == 1
+    assert len(hook_calls[0]) == 1
+    assert hook_calls[0][0].value == "what should I do?"
+
+    # Resume — no new interrupt, hook should not fire again
+    hook_calls.clear()
+    result = list(graph.stream(Command(resume="do this"), config))
+    assert any("ask" in chunk for chunk in result)
+    assert len(hook_calls) == 0
+
+
+def test_on_interrupt_hook_with_interrupt_before(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that on_interrupt hook fires for interrupt_before config."""
+    hook_calls: list[list[Interrupt]] = []
+
+    def my_on_interrupt(interrupts: list[Interrupt]) -> None:
+        hook_calls.append(interrupts)
+
+    class State(TypedDict):
+        value: int
+
+    def add_one(state: State) -> dict:
+        return {"value": state["value"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("add_one", add_one)
+    builder.add_edge(START, "add_one")
+
+    graph = builder.compile(
+        checkpointer=sync_checkpointer,
+        interrupt_before=["add_one"],
+        on_interrupt=my_on_interrupt,
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Should interrupt before add_one runs
+    result = list(graph.stream({"value": 0}, config))
+    assert any("__interrupt__" in chunk for chunk in result)
+
+    # Hook should have been called (empty interrupt list for config-level interrupts)
+    assert len(hook_calls) == 1
+    assert hook_calls[0] == []
+
+
+def test_on_interrupt_hook_not_called_without_interrupt(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that on_interrupt hook is NOT called when graph completes normally."""
+    hook_calls: list[list[Interrupt]] = []
+
+    def my_on_interrupt(interrupts: list[Interrupt]) -> None:
+        hook_calls.append(interrupts)
+
+    class State(TypedDict):
+        value: int
+
+    def add_one(state: State) -> dict:
+        return {"value": state["value"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("add_one", add_one)
+    builder.add_edge(START, "add_one")
+
+    graph = builder.compile(
+        checkpointer=sync_checkpointer,
+        on_interrupt=my_on_interrupt,
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = graph.invoke({"value": 0}, config)
+    assert result == {"value": 1}
+
+    # Hook should NOT have been called
+    assert len(hook_calls) == 0
+
+
+def test_on_interrupt_hook_exception_propagates(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that exceptions in the on_interrupt hook propagate to the caller."""
+
+    def bad_hook(interrupts: list[Interrupt]) -> None:
+        raise RuntimeError("hook exploded")
+
+    class State(TypedDict):
+        value: str
+
+    def ask(state: State) -> dict:
+        answer = interrupt("question")
+        return {"value": answer}
+
+    builder = StateGraph(State)
+    builder.add_node("ask", ask)
+    builder.add_edge(START, "ask")
+
+    graph = builder.compile(
+        checkpointer=sync_checkpointer,
+        on_interrupt=bad_hook,
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Hook error should propagate
+    with pytest.raises(RuntimeError, match="hook exploded"):
+        list(graph.stream({"value": ""}, config))
+
+    # Graph state should still be checkpointed and resumable despite the hook error
+    result = list(graph.stream(Command(resume="answer"), config))
+    assert any("ask" in chunk for chunk in result)

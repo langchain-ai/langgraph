@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import binascii
 import concurrent.futures
+import warnings
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import (
@@ -12,7 +13,7 @@ from contextlib import (
     ExitStack,
 )
 from datetime import datetime, timezone
-from inspect import signature
+from inspect import iscoroutinefunction, signature
 from types import TracebackType
 from typing import (
     Any,
@@ -115,6 +116,8 @@ from langgraph.types import (
     CachePolicy,
     Command,
     Durability,
+    Interrupt,
+    OnInterruptHook,
     PregelExecutableTask,
     RetryPolicy,
     Send,
@@ -157,6 +160,7 @@ class PregelLoop:
     manager: None | AsyncParentRunManager | ParentRunManager
     interrupt_after: All | Sequence[str]
     interrupt_before: All | Sequence[str]
+    on_interrupt: OnInterruptHook | None
     durability: Durability
     retry_policy: Sequence[RetryPolicy]
     cache_policy: CachePolicy | None
@@ -226,6 +230,7 @@ class PregelLoop:
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        on_interrupt: OnInterruptHook | None = None,
     ) -> None:
         self.stream = stream
         self.config = config
@@ -242,6 +247,7 @@ class PregelLoop:
         self.stream_keys = stream_keys
         self.interrupt_after = interrupt_after
         self.interrupt_before = interrupt_before
+        self.on_interrupt = on_interrupt
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
         self.skip_done_tasks = CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
@@ -865,13 +871,35 @@ class PregelLoop:
                         [{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]
                     ),
                 )
-            # save final output
+            # save final output first, so graph state is consistent even
+            # if the on_interrupt hook raises
             self.output = read_channels(self.channels, self.output_keys)
+            # call on_interrupt hook
+            if self.on_interrupt is not None:
+                interrupts: list[Interrupt] = (
+                    list(cast(GraphInterrupt, exc_value).args[0])
+                    if exc_value is not None and exc_value.args and exc_value.args[0]
+                    else []
+                )
+                self._call_on_interrupt(interrupts)
             # suppress interrupt
             return True
         elif exc_type is None:
             # save final output
             self.output = read_channels(self.channels, self.output_keys)
+
+    def _call_on_interrupt(self, interrupts: list[Interrupt]) -> None:
+        """Call the on_interrupt hook synchronously."""
+        if self.on_interrupt is None:
+            return
+        if iscoroutinefunction(self.on_interrupt):
+            warnings.warn(
+                "Async on_interrupt hook cannot be called from sync graph execution. "
+                "Use a sync function or run the graph with astream/ainvoke.",
+                stacklevel=2,
+            )
+            return
+        self.on_interrupt(interrupts)
 
     def _emit(
         self,
@@ -985,6 +1013,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        on_interrupt: OnInterruptHook | None = None,
     ) -> None:
         super().__init__(
             input,
@@ -1006,6 +1035,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            on_interrupt=on_interrupt,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1161,6 +1191,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        on_interrupt: OnInterruptHook | None = None,
     ) -> None:
         super().__init__(
             input,
@@ -1182,6 +1213,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            on_interrupt=on_interrupt,
         )
         self.stack = AsyncExitStack()
         if checkpointer:
@@ -1257,6 +1289,18 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             },
         )
 
+    _deferred_on_interrupt_args: list[Interrupt] | None = None
+
+    def _call_on_interrupt(self, interrupts: list[Interrupt]) -> None:
+        """Override for async loop: defer async hooks to __aexit__."""
+        if self.on_interrupt is None:
+            return
+        if iscoroutinefunction(self.on_interrupt):
+            # Defer async hooks — they will be awaited in __aexit__
+            self._deferred_on_interrupt_args = interrupts
+        else:
+            self.on_interrupt(interrupts)
+
     # context manager
 
     async def __aenter__(self) -> Self:
@@ -1315,14 +1359,25 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> bool | None:
-        # unwind stack
+        # unwind stack (calls _suppress_interrupt synchronously)
         exit_task = asyncio.create_task(
             self.stack.__aexit__(exc_type, exc_value, traceback)
         )
         try:
-            return await exit_task
+            result = await exit_task
         except asyncio.CancelledError as e:
             # Bubble up the exit task upon cancellation to permit the API
             # consumer to await it before e.g., reusing the DB connection.
             e.args = (*e.args, exit_task)
             raise
+        # Await deferred async on_interrupt hook (set by _call_on_interrupt)
+        if (
+            self._deferred_on_interrupt_args is not None
+            and self.on_interrupt is not None
+        ):
+            interrupts = self._deferred_on_interrupt_args
+            self._deferred_on_interrupt_args = None
+            coro = self.on_interrupt(interrupts)
+            if coro is not None:
+                await coro
+        return result
