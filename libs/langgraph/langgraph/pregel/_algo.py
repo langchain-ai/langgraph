@@ -814,16 +814,27 @@ def prepare_push_task_functional(
         )
         runtime = cast(Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME))
         runtime = runtime.override(store=store)
+        # Get manager callbacks (contains StreamMessagesHandler for streaming)
+        manager_callbacks = manager.get_child(f"graph:step:{step}") if manager else None
+        
+        # Merge call.callbacks with manager_callbacks to ensure StreamMessagesHandler
+        # is propagated to tasks. Previously used 'or' which skipped manager_callbacks
+        # when call.callbacks was truthy (even if empty), breaking token streaming.
+        merged_config = merge_configs(
+            config,
+            {"metadata": metadata},
+            {"callbacks": call.callbacks} if call.callbacks else {},
+            {"callbacks": manager_callbacks} if manager_callbacks else {},
+        )
+        
         return PregelExecutableTask(
             name,
             call.input,
             proc_,
             writes,
             patch_config(
-                merge_configs(config, {"metadata": metadata}),
+                merged_config,
                 run_name=name,
-                callbacks=call.callbacks
-                or (manager.get_child(f"graph:step:{step}") if manager else None),
                 configurable={
                     CONFIG_KEY_TASK_ID: task_id,
                     # deque.extend is thread-safe
