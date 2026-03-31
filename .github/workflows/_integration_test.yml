@@ -41,17 +41,16 @@ jobs:
       - name: Get changed files
         id: changed-files
         if: github.event_name != 'workflow_dispatch'
-        uses: Ana06/get-changed-files@v2.3.0
+        uses: Ana06/get-changed-files@25f79e676e7ea1868813e21465014798211fad8c # v2.3.0
         with:
           filter: "libs/cli/**"
       - name: Set up Python ${{ matrix.python-version }}
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ matrix.python-version }}
-          enable-cache: true
-          cache-suffix: "cli-integration-test"
-          ignore-nothing-to-cache: true
+          enable-cache: "false"
+          working-directory: libs/cli
       - name: Install cli globally
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
         run: pip install -e .
@@ -117,8 +116,8 @@ jobs:
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h
           echo "Finished starting up langgraph-test-h"
           LANGGRAPH_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langgraph'); print(v);")
-          if [ "$LANGGRAPH_VERSION" != "1.0.8" ]; then
-            echo "LANGGRAPH_VERSION != 1.0.8; $LANGGRAPH_VERSION"
+          if [ "$LANGGRAPH_VERSION" != "1.1.2" ]; then
+            echo "LANGGRAPH_VERSION != 1.1.2; $LANGGRAPH_VERSION"
             exit 1
           fi
           LANGCHAIN_OPENAI_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-openai'); print(v);")

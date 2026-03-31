@@ -1,0 +1,402 @@
+# Automatically tag issues as "external" or "internal" based on whether
+# the author is a member of the langchain-ai GitHub organization, and
+# apply contributor tier labels to external contributors based on their
+# merged PR history.
+#
+# PR labeling is handled by tag-external-prs.yml.
+# PR + issue backfill lives in the backfill job below (workflow_dispatch).
+#
+# Setup Requirements:
+# 1. Create a GitHub App with permissions:
+#    - Repository: Issues (write), Pull requests (write)
+#    - Organization: Members (read)
+# 2. Install the app on your organization and this repository
+# 3. Add these repository secrets:
+#    - ORG_MEMBERSHIP_APP_ID: Your app's ID
+#    - ORG_MEMBERSHIP_APP_PRIVATE_KEY: Your app's private key
+#
+# The GitHub App token is required to check private organization membership.
+# Without it, the workflow will fail.
+
+name: Tag External Issues
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      backfill_type:
+        description: "Backfill type (for initial run)"
+        default: "both"
+        type: choice
+        options:
+          - prs
+          - issues
+          - both
+      max_items:
+        description: "Maximum number of items to process"
+        default: "100"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  tag-external:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.ORG_MEMBERSHIP_APP_ID }}
+          private-key: ${{ secrets.ORG_MEMBERSHIP_APP_PRIVATE_KEY }}
+
+      - name: Check if contributor is external
+        if: steps.app-token.outcome == 'success'
+        id: check-membership
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const author = context.payload.sender.login;
+            const senderType = context.payload.sender.type;
+
+            if (senderType === 'Bot') {
+              console.log(`${author} is a Bot — treating as internal`);
+              core.setOutput('is-external', 'false');
+              return;
+            }
+
+            try {
+              const membership = await github.rest.orgs.getMembershipForUser({
+                org: 'langchain-ai',
+                username: author,
+              });
+              const isExternal = membership.data.state !== 'active';
+              console.log(
+                isExternal
+                  ? `${author} has pending membership — treating as external`
+                  : `${author} is an active member of langchain-ai`,
+              );
+              core.setOutput('is-external', isExternal ? 'true' : 'false');
+            } catch (e) {
+              if (e.status === 404) {
+                console.log(`${author} is not a member of langchain-ai`);
+                core.setOutput('is-external', 'true');
+              } else {
+                throw new Error(
+                  `Membership check failed for ${author} (${e.status}): ${e.message}`,
+                );
+              }
+            }
+
+      - name: Apply contributor tier label
+        if: steps.check-membership.outputs.is-external == 'true'
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const issue = context.payload.issue;
+            const author = issue.user.login;
+            const issueNumber = issue.number;
+
+            const TRUSTED_THRESHOLD = 5;
+            const LABEL_COLOR = 'b76e79';
+
+            let mergedCount;
+            try {
+              const result = await github.rest.search.issuesAndPullRequests({
+                q: `repo:${owner}/${repo} is:pr is:merged author:"${author}"`,
+                per_page: 1,
+              });
+              mergedCount = result?.data?.total_count;
+            } catch (error) {
+              if (error?.status !== 422) throw error;
+              core.warning(`Search failed for ${author}; skipping tier label.`);
+              return;
+            }
+
+            if (mergedCount == null) {
+              core.warning(`Search response missing total_count for ${author}; skipping tier label.`);
+              return;
+            }
+
+            const tierLabel = mergedCount >= TRUSTED_THRESHOLD ? 'trusted-contributor' : null;
+
+            if (tierLabel) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name: tierLabel });
+              } catch (e) {
+                if (e.status !== 404) throw e;
+                try {
+                  await github.rest.issues.createLabel({ owner, repo, name: tierLabel, color: LABEL_COLOR });
+                } catch (createErr) {
+                  if (createErr.status !== 422) throw createErr;
+                }
+              }
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: issueNumber, labels: [tierLabel],
+              });
+              console.log(`Applied '${tierLabel}' to #${issueNumber} (${mergedCount} merged PRs)`);
+            } else {
+              console.log(`No tier label for ${author} (${mergedCount} merged PRs)`);
+            }
+
+      - name: Add external label
+        if: steps.check-membership.outputs.is-external == 'true'
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.issue.number;
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number, labels: ['external'],
+            });
+            console.log(`Added 'external' label to issue #${issue_number}`);
+
+      - name: Add internal label
+        if: steps.check-membership.outputs.is-external == 'false'
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.issue.number;
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number, labels: ['internal'],
+            });
+            console.log(`Added 'internal' label to issue #${issue_number}`);
+
+  backfill:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.ORG_MEMBERSHIP_APP_ID }}
+          private-key: ${{ secrets.ORG_MEMBERSHIP_APP_PRIVATE_KEY }}
+
+      - name: Backfill labels
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const rawMax = '${{ inputs.max_items }}';
+            const maxItems = parseInt(rawMax, 10);
+            if (isNaN(maxItems) || maxItems <= 0) {
+              core.setFailed(`Invalid max_items: "${rawMax}" — must be a positive integer`);
+              return;
+            }
+            const backfillType = '${{ inputs.backfill_type }}';
+
+            const TRUSTED_THRESHOLD = 5;
+            const LABEL_COLOR = 'b76e79';
+
+            const tierLabels = ['trusted-contributor'];
+
+            // ── Helpers ─────────────────────────────────────────────────
+
+            async function ensureLabel(name) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (e) {
+                if (e.status !== 404) throw e;
+                try {
+                  await github.rest.issues.createLabel({ owner, repo, name, color: LABEL_COLOR });
+                } catch (createErr) {
+                  if (createErr.status !== 422) throw createErr;
+                }
+              }
+            }
+
+            async function checkMembership(author, userType) {
+              if (userType === 'Bot') {
+                console.log(`${author} is a Bot — treating as internal`);
+                return { isExternal: false };
+              }
+              try {
+                const membership = await github.rest.orgs.getMembershipForUser({
+                  org: 'langchain-ai',
+                  username: author,
+                });
+                const isExternal = membership.data.state !== 'active';
+                console.log(
+                  isExternal
+                    ? `${author} has pending membership — treating as external`
+                    : `${author} is an active member of langchain-ai`,
+                );
+                return { isExternal };
+              } catch (e) {
+                if (e.status === 404) {
+                  console.log(`${author} is not a member of langchain-ai`);
+                  return { isExternal: true };
+                }
+                throw new Error(
+                  `Membership check failed for ${author} (${e.status}): ${e.message}`,
+                );
+              }
+            }
+
+            async function getContributorInfo(contributorCache, author, userType) {
+              if (contributorCache.has(author)) return contributorCache.get(author);
+
+              const { isExternal } = await checkMembership(author, userType);
+
+              let mergedCount = null;
+              if (isExternal) {
+                try {
+                  const result = await github.rest.search.issuesAndPullRequests({
+                    q: `repo:${owner}/${repo} is:pr is:merged author:"${author}"`,
+                    per_page: 1,
+                  });
+                  mergedCount = result?.data?.total_count ?? null;
+                } catch (e) {
+                  if (e?.status !== 422) throw e;
+                  core.warning(`Search failed for ${author}; skipping tier.`);
+                }
+              }
+
+              const info = { isExternal, mergedCount };
+              contributorCache.set(author, info);
+              return info;
+            }
+
+            // ── Setup ────────────────────────────────────────────────────
+
+            for (const name of tierLabels) {
+              await ensureLabel(name);
+            }
+
+            const contributorCache = new Map();
+
+            let processed = 0;
+            let failures = 0;
+
+            // ── Backfill PRs ─────────────────────────────────────────────
+
+            if (backfillType === 'prs' || backfillType === 'both') {
+              const prs = await github.paginate(github.rest.pulls.list, {
+                owner, repo, state: 'open', per_page: 100,
+              });
+
+              for (const pr of prs) {
+                if (processed >= maxItems) break;
+
+                try {
+                  const author = pr.user.login;
+                  const info = await getContributorInfo(contributorCache, author, pr.user.type);
+
+                  const labels = [info.isExternal ? 'external' : 'internal'];
+                  if (info.isExternal && info.mergedCount != null && info.mergedCount >= TRUSTED_THRESHOLD) {
+                    labels.push('trusted-contributor');
+                  }
+
+                  // Ensure all labels exist before batch add
+                  for (const name of labels) {
+                    await ensureLabel(name);
+                  }
+
+                  // Remove stale tier labels
+                  const currentLabels = (await github.paginate(
+                    github.rest.issues.listLabelsOnIssue,
+                    { owner, repo, issue_number: pr.number, per_page: 100 },
+                  )).map(l => l.name ?? '');
+                  for (const name of currentLabels) {
+                    if (tierLabels.includes(name) && !labels.includes(name)) {
+                      try {
+                        await github.rest.issues.removeLabel({
+                          owner, repo, issue_number: pr.number, name,
+                        });
+                      } catch (e) {
+                        if (e.status !== 404) throw e;
+                      }
+                    }
+                  }
+
+                  await github.rest.issues.addLabels({
+                    owner, repo, issue_number: pr.number, labels,
+                  });
+                  console.log(`PR #${pr.number} (${author}): ${labels.join(', ')}`);
+                  processed++;
+                } catch (e) {
+                  failures++;
+                  core.warning(`Failed to process PR #${pr.number}: ${e.message}`);
+                }
+              }
+            }
+
+            // ── Backfill issues ──────────────────────────────────────────
+
+            if (backfillType === 'issues' || backfillType === 'both') {
+              const issues = await github.paginate(github.rest.issues.listForRepo, {
+                owner, repo, state: 'open', per_page: 100,
+              });
+
+              for (const issue of issues) {
+                if (processed >= maxItems) break;
+                if (issue.pull_request) continue;
+
+                try {
+                  const author = issue.user.login;
+                  const info = await getContributorInfo(contributorCache, author, issue.user.type);
+
+                  const labels = [info.isExternal ? 'external' : 'internal'];
+                  if (info.isExternal && info.mergedCount != null && info.mergedCount >= TRUSTED_THRESHOLD) {
+                    labels.push('trusted-contributor');
+                  }
+
+                  // Ensure all labels exist before batch add
+                  for (const name of labels) {
+                    await ensureLabel(name);
+                  }
+
+                  // Remove stale tier labels
+                  const currentLabels = (await github.paginate(
+                    github.rest.issues.listLabelsOnIssue,
+                    { owner, repo, issue_number: issue.number, per_page: 100 },
+                  )).map(l => l.name ?? '');
+                  for (const name of currentLabels) {
+                    if (tierLabels.includes(name) && !labels.includes(name)) {
+                      try {
+                        await github.rest.issues.removeLabel({
+                          owner, repo, issue_number: issue.number, name,
+                        });
+                      } catch (e) {
+                        if (e.status !== 404) throw e;
+                      }
+                    }
+                  }
+
+                  await github.rest.issues.addLabels({
+                    owner, repo, issue_number: issue.number, labels,
+                  });
+                  console.log(`Issue #${issue.number} (${author}): ${labels.join(', ')}`);
+                  processed++;
+                } catch (e) {
+                  failures++;
+                  core.warning(`Failed to process issue #${issue.number}: ${e.message}`);
+                }
+              }
+            }
+
+            console.log(`\nBackfill complete. Processed ${processed} items, ${failures} failures. ${contributorCache.size} unique authors.`);

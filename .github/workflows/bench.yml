@@ -18,15 +18,15 @@ jobs:
       - uses: actions/checkout@v6
       - id: files
         name: Get changed files
-        uses: Ana06/get-changed-files@v2.3.0
+        uses: Ana06/get-changed-files@25f79e676e7ea1868813e21465014798211fad8c # v2.3.0
         with:
           format: json
       - name: Set up Python 3.11
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: "3.11"
-          enable-cache: true
           cache-suffix: "bench"
+          working-directory: libs/langgraph
       - name: Install dependencies
         run: uv sync --group test
       - name: Download baseline
