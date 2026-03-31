@@ -290,24 +290,29 @@ def test_tool_node_error_handling_default_invocation() -> None:
 
 def test_tool_node_error_handling_default_exception() -> None:
     tn = ToolNode([tool1])
-    with pytest.raises(ValueError):
-        tn.invoke(
-            {
-                "messages": [
-                    AIMessage(
-                        "hi?",
-                        tool_calls=[
-                            {
-                                "name": "tool1",
-                                "args": {"some_val": 0, "some_other_val": "foo"},
-                                "id": "some id",
-                            },
-                        ],
-                    )
-                ]
-            },
-            config=_create_config_with_runtime(),
-        )
+    result = tn.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 0, "some_other_val": "foo"},
+                            "id": "some id",
+                        },
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    assert len(result["messages"]) == 1
+    assert result["messages"][0].type == "tool"
+    assert result["messages"][0].status == "error"
+    assert "ValueError" in result["messages"][0].content
+    assert "Test error" in result["messages"][0].content
+    assert result["messages"][0].tool_call_id == "some id"
 
 
 async def test_tool_node_error_handling() -> None:
@@ -2008,3 +2013,30 @@ async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() 
     tool_message = result["messages"][-1]
     assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_2"
     assert tool_message.tool_call_id == "call_dynamic_2"
+
+def test_tool_node_handles_generic_errors_by_default():
+    """Regression test for #6486: ToolNode should handle all errors by default."""
+
+    @dec_tool
+    def exploding_tool():
+        """A tool that always raises an exception."""
+        raise ValueError("boom")
+
+    tool_node = ToolNode([exploding_tool])
+
+    ai_msg = AIMessage(
+        content="calling tool",
+        tool_calls=[{
+            "name": "exploding_tool",
+            "args": {},
+            "id": "test-call"
+        }]
+    )
+
+    # This should not raise, it should return a ToolMessage with the error
+    result = tool_node.invoke({"messages": [ai_msg]})
+    messages = result["messages"]
+    assert len(messages) == 1
+    assert "ValueError" in messages[0].content
+    assert "boom" in messages[0].content
+    assert messages[0].status == "error"
