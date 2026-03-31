@@ -136,7 +136,7 @@ from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
-from langgraph.runtime import DEFAULT_RUNTIME, Runtime
+from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
 from langgraph.types import (
     All,
     CachePolicy,
@@ -2572,6 +2572,8 @@ class Pregel(
 
         config = ensure_config(self.config, config)
         callback_manager = get_callback_manager_for_config(config)
+        if "ls_integration" not in callback_manager.metadata:
+            callback_manager.add_metadata({"ls_integration": "langgraph"})
         run_manager = callback_manager.on_chain_start(
             None,
             input,
@@ -2648,6 +2650,7 @@ class Pregel(
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
+                execution_info=ExecutionInfo(),
             )
             parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)
@@ -2908,6 +2911,8 @@ class Pregel(
 
         config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
+        if "ls_integration" not in callback_manager.metadata:
+            callback_manager.add_metadata({"ls_integration": "langgraph"})
         run_manager = await callback_manager.on_chain_start(
             None,
             input,
@@ -3014,6 +3019,7 @@ class Pregel(
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
+                execution_info=ExecutionInfo(),
             )
             parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)

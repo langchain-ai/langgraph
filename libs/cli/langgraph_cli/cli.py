@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 import click
 import click.exceptions
 from click import secho
-from dotenv import dotenv_values
+from dotenv import dotenv_values, set_key
 
 import langgraph_cli.config
 import langgraph_cli.docker
@@ -31,7 +31,11 @@ from langgraph_cli.helpers import format_log_entry, level_fg, resolve_deployment
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
-from langgraph_cli.util import format_deployments_table, warn_non_wolfi_distro
+from langgraph_cli.util import (
+    format_deployments_table,
+    format_revisions_table,
+    warn_non_wolfi_distro,
+)
 from langgraph_cli.version import __version__
 
 RESERVED_ENV_VARS = frozenset(
@@ -90,14 +94,13 @@ _API_KEY_ENV_NAMES = (
 _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
 
 
-def _parse_env_from_config(
+def _resolve_env_path(
     config_json: dict, config_path: pathlib.Path
-) -> dict[str, str]:
-    """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
+) -> pathlib.Path | None:
+    """Return the .env file path implied by the config, or None for inline dicts."""
     env_field = config_json.get("env")
-    # validate_config_file will default env to {}
     if isinstance(env_field, dict) and env_field:
-        return {str(k): str(v) for k, v in env_field.items()}
+        return None
     if isinstance(env_field, str):
         env_path = (config_path.parent / env_field).resolve()
         if not env_path.exists():
@@ -105,9 +108,21 @@ def _parse_env_from_config(
                 f"Warning: env file '{env_field}' specified in langgraph.json not found.",
                 fg="yellow",
             )
-            return {}
-    else:
-        env_path = pathlib.Path.cwd() / ".env"
+            return None
+        return env_path
+    return pathlib.Path.cwd() / ".env"
+
+
+def _parse_env_from_config(
+    config_json: dict, config_path: pathlib.Path
+) -> dict[str, str]:
+    """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
+    env_field = config_json.get("env")
+    if isinstance(env_field, dict) and env_field:
+        return {str(k): str(v) for k, v in env_field.items()}
+    env_path = _resolve_env_path(config_json, config_path)
+    if env_path is None:
+        return {}
     return {k: v for k, v in dotenv_values(env_path).items() if v is not None}
 
 
@@ -331,25 +346,25 @@ class NestedHelpGroup(click.Group):
         self, ctx: click.Context, formatter: click.HelpFormatter
     ) -> None:
         command_entries: list[tuple[str, click.Command]] = []
-        # Collect the top-level commands first, then append one level of nested
-        # subcommands using names like "deploy list" so they show up in the
-        # top-level help output.
-        for command_name in self.list_commands(ctx):
-            command = self.get_command(ctx, command_name)
-            if command is None or command.hidden:
-                continue
-            command_entries.append((command_name, command))
-            if isinstance(command, click.Group):
-                # Build a child context so Click resolves the subcommands the same
-                # way it would for the nested group itself.
-                sub_ctx = click.Context(command, info_name=command_name, parent=ctx)
-                for subcommand_name in command.list_commands(sub_ctx):
-                    subcommand = command.get_command(sub_ctx, subcommand_name)
-                    if subcommand is None or subcommand.hidden:
-                        continue
-                    command_entries.append(
-                        (f"{command_name} {subcommand_name}", subcommand)
+
+        def collect_commands(
+            group: click.Group, parent_ctx: click.Context, prefix: str = ""
+        ) -> None:
+            for command_name in group.list_commands(parent_ctx):
+                command = group.get_command(parent_ctx, command_name)
+                if command is None or command.hidden:
+                    continue
+                qualified_name = f"{prefix} {command_name}" if prefix else command_name
+                command_entries.append((qualified_name, command))
+                if isinstance(command, click.Group):
+                    sub_ctx = click.Context(
+                        command,
+                        info_name=qualified_name,
+                        parent=parent_ctx,
                     )
+                    collect_commands(command, sub_ctx, qualified_name)
+
+        collect_commands(self, ctx)
 
         # Compute the available width for help text up front so we can truncate
         # descriptions before handing them to Click. That keeps each command on
@@ -373,13 +388,30 @@ class DeployGroup(NestedHelpGroup):
     """Group that treats leading '-' args as passthrough docker flags."""
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        """Treat leading option-like subcommand tokens as passthrough args.
+
+        Click stores the unresolved nested command token on the context after
+        ``Group.parse_args()`` runs, but the backing attribute changed across
+        supported Click versions. Click 8.1.x stores the value directly on
+        ``protected_args``, while Click 8.2+ stores it on ``_protected_args``
+        and exposes ``protected_args`` as a deprecated compatibility property.
+        Since this package allows ``click>=8.1.7``, we need to check both
+        names to support the full version range without relying on one
+        version-specific internal detail.
+        """
         result = super().parse_args(ctx, args)
-        if ctx._protected_args and ctx._protected_args[0].startswith("-"):
+        protected_args = ctx.__dict__.get("protected_args")
+        if protected_args is None:
+            protected_args = ctx.__dict__.get("_protected_args", [])
+        if protected_args and protected_args[0].startswith("-"):
             # Click stores the would-be subcommand in _protected_args; if it looks
             # like an option (e.g. --build-arg) treat it as passthrough docker
             # args instead of insisting on a nested command.
-            ctx.args = [*ctx._protected_args, *ctx.args]
-            ctx._protected_args = []
+            ctx.args = [*protected_args, *ctx.args]
+            if "protected_args" in ctx.__dict__:
+                ctx.protected_args = []
+            elif "_protected_args" in ctx.__dict__:
+                ctx._protected_args = []
             return ctx.args
         return result
 
@@ -764,7 +796,7 @@ def _deploy_base_options(
 @cli.group(
     cls=DeployGroup,
     help=(
-        "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
+        "[Beta] Build and deploy a LangGraph image to LangSmith Deployment.\n\n"
         "This command is in beta and under active development. "
         "Expect frequent updates and improvements.\n\n"
         "Run from the root of your LangGraph project (where langgraph.json "
@@ -786,6 +818,13 @@ def deploy(ctx: click.Context, **_: object):
     docker_build_args = tuple(ctx.args)
     ctx.args = []  # Prevent Click from re-processing passthrough args later.
     return ctx.forward(_deploy, docker_build_args=docker_build_args)
+
+
+@deploy.group(
+    "revisions", cls=NestedHelpGroup, help="[Beta] Manage deployment revisions."
+)
+def deploy_revisions() -> None:
+    pass
 
 
 @_deploy_base_options()
@@ -823,7 +862,15 @@ def _deploy(
     if not deployment_id and not name:
         default_name = _normalize_image_name(pathlib.Path.cwd().name)
         name = click.prompt("Deployment name", default=default_name)
+        # Persist so the user doesn't have to type it again next time
+        env_path = _resolve_env_path(config_json, config)
+        if env_path is not None:
+            set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
+            click.echo(f"Saved deployment name to {env_path}")
 
+    # Remove deployment name before converting to secrets — it's consumed above
+    # and is in RESERVED_ENV_VARS, so _secrets_from_env would warn about it.
+    env_vars.pop(_DEPLOYMENT_NAME_ENV, None)
     secrets = _secrets_from_env(env_vars)
 
     # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
@@ -1122,7 +1169,7 @@ def _deploy(
                 )
             else:
                 click.secho(
-                    "   Check status in the LangSmith Deployments dashboard.",
+                    "   Check status in the LangSmith Deployment dashboard.",
                     fg="yellow",
                 )
 
@@ -1165,22 +1212,42 @@ def _call_host_backend_with_optional_tenant(
     in-place so all subsequent calls through the same instance are
     tenant-aware.
     """
-    try:
-        return operation(client)
-    except HostBackendError as err:
-        if err.status_code == 403 and "requires workspace specification" in err.message:
-            click.secho(
-                "Your API key is org-scoped and requires a workspace ID.",
-                fg="yellow",
-            )
-            click.secho(
-                "Find your workspace ID in LangSmith under Settings > Workspaces.",
-                fg="yellow",
-            )
-            tenant_id = click.prompt("Workspace ID")
-            client._client.headers["X-Tenant-ID"] = tenant_id
+    prompted_for_tenant = False
+
+    while True:
+        try:
             return operation(client)
-        raise
+        except HostBackendError as err:
+            if (
+                not prompted_for_tenant
+                and err.status_code == 403
+                and "requires workspace specification" in err.message
+            ):
+                click.secho(
+                    "Your API key is org-scoped and requires a workspace ID.",
+                    fg="yellow",
+                )
+                click.secho(
+                    "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                    fg="yellow",
+                )
+                client._client.headers["X-Tenant-ID"] = click.prompt("Workspace ID")
+                prompted_for_tenant = True
+                continue
+            if err.status_code == 403 and "not enabled" in err.message.lower():
+                from urllib.parse import urlparse
+
+                smith_host = "smith.langchain.com"
+                parsed = urlparse(client._base_url)
+                if (parsed.hostname or "").startswith("eu."):
+                    smith_host = "eu.smith.langchain.com"
+                raise HostBackendError(
+                    "LangSmith Deployment is not enabled for this organization. "
+                    f"Enable it at https://{smith_host}/host/deployments"
+                    " (ensure this matches the organization for your API key).",
+                    status_code=403,
+                ) from None
+            raise
 
 
 @OPT_HOST_API_KEY
@@ -1203,6 +1270,39 @@ def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -
         click.echo("No deployments found.")
         return
     click.echo(format_deployments_table(deployments))
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--limit",
+    type=int,
+    default=10,
+    show_default=True,
+    help="Maximum number of revisions to return.",
+)
+@click.argument("deployment_id")
+@deploy_revisions.command(
+    "list",
+    help=(
+        "[Beta] List revisions for a LangSmith Deployment.\n\n"
+        "Use the `deploy list` command to list deployment IDs."
+    ),
+)
+def deploy_revisions_list(
+    api_key: str | None, host_url: str | None, limit: int, deployment_id: str
+) -> None:
+    client = _create_host_backend_client(host_url, api_key)
+    response = _call_host_backend_with_optional_tenant(
+        client,
+        lambda c: c.list_revisions(deployment_id, limit=limit),
+    )
+    resources = response.get("resources", []) if isinstance(response, dict) else []
+    revisions = [item for item in resources if isinstance(item, dict)]
+    if not revisions:
+        click.echo(f"No revisions found for deployment {deployment_id}.")
+        return
+    click.echo(format_revisions_table(revisions))
 
 
 @OPT_HOST_API_KEY

@@ -6885,14 +6885,17 @@ def test_tags_stream_mode_messages() -> None:
         (
             _AnyIdAIMessageChunk(content="foo", chunk_position="last"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 1,
                 "langgraph_node": "call_model",
                 "langgraph_triggers": ("branch:to:call_model",),
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),
+                "_type": "generic-fake-chat-model",
                 "ls_provider": "genericfakechatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
                 "tags": ["meow"],
             },
         )
@@ -6928,6 +6931,7 @@ def test_stream_mode_messages_command() -> None:
         (
             _AnyIdHumanMessage(content="foo"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 1,
                 "langgraph_node": "my_node",
                 "langgraph_triggers": ("branch:to:my_node",),
@@ -6938,6 +6942,7 @@ def test_stream_mode_messages_command() -> None:
         (
             _AnyIdHumanMessage(content="bar"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 2,
                 "langgraph_node": "my_other_node",
                 "langgraph_triggers": ("branch:to:my_other_node",),
@@ -6948,6 +6953,7 @@ def test_stream_mode_messages_command() -> None:
         (
             _AnyIdHumanMessage(content="baz"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 3,
                 "langgraph_node": "my_last_node",
                 "langgraph_triggers": ("branch:to:my_last_node",),
