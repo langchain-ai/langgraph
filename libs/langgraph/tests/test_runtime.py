@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -6,7 +7,7 @@ from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.runtime import Runtime, get_runtime
+from langgraph.runtime import ExecutionInfo, Runtime, ServerInfo, UserInfo, get_runtime
 
 
 def test_injected_runtime() -> None:
@@ -389,3 +390,202 @@ def test_context_coercion_pydantic_validation_errors() -> None:
         compiled.invoke(
             {"message": "test"}, context={"api_key": "sk_test", "timeout": "not_an_int"}
         )
+
+
+# --- ExecutionInfo tests ---
+
+
+def test_execution_info_defaults() -> None:
+    info = ExecutionInfo()
+    assert info.thread_id is None
+    assert info.checkpoint_id is None
+    assert info.checkpoint_ns == ""
+    assert info.task_id is None
+    assert info.run_id is None
+    assert info.node_attempt == 1
+    assert info.node_first_attempt_time is None
+
+
+def test_execution_info_patch() -> None:
+    info = ExecutionInfo(thread_id="t1", run_id="r1")
+    patched = info.patch(node_attempt=3, task_id="tk1")
+    assert patched.thread_id == "t1"
+    assert patched.run_id == "r1"
+    assert patched.node_attempt == 3
+    assert patched.task_id == "tk1"
+    # original unchanged
+    assert info.node_attempt == 1
+    assert info.task_id is None
+
+
+def test_execution_info_frozen() -> None:
+    info = ExecutionInfo(thread_id="t1")
+    with pytest.raises(AttributeError):
+        info.thread_id = "t2"  # type: ignore[misc]
+
+
+def test_execution_info_populated_in_node() -> None:
+    """ExecutionInfo fields are populated from config in node execution."""
+
+    class State(TypedDict):
+        result: str
+
+    captured: dict[str, Any] = {}
+
+    def my_node(state: State, runtime: Runtime) -> dict[str, Any]:
+        info = runtime.execution_info
+        captured["thread_id"] = info.thread_id
+        captured["run_id"] = info.run_id
+        captured["node_attempt"] = info.node_attempt
+        captured["node_first_attempt_time"] = info.node_first_attempt_time
+        return {"result": "ok"}
+
+    from langgraph.checkpoint.memory import MemorySaver
+
+    graph = (
+        StateGraph(State)
+        .add_node("my_node", my_node)
+        .add_edge(START, "my_node")
+        .compile(checkpointer=MemorySaver())
+    )
+    config = {"configurable": {"thread_id": "thread-abc"}}
+    result = graph.invoke({"result": ""}, config=config)
+
+    assert result["result"] == "ok"
+    assert captured["thread_id"] == "thread-abc"
+    assert captured["node_attempt"] == 1
+    assert isinstance(captured["node_first_attempt_time"], float)
+
+
+@pytest.mark.anyio
+async def test_execution_info_populated_in_node_async() -> None:
+    """ExecutionInfo fields are populated from config in async node execution."""
+
+    class State(TypedDict):
+        result: str
+
+    captured: dict[str, Any] = {}
+
+    async def my_node(state: State, runtime: Runtime) -> dict[str, Any]:
+        info = runtime.execution_info
+        captured["thread_id"] = info.thread_id
+        captured["node_attempt"] = info.node_attempt
+        captured["node_first_attempt_time"] = info.node_first_attempt_time
+        return {"result": "ok"}
+
+    from langgraph.checkpoint.memory import MemorySaver
+
+    graph = (
+        StateGraph(State)
+        .add_node("my_node", my_node)
+        .add_edge(START, "my_node")
+        .compile(checkpointer=MemorySaver())
+    )
+    config = {"configurable": {"thread_id": "thread-xyz"}}
+    result = await graph.ainvoke({"result": ""}, config=config)
+
+    assert result["result"] == "ok"
+    assert captured["thread_id"] == "thread-xyz"
+    assert captured["node_attempt"] == 1
+    assert isinstance(captured["node_first_attempt_time"], float)
+
+
+# --- UserInfo protocol tests ---
+
+
+def test_user_info_protocol() -> None:
+    """BaseUser from SDK satisfies UserInfo protocol structurally."""
+
+    class MyUser:
+        @property
+        def identity(self) -> str:
+            return "user-123"
+
+        @property
+        def display_name(self) -> str:
+            return "Alice"
+
+        @property
+        def is_authenticated(self) -> bool:
+            return True
+
+        @property
+        def permissions(self) -> Sequence[str]:
+            return ["read", "write"]
+
+    user = MyUser()
+    assert isinstance(user, UserInfo)
+    assert user.identity == "user-123"
+    assert user.display_name == "Alice"
+    assert user.is_authenticated is True
+    assert user.permissions == ["read", "write"]
+
+
+# --- ServerInfo tests ---
+
+
+def test_server_info() -> None:
+    info = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
+    assert info.assistant_id == "asst-1"
+    assert info.graph_id == "graph-1"
+    assert info.user is None
+
+
+def test_server_info_with_user() -> None:
+    class MyUser:
+        @property
+        def identity(self) -> str:
+            return "user-1"
+
+        @property
+        def display_name(self) -> str:
+            return "Bob"
+
+        @property
+        def is_authenticated(self) -> bool:
+            return True
+
+        @property
+        def permissions(self) -> Sequence[str]:
+            return []
+
+    user = MyUser()
+    info = ServerInfo(assistant_id="asst-1", graph_id="graph-1", user=user)
+    assert info.user is not None
+    assert info.user.identity == "user-1"
+
+
+def test_server_info_frozen() -> None:
+    info = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
+    with pytest.raises(AttributeError):
+        info.assistant_id = "asst-2"  # type: ignore[misc]
+
+
+# --- Runtime server_info tests ---
+
+
+def test_runtime_server_info_default_none() -> None:
+    runtime = Runtime()
+    assert runtime.server_info is None
+
+
+def test_runtime_server_info_set() -> None:
+    si = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
+    runtime = Runtime(server_info=si)
+    assert runtime.server_info is si
+
+
+def test_runtime_merge_preserves_server_info() -> None:
+    si = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
+    runtime1 = Runtime(server_info=si)
+    runtime2 = Runtime()
+
+    # server_info from self is preserved when other has None
+    merged = runtime1.merge(runtime2)
+    assert merged.server_info is si
+
+    # server_info from other takes precedence
+    si2 = ServerInfo(assistant_id="asst-2", graph_id="graph-2")
+    runtime3 = Runtime(server_info=si2)
+    merged2 = runtime1.merge(runtime3)
+    assert merged2.server_info is si2

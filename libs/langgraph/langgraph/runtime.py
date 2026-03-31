@@ -1,21 +1,44 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any, Generic, NamedTuple, cast
+from typing import Any, Generic, cast, runtime_checkable
 
 from langgraph.store.base import BaseStore
-from typing_extensions import TypedDict, Unpack
+from typing_extensions import Protocol, TypedDict, Unpack
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.config import get_config
 from langgraph.types import _DC_KWARGS, StreamWriter
 from langgraph.typing import ContextT
 
-__all__ = ("ExecutionInfo", "Runtime", "get_runtime")
+__all__ = (
+    "ExecutionInfo",
+    "Runtime",
+    "ServerInfo",
+    "UserInfo",
+    "get_runtime",
+)
 
 
-class ExecutionInfo(NamedTuple):
+@dataclass(frozen=True)
+class ExecutionInfo:
     """Read-only execution info/metadata for the execution of current thread/run/node."""
+
+    thread_id: str | None = None
+    """The thread ID for the current execution, if any."""
+
+    checkpoint_id: str | None = None
+    """The checkpoint ID for the current execution, if any."""
+
+    checkpoint_ns: str = ""
+    """The checkpoint namespace for the current execution."""
+
+    task_id: str | None = None
+    """The task ID for the current execution, if any."""
+
+    run_id: str | None = None
+    """The run ID for the current execution, if any."""
 
     node_attempt: int = 1
     """Current node execution attempt number (1-indexed)."""
@@ -25,7 +48,50 @@ class ExecutionInfo(NamedTuple):
 
     def patch(self, **overrides: Any) -> ExecutionInfo:
         """Return a new execution info object with selected fields replaced."""
-        return self._replace(**overrides)
+        return replace(self, **overrides)
+
+
+@runtime_checkable
+class UserInfo(Protocol):
+    """Protocol for authenticated user information.
+
+    Mirrors `BaseUser` from `langgraph_sdk` without creating a dependency.
+    Any object satisfying this protocol (including SDK's `BaseUser`) can be used.
+    """
+
+    @property
+    def identity(self) -> str:
+        """The unique identifier for the user."""
+        ...
+
+    @property
+    def display_name(self) -> str:
+        """The display name of the user."""
+        ...
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Whether the user is authenticated."""
+        ...
+
+    @property
+    def permissions(self) -> Sequence[str]:
+        """The permissions associated with the user."""
+        ...
+
+
+@dataclass(frozen=True)
+class ServerInfo:
+    """Metadata injected by LangGraph Server. None when running OSS."""
+
+    assistant_id: str
+    """The assistant ID for the current execution."""
+
+    graph_id: str
+    """The graph ID for the current execution."""
+
+    user: UserInfo | None = None
+    """The authenticated user, if any."""
 
 
 def _no_op_stream_writer(_: Any) -> None: ...
@@ -37,6 +103,7 @@ class _RuntimeOverrides(TypedDict, Generic[ContextT], total=False):
     stream_writer: StreamWriter
     previous: Any
     execution_info: ExecutionInfo
+    server_info: ServerInfo | None
 
 
 @dataclass(**_DC_KWARGS)
@@ -133,6 +200,9 @@ class Runtime(Generic[ContextT]):
     execution_info: ExecutionInfo = field(default_factory=ExecutionInfo)
     """Read-only execution information/metadata for the current node run."""
 
+    server_info: ServerInfo | None = field(default=None)
+    """Metadata injected by LangGraph Server. None when running OSS."""
+
     def merge(self, other: Runtime[ContextT]) -> Runtime[ContextT]:
         """Merge two runtimes together.
 
@@ -146,6 +216,7 @@ class Runtime(Generic[ContextT]):
             else self.stream_writer,
             previous=self.previous if other.previous is None else other.previous,
             execution_info=other.execution_info,
+            server_info=other.server_info or self.server_info,
         )
 
     def override(
