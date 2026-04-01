@@ -5,7 +5,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Generic, cast
 
 from langgraph.store.base import BaseStore
-from typing_extensions import TypedDict, Unpack
+from typing_extensions import NotRequired, TypedDict, Unpack
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.config import get_config
@@ -16,12 +16,12 @@ __all__ = (
     "ExecutionInfo",
     "Runtime",
     "ServerInfo",
-    "UserInfo",
+    "User",
     "get_runtime",
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ExecutionInfo:
     """Read-only execution info/metadata for the execution of current thread/run/node."""
 
@@ -51,26 +51,26 @@ class ExecutionInfo:
         return replace(self, **overrides)
 
 
-class UserInfo(TypedDict, total=False):
+class User(TypedDict):
     """Authenticated user information from LangGraph Server.
 
     Populated from `config["configurable"]["langgraph_auth_user"]`.
     """
 
-    identity: str
+    identity: NotRequired[str]
     """The unique identifier for the user."""
 
-    display_name: str
+    display_name: NotRequired[str]
     """The display name of the user."""
 
-    is_authenticated: bool
+    is_authenticated: NotRequired[bool]
     """Whether the user is authenticated."""
 
-    permissions: Sequence[str]
+    permissions: NotRequired[Sequence[str]]
     """The permissions associated with the user."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ServerInfo:
     """Metadata injected by LangGraph Server. None when running OSS."""
 
@@ -80,20 +80,20 @@ class ServerInfo:
     graph_id: str
     """The graph ID for the current execution."""
 
-    user: UserInfo | None = None
+    user: User | None = None
     """The authenticated user, if any."""
 
 
 def _no_op_stream_writer(_: Any) -> None: ...
 
 
-class _RuntimeOverrides(TypedDict, Generic[ContextT], total=False):
-    context: ContextT
-    store: BaseStore | None
-    stream_writer: StreamWriter
-    previous: Any
-    execution_info: ExecutionInfo
-    server_info: ServerInfo | None
+class _RuntimeOverrides(TypedDict, Generic[ContextT]):
+    context: NotRequired[ContextT]
+    store: NotRequired[BaseStore | None]
+    stream_writer: NotRequired[StreamWriter]
+    previous: NotRequired[Any]
+    execution_info: NotRequired[ExecutionInfo]
+    server_info: NotRequired[ServerInfo | None]
 
 
 @dataclass(**_DC_KWARGS)

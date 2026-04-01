@@ -6,7 +6,7 @@ from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.runtime import ExecutionInfo, Runtime, ServerInfo, UserInfo, get_runtime
+from langgraph.runtime import ExecutionInfo, Runtime, ServerInfo, User, get_runtime
 
 
 def test_injected_runtime() -> None:
@@ -489,12 +489,12 @@ async def test_execution_info_populated_in_node_async() -> None:
     assert isinstance(captured["node_first_attempt_time"], float)
 
 
-# --- UserInfo tests ---
+# --- User tests ---
 
 
 def test_user_info_typed_dict() -> None:
-    """UserInfo is a simple TypedDict."""
-    user: UserInfo = {
+    """User is a simple TypedDict."""
+    user: User = {
         "identity": "user-123",
         "display_name": "Alice",
         "is_authenticated": True,
@@ -507,8 +507,8 @@ def test_user_info_typed_dict() -> None:
 
 
 def test_user_info_partial() -> None:
-    """UserInfo fields are all optional (total=False)."""
-    user: UserInfo = {"identity": "user-123"}
+    """User fields are all optional (total=False)."""
+    user: User = {"identity": "user-123"}
     assert user["identity"] == "user-123"
     assert "display_name" not in user
 
@@ -524,7 +524,7 @@ def test_server_info() -> None:
 
 
 def test_server_info_with_user() -> None:
-    user: UserInfo = {"identity": "user-1", "display_name": "Bob"}
+    user: User = {"identity": "user-1", "display_name": "Bob"}
     info = ServerInfo(assistant_id="asst-1", graph_id="graph-1", user=user)
     assert info.user is not None
     assert info.user["identity"] == "user-1"

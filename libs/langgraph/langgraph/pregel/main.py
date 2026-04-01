@@ -141,7 +141,7 @@ from langgraph.runtime import (
     ExecutionInfo,
     Runtime,
     ServerInfo,
-    UserInfo,
+    User,
 )
 from langgraph.types import (
     All,
@@ -3672,8 +3672,8 @@ def _build_server_info(
 
     # Read authenticated user from configurable (set by LangGraph Server)
     auth_user_data = configurable.get("langgraph_auth_user")
-    user: UserInfo | None = (
-        cast(UserInfo, auth_user_data) if isinstance(auth_user_data, dict) else None
+    user: User | None = (
+        cast(User, auth_user_data) if isinstance(auth_user_data, dict) else None
     )
 
     if assistant_id is not None or graph_id is not None or user is not None:
