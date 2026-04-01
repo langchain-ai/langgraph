@@ -12,12 +12,9 @@ from typing import Any
 from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
 from langgraph._internal._constants import (
     CONF,
-    CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_RUNTIME,
-    CONFIG_KEY_TASK_ID,
-    CONFIG_KEY_THREAD_ID,
     NS_SEP,
 )
 from langgraph.errors import GraphBubbleUp, ParentCommand
@@ -70,18 +67,12 @@ def run_with_retry(
     if configurable is not None:
         config = patch_configurable(config, configurable)
     runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
-    conf = config.get(CONF, {})
     if isinstance(runtime, Runtime):
         config = patch_configurable(
             config,
             {
                 CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
                     node_first_attempt_time=node_first_attempt_time,
-                    thread_id=conf.get(CONFIG_KEY_THREAD_ID),
-                    checkpoint_id=conf.get(CONFIG_KEY_CHECKPOINT_ID),
-                    checkpoint_ns=conf.get(CONFIG_KEY_CHECKPOINT_NS, ""),
-                    task_id=conf.get(CONFIG_KEY_TASK_ID),
-                    run_id=config.get("run_id"),
                 )
             },
         )
@@ -180,18 +171,12 @@ async def arun_with_retry(
     if configurable is not None:
         config = patch_configurable(config, configurable)
     runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
-    conf = config.get(CONF, {})
     if isinstance(runtime, Runtime):
         config = patch_configurable(
             config,
             {
                 CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
                     node_first_attempt_time=node_first_attempt_time,
-                    thread_id=conf.get(CONFIG_KEY_THREAD_ID),
-                    checkpoint_id=conf.get(CONFIG_KEY_CHECKPOINT_ID),
-                    checkpoint_ns=conf.get(CONFIG_KEY_CHECKPOINT_NS, ""),
-                    task_id=conf.get(CONFIG_KEY_TASK_ID),
-                    run_id=config.get("run_id"),
                 )
             },
         )

@@ -136,7 +136,13 @@ from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
-from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
+from langgraph.runtime import (
+    DEFAULT_RUNTIME,
+    ExecutionInfo,
+    Runtime,
+    ServerInfo,
+    UserInfo,
+)
 from langgraph.types import (
     All,
     CachePolicy,
@@ -2645,14 +2651,18 @@ class Pregel(
             if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
+            # build server_info from metadata + parent runtime
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            server_info = _build_server_info(config, parent_runtime)
+
             runtime = Runtime(
                 context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
                 execution_info=ExecutionInfo(),
+                server_info=server_info,
             )
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
@@ -3014,14 +3024,18 @@ class Pregel(
             if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
+            # build server_info from metadata + parent runtime
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            server_info = _build_server_info(config, parent_runtime)
+
             runtime = Runtime(
                 context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
                 execution_info=ExecutionInfo(),
+                server_info=server_info,
             )
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
@@ -3641,6 +3655,34 @@ def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> Non
         and _START not in payload.get("next", ())
     ):
         payload["values"] = mapper(payload["values"])
+
+
+def _build_server_info(
+    config: RunnableConfig, parent_runtime: Runtime[Any]
+) -> ServerInfo | None:
+    """Build ServerInfo from config metadata and configurable.
+
+    The server puts assistant_id/graph_id in config metadata and the
+    authenticated user dict in configurable["langgraph_auth_user"].
+    """
+    metadata = config.get("metadata") or {}
+    configurable = config.get(CONF) or {}
+    assistant_id = metadata.get("assistant_id")
+    graph_id = metadata.get("graph_id")
+
+    # Read authenticated user from configurable (set by LangGraph Server)
+    auth_user_data = configurable.get("langgraph_auth_user")
+    user: UserInfo | None = (
+        cast(UserInfo, auth_user_data) if isinstance(auth_user_data, dict) else None
+    )
+
+    if assistant_id is not None or graph_id is not None or user is not None:
+        return ServerInfo(
+            assistant_id=str(assistant_id) if assistant_id else "",
+            graph_id=str(graph_id) if graph_id else "",
+            user=user,
+        )
+    return None
 
 
 def _coerce_context(

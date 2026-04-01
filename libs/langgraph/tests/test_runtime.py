@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -490,35 +489,28 @@ async def test_execution_info_populated_in_node_async() -> None:
     assert isinstance(captured["node_first_attempt_time"], float)
 
 
-# --- UserInfo protocol tests ---
+# --- UserInfo tests ---
 
 
-def test_user_info_protocol() -> None:
-    """BaseUser from SDK satisfies UserInfo protocol structurally."""
+def test_user_info_typed_dict() -> None:
+    """UserInfo is a simple TypedDict."""
+    user: UserInfo = {
+        "identity": "user-123",
+        "display_name": "Alice",
+        "is_authenticated": True,
+        "permissions": ["read", "write"],
+    }
+    assert user["identity"] == "user-123"
+    assert user["display_name"] == "Alice"
+    assert user["is_authenticated"] is True
+    assert user["permissions"] == ["read", "write"]
 
-    class MyUser:
-        @property
-        def identity(self) -> str:
-            return "user-123"
 
-        @property
-        def display_name(self) -> str:
-            return "Alice"
-
-        @property
-        def is_authenticated(self) -> bool:
-            return True
-
-        @property
-        def permissions(self) -> Sequence[str]:
-            return ["read", "write"]
-
-    user = MyUser()
-    assert isinstance(user, UserInfo)
-    assert user.identity == "user-123"
-    assert user.display_name == "Alice"
-    assert user.is_authenticated is True
-    assert user.permissions == ["read", "write"]
+def test_user_info_partial() -> None:
+    """UserInfo fields are all optional (total=False)."""
+    user: UserInfo = {"identity": "user-123"}
+    assert user["identity"] == "user-123"
+    assert "display_name" not in user
 
 
 # --- ServerInfo tests ---
@@ -532,27 +524,10 @@ def test_server_info() -> None:
 
 
 def test_server_info_with_user() -> None:
-    class MyUser:
-        @property
-        def identity(self) -> str:
-            return "user-1"
-
-        @property
-        def display_name(self) -> str:
-            return "Bob"
-
-        @property
-        def is_authenticated(self) -> bool:
-            return True
-
-        @property
-        def permissions(self) -> Sequence[str]:
-            return []
-
-    user = MyUser()
+    user: UserInfo = {"identity": "user-1", "display_name": "Bob"}
     info = ServerInfo(assistant_id="asst-1", graph_id="graph-1", user=user)
     assert info.user is not None
-    assert info.user.identity == "user-1"
+    assert info.user["identity"] == "user-1"
 
 
 def test_server_info_frozen() -> None:
@@ -589,3 +564,137 @@ def test_runtime_merge_preserves_server_info() -> None:
     runtime3 = Runtime(server_info=si2)
     merged2 = runtime1.merge(runtime3)
     assert merged2.server_info is si2
+
+
+# --- Integration tests: execution_info populated during graph execution ---
+
+
+def test_execution_info_populated_in_graph() -> None:
+    """execution_info should carry thread_id, run_id, task_id, checkpoint_id, checkpoint_ns."""
+    from langgraph.checkpoint.memory import MemorySaver
+
+    class State(TypedDict):
+        message: str
+
+    captured: dict[str, Any] = {}
+
+    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
+        info = runtime.execution_info
+        captured["thread_id"] = info.thread_id
+        captured["run_id"] = info.run_id
+        captured["task_id"] = info.task_id
+        captured["checkpoint_id"] = info.checkpoint_id
+        captured["checkpoint_ns"] = info.checkpoint_ns
+        return {"message": "done"}
+
+    graph = StateGraph(state_schema=State)
+    graph.add_node("capture", capture_node)
+    graph.add_edge(START, "capture")
+    graph.add_edge("capture", END)
+    compiled = graph.compile(checkpointer=MemorySaver())
+    compiled.invoke(
+        {"message": "hi"},
+        config={"configurable": {"thread_id": "t-123"}},
+    )
+    assert captured["thread_id"] == "t-123"
+    assert captured["task_id"] is not None
+    assert captured["checkpoint_id"] is not None
+    assert captured["checkpoint_ns"] is not None
+
+
+def test_server_info_populated_from_metadata() -> None:
+    """server_info should be built from assistant_id/graph_id in config metadata."""
+
+    class State(TypedDict):
+        message: str
+
+    captured: dict[str, Any] = {}
+
+    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
+        captured["server_info"] = runtime.server_info
+        return {"message": "done"}
+
+    graph = StateGraph(state_schema=State)
+    graph.add_node("capture", capture_node)
+    graph.add_edge(START, "capture")
+    graph.add_edge("capture", END)
+    compiled = graph.compile()
+    compiled.invoke(
+        {"message": "hi"},
+        config={
+            "metadata": {
+                "assistant_id": "asst-abc",
+                "graph_id": "my-graph",
+            }
+        },
+    )
+    si = captured["server_info"]
+    assert si is not None
+    assert si.assistant_id == "asst-abc"
+    assert si.graph_id == "my-graph"
+    assert si.user is None
+
+
+def test_server_info_none_without_metadata() -> None:
+    """server_info should be None when no assistant_id/graph_id in metadata."""
+
+    class State(TypedDict):
+        message: str
+
+    captured: dict[str, Any] = {}
+
+    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
+        captured["server_info"] = runtime.server_info
+        return {"message": "done"}
+
+    graph = StateGraph(state_schema=State)
+    graph.add_node("capture", capture_node)
+    graph.add_edge(START, "capture")
+    graph.add_edge("capture", END)
+    compiled = graph.compile()
+    compiled.invoke({"message": "hi"})
+    assert captured["server_info"] is None
+
+
+def test_server_info_user_from_langgraph_auth_user() -> None:
+    """server_info.user should be populated from configurable['langgraph_auth_user']."""
+
+    class State(TypedDict):
+        message: str
+
+    captured: dict[str, Any] = {}
+
+    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
+        captured["server_info"] = runtime.server_info
+        return {"message": "done"}
+
+    graph = StateGraph(state_schema=State)
+    graph.add_node("capture", capture_node)
+    graph.add_edge(START, "capture")
+    graph.add_edge("capture", END)
+    compiled = graph.compile()
+    compiled.invoke(
+        {"message": "hi"},
+        config={
+            "configurable": {
+                "langgraph_auth_user": {
+                    "identity": "user-42",
+                    "display_name": "Alice",
+                    "is_authenticated": True,
+                    "permissions": ["read"],
+                },
+            },
+            "metadata": {
+                "assistant_id": "asst-srv",
+                "graph_id": "graph-srv",
+            },
+        },
+    )
+    si = captured["server_info"]
+    assert si is not None
+    assert si.assistant_id == "asst-srv"
+    assert si.graph_id == "graph-srv"
+    assert si.user is not None
+    assert si.user["identity"] == "user-42"
+    assert si.user["display_name"] == "Alice"
+    assert si.user["permissions"] == ["read"]

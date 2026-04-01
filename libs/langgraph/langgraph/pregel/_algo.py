@@ -45,6 +45,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_THREAD_ID,
     ERROR,
     INTERRUPT,
     NO_WRITES,
@@ -668,6 +669,13 @@ def prepare_single_task(
                     runtime = runtime.override(
                         previous=checkpoint["channel_values"].get(PREVIOUS, None),
                         store=store,
+                        execution_info=runtime.execution_info.patch(
+                            thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+                            checkpoint_id=checkpoint["id"],
+                            checkpoint_ns=task_checkpoint_ns,
+                            task_id=task_id,
+                            run_id=config.get("run_id"),
+                        ),
                     )
                     additional_config = {
                         "metadata": metadata,
@@ -813,7 +821,16 @@ def prepare_push_task_functional(
             stop,
         )
         runtime = cast(Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME))
-        runtime = runtime.override(store=store)
+        runtime = runtime.override(
+            store=store,
+            execution_info=runtime.execution_info.patch(
+                thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+                checkpoint_id=checkpoint["id"],
+                checkpoint_ns=task_checkpoint_ns,
+                task_id=task_id,
+                run_id=config.get("run_id"),
+            ),
+        )
         return PregelExecutableTask(
             name,
             call.input,
@@ -966,7 +983,15 @@ def prepare_push_task_send(
         )
         runtime = cast(Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME))
         runtime = runtime.override(
-            store=store, previous=checkpoint["channel_values"].get(PREVIOUS, None)
+            store=store,
+            previous=checkpoint["channel_values"].get(PREVIOUS, None),
+            execution_info=runtime.execution_info.patch(
+                thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+                checkpoint_id=checkpoint["id"],
+                checkpoint_ns=task_checkpoint_ns,
+                task_id=task_id,
+                run_id=config.get("run_id"),
+            ),
         )
         additional_config: RunnableConfig = {
             "metadata": metadata,

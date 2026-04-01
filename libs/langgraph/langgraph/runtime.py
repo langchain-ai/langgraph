@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any, Generic, cast, runtime_checkable
+from typing import Any, Generic, cast
 
 from langgraph.store.base import BaseStore
-from typing_extensions import Protocol, TypedDict, Unpack
+from typing_extensions import TypedDict, Unpack
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.config import get_config
@@ -51,33 +51,23 @@ class ExecutionInfo:
         return replace(self, **overrides)
 
 
-@runtime_checkable
-class UserInfo(Protocol):
-    """Protocol for authenticated user information.
+class UserInfo(TypedDict, total=False):
+    """Authenticated user information from LangGraph Server.
 
-    Mirrors `BaseUser` from `langgraph_sdk` without creating a dependency.
-    Any object satisfying this protocol (including SDK's `BaseUser`) can be used.
+    Populated from `config["configurable"]["langgraph_auth_user"]`.
     """
 
-    @property
-    def identity(self) -> str:
-        """The unique identifier for the user."""
-        ...
+    identity: str
+    """The unique identifier for the user."""
 
-    @property
-    def display_name(self) -> str:
-        """The display name of the user."""
-        ...
+    display_name: str
+    """The display name of the user."""
 
-    @property
-    def is_authenticated(self) -> bool:
-        """Whether the user is authenticated."""
-        ...
+    is_authenticated: bool
+    """Whether the user is authenticated."""
 
-    @property
-    def permissions(self) -> Sequence[str]:
-        """The permissions associated with the user."""
-        ...
+    permissions: Sequence[str]
+    """The permissions associated with the user."""
 
 
 @dataclass(frozen=True)
