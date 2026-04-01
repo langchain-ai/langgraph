@@ -26,19 +26,23 @@ class ExecutionInfo:
     """Read-only execution info/metadata for the execution of current thread/run/node."""
 
     thread_id: str | None = None
-    """The thread ID for the current execution, if any."""
+    """The thread ID for the current execution.
 
-    checkpoint_id: str | None = None
-    """The checkpoint ID for the current execution, if any."""
+    None when running without a checkpointer (i.e., no persistence)."""
+
+    checkpoint_id: str = ""
+    """The checkpoint ID for the current execution."""
 
     checkpoint_ns: str = ""
     """The checkpoint namespace for the current execution."""
 
-    task_id: str | None = None
-    """The task ID for the current execution, if any."""
+    task_id: str = ""
+    """The task ID for the current execution."""
 
     run_id: str | None = None
-    """The run ID for the current execution, if any."""
+    """The run ID for the current execution.
+
+    None when `run_id` is not provided in the RunnableConfig."""
 
     node_attempt: int = 1
     """Current node execution attempt number (1-indexed)."""

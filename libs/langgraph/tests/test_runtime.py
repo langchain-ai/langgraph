@@ -397,9 +397,9 @@ def test_context_coercion_pydantic_validation_errors() -> None:
 def test_execution_info_defaults() -> None:
     info = ExecutionInfo()
     assert info.thread_id is None
-    assert info.checkpoint_id is None
+    assert info.checkpoint_id == ""
     assert info.checkpoint_ns == ""
-    assert info.task_id is None
+    assert info.task_id == ""
     assert info.run_id is None
     assert info.node_attempt == 1
     assert info.node_first_attempt_time is None
@@ -414,7 +414,7 @@ def test_execution_info_patch() -> None:
     assert patched.task_id == "tk1"
     # original unchanged
     assert info.node_attempt == 1
-    assert info.task_id is None
+    assert info.task_id == ""
 
 
 def test_execution_info_frozen() -> None:
