@@ -476,7 +476,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                     f"Please provide an Embeddings when initializing the {self.__class__.__name__}."
                 )
 
-            query, txt_params = embedding_request
+            query, txt_params, is_many = embedding_request
             # Update the params to replace the raw text with the vectors
             vectors = await self.embeddings.aembed_documents(
                 [param[-1] for param in txt_params]
@@ -485,14 +485,17 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             # Convert vectors to SQLite-friendly format
             vector_params = []
             for (ns, k, pathname, _), vector in zip(txt_params, vectors, strict=False):
-                vector_params.extend(
-                    [ns, k, pathname, sqlite_vec.serialize_float32(vector)]
+                vector_params.append(
+                    (ns, k, pathname, sqlite_vec.serialize_float32(vector))
                 )
 
-            queries.append((query, vector_params))
+            queries.append((query, vector_params, is_many))
 
-        for query, params in queries:
-            await cur.execute(query, params)
+        for query, params, is_many in queries:
+            if is_many:
+                await cur.executemany(query, params)
+            else:
+                await cur.execute(query, params)
 
     async def _batch_search_ops(
         self,
