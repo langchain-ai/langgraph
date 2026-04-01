@@ -277,15 +277,29 @@ def validate_config(config: Config) -> Config:
                 "pip_installer 'uv_lock' does not support Node.js graphs or "
                 "`node_version`. Use only Python graph entrypoints."
             )
+        errors: list[str] = []
         if config["dependencies"]:
-            raise click.UsageError(
-                "pip_installer 'uv_lock' does not support `dependencies`. "
-                "Move dependency declarations into project_root/pyproject.toml and uv.lock."
+            errors.append(
+                "Remove `dependencies` from your config. With 'uv_lock', all "
+                "dependencies are read from your pyproject.toml and uv.lock instead."
             )
         if not config.get("project_root"):
-            raise click.UsageError("pip_installer 'uv_lock' requires `project_root`.")
+            errors.append(
+                "Add `project_root`: the relative path from your langgraph.json "
+                "to the directory containing pyproject.toml and uv.lock "
+                '(e.g. "project_root": "../..").'
+            )
         if not config.get("package"):
-            raise click.UsageError("pip_installer 'uv_lock' requires `package`.")
+            errors.append(
+                "Add `package`: the [project].name of the workspace package to "
+                'deploy (e.g. "package": "my-agent").'
+            )
+        if errors:
+            detail = "\n".join(f"  - {e}" for e in errors)
+            raise click.UsageError(
+                f"pip_installer 'uv_lock' requires a different config shape than "
+                f"'pip' or 'uv':\n{detail}"
+            )
     elif config.get("project_root") or config.get("package"):
         raise click.UsageError(
             "`project_root` and `package` are only supported when "

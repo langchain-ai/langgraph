@@ -423,7 +423,7 @@ def test_validate_config_pip_installer():
         )
     assert "Invalid pip_installer: 'invalid'" in str(exc_info.value)
 
-    with pytest.raises(click.UsageError, match="requires `project_root`"):
+    with pytest.raises(click.UsageError, match="Add `project_root`"):
         validate_config(
             {
                 "python_version": "3.11",
@@ -433,7 +433,7 @@ def test_validate_config_pip_installer():
             }
         )
 
-    with pytest.raises(click.UsageError, match="requires `package`"):
+    with pytest.raises(click.UsageError, match="Add `package`"):
         validate_config(
             {
                 "python_version": "3.11",
@@ -443,7 +443,7 @@ def test_validate_config_pip_installer():
             }
         )
 
-    with pytest.raises(click.UsageError, match="does not support `dependencies`"):
+    with pytest.raises(click.UsageError, match="Remove `dependencies`"):
         validate_config(
             {
                 "python_version": "3.11",
@@ -454,6 +454,21 @@ def test_validate_config_pip_installer():
                 "package": "agent",
             }
         )
+
+    # All three errors at once (typical migration from 'uv' to 'uv_lock')
+    with pytest.raises(click.UsageError, match="different config shape") as exc_info:
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "pip_installer": "uv_lock",
+            }
+        )
+    msg = str(exc_info.value)
+    assert "Remove `dependencies`" in msg
+    assert "Add `project_root`" in msg
+    assert "Add `package`" in msg
 
     with pytest.raises(click.UsageError, match="only supported for Python deployments"):
         validate_config(
