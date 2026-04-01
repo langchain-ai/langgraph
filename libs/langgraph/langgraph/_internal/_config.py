@@ -316,5 +316,17 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
 
 
 _PROPAGATE_TO_METADATA = frozenset(
-    ("thread_id", "run_id", "assistant_id", "graph_id", "langgraph_auth_user_id")
+    (
+        "thread_id",
+        "checkpoint_id",
+        "checkpoint_ns",
+        "task_id",
+        "run_id",
+        "assistant_id",
+        "graph_id",
+        "model",
+        "user_id",
+        "cron_id",
+        "langgraph_auth_user_id",
+    )
 )

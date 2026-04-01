@@ -6920,9 +6920,15 @@ def test_configurable_propagates_to_stream_metadata() -> None:
     config = {
         "configurable": {
             "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
             "run_id": "run-456",
             "assistant_id": "asst-789",
             "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
             "langgraph_auth_user_id": "user-1",
             # these should NOT leak into metadata
             "some_api_key": "secret",
@@ -6934,9 +6940,15 @@ def test_configurable_propagates_to_stream_metadata() -> None:
     _, metadata = results[0]
     # propagated keys
     assert metadata["thread_id"] == "th-123"
+    assert metadata["checkpoint_id"] == "ckpt-1"
+    assert metadata["checkpoint_ns"] == "ns-1"
+    assert metadata["task_id"] == "task-1"
     assert metadata["run_id"] == "run-456"
     assert metadata["assistant_id"] == "asst-789"
     assert metadata["graph_id"] == "graph-0"
+    assert metadata["model"] == "gpt-4o"
+    assert metadata["user_id"] == "uid-1"
+    assert metadata["cron_id"] == "cron-1"
     assert metadata["langgraph_auth_user_id"] == "user-1"
     # non-allowlisted keys must not appear
     assert "some_api_key" not in metadata
