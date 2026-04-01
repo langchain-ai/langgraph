@@ -976,6 +976,7 @@ class ToolNode(RunnableCallable):
                 name=call["name"],
                 tool_call_id=call["id"],
                 status="error",
+                additional_kwargs={"metadata": call.get("metadata", {})},
             )
 
         # Process successful response
@@ -1042,6 +1043,9 @@ class ToolNode(RunnableCallable):
                 name=tool_request.tool_call["name"],
                 tool_call_id=tool_request.tool_call["id"],
                 status="error",
+                additional_kwargs={
+                    "metadata": tool_request.tool_call.get("metadata", {})
+                },
             )
 
     async def _execute_tool_async(
@@ -1129,6 +1133,7 @@ class ToolNode(RunnableCallable):
                 name=call["name"],
                 tool_call_id=call["id"],
                 status="error",
+                additional_kwargs={"metadata": call.get("metadata", {})},
             )
 
         # Process successful response
@@ -1203,6 +1208,9 @@ class ToolNode(RunnableCallable):
                 name=tool_request.tool_call["name"],
                 tool_call_id=tool_request.tool_call["id"],
                 status="error",
+                additional_kwargs={
+                    "metadata": tool_request.tool_call.get("metadata", {})
+                },
             )
 
     def _parse_input(
