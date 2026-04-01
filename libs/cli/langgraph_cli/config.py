@@ -1012,13 +1012,6 @@ def python_config_to_docker(
             base_image,
             api_version=api_version,
             build_tools_to_uninstall=build_tools_to_uninstall,
-            image_supports_uv=_image_supports_uv,
-            get_node_pm_install_cmd=_get_node_pm_install_cmd,
-            get_pip_cleanup_lines=_get_pip_cleanup_lines,
-            docker_tag=docker_tag,
-            build_python_install_commands=_build_python_install_commands,
-            build_runtime_env_vars=_build_runtime_env_vars,
-            default_node_version=DEFAULT_NODE_VERSION,
         )
     if pip_installer == "uv":
         install_cmd = "uv pip install --system"

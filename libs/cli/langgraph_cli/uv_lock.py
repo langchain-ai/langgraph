@@ -2,7 +2,6 @@ import os
 import pathlib
 import re
 import shlex
-from collections.abc import Callable
 from dataclasses import dataclass
 
 try:
@@ -15,7 +14,7 @@ import click
 from langgraph_cli.schemas import Config
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UvLockSourceEntry:
     name: str
     value: object
@@ -23,35 +22,28 @@ class UvLockSourceEntry:
     pyproject_path: pathlib.Path
 
 
-@dataclass(frozen=True)
-class DiscoveredUvLockPackage:
+@dataclass(slots=True)
+class UvLockPackage:
     name: str
     normalized_name: str
     root: pathlib.Path
     pyproject_path: pathlib.Path
     raw_dependency_specs: object
     raw_uv_tool: object
+    # Set after validation:
+    package_enabled: bool = False
+    dependency_names: tuple[str, ...] = ()
+    workspace_dependencies: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True)
-class UvLockPackage:
-    name: str
-    normalized_name: str
-    root: pathlib.Path
-    pyproject_path: pathlib.Path
-    package_enabled: bool
-    dependency_names: tuple[str, ...]
-    workspace_dependencies: tuple[str, ...]
-
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UvLockWorkspace:
     raw_root_source_entries: object
-    packages_by_name: dict[str, DiscoveredUvLockPackage]
-    packages_by_root: dict[pathlib.Path, DiscoveredUvLockPackage]
+    packages_by_name: dict[str, UvLockPackage]
+    packages_by_root: dict[pathlib.Path, UvLockPackage]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UvLockPlan:
     project_root: pathlib.Path
     pyproject_path: pathlib.Path
@@ -113,8 +105,8 @@ def _validate_uv_lock_source_entry(
     declared_root: pathlib.Path,
     pyproject_path: pathlib.Path,
     project_root: pathlib.Path,
-    packages_by_name: dict[str, DiscoveredUvLockPackage],
-    packages_by_root: dict[pathlib.Path, DiscoveredUvLockPackage],
+    packages_by_name: dict[str, UvLockPackage],
+    packages_by_root: dict[pathlib.Path, UvLockPackage],
 ) -> set[str]:
     workspace_dependencies: set[str] = set()
     if isinstance(source_value, list):
@@ -203,7 +195,7 @@ def _validate_uv_lock_source_entry(
     return workspace_dependencies
 
 
-def _get_uv_lock_package_enabled(package: DiscoveredUvLockPackage) -> bool:
+def _get_uv_lock_package_enabled(package: UvLockPackage) -> bool:
     uv_tool = package.raw_uv_tool
     if uv_tool and not isinstance(uv_tool, dict):
         raise click.UsageError(
@@ -222,7 +214,7 @@ def _get_uv_lock_package_enabled(package: DiscoveredUvLockPackage) -> bool:
 
 
 def _get_uv_lock_source_entries(
-    package: DiscoveredUvLockPackage,
+    package: UvLockPackage,
     *,
     project_root: pathlib.Path,
     root_pyproject_path: pathlib.Path,
@@ -268,14 +260,14 @@ def _get_uv_lock_source_entries(
 
 
 def _validate_uv_lock_package(
-    package: DiscoveredUvLockPackage,
+    package: UvLockPackage,
     *,
     project_root: pathlib.Path,
     root_pyproject_path: pathlib.Path,
     raw_root_source_entries: object,
-    packages_by_name: dict[str, DiscoveredUvLockPackage],
-    packages_by_root: dict[pathlib.Path, DiscoveredUvLockPackage],
-) -> UvLockPackage:
+    packages_by_name: dict[str, UvLockPackage],
+    packages_by_root: dict[pathlib.Path, UvLockPackage],
+) -> None:
     dependency_names = _get_dependency_names(
         package.raw_dependency_specs,
         package_name=package.name,
@@ -304,18 +296,12 @@ def _validate_uv_lock_package(
             )
         )
 
-    return UvLockPackage(
-        name=package.name,
-        normalized_name=package.normalized_name,
-        root=package.root,
-        pyproject_path=package.pyproject_path,
-        package_enabled=_get_uv_lock_package_enabled(package),
-        dependency_names=dependency_names,
-        workspace_dependencies=tuple(
-            dependency_name
-            for dependency_name in dependency_names
-            if dependency_name in workspace_dependency_names
-        ),
+    package.package_enabled = _get_uv_lock_package_enabled(package)
+    package.dependency_names = dependency_names
+    package.workspace_dependencies = tuple(
+        dependency_name
+        for dependency_name in dependency_names
+        if dependency_name in workspace_dependency_names
     )
 
 
@@ -357,7 +343,7 @@ def _discover_uv_lock_workspace_packages(
             unique_roots.append(root)
             seen_roots.add(root)
 
-    packages: list[DiscoveredUvLockPackage] = []
+    packages: list[UvLockPackage] = []
     for package_root in unique_roots:
         member_pyproject_path = package_root / "pyproject.toml"
         pyproject_data = _load_pyproject(member_pyproject_path)
@@ -373,7 +359,7 @@ def _discover_uv_lock_workspace_packages(
             )
 
         packages.append(
-            DiscoveredUvLockPackage(
+            UvLockPackage(
                 name=package_name,
                 normalized_name=_normalize_package_name(package_name),
                 root=package_root,
@@ -383,8 +369,8 @@ def _discover_uv_lock_workspace_packages(
             )
         )
 
-    packages_by_name: dict[str, DiscoveredUvLockPackage] = {}
-    packages_by_root: dict[pathlib.Path, DiscoveredUvLockPackage] = {}
+    packages_by_name: dict[str, UvLockPackage] = {}
+    packages_by_root: dict[pathlib.Path, UvLockPackage] = {}
     for package in packages:
         existing = packages_by_name.get(package.normalized_name)
         if existing is not None:
@@ -462,7 +448,7 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
             f"under project_root {project_root}. Available workspace packages: "
             f"{available_packages or '(none)'}."
         )
-    target_package = _validate_uv_lock_package(
+    _validate_uv_lock_package(
         target,
         project_root=project_root,
         root_pyproject_path=pyproject_path,
@@ -470,25 +456,22 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
         packages_by_name=workspace.packages_by_name,
         packages_by_root=workspace.packages_by_root,
     )
-    if not target_package.package_enabled:
+    if not target.package_enabled:
         raise click.UsageError(
             "pip_installer 'uv_lock' requires `package` to reference a buildable "
-            f"workspace package. '{target_package.name}' sets `tool.uv.package = false`."
+            f"workspace package. '{target.name}' sets `tool.uv.package = false`."
         )
 
     install_order: list[UvLockPackage] = []
     visited: set[str] = set()
-    validated_packages: dict[str, UvLockPackage] = {
-        target_package.normalized_name: target_package
-    }
+    validated: set[str] = {target.normalized_name}
 
-    def visit(package: DiscoveredUvLockPackage) -> None:
+    def visit(package: UvLockPackage) -> None:
         if package.normalized_name in visited:
             return
         visited.add(package.normalized_name)
-        validated_package = validated_packages.get(package.normalized_name)
-        if validated_package is None:
-            validated_package = _validate_uv_lock_package(
+        if package.normalized_name not in validated:
+            _validate_uv_lock_package(
                 package,
                 project_root=project_root,
                 root_pyproject_path=pyproject_path,
@@ -496,12 +479,12 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
                 packages_by_name=workspace.packages_by_name,
                 packages_by_root=workspace.packages_by_root,
             )
-            validated_packages[package.normalized_name] = validated_package
-        for dependency_name in validated_package.workspace_dependencies:
+            validated.add(package.normalized_name)
+        for dependency_name in package.workspace_dependencies:
             dependency = packages_by_name.get(dependency_name)
             if dependency is not None:
                 visit(dependency)
-        install_order.append(validated_package)
+        install_order.append(package)
 
     visit(target)
 
@@ -516,22 +499,22 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
             project_root=project_root,
             pyproject_path=pyproject_path,
             uv_lock_path=uv_lock_path,
-            target=target_package,
+            target=target,
             install_order=tuple(install_order),
             container_roots=container_roots,
             working_dir=str(
-                _container_root_for_uv_lock_package(project_root, target_package.root)
+                _container_root_for_uv_lock_package(project_root, target.root)
             ),
         ),
     )
     if working_dir is None:
-        working_dir = container_roots[target_package.root]
+        working_dir = container_roots[target.root]
 
     return UvLockPlan(
         project_root=project_root,
         pyproject_path=pyproject_path,
         uv_lock_path=uv_lock_path,
-        target=target_package,
+        target=target,
         install_order=tuple(install_order),
         container_roots=container_roots,
         working_dir=str(working_dir),
@@ -630,15 +613,18 @@ def python_config_to_docker_uv_lock(
     api_version: str | None = None,
     *,
     build_tools_to_uninstall: tuple[str] | None,
-    image_supports_uv: Callable[[str], bool],
-    get_node_pm_install_cmd: Callable[[pathlib.Path, Config], str],
-    get_pip_cleanup_lines: Callable[[str, tuple[str] | None, str], str],
-    docker_tag: Callable[[Config, str | None, str | None], str],
-    build_python_install_commands: Callable[[Config, str], tuple[str, str, str]],
-    build_runtime_env_vars: Callable[[Config], list[str]],
-    default_node_version: str,
 ) -> tuple[str, dict[str, str]]:
-    if not image_supports_uv(base_image):
+    from langgraph_cli.config import (
+        DEFAULT_NODE_VERSION,
+        _build_python_install_commands,
+        _build_runtime_env_vars,
+        _get_node_pm_install_cmd,
+        _get_pip_cleanup_lines,
+        _image_supports_uv,
+        docker_tag,
+    )
+
+    if not _image_supports_uv(base_image):
         raise ValueError(
             "pip_installer 'uv_lock' requires a base image with uv support "
             "(langchain/langgraph-api >= 0.2.47)"
@@ -646,44 +632,26 @@ def python_config_to_docker_uv_lock(
 
     config_root = config_path.parent.resolve()
     install_cmd = "uv pip install --system"
-    _, global_reqs_pip_install, pip_config_file_str = build_python_install_commands(
+    _, global_reqs_pip_install, pip_config_file_str = _build_python_install_commands(
         config, install_cmd
     )
     plan = _plan_uv_lock_workspace(config_path, config)
 
     _update_uv_lock_graph_paths(config_path, config, plan)
-    _update_uv_lock_component_path(
-        config_path,
-        config,
-        plan,
-        section="auth",
-        key="path",
-        label="auth.path",
-    )
-    _update_uv_lock_component_path(
-        config_path,
-        config,
-        plan,
-        section="encryption",
-        key="path",
-        label="encryption.path",
-    )
-    _update_uv_lock_component_path(
-        config_path,
-        config,
-        plan,
-        section="checkpointer",
-        key="path",
-        label="checkpointer.path",
-    )
-    _update_uv_lock_component_path(
-        config_path,
-        config,
-        plan,
-        section="http",
-        key="app",
-        label="http.app",
-    )
+    for section, key in [
+        ("auth", "path"),
+        ("encryption", "path"),
+        ("checkpointer", "path"),
+        ("http", "app"),
+    ]:
+        _update_uv_lock_component_path(
+            config_path,
+            config,
+            plan,
+            section=section,
+            key=key,
+            label=f"{section}.{key}",
+        )
 
     additional_contexts: dict[str, str] = {}
     workspace_context_name: str | None = None
@@ -744,15 +712,15 @@ RUN rm -rf /tmp/uv_export
         )
     )
 
-    env_vars = build_runtime_env_vars(config)
+    env_vars = _build_runtime_env_vars(config)
 
     js_inst_str = ""
     if (config.get("ui") or config.get("node_version")) and plan.working_dir:
         js_inst_str = os.linesep.join(
             [
                 "# -- Installing JS dependencies --",
-                f"ENV NODE_VERSION={config.get('node_version') or default_node_version}",
-                f"RUN cd {plan.working_dir} && {get_node_pm_install_cmd(config_path, config)} && tsx /api/langgraph_api/js/build.mts",
+                f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
+                f"RUN cd {plan.working_dir} && {_get_node_pm_install_cmd(config_path, config)} && tsx /api/langgraph_api/js/build.mts",
                 "# -- End of JS dependencies install --",
             ]
         )
@@ -783,7 +751,7 @@ RUN rm -rf /tmp/uv_export
             "",
             js_inst_str,
             "",
-            get_pip_cleanup_lines(
+            _get_pip_cleanup_lines(
                 install_cmd=install_cmd,
                 to_uninstall=build_tools_to_uninstall,
                 pip_installer="uv",
