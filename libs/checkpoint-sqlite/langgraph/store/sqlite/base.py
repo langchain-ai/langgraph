@@ -276,8 +276,8 @@ class BaseSqliteStore:
     def _prepare_batch_PUT_queries(
         self, put_ops: Sequence[tuple[int, PutOp]]
     ) -> tuple[
-        list[tuple[str, Sequence]],
-        tuple[str, Sequence[tuple[str, str, str, str]]] | None,
+        list[tuple[str, Sequence, bool]],
+        tuple[str, Sequence[tuple[str, str, str, str]], bool] | None,
     ]:
         # Last-write wins
         dedupped_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
@@ -292,25 +292,18 @@ class BaseSqliteStore:
             else:
                 inserts.append(op)
 
-        queries: list[tuple[str, Sequence]] = []
+        queries: list[tuple[str, Sequence, bool]] = []
 
         if deletes:
-            namespace_groups: dict[tuple[str, ...], list[str]] = defaultdict(list)
-            for op in deletes:
-                namespace_groups[op.namespace].append(op.key)
-            for namespace, keys in namespace_groups.items():
-                placeholders = ",".join(["?" for _ in keys])
-                query = (
-                    f"DELETE FROM store WHERE prefix = ? AND key IN ({placeholders})"
-                )
-                params = (_namespace_to_text(namespace), *keys)
-                queries.append((query, params))
+            params = [(_namespace_to_text(op.namespace), op.key) for op in deletes]
+            query = "DELETE FROM store WHERE prefix = ? AND key = ?"
+            queries.append((query, params, True))
 
-        embedding_request: tuple[str, Sequence[tuple[str, str, str, str]]] | None = None
+        embedding_request: tuple[str, Sequence[tuple[str, str, str, str]], bool] | None = (
+            None
+        )
         if inserts:
-            values = []
             insertion_params = []
-            vector_values = []
             embedding_request_params = []
             now = datetime.datetime.now(datetime.timezone.utc)
 
@@ -320,15 +313,14 @@ class BaseSqliteStore:
                     expires_at = None
                 else:
                     expires_at = now + datetime.timedelta(minutes=op.ttl)
-                values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)")
-                insertion_params.extend(
-                    [
+                insertion_params.append(
+                    (
                         _namespace_to_text(op.namespace),
                         op.key,
                         orjson.dumps(cast(dict, op.value)),
                         expires_at,
                         op.ttl,
-                    ]
+                    )
                 )
 
             # Then handle embeddings if configured
@@ -349,25 +341,20 @@ class BaseSqliteStore:
                         texts = get_text_at_path(value, tokenized_path)
                         for i, text in enumerate(texts):
                             pathname = f"{path}.{i}" if len(texts) > 1 else path
-                            vector_values.append(
-                                "(?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-                            )
                             embedding_request_params.append((ns, k, pathname, text))
 
-            values_str = ",".join(values)
-            query = f"""
+            query = """
                 INSERT OR REPLACE INTO store (prefix, key, value, created_at, updated_at, expires_at, ttl_minutes)
-                VALUES {values_str}
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)
             """
-            queries.append((query, insertion_params))
+            queries.append((query, insertion_params, True))
 
-            if vector_values:
-                values_str = ",".join(vector_values)
-                query = f"""
+            if embedding_request_params:
+                query = """
                     INSERT OR REPLACE INTO store_vectors (prefix, key, field_name, embedding, created_at, updated_at)
-                    VALUES {values_str}
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """
-                embedding_request = (query, embedding_request_params)
+                embedding_request = (query, embedding_request_params, True)
 
         return queries, embedding_request
 
@@ -1262,7 +1249,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                     f"(for semantic search). "
                     f"Please provide an Embeddings when initializing the {self.__class__.__name__}."
                 )
-            query, txt_params = embedding_request
+            query, txt_params, is_many = embedding_request
             # Update the params to replace the raw text with the vectors
             vectors = self.embeddings.embed_documents(
                 [param[-1] for param in txt_params]
@@ -1271,14 +1258,17 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             # Convert vectors to SQLite-friendly format
             vector_params = []
             for (ns, k, pathname, _), vector in zip(txt_params, vectors, strict=False):
-                vector_params.extend(
-                    [ns, k, pathname, sqlite_vec.serialize_float32(vector)]
+                vector_params.append(
+                    (ns, k, pathname, sqlite_vec.serialize_float32(vector))
                 )
 
-            queries.append((query, vector_params))
+            queries.append((query, vector_params, is_many))
 
-        for query, params in queries:
-            cur.execute(query, params)
+        for query, params, is_many in queries:
+            if is_many:
+                cur.executemany(query, params)
+            else:
+                cur.execute(query, params)
 
     def _batch_search_ops(
         self,
