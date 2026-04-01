@@ -1,4 +1,4 @@
-.PHONY: format lint test
+.PHONY: format lint test spell_check spell_fix
 
 format:
 	uv run ruff format .
@@ -7,6 +7,12 @@ format:
 lint:
 	uv run ruff check .
 	uv run ty check
+
+spell_check:
+	uv run codespell --toml pyproject.toml
+
+spell_fix:
+	uv run codespell --toml pyproject.toml -w
 
 test:
 	uv run pytest $(TEST)

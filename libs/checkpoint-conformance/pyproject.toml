@@ -24,6 +24,7 @@ test = [
 ]
 lint = [
   "ruff",
+  "codespell",
   "ty",
 ]
 dev = [
@@ -57,6 +58,9 @@ lint.select = [
 ]
 lint.ignore = ["E501", "B008"]
 target-version = "py310"
+
+[tool.codespell]
+ignore-words-list = "langgraph,langchain,checkpointer,checkpointing"
 
 [[tool.uv.index]]
 name = "testpypi"

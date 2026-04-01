@@ -81,5 +81,8 @@ ignore = [
 ]
 per-file-ignores = { "tests/**" = ["S101", "B017"] }
 
+[tool.codespell]
+ignore-words-list = "langgraph,langchain"
+
 [tool.ty.rules]
 no-matching-overload = "ignore"

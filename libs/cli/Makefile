@@ -1,4 +1,4 @@
-.PHONY: test lint type format test-integration update-schema bump-version
+.PHONY: test lint type format test-integration spell_check spell_fix update-schema bump-version
 
 ######################
 # TESTING AND COVERAGE
@@ -35,6 +35,12 @@ type:
 format format_diff:
 	uv run ruff format $(PYTHON_FILES)
 	uv run ruff check --select I --fix $(PYTHON_FILES)
+
+spell_check:
+	uv run codespell --toml pyproject.toml
+
+spell_fix:
+	uv run codespell --toml pyproject.toml -w
 
 update-schema:
 	uv run python generate_schema.py
