@@ -1,8 +1,8 @@
 <div align="center">
   <a href="https://www.langchain.com/langgraph">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-dark.svg">
-      <source media="(prefers-color-scheme: light)" srcset=".github/images/logo-light.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="../../.github/images/logo-dark.svg">
+      <source media="(prefers-color-scheme: light)" srcset="../../.github/images/logo-light.svg">
       <img alt="LangGraph Logo" src=".github/images/logo-dark.svg" width="50%">
     </picture>
   </a>
@@ -16,6 +16,8 @@
   <a href="https://opensource.org/licenses/MIT" target="_blank"><img src="https://img.shields.io/pypi/l/langgraph" alt="PyPI - License"></a>
   <a href="https://pypistats.org/packages/langgraph" target="_blank"><img src="https://img.shields.io/pepy/dt/langgraph" alt="PyPI - Downloads"></a>
   <a href="https://pypi.org/project/langgraph/" target="_blank"><img src="https://img.shields.io/pypi/v/langgraph.svg?label=%20" alt="Version"></a>
+  <a href="https://github.com/langchain-ai/langgraph/issues" target="_blank"><img src="https://img.shields.io/github/issues-raw/langchain-ai/langgraph" alt="Open Issues"></a>
+  <a href="https://docs.langchain.com/oss/python/langgraph/overview" target="_blank"><img src="https://img.shields.io/badge/docs-latest-blue" alt="Docs"></a>
   <a href="https://x.com/langchain" target="_blank"><img src="https://img.shields.io/twitter/url/https/twitter.com/langchain.svg?style=social&label=Follow%20%40LangChain" alt="Twitter / X"></a>
 </div>
 
