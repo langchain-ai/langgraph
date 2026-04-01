@@ -6905,7 +6905,6 @@ def test_configurable_propagates_to_stream_metadata() -> None:
     """Regression: thread_id, run_id, assistant_id, graph_id,
     and langgraph_auth_user_id from configurable must appear
     in stream_mode='messages' metadata."""
-    from langchain_core.messages import HumanMessage
 
     def my_node(state):
         return {"messages": HumanMessage(content="hello")}

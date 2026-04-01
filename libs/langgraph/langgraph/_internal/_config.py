@@ -309,9 +309,10 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
             if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
     _empty_metadata = empty["metadata"]
+    _empty_conf = empty[CONF]
     for key in _PROPAGATE_TO_METADATA:
-        if key in empty[CONF] and key not in _empty_metadata and empty[CONF][key] is not None:
-            _empty_metadata[key] = empty[CONF][key]
+        if (v := _empty_conf.get(key)) is not None and key not in _empty_metadata:
+            _empty_metadata[key] = v
     return empty
 
 

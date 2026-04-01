@@ -20,6 +20,7 @@ from uuid import UUID
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from langchain_core.utils.aiter import aclosing
 from langgraph.cache.base import BaseCache
@@ -7555,7 +7556,6 @@ async def test_configurable_propagates_to_stream_metadata() -> None:
     """Regression: thread_id, run_id, assistant_id, graph_id,
     and langgraph_auth_user_id from configurable must appear
     in stream_mode='messages' metadata."""
-    from langchain_core.messages import HumanMessage
 
     def my_node(state):
         return {"messages": HumanMessage(content="hello")}
