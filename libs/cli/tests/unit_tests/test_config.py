@@ -1518,9 +1518,7 @@ def test_config_to_docker_uv_lock_validates_root_path_sources_relative_to_projec
                 "package": "agent",
             }
         )
-        with pytest.raises(
-            click.UsageError, match="Replace the path source for 'shared'"
-        ):
+        with pytest.raises(click.UsageError, match="'shared' .* uses a path source"):
             config_to_docker(
                 config_path, config, base_image="langchain/langgraph-api:0.2.47"
             )
@@ -1545,7 +1543,7 @@ def test_config_to_docker_uv_lock_requires_explicit_workspace_sources():
         )
         with pytest.raises(
             click.UsageError,
-            match="is not inside the target package 'agent' or its workspace package dependencies",
+            match="not inside the target package 'agent'",
         ):
             config_to_docker(
                 config_path, config, base_image="langchain/langgraph-api:0.2.47"
@@ -1571,9 +1569,7 @@ def test_config_to_docker_uv_lock_rejects_path_workspace_sources():
                 "package": "agent",
             }
         )
-        with pytest.raises(
-            click.UsageError, match="Replace the path source for 'shared'"
-        ):
+        with pytest.raises(click.UsageError, match="'shared' .* uses a path source"):
             config_to_docker(
                 config_path, config, base_image="langchain/langgraph-api:0.2.47"
             )
@@ -1599,7 +1595,7 @@ def test_config_to_docker_uv_lock_rejects_package_false_workspace_dependency():
                 "package": "agent",
             }
         )
-        with pytest.raises(click.UsageError, match="package = false"):
+        with pytest.raises(click.UsageError, match="tool.uv.package = false"):
             config_to_docker(
                 config_path, config, base_image="langchain/langgraph-api:0.2.47"
             )
@@ -1627,7 +1623,7 @@ def test_config_to_docker_uv_lock_rejects_paths_outside_target_closure():
 
         with pytest.raises(
             click.UsageError,
-            match="is not inside the target package 'agent' or its workspace package dependencies",
+            match="not inside the target package 'agent'",
         ):
             config_to_docker(
                 config_path, config, base_image="langchain/langgraph-api:0.2.47"
@@ -1649,7 +1645,7 @@ def test_config_to_docker_uv_lock_missing_lockfile():
                 "package": "agent",
             }
         )
-        with pytest.raises(click.UsageError, match="no uv.lock file found"):
+        with pytest.raises(click.UsageError, match="No uv.lock found"):
             config_to_docker(
                 config_path, config, base_image="langchain/langgraph-api:0.2.47"
             )
@@ -1670,7 +1666,7 @@ def test_config_to_docker_uv_lock_missing_pyproject():
                 "package": "agent",
             }
         )
-        with pytest.raises(click.UsageError, match="no pyproject.toml found"):
+        with pytest.raises(click.UsageError, match="No pyproject.toml found"):
             config_to_docker(
                 config_path, config, base_image="langchain/langgraph-api:0.2.47"
             )

@@ -133,16 +133,16 @@ def _validate_uv_lock_source_entry(
         package = packages_by_name.get(normalized_source_name)
         if package is None:
             raise click.UsageError(
-                "pip_installer 'uv_lock' only supports workspace-local [tool.uv.sources] "
-                f"entries under project_root. '{source_name}' in {pyproject_path} is "
-                "marked as a workspace dependency but does not resolve to a workspace "
-                "package under project_root."
+                f"'{source_name}' in {pyproject_path} is marked as "
+                "`{{ workspace = true }}` but no matching workspace package was "
+                f"found under project_root ({project_root}). Check that "
+                f"'{source_name}' appears in [tool.uv.workspace].members."
             )
         if not _get_uv_lock_package_enabled(package):
             raise click.UsageError(
-                "pip_installer 'uv_lock' does not support workspace dependencies "
-                f"with `tool.uv.package = false`. '{source_name}' in {pyproject_path} "
-                "must be a buildable package."
+                f"'{source_name}' in {pyproject_path} is a workspace dependency "
+                f"but sets `tool.uv.package = false` in {package.pyproject_path}. "
+                "Workspace dependencies must be buildable packages."
             )
         workspace_dependencies.add(normalized_source_name)
 
@@ -153,31 +153,23 @@ def _validate_uv_lock_source_entry(
             or pathlib.PurePosixPath(path_ref).is_absolute()
         ):
             raise click.UsageError(
-                "pip_installer 'uv_lock' does not support absolute [tool.uv.sources] "
-                f"paths: {path_ref} in {pyproject_path}."
+                f"'{source_name}' in {pyproject_path} uses an absolute path "
+                f"({path_ref}), which is not supported. Use a relative path or "
+                "`{{ workspace = true }}` instead."
             )
 
         resolved = (declared_root / path_ref).resolve()
+        # All three cases below have the same fix: use { workspace = true }.
+        # Give a specific reason so the user understands *why*.
         if project_root != resolved and project_root not in resolved.parents:
-            raise click.UsageError(
-                "pip_installer 'uv_lock' only supports workspace dependencies "
-                "declared with `{ workspace = true }` under project_root. "
-                f"'{source_name}' in {pyproject_path} points to {resolved}, which "
-                f"is outside project_root {project_root}."
-            )
-
-        if resolved not in packages_by_root:
-            raise click.UsageError(
-                "pip_installer 'uv_lock' only supports workspace dependencies "
-                "declared with `{ workspace = true }` under project_root. "
-                f"'{source_name}' in {pyproject_path} points to {resolved}, which "
-                "is not a declared workspace package."
-            )
-
+            reason = f"it resolves to {resolved}, which is outside project_root ({project_root})"
+        elif resolved not in packages_by_root:
+            reason = f"it resolves to {resolved}, which is not a workspace package"
+        else:
+            reason = "path-based sources are not supported for workspace packages"
         raise click.UsageError(
-            "pip_installer 'uv_lock' only supports workspace dependencies "
-            "declared with `{ workspace = true }`. "
-            f"Replace the path source for '{source_name}' in {pyproject_path}."
+            f"'{source_name}' in {pyproject_path} uses a path source, but "
+            f"{reason}. Replace it with `{source_name} = {{ workspace = true }}`."
         )
 
     for nested_value in source_value.values():
@@ -426,13 +418,16 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
 
     if not uv_lock_path.exists():
         raise click.UsageError(
-            f"pip_installer is 'uv_lock' but no uv.lock file found at {uv_lock_path}. "
-            "Ensure project_root points to a workspace root containing uv.lock."
+            f"No uv.lock found at {uv_lock_path}. Your langgraph.json sets "
+            f"project_root={config['project_root']!r}, which resolves to "
+            f"{project_root}. Make sure this is the directory where you run "
+            "`uv lock` (it should contain both pyproject.toml and uv.lock)."
         )
     if not pyproject_path.exists():
         raise click.UsageError(
-            f"pip_installer is 'uv_lock' but no pyproject.toml found at {pyproject_path}. "
-            "Ensure project_root points to a workspace root containing pyproject.toml."
+            f"No pyproject.toml found at {pyproject_path}. Your langgraph.json "
+            f"sets project_root={config['project_root']!r}, which resolves to "
+            f"{project_root}. This should be your uv workspace root."
         )
 
     workspace = _discover_uv_lock_workspace_packages(project_root, pyproject_path)
@@ -444,9 +439,10 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
             sorted(package.name for package in packages_by_name.values())
         )
         raise click.UsageError(
-            f"pip_installer 'uv_lock' could not find package '{config['package']}' "
-            f"under project_root {project_root}. Available workspace packages: "
-            f"{available_packages or '(none)'}."
+            f"Could not find package '{config['package']}' in the workspace at "
+            f"{project_root}. The `package` field in your langgraph.json must "
+            f"match a [project].name in one of the workspace member pyproject.toml "
+            f"files. Available packages: {available_packages or '(none)'}."
         )
     _validate_uv_lock_package(
         target,
@@ -458,8 +454,9 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
     )
     if not target.package_enabled:
         raise click.UsageError(
-            "pip_installer 'uv_lock' requires `package` to reference a buildable "
-            f"workspace package. '{target.name}' sets `tool.uv.package = false`."
+            f"'{target.name}' has `tool.uv.package = false` in "
+            f"{target.pyproject_path}, so it cannot be deployed. Either remove "
+            "that setting or point `package` at a different workspace member."
         )
 
     install_order: list[UvLockPackage] = []
@@ -545,9 +542,17 @@ def _rewrite_uv_lock_import_path(
 
     container_path = _resolve_uv_lock_container_path(resolved, plan)
     if container_path is None:
+        copied_dirs = ", ".join(
+            package.root.relative_to(plan.project_root).as_posix() or "."
+            for package in plan.install_order
+        )
         raise click.UsageError(
-            f"{label.capitalize()} '{import_str}' is not inside the target package "
-            f"'{plan.target.name}' or its workspace package dependencies."
+            f"{label.capitalize()} '{import_str}' resolves to {resolved}, which is "
+            f"not inside the target package '{plan.target.name}' or any of its "
+            f"workspace dependencies. Only these directories are copied into the "
+            f"container: {copied_dirs}. If this file lives in another workspace "
+            f"package, add it as a dependency of '{plan.target.name}' with "
+            "`{ workspace = true }` in [tool.uv.sources]."
         )
 
     return f"{container_path.as_posix()}:{attr_str}"
