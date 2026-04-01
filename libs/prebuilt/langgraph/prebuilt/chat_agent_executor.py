@@ -240,6 +240,23 @@ def _get_model(model: LanguageModelLike) -> BaseChatModel:
     return model
 
 
+def _strip_thinking_if_enabled(model: BaseChatModel) -> BaseChatModel:
+    """Strip thinking/reasoning from a model if it is enabled.
+
+    Some providers (e.g. Anthropic extended thinking) set a `thinking` parameter
+    on the model that enables reasoning prior to the response.  When thinking is
+    active the provider does not allow `tool_choice` to force tool use
+    (i.e. `tool_choice="any"` or `tool_choice="tool"`), which is the default
+    behaviour of `with_structured_output`.  For the separate structured-response
+    generation call we therefore disable thinking so that `with_structured_output`
+    can bind tools without hitting an API error.
+    """
+    thinking = getattr(model, "thinking", None)
+    if isinstance(thinking, dict) and thinking.get("type") not in (None, "disabled"):
+        return model.model_copy(update={"thinking": {"type": "disabled"}})
+    return model
+
+
 def _validate_chat_history(
     messages: Sequence[BaseMessage],
 ) -> None:
@@ -758,8 +775,8 @@ def create_react_agent(
             messages = [SystemMessage(content=system_prompt)] + list(messages)
 
         resolved_model = _resolve_model(state, runtime)
-        model_with_structured_output = _get_model(
-            resolved_model
+        model_with_structured_output = _strip_thinking_if_enabled(
+            _get_model(resolved_model)
         ).with_structured_output(
             cast(StructuredResponseSchema, structured_response_schema)
         )
@@ -776,8 +793,8 @@ def create_react_agent(
             messages = [SystemMessage(content=system_prompt)] + list(messages)
 
         resolved_model = await _aresolve_model(state, runtime)
-        model_with_structured_output = _get_model(
-            resolved_model
+        model_with_structured_output = _strip_thinking_if_enabled(
+            _get_model(resolved_model)
         ).with_structured_output(
             cast(StructuredResponseSchema, structured_response_schema)
         )
