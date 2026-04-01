@@ -152,7 +152,7 @@ def test_state_schema_optional_values(total_: bool):
     class OutputState(SomeParentState, total=total_):  # type: ignore
         out_val1: str
         out_val2: str | None
-        out_val3: Required[str]
+        out_val3: Annotated[Required[str], "out_val3"]
         out_val4: NotRequired[dict]
         out_val5: Annotated[Required[str], "foo"]
         out_val6: Annotated[NotRequired[str], "bar"]
