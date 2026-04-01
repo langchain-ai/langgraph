@@ -240,6 +240,80 @@ def _get_model(model: LanguageModelLike) -> BaseChatModel:
     return model
 
 
+def _strip_thinking_if_enabled(model: BaseChatModel) -> BaseChatModel:
+    """Strip thinking/reasoning from a model if it is enabled.
+
+    Some providers (e.g. Anthropic extended thinking) set a `thinking` parameter
+    on the model that enables reasoning prior to the response.  When thinking is
+    active the provider does not allow `tool_choice` to force tool use
+    (i.e. `tool_choice="any"` or `tool_choice="tool"`), which is the default
+    behaviour of `with_structured_output`.  For the separate structured-response
+    generation call we therefore disable thinking so that `with_structured_output`
+    can bind tools without hitting an API error.
+    """
+    thinking = getattr(model, "thinking", None)
+    if isinstance(thinking, dict) and thinking.get("type") not in (None, "disabled"):
+        return model.model_copy(update={"thinking": {"type": "disabled"}})
+    return model
+
+
+def _strip_thinking_from_messages(
+    messages: Sequence[BaseMessage],
+) -> list[BaseMessage]:
+    """Strip thinking/reasoning content from messages.
+
+    Removes thinking content blocks (`type: "thinking"`) from AIMessage content
+    and `reasoning_content` / `reasoning` keys from `additional_kwargs`.
+
+    This is used before structured-output generation where thinking content
+    is unnecessary and may trigger provider errors (e.g. Anthropic disallows
+    thinking blocks when `tool_choice` forces tool use).
+    """
+    stripped: list[BaseMessage] = []
+    for message in messages:
+        if not isinstance(message, AIMessage):
+            stripped.append(message)
+            continue
+
+        new_content = message.content
+        new_kwargs = message.additional_kwargs
+        changed = False
+
+        # Strip thinking blocks from list-style content
+        if isinstance(message.content, list):
+            filtered = [
+                block
+                for block in message.content
+                if not (isinstance(block, dict) and block.get("type") == "thinking")
+            ]
+            if len(filtered) != len(message.content):
+                new_content = filtered
+                changed = True
+
+        # Strip reasoning fields from additional_kwargs
+        if (
+            "reasoning_content" in message.additional_kwargs
+            or "reasoning" in message.additional_kwargs
+        ):
+            new_kwargs = {
+                k: v
+                for k, v in message.additional_kwargs.items()
+                if k not in ("reasoning_content", "reasoning")
+            }
+            changed = True
+
+        if changed:
+            stripped.append(
+                message.model_copy(
+                    update={"content": new_content, "additional_kwargs": new_kwargs}
+                )
+            )
+        else:
+            stripped.append(message)
+
+    return stripped
+
+
 def _validate_chat_history(
     messages: Sequence[BaseMessage],
 ) -> None:
@@ -757,9 +831,12 @@ def create_react_agent(
             system_prompt, structured_response_schema = response_format
             messages = [SystemMessage(content=system_prompt)] + list(messages)
 
+        # Strip thinking/reasoning from messages and disable thinking on model
+        # to avoid provider errors with tool_choice in with_structured_output
+        messages = _strip_thinking_from_messages(messages)
         resolved_model = _resolve_model(state, runtime)
-        model_with_structured_output = _get_model(
-            resolved_model
+        model_with_structured_output = _strip_thinking_if_enabled(
+            _get_model(resolved_model)
         ).with_structured_output(
             cast(StructuredResponseSchema, structured_response_schema)
         )
@@ -775,9 +852,12 @@ def create_react_agent(
             system_prompt, structured_response_schema = response_format
             messages = [SystemMessage(content=system_prompt)] + list(messages)
 
+        # Strip thinking/reasoning from messages and disable thinking on model
+        # to avoid provider errors with tool_choice in with_structured_output
+        messages = _strip_thinking_from_messages(messages)
         resolved_model = await _aresolve_model(state, runtime)
-        model_with_structured_output = _get_model(
-            resolved_model
+        model_with_structured_output = _strip_thinking_if_enabled(
+            _get_model(resolved_model)
         ).with_structured_output(
             cast(StructuredResponseSchema, structured_response_schema)
         )

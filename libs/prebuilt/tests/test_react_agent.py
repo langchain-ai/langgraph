@@ -11,7 +11,7 @@ from typing import (
 from unittest.mock import Mock
 
 import pytest
-from langchain_core.language_models import BaseChatModel
+from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -22,7 +22,7 @@ from langchain_core.messages import (
     ToolCall,
     ToolMessage,
 )
-from langchain_core.runnables import RunnableConfig, RunnableLambda
+from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langchain_core.tools import InjectedToolCallId, ToolException
 from langchain_core.tools import tool as dec_tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -46,8 +46,11 @@ from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
     AgentStatePydantic,
     StateSchemaType,
+    StructuredResponse,
     _get_model,
     _should_bind_tools,
+    _strip_thinking_from_messages,
+    _strip_thinking_if_enabled,
     _validate_chat_history,
 )
 from langgraph.prebuilt.tool_node import (
@@ -1549,6 +1552,171 @@ def test_get_model() -> None:
 
     with pytest.raises(TypeError):
         _get_model(RunnableLambda(lambda message: message))
+
+
+class FakeThinkingModel(FakeToolCallingModel):
+    """Fake model that simulates Anthropic extended thinking."""
+
+    thinking: dict | None = None
+
+    def with_structured_output(
+        self, schema: type[BaseModel], **kwargs
+    ) -> Runnable[LanguageModelInput, StructuredResponse]:
+        # Simulate Anthropic's restriction: raise an error if thinking is enabled
+        # and tool_choice would force tool use (the default with_structured_output
+        # behaviour for Anthropic models).
+        if isinstance(self.thinking, dict) and self.thinking.get("type") not in (
+            None,
+            "disabled",
+        ):
+            raise ValueError(
+                "Thinking may not be enabled when tool_choice forces tool use."
+            )
+        return super().with_structured_output(schema, **kwargs)
+
+
+def test_strip_thinking_if_enabled() -> None:
+    """_strip_thinking_if_enabled should disable thinking when it is active."""
+    # Model without thinking - returned unchanged
+    plain_model = FakeToolCallingModel(tool_calls=[])
+    assert _strip_thinking_if_enabled(plain_model) is plain_model
+
+    # Model with thinking explicitly disabled - returned unchanged
+    model_thinking_disabled = FakeThinkingModel(
+        tool_calls=[], thinking={"type": "disabled"}
+    )
+    assert (
+        _strip_thinking_if_enabled(model_thinking_disabled) is model_thinking_disabled
+    )
+
+    # Model with thinking=None - returned unchanged
+    model_thinking_none = FakeThinkingModel(tool_calls=[], thinking=None)
+    assert _strip_thinking_if_enabled(model_thinking_none) is model_thinking_none
+
+    # Model with thinking enabled - should return a copy with thinking disabled
+    model_thinking_enabled = FakeThinkingModel(
+        tool_calls=[], thinking={"type": "enabled", "budget_tokens": 1024}
+    )
+    stripped = _strip_thinking_if_enabled(model_thinking_enabled)
+    assert stripped is not model_thinking_enabled
+    assert stripped.thinking == {"type": "disabled"}  # type: ignore[attr-defined]
+
+    # Adaptive thinking variant
+    model_adaptive = FakeThinkingModel(tool_calls=[], thinking={"type": "adaptive"})
+    stripped_adaptive = _strip_thinking_if_enabled(model_adaptive)
+    assert stripped_adaptive is not model_adaptive
+    assert stripped_adaptive.thinking == {"type": "disabled"}  # type: ignore[attr-defined]
+
+
+def test_strip_thinking_from_messages() -> None:
+    """_strip_thinking_from_messages should remove thinking/reasoning from messages."""
+    # Non-AI messages are passed through unchanged
+    human = HumanMessage("hello")
+    tool = ToolMessage("result", tool_call_id="1")
+    assert _strip_thinking_from_messages([human, tool]) == [human, tool]
+
+    # AIMessage without thinking content is returned unchanged
+    plain_ai = AIMessage(content="answer")
+    result = _strip_thinking_from_messages([plain_ai])
+    assert result[0] is plain_ai
+
+    # AIMessage with thinking content blocks gets them stripped
+    ai_with_thinking = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "Let me reason about this..."},
+            {"type": "text", "text": "The answer is 42."},
+        ]
+    )
+    result = _strip_thinking_from_messages([ai_with_thinking])
+    assert result[0].content == [{"type": "text", "text": "The answer is 42."}]
+
+    # AIMessage with only thinking blocks gets empty content list
+    ai_only_thinking = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "I'm just thinking..."},
+        ]
+    )
+    result = _strip_thinking_from_messages([ai_only_thinking])
+    assert result[0].content == []
+
+    # AIMessage with reasoning_content in additional_kwargs gets it stripped
+    ai_with_reasoning = AIMessage(
+        content="answer",
+        additional_kwargs={"reasoning_content": "My reasoning...", "other_key": "keep"},
+    )
+    result = _strip_thinking_from_messages([ai_with_reasoning])
+    assert result[0].content == "answer"
+    assert result[0].additional_kwargs == {"other_key": "keep"}
+    assert "reasoning_content" not in result[0].additional_kwargs
+
+    # AIMessage with reasoning in additional_kwargs gets it stripped
+    ai_with_reasoning_field = AIMessage(
+        content="answer",
+        additional_kwargs={"reasoning": "My reasoning..."},
+    )
+    result = _strip_thinking_from_messages([ai_with_reasoning_field])
+    assert result[0].content == "answer"
+    assert result[0].additional_kwargs == {}
+
+    # AIMessage with both thinking blocks and reasoning_content
+    ai_with_both = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "Deep thought..."},
+            {"type": "text", "text": "Result"},
+        ],
+        additional_kwargs={"reasoning_content": "Also reasoning..."},
+    )
+    result = _strip_thinking_from_messages([ai_with_both])
+    assert result[0].content == [{"type": "text", "text": "Result"}]
+    assert result[0].additional_kwargs == {}
+
+    # Mixed message list preserves order and handles each correctly
+    messages = [
+        HumanMessage("question"),
+        AIMessage(
+            content=[
+                {"type": "thinking", "thinking": "Hmm..."},
+                {"type": "text", "text": "first answer"},
+            ]
+        ),
+        ToolMessage("tool result", tool_call_id="1"),
+        AIMessage(content="plain answer"),
+    ]
+    result = _strip_thinking_from_messages(messages)
+    assert len(result) == 4
+    assert result[0] is messages[0]  # HumanMessage unchanged
+    assert result[1].content == [{"type": "text", "text": "first answer"}]
+    assert result[2] is messages[2]  # ToolMessage unchanged
+    assert result[3] is messages[3]  # plain AIMessage unchanged
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_react_agent_structured_response_strips_thinking(version: str) -> None:
+    """create_react_agent should strip extended thinking before calling
+    with_structured_output so that Anthropic's tool_choice restriction is not hit.
+    """
+
+    class WeatherResponse(BaseModel):
+        temperature: float = Field(description="The temperature in fahrenheit")
+
+    expected_structured_response = WeatherResponse(temperature=75)
+    # Model that has thinking enabled and raises if with_structured_output
+    # is called without stripping thinking first.
+    model = FakeThinkingModel(
+        tool_calls=[[]],
+        structured_response=expected_structured_response,
+        thinking={"type": "enabled", "budget_tokens": 1024},
+    )
+
+    agent = create_react_agent(
+        model,
+        [],  # no tools - goes straight to generate_structured_response
+        response_format=WeatherResponse,
+        version=version,
+    )
+    # Should NOT raise "Thinking may not be enabled when tool_choice forces tool use."
+    response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
+    assert response["structured_response"] == expected_structured_response
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
