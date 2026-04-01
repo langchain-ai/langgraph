@@ -309,11 +309,32 @@ def test_configurable_metadata():
             "andme": 42,
             "nested": {"foo": "bar"},
             "nooverride": -2,
+            "thread_id": "th-123",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "langgraph_auth_user_id": "user-1",
         },
         "metadata": {"nooverride": 18},
     }
-    expected = {"nooverride"}
+    expected = {
+        "nooverride",
+        "thread_id",
+        "run_id",
+        "assistant_id",
+        "graph_id",
+        "langgraph_auth_user_id",
+    }
     merged = ensure_config(config)
     metadata = merged["metadata"]
     assert metadata.keys() == expected
     assert metadata["nooverride"] == 18
+    assert metadata["thread_id"] == "th-123"
+    assert metadata["run_id"] == "run-456"
+    # existing metadata should not be overridden
+    config2 = {
+        "configurable": {"thread_id": "from-configurable"},
+        "metadata": {"thread_id": "from-metadata"},
+    }
+    merged2 = ensure_config(config2)
+    assert merged2["metadata"]["thread_id"] == "from-metadata"

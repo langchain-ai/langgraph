@@ -308,4 +308,13 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         for k, v in config.items():
             if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
+    _empty_metadata = empty["metadata"]
+    for key in _PROPAGATE_TO_METADATA:
+        if key in empty[CONF] and key not in _empty_metadata:
+            _empty_metadata[key] = empty[CONF][key]
     return empty
+
+
+_PROPAGATE_TO_METADATA = frozenset(
+    ("thread_id", "run_id", "assistant_id", "graph_id", "langgraph_auth_user_id")
+)
