@@ -319,15 +319,16 @@ def find_deployment_id_by_name(
 # ---------------------------------------------------------------------------
 
 
-def normalize_image_name(value: str | None) -> str:
-    """Sanitize a deployment/directory name into a valid Docker repository name.
+def normalize_name(value: str | None) -> str:
+    """Sanitize a deployment/directory name into a valid deployment name.
 
-    Docker repository names must be lowercase and may only contain
-    [a-z0-9._-].  Invalid characters are replaced with hyphens.
+    LangSmith Deployment names only allow lowercase
+    alphanumeric characters and hyphens ([a-z0-9-]).
+    Invalid characters are replaced with hyphens.
     """
     if not value:
         return "app"
-    slug = re.sub(r"[^a-z0-9._-]+", "-", value.lower()).strip("-.")
+    slug = re.sub(r"[^a-z0-9-]+", "-", value.lower()).strip("-")
     return slug or "app"
 
 
@@ -950,7 +951,7 @@ def _run_local_build(
         if "://" in normalized_registry:
             normalized_registry = normalized_registry.split("//", 1)[1]
         repo_seed = image_name or name or config.parent.name
-        repo_name = normalize_image_name(repo_seed)
+        repo_name = normalize_name(repo_seed)
         tag_value = normalize_image_tag(tag)
         remote_image = f"{normalized_registry}/{repo_name}:{tag_value}"
 
@@ -1505,7 +1506,7 @@ def _deploy_cmd(
     if not deployment_id and not name:
         name = env_vars.get(_DEPLOYMENT_NAME_ENV)
     if not deployment_id and not name:
-        default_name = normalize_image_name(pathlib.Path.cwd().name)
+        default_name = normalize_name(pathlib.Path.cwd().name)
         if no_input:
             name = default_name
         else:
@@ -1515,7 +1516,7 @@ def _deploy_cmd(
                 set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
                 click.echo(f"Saved deployment name to {env_path}")
     if name and not deployment_id:
-        name = normalize_image_name(name)
+        name = normalize_name(name)
 
     secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 

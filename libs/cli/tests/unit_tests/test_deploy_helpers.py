@@ -17,8 +17,8 @@ from langgraph_cli.deploy import (
     _parse_env_from_config,
     _resolve_env_path,
     _smith_dashboard_base_url,
-    normalize_image_name,
     normalize_image_tag,
+    normalize_name,
 )
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 
@@ -45,30 +45,33 @@ class TestDockerConfigForToken:
             assert "gcr.io" in data["auths"]
 
 
-class TestNormalizeImageName:
+class TestNormalizeName:
     def test_simple_name(self):
-        assert normalize_image_name("myapp") == "myapp"
+        assert normalize_name("myapp") == "myapp"
 
     def test_uppercase_lowered(self):
-        assert normalize_image_name("MyApp") == "myapp"
+        assert normalize_name("MyApp") == "myapp"
 
     def test_special_chars_replaced(self):
-        assert normalize_image_name("my app!@#v2") == "my-app-v2"
+        assert normalize_name("my app!@#v2") == "my-app-v2"
 
-    def test_dots_and_hyphens_kept(self):
-        assert normalize_image_name("my-app.v2") == "my-app.v2"
+    def test_dots_replaced_with_hyphens(self):
+        assert normalize_name("my-app.v2") == "my-app-v2"
+
+    def test_underscores_replaced_with_hyphens(self):
+        assert normalize_name("simple_graph_name") == "simple-graph-name"
 
     def test_leading_trailing_stripped(self):
-        assert normalize_image_name("--my-app..") == "my-app"
+        assert normalize_name("--my-app..") == "my-app"
 
     def test_empty_string_returns_app(self):
-        assert normalize_image_name("") == "app"
+        assert normalize_name("") == "app"
 
     def test_none_returns_app(self):
-        assert normalize_image_name(None) == "app"
+        assert normalize_name(None) == "app"
 
     def test_all_invalid_chars_returns_app(self):
-        assert normalize_image_name("!!!") == "app"
+        assert normalize_name("!!!") == "app"
 
 
 class TestNormalizeImageTag:
