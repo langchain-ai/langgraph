@@ -1,3 +1,6 @@
+import asyncio
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -5,8 +8,9 @@ import pytest
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
+from langgraph.errors import GraphDrained
 from langgraph.graph import END, START, StateGraph
-from langgraph.runtime import Runtime, get_runtime
+from langgraph.runtime import RunControl, Runtime, get_runtime
 
 
 def test_injected_runtime() -> None:
@@ -76,6 +80,61 @@ def test_merge_runtime() -> None:
     assert runtime1.merge(runtime2).context.api_key == "def"
     # override only applies to non-falsy values
     assert runtime1.merge(runtime3).context.api_key == "abc"  # type: ignore
+
+
+def test_merge_runtime_preserves_run_control() -> None:
+    control = RunControl()
+    runtime1 = Runtime(control=control)
+    runtime2 = Runtime(context=None)
+
+    assert runtime1.merge(runtime2).control is control
+
+
+def test_runtime_request_drain_stops_future_steps() -> None:
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    def first_node(state: State, runtime: Runtime) -> dict[str, str]:
+        runtime.request_drain()
+        return {"first": "done"}
+
+    def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", first_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    with pytest.raises(GraphDrained, match="shutdown"):
+        graph.compile().invoke({})
+
+
+@pytest.mark.anyio
+async def test_runtime_request_drain_stops_future_steps_async() -> None:
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    async def first_node(state: State, runtime: Runtime) -> dict[str, str]:
+        runtime.request_drain()
+        return {"first": "done"}
+
+    async def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", first_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    with pytest.raises(GraphDrained, match="shutdown"):
+        await graph.compile().ainvoke({})
 
 
 def test_runtime_propogated_to_subgraph() -> None:
@@ -389,3 +448,328 @@ def test_context_coercion_pydantic_validation_errors() -> None:
         compiled.invoke(
             {"message": "test"}, context={"api_key": "sk_test", "timeout": "not_an_int"}
         )
+
+
+def test_external_drain_concurrent_sync() -> None:
+    """External thread calls request_drain() while graph is mid-execution."""
+
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    started = threading.Event()
+
+    def first_node(state: State) -> dict[str, str]:
+        started.set()
+        time.sleep(0.5)
+        return {"first": "done"}
+
+    def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", first_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    control = RunControl()
+    compiled = graph.compile()
+
+    exc_holder: list[BaseException | None] = [None]
+
+    def run_graph() -> None:
+        try:
+            compiled.invoke({}, control=control)
+        except GraphDrained as e:
+            exc_holder[0] = e
+
+    t = threading.Thread(target=run_graph)
+    t.start()
+
+    started.wait(timeout=5)
+    control.request_drain("sigterm")
+
+    t.join(timeout=10)
+
+    exc = exc_holder[0]
+    assert isinstance(exc, GraphDrained)
+    assert exc.reason == "sigterm"
+
+
+@pytest.mark.anyio
+async def test_external_drain_concurrent_async() -> None:
+    """External task calls request_drain() while graph is mid-execution."""
+
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    started = asyncio.Event()
+
+    async def first_node(state: State) -> dict[str, str]:
+        started.set()
+        await asyncio.sleep(0.5)
+        return {"first": "done"}
+
+    async def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", first_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    control = RunControl()
+    compiled = graph.compile()
+
+    async def drain_after_start() -> None:
+        await started.wait()
+        control.request_drain("sigterm")
+
+    drain_task = asyncio.create_task(drain_after_start())
+
+    with pytest.raises(GraphDrained, match="sigterm"):
+        await compiled.ainvoke({}, control=control)
+
+    await drain_task
+
+
+@pytest.mark.anyio
+async def test_drain_then_cancel_after_graceful_timeout() -> None:
+    """Simulate: drain requested -> node still running -> graceful timeout -> cancel.
+
+    This shows what happens when a long-running node doesn't finish within
+    the graceful period after drain is requested.
+    """
+
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    node_started = asyncio.Event()
+    node_cancelled = asyncio.Event()
+    node_finished = asyncio.Event()
+
+    async def slow_node(state: State) -> dict[str, str]:
+        node_started.set()
+        try:
+            await asyncio.sleep(30)  # very long operation
+        except asyncio.CancelledError:
+            node_cancelled.set()
+            raise
+        node_finished.set()
+        return {"first": "done"}
+
+    async def second_node(state: State) -> dict[str, str]:
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", slow_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    control = RunControl()
+    compiled = graph.compile()
+
+    # Phase 1: start graph
+    graph_task = asyncio.create_task(compiled.ainvoke({}, control=control))
+
+    # Phase 2: wait for node to start, then request drain
+    await node_started.wait()
+    control.request_drain("sigterm")
+
+    # Phase 3: graceful timeout — node is still running, cancel after 1s
+    graceful_timeout = 1.0
+    await asyncio.sleep(graceful_timeout)
+
+    assert not node_finished.is_set(), "node should still be running"
+    assert not node_cancelled.is_set(), "node should not be cancelled yet"
+
+    # Phase 4: force cancel
+    graph_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await graph_task
+
+    # The node received CancelledError at the await point
+    assert node_cancelled.is_set(), "node should have received CancelledError"
+    assert not node_finished.is_set(), "node should NOT have finished normally"
+
+
+@pytest.mark.anyio
+async def test_cancel_ainvoke_with_async_node() -> None:
+    """Cancel ainvoke running an async node: CancelledError is delivered
+    at the await point and the node stops immediately."""
+
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    timeline: list[str] = []
+    node_started = asyncio.Event()
+
+    async def slow_async_node(state: State) -> dict[str, str]:
+        timeline.append(f"async_node:start thread={threading.current_thread().name}")
+        node_started.set()
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            timeline.append("async_node:cancelled")
+            raise
+        timeline.append("async_node:finished")
+        return {"first": "done"}
+
+    async def second_node(state: State) -> dict[str, str]:
+        timeline.append("second_node:run")
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", slow_async_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    compiled = graph.compile()
+    graph_task = asyncio.create_task(compiled.ainvoke({}))
+
+    await node_started.wait()
+    timeline.append("test:cancel")
+    graph_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await graph_task
+    timeline.append("test:done")
+
+    # async node runs on the event loop thread (MainThread)
+    assert any("MainThread" in e for e in timeline if "async_node:start" in e)
+    # CancelledError was delivered at the await point — node stopped
+    assert "async_node:cancelled" in timeline
+    # Node did NOT run to completion
+    assert "async_node:finished" not in timeline
+    # Second node never ran
+    assert "second_node:run" not in timeline
+
+
+@pytest.mark.anyio
+async def test_cancel_ainvoke_with_sync_node() -> None:
+    """Cancel ainvoke running a sync node.
+
+    Sync nodes in ainvoke run on a separate thread (via run_in_executor),
+    NOT on the event loop thread. Cancelling the asyncio task disconnects
+    from the thread future, but the thread keeps running as an orphan and
+    completes on its own.
+
+    Key difference from async nodes:
+    - async node: CancelledError stops the coroutine at an await point
+    - sync node: cancel only disconnects asyncio; the thread runs to completion
+
+    In shutdown case, we will ignore this because the instance will be destroyed soon.
+    """
+
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    timeline: list[str] = []
+    node_started = threading.Event()
+    node_finished = threading.Event()
+
+    def slow_sync_node(state: State) -> dict[str, str]:
+        timeline.append(f"sync_node:start thread={threading.current_thread().name}")
+        node_started.set()
+        time.sleep(1)
+        timeline.append("sync_node:after_sleep")
+        node_finished.set()
+        return {"first": "done"}
+
+    def second_node(state: State) -> dict[str, str]:
+        timeline.append("second_node:run")
+        return {"second": "should-not-run"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", slow_sync_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    control = RunControl()
+    compiled = graph.compile()
+
+    timeline.append(f"test:main thread={threading.current_thread().name}")
+    graph_task = asyncio.create_task(compiled.ainvoke({}, control=control))
+
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, node_started.wait, 5)
+
+    timeline.append("test:cancel+drain")
+    graph_task.cancel()
+    control.request_drain("sigterm")
+
+    with pytest.raises(asyncio.CancelledError):
+        await graph_task
+    timeline.append("test:exc=CancelledError")
+
+    # Sync node runs on a background thread (asyncio_*), NOT MainThread
+    sync_start = next(e for e in timeline if "sync_node:start" in e)
+    assert "MainThread" not in sync_start, (
+        "sync node should run on a background thread, not the event loop thread"
+    )
+
+    # At this point, the asyncio task is done but the thread is orphaned.
+    # The sync node has NOT finished yet — cancel only disconnected asyncio.
+    assert not node_finished.is_set(), (
+        "sync node should still be running in its background thread"
+    )
+
+    # Wait for the orphaned thread to complete on its own.
+    await loop.run_in_executor(None, node_finished.wait, 5)
+    assert node_finished.is_set()
+
+    # After the orphaned thread finishes, the full timeline looks like:
+    #   test:main thread=MainThread
+    #   sync_node:start thread=asyncio_N    <- background thread
+    #   test:cancel+drain                   <- cancel + drain fired
+    #   test:exc=CancelledError             <- asyncio disconnected
+    #   sync_node:after_sleep               <- thread ran to completion anyway
+    assert "sync_node:after_sleep" in timeline
+    # Second node never ran
+    assert "second_node:run" not in timeline
+
+    # Verify timeline ordering: cancel happened before node finished
+    cancel_idx = timeline.index("test:cancel+drain")
+    sleep_idx = timeline.index("sync_node:after_sleep")
+    assert cancel_idx < sleep_idx, (
+        "cancel was issued while the sync node was still sleeping"
+    )
+
+
+def test_drain_with_control_parameter_sync() -> None:
+    """Control parameter is wired through invoke -> stream."""
+
+    class State(TypedDict, total=False):
+        value: str
+
+    def node(state: State) -> dict[str, str]:
+        return {"value": "done"}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.add_edge(START, "node")
+    graph.add_edge("node", END)
+
+    # Pre-drained control should immediately stop after first step
+    control = RunControl()
+    control.request_drain("pre-drained")
+
+    # Graph has only one node in first step, so it completes that step
+    # then drain prevents any further steps
+    with pytest.raises(GraphDrained, match="pre-drained"):
+        graph.compile().invoke({}, control=control)
