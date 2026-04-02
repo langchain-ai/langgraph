@@ -1691,6 +1691,7 @@ dependencies = [
     { name = "click", marker = "python_full_version < '3.14'" },
     { name = "httpx", marker = "python_full_version < '3.14'" },
     { name = "langgraph-sdk", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
+    { name = "pathspec", marker = "python_full_version < '3.14'" },
     { name = "python-dotenv", marker = "python_full_version < '3.14'" },
 ]
 
@@ -1707,6 +1708,7 @@ requires-dist = [
     { name = "langgraph-api", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.5.35,<0.8.0" },
     { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.7" },
     { name = "langgraph-sdk", marker = "python_full_version >= '3.11'", specifier = ">=0.1.0" },
+    { name = "pathspec", specifier = ">=0.11.0" },
     { name = "python-dotenv", specifier = ">=0.8.0" },
 ]
 provides-extras = ["inmem"]
