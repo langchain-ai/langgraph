@@ -775,3 +775,104 @@ def test_server_info_user_from_base_user_object() -> None:
     assert si.user["identity"] == "user-99"
     assert si.user.identity == "user-99"
     assert si.user["display_name"] == "Bob"
+
+
+def test_server_info_user_from_starlette_style_proxy() -> None:
+    """server_info.user should work with starlette-style proxy users.
+
+    The LangGraph Server wraps auth users in a ProxyUser(BaseUser) that
+    provides identity/display_name via properties and permissions via
+    __getattr__. This doesn't satisfy the SDK's runtime_checkable Protocol
+    isinstance check, but should still be accepted via the hasattr fallback.
+    """
+
+    class _StarletteBaseUser:
+        """Mimics starlette.authentication.BaseUser — no __getitem__."""
+
+        @property
+        def is_authenticated(self) -> bool:
+            return True
+
+        @property
+        def display_name(self) -> str:
+            return ""
+
+        @property
+        def identity(self) -> str:
+            return ""
+
+    class _ProxyUser(_StarletteBaseUser):
+        """Mimics langgraph_api.auth.custom.ProxyUser."""
+
+        def __init__(self, data: dict[str, Any]) -> None:
+            self._data = data
+
+        @property
+        def identity(self) -> str:
+            return self._data["identity"]
+
+        @property
+        def display_name(self) -> str:
+            return self._data.get("display_name", self.identity)
+
+        def __getattr__(self, name: str) -> Any:
+            return self._data[name]
+
+        def __getitem__(self, key: str) -> Any:
+            return self._data[key]
+
+        def __contains__(self, key: str) -> bool:
+            return key in self._data
+
+        def __iter__(self):
+            return iter(self._data)
+
+    class State(TypedDict):
+        message: str
+
+    captured: dict[str, Any] = {}
+
+    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
+        captured["server_info"] = runtime.server_info
+        return {"message": "done"}
+
+    graph = StateGraph(state_schema=State)
+    graph.add_node("capture", capture_node)
+    graph.add_edge(START, "capture")
+    graph.add_edge("capture", END)
+    compiled = graph.compile()
+
+    proxy = _ProxyUser(
+        {
+            "identity": "starlette-user",
+            "display_name": "Starlette User",
+            "is_authenticated": True,
+            "permissions": ["read"],
+        }
+    )
+    # Verify it does NOT satisfy the SDK Protocol (the bug scenario)
+    from langgraph.runtime import BaseUser as SDKBaseUser
+
+    assert not isinstance(proxy, SDKBaseUser)
+    assert not isinstance(proxy, dict)
+    # But it does have identity
+    assert hasattr(proxy, "identity")
+
+    compiled.invoke(
+        {"message": "hi"},
+        config={
+            "configurable": {
+                "langgraph_auth_user": proxy,
+            },
+            "metadata": {
+                "assistant_id": "asst-proxy",
+                "graph_id": "graph-proxy",
+            },
+        },
+    )
+    si = captured["server_info"]
+    assert si is not None
+    assert si.assistant_id == "asst-proxy"
+    assert si.user is not None
+    assert si.user.identity == "starlette-user"
+    assert si.user["display_name"] == "Starlette User"
