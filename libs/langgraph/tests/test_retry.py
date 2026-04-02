@@ -1,6 +1,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 
 from langgraph.graph import START, StateGraph
@@ -393,3 +394,65 @@ def test_graph_with_max_attempts_exceeded():
         graph.invoke({"foo": ""})
 
     mock_sleep.assert_called_with(0.01)
+
+
+def test_execution_info_identity_fields_populated_on_retry():
+    """Test that thread_id, task_id, run_id, etc. are populated in execution_info during retries."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempt_count = 0
+    captured_infos: list[dict] = []
+
+    def failing_node(state: State, runtime: Runtime):
+        nonlocal attempt_count
+        attempt_count += 1
+        info = runtime.execution_info
+        captured_infos.append(
+            {
+                "thread_id": info.thread_id,
+                "run_id": info.run_id,
+                "node_attempt": info.node_attempt,
+                "node_first_attempt_time": info.node_first_attempt_time,
+                "checkpoint_ns": info.checkpoint_ns,
+            }
+        )
+        if attempt_count < 2:
+            raise ValueError("Intentional failure")
+        return {"foo": "success"}
+
+    retry_policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.01,
+        jitter=False,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, retry_policy=retry_policy)
+        .add_edge(START, "failing_node")
+        .compile(checkpointer=MemorySaver())
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke(
+            {"foo": ""},
+            config={"configurable": {"thread_id": "retry-thread"}},
+        )
+
+    assert result["foo"] == "success"
+    assert len(captured_infos) == 2
+
+    # Both attempts should have the same thread_id and first_attempt_time
+    assert captured_infos[0]["thread_id"] == "retry-thread"
+    assert captured_infos[1]["thread_id"] == "retry-thread"
+    assert (
+        captured_infos[0]["node_first_attempt_time"]
+        == captured_infos[1]["node_first_attempt_time"]
+    )
+
+    # node_attempt should increment
+    assert captured_infos[0]["node_attempt"] == 1
+    assert captured_infos[1]["node_attempt"] == 2
