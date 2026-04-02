@@ -219,7 +219,7 @@ class _Emitter:
                 if url:
                     click.secho(f"   URL: {url}", fg="green")
             elif status == "failed":
-                click.secho(f"   Deployment failed", fg="red")
+                click.secho("   Deployment failed", fg="red")
             elif status == "timed_out":
                 click.secho("   Timed out waiting for deployment.", fg="yellow")
                 if url:
@@ -813,7 +813,6 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
     with open(file_path, "rb") as f:
         reader = _ProgressReader(f, file_size)
         if em._json:
-            original_read = reader.read
 
             def _json_read(sz=-1):
                 data = f.read(sz)
@@ -1515,6 +1514,8 @@ def _deploy_cmd(
             if env_path is not None:
                 set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
                 click.echo(f"Saved deployment name to {env_path}")
+    if name and not deployment_id:
+        name = normalize_image_name(name)
 
     secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 

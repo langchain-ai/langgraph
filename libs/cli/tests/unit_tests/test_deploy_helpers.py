@@ -310,8 +310,8 @@ class TestEmitterJsonMode:
             fn()
         finally:
             sys.stdout = old
-        lines = [l for l in buf.getvalue().splitlines() if l.strip()]
-        return [json.loads(l) for l in lines]
+        lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+        return [json.loads(line) for line in lines]
 
     def test_step_event(self):
         em = _Emitter(json_mode=True)
@@ -435,8 +435,9 @@ class TestEmitterTextMode:
         em = _Emitter(json_mode=False)
         em.result("succeeded", deployment_id="d1", url="https://app.test")
         captured = capsys.readouterr()
-        assert "successful" in captured.out.lower()
-        assert "https://app.test" in captured.out
+        lines = [line.strip() for line in captured.out.splitlines() if line.strip()]
+        assert "Deployment successful!" in lines
+        assert "URL: https://app.test" in lines
 
 
 # ---------------------------------------------------------------------------
