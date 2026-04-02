@@ -217,14 +217,15 @@ def get_callback_manager_for_config(
             callbacks.add_tags(all_tags)
         if metadata := config.get("metadata"):
             callbacks.add_metadata(metadata)
-        return callbacks
+        manager = callbacks
     else:
         # otherwise create a new manager
-        return CallbackManager.configure(
+        manager = CallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
         )
+    _ensure_local_tracing_metadata(manager, config)
 
 
 def get_async_callback_manager_for_config(
@@ -255,14 +256,17 @@ def get_async_callback_manager_for_config(
             callbacks.add_tags(all_tags)
         if metadata := config.get("metadata"):
             callbacks.add_metadata(metadata)
-        return callbacks
+        manager = callbacks
     else:
         # otherwise create a new manager
-        return AsyncCallbackManager.configure(
+        manager = AsyncCallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
         )
+    # If not already specified in metadata, port specific configurable values over.
+    _ensure_local_tracing_metadata(manager, config)
+    return manager
 
 
 def _is_not_empty(value: Any) -> bool:
@@ -308,12 +312,24 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         for k, v in config.items():
             if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
-    _empty_metadata = empty["metadata"]
-    _empty_conf = empty[CONF]
-    for key in _PROPAGATE_TO_METADATA:
-        if (v := _empty_conf.get(key)) is not None and key not in _empty_metadata:
-            _empty_metadata[key] = v
     return empty
+
+
+def _ensure_local_tracing_metadata(
+    manager: BaseCallbackManager,
+    config: RunnableConfig,
+) -> None:
+    """Patch in configurable keys as non-inheritable.
+
+    Mutates the manager in-place.
+    """
+    _conf = config.get("configurable")
+    if not _conf:
+        return
+    metadata = manager.metadata
+    for key in _PROPAGATE_TO_METADATA:
+        if key not in metadata and (value := _conf.get(key)):
+            metadata[key] = value
 
 
 _PROPAGATE_TO_METADATA = frozenset(
@@ -325,7 +341,6 @@ _PROPAGATE_TO_METADATA = frozenset(
         "run_id",
         "assistant_id",
         "graph_id",
-        "model",
         "user_id",
         "cron_id",
         "langgraph_auth_user_id",
