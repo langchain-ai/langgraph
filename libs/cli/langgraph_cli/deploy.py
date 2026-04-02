@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 import click
 import click.exceptions
-from dotenv import dotenv_values
+from dotenv import dotenv_values, set_key
 
 import langgraph_cli.config
 from langgraph_cli.analytics import log_command
@@ -297,14 +297,13 @@ def level_fg(level: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _parse_env_from_config(
+def _resolve_env_path(
     config_json: dict, config_path: pathlib.Path
-) -> dict[str, str]:
-    """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
+) -> pathlib.Path | None:
+    """Return the .env file path implied by the config, or None for inline dicts."""
     env_field = config_json.get("env")
-    # validate_config_file will default env to {}
     if isinstance(env_field, dict) and env_field:
-        return {str(k): str(v) for k, v in env_field.items()}
+        return None
     if isinstance(env_field, str):
         env_path = (config_path.parent / env_field).resolve()
         if not env_path.exists():
@@ -312,10 +311,29 @@ def _parse_env_from_config(
                 f"Warning: env file '{env_field}' specified in langgraph.json not found.",
                 fg="yellow",
             )
-            return {}
-    else:
-        env_path = pathlib.Path.cwd() / ".env"
+            return None
+        return env_path
+    return pathlib.Path.cwd() / ".env"
+
+
+def _parse_env_from_config(
+    config_json: dict, config_path: pathlib.Path
+) -> dict[str, str]:
+    """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
+    env_field = config_json.get("env")
+    if isinstance(env_field, dict) and env_field:
+        return {str(k): str(v) for k, v in env_field.items()}
+    env_path = _resolve_env_path(config_json, config_path)
+    if env_path is None:
+        return {}
     return {k: v for k, v in dotenv_values(env_path).items() if v is not None}
+
+
+def _env_without_deployment_name(env_vars: dict[str, str]) -> dict[str, str]:
+    """Return env vars copy with deployment-name key removed."""
+    filtered = dict(env_vars)
+    filtered.pop(_DEPLOYMENT_NAME_ENV, None)
+    return filtered
 
 
 def _secrets_from_env(
@@ -591,9 +609,7 @@ class _ProgressReader:
         if data:
             self._uploaded += len(data)
             pct = (
-                int(self._uploaded * 100 / self._file_size)
-                if self._file_size
-                else 100
+                int(self._uploaded * 100 / self._file_size) if self._file_size else 100
             )
             click.echo(
                 f"\r   Uploading ({self._file_size / 1_048_576:.1f} MB)... {pct}%",
@@ -833,9 +849,7 @@ def _run_remote_build(
 
     _log_deploy_step(step, "Creating source archive")
     with create_archive(config, config_json) as (archive_path, file_size, config_rel):
-        click.secho(
-            f"   Archive created ({file_size / 1_048_576:.1f} MB)", fg="green"
-        )
+        click.secho(f"   Archive created ({file_size / 1_048_576:.1f} MB)", fg="green")
         step += 1
 
         _log_deploy_step(step, "Requesting upload URL")
@@ -1261,8 +1275,12 @@ def _deploy_cmd(
     if not deployment_id and not name:
         default_name = normalize_image_name(pathlib.Path.cwd().name)
         name = click.prompt("Deployment name", default=default_name)
+        env_path = _resolve_env_path(config_json, config)
+        if env_path is not None:
+            set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
+            click.echo(f"Saved deployment name to {env_path}")
 
-    secrets = _secrets_from_env(env_vars)
+    secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 
     use_remote_build, local_build_error = _resolve_build_mode(remote_build_flag)
     if use_remote_build and remote_build_flag is None and local_build_error:

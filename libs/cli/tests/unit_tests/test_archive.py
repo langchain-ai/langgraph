@@ -1,5 +1,4 @@
 import os
-import pathlib
 import tarfile
 from unittest.mock import patch
 
@@ -12,7 +11,6 @@ from langgraph_cli.archive import (
     _tar_filter,
     create_archive,
 )
-
 
 # ---------------------------------------------------------------------------
 # _tar_filter

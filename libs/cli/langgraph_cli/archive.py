@@ -94,7 +94,7 @@ def create_archive(
 
     The archive preserves the real filesystem layout relative to the common
     ancestor of config.parent and all external dependency directories, so that
-    relative references (e.g. ``../shared-lib``) resolve correctly after
+    relative references (e.g. `../shared-lib`) resolve correctly after
     extraction.
 
     Yields (archive_path, file_size, config_relative_path).  The temporary
