@@ -1,6 +1,8 @@
 import base64
+import io
 import json
 import os
+import sys
 
 import click
 import httpx
@@ -8,10 +10,13 @@ import pytest
 
 from langgraph_cli.deploy import (
     _call_host_backend_with_optional_tenant,
+    _create_host_backend_client,
     _docker_config_for_token,
+    _Emitter,
     _env_without_deployment_name,
     _parse_env_from_config,
     _resolve_env_path,
+    _smith_dashboard_base_url,
     normalize_image_name,
     normalize_image_tag,
 )
@@ -271,3 +276,255 @@ class TestCallHostBackendWithOptionalTenant:
             _call_host_backend_with_optional_tenant(
                 client, lambda c: c.list_deployments()
             )
+
+    def test_workspace_prompt_blocked_by_no_input(self, monkeypatch):
+        """With _no_input=True, 403 requiring workspace should raise ClickException."""
+        import langgraph_cli.deploy as deploy_mod
+
+        monkeypatch.setattr(deploy_mod, "_no_input", True)
+
+        requires_workspace = '{"detail":"requires workspace specification"}'
+        client = self._make_client(
+            lambda req: httpx.Response(403, text=requires_workspace)
+        )
+        with pytest.raises(click.ClickException, match="workspace"):
+            _call_host_backend_with_optional_tenant(
+                client, lambda c: c.list_deployments()
+            )
+
+
+# ---------------------------------------------------------------------------
+# _Emitter JSON mode
+# ---------------------------------------------------------------------------
+
+
+class TestEmitterJsonMode:
+    """Verify that _Emitter in json_mode writes valid JSON-lines to stdout."""
+
+    def _capture(self, fn):
+        """Run fn with stdout captured and return parsed JSON objects."""
+        buf = io.StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            fn()
+        finally:
+            sys.stdout = old
+        lines = [l for l in buf.getvalue().splitlines() if l.strip()]
+        return [json.loads(l) for l in lines]
+
+    def test_step_event(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(lambda: em.step(1, "Building image"))
+        assert len(events) == 1
+        assert events[0]["event"] == "step"
+        assert events[0]["step"] == 1
+        assert events[0]["message"] == "Building image"
+
+    def test_info_event(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(lambda: em.info("All good"))
+        assert events[0]["event"] == "info"
+        assert events[0]["message"] == "All good"
+
+    def test_warn_event(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(lambda: em.warn("Careful"))
+        assert events[0]["event"] == "warn"
+
+    def test_error_event(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(lambda: em.error("Boom"))
+        assert events[0]["event"] == "error"
+        assert events[0]["message"] == "Boom"
+
+    def test_status_change_event(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(lambda: em.status_change("building", 12.345))
+        assert events[0]["event"] == "status_change"
+        assert events[0]["status"] == "building"
+        assert events[0]["elapsed_seconds"] == 12.3
+        assert events[0]["message"] == "building... (12s)"
+
+    def test_status_change_event_with_minutes(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(lambda: em.status_change("deploying", 95.0))
+        assert events[0]["message"] == "deploying... (1m 35s)"
+
+    def test_log_event(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(lambda: em.log("some output"))
+        assert events[0] == {"event": "log", "message": "some output"}
+
+    def test_status_url_event(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(
+            lambda: em.status_url("https://smith.langchain.com/deploy/123")
+        )
+        assert events[0]["event"] == "status_url"
+        assert events[0]["url"] == "https://smith.langchain.com/deploy/123"
+
+    def test_result_event_full(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(
+            lambda: em.result(
+                "succeeded",
+                deployment_id="dep-1",
+                url="https://app.example.com",
+                status_url="https://smith.langchain.com/deploy/dep-1",
+            )
+        )
+        assert events[0]["event"] == "result"
+        assert events[0]["status"] == "succeeded"
+        assert events[0]["deployment_id"] == "dep-1"
+        assert events[0]["message"] == "Deployment successful!"
+        assert events[0]["url"] == "https://app.example.com"
+        assert events[0]["status_url"] == "https://smith.langchain.com/deploy/dep-1"
+
+    def test_result_event_minimal(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(lambda: em.result("failed", deployment_id="dep-2"))
+        assert events[0]["event"] == "result"
+        assert events[0]["status"] == "failed"
+        assert events[0]["message"] == "Deployment failed"
+        assert "url" not in events[0]
+        assert "status_url" not in events[0]
+
+    def test_heartbeat_event(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(lambda: em.heartbeat("building", 30.789))
+        assert events[0]["event"] == "heartbeat"
+        assert events[0]["elapsed_seconds"] == 30.8
+        assert events[0]["message"] == "building... (30s)"
+
+    def test_heartbeat_silent_in_text_mode(self, capsys):
+        em = _Emitter(json_mode=False)
+        em.heartbeat("building", 10.0)
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+    def test_upload_progress_event(self):
+        em = _Emitter(json_mode=True)
+        events = self._capture(lambda: em.upload_progress(5.678, 42))
+        assert events[0]["event"] == "upload_progress"
+        assert events[0]["size_mb"] == 5.7
+        assert events[0]["pct"] == 42
+
+
+# ---------------------------------------------------------------------------
+# _Emitter text mode (non-json)
+# ---------------------------------------------------------------------------
+
+
+class TestEmitterTextMode:
+    """Verify that _Emitter in text mode uses click.echo/click.secho."""
+
+    def test_step_writes_text(self, capsys):
+        em = _Emitter(json_mode=False)
+        em.step(1, "Hello")
+        captured = capsys.readouterr()
+        assert "1. Hello" in captured.out
+
+    def test_log_writes_text(self, capsys):
+        em = _Emitter(json_mode=False)
+        em.log("my line")
+        captured = capsys.readouterr()
+        assert "my line" in captured.out
+
+    def test_result_succeeded_text(self, capsys):
+        em = _Emitter(json_mode=False)
+        em.result("succeeded", deployment_id="d1", url="https://app.test")
+        captured = capsys.readouterr()
+        assert "successful" in captured.out.lower()
+        assert "https://app.test" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# --no-input guard on _create_host_backend_client
+# ---------------------------------------------------------------------------
+
+
+class TestCreateHostBackendClientNoInput:
+    def test_raises_when_no_api_key_and_no_input(self, monkeypatch, tmp_path):
+        import langgraph_cli.deploy as deploy_mod
+
+        monkeypatch.setattr(deploy_mod, "_no_input", True)
+        monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
+        monkeypatch.delenv("LANGCHAIN_API_KEY", raising=False)
+        monkeypatch.delenv("LANGGRAPH_HOST_API_KEY", raising=False)
+
+        with pytest.raises(click.ClickException, match="API key"):
+            _create_host_backend_client(
+                host_url="https://api.example.com",
+                api_key=None,
+                env_vars={},
+            )
+
+    def test_succeeds_with_api_key_in_env(self, monkeypatch, tmp_path):
+        import langgraph_cli.deploy as deploy_mod
+
+        monkeypatch.setattr(deploy_mod, "_no_input", True)
+        monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")
+
+        client = _create_host_backend_client(
+            host_url="https://api.example.com",
+            api_key=None,
+            env_vars={},
+        )
+        assert client is not None
+
+
+class TestSmithDashboardBaseUrl:
+    def test_none_returns_default(self):
+        assert _smith_dashboard_base_url(None) == "https://smith.langchain.com"
+
+    def test_empty_returns_default(self):
+        assert _smith_dashboard_base_url("") == "https://smith.langchain.com"
+
+    def test_prod_host_url(self):
+        assert (
+            _smith_dashboard_base_url("https://api.host.langchain.com")
+            == "https://smith.langchain.com"
+        )
+
+    def test_dev_host_url(self):
+        assert (
+            _smith_dashboard_base_url("https://dev.api.host.langchain.com")
+            == "https://dev.smith.langchain.com"
+        )
+
+    def test_eu_host_url(self):
+        assert (
+            _smith_dashboard_base_url("https://eu.api.host.langchain.com")
+            == "https://eu.smith.langchain.com"
+        )
+
+    def test_staging_host_url(self):
+        assert (
+            _smith_dashboard_base_url("https://staging.api.host.langchain.com")
+            == "https://staging.smith.langchain.com"
+        )
+
+    def test_localhost(self):
+        assert (
+            _smith_dashboard_base_url("http://localhost:8080")
+            == "http://localhost:8080"
+        )
+
+    def test_localhost_trailing_slash(self):
+        assert (
+            _smith_dashboard_base_url("http://localhost:8080/")
+            == "http://localhost:8080"
+        )
+
+    def test_127_0_0_1(self):
+        assert (
+            _smith_dashboard_base_url("http://127.0.0.1:3000")
+            == "http://127.0.0.1:3000"
+        )
+
+    def test_unknown_domain_returns_default(self):
+        assert (
+            _smith_dashboard_base_url("https://custom.example.com")
+            == "https://smith.langchain.com"
+        )
