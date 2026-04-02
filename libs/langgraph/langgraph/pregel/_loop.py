@@ -720,6 +720,15 @@ class PregelLoop:
                 if k in self.checkpoint["channel_versions"]:
                     version = self.checkpoint["channel_versions"][k]
                     self.checkpoint["versions_seen"][INTERRUPT][k] = version
+            # When time-traveling to a subgraph checkpoint, both the
+            # parent and the subgraph load historical checkpoints via
+            # checkpoint_map. Save a new checkpoint to create a branch
+            # point so that writes (e.g. INTERRUPT) are attached to the
+            # new branch tip and visible to subsequent resumes.
+            if self.is_replaying and configurable.get(
+                CONFIG_KEY_CHECKPOINT_NS, ""
+            ) in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}):
+                self._put_checkpoint({"source": "input"})
             # produce values output
             self._emit(
                 "values", map_output_values, self.output_keys, True, self.channels
