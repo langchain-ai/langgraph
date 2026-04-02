@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 import warnings
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from functools import partial
 from typing import (
     Annotated,
@@ -321,7 +322,26 @@ def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
         warnings.warn(msg)
         return list(messages)
     else:
-        return convert_to_messages(convert_to_openai_messages(messages))
+        additional_kwargs_by_id = {
+            m.id: deepcopy(m.additional_kwargs)
+            for m in messages
+            if m.id is not None and m.additional_kwargs
+        }
+        formatted_messages = convert_to_messages(
+            convert_to_openai_messages(messages, include_id=True)
+        )
+        for m in formatted_messages:
+            if m.id is None:
+                continue
+            original_additional_kwargs = additional_kwargs_by_id.get(m.id)
+            if not original_additional_kwargs:
+                continue
+            if not m.additional_kwargs:
+                m.additional_kwargs = original_additional_kwargs
+            else:
+                for key, value in original_additional_kwargs.items():
+                    m.additional_kwargs.setdefault(key, value)
+        return formatted_messages
 
 
 def push_message(

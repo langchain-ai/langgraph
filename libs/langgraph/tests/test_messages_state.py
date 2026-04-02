@@ -208,6 +208,50 @@ def test_messages_state(state_schema):
     condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
     reason="Requires langchain_core>=0.3.11.",
 )
+def test_add_messages_format_openai_preserves_ids():
+    initial = add_messages(
+        [], [HumanMessage(content="hello", id="msg-1")], format="langchain-openai"
+    )
+
+    result = add_messages(
+        initial,
+        [HumanMessage(content="hello again", id="msg-1")],
+        format="langchain-openai",
+    )
+
+    assert result == [HumanMessage(content="hello again", id="msg-1")]
+
+
+@pytest.mark.skipif(
+    condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
+    reason="Requires langchain_core>=0.3.11.",
+)
+def test_add_messages_format_openai_preserves_additional_kwargs():
+    result = add_messages(
+        [],
+        [
+            AIMessage(
+                content="hello",
+                id="msg-1",
+                additional_kwargs={"widgets": [{"type": "carousel"}]},
+            )
+        ],
+        format="langchain-openai",
+    )
+
+    assert result == [
+        AIMessage(
+            content="hello",
+            id="msg-1",
+            additional_kwargs={"widgets": [{"type": "carousel"}]},
+        )
+    ]
+
+
+@pytest.mark.skipif(
+    condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
+    reason="Requires langchain_core>=0.3.11.",
+)
 def test_messages_state_format_openai():
     class State(TypedDict):
         messages: Annotated[list[AnyMessage], add_messages(format="langchain-openai")]
