@@ -1,6 +1,12 @@
 from unittest.mock import patch
 
-from langgraph_cli.util import clean_empty_lines, warn_non_wolfi_distro
+from langgraph_cli.util import (
+    _extract_deployment_url,
+    clean_empty_lines,
+    format_deployments_table,
+    format_revisions_table,
+    warn_non_wolfi_distro,
+)
 
 
 def test_clean_empty_lines():
@@ -186,3 +192,67 @@ def test_warn_non_wolfi_distro_does_not_modify_config():
     warn_non_wolfi_distro(config_copy)
 
     assert config_copy == original_config  # Config should remain unchanged
+
+
+def test_extract_deployment_url_uses_custom_url():
+    deployment = {"source_config": {"custom_url": "https://example.com/custom"}}
+    assert _extract_deployment_url(deployment) == "https://example.com/custom"
+
+
+def test_extract_deployment_url_defaults_to_dash():
+    assert _extract_deployment_url({"id": "dep-123"}) == "-"
+
+
+def test_format_deployments_table():
+    output = format_deployments_table(
+        [
+            {
+                "id": "dep-123",
+                "name": "alpha",
+                "source_config": {"custom_url": "https://alpha.example.com"},
+            },
+            {
+                "id": "dep-456",
+                "name": "beta",
+                "url": "https://beta.example.com",
+            },
+        ]
+    )
+    assert "Deployment ID" in output
+    assert "Deployment Name" in output
+    assert "Deployment URL" in output
+    assert "dep-123" in output
+    assert "alpha" in output
+    assert "https://alpha.example.com" in output
+    assert "dep-456" in output
+
+
+def test_format_revisions_table():
+    output = format_revisions_table(
+        [
+            {
+                "id": "rev-123",
+                "status": "DEPLOYED",
+                "created_at": "2023-11-09T10:00:00Z",
+            },
+            {
+                "id": "rev-456",
+                "status": "CREATING",
+                "created_at": "2023-11-07T05:31:56Z",
+            },
+            {
+                "id": "rev-789",
+                "status": "DEPLOYED",
+                "created_at": "2023-11-08T10:00:00Z",
+            },
+        ]
+    )
+    assert "Revision ID" in output
+    assert "Status" in output
+    assert "Created At" in output
+    assert "rev-123" in output
+    assert "CREATING" in output
+    assert "2023-11-07T05:31:56Z" in output
+    assert "rev-456" in output
+    assert "rev-789" in output
+    assert "REPLACED" in output

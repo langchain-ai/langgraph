@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import pathlib
@@ -12,6 +13,36 @@ from langgraph_cli.schemas import Config, Distros
 
 MIN_NODE_VERSION = "20"
 DEFAULT_NODE_VERSION = "20"
+
+DISALLOWED_BUILD_COMMAND_CHARS = [
+    '"',
+    "`",
+    "\\",
+    "\n",
+    "\r",
+    "\0",
+    "\t",
+    "|",
+    ";",
+    "$",
+    ">",
+    "<",
+]
+
+# Regex pattern matching a single "&" that is NOT part of "&&".
+# This blocks background execution (cmd &) while allowing command
+# chaining (cmd1 && cmd2) which is common in build commands.
+_SINGLE_AMPERSAND_RE = re.compile(r"(?<!&)&(?:&&)*(?!&)")
+
+
+def has_disallowed_build_command_content(command: str) -> bool:
+    """Check if a command string contains disallowed characters or patterns."""
+    if any(char in command for char in DISALLOWED_BUILD_COMMAND_CHARS):
+        return True
+    if _SINGLE_AMPERSAND_RE.search(command):
+        return True
+    return False
+
 
 MIN_PYTHON_VERSION = "3.11"
 DEFAULT_PYTHON_VERSION = "3.11"
@@ -196,6 +227,11 @@ def validate_config(config: Config) -> Config:
                 f"Python version {pyversion} is not supported. "
                 f"Minimum required version is {MIN_PYTHON_VERSION}."
             )
+        if "bullseye" in pyversion:
+            raise click.UsageError(
+                "Bullseye images were deprecated in version 0.4.13. "
+                "Please use 'bookworm' or 'debian' instead."
+            )
 
         if not config["dependencies"]:
             raise click.UsageError(
@@ -210,10 +246,15 @@ def validate_config(config: Config) -> Config:
 
     # Validate image_distro config
     if image_distro := config.get("image_distro"):
+        if image_distro == "bullseye":
+            raise click.UsageError(
+                "Bullseye images were deprecated in version 0.4.13. "
+                "Please use 'bookworm' or 'debian' instead."
+            )
         if image_distro not in Distros.__args__:
             raise click.UsageError(
                 f"Invalid image_distro: '{image_distro}'. "
-                "Must be one of 'debian', 'bullseye', or 'bookworm'."
+                "Must be one of 'debian', 'wolfi', or 'bookworm'."
             )
 
     if pip_installer := config.get("pip_installer"):
@@ -668,6 +709,51 @@ def _update_encryption_path(
     )
 
 
+def _update_checkpointer_path(
+    config_path: pathlib.Path, config: Config, local_deps: LocalDeps
+) -> None:
+    """Update checkpointer.path to use Docker container paths."""
+    checkpointer_conf = config.get("checkpointer")
+    if not checkpointer_conf or not isinstance(checkpointer_conf, dict):
+        return
+    if not (path_str := checkpointer_conf.get("path")):
+        return
+
+    module_str, sep, attr_str = path_str.partition(":")
+    if not sep or not module_str.startswith("."):
+        return  # Already validated or absolute path
+
+    resolved = config_path.parent / module_str
+    if not resolved.exists():
+        raise FileNotFoundError(
+            f"Checkpointer file not found: {resolved} (from {path_str})"
+        )
+    if not resolved.is_file():
+        raise IsADirectoryError(f"Checkpointer path must be a file: {resolved}")
+
+    # Check faux packages first (higher priority)
+    for faux_path, (_, destpath) in local_deps.faux_pkgs.items():
+        if resolved.is_relative_to(faux_path):
+            new_path = f"{destpath}/{resolved.relative_to(faux_path)}:{attr_str}"
+            checkpointer_conf["path"] = new_path
+            return
+
+    # Check real packages
+    for real_path in local_deps.real_pkgs:
+        if resolved.is_relative_to(real_path):
+            new_path = (
+                f"/deps/{real_path.name}/{resolved.relative_to(real_path)}:{attr_str}"
+            )
+            checkpointer_conf["path"] = new_path
+            return
+
+    raise ValueError(
+        f"Checkpointer file '{resolved}' not covered by dependencies.\n"
+        "Add its parent directory to the 'dependencies' array in your config.\n"
+        f"Current dependencies: {config['dependencies']}"
+    )
+
+
 def _update_http_app_path(
     config_path: pathlib.Path, config: Config, local_deps: LocalDeps
 ) -> None:
@@ -867,6 +953,8 @@ def python_config_to_docker(
     _update_auth_path(config_path, config, local_deps)
     # Rewrite encryption path, so it points to the correct location in the Docker container
     _update_encryption_path(config_path, config, local_deps)
+    # Rewrite checkpointer path, so it points to the correct location in the Docker container
+    _update_checkpointer_path(config_path, config, local_deps)
     # Rewrite HTTP app path, so it points to the correct location in the Docker container
     _update_http_app_path(config_path, config, local_deps)
 
@@ -1145,11 +1233,15 @@ def node_config_to_docker(
     return os.linesep.join(docker_file_contents), {}
 
 
-def default_base_image(config: Config) -> str:
+def default_base_image(
+    config: Config, engine_runtime_mode: str = "combined_queue_worker"
+) -> str:
     if config.get("base_image"):
         return config["base_image"]
     if config.get("node_version") and not config.get("python_version"):
         return "langchain/langgraphjs-api"
+    if engine_runtime_mode == "distributed":
+        return "langchain/langgraph-executor"
     return "langchain/langgraph-api"
 
 
@@ -1242,6 +1334,7 @@ def config_to_compose(
     api_version: str | None = None,
     image: str | None = None,
     watch: bool = False,
+    engine_runtime_mode: str = "combined_queue_worker",
 ) -> str:
     base_image = base_image or default_base_image(config)
 
@@ -1275,6 +1368,11 @@ def config_to_compose(
 """
 
     else:
+        # Save a pristine copy before config_to_docker mutates graph paths
+        config_snapshot = (
+            copy.deepcopy(config) if engine_runtime_mode == "distributed" else None
+        )
+
         dockerfile, additional_contexts = config_to_docker(
             config_path=config_path,
             config=config,
@@ -1292,7 +1390,7 @@ def config_to_compose(
             additional_contexts:
 {additional_contexts_str}"""
 
-        return f"""
+        result = f"""
 {textwrap.indent(env_vars_str, "            ")}
         {env_file_str}
         pull_policy: build
@@ -1302,3 +1400,60 @@ def config_to_compose(
 {textwrap.indent(dockerfile, "                ")}
         {watch_str}
 """
+
+        if engine_runtime_mode == "distributed":
+            executor_base_image = default_base_image(
+                config_snapshot, engine_runtime_mode="distributed"
+            )
+            executor_dockerfile, executor_additional_contexts = config_to_docker(
+                config_path=config_path,
+                config=config_snapshot,
+                base_image=executor_base_image,
+                api_version=api_version,
+                escape_variables=True,
+            )
+
+            executor_additional_contexts_str = "\n".join(
+                f"                    - {name}: {path}"
+                for name, path in executor_additional_contexts.items()
+            )
+            if executor_additional_contexts_str:
+                executor_additional_contexts_str = f"""
+                additional_contexts:
+{executor_additional_contexts_str}"""
+
+            postgres_uri = "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
+            result += f"""    langgraph-orchestrator:
+        image: langchain/langgraph-orchestrator-licensed:latest
+        depends_on:
+            langgraph-api:
+                condition: service_healthy
+            langgraph-postgres:
+                condition: service_healthy
+        environment:
+            DATABASE_URI: {postgres_uri}
+            EXECUTOR_TARGET: langgraph-executor:8188
+        {env_file_str}
+    langgraph-executor:
+        depends_on:
+            langgraph-postgres:
+                condition: service_healthy
+            langgraph-api:
+                condition: service_healthy
+        entrypoint: ["sh", "/storage/executor_entrypoint.sh"]
+        environment:
+            DATABASE_URI: {postgres_uri}
+            REDIS_URI: redis://langgraph-redis:6379
+            EXECUTOR_GRPC_PORT: "8188"
+            ENGINE_GRPC_ADDRESS: "langgraph-orchestrator:50054"
+            LSD_GRPC_SERVER_ADDRESS: "localhost:50050"
+            LANGGRAPH_HTTP: ""
+        {env_file_str}
+        pull_policy: build
+        build:
+            context: .{executor_additional_contexts_str}
+            dockerfile_inline: |
+{textwrap.indent(executor_dockerfile, "                ")}
+"""
+
+        return result

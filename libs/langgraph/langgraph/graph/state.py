@@ -6,6 +6,7 @@ import typing
 import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
+from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
@@ -14,6 +15,7 @@ from typing import (
     Any,
     Generic,
     Literal,
+    TypeVar,
     Union,
     cast,
     get_args,
@@ -29,6 +31,7 @@ from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
+from langgraph._internal import _serde
 from langgraph._internal._constants import (
     INTERRUPT,
     NS_END,
@@ -1079,6 +1082,28 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             CompiledStateGraph: The compiled `StateGraph`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
+        serde_allowlist: set[tuple[str, ...]] | None = None
+        if _serde.STRICT_MSGPACK_ENABLED:
+            schema_types: list[type[Any]] = [
+                self.state_schema,
+                self.input_schema,
+                self.output_schema,
+            ]
+            if self.context_schema is not None:
+                schema_types.append(self.context_schema)
+            for node in self.nodes.values():
+                schema_types.append(node.input_schema)
+            for branches in self.branches.values():
+                for branch in branches.values():
+                    if branch.input_schema is not None:
+                        schema_types.append(branch.input_schema)
+            serde_allowlist = _serde.build_serde_allowlist(
+                schemas=schema_types,
+                channels=self.channels,
+            )
+            checkpointer = _serde.apply_checkpointer_allowlist(
+                checkpointer, serde_allowlist
+            )
 
         # assign default values
         interrupt_before = interrupt_before or []
@@ -1135,10 +1160,25 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             cache=cache,
             name=name or "LangGraph",
         )
+        compiled._serde_allowlist = serde_allowlist
 
         compiled.attach_node(START, None)
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
+
+        # Record output/state mappers for v2 stream coercion (pydantic/dataclass only)
+        compiled._output_mapper = _pick_mapper(
+            list(output_channels)
+            if isinstance(output_channels, list)
+            else [output_channels],
+            self.output_schema,
+        )
+        compiled._state_mapper = _pick_mapper(
+            list(stream_channels)
+            if isinstance(stream_channels, list)
+            else [stream_channels],
+            self.state_schema,
+        )
 
         for start, end in self.edges:
             compiled.attach_edge(start, end)
@@ -1159,6 +1199,8 @@ class CompiledStateGraph(
 ):
     builder: StateGraph[StateT, ContextT, InputT, OutputT]
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
+    _output_mapper: Callable[[Any], Any] | None
+    _state_mapper: Callable[[Any], Any] | None
 
     def __init__(
         self,
@@ -1480,12 +1522,15 @@ def _pick_mapper(
 ) -> Callable[[Any], Any] | None:
     if state_keys == ["__root__"]:
         return None
-    if isclass(schema) and issubclass(schema, dict):
-        return None
-    return partial(_coerce_state, schema)
+    if isclass(schema) and (issubclass(schema, BaseModel) or is_dataclass(schema)):
+        return partial(_coerce_state, schema)
+    return None
 
 
-def _coerce_state(schema: type[Any], input: dict[str, Any]) -> dict[str, Any]:
+_S = TypeVar("_S")
+
+
+def _coerce_state(schema: type[_S], input: dict[str, Any]) -> _S:
     return schema(**input)
 
 

@@ -21,7 +21,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.tools import BaseTool, ToolException
+from langchain_core.tools import BaseTool, InjectedToolArg, ToolException
 from langchain_core.tools import tool as dec_tool
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
@@ -1902,3 +1902,204 @@ async def test_tool_node_tool_runtime_generic() -> None:
     assert tool_message.type == "tool"
     assert tool_message.content == "test_info"
     assert tool_message.tool_call_id == "call_1"
+
+
+def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call() -> None:
+    """Test that ToolRuntime is injected for dynamically registered tools.
+
+    Regression test for https://github.com/langchain-ai/langchain/issues/35305.
+    When a tool is dynamically provided via wrap_tool_call (not registered at
+    ToolNode init time), ToolRuntime should still be injected into the tool.
+    """
+
+    @dec_tool
+    def static_tool(x: int) -> str:
+        """A static tool registered at init."""
+        return f"static: {x}"
+
+    @dec_tool
+    def dynamic_tool_with_runtime(x: int, runtime: ToolRuntime) -> str:
+        """A dynamic tool that needs ToolRuntime injection."""
+        return f"dynamic: x={x}, tool_call_id={runtime.tool_call_id}"
+
+    def wrap_tool_call(request, execute):
+        """Middleware that swaps in a dynamic tool."""
+        if request.tool_call["name"] == "dynamic_tool_with_runtime":
+            # Override tool to the dynamic one (not registered at init)
+            new_request = request.override(tool=dynamic_tool_with_runtime)
+            return execute(new_request)
+        return execute(request)
+
+    # ToolNode only knows about static_tool at init time
+    tool_node = ToolNode(
+        [static_tool],
+        wrap_tool_call=wrap_tool_call,
+    )
+
+    # Verify the dynamic tool is NOT in the tool node's registered tools
+    assert "dynamic_tool_with_runtime" not in tool_node.tools_by_name
+
+    # Call the dynamic tool
+    tool_call = {
+        "name": "dynamic_tool_with_runtime",
+        "args": {"x": 42},
+        "id": "call_dynamic_1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = tool_node.invoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    # ToolRuntime should be injected and the tool should execute successfully
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_1"
+    assert tool_message.tool_call_id == "call_dynamic_1"
+
+
+async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() -> None:
+    """Test that ToolRuntime is injected for dynamically registered tools (async).
+
+    Async version of the regression test for
+    https://github.com/langchain-ai/langchain/issues/35305.
+    """
+
+    @dec_tool
+    def static_tool(x: int) -> str:
+        """A static tool registered at init."""
+        return f"static: {x}"
+
+    @dec_tool
+    async def dynamic_tool_with_runtime(x: int, runtime: ToolRuntime) -> str:
+        """A dynamic async tool that needs ToolRuntime injection."""
+        return f"dynamic: x={x}, tool_call_id={runtime.tool_call_id}"
+
+    async def awrap_tool_call(request, execute):
+        """Async middleware that swaps in a dynamic tool."""
+        if request.tool_call["name"] == "dynamic_tool_with_runtime":
+            new_request = request.override(tool=dynamic_tool_with_runtime)
+            return await execute(new_request)
+        return await execute(request)
+
+    # ToolNode only knows about static_tool at init time
+    tool_node = ToolNode(
+        [static_tool],
+        awrap_tool_call=awrap_tool_call,
+    )
+
+    # Verify the dynamic tool is NOT in the tool node's registered tools
+    assert "dynamic_tool_with_runtime" not in tool_node.tools_by_name
+
+    # Call the dynamic tool
+    tool_call = {
+        "name": "dynamic_tool_with_runtime",
+        "args": {"x": 42},
+        "id": "call_dynamic_2",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = await tool_node.ainvoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    # ToolRuntime should be injected and the tool should execute successfully
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_2"
+    assert tool_message.tool_call_id == "call_dynamic_2"
+
+
+# --- InjectedToolArg security tests ---
+
+
+def test_tool_node_strips_plain_injected_tool_arg() -> None:
+    """Plain InjectedToolArg values supplied by the LLM should be stripped."""
+
+    @dec_tool
+    def read_secret(
+        query: str,
+        auth: Annotated[dict, InjectedToolArg()],
+    ) -> str:
+        """Return secret data based on auth role."""
+        if auth.get("role") == "admin":
+            return "ADMIN_SECRET"
+        return "PUBLIC_DATA"
+
+    node = ToolNode([read_secret], handle_tool_errors=True)
+
+    # LLM tries to supply the hidden 'auth' field
+    tool_call = {
+        "name": "read_secret",
+        "args": {"query": "hello", "auth": {"role": "admin"}},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = node.invoke({"messages": [msg]}, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    # auth should have been stripped, so tool should fail (missing required arg)
+    assert "ADMIN_SECRET" not in tool_message.content
+
+
+def test_tool_node_strips_custom_injected_tool_arg_subclass() -> None:
+    """Custom InjectedToolArg subclasses should also be stripped."""
+
+    class InjectedAuth(InjectedToolArg):
+        pass
+
+    @dec_tool
+    def read_secret(
+        query: str,
+        auth: Annotated[dict, InjectedAuth()],
+    ) -> str:
+        """Return secret data based on auth role."""
+        if auth.get("role") == "admin":
+            return "ADMIN_SECRET"
+        return "PUBLIC_DATA"
+
+    node = ToolNode([read_secret], handle_tool_errors=True)
+
+    tool_call = {
+        "name": "read_secret",
+        "args": {"query": "hello", "auth": {"role": "admin"}},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = node.invoke({"messages": [msg]}, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    assert "ADMIN_SECRET" not in tool_message.content
+
+
+def test_tool_node_injected_state_overwrites_llm_value() -> None:
+    """InjectedState should use graph state, not LLM-supplied values."""
+
+    @dec_tool
+    def read_secret(
+        query: str,
+        auth: Annotated[dict, InjectedState("auth")],
+    ) -> str:
+        """Return secret data based on auth from graph state."""
+        if auth.get("role") == "admin":
+            return "ADMIN_SECRET"
+        return "PUBLIC_DATA"
+
+    node = ToolNode([read_secret])
+
+    # LLM tries to supply auth as admin
+    tool_call = {
+        "name": "read_secret",
+        "args": {"query": "hello", "auth": {"role": "admin"}},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    # Graph state has auth as viewer
+    result = node.invoke(
+        {"messages": [msg], "auth": {"role": "viewer"}},
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "PUBLIC_DATA"

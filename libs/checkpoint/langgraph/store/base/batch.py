@@ -334,6 +334,9 @@ async def _run(
     store: weakref.ReferenceType[BaseStore],
 ) -> None:
     while item := await aqueue.get():
+        # don't run batch if the future is done (e.g. cancelled)
+        if item[0].done():
+            continue
         # check if store is still alive
         if s := store():
             try:
@@ -341,6 +344,9 @@ async def _run(
                 items = [item]
                 try:
                     while item := aqueue.get_nowait():
+                        # don't insert if the future is done (e.g. cancelled)
+                        if item[0].done():
+                            continue
                         items.append(item)
                 except asyncio.QueueEmpty:
                     pass

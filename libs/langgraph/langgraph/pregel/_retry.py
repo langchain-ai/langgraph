@@ -14,13 +14,44 @@ from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_RUNTIME,
     NS_SEP,
 )
 from langgraph.errors import GraphBubbleUp, ParentCommand
+from langgraph.runtime import Runtime
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 
 logger = logging.getLogger(__name__)
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
+
+
+def _checkpoint_ns_for_parent_command(ns: str) -> str:
+    """Return the checkpoint namespace for the parent graph.
+
+    The checkpoint namespace is a `|`-separated path. Each segment is usually
+    of the form `name:task_id` (e.g. `parent_first:<uuid>|node:<uuid>`), but the
+    runtime may also insert a purely-numeric segment (e.g. `|1`) to disambiguate
+    concurrent tasks (e.g. `parent_first:<uuid>|1|node:<uuid>`).
+
+    Numeric segments are not real path levels, so we drop them before computing
+    the parent namespace.
+    """
+
+    parts = ns.split(NS_SEP)
+
+    # Drop any trailing numeric selectors for the current frame (e.g. `...|node:<id>|1`).
+    while parts and parts[-1].isdigit():
+        parts.pop()
+
+    # Drop the current frame segment itself (e.g. the `node:<id>`).
+    if parts:
+        parts.pop()
+
+    # Drop any trailing numeric selectors for the parent frame (e.g. `...|1|node:<id>`).
+    while parts and parts[-1].isdigit():
+        parts.pop()
+
+    return NS_SEP.join(parts)
 
 
 def run_with_retry(
@@ -31,10 +62,33 @@ def run_with_retry(
     """Run a task with retries."""
     retry_policy = task.retry_policy or retry_policy
     attempts = 0
+    node_first_attempt_time = time.time()
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
+    runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+    if isinstance(runtime, Runtime):
+        config = patch_configurable(
+            config,
+            {
+                CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                    node_first_attempt_time=node_first_attempt_time,
+                )
+            },
+        )
     while True:
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+        if isinstance(runtime, Runtime):
+            config = patch_configurable(
+                config,
+                {
+                    CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                        # node_attempt is execution count (1-indexed): 1 on first run,
+                        # then 2, 3, ... on subsequent retries.
+                        node_attempt=attempts + 1,
+                    )
+                },
+            )
         try:
             # clear any writes from previous attempts
             task.writes.clear()
@@ -50,12 +104,8 @@ def run_with_retry(
                     w.invoke(cmd, config)
                 break
             elif cmd.graph == Command.PARENT:
-                # this command is for the parent graph, assign it to the parent
-                parts = ns.split(NS_SEP)
-                if parts[-1].isdigit():
-                    parts.pop()
-                parent_ns = NS_SEP.join(parts[:-1])
-                exc.args = (replace(cmd, graph=parent_ns),)
+                # this command is for the parent graph, assign it to the parent.
+                exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
             # bubble up
             raise
         except GraphBubbleUp:
@@ -77,7 +127,7 @@ def run_with_retry(
             if not matching_policy:
                 raise
 
-            # increment attempts
+            # attempts tracks failed tries only; it increments after a failure.
             attempts += 1
             # check if we should give up
             if attempts >= matching_policy.max_attempts:
@@ -116,15 +166,38 @@ async def arun_with_retry(
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
     attempts = 0
+    node_first_attempt_time = time.time()
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
+    runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+    if isinstance(runtime, Runtime):
+        config = patch_configurable(
+            config,
+            {
+                CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                    node_first_attempt_time=node_first_attempt_time,
+                )
+            },
+        )
     if match_cached_writes is not None and task.cache_key is not None:
         for t in await match_cached_writes():
             if t is task:
                 # if the task is already cached, return
                 return
     while True:
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+        if isinstance(runtime, Runtime):
+            config = patch_configurable(
+                config,
+                {
+                    CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                        # node_attempt is execution count (1-indexed): 1 on first run,
+                        # then 2, 3, ... on subsequent retries.
+                        node_attempt=attempts + 1,
+                    )
+                },
+            )
         try:
             # clear any writes from previous attempts
             task.writes.clear()
@@ -146,12 +219,8 @@ async def arun_with_retry(
                     w.invoke(cmd, config)
                 break
             elif cmd.graph == Command.PARENT:
-                # this command is for the parent graph, assign it to the parent
-                parts = ns.split(NS_SEP)
-                if parts[-1].isdigit():
-                    parts.pop()
-                parent_ns = NS_SEP.join(parts[:-1])
-                exc.args = (replace(cmd, graph=parent_ns),)
+                # this command is for the parent graph, assign it to the parent.
+                exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
             # bubble up
             raise
         except GraphBubbleUp:
@@ -173,7 +242,8 @@ async def arun_with_retry(
             if not matching_policy:
                 raise
 
-            # increment attempts
+            # attempts tracks failed tries only; it increments after a failure.
+            # The next execution's node_attempt is derived as attempts + 1.
             attempts += 1
             # check if we should give up
             if attempts >= matching_policy.max_attempts:

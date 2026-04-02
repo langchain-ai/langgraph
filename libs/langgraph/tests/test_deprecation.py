@@ -14,8 +14,12 @@ from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
 from langgraph.graph.message import MessageGraph
 from langgraph.pregel import NodeBuilder, Pregel
-from langgraph.types import Interrupt, RetryPolicy
-from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
+from langgraph.types import GraphOutput, Interrupt, RetryPolicy
+from langgraph.warnings import (
+    LangGraphDeprecatedSinceV05,
+    LangGraphDeprecatedSinceV10,
+    LangGraphDeprecatedSinceV11,
+)
 
 
 class PlainState(TypedDict): ...
@@ -197,6 +201,7 @@ def test_deprecated_import() -> None:
 @pytest.mark.filterwarnings(
     "ignore:`durability` has no effect when no checkpointer is present"
 )
+@pytest.mark.filterwarnings("ignore:Accessing GraphOutput via")
 def test_checkpoint_during_deprecation_state_graph() -> None:
     class CheckDurability(TypedDict):
         durability: NotRequired[str]
@@ -341,3 +346,34 @@ def test_message_graph_deprecation() -> None:
         match="MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.",
     ):
         MessageGraph()
+
+
+def test_graph_output_getitem_deprecation() -> None:
+    output = GraphOutput(value={"foo": "bar"})
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV11,
+        match=r"Accessing GraphOutput via `result\[key\]` is deprecated",
+    ):
+        assert output["foo"] == "bar"
+
+
+def test_graph_output_contains_deprecation() -> None:
+    output = GraphOutput(value={"foo": "bar"})
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV11,
+        match=r"Accessing GraphOutput via `key in result` is deprecated",
+    ):
+        assert "foo" in output
+
+
+def test_graph_output_getitem_interrupt_deprecation() -> None:
+    interrupts = (Interrupt(value="q", id="abc"),)
+    output = GraphOutput(value={"foo": "bar"}, interrupts=interrupts)
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV11,
+        match=r"Accessing GraphOutput via `result\[key\]` is deprecated",
+    ):
+        assert output["__interrupt__"] == interrupts
