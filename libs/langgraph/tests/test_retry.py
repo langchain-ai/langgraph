@@ -1,6 +1,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 
 from langgraph.graph import START, StateGraph
@@ -427,8 +428,6 @@ def test_execution_info_identity_fields_populated_on_retry():
         jitter=False,
         retry_on=ValueError,
     )
-
-    from langgraph.checkpoint.memory import MemorySaver
 
     graph = (
         StateGraph(State)

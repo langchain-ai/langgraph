@@ -589,3 +589,60 @@ def test_server_info_user_from_auth_user() -> None:
     assert si.user is not None
     assert si.user.identity == "proxy-user"
     assert si.user["display_name"] == "Proxy User"
+
+
+def test_execution_info_inherited_by_subgraph() -> None:
+    """execution_info is correctly populated for subgraph nodes, including namespace."""
+    captured_main: dict[str, Any] = {}
+    captured_sub: dict[str, Any] = {}
+
+    class State(TypedDict, total=False):
+        message: str
+
+    def subgraph_node(state: State, runtime: Runtime) -> dict[str, str]:
+        captured_sub["execution_info"] = runtime.execution_info
+        return {"message": "from_sub"}
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node("sub_node", subgraph_node)
+    subgraph_builder.add_edge(START, "sub_node")
+    subgraph = subgraph_builder.compile()
+
+    def main_node(state: State, runtime: Runtime) -> dict[str, str]:
+        captured_main["execution_info"] = runtime.execution_info
+        return {"message": "from_main"}
+
+    builder = StateGraph(State)
+    builder.add_node("main_node", main_node)
+    builder.add_node("subgraph", subgraph)
+    builder.add_edge(START, "main_node")
+    builder.add_edge("main_node", "subgraph")
+    graph = builder.compile(checkpointer=MemorySaver())
+
+    graph.invoke(
+        {"message": "hi"},
+        config={"configurable": {"thread_id": "sub-thread"}},
+    )
+
+    main_info = captured_main["execution_info"]
+    sub_info = captured_sub["execution_info"]
+
+    # Both share the same thread_id
+    assert main_info.thread_id == "sub-thread"
+    assert sub_info.thread_id == "sub-thread"
+
+    # Both have node_attempt = 1
+    assert main_info.node_attempt == 1
+    assert sub_info.node_attempt == 1
+
+    # Main namespace is "main_node:<task_id>" (top-level, no separator)
+    assert main_info.checkpoint_ns.startswith("main_node:")
+    assert "|" not in main_info.checkpoint_ns
+
+    # Subgraph namespace is "subgraph:<task_id>|sub_node:<task_id>" (nested)
+    assert sub_info.checkpoint_ns.startswith("subgraph:")
+    assert "|sub_node:" in sub_info.checkpoint_ns
+
+    # task_id appears in its own namespace segment
+    assert main_info.task_id in main_info.checkpoint_ns
+    assert sub_info.task_id in sub_info.checkpoint_ns

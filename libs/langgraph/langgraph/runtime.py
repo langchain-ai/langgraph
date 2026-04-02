@@ -5,7 +5,7 @@ from typing import Any, Generic, cast
 
 from langgraph.store.base import BaseStore
 from langgraph_sdk.auth.types import BaseUser
-from typing_extensions import NotRequired, TypedDict, Unpack
+from typing_extensions import TypedDict, Unpack
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.config import get_config
@@ -57,7 +57,7 @@ class ExecutionInfo:
 
 @dataclass(frozen=True, slots=True)
 class ServerInfo:
-    """Metadata injected by LangGraph Server. None when running OSS."""
+    """Metadata injected by LangGraph Server. None when running open-source LangGraph without LangSmith deployments."""
 
     assistant_id: str
     """The assistant ID for the current execution."""
@@ -77,13 +77,13 @@ class ServerInfo:
 def _no_op_stream_writer(_: Any) -> None: ...
 
 
-class _RuntimeOverrides(TypedDict, Generic[ContextT]):
-    context: NotRequired[ContextT]
-    store: NotRequired[BaseStore | None]
-    stream_writer: NotRequired[StreamWriter]
-    previous: NotRequired[Any]
-    execution_info: NotRequired[ExecutionInfo]
-    server_info: NotRequired[ServerInfo | None]
+class _RuntimeOverrides(TypedDict, Generic[ContextT], total=False):
+    context: ContextT
+    store: BaseStore | None
+    stream_writer: StreamWriter
+    previous: Any
+    execution_info: ExecutionInfo
+    server_info: ServerInfo | None
 
 
 @dataclass(**_DC_KWARGS)
@@ -183,7 +183,7 @@ class Runtime(Generic[ContextT]):
     None before task preparation populates it."""
 
     server_info: ServerInfo | None = field(default=None)
-    """Metadata injected by LangGraph Server. None when running OSS."""
+    """Metadata injected by LangGraph Server. None when running open-source LangGraph without LangSmith deployments."""
 
     def merge(self, other: Runtime[ContextT]) -> Runtime[ContextT]:
         """Merge two runtimes together.
