@@ -1,10 +1,14 @@
+import copy
 import json
 import pathlib
+import platform
 import shutil
+from collections.abc import Callable, Sequence
 from typing import Literal, NamedTuple
 
 import click.exceptions
 
+import langgraph_cli.config
 from langgraph_cli.exec import subp_exec
 
 ROOT = pathlib.Path(__file__).parent.resolve()
@@ -43,6 +47,54 @@ def _parse_version(version: str) -> Version:
     return Version(
         int(major.lstrip("v")), int(minor), int(patch.split("-")[0].split("+")[0])
     )
+
+
+def can_build_locally() -> tuple[bool, str | None]:
+    """Return whether local deployment builds can run on this machine.
+
+    Checks:
+    - Docker binary is installed
+    - Docker daemon is running
+    - Buildx is available when cross-compilation is required (non-x86_64)
+    """
+    if shutil.which("docker") is None:
+        return (
+            False,
+            "Docker is required but not installed.\n"
+            "Install Docker Desktop: https://docs.docker.com/get-docker/",
+        )
+    try:
+        import subprocess
+
+        docker_info = subprocess.run(
+            ["docker", "info"],
+            capture_output=True,
+            timeout=10,
+        )
+        if docker_info.returncode != 0:
+            return (
+                False,
+                "Docker is installed but not running.\nStart Docker and try again.",
+            )
+
+        if platform.machine() != "x86_64":
+            buildx = subprocess.run(
+                ["docker", "buildx", "version"],
+                capture_output=True,
+                timeout=10,
+            )
+            if buildx.returncode != 0:
+                return (
+                    False,
+                    "Docker Buildx is required but not installed.\n"
+                    "Your machine architecture ("
+                    + platform.machine()
+                    + ") requires Buildx to cross-compile images for linux/amd64.\n"
+                    "Install Buildx: https://docs.docker.com/build/install-buildx/",
+                )
+        return True, None
+    except Exception:
+        return False, "Unable to verify local Docker build support."
 
 
 def check_capabilities(runner) -> DockerCapabilities:
@@ -276,3 +328,79 @@ def compose(
     )
     compose_str = dict_to_yaml(compose_content)
     return compose_str
+
+
+def build_docker_image(
+    runner,
+    set: Callable[[str], None],
+    config: pathlib.Path,
+    config_json: dict,
+    base_image: str | None,
+    api_version: str | None,
+    pull: bool,
+    tag: str,
+    passthrough: Sequence[str] = (),
+    install_command: str | None = None,
+    build_command: str | None = None,
+    docker_command: Sequence[str] | None = None,
+    extra_flags: Sequence[str] = (),
+    verbose: bool = True,
+):
+    """Build a Docker image from a LangGraph config."""
+    # pull latest images
+    if pull:
+        runner.run(
+            subp_exec(
+                "docker",
+                "pull",
+                langgraph_cli.config.docker_tag(config_json, base_image, api_version),
+                verbose=verbose,
+            )
+        )
+    set("Building...")
+    # apply options
+    args = [
+        "-f",
+        "-",  # stdin
+        "-t",
+        tag,
+    ]
+    # determine build context: use current directory for JS projects, config parent for Python
+    is_js_project = config_json.get("node_version") and not config_json.get(
+        "python_version"
+    )
+    # build/install commands only apply to JS projects for now
+    # without install/build command, JS projects will follow the old behavior
+    if is_js_project and (build_command or install_command):
+        build_context = str(pathlib.Path.cwd())
+    else:
+        build_context = str(config.parent)
+
+    # Deep copy to avoid mutating the caller's config (config_to_docker
+    # rewrites graph paths to container-internal paths in place).
+    config_json = copy.deepcopy(config_json)
+    stdin, additional_contexts = langgraph_cli.config.config_to_docker(
+        config_path=config,
+        config=config_json,
+        base_image=base_image,
+        api_version=api_version,
+        install_command=install_command,
+        build_command=build_command,
+        build_context=build_context,
+    )
+    # add additional_contexts
+    if additional_contexts:
+        for k, v in additional_contexts.items():
+            args.extend(["--build-context", f"{k}={v}"])
+    cmd = tuple(docker_command) if docker_command else ("docker", "build")
+    runner.run(
+        subp_exec(
+            *cmd,
+            *args,
+            *extra_flags,
+            *passthrough,
+            build_context,
+            input=stdin,
+            verbose=verbose,
+        )
+    )
