@@ -21,7 +21,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.tools import BaseTool, ToolException
+from langchain_core.tools import BaseTool, InjectedToolArg, ToolException
 from langchain_core.tools import tool as dec_tool
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
@@ -2043,6 +2043,28 @@ def test_tool_runtime_forwards_execution_info_and_server_info() -> None:
     tool_call = {
         "name": "info_tool",
         "args": {"x": 1},
+# --- InjectedToolArg security tests ---
+
+
+def test_tool_node_strips_plain_injected_tool_arg() -> None:
+    """Plain InjectedToolArg values supplied by the LLM should be stripped."""
+
+    @dec_tool
+    def read_secret(
+        query: str,
+        auth: Annotated[dict, InjectedToolArg()],
+    ) -> str:
+        """Return secret data based on auth role."""
+        if auth.get("role") == "admin":
+            return "ADMIN_SECRET"
+        return "PUBLIC_DATA"
+
+    node = ToolNode([read_secret], handle_tool_errors=True)
+
+    # LLM tries to supply the hidden 'auth' field
+    tool_call = {
+        "name": "read_secret",
+        "args": {"query": "hello", "auth": {"role": "admin"}},
         "id": "call-1",
         "type": "tool_call",
     }
@@ -2095,3 +2117,70 @@ async def test_tool_runtime_forwards_execution_info_and_server_info_async() -> N
     assert captured["execution_info"].thread_id == "t-2"
     assert captured["server_info"] is server_info
     assert captured["server_info"].graph_id == "graph-2"
+    result = node.invoke({"messages": [msg]}, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    # auth should have been stripped, so tool should fail (missing required arg)
+    assert "ADMIN_SECRET" not in tool_message.content
+
+
+def test_tool_node_strips_custom_injected_tool_arg_subclass() -> None:
+    """Custom InjectedToolArg subclasses should also be stripped."""
+
+    class InjectedAuth(InjectedToolArg):
+        pass
+
+    @dec_tool
+    def read_secret(
+        query: str,
+        auth: Annotated[dict, InjectedAuth()],
+    ) -> str:
+        """Return secret data based on auth role."""
+        if auth.get("role") == "admin":
+            return "ADMIN_SECRET"
+        return "PUBLIC_DATA"
+
+    node = ToolNode([read_secret], handle_tool_errors=True)
+
+    tool_call = {
+        "name": "read_secret",
+        "args": {"query": "hello", "auth": {"role": "admin"}},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = node.invoke({"messages": [msg]}, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    assert "ADMIN_SECRET" not in tool_message.content
+
+
+def test_tool_node_injected_state_overwrites_llm_value() -> None:
+    """InjectedState should use graph state, not LLM-supplied values."""
+
+    @dec_tool
+    def read_secret(
+        query: str,
+        auth: Annotated[dict, InjectedState("auth")],
+    ) -> str:
+        """Return secret data based on auth from graph state."""
+        if auth.get("role") == "admin":
+            return "ADMIN_SECRET"
+        return "PUBLIC_DATA"
+
+    node = ToolNode([read_secret])
+
+    # LLM tries to supply auth as admin
+    tool_call = {
+        "name": "read_secret",
+        "args": {"query": "hello", "auth": {"role": "admin"}},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    # Graph state has auth as viewer
+    result = node.invoke(
+        {"messages": [msg], "auth": {"role": "viewer"}},
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "PUBLIC_DATA"
