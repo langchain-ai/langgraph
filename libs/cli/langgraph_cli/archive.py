@@ -2,9 +2,9 @@
 
 import os
 import pathlib
-import shutil
 import tarfile
 import tempfile
+from contextlib import contextmanager
 
 import click
 import pathspec
@@ -82,11 +82,12 @@ def _add_directory(
                 tar.addfile(filtered, fobj)
 
 
+@contextmanager
 def create_archive(
     config_path: pathlib.Path,
     config: Config,
-) -> tuple[str, int, str]:
-    """Create a .tar.gz archive of the project source.
+):
+    """Context manager that creates a .tar.gz archive of the project source.
 
     Uses _assemble_local_deps to discover local dependencies referenced in
     langgraph.json, including those outside config.parent (monorepo case).
@@ -96,7 +97,8 @@ def create_archive(
     relative references (e.g. ``../shared-lib``) resolve correctly after
     extraction.
 
-    Returns (archive_path, file_size, config_relative_path).
+    Yields (archive_path, file_size, config_relative_path).  The temporary
+    directory holding the archive is cleaned up automatically on exit.
     """
     config_path = config_path.resolve()
     context_dir = config_path.parent
@@ -111,47 +113,49 @@ def create_archive(
         common = pathlib.Path(os.path.commonpath([common, d]))
 
     tmp_dir = tempfile.mkdtemp(prefix="langgraph-deploy-")
-    archive_path = os.path.join(tmp_dir, "source.tar.gz")
+    try:
+        archive_path = os.path.join(tmp_dir, "source.tar.gz")
 
-    added_dirs: set[str] = set()
-    with tarfile.open(archive_path, "w:gz") as tar:
-        for dir_path in dirs_to_include:
-            rel = dir_path.relative_to(common)
-            prefix = str(rel).replace(os.sep, "/") if str(rel) != "." else None
-            key = prefix or ""
-            if key in added_dirs:
-                continue
-            added_dirs.add(key)
-            ignore_spec = _build_ignore_spec(dir_path)
-            _add_directory(
-                tar, dir_path, arcname_prefix=prefix, ignore_spec=ignore_spec
-            )
+        added_dirs: set[str] = set()
+        with tarfile.open(archive_path, "w:gz") as tar:
+            for dir_path in dirs_to_include:
+                rel = dir_path.relative_to(common)
+                prefix = str(rel).replace(os.sep, "/") if str(rel) != "." else None
+                key = prefix or ""
+                if key in added_dirs:
+                    continue
+                added_dirs.add(key)
+                ignore_spec = _build_ignore_spec(dir_path)
+                _add_directory(
+                    tar, dir_path, arcname_prefix=prefix, ignore_spec=ignore_spec
+                )
 
-    file_size = os.path.getsize(archive_path)
+        file_size = os.path.getsize(archive_path)
 
-    config_rel = str(config_path.relative_to(common)).replace(os.sep, "/")
+        config_rel = str(config_path.relative_to(common)).replace(os.sep, "/")
 
-    # Validate config file is in the archive
-    with tarfile.open(archive_path, "r:gz") as tar:
-        names = tar.getnames()
-        if config_rel not in names:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+        with tarfile.open(archive_path, "r:gz") as tar:
+            names = tar.getnames()
+            if config_rel not in names:
+                raise click.ClickException(
+                    f"Archive validation failed: {config_rel} not found in archive"
+                )
+
+        if file_size > _MAX_SIZE:
             raise click.ClickException(
-                f"Archive validation failed: {config_rel} not found in archive"
+                f"Source archive is {file_size / 1_048_576:.1f} MB, which exceeds the 200 MB limit. "
+                "Add large files to .dockerignore or .gitignore (model weights, data sets, etc.)."
             )
 
-    if file_size > _MAX_SIZE:
+        if file_size > _WARN_SIZE:
+            click.secho(
+                f"   Warning: source archive is {file_size / 1_048_576:.1f} MB. "
+                "Consider adding large files to .dockerignore or .gitignore.",
+                fg="yellow",
+            )
+
+        yield archive_path, file_size, config_rel
+    finally:
+        import shutil
+
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        raise click.ClickException(
-            f"Source archive is {file_size / 1_048_576:.1f} MB, which exceeds the 200 MB limit. "
-            "Add large files to .dockerignore or .gitignore (model weights, data sets, etc.)."
-        )
-
-    if file_size > _WARN_SIZE:
-        click.secho(
-            f"   Warning: source archive is {file_size / 1_048_576:.1f} MB. "
-            "Consider adding large files to .dockerignore or .gitignore.",
-            fg="yellow",
-        )
-
-    return archive_path, file_size, config_rel

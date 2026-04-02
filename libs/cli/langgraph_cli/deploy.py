@@ -6,7 +6,6 @@ import os
 import pathlib
 import platform
 import re
-import shutil
 import tempfile
 import time
 from collections.abc import Callable, Sequence
@@ -111,7 +110,7 @@ class BuildResult:
     timeout_seconds: int = 300
     poll_interval_seconds: int = 1
     no_result_message: str = "Deployment updated"
-    on_poll: Callable[[str, str], None] | None = None
+    on_poll: Callable[[str, str, Callable[[str], None]], None] | None = None
     on_interrupt: Callable[[str], None] | None = None
     show_build_logs_on_failure: bool = False
 
@@ -465,7 +464,7 @@ def _poll_revision_status(
     progress_message: str,
     timeout_seconds: int,
     poll_interval_seconds: int,
-    on_poll: Callable[[str, str], None] | None = None,
+    on_poll: Callable[[str, str, Callable[[str], None]], None] | None = None,
     on_interrupt: Callable[[str], None] | None = None,
 ) -> tuple[str, str | None]:
     """Poll latest revision status until terminal status or timeout."""
@@ -507,7 +506,7 @@ def _poll_revision_status(
                 set_progress(f"{status}...")
 
             if on_poll is not None:
-                on_poll(status, revision_id)
+                on_poll(status, revision_id, set_progress)
             time.sleep(poll_interval_seconds)
         else:
             set_progress("")
@@ -576,34 +575,45 @@ def _docker_config_for_token(registry_host: str, token: str):
 # GCS upload
 # ---------------------------------------------------------------------------
 
+_UPLOAD_TIMEOUT_SECONDS = 300
+
+
+class _ProgressReader:
+    """File-like wrapper that displays upload progress via click."""
+
+    def __init__(self, fobj, file_size: int):
+        self._fobj = fobj
+        self._file_size = file_size
+        self._uploaded = 0
+
+    def read(self, size=-1):
+        data = self._fobj.read(size)
+        if data:
+            self._uploaded += len(data)
+            pct = (
+                int(self._uploaded * 100 / self._file_size)
+                if self._file_size
+                else 100
+            )
+            click.echo(
+                f"\r   Uploading ({self._file_size / 1_048_576:.1f} MB)... {pct}%",
+                nl=False,
+            )
+        return data
+
+    def __len__(self):
+        return self._file_size
+
 
 def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
     """Upload tarball to GCS via signed PUT URL with progress display."""
     import urllib.error
     import urllib.request
 
-    uploaded = 0
-
     with open(file_path, "rb") as f:
-        original_read = f.read
-
-        def tracked_read(size=-1):
-            nonlocal uploaded
-            data = original_read(size)
-            if data:
-                uploaded += len(data)
-                pct = int(uploaded * 100 / file_size) if file_size else 100
-                click.echo(
-                    f"\r   Uploading ({file_size / 1_048_576:.1f} MB)... {pct}%",
-                    nl=False,
-                )
-            return data
-
-        f.read = tracked_read
-
         req = urllib.request.Request(
             signed_url,
-            data=f,
+            data=_ProgressReader(f, file_size),
             method="PUT",
             headers={
                 "Content-Type": "application/gzip",
@@ -612,7 +622,7 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
             },
         )
         try:
-            urllib.request.urlopen(req)
+            urllib.request.urlopen(req, timeout=_UPLOAD_TIMEOUT_SECONDS)
         except urllib.error.HTTPError as err:
             detail = err.read().decode("utf-8", errors="ignore")
             raise click.ClickException(
@@ -822,23 +832,22 @@ def _run_remote_build(
     from langgraph_cli.archive import create_archive
 
     _log_deploy_step(step, "Creating source archive")
-    archive_path, file_size, config_rel = create_archive(config, config_json)
-    click.secho(f"   Archive created ({file_size / 1_048_576:.1f} MB)", fg="green")
-    step += 1
+    with create_archive(config, config_json) as (archive_path, file_size, config_rel):
+        click.secho(
+            f"   Archive created ({file_size / 1_048_576:.1f} MB)", fg="green"
+        )
+        step += 1
 
-    _log_deploy_step(step, "Requesting upload URL")
-    upload_data = client.request_upload_url(deployment_id)
-    signed_url = upload_data.get("upload_url")
-    object_path = upload_data.get("object_path")
-    if not signed_url or not object_path:
-        raise click.ClickException("Upload URL response missing required fields")
-    step += 1
+        _log_deploy_step(step, "Requesting upload URL")
+        upload_data = client.request_upload_url(deployment_id)
+        signed_url = upload_data.get("upload_url")
+        object_path = upload_data.get("object_path")
+        if not signed_url or not object_path:
+            raise click.ClickException("Upload URL response missing required fields")
+        step += 1
 
-    _log_deploy_step(step, "Uploading source")
-    try:
+        _log_deploy_step(step, "Uploading source")
         _upload_to_gcs(signed_url, archive_path, file_size)
-    finally:
-        shutil.rmtree(os.path.dirname(archive_path), ignore_errors=True)
     step += 1
 
     _log_deploy_step(step, "Triggering remote build")
@@ -852,9 +861,12 @@ def _run_remote_build(
     )
 
     log_offset: str | None = None
+    logs_header_printed = False
 
-    def _stream_build_logs(status: str, revision_id: str) -> None:
-        nonlocal log_offset
+    def _stream_build_logs(
+        status: str, revision_id: str, set_progress: Callable[[str], None]
+    ) -> None:
+        nonlocal log_offset, logs_header_printed
         if not (verbose and status in ("AWAITING_BUILD", "BUILDING")):
             return
         try:
@@ -866,11 +878,20 @@ def _run_remote_build(
                 else {"order": "asc", "limit": 50},
             )
             if isinstance(logs_resp, dict):
-                for entry in logs_resp.get("logs", []):
+                entries = logs_resp.get("logs", [])
+                has_output = any(entry.get("message") for entry in entries)
+                if has_output:
+                    set_progress("")
+                    if not logs_header_printed:
+                        click.echo(f"   {status} (build logs):")
+                        logs_header_printed = True
+                for entry in entries:
                     msg = entry.get("message", "")
                     if msg:
                         click.echo(f"   | {msg}")
                 log_offset = logs_resp.get("next_offset") or log_offset
+                if has_output:
+                    set_progress(f"{status}...")
         except Exception:
             pass
 
