@@ -3671,15 +3671,15 @@ def _build_server_info(
     graph_id = metadata.get("graph_id")
 
     # Read authenticated user from configurable (set by LangGraph Server).
-    # The user object may be a dict, a langgraph_sdk BaseUser, or a
-    # starlette BaseUser (e.g. ProxyUser).  The SDK Protocol's isinstance()
-    # check can miss starlette users whose __getitem__/permissions come via
-    # __getattr__, so we also accept any object with an `identity` attribute.
+    # The server's normalize_user() always returns a starlette ProxyUser which
+    # has `identity` as a property.  We accept any object with an `identity`
+    # attribute rather than checking isinstance against the SDK Protocol,
+    # because Python's runtime Protocol check fails on classes that provide
+    # members via __getattr__ (which ProxyUser does for `permissions`).
     auth_user_data = configurable.get("langgraph_auth_user")
     user: BaseUser | None = (
         cast(BaseUser, auth_user_data)
-        if isinstance(auth_user_data, (dict, BaseUser))
-        or (auth_user_data is not None and hasattr(auth_user_data, "identity"))
+        if auth_user_data is not None and hasattr(auth_user_data, "identity")
         else None
     )
 

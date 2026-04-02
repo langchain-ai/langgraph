@@ -688,7 +688,11 @@ def test_server_info_none_without_metadata() -> None:
 
 
 def test_server_info_user_from_langgraph_auth_user() -> None:
-    """server_info.user should be populated from configurable['langgraph_auth_user']."""
+    """server_info.user should be populated from configurable['langgraph_auth_user'].
+
+    The server always normalizes the user to a starlette-style object with an
+    `identity` attribute (never a raw dict), so the test uses _MockBaseUser.
+    """
 
     class State(TypedDict):
         message: str
@@ -708,12 +712,14 @@ def test_server_info_user_from_langgraph_auth_user() -> None:
         {"message": "hi"},
         config={
             "configurable": {
-                "langgraph_auth_user": {
-                    "identity": "user-42",
-                    "display_name": "Alice",
-                    "is_authenticated": True,
-                    "permissions": ["read"],
-                },
+                "langgraph_auth_user": _MockBaseUser(
+                    {
+                        "identity": "user-42",
+                        "display_name": "Alice",
+                        "is_authenticated": True,
+                        "permissions": ["read"],
+                    }
+                ),
             },
             "metadata": {
                 "assistant_id": "asst-srv",
