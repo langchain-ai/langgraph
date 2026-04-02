@@ -65,7 +65,9 @@ def _create_mock_runtime(store: BaseStore | None = None) -> Mock:
     mock_runtime.store = store
     mock_runtime.context = None
     mock_runtime.stream_writer = lambda *args, **kwargs: None
-    mock_runtime.execution_info = ExecutionInfo()
+    mock_runtime.execution_info = ExecutionInfo(
+        checkpoint_id="test-cp", checkpoint_ns="", task_id="test-task"
+    )
     mock_runtime.server_info = None
     return mock_runtime
 
@@ -2019,7 +2021,11 @@ def test_tool_runtime_forwards_execution_info_and_server_info() -> None:
     from langgraph.runtime import ExecutionInfo, ServerInfo
 
     exec_info = ExecutionInfo(
-        thread_id="t-1", checkpoint_id="cp-1", task_id="tk-1", run_id="r-1"
+        thread_id="t-1",
+        checkpoint_id="cp-1",
+        checkpoint_ns="",
+        task_id="tk-1",
+        run_id="r-1",
     )
     server_info = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
 
@@ -2043,28 +2049,6 @@ def test_tool_runtime_forwards_execution_info_and_server_info() -> None:
     tool_call = {
         "name": "info_tool",
         "args": {"x": 1},
-# --- InjectedToolArg security tests ---
-
-
-def test_tool_node_strips_plain_injected_tool_arg() -> None:
-    """Plain InjectedToolArg values supplied by the LLM should be stripped."""
-
-    @dec_tool
-    def read_secret(
-        query: str,
-        auth: Annotated[dict, InjectedToolArg()],
-    ) -> str:
-        """Return secret data based on auth role."""
-        if auth.get("role") == "admin":
-            return "ADMIN_SECRET"
-        return "PUBLIC_DATA"
-
-    node = ToolNode([read_secret], handle_tool_errors=True)
-
-    # LLM tries to supply the hidden 'auth' field
-    tool_call = {
-        "name": "read_secret",
-        "args": {"query": "hello", "auth": {"role": "admin"}},
         "id": "call-1",
         "type": "tool_call",
     }
@@ -2083,7 +2067,13 @@ async def test_tool_runtime_forwards_execution_info_and_server_info_async() -> N
     """Test that execution_info and server_info are forwarded in async path."""
     from langgraph.runtime import ExecutionInfo, ServerInfo
 
-    exec_info = ExecutionInfo(thread_id="t-2", run_id="r-2")
+    exec_info = ExecutionInfo(
+        thread_id="t-2",
+        checkpoint_id="cp-2",
+        checkpoint_ns="",
+        task_id="tk-2",
+        run_id="r-2",
+    )
     server_info = ServerInfo(assistant_id="asst-2", graph_id="graph-2")
 
     mock_runtime = Mock()
@@ -2117,6 +2107,34 @@ async def test_tool_runtime_forwards_execution_info_and_server_info_async() -> N
     assert captured["execution_info"].thread_id == "t-2"
     assert captured["server_info"] is server_info
     assert captured["server_info"].graph_id == "graph-2"
+
+
+# --- InjectedToolArg security tests ---
+
+
+def test_tool_node_strips_plain_injected_tool_arg() -> None:
+    """Plain InjectedToolArg values supplied by the LLM should be stripped."""
+
+    @dec_tool
+    def read_secret(
+        query: str,
+        auth: Annotated[dict, InjectedToolArg()],
+    ) -> str:
+        """Return secret data based on auth role."""
+        if auth.get("role") == "admin":
+            return "ADMIN_SECRET"
+        return "PUBLIC_DATA"
+
+    node = ToolNode([read_secret], handle_tool_errors=True)
+
+    # LLM tries to supply the hidden 'auth' field
+    tool_call = {
+        "name": "read_secret",
+        "args": {"query": "hello", "auth": {"role": "admin"}},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
     result = node.invoke({"messages": [msg]}, config=_create_config_with_runtime())
     tool_message = result["messages"][-1]
     # auth should have been stripped, so tool should fail (missing required arg)
