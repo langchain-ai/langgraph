@@ -856,12 +856,8 @@ def test_server_info_user_from_starlette_style_proxy() -> None:
             "permissions": ["read"],
         }
     )
-    # Verify it does NOT satisfy the SDK Protocol (the bug scenario)
-    from langgraph.runtime import BaseUser as SDKBaseUser
-
-    assert not isinstance(proxy, SDKBaseUser)
     assert not isinstance(proxy, dict)
-    # But it does have identity
+    # The proxy has identity (either via Protocol isinstance or hasattr fallback)
     assert hasattr(proxy, "identity")
 
     compiled.invoke(
