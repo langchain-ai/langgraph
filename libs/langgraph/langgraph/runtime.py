@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any, Generic, cast, runtime_checkable
+from typing import Any, Generic, cast
 
 from langgraph.store.base import BaseStore
-from typing_extensions import NotRequired, Protocol, TypedDict, Unpack
+from langgraph_sdk.auth.types import BaseUser
+from typing_extensions import NotRequired, TypedDict, Unpack
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.config import get_config
@@ -53,48 +53,6 @@ class ExecutionInfo:
     def patch(self, **overrides: Any) -> ExecutionInfo:
         """Return a new execution info object with selected fields replaced."""
         return replace(self, **overrides)
-
-
-@runtime_checkable
-class BaseUser(Protocol):
-    """Protocol for authenticated user objects.
-
-    Compatible with `langgraph_sdk.auth.types.BaseUser` and the Starlette
-    `BaseUser` protocol. Supports both attribute access (e.g. `user.identity`)
-    and dict-like access (e.g. `user["identity"]`).
-    """
-
-    @property
-    def is_authenticated(self) -> bool:
-        """Whether the user is authenticated."""
-        ...
-
-    @property
-    def display_name(self) -> str:
-        """The display name of the user."""
-        ...
-
-    @property
-    def identity(self) -> str:
-        """The unique identifier for the user."""
-        ...
-
-    @property
-    def permissions(self) -> Sequence[str]:
-        """The permissions associated with the user."""
-        ...
-
-    def __getitem__(self, key: str) -> Any:
-        """Get a key from the user object."""
-        ...
-
-    def __contains__(self, key: object) -> bool:
-        """Check if a property exists."""
-        ...
-
-    def __iter__(self) -> Any:
-        """Iterate over the keys of the user."""
-        ...
 
 
 @dataclass(frozen=True, slots=True)
