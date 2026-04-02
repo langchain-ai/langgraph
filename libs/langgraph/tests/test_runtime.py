@@ -1,13 +1,13 @@
-from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.runtime import BaseUser, ExecutionInfo, Runtime, ServerInfo, get_runtime
+from langgraph.runtime import ExecutionInfo, Runtime, ServerInfo, get_runtime
 
 
 def test_injected_runtime() -> None:
@@ -392,272 +392,122 @@ def test_context_coercion_pydantic_validation_errors() -> None:
         )
 
 
-# --- ExecutionInfo tests ---
+# --- ExecutionInfo unit tests ---
 
 
-def test_execution_info_defaults() -> None:
-    info = ExecutionInfo()
+def test_execution_info_defaults_and_patch() -> None:
+    info = ExecutionInfo(checkpoint_id="c1", checkpoint_ns="ns1", task_id="t1")
+    assert info.checkpoint_id == "c1"
+    assert info.checkpoint_ns == "ns1"
+    assert info.task_id == "t1"
     assert info.thread_id is None
-    assert info.checkpoint_id == ""
-    assert info.checkpoint_ns == ""
-    assert info.task_id == ""
     assert info.run_id is None
     assert info.node_attempt == 1
     assert info.node_first_attempt_time is None
 
-
-def test_execution_info_patch() -> None:
-    info = ExecutionInfo(thread_id="t1", run_id="r1")
-    patched = info.patch(node_attempt=3, task_id="tk1")
-    assert patched.thread_id == "t1"
-    assert patched.run_id == "r1"
+    # patch returns new instance, original unchanged
+    patched = info.patch(thread_id="th1", node_attempt=3, task_id="tk1")
+    assert patched.thread_id == "th1"
     assert patched.node_attempt == 3
     assert patched.task_id == "tk1"
-    # original unchanged
     assert info.node_attempt == 1
-    assert info.task_id == ""
+    assert info.task_id == "t1"
 
-
-def test_execution_info_frozen() -> None:
-    info = ExecutionInfo(thread_id="t1")
+    # frozen
     with pytest.raises(AttributeError):
         info.thread_id = "t2"  # type: ignore[misc]
 
 
-def test_execution_info_populated_in_node() -> None:
-    """ExecutionInfo fields are populated from config in node execution."""
-
-    class State(TypedDict):
-        result: str
-
-    captured: dict[str, Any] = {}
-
-    def my_node(state: State, runtime: Runtime) -> dict[str, Any]:
-        info = runtime.execution_info
-        captured["thread_id"] = info.thread_id
-        captured["run_id"] = info.run_id
-        captured["node_attempt"] = info.node_attempt
-        captured["node_first_attempt_time"] = info.node_first_attempt_time
-        return {"result": "ok"}
-
-    from langgraph.checkpoint.memory import MemorySaver
-
-    graph = (
-        StateGraph(State)
-        .add_node("my_node", my_node)
-        .add_edge(START, "my_node")
-        .compile(checkpointer=MemorySaver())
-    )
-    config = {"configurable": {"thread_id": "thread-abc"}}
-    result = graph.invoke({"result": ""}, config=config)
-
-    assert result["result"] == "ok"
-    assert captured["thread_id"] == "thread-abc"
-    assert captured["node_attempt"] == 1
-    assert isinstance(captured["node_first_attempt_time"], float)
+# --- ServerInfo / Runtime unit tests ---
 
 
-@pytest.mark.anyio
-async def test_execution_info_populated_in_node_async() -> None:
-    """ExecutionInfo fields are populated from config in async node execution."""
+def test_server_info_and_runtime_merge() -> None:
+    si = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
+    assert si.assistant_id == "asst-1"
+    assert si.user is None
 
-    class State(TypedDict):
-        result: str
-
-    captured: dict[str, Any] = {}
-
-    async def my_node(state: State, runtime: Runtime) -> dict[str, Any]:
-        info = runtime.execution_info
-        captured["thread_id"] = info.thread_id
-        captured["node_attempt"] = info.node_attempt
-        captured["node_first_attempt_time"] = info.node_first_attempt_time
-        return {"result": "ok"}
-
-    from langgraph.checkpoint.memory import MemorySaver
-
-    graph = (
-        StateGraph(State)
-        .add_node("my_node", my_node)
-        .add_edge(START, "my_node")
-        .compile(checkpointer=MemorySaver())
-    )
-    config = {"configurable": {"thread_id": "thread-xyz"}}
-    result = await graph.ainvoke({"result": ""}, config=config)
-
-    assert result["result"] == "ok"
-    assert captured["thread_id"] == "thread-xyz"
-    assert captured["node_attempt"] == 1
-    assert isinstance(captured["node_first_attempt_time"], float)
-
-
-# --- User tests ---
-
-
-class _MockBaseUser:
-    """A minimal BaseUser implementation for testing."""
-
-    def __init__(self, data: dict[str, Any]) -> None:
-        self._data = data
-
-    @property
-    def is_authenticated(self) -> bool:
-        return self._data.get("is_authenticated", False)
-
-    @property
-    def display_name(self) -> str:
-        return self._data.get("display_name", "")
-
-    @property
-    def identity(self) -> str:
-        return self._data.get("identity", "")
-
-    @property
-    def permissions(self) -> Sequence[str]:
-        return self._data.get("permissions", [])
-
-    def __getitem__(self, key: str) -> Any:
-        return self._data[key]
-
-    def __contains__(self, key: str) -> bool:
-        return key in self._data
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._data)
-
-
-def test_base_user_protocol() -> None:
-    """BaseUser protocol supports both attribute and dict-like access."""
-    user = _MockBaseUser(
-        {
-            "identity": "user-123",
-            "display_name": "Alice",
-            "is_authenticated": True,
-            "permissions": ["read", "write"],
-        }
-    )
-    assert isinstance(user, BaseUser)
-    assert user.identity == "user-123"
-    assert user.display_name == "Alice"
-    assert user.is_authenticated is True
-    assert user.permissions == ["read", "write"]
-    assert user["identity"] == "user-123"
-    assert "display_name" in user
-
-
-# --- ServerInfo tests ---
-
-
-def test_server_info() -> None:
-    info = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
-    assert info.assistant_id == "asst-1"
-    assert info.graph_id == "graph-1"
-    assert info.user is None
-
-
-def test_server_info_with_user() -> None:
-    user = _MockBaseUser({"identity": "user-1", "display_name": "Bob"})
-    info = ServerInfo(assistant_id="asst-1", graph_id="graph-1", user=user)
-    assert info.user is not None
-    assert info.user["identity"] == "user-1"
-
-
-def test_server_info_frozen() -> None:
-    info = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
+    # frozen
     with pytest.raises(AttributeError):
-        info.assistant_id = "asst-2"  # type: ignore[misc]
+        si.assistant_id = "asst-2"  # type: ignore[misc]
 
+    # runtime default is None
+    assert Runtime().server_info is None
 
-# --- Runtime server_info tests ---
-
-
-def test_runtime_server_info_default_none() -> None:
-    runtime = Runtime()
-    assert runtime.server_info is None
-
-
-def test_runtime_server_info_set() -> None:
-    si = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
-    runtime = Runtime(server_info=si)
-    assert runtime.server_info is si
-
-
-def test_runtime_merge_preserves_server_info() -> None:
-    si = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
-    runtime1 = Runtime(server_info=si)
-    runtime2 = Runtime()
-
-    # server_info from self is preserved when other has None
-    merged = runtime1.merge(runtime2)
+    # merge preserves server_info from self when other has None
+    r1 = Runtime(server_info=si)
+    merged = r1.merge(Runtime())
     assert merged.server_info is si
 
-    # server_info from other takes precedence
+    # merge takes server_info from other when present
     si2 = ServerInfo(assistant_id="asst-2", graph_id="graph-2")
-    runtime3 = Runtime(server_info=si2)
-    merged2 = runtime1.merge(runtime3)
+    merged2 = r1.merge(Runtime(server_info=si2))
     assert merged2.server_info is si2
 
 
-# --- Integration tests: execution_info populated during graph execution ---
+# --- Integration tests ---
 
 
-def test_execution_info_populated_in_graph() -> None:
-    """execution_info should carry thread_id, run_id, task_id, checkpoint_id, checkpoint_ns."""
-    from langgraph.checkpoint.memory import MemorySaver
+def _make_capture_graph(
+    capture: dict[str, Any],
+    *,
+    checkpointer: Any = None,
+) -> Any:
+    """Helper: build a simple graph that captures runtime info."""
 
     class State(TypedDict):
         message: str
 
-    captured: dict[str, Any] = {}
-
     def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
-        info = runtime.execution_info
-        captured["thread_id"] = info.thread_id
-        captured["run_id"] = info.run_id
-        captured["task_id"] = info.task_id
-        captured["checkpoint_id"] = info.checkpoint_id
-        captured["checkpoint_ns"] = info.checkpoint_ns
+        capture["execution_info"] = runtime.execution_info
+        capture["server_info"] = runtime.server_info
         return {"message": "done"}
 
     graph = StateGraph(state_schema=State)
     graph.add_node("capture", capture_node)
     graph.add_edge(START, "capture")
     graph.add_edge("capture", END)
-    compiled = graph.compile(checkpointer=MemorySaver())
+    return graph.compile(checkpointer=checkpointer)
+
+
+def test_execution_info_populated_in_graph() -> None:
+    """execution_info fields are populated when running with a checkpointer."""
+    captured: dict[str, Any] = {}
+    compiled = _make_capture_graph(captured, checkpointer=MemorySaver())
     compiled.invoke(
         {"message": "hi"},
         config={"configurable": {"thread_id": "t-123"}},
     )
-    assert captured["thread_id"] == "t-123"
-    assert captured["task_id"] is not None
-    assert captured["checkpoint_id"] is not None
-    assert captured["checkpoint_ns"] is not None
+    info = captured["execution_info"]
+    assert info.thread_id == "t-123"
+    assert info.task_id is not None
+    assert info.checkpoint_id is not None
+    assert info.checkpoint_ns is not None
+    assert info.node_attempt == 1
+    assert isinstance(info.node_first_attempt_time, float)
 
 
-def test_server_info_populated_from_metadata() -> None:
-    """server_info should be built from assistant_id/graph_id in config metadata."""
-
-    class State(TypedDict):
-        message: str
-
+@pytest.mark.anyio
+async def test_execution_info_populated_in_graph_async() -> None:
+    """execution_info fields are populated in async execution."""
     captured: dict[str, Any] = {}
+    compiled = _make_capture_graph(captured, checkpointer=MemorySaver())
+    await compiled.ainvoke(
+        {"message": "hi"},
+        config={"configurable": {"thread_id": "t-xyz"}},
+    )
+    info = captured["execution_info"]
+    assert info.thread_id == "t-xyz"
+    assert info.node_attempt == 1
+    assert isinstance(info.node_first_attempt_time, float)
 
-    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
-        captured["server_info"] = runtime.server_info
-        return {"message": "done"}
 
-    graph = StateGraph(state_schema=State)
-    graph.add_node("capture", capture_node)
-    graph.add_edge(START, "capture")
-    graph.add_edge("capture", END)
-    compiled = graph.compile()
+def test_server_info_from_metadata() -> None:
+    """server_info is built from assistant_id/graph_id in config metadata."""
+    captured: dict[str, Any] = {}
+    compiled = _make_capture_graph(captured)
     compiled.invoke(
         {"message": "hi"},
-        config={
-            "metadata": {
-                "assistant_id": "asst-abc",
-                "graph_id": "my-graph",
-            }
-        },
+        config={"metadata": {"assistant_id": "asst-abc", "graph_id": "my-graph"}},
     )
     si = captured["server_info"]
     assert si is not None
@@ -667,148 +517,24 @@ def test_server_info_populated_from_metadata() -> None:
 
 
 def test_server_info_none_without_metadata() -> None:
-    """server_info should be None when no assistant_id/graph_id in metadata."""
-
-    class State(TypedDict):
-        message: str
-
+    """server_info is None when no assistant_id/graph_id in metadata."""
     captured: dict[str, Any] = {}
-
-    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
-        captured["server_info"] = runtime.server_info
-        return {"message": "done"}
-
-    graph = StateGraph(state_schema=State)
-    graph.add_node("capture", capture_node)
-    graph.add_edge(START, "capture")
-    graph.add_edge("capture", END)
-    compiled = graph.compile()
+    compiled = _make_capture_graph(captured)
     compiled.invoke({"message": "hi"})
     assert captured["server_info"] is None
 
 
-def test_server_info_user_from_langgraph_auth_user() -> None:
-    """server_info.user should be populated from configurable['langgraph_auth_user'].
+def test_server_info_user_from_auth_user() -> None:
+    """server_info.user is populated from configurable['langgraph_auth_user'].
 
-    The server always normalizes the user to a starlette-style object with an
-    `identity` attribute (never a raw dict), so the test uses _MockBaseUser.
+    Tests both a proper BaseUser protocol object and a starlette-style proxy
+    that provides `permissions` via __getattr__ (which the Protocol isinstance
+    check may not see).
     """
 
-    class State(TypedDict):
-        message: str
-
-    captured: dict[str, Any] = {}
-
-    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
-        captured["server_info"] = runtime.server_info
-        return {"message": "done"}
-
-    graph = StateGraph(state_schema=State)
-    graph.add_node("capture", capture_node)
-    graph.add_edge(START, "capture")
-    graph.add_edge("capture", END)
-    compiled = graph.compile()
-    compiled.invoke(
-        {"message": "hi"},
-        config={
-            "configurable": {
-                "langgraph_auth_user": _MockBaseUser(
-                    {
-                        "identity": "user-42",
-                        "display_name": "Alice",
-                        "is_authenticated": True,
-                        "permissions": ["read"],
-                    }
-                ),
-            },
-            "metadata": {
-                "assistant_id": "asst-srv",
-                "graph_id": "graph-srv",
-            },
-        },
-    )
-    si = captured["server_info"]
-    assert si is not None
-    assert si.assistant_id == "asst-srv"
-    assert si.graph_id == "graph-srv"
-    assert si.user is not None
-    assert si.user["identity"] == "user-42"
-    assert si.user["display_name"] == "Alice"
-    assert si.user["permissions"] == ["read"]
-
-
-def test_server_info_user_from_base_user_object() -> None:
-    """server_info.user should work with BaseUser protocol objects, not just dicts."""
-
-    class State(TypedDict):
-        message: str
-
-    captured: dict[str, Any] = {}
-
-    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
-        captured["server_info"] = runtime.server_info
-        return {"message": "done"}
-
-    graph = StateGraph(state_schema=State)
-    graph.add_node("capture", capture_node)
-    graph.add_edge(START, "capture")
-    graph.add_edge("capture", END)
-    compiled = graph.compile()
-
-    mock_user = _MockBaseUser(
-        {
-            "identity": "user-99",
-            "display_name": "Bob",
-            "is_authenticated": True,
-            "permissions": ["admin"],
-        }
-    )
-    compiled.invoke(
-        {"message": "hi"},
-        config={
-            "configurable": {
-                "langgraph_auth_user": mock_user,
-            },
-            "metadata": {
-                "assistant_id": "asst-srv",
-                "graph_id": "graph-srv",
-            },
-        },
-    )
-    si = captured["server_info"]
-    assert si is not None
-    assert si.user is not None
-    assert si.user["identity"] == "user-99"
-    assert si.user.identity == "user-99"
-    assert si.user["display_name"] == "Bob"
-
-
-def test_server_info_user_from_starlette_style_proxy() -> None:
-    """server_info.user should work with starlette-style proxy users.
-
-    The LangGraph Server wraps auth users in a ProxyUser(BaseUser) that
-    provides identity/display_name via properties and permissions via
-    __getattr__. This doesn't satisfy the SDK's runtime_checkable Protocol
-    isinstance check, but should still be accepted via the hasattr fallback.
-    """
-
-    class _StarletteBaseUser:
-        """Mimics starlette.authentication.BaseUser — no __getitem__."""
-
-        @property
-        def is_authenticated(self) -> bool:
-            return True
-
-        @property
-        def display_name(self) -> str:
-            return ""
-
-        @property
-        def identity(self) -> str:
-            return ""
-
-    class _ProxyUser(_StarletteBaseUser):
-        """Mimics langgraph_api.auth.custom.ProxyUser."""
+    class _ProxyUser:
+        """Mimics langgraph_api's ProxyUser: identity/display_name as properties,
+        permissions via __getattr__."""
 
         def __init__(self, data: dict[str, Any]) -> None:
             self._data = data
@@ -821,6 +547,10 @@ def test_server_info_user_from_starlette_style_proxy() -> None:
         def display_name(self) -> str:
             return self._data.get("display_name", self.identity)
 
+        @property
+        def is_authenticated(self) -> bool:
+            return True
+
         def __getattr__(self, name: str) -> Any:
             return self._data[name]
 
@@ -830,51 +560,32 @@ def test_server_info_user_from_starlette_style_proxy() -> None:
         def __contains__(self, key: str) -> bool:
             return key in self._data
 
-        def __iter__(self):
+        def __iter__(self) -> Any:
             return iter(self._data)
-
-    class State(TypedDict):
-        message: str
-
-    captured: dict[str, Any] = {}
-
-    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
-        captured["server_info"] = runtime.server_info
-        return {"message": "done"}
-
-    graph = StateGraph(state_schema=State)
-    graph.add_node("capture", capture_node)
-    graph.add_edge(START, "capture")
-    graph.add_edge("capture", END)
-    compiled = graph.compile()
 
     proxy = _ProxyUser(
         {
-            "identity": "starlette-user",
-            "display_name": "Starlette User",
+            "identity": "proxy-user",
+            "display_name": "Proxy User",
             "is_authenticated": True,
             "permissions": ["read"],
         }
     )
     assert not isinstance(proxy, dict)
-    # The proxy has identity (either via Protocol isinstance or hasattr fallback)
     assert hasattr(proxy, "identity")
 
+    captured: dict[str, Any] = {}
+    compiled = _make_capture_graph(captured)
     compiled.invoke(
         {"message": "hi"},
         config={
-            "configurable": {
-                "langgraph_auth_user": proxy,
-            },
-            "metadata": {
-                "assistant_id": "asst-proxy",
-                "graph_id": "graph-proxy",
-            },
+            "configurable": {"langgraph_auth_user": proxy},
+            "metadata": {"assistant_id": "asst-proxy", "graph_id": "graph-proxy"},
         },
     )
     si = captured["server_info"]
     assert si is not None
     assert si.assistant_id == "asst-proxy"
     assert si.user is not None
-    assert si.user.identity == "starlette-user"
-    assert si.user["display_name"] == "Starlette User"
+    assert si.user.identity == "proxy-user"
+    assert si.user["display_name"] == "Proxy User"

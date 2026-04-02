@@ -25,19 +25,19 @@ __all__ = (
 class ExecutionInfo:
     """Read-only execution info/metadata for the execution of current thread/run/node."""
 
+    checkpoint_id: str
+    """The checkpoint ID for the current execution."""
+
+    checkpoint_ns: str
+    """The checkpoint namespace for the current execution."""
+
+    task_id: str
+    """The task ID for the current execution."""
+
     thread_id: str | None = None
     """The thread ID for the current execution.
 
     None when running without a checkpointer (i.e., no persistence)."""
-
-    checkpoint_id: str = ""
-    """The checkpoint ID for the current execution."""
-
-    checkpoint_ns: str = ""
-    """The checkpoint namespace for the current execution."""
-
-    task_id: str = ""
-    """The task ID for the current execution."""
 
     run_id: str | None = None
     """The run ID for the current execution.
@@ -177,8 +177,10 @@ class Runtime(Generic[ContextT]):
     Only available with the functional API when a checkpointer is provided.
     """
 
-    execution_info: ExecutionInfo = field(default_factory=ExecutionInfo)
-    """Read-only execution information/metadata for the current node run."""
+    execution_info: ExecutionInfo | None = field(default=None)
+    """Read-only execution information/metadata for the current node run.
+
+    None before task preparation populates it."""
 
     server_info: ServerInfo | None = field(default=None)
     """Metadata injected by LangGraph Server. None when running OSS."""
@@ -195,7 +197,7 @@ class Runtime(Generic[ContextT]):
             if other.stream_writer is not _no_op_stream_writer
             else self.stream_writer,
             previous=self.previous if other.previous is None else other.previous,
-            execution_info=other.execution_info,
+            execution_info=other.execution_info or self.execution_info,
             server_info=other.server_info or self.server_info,
         )
 
@@ -207,6 +209,9 @@ class Runtime(Generic[ContextT]):
 
     def patch_execution_info(self, **overrides: Any) -> Runtime[ContextT]:
         """Return a new runtime with selected execution_info fields replaced."""
+        if self.execution_info is None:
+            msg = "Cannot patch execution_info before it has been set"
+            raise RuntimeError(msg)
         return replace(
             self,
             execution_info=self.execution_info.patch(**overrides),
@@ -218,7 +223,7 @@ DEFAULT_RUNTIME = Runtime(
     store=None,
     stream_writer=_no_op_stream_writer,
     previous=None,
-    execution_info=ExecutionInfo(),
+    execution_info=None,
 )
 
 

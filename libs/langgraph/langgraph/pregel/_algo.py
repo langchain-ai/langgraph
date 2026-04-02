@@ -71,7 +71,7 @@ from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
-from langgraph.runtime import DEFAULT_RUNTIME, Runtime
+from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
 from langgraph.types import (
     All,
     CacheKey,
@@ -669,12 +669,12 @@ def prepare_single_task(
                     runtime = runtime.override(
                         previous=checkpoint["channel_values"].get(PREVIOUS, None),
                         store=store,
-                        execution_info=runtime.execution_info.patch(
-                            thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+                        execution_info=ExecutionInfo(
                             checkpoint_id=checkpoint["id"],
                             checkpoint_ns=task_checkpoint_ns,
                             task_id=task_id,
-                            run_id=config.get("run_id"),
+                            thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+                            run_id=str(rid) if (rid := config.get("run_id")) else None,
                         ),
                     )
                     additional_config = {
@@ -823,12 +823,12 @@ def prepare_push_task_functional(
         runtime = cast(Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME))
         runtime = runtime.override(
             store=store,
-            execution_info=runtime.execution_info.patch(
-                thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+            execution_info=ExecutionInfo(
                 checkpoint_id=checkpoint["id"],
                 checkpoint_ns=task_checkpoint_ns,
                 task_id=task_id,
-                run_id=config.get("run_id"),
+                thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+                run_id=str(rid) if (rid := config.get("run_id")) else None,
             ),
         )
         return PregelExecutableTask(
@@ -985,12 +985,12 @@ def prepare_push_task_send(
         runtime = runtime.override(
             store=store,
             previous=checkpoint["channel_values"].get(PREVIOUS, None),
-            execution_info=runtime.execution_info.patch(
-                thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+            execution_info=ExecutionInfo(
                 checkpoint_id=checkpoint["id"],
                 checkpoint_ns=task_checkpoint_ns,
                 task_id=task_id,
-                run_id=config.get("run_id"),
+                thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+                run_id=str(rid) if (rid := config.get("run_id")) else None,
             ),
         )
         additional_config: RunnableConfig = {

@@ -139,7 +139,6 @@ from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtoco
 from langgraph.runtime import (
     DEFAULT_RUNTIME,
     BaseUser,
-    ExecutionInfo,
     Runtime,
     ServerInfo,
 )
@@ -2660,7 +2659,7 @@ class Pregel(
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
-                execution_info=ExecutionInfo(),
+                execution_info=None,
                 server_info=server_info,
             )
             runtime = parent_runtime.merge(runtime)
@@ -3033,7 +3032,7 @@ class Pregel(
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
-                execution_info=ExecutionInfo(),
+                execution_info=None,
                 server_info=server_info,
             )
             runtime = parent_runtime.merge(runtime)
@@ -3671,17 +3670,14 @@ def _build_server_info(
     graph_id = metadata.get("graph_id")
 
     # Read authenticated user from configurable (set by LangGraph Server).
-    # The server's normalize_user() always returns a starlette ProxyUser which
-    # has `identity` as a property.  We accept any object with an `identity`
-    # attribute rather than checking isinstance against the SDK Protocol,
-    # because Python's runtime Protocol check fails on classes that provide
-    # members via __getattr__ (which ProxyUser does for `permissions`).
+    # We prefer isinstance(BaseUser) but fall back to hasattr("identity")
+    # because the server's ProxyUser provides `permissions` via __getattr__,
+    # which Python's runtime_checkable Protocol check doesn't see.
     auth_user_data = configurable.get("langgraph_auth_user")
-    user: BaseUser | None = (
-        cast(BaseUser, auth_user_data)
-        if auth_user_data is not None and hasattr(auth_user_data, "identity")
-        else None
-    )
+    user: BaseUser | None = None
+    if auth_user_data is not None:
+        if isinstance(auth_user_data, BaseUser) or hasattr(auth_user_data, "identity"):
+            user = cast(BaseUser, auth_user_data)
 
     if assistant_id is not None or graph_id is not None or user is not None:
         return ServerInfo(
