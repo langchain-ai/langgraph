@@ -531,12 +531,9 @@ def _filter_validation_errors(
     # Collect all injected argument names
     injected_arg_names: set[str] = set()
     if injected_args:
-        if injected_args.state:
-            injected_arg_names.update(injected_args.state.keys())
-        if injected_args.store:
-            injected_arg_names.add(injected_args.store)
-        if injected_args.runtime:
-            injected_arg_names.add(injected_args.runtime)
+        # Use all_injected_keys which includes custom InjectedToolArg subclasses,
+        # not just the built-in state/store/runtime args
+        injected_arg_names = injected_args.all_injected_keys
 
     filtered_errors: list[ErrorDetails] = []
     for error in validation_error.errors():
