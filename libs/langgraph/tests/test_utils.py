@@ -312,7 +312,7 @@ def test_configurable_metadata():
         },
         "metadata": {"nooverride": 18},
     }
-    expected = {"nooverride"}
+    expected = {"includeme", "andme", "nooverride"}
     merged = ensure_config(config)
     metadata = merged["metadata"]
     assert metadata.keys() == expected
