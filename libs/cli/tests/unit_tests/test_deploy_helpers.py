@@ -6,12 +6,14 @@ import click
 import httpx
 import pytest
 
-from langgraph_cli.cli import (
+from langgraph_cli.deploy import (
     _call_host_backend_with_optional_tenant,
     _docker_config_for_token,
-    _normalize_image_name,
-    _normalize_image_tag,
+    _env_without_deployment_name,
     _parse_env_from_config,
+    _resolve_env_path,
+    normalize_image_name,
+    normalize_image_tag,
 )
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 
@@ -40,47 +42,47 @@ class TestDockerConfigForToken:
 
 class TestNormalizeImageName:
     def test_simple_name(self):
-        assert _normalize_image_name("myapp") == "myapp"
+        assert normalize_image_name("myapp") == "myapp"
 
     def test_uppercase_lowered(self):
-        assert _normalize_image_name("MyApp") == "myapp"
+        assert normalize_image_name("MyApp") == "myapp"
 
     def test_special_chars_replaced(self):
-        assert _normalize_image_name("my app!@#v2") == "my-app-v2"
+        assert normalize_image_name("my app!@#v2") == "my-app-v2"
 
     def test_dots_and_hyphens_kept(self):
-        assert _normalize_image_name("my-app.v2") == "my-app.v2"
+        assert normalize_image_name("my-app.v2") == "my-app.v2"
 
     def test_leading_trailing_stripped(self):
-        assert _normalize_image_name("--my-app..") == "my-app"
+        assert normalize_image_name("--my-app..") == "my-app"
 
     def test_empty_string_returns_app(self):
-        assert _normalize_image_name("") == "app"
+        assert normalize_image_name("") == "app"
 
     def test_none_returns_app(self):
-        assert _normalize_image_name(None) == "app"
+        assert normalize_image_name(None) == "app"
 
     def test_all_invalid_chars_returns_app(self):
-        assert _normalize_image_name("!!!") == "app"
+        assert normalize_image_name("!!!") == "app"
 
 
 class TestNormalizeImageTag:
     def test_valid_tag(self):
-        assert _normalize_image_tag("v1.2.3") == "v1.2.3"
+        assert normalize_image_tag("v1.2.3") == "v1.2.3"
 
     def test_empty_defaults_to_latest(self):
-        assert _normalize_image_tag("") == "latest"
+        assert normalize_image_tag("") == "latest"
 
     def test_alphanumeric_and_special(self):
-        assert _normalize_image_tag("my_tag-1.0") == "my_tag-1.0"
+        assert normalize_image_tag("my_tag-1.0") == "my_tag-1.0"
 
     def test_invalid_chars_raises(self):
         with pytest.raises(click.UsageError, match="Image tag may only contain"):
-            _normalize_image_tag("v1.0:bad")
+            normalize_image_tag("v1.0:bad")
 
     def test_spaces_raises(self):
         with pytest.raises(click.UsageError, match="Image tag may only contain"):
-            _normalize_image_tag("has space")
+            normalize_image_tag("has space")
 
 
 class TestParseEnvFromConfig:
@@ -135,6 +137,51 @@ class TestParseEnvFromConfig:
         assert result["GOOD"] == "value"
         # EMPTY= gives empty string, not None, so it should be present
         assert result["EMPTY"] == ""
+
+
+class TestResolveEnvPath:
+    def test_inline_env_dict_returns_none(self, tmp_path):
+        config_path = tmp_path / "langgraph.json"
+        config_path.touch()
+        assert _resolve_env_path({"env": {"FOO": "bar"}}, config_path) is None
+
+    def test_relative_env_path_resolves(self, tmp_path):
+        env_file = tmp_path / "custom.env"
+        env_file.write_text("FOO=bar\n")
+        config_path = tmp_path / "langgraph.json"
+        config_path.touch()
+
+        resolved = _resolve_env_path({"env": "custom.env"}, config_path)
+        assert resolved == env_file.resolve()
+
+    def test_missing_env_file_returns_none(self, tmp_path):
+        config_path = tmp_path / "langgraph.json"
+        config_path.touch()
+        assert _resolve_env_path({"env": "missing.env"}, config_path) is None
+
+    def test_default_env_is_cwd_dotenv(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        config_path = tmp_path / "langgraph.json"
+        config_path.touch()
+        assert _resolve_env_path({}, config_path) == tmp_path / ".env"
+
+
+class TestEnvWithoutDeploymentName:
+    def test_removes_deployment_name_only(self):
+        env = {
+            "LANGSMITH_DEPLOYMENT_NAME": "my-deploy",
+            "KEEP_ME": "value",
+        }
+        cleaned = _env_without_deployment_name(env)
+
+        assert "LANGSMITH_DEPLOYMENT_NAME" not in cleaned
+        assert cleaned["KEEP_ME"] == "value"
+        # Original dict should be unchanged.
+        assert env["LANGSMITH_DEPLOYMENT_NAME"] == "my-deploy"
+
+    def test_noop_when_deployment_name_absent(self):
+        env = {"FOO": "bar"}
+        assert _env_without_deployment_name(env) == {"FOO": "bar"}
 
 
 class TestCallHostBackendWithOptionalTenant:
