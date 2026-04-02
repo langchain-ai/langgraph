@@ -138,10 +138,10 @@ from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_wr
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
 from langgraph.runtime import (
     DEFAULT_RUNTIME,
+    BaseUser,
     ExecutionInfo,
     Runtime,
     ServerInfo,
-    User,
 )
 from langgraph.types import (
     All,
@@ -3670,10 +3670,13 @@ def _build_server_info(
     assistant_id = metadata.get("assistant_id")
     graph_id = metadata.get("graph_id")
 
-    # Read authenticated user from configurable (set by LangGraph Server)
+    # Read authenticated user from configurable (set by LangGraph Server).
+    # The user object may be a dict, a DotDict, or any BaseUser implementation.
     auth_user_data = configurable.get("langgraph_auth_user")
-    user: User | None = (
-        cast(User, auth_user_data) if isinstance(auth_user_data, dict) else None
+    user: BaseUser | None = (
+        cast(BaseUser, auth_user_data)
+        if isinstance(auth_user_data, (dict, BaseUser))
+        else None
     )
 
     if assistant_id is not None or graph_id is not None or user is not None:

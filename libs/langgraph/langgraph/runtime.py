@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any, Generic, cast
+from typing import Any, Generic, cast, runtime_checkable
 
 from langgraph.store.base import BaseStore
-from typing_extensions import NotRequired, TypedDict, Unpack
+from typing_extensions import NotRequired, Protocol, TypedDict, Unpack
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.config import get_config
@@ -13,10 +13,10 @@ from langgraph.types import _DC_KWARGS, StreamWriter
 from langgraph.typing import ContextT
 
 __all__ = (
+    "BaseUser",
     "ExecutionInfo",
     "Runtime",
     "ServerInfo",
-    "User",
     "get_runtime",
 )
 
@@ -55,23 +55,46 @@ class ExecutionInfo:
         return replace(self, **overrides)
 
 
-class User(TypedDict):
-    """Authenticated user information from LangGraph Server.
+@runtime_checkable
+class BaseUser(Protocol):
+    """Protocol for authenticated user objects.
 
-    Populated from `config["configurable"]["langgraph_auth_user"]`.
+    Compatible with `langgraph_sdk.auth.types.BaseUser` and the Starlette
+    `BaseUser` protocol. Supports both attribute access (e.g. `user.identity`)
+    and dict-like access (e.g. `user["identity"]`).
     """
 
-    identity: NotRequired[str]
-    """The unique identifier for the user."""
+    @property
+    def is_authenticated(self) -> bool:
+        """Whether the user is authenticated."""
+        ...
 
-    display_name: NotRequired[str]
-    """The display name of the user."""
+    @property
+    def display_name(self) -> str:
+        """The display name of the user."""
+        ...
 
-    is_authenticated: NotRequired[bool]
-    """Whether the user is authenticated."""
+    @property
+    def identity(self) -> str:
+        """The unique identifier for the user."""
+        ...
 
-    permissions: NotRequired[Sequence[str]]
-    """The permissions associated with the user."""
+    @property
+    def permissions(self) -> Sequence[str]:
+        """The permissions associated with the user."""
+        ...
+
+    def __getitem__(self, key: str) -> Any:
+        """Get a key from the user object."""
+        ...
+
+    def __contains__(self, key: object) -> bool:
+        """Check if a property exists."""
+        ...
+
+    def __iter__(self) -> Any:
+        """Iterate over the keys of the user."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,8 +107,13 @@ class ServerInfo:
     graph_id: str
     """The graph ID for the current execution."""
 
-    user: User | None = None
-    """The authenticated user, if any."""
+    user: BaseUser | None = None
+    """The authenticated user, if any.
+
+    This implements the `BaseUser` protocol from `langgraph_sdk.auth.types`,
+    which supports both attribute access (e.g. `user.identity`) and dict-like
+    access (e.g. `user["identity"]`).
+    """
 
 
 def _no_op_stream_writer(_: Any) -> None: ...

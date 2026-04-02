@@ -1,3 +1,4 @@
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -6,7 +7,7 @@ from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.runtime import ExecutionInfo, Runtime, ServerInfo, User, get_runtime
+from langgraph.runtime import BaseUser, ExecutionInfo, Runtime, ServerInfo, get_runtime
 
 
 def test_injected_runtime() -> None:
@@ -492,25 +493,55 @@ async def test_execution_info_populated_in_node_async() -> None:
 # --- User tests ---
 
 
-def test_user_info_typed_dict() -> None:
-    """User is a simple TypedDict."""
-    user: User = {
-        "identity": "user-123",
-        "display_name": "Alice",
-        "is_authenticated": True,
-        "permissions": ["read", "write"],
-    }
-    assert user["identity"] == "user-123"
-    assert user["display_name"] == "Alice"
-    assert user["is_authenticated"] is True
-    assert user["permissions"] == ["read", "write"]
+class _MockBaseUser:
+    """A minimal BaseUser implementation for testing."""
+
+    def __init__(self, data: dict[str, Any]) -> None:
+        self._data = data
+
+    @property
+    def is_authenticated(self) -> bool:
+        return self._data.get("is_authenticated", False)
+
+    @property
+    def display_name(self) -> str:
+        return self._data.get("display_name", "")
+
+    @property
+    def identity(self) -> str:
+        return self._data.get("identity", "")
+
+    @property
+    def permissions(self) -> Sequence[str]:
+        return self._data.get("permissions", [])
+
+    def __getitem__(self, key: str) -> Any:
+        return self._data[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._data
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
 
 
-def test_user_info_partial() -> None:
-    """User fields are all optional (total=False)."""
-    user: User = {"identity": "user-123"}
+def test_base_user_protocol() -> None:
+    """BaseUser protocol supports both attribute and dict-like access."""
+    user = _MockBaseUser(
+        {
+            "identity": "user-123",
+            "display_name": "Alice",
+            "is_authenticated": True,
+            "permissions": ["read", "write"],
+        }
+    )
+    assert isinstance(user, BaseUser)
+    assert user.identity == "user-123"
+    assert user.display_name == "Alice"
+    assert user.is_authenticated is True
+    assert user.permissions == ["read", "write"]
     assert user["identity"] == "user-123"
-    assert "display_name" not in user
+    assert "display_name" in user
 
 
 # --- ServerInfo tests ---
@@ -524,7 +555,7 @@ def test_server_info() -> None:
 
 
 def test_server_info_with_user() -> None:
-    user: User = {"identity": "user-1", "display_name": "Bob"}
+    user = _MockBaseUser({"identity": "user-1", "display_name": "Bob"})
     info = ServerInfo(assistant_id="asst-1", graph_id="graph-1", user=user)
     assert info.user is not None
     assert info.user["identity"] == "user-1"
@@ -698,3 +729,49 @@ def test_server_info_user_from_langgraph_auth_user() -> None:
     assert si.user["identity"] == "user-42"
     assert si.user["display_name"] == "Alice"
     assert si.user["permissions"] == ["read"]
+
+
+def test_server_info_user_from_base_user_object() -> None:
+    """server_info.user should work with BaseUser protocol objects, not just dicts."""
+
+    class State(TypedDict):
+        message: str
+
+    captured: dict[str, Any] = {}
+
+    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
+        captured["server_info"] = runtime.server_info
+        return {"message": "done"}
+
+    graph = StateGraph(state_schema=State)
+    graph.add_node("capture", capture_node)
+    graph.add_edge(START, "capture")
+    graph.add_edge("capture", END)
+    compiled = graph.compile()
+
+    mock_user = _MockBaseUser(
+        {
+            "identity": "user-99",
+            "display_name": "Bob",
+            "is_authenticated": True,
+            "permissions": ["admin"],
+        }
+    )
+    compiled.invoke(
+        {"message": "hi"},
+        config={
+            "configurable": {
+                "langgraph_auth_user": mock_user,
+            },
+            "metadata": {
+                "assistant_id": "asst-srv",
+                "graph_id": "graph-srv",
+            },
+        },
+    )
+    si = captured["server_info"]
+    assert si is not None
+    assert si.user is not None
+    assert si.user["identity"] == "user-99"
+    assert si.user.identity == "user-99"
+    assert si.user["display_name"] == "Bob"
