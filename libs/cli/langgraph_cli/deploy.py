@@ -6,7 +6,6 @@ import os
 import pathlib
 import platform
 import re
-import shutil
 import tempfile
 import time
 from collections.abc import Callable, Sequence
@@ -16,7 +15,7 @@ from datetime import datetime, timezone
 
 import click
 import click.exceptions
-from dotenv import dotenv_values
+from dotenv import dotenv_values, set_key
 
 import langgraph_cli.config
 from langgraph_cli.analytics import log_command
@@ -111,7 +110,7 @@ class BuildResult:
     timeout_seconds: int = 300
     poll_interval_seconds: int = 1
     no_result_message: str = "Deployment updated"
-    on_poll: Callable[[str, str], None] | None = None
+    on_poll: Callable[[str, str, Callable[[str], None]], None] | None = None
     on_interrupt: Callable[[str], None] | None = None
     show_build_logs_on_failure: bool = False
 
@@ -298,14 +297,13 @@ def level_fg(level: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _parse_env_from_config(
+def _resolve_env_path(
     config_json: dict, config_path: pathlib.Path
-) -> dict[str, str]:
-    """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
+) -> pathlib.Path | None:
+    """Return the .env file path implied by the config, or None for inline dicts."""
     env_field = config_json.get("env")
-    # validate_config_file will default env to {}
     if isinstance(env_field, dict) and env_field:
-        return {str(k): str(v) for k, v in env_field.items()}
+        return None
     if isinstance(env_field, str):
         env_path = (config_path.parent / env_field).resolve()
         if not env_path.exists():
@@ -313,10 +311,29 @@ def _parse_env_from_config(
                 f"Warning: env file '{env_field}' specified in langgraph.json not found.",
                 fg="yellow",
             )
-            return {}
-    else:
-        env_path = pathlib.Path.cwd() / ".env"
+            return None
+        return env_path
+    return pathlib.Path.cwd() / ".env"
+
+
+def _parse_env_from_config(
+    config_json: dict, config_path: pathlib.Path
+) -> dict[str, str]:
+    """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
+    env_field = config_json.get("env")
+    if isinstance(env_field, dict) and env_field:
+        return {str(k): str(v) for k, v in env_field.items()}
+    env_path = _resolve_env_path(config_json, config_path)
+    if env_path is None:
+        return {}
     return {k: v for k, v in dotenv_values(env_path).items() if v is not None}
+
+
+def _env_without_deployment_name(env_vars: dict[str, str]) -> dict[str, str]:
+    """Return env vars copy with deployment-name key removed."""
+    filtered = dict(env_vars)
+    filtered.pop(_DEPLOYMENT_NAME_ENV, None)
+    return filtered
 
 
 def _secrets_from_env(
@@ -465,7 +482,7 @@ def _poll_revision_status(
     progress_message: str,
     timeout_seconds: int,
     poll_interval_seconds: int,
-    on_poll: Callable[[str, str], None] | None = None,
+    on_poll: Callable[[str, str, Callable[[str], None]], None] | None = None,
     on_interrupt: Callable[[str], None] | None = None,
 ) -> tuple[str, str | None]:
     """Poll latest revision status until terminal status or timeout."""
@@ -507,7 +524,7 @@ def _poll_revision_status(
                 set_progress(f"{status}...")
 
             if on_poll is not None:
-                on_poll(status, revision_id)
+                on_poll(status, revision_id, set_progress)
             time.sleep(poll_interval_seconds)
         else:
             set_progress("")
@@ -576,34 +593,43 @@ def _docker_config_for_token(registry_host: str, token: str):
 # GCS upload
 # ---------------------------------------------------------------------------
 
+_UPLOAD_TIMEOUT_SECONDS = 300
+
+
+class _ProgressReader:
+    """File-like wrapper that displays upload progress via click."""
+
+    def __init__(self, fobj, file_size: int):
+        self._fobj = fobj
+        self._file_size = file_size
+        self._uploaded = 0
+
+    def read(self, size=-1):
+        data = self._fobj.read(size)
+        if data:
+            self._uploaded += len(data)
+            pct = (
+                int(self._uploaded * 100 / self._file_size) if self._file_size else 100
+            )
+            click.echo(
+                f"\r   Uploading ({self._file_size / 1_048_576:.1f} MB)... {pct}%",
+                nl=False,
+            )
+        return data
+
+    def __len__(self):
+        return self._file_size
+
 
 def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
     """Upload tarball to GCS via signed PUT URL with progress display."""
     import urllib.error
     import urllib.request
 
-    uploaded = 0
-
     with open(file_path, "rb") as f:
-        original_read = f.read
-
-        def tracked_read(size=-1):
-            nonlocal uploaded
-            data = original_read(size)
-            if data:
-                uploaded += len(data)
-                pct = int(uploaded * 100 / file_size) if file_size else 100
-                click.echo(
-                    f"\r   Uploading ({file_size / 1_048_576:.1f} MB)... {pct}%",
-                    nl=False,
-                )
-            return data
-
-        f.read = tracked_read
-
         req = urllib.request.Request(
             signed_url,
-            data=f,
+            data=_ProgressReader(f, file_size),
             method="PUT",
             headers={
                 "Content-Type": "application/gzip",
@@ -612,7 +638,7 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
             },
         )
         try:
-            urllib.request.urlopen(req)
+            urllib.request.urlopen(req, timeout=_UPLOAD_TIMEOUT_SECONDS)
         except urllib.error.HTTPError as err:
             detail = err.read().decode("utf-8", errors="ignore")
             raise click.ClickException(
@@ -822,23 +848,20 @@ def _run_remote_build(
     from langgraph_cli.archive import create_archive
 
     _log_deploy_step(step, "Creating source archive")
-    archive_path, file_size, config_rel = create_archive(config, config_json)
-    click.secho(f"   Archive created ({file_size / 1_048_576:.1f} MB)", fg="green")
-    step += 1
+    with create_archive(config, config_json) as (archive_path, file_size, config_rel):
+        click.secho(f"   Archive created ({file_size / 1_048_576:.1f} MB)", fg="green")
+        step += 1
 
-    _log_deploy_step(step, "Requesting upload URL")
-    upload_data = client.request_upload_url(deployment_id)
-    signed_url = upload_data.get("upload_url")
-    object_path = upload_data.get("object_path")
-    if not signed_url or not object_path:
-        raise click.ClickException("Upload URL response missing required fields")
-    step += 1
+        _log_deploy_step(step, "Requesting upload URL")
+        upload_data = client.request_upload_url(deployment_id)
+        signed_url = upload_data.get("upload_url")
+        object_path = upload_data.get("object_path")
+        if not signed_url or not object_path:
+            raise click.ClickException("Upload URL response missing required fields")
+        step += 1
 
-    _log_deploy_step(step, "Uploading source")
-    try:
+        _log_deploy_step(step, "Uploading source")
         _upload_to_gcs(signed_url, archive_path, file_size)
-    finally:
-        shutil.rmtree(os.path.dirname(archive_path), ignore_errors=True)
     step += 1
 
     _log_deploy_step(step, "Triggering remote build")
@@ -852,9 +875,12 @@ def _run_remote_build(
     )
 
     log_offset: str | None = None
+    logs_header_printed = False
 
-    def _stream_build_logs(status: str, revision_id: str) -> None:
-        nonlocal log_offset
+    def _stream_build_logs(
+        status: str, revision_id: str, set_progress: Callable[[str], None]
+    ) -> None:
+        nonlocal log_offset, logs_header_printed
         if not (verbose and status in ("AWAITING_BUILD", "BUILDING")):
             return
         try:
@@ -866,11 +892,20 @@ def _run_remote_build(
                 else {"order": "asc", "limit": 50},
             )
             if isinstance(logs_resp, dict):
-                for entry in logs_resp.get("logs", []):
+                entries = logs_resp.get("logs", [])
+                has_output = any(entry.get("message") for entry in entries)
+                if has_output:
+                    set_progress("")
+                    if not logs_header_printed:
+                        click.echo(f"   {status} (build logs):")
+                        logs_header_printed = True
+                for entry in entries:
                     msg = entry.get("message", "")
                     if msg:
                         click.echo(f"   | {msg}")
                 log_offset = logs_resp.get("next_offset") or log_offset
+                if has_output:
+                    set_progress(f"{status}...")
         except Exception:
             pass
 
@@ -1240,8 +1275,12 @@ def _deploy_cmd(
     if not deployment_id and not name:
         default_name = normalize_image_name(pathlib.Path.cwd().name)
         name = click.prompt("Deployment name", default=default_name)
+        env_path = _resolve_env_path(config_json, config)
+        if env_path is not None:
+            set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
+            click.echo(f"Saved deployment name to {env_path}")
 
-    secrets = _secrets_from_env(env_vars)
+    secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 
     use_remote_build, local_build_error = _resolve_build_mode(remote_build_flag)
     if use_remote_build and remote_build_flag is None and local_build_error:

@@ -1,31 +1,40 @@
-Thank you for contributing to LangGraph! Follow these steps to mark your pull request as ready for review. **If any of these steps are not completed, your PR will not be considered for review.**
+Fixes #
 
-- [ ] **PR title**: Follows the format: {TYPE}({SCOPE}): {DESCRIPTION}
-  - Examples:
-    - feat(core): add multi-tenant support
-    - fix(cli): resolve flag parsing error
-    - docs(openai): update API usage examples
-  - Allowed `{TYPE}` values:
-    - feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert, release
-  - Allowed `{SCOPE}` values (optional):
-    - langgraph, docs, cli, checkpoint, checkpoint-postgres, checkpoint-sqlite, prebuilt, scheduler-kafka, sdk-py
-  - Once you've written the title, please delete this checklist item; do not include it in the PR.
+<!-- Replace everything above this line with a 1-2 sentence description of your change. Keep the "Fixes #xx" keyword and update the issue number. -->
 
-- [ ] **PR message**: ***Delete this entire checklist*** and replace with
-  - **Description:** a description of the change. Include a [closing keyword](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword) if applicable.
-  - **Issue:** the issue # it fixes, if applicable
-  - **Dependencies:** any dependencies required for this change
-  - **Twitter handle:** if your PR gets announced, and you'd like a mention, we'll gladly shout you out!
+Read the full contributing guidelines: https://docs.langchain.com/oss/python/contributing/overview
 
-- [ ] **Add tests and docs**: If you're adding a new integration, you must include:
-  1. A test for the integration, preferably unit tests that do not rely on network access,
-  2. An example notebook showing its use. It lives in `docs/docs/integrations` directory.
+> **All contributions must be in English.** See the [language policy](https://docs.langchain.com/oss/python/contributing/overview#language-policy).
 
-- [ ] **Lint and test**: Run `make format`, `make lint` and `make test` from the root of the package(s) you've modified. We will not consider a PR unless these three are passing in CI. See [contribution guidelines](https://docs.langchain.com/oss/python/contributing/overview) for more.
+If you paste a large clearly AI generated description here your PR may be IGNORED or CLOSED!
+
+Thank you for contributing to LangGraph! Follow these steps to have your pull request considered as ready for review.
+
+1. PR title: Should follow the format: TYPE(SCOPE): DESCRIPTION
+
+    - feat(langgraph): add multi-tenant support
+  - Allowed TYPE and SCOPE values: https://github.com/langchain-ai/langgraph/blob/main/.github/workflows/pr_lint.yml#L19-L43
+
+2. PR description:
+
+  - Write 1-2 sentences summarizing the change.
+  - The `Fixes #xx` line at the top is **required** for external contributions — update the issue number and keep the keyword. This links your PR to the approved issue and auto-closes it on merge.
+  - If there are any breaking changes, please clearly describe them.
+  - If this PR depends on another PR being merged first, please include "Depends on #PR_NUMBER" in the description.
+
+3. Run `make format`, `make lint` and `make test` from the root of the package(s) you've modified.
+
+  - We will not consider a PR unless these three are passing in CI.
+
+4. How did you verify your code works?
 
 Additional guidelines:
 
-- Make sure optional dependencies are imported within a function.
-- Please do not add dependencies to `pyproject.toml` files (even optional ones) unless they are **required** for unit tests.
-- Most PRs should not touch more than one package.
-- Changes should be backwards compatible.
+  - All external PRs must link to an issue or discussion where a solution has been approved by a maintainer, and you must be assigned to that issue. PRs without prior approval will be closed.
+  - PRs should not touch more than one package unless absolutely necessary.
+  - Do not update the `uv.lock` files or add dependencies to `pyproject.toml` files (even optional ones) unless you have explicit permission to do so by a maintainer.
+
+## Social handles (optional)
+<!-- If you'd like a shoutout on release, add your socials below -->
+Twitter: @
+LinkedIn: https://linkedin.com/in/
