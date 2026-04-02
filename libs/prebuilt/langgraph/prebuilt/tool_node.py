@@ -1328,7 +1328,7 @@ class ToolNode(RunnableCallable):
             return tool_call
 
         tool_call_copy: ToolCall = copy(tool_call)
-        injected_args = {}
+        injected_args: dict[str, Any] = {}
 
         # Inject state
         if injected.state:
@@ -1356,9 +1356,10 @@ class ToolNode(RunnableCallable):
             # Extract state values
             if isinstance(state, dict):
                 for tool_arg, state_field in injected.state.items():
-                    injected_args[tool_arg] = (
-                        state[state_field] if state_field else state
-                    )
+                    if not state_field:
+                        injected_args[tool_arg] = state
+                    elif state_field in state:
+                        injected_args[tool_arg] = state[state_field]
             else:
                 for tool_arg, state_field in injected.state.items():
                     injected_args[tool_arg] = (
