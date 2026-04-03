@@ -9,6 +9,8 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
+
 from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
 from langgraph._internal._constants import (
     CONF,
@@ -29,7 +31,7 @@ SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
 def _ensure_execution_info(
-    runtime: Runtime, config: dict, task: PregelExecutableTask
+    runtime: Runtime, config: RunnableConfig, task: PregelExecutableTask
 ) -> Runtime:
     """Ensure runtime has execution_info, creating one from config if needed.
 
