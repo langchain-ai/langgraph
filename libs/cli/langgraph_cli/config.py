@@ -140,6 +140,14 @@ def _is_node_graph(spec: str | dict) -> bool:
     ]
 
 
+def _get_source_kind(config: Config) -> str | None:
+    source = config.get("source")
+    if not isinstance(source, dict):
+        return None
+    kind = source.get("kind")
+    return kind if isinstance(kind, str) else None
+
+
 def validate_config(config: Config) -> Config:
     """Validate a configuration dictionary."""
 
@@ -158,6 +166,8 @@ def validate_config(config: Config) -> Config:
     image_distro = config.get("image_distro", DEFAULT_IMAGE_DISTRO)
     internal_docker_tag = config.get("_INTERNAL_docker_tag")
     api_version = config.get("api_version")
+    legacy_project_root = config.get("project_root")
+    legacy_package = config.get("package")
     if internal_docker_tag:
         if api_version:
             raise click.UsageError(
@@ -178,8 +188,7 @@ def validate_config(config: Config) -> Config:
         "python_version": python_version,
         "pip_config_file": config.get("pip_config_file"),
         "pip_installer": config.get("pip_installer", "auto"),
-        "project_root": config.get("project_root"),
-        "package": config.get("package"),
+        "source": config.get("source"),
         "base_image": config.get("base_image"),
         "image_distro": image_distro,
         "dependencies": config.get("dependencies", []),
@@ -216,11 +225,24 @@ def validate_config(config: Config) -> Config:
             raise click.UsageError(str(e)) from None
 
     if pip_installer := config.get("pip_installer"):
-        if pip_installer not in ["auto", "pip", "uv", "uv_lock"]:
+        if pip_installer == "uv_lock":
+            raise click.UsageError(
+                "pip_installer 'uv_lock' has been replaced. Use "
+                '`source: {"kind": "uv", "root": "..", '
+                '"package": "my-agent"}`.'
+            )
+        if pip_installer not in ["auto", "pip", "uv"]:
             raise click.UsageError(
                 f"Invalid pip_installer: '{pip_installer}'. "
-                "Must be 'auto', 'pip', 'uv', or 'uv_lock'."
+                "Must be 'auto', 'pip', or 'uv'."
             )
+
+    source = config.get("source")
+    source_kind = _get_source_kind(config)
+    if source is not None and not isinstance(source, dict):
+        raise click.UsageError("`source` must be an object.")
+    if source is not None and source_kind != "uv":
+        raise click.UsageError("Invalid source.kind. Supported values: 'uv'.")
 
     if config.get("python_version"):
         pyversion = config["python_version"]
@@ -243,7 +265,7 @@ def validate_config(config: Config) -> Config:
                 "Please use 'bookworm' or 'debian' instead."
             )
 
-        if config["pip_installer"] != "uv_lock" and not config["dependencies"]:
+        if source_kind != "uv" and not config["dependencies"]:
             raise click.UsageError(
                 "No dependencies found in config. "
                 "Add at least one dependency to 'dependencies' list."
@@ -267,43 +289,41 @@ def validate_config(config: Config) -> Config:
                 "Must be one of 'debian', 'wolfi', or 'bookworm'."
             )
 
-    if config["pip_installer"] == "uv_lock":
+    if source_kind == "uv":
         if not config.get("python_version"):
             raise click.UsageError(
-                "pip_installer 'uv_lock' is only supported for Python deployments."
+                "source.kind 'uv' is only supported for Python deployments."
             )
         if config.get("node_version"):
             raise click.UsageError(
-                "pip_installer 'uv_lock' does not support Node.js graphs or "
+                "source.kind 'uv' does not support Node.js graphs or "
                 "`node_version`. Use only Python graph entrypoints."
             )
         errors: list[str] = []
         if config["dependencies"]:
             errors.append(
-                "Remove `dependencies` from your config. With 'uv_lock', all "
-                "dependencies are read from your pyproject.toml and uv.lock instead."
+                "Remove `dependencies` from your config. With "
+                '`source.kind = "uv"`, all dependencies '
+                "are read from your pyproject.toml and uv.lock instead."
             )
-        if not config.get("project_root"):
+        root = source.get("root") if source else None
+        if not root:
             errors.append(
-                "Add `project_root`: the relative path from your langgraph.json "
-                "to the directory containing pyproject.toml and uv.lock "
-                '(e.g. "project_root": "../..").'
-            )
-        if not config.get("package"):
-            errors.append(
-                "Add `package`: the [project].name of the workspace package to "
-                'deploy (e.g. "package": "my-agent").'
+                "Add `source.root`: the relative path from "
+                "your langgraph.json to the directory containing pyproject.toml "
+                'and uv.lock (e.g. "root": "../..").'
             )
         if errors:
             detail = "\n".join(f"  - {e}" for e in errors)
             raise click.UsageError(
-                f"pip_installer 'uv_lock' requires a different config shape than "
-                f"'pip' or 'uv':\n{detail}"
+                "source.kind 'uv' requires a different "
+                f"config shape than dependency-based installs:\n{detail}"
             )
-    elif config.get("project_root") or config.get("package"):
+
+    if legacy_project_root or legacy_package:
         raise click.UsageError(
-            "`project_root` and `package` are only supported when "
-            "pip_installer is 'uv_lock'."
+            "Top-level `project_root` and `package` are no longer supported. "
+            "Use `source.root` and `source.package` instead."
         )
 
     # Validate auth config
@@ -1012,14 +1032,10 @@ def python_config_to_docker(
     escape_variables: bool = False,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
+    source_kind = _get_source_kind(config)
     pip_installer = config.get("pip_installer", "auto")
     build_tools_to_uninstall = get_build_tools_to_uninstall(config)
-    if pip_installer == "auto":
-        if _image_supports_uv(base_image):
-            pip_installer = "uv"
-        else:
-            pip_installer = "pip"
-    if pip_installer == "uv_lock":
+    if source_kind == "uv":
         return python_config_to_docker_uv_lock(
             config_path,
             config,
@@ -1027,6 +1043,11 @@ def python_config_to_docker(
             api_version=api_version,
             build_tools_to_uninstall=build_tools_to_uninstall,
         )
+    if pip_installer == "auto":
+        if _image_supports_uv(base_image):
+            pip_installer = "uv"
+        else:
+            pip_installer = "pip"
     if pip_installer == "uv":
         install_cmd = "uv pip install --system"
     elif pip_installer == "pip":
@@ -1230,6 +1251,10 @@ def node_config_to_docker(
     build_context: str | None = None,
 ) -> tuple[str, dict[str, str]]:
     # Calculate paths for monorepo support
+    install_root = (
+        pathlib.Path(build_context).resolve() if build_context else config_path.parent
+    )
+    install_cmd = install_command or _get_node_pm_install_cmd(install_root)
     if build_context:
         relative_workdir = _calculate_relative_workdir(config_path, build_context)
         container_name = pathlib.Path(build_context).name
@@ -1240,12 +1265,6 @@ def node_config_to_docker(
     else:
         # Backward compatibility: use the original behavior
         faux_path = f"/deps/{config_path.parent.name}"
-
-        # Use custom install command or auto-detect
-        if install_command:
-            install_cmd = install_command
-        else:
-            install_cmd = _get_node_pm_install_cmd(config_path.parent)
 
     image_str = docker_tag(config, base_image, api_version)
 

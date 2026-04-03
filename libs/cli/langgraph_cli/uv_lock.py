@@ -428,40 +428,92 @@ def _resolve_uv_lock_container_path(
     return None
 
 
+def _infer_uv_lock_target_package(
+    *,
+    config_root: pathlib.Path,
+    project_root: pathlib.Path,
+    source: dict,
+    packages_by_name: dict[str, UvLockPackage],
+    packages_by_root: dict[pathlib.Path, UvLockPackage],
+) -> UvLockPackage:
+    package_name = source.get("package")
+    if isinstance(package_name, str) and package_name:
+        target = packages_by_name.get(_normalize_package_name(package_name))
+        if target is None:
+            available_packages = ", ".join(
+                sorted(package.name for package in packages_by_name.values())
+            )
+            raise click.UsageError(
+                "Could not find source.package "
+                f"'{package_name}' in the uv project at {project_root}. "
+                "It must match a [project].name from one of the discovered "
+                f"packages. Available packages: {available_packages or '(none)'}."
+            )
+        return target
+
+    containing_packages = sorted(
+        (
+            package
+            for package_root, package in packages_by_root.items()
+            if config_root == package_root or package_root in config_root.parents
+        ),
+        key=lambda package: len(package.root.parts),
+        reverse=True,
+    )
+    if containing_packages:
+        target = containing_packages[0]
+        if (
+            target.root != project_root
+            or len(packages_by_name) == 1
+            or config_root == project_root
+        ):
+            return target
+
+    if len(packages_by_name) == 1:
+        return next(iter(packages_by_name.values()))
+
+    available_packages = ", ".join(
+        sorted(package.name for package in packages_by_name.values())
+    )
+    raise click.UsageError(
+        "source.package is required because source.root resolves to a uv "
+        "workspace with multiple packages and no unique target package could be "
+        f"inferred from langgraph.json at {config_root}. Available packages: "
+        f"{available_packages or '(none)'}. "
+        "Move langgraph.json into the target package or set source.package."
+    )
+
+
 def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLockPlan:
     config_root = config_path.parent.resolve()
-    project_root = (config_root / config["project_root"]).resolve()
+    source = config["source"]
+    project_root = (config_root / source["root"]).resolve()
     pyproject_path = project_root / "pyproject.toml"
     uv_lock_path = project_root / "uv.lock"
 
     if not uv_lock_path.exists():
         raise click.UsageError(
             f"No uv.lock found at {uv_lock_path}. Your langgraph.json sets "
-            f"project_root={config['project_root']!r}, which resolves to "
+            f"source.root={source['root']!r}, which resolves to "
             f"{project_root}. Make sure this is the directory where you run "
             "`uv lock` (it should contain both pyproject.toml and uv.lock)."
         )
     if not pyproject_path.exists():
         raise click.UsageError(
             f"No pyproject.toml found at {pyproject_path}. Your langgraph.json "
-            f"sets project_root={config['project_root']!r}, which resolves to "
+            f"sets source.root={source['root']!r}, which resolves to "
             f"{project_root}. This should be your uv workspace root."
         )
 
     workspace = _discover_uv_lock_workspace_packages(project_root, pyproject_path)
     packages_by_name = workspace.packages_by_name
-    target_name = _normalize_package_name(config["package"])
-    target = packages_by_name.get(target_name)
-    if target is None:
-        available_packages = ", ".join(
-            sorted(package.name for package in packages_by_name.values())
-        )
-        raise click.UsageError(
-            f"Could not find package '{config['package']}' in the workspace at "
-            f"{project_root}. The `package` field in your langgraph.json must "
-            f"match a [project].name in one of the workspace member pyproject.toml "
-            f"files. Available packages: {available_packages or '(none)'}."
-        )
+    target = _infer_uv_lock_target_package(
+        config_root=config_root,
+        project_root=project_root,
+        source=source,
+        packages_by_name=packages_by_name,
+        packages_by_root=workspace.packages_by_root,
+    )
     _validate_uv_lock_package(
         target,
         project_root=project_root,
@@ -474,7 +526,8 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
         raise click.UsageError(
             f"'{target.name}' has `tool.uv.package = false` in "
             f"{target.pyproject_path}, so it cannot be deployed. Either remove "
-            "that setting or point `package` at a different workspace member."
+            "that setting or point `source.package` at a different workspace "
+            "member."
         )
 
     install_order: list[UvLockPackage] = []
@@ -631,6 +684,42 @@ def _update_uv_lock_component_path(
     )
 
 
+def _update_uv_lock_ui_paths(
+    config_path: pathlib.Path, config: Config, plan: UvLockPlan
+) -> None:
+    ui = config.get("ui")
+    if not isinstance(ui, dict):
+        return
+
+    for ui_name, path_str in ui.items():
+        if not isinstance(path_str, str):
+            continue
+
+        resolved = (config_path.parent / path_str).resolve()
+        if not resolved.exists():
+            raise FileNotFoundError(f"Could not find ui '{ui_name}': {resolved}")
+        if not resolved.is_file():
+            raise IsADirectoryError(f"Ui '{ui_name}' must be a file: {resolved}")
+
+        container_path = _resolve_uv_lock_container_path(resolved, plan)
+        if container_path is None:
+            copied_dirs = ", ".join(
+                package.root.relative_to(plan.project_root).as_posix() or "."
+                for package in plan.install_order
+            )
+            raise click.UsageError(
+                f"Ui '{ui_name}' resolves to {resolved}, which is not inside the "
+                f"target package '{plan.target.name}' or any of its workspace "
+                f"dependencies. Only these directories are copied into the "
+                f"container: {copied_dirs}. If this file lives in another "
+                f"workspace package, add it as a dependency of "
+                f"'{plan.target.name}' with `{{ workspace = true }}` in "
+                "[tool.uv.sources]."
+            )
+
+        ui[ui_name] = container_path.as_posix()
+
+
 def python_config_to_docker_uv_lock(
     config_path: pathlib.Path,
     config: Config,
@@ -677,6 +766,7 @@ def python_config_to_docker_uv_lock(
             key=key,
             label=f"{section}.{key}",
         )
+    _update_uv_lock_ui_paths(config_path, config, plan)
 
     additional_contexts: dict[str, str] = {}
     workspace_context_name: str | None = None
@@ -702,7 +792,7 @@ def python_config_to_docker_uv_lock(
     uv_lock_str = f"""# -- Installing dependencies from uv.lock --
 {copy_from_project_root(pathlib.PurePosixPath("pyproject.toml"), f"{uv_export_project_dir}/pyproject.toml")}
 {copy_from_project_root(pathlib.PurePosixPath("uv.lock"), f"{uv_export_project_dir}/uv.lock")}
-RUN cd {uv_export_project_dir} && uv export --package {shlex.quote(config["package"])} --frozen --no-hashes --no-emit-project --no-emit-workspace -o uv_requirements.txt
+RUN cd {uv_export_project_dir} && uv export --package {shlex.quote(plan.target.name)} --frozen --no-hashes --no-emit-project --no-emit-workspace -o uv_requirements.txt
 RUN cd {uv_export_project_dir} && {global_reqs_pip_install} -r uv_requirements.txt
 RUN rm -rf /tmp/uv_export
 # -- End of uv.lock dependencies install --"""

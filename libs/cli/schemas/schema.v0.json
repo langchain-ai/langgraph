@@ -196,6 +196,17 @@
                 }
               ]
             },
+            "source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UvSource"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Explicit deployment source configuration.\n\n`root/pyproject.toml` and `root/uv.lock`. If `root` is a workspace and the\ntarget is ambiguous, set `package` to the desired workspace member.\n"
+            },
             "store": {
               "anyOf": [
                 {
@@ -260,28 +271,6 @@
                 }
               ],
               "description": "Optional. Path to a pip config file (e.g., \"/etc/pip.conf\" or \"pip.ini\") for controlling\npackage installation (custom indices, credentials, etc.).\n\nOnly relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.\n"
-            },
-            "project_root": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Optional. Relative path from langgraph.json to the authoritative uv workspace root.\n\nOnly supported when `pip_installer` is `uv_lock`.\nThe resolved directory must contain `pyproject.toml` and `uv.lock`.\n"
-            },
-            "package": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Optional. Workspace package name to deploy when `pip_installer` is `uv_lock`.\n\nThis must match the `[project].name` of the target workspace package under\n`project_root`.\n"
             },
             "_INTERNAL_docker_tag": {
               "anyOf": [
@@ -435,7 +424,22 @@
               "description": "Optional. Control whether to retain Python packaging tools in the final image.\n\nYou can also set to true to include all packaging tools.\n"
             },
             "pip_installer": {
-              "const": "uv_lock"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "pip",
+                    "uv"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/UvSource"
             },
             "store": {
               "anyOf": [
@@ -476,15 +480,8 @@
           },
           "required": [
             "graphs",
-            "pip_installer",
-            "project_root",
-            "package"
-          ],
-          "not": {
-            "required": [
-              "dependencies"
-            ]
-          }
+            "source"
+          ]
         },
         {
           "type": "object",
@@ -668,6 +665,17 @@
                   "type": "null"
                 }
               ]
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UvSource"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Explicit deployment source configuration.\n\n`root/pyproject.toml` and `root/uv.lock`. If `root` is a workspace and the\ntarget is ambiguous, set `package` to the desired workspace member.\n"
             },
             "store": {
               "anyOf": [
@@ -1158,6 +1166,25 @@
         "max_age": {
           "type": "integer",
           "description": "Optional. How many seconds the browser may cache preflight responses.\n\nDefault might be 600 (10 minutes). Larger values reduce preflight requests but can cause stale configurations.\n"
+        }
+      },
+      "required": []
+    },
+    "UvSource": {
+      "title": "UvSource",
+      "description": "Deployment source rooted at a uv project or workspace.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "uv"
+          ]
+        },
+        "package": {
+          "type": "string"
+        },
+        "root": {
+          "type": "string"
         }
       },
       "required": []

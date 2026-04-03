@@ -588,6 +588,28 @@ class WebhooksConfig(TypedDict, total=False):
     """
 
 
+class UvSource(TypedDict, total=False):
+    """Deployment source rooted at a uv project or workspace."""
+
+    kind: Literal["uv"]
+    """Discriminator for uv-backed deployment mode."""
+
+    root: str
+    """Relative path from langgraph.json to the authoritative uv project root.
+
+    The resolved directory must contain `pyproject.toml` and `uv.lock`. If the
+    root is a workspace, package discovery happens within this root.
+    """
+
+    package: str
+    """Optional. Workspace package name to deploy when `root` is ambiguous.
+
+    If omitted, the CLI tries to infer the target package from the location of
+    `langgraph.json`, or falls back to the only package if the root contains
+    exactly one candidate.
+    """
+
+
 class Config(TypedDict, total=False):
     """Top-level config for langgraph-cli or similar deployment tooling."""
 
@@ -632,31 +654,19 @@ class Config(TypedDict, total=False):
     """
 
     pip_installer: str | None
-    """Optional. Python package installer to use ('auto', 'pip', 'uv', 'uv_lock').
+    """Optional. Python package installer to use ('auto', 'pip', or 'uv').
 
     - 'auto' (default): Use uv for supported base images, otherwise pip
     - 'pip': Force use of pip regardless of base image support
     - 'uv': Force use of uv (will fail if base image doesn't support it)
-    - 'uv_lock': Use a strict uv workspace deployment flow. Requires
-      `project_root` and `package`, along with `project_root/pyproject.toml`
-      and `project_root/uv.lock`. Under this mode, langgraph.json identifies
-      the deploy target only; all dependency declarations must come from
-      pyproject.toml and uv.lock, and copied local workspace packages are
-      installed with `--no-deps`.
     """
 
-    project_root: str | None
-    """Optional. Relative path from langgraph.json to the authoritative uv workspace root.
+    source: UvSource | None
+    """Optional. Explicit deployment source configuration.
 
-    Only supported when `pip_installer` is `uv_lock`.
-    The resolved directory must contain `pyproject.toml` and `uv.lock`.
-    """
-
-    package: str | None
-    """Optional. Workspace package name to deploy when `pip_installer` is `uv_lock`.
-
-    This must match the `[project].name` of the target workspace package under
-    `project_root`.
+    Use `{ "kind": "uv", "root": "." }` to deploy from a uv project rooted at
+    `root/pyproject.toml` and `root/uv.lock`. If `root` is a workspace and the
+    target is ambiguous, set `package` to the desired workspace member.
     """
 
     dockerfile_lines: list[str]
@@ -679,7 +689,7 @@ class Config(TypedDict, total=False):
       - "git+https://github.com/org/repo.git@main" for a Git-based package
     Defaults to an empty list, meaning no additional packages installed beyond your base environment.
 
-    This field is not supported when `pip_installer` is `uv_lock`.
+    This field is not supported when `source.kind` is `uv`.
     """
 
     graphs: dict[str, str | GraphDef]

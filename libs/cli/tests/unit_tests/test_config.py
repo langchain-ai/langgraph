@@ -147,8 +147,7 @@ def test_validate_config():
         "node_version": None,
         "pip_config_file": None,
         "pip_installer": "auto",
-        "project_root": None,
-        "package": None,
+        "source": None,
         "image_distro": "debian",
         "dockerfile_lines": [],
         "env": {},
@@ -173,8 +172,7 @@ def test_validate_config():
         "node_version": None,
         "pip_config_file": "pipconfig.txt",
         "pip_installer": "auto",
-        "project_root": None,
-        "package": None,
+        "source": None,
         "image_distro": "debian",
         "dockerfile_lines": ["ARG meow"],
         "dependencies": [".", "langchain"],
@@ -380,14 +378,10 @@ def test_validate_config_pip_installer():
         {
             "python_version": "3.11",
             "graphs": {"agent": "./agent.py:graph"},
-            "pip_installer": "uv_lock",
-            "project_root": "../..",
-            "package": "agent",
+            "source": {"kind": "uv", "root": "../.."},
         }
     )
-    assert config["pip_installer"] == "uv_lock"
-    assert config["project_root"] == "../.."
-    assert config["package"] == "agent"
+    assert config["source"] == {"kind": "uv", "root": "../.."}
 
     # Missing pip_installer should default to "auto"
     config = validate_config(
@@ -410,7 +404,7 @@ def test_validate_config_pip_installer():
             }
         )
     assert "Invalid pip_installer: 'conda'" in str(exc_info.value)
-    assert "Must be 'auto', 'pip', 'uv', or 'uv_lock'" in str(exc_info.value)
+    assert "Must be 'auto', 'pip', or 'uv'" in str(exc_info.value)
 
     with pytest.raises(click.UsageError) as exc_info:
         validate_config(
@@ -423,23 +417,21 @@ def test_validate_config_pip_installer():
         )
     assert "Invalid pip_installer: 'invalid'" in str(exc_info.value)
 
-    with pytest.raises(click.UsageError, match="Add `project_root`"):
+    with pytest.raises(click.UsageError, match="has been replaced"):
         validate_config(
             {
                 "python_version": "3.11",
                 "graphs": {"agent": "./agent.py:graph"},
                 "pip_installer": "uv_lock",
-                "package": "agent",
             }
         )
 
-    with pytest.raises(click.UsageError, match="Add `package`"):
+    with pytest.raises(click.UsageError, match="Add `source.root`"):
         validate_config(
             {
                 "python_version": "3.11",
                 "graphs": {"agent": "./agent.py:graph"},
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
+                "source": {"kind": "uv"},
             }
         )
 
@@ -449,35 +441,16 @@ def test_validate_config_pip_installer():
                 "python_version": "3.11",
                 "dependencies": ["."],
                 "graphs": {"agent": "./agent.py:graph"},
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
             }
         )
-
-    # All three errors at once (typical migration from 'uv' to 'uv_lock')
-    with pytest.raises(click.UsageError, match="different config shape") as exc_info:
-        validate_config(
-            {
-                "python_version": "3.11",
-                "dependencies": ["."],
-                "graphs": {"agent": "./agent.py:graph"},
-                "pip_installer": "uv_lock",
-            }
-        )
-    msg = str(exc_info.value)
-    assert "Remove `dependencies`" in msg
-    assert "Add `project_root`" in msg
-    assert "Add `package`" in msg
 
     with pytest.raises(click.UsageError, match="only supported for Python deployments"):
         validate_config(
             {
                 "node_version": "20",
                 "graphs": {"agent": "./agent.ts:graph"},
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
             }
         )
 
@@ -488,15 +461,22 @@ def test_validate_config_pip_installer():
                     "agent": "./agent.py:graph",
                     "ui": "./agent.ts:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
             }
         )
 
-    # project_root and package should be rejected when not using uv_lock
+    with pytest.raises(click.UsageError, match="Invalid source.kind"):
+        validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./agent.py:graph"},
+                "source": {"kind": "poetry", "root": "../.."},
+            }
+        )
+
     with pytest.raises(
-        click.UsageError, match="only supported when.*pip_installer is 'uv_lock'"
+        click.UsageError,
+        match="Top-level `project_root` and `package` are no longer supported",
     ):
         validate_config(
             {
@@ -510,7 +490,8 @@ def test_validate_config_pip_installer():
         )
 
     with pytest.raises(
-        click.UsageError, match="only supported when.*pip_installer is 'uv_lock'"
+        click.UsageError,
+        match="Top-level `project_root` and `package` are no longer supported",
     ):
         validate_config(
             {
@@ -1309,9 +1290,7 @@ def test_config_to_docker_uv_lock():
                 "graphs": {
                     "agent": "../../apps/agent/src/agent/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
                 "auth": {"path": "../../libs/shared/src/shared/auth.py:create_auth"},
             }
         )
@@ -1386,9 +1365,7 @@ def test_config_to_docker_uv_lock_honors_root_workspace_sources():
                 "graphs": {
                     "agent": "../../apps/agent/src/agent/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
                 "auth": {"path": "../../libs/shared/src/shared/auth.py:create_auth"},
             }
         )
@@ -1439,9 +1416,7 @@ def test_config_to_docker_uv_lock_ignores_unrelated_workspace_package_sources():
                 "graphs": {
                     "agent": "../../apps/agent/src/agent/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
                 "auth": {"path": "../../libs/shared/src/shared/auth.py:create_auth"},
             }
         )
@@ -1479,9 +1454,7 @@ def test_config_to_docker_uv_lock_ignores_unrelated_root_sources():
                 "graphs": {
                     "agent": "../../apps/agent/src/agent/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
                 "auth": {"path": "../../libs/shared/src/shared/auth.py:create_auth"},
             }
         )
@@ -1525,9 +1498,7 @@ def test_config_to_docker_uv_lock_validates_root_path_sources_relative_to_projec
                 "graphs": {
                     "agent": "../../apps/agent/src/agent/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
             }
         )
         with pytest.raises(click.UsageError, match="outside project_root"):
@@ -1547,9 +1518,7 @@ def test_config_to_docker_uv_lock_requires_explicit_workspace_sources():
                 "graphs": {
                     "agent": "../../apps/agent/src/agent/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
                 "auth": {"path": "../../libs/shared/src/shared/auth.py:create_auth"},
             }
         )
@@ -1576,9 +1545,7 @@ def test_config_to_docker_uv_lock_accepts_path_workspace_sources():
                 "graphs": {
                     "agent": "../../apps/agent/src/agent/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
             }
         )
         docker, _ = config_to_docker(
@@ -1606,9 +1573,7 @@ def test_config_to_docker_uv_lock_rejects_package_false_workspace_dependency():
                 "graphs": {
                     "agent": "../../apps/agent/src/agent/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
             }
         )
         with pytest.raises(click.UsageError, match="tool.uv.package = false"):
@@ -1631,9 +1596,7 @@ def test_config_to_docker_uv_lock_accepts_root_path_workspace_sources():
                 "graphs": {
                     "agent": "../../apps/agent/src/agent/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
                 "auth": {"path": "../../libs/shared/src/shared/auth.py:create_auth"},
             }
         )
@@ -1665,9 +1628,7 @@ def test_config_to_docker_uv_lock_rejects_mismatched_path_workspace_sources():
                 "graphs": {
                     "agent": "../../apps/agent/src/agent/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
             }
         )
         with pytest.raises(
@@ -1689,6 +1650,7 @@ def test_config_to_docker_uv_lock_detects_js_pm_from_target_package_root():
         agent_dir = project_root / "apps" / "agent"
         (agent_dir / "package.json").write_text('{"packageManager":"pnpm@9.0.0"}\n')
         (agent_dir / "pnpm-lock.yaml").write_text("lockfileVersion: 9.0\n")
+        (agent_dir / "ui.tsx").write_text("export const ui = null;\n")
 
         config = validate_config(
             {
@@ -1696,10 +1658,8 @@ def test_config_to_docker_uv_lock_detects_js_pm_from_target_package_root():
                 "graphs": {
                     "agent": "../../apps/agent/src/agent/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
-                "ui": {"agent": "./ui.tsx"},
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+                "ui": {"agent": "../../apps/agent/ui.tsx"},
             }
         )
         docker, _ = config_to_docker(
@@ -1710,6 +1670,57 @@ def test_config_to_docker_uv_lock_detects_js_pm_from_target_package_root():
             "RUN cd /deps/workspace/apps/agent && pnpm i --frozen-lockfile && tsx /api/langgraph_api/js/build.mts"
             in docker
         )
+        assert (
+            'ENV LANGGRAPH_UI=\'{"agent": "/deps/workspace/apps/agent/ui.tsx"}\''
+            in docker
+        )
+
+
+def test_config_to_docker_uv_lock_supports_single_uv_project_root():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root = tmpdir_path / "single"
+        project_root.mkdir()
+        (project_root / "uv.lock").write_text("# uv lock file\n")
+        (project_root / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "single-app"
+                version = "0.1.0"
+                dependencies = ["httpx>=0.28"]
+
+                [build-system]
+                requires = ["setuptools>=61"]
+                build-backend = "setuptools.build_meta"
+                """
+            ).strip()
+            + "\n"
+        )
+        (project_root / "langgraph.json").write_text("{}\n")
+        src_dir = project_root / "src"
+        src_dir.mkdir()
+        (src_dir / "agent.py").write_text("graph = object()\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./src/agent.py:graph"},
+                "source": {"kind": "uv", "root": "."},
+            }
+        )
+        docker, additional_contexts = config_to_docker(
+            project_root / "langgraph.json",
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+        assert (
+            "uv export --package single-app --frozen --no-hashes --no-emit-project --no-emit-workspace"
+            in docker
+        )
+        assert '"agent": "/deps/workspace/src/agent.py:graph"' in docker
+        assert additional_contexts == {}
 
 
 def test_config_to_docker_uv_lock_rejects_paths_outside_target_closure():
@@ -1726,9 +1737,7 @@ def test_config_to_docker_uv_lock_rejects_paths_outside_target_closure():
                 "graphs": {
                     "agent": "../../libs/extra/src/extra/graph.py:graph",
                 },
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
             }
         )
 
@@ -1751,9 +1760,7 @@ def test_config_to_docker_uv_lock_missing_lockfile():
             {
                 "python_version": "3.11",
                 "graphs": {"agent": "../../apps/agent/src/agent/graph.py:graph"},
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
             }
         )
         with pytest.raises(click.UsageError, match="No uv.lock found"):
@@ -1772,9 +1779,7 @@ def test_config_to_docker_uv_lock_missing_pyproject():
             {
                 "python_version": "3.11",
                 "graphs": {"agent": "../../apps/agent/src/agent/graph.py:graph"},
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
             }
         )
         with pytest.raises(click.UsageError, match="No pyproject.toml found"):
@@ -1792,9 +1797,7 @@ def test_config_to_docker_uv_lock_old_image():
             {
                 "python_version": "3.11",
                 "graphs": {"agent": "../../apps/agent/src/agent/graph.py:graph"},
-                "pip_installer": "uv_lock",
-                "project_root": "../..",
-                "package": "agent",
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
             }
         )
         with pytest.raises(ValueError, match="requires a base image with uv support"):
