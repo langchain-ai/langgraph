@@ -85,6 +85,7 @@ from langchain_core.tools.base import (
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.runtime import ExecutionInfo, ServerInfo  # noqa: TC002
 from langgraph.store.base import BaseStore  # noqa: TC002
 from langgraph.types import Command, Send, StreamWriter
 from pydantic import BaseModel, ValidationError
@@ -807,6 +808,8 @@ class ToolNode(RunnableCallable):
                 context=runtime.context,
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
+                execution_info=runtime.execution_info,
+                server_info=runtime.server_info,
             )
             tool_runtimes.append(tool_runtime)
 
@@ -839,6 +842,8 @@ class ToolNode(RunnableCallable):
                 context=runtime.context,
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
+                execution_info=runtime.execution_info,
+                server_info=runtime.server_info,
             )
             tool_runtimes.append(tool_runtime)
 
@@ -1612,6 +1617,8 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     stream_writer: StreamWriter
     tool_call_id: str | None
     store: BaseStore | None
+    execution_info: ExecutionInfo | None = None
+    server_info: ServerInfo | None = None
 
 
 class InjectedState(InjectedToolArg):
