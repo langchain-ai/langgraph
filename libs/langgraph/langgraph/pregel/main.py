@@ -20,6 +20,7 @@ from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass
 from typing import (
+    TYPE_CHECKING,
     Any,
     Generic,
     Literal,
@@ -27,6 +28,9 @@ from typing import (
     get_type_hints,
     overload,
 )
+
+if TYPE_CHECKING:
+    from langgraph.a2a.types import AgentCard
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -3520,6 +3524,47 @@ class Pregel(
             return latest
         else:
             return chunks
+
+    # -- A2A card support --------------------------------------------------
+
+    def with_agent_card(self, card: AgentCard) -> Self:
+        """Attach an A2A `AgentCard` to this compiled graph.
+
+        Returns `self` so it can be chained at compile time::
+
+            graph = builder.compile().with_agent_card(card)
+
+        The card is accessible as `graph.agent_card` and is serialized to
+        ``/.well-known/agent.json`` when `serve_a2a` is called.
+        """
+        self.agent_card = card
+        return self
+
+    def serve_a2a(
+        self,
+        *,
+        host: str = "0.0.0.0",
+        port: int = 8080,
+        config: dict | None = None,
+    ) -> None:
+        """Start a standards-compliant A2A server for this graph.
+
+        Requires ``pip install langgraph[a2a]``.
+        The graph must have an `AgentCard` attached via `with_agent_card` first.
+
+        Exposes:
+            - ``GET  /.well-known/agent.json`` — the AgentCard JSON
+            - ``POST /`` — A2A task endpoint (``tasks/send``)
+        """
+        if not hasattr(self, "agent_card"):
+            raise RuntimeError(
+                "No AgentCard attached. Call graph.with_agent_card(card) first."
+            )
+        try:
+            from langgraph.a2a.server import run_server
+        except ImportError:
+            raise ImportError("A2A server support requires: pip install langgraph[a2a]")
+        run_server(self, host=host, port=port, config=config or {})
 
     def clear_cache(self, nodes: Sequence[str] | None = None) -> None:
         """Clear the cache for the given nodes."""

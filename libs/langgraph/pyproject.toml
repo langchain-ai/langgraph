@@ -42,6 +42,12 @@ Twitter = "https://x.com/LangChain"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
+[project.optional-dependencies]
+a2a = [
+    "uvicorn>=0.29",
+    "starlette>=0.37",
+]
+
 [dependency-groups]
 test = [
     "pytest",
