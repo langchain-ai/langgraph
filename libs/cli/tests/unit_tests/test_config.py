@@ -1502,9 +1502,21 @@ def test_config_to_docker_uv_lock_ignores_unrelated_root_sources():
 def test_config_to_docker_uv_lock_validates_root_path_sources_relative_to_project_root():
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = pathlib.Path(tmpdir)
-        _, config_path = _write_uv_lock_workspace(
+        project_root, config_path = _write_uv_lock_workspace(
             tmpdir_path,
-            root_sources='[tool.uv.sources]\nshared = { path = "libs/shared", editable = true }',
+            root_sources='[tool.uv.sources]\nshared = { path = "../outside", editable = true }',
+        )
+        outside_dir = project_root.parent / "outside"
+        outside_dir.mkdir()
+        (outside_dir / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "shared"
+                version = "0.1.0"
+                """
+            ).strip()
+            + "\n"
         )
 
         config = validate_config(
@@ -1518,7 +1530,7 @@ def test_config_to_docker_uv_lock_validates_root_path_sources_relative_to_projec
                 "package": "agent",
             }
         )
-        with pytest.raises(click.UsageError, match="'shared' .* uses a path source"):
+        with pytest.raises(click.UsageError, match="outside project_root"):
             config_to_docker(
                 config_path, config, base_image="langchain/langgraph-api:0.2.47"
             )
@@ -1550,7 +1562,7 @@ def test_config_to_docker_uv_lock_requires_explicit_workspace_sources():
             )
 
 
-def test_config_to_docker_uv_lock_rejects_path_workspace_sources():
+def test_config_to_docker_uv_lock_accepts_path_workspace_sources():
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = pathlib.Path(tmpdir)
         _, config_path = _write_uv_lock_workspace(
@@ -1569,10 +1581,14 @@ def test_config_to_docker_uv_lock_rejects_path_workspace_sources():
                 "package": "agent",
             }
         )
-        with pytest.raises(click.UsageError, match="'shared' .* uses a path source"):
-            config_to_docker(
-                config_path, config, base_image="langchain/langgraph-api:0.2.47"
-            )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert (
+            "COPY --from=uv-workspace-root libs/shared /deps/workspace/libs/shared"
+            in docker
+        )
 
 
 def test_config_to_docker_uv_lock_rejects_package_false_workspace_dependency():
@@ -1599,6 +1615,101 @@ def test_config_to_docker_uv_lock_rejects_package_false_workspace_dependency():
             config_to_docker(
                 config_path, config, base_image="langchain/langgraph-api:0.2.47"
             )
+
+
+def test_config_to_docker_uv_lock_accepts_root_path_workspace_sources():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        _, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            root_sources='[tool.uv.sources]\nshared = { path = "libs/shared", editable = true }',
+        )
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    "agent": "../../apps/agent/src/agent/graph.py:graph",
+                },
+                "pip_installer": "uv_lock",
+                "project_root": "../..",
+                "package": "agent",
+                "auth": {"path": "../../libs/shared/src/shared/auth.py:create_auth"},
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert (
+            "COPY --from=uv-workspace-root libs/shared /deps/workspace/libs/shared"
+            in docker
+        )
+        assert (
+            '"path": "/deps/workspace/libs/shared/src/shared/auth.py:create_auth"'
+            in docker
+        )
+
+
+def test_config_to_docker_uv_lock_rejects_mismatched_path_workspace_sources():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        _, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            agent_sources='[tool.uv.sources]\nshared = { path = "../../libs/extra", editable = true }',
+        )
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    "agent": "../../apps/agent/src/agent/graph.py:graph",
+                },
+                "pip_installer": "uv_lock",
+                "project_root": "../..",
+                "package": "agent",
+            }
+        )
+        with pytest.raises(
+            click.UsageError,
+            match="dependency name and the workspace package name must match",
+        ):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.47"
+            )
+
+
+def test_config_to_docker_uv_lock_detects_js_pm_from_target_package_root():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            agent_sources="[tool.uv.sources]\nshared = { workspace = true }",
+        )
+        agent_dir = project_root / "apps" / "agent"
+        (agent_dir / "package.json").write_text('{"packageManager":"pnpm@9.0.0"}\n')
+        (agent_dir / "pnpm-lock.yaml").write_text("lockfileVersion: 9.0\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    "agent": "../../apps/agent/src/agent/graph.py:graph",
+                },
+                "pip_installer": "uv_lock",
+                "project_root": "../..",
+                "package": "agent",
+                "ui": {"agent": "./ui.tsx"},
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert (
+            "RUN cd /deps/workspace/apps/agent && pnpm i --frozen-lockfile && tsx /api/langgraph_api/js/build.mts"
+            in docker
+        )
 
 
 def test_config_to_docker_uv_lock_rejects_paths_outside_target_closure():

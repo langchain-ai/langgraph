@@ -905,9 +905,9 @@ def _build_runtime_env_vars(config: Config) -> list[str]:
     return env_vars
 
 
-def _get_node_pm_install_cmd(config_path: pathlib.Path, config: Config) -> str:
+def _get_node_pm_install_cmd(project_dir: pathlib.Path) -> str:
     def test_file(file_name):
-        full_path = config_path.parent / file_name
+        full_path = project_dir / file_name
         try:
             return full_path.is_file()
         except OSError:
@@ -916,7 +916,7 @@ def _get_node_pm_install_cmd(config_path: pathlib.Path, config: Config) -> str:
     # inspired by `package-manager-detector`
     def get_pkg_manager_name():
         try:
-            with open(config_path.parent / "package.json") as f:
+            with open(project_dir / "package.json") as f:
                 pkg = json.load(f)
 
                 if (pkg_manager_name := pkg.get("packageManager")) and isinstance(
@@ -1164,7 +1164,7 @@ ADD {relpath} /deps/{name}
             [
                 "# -- Installing JS dependencies --",
                 f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
-                f"RUN cd {local_deps.working_dir} && {_get_node_pm_install_cmd(config_path, config)} && tsx /api/langgraph_api/js/build.mts",
+                f"RUN cd {local_deps.working_dir} && {_get_node_pm_install_cmd(config_path.parent)} && tsx /api/langgraph_api/js/build.mts",
                 "# -- End of JS dependencies install --",
             ]
         )
@@ -1241,11 +1241,11 @@ def node_config_to_docker(
         # Backward compatibility: use the original behavior
         faux_path = f"/deps/{config_path.parent.name}"
 
-    # Use custom install command or auto-detect
-    if install_command:
-        install_cmd = install_command
-    else:
-        install_cmd = _get_node_pm_install_cmd(config_path, config)
+        # Use custom install command or auto-detect
+        if install_command:
+            install_cmd = install_command
+        else:
+            install_cmd = _get_node_pm_install_cmd(config_path.parent)
 
     image_str = docker_tag(config, base_image, api_version)
 

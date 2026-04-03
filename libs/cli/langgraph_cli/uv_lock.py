@@ -49,6 +49,7 @@ class UvLockPlan:
     pyproject_path: pathlib.Path
     uv_lock_path: pathlib.Path
     target: UvLockPackage
+    target_root: pathlib.Path
     install_order: tuple[UvLockPackage, ...]
     container_roots: dict[pathlib.Path, pathlib.PurePosixPath]
     working_dir: str
@@ -128,6 +129,7 @@ def _validate_uv_lock_source_entry(
         return workspace_dependencies
 
     normalized_source_name = _normalize_package_name(source_name)
+    package: UvLockPackage | None = None
 
     if source_value.get("workspace") is True:
         package = packages_by_name.get(normalized_source_name)
@@ -144,7 +146,7 @@ def _validate_uv_lock_source_entry(
                 f"but sets `tool.uv.package = false` in {package.pyproject_path}. "
                 "Workspace dependencies must be buildable packages."
             )
-        workspace_dependencies.add(normalized_source_name)
+        workspace_dependencies.add(package.normalized_name)
 
     path_ref = source_value.get("path")
     if isinstance(path_ref, str):
@@ -159,18 +161,34 @@ def _validate_uv_lock_source_entry(
             )
 
         resolved = (declared_root / path_ref).resolve()
-        # All three cases below have the same fix: use { workspace = true }.
-        # Give a specific reason so the user understands *why*.
         if project_root != resolved and project_root not in resolved.parents:
-            reason = f"it resolves to {resolved}, which is outside project_root ({project_root})"
-        elif resolved not in packages_by_root:
-            reason = f"it resolves to {resolved}, which is not a workspace package"
-        else:
-            reason = "path-based sources are not supported for workspace packages"
-        raise click.UsageError(
-            f"'{source_name}' in {pyproject_path} uses a path source, but "
-            f"{reason}. Replace it with `{source_name} = {{ workspace = true }}`."
-        )
+            raise click.UsageError(
+                f"'{source_name}' in {pyproject_path} uses a path source that "
+                f"resolves to {resolved}, which is outside project_root "
+                f"({project_root})."
+            )
+
+        package = packages_by_root.get(resolved)
+        if package is None:
+            raise click.UsageError(
+                f"'{source_name}' in {pyproject_path} uses a path source that "
+                f"resolves to {resolved}, which is not a workspace package under "
+                f"project_root ({project_root})."
+            )
+        if package.normalized_name != normalized_source_name:
+            raise click.UsageError(
+                f"'{source_name}' in {pyproject_path} points to {resolved}, which "
+                f"defines package '{package.name}'. The dependency name and the "
+                "workspace package name must match."
+            )
+        if not _get_uv_lock_package_enabled(package):
+            raise click.UsageError(
+                f"'{source_name}' in {pyproject_path} resolves to workspace package "
+                f"'{package.name}', which sets `tool.uv.package = false` in "
+                f"{package.pyproject_path}. Workspace dependencies must be "
+                "buildable packages."
+            )
+        workspace_dependencies.add(package.normalized_name)
 
     for nested_value in source_value.values():
         workspace_dependencies.update(
@@ -497,6 +515,7 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
             pyproject_path=pyproject_path,
             uv_lock_path=uv_lock_path,
             target=target,
+            target_root=target.root,
             install_order=tuple(install_order),
             container_roots=container_roots,
             working_dir=str(
@@ -512,6 +531,7 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
         pyproject_path=pyproject_path,
         uv_lock_path=uv_lock_path,
         target=target,
+        target_root=target.root,
         install_order=tuple(install_order),
         container_roots=container_roots,
         working_dir=str(working_dir),
@@ -725,7 +745,7 @@ RUN rm -rf /tmp/uv_export
             [
                 "# -- Installing JS dependencies --",
                 f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
-                f"RUN cd {plan.working_dir} && {_get_node_pm_install_cmd(config_path, config)} && tsx /api/langgraph_api/js/build.mts",
+                f"RUN cd {plan.working_dir} && {_get_node_pm_install_cmd(plan.target_root)} && tsx /api/langgraph_api/js/build.mts",
                 "# -- End of JS dependencies install --",
             ]
         )
