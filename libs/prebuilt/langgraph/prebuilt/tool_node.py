@@ -613,6 +613,7 @@ class _InjectedArgs:
     store: str | None
     runtime: str | None
     all_injected_keys: set[str]
+    optional_state_args: set[str]
 
 
 class ToolNode(RunnableCallable):
@@ -1360,6 +1361,8 @@ class ToolNode(RunnableCallable):
                         injected_args[tool_arg] = state
                     elif state_field in state:
                         injected_args[tool_arg] = state[state_field]
+                    elif tool_arg not in injected.optional_state_args:
+                        raise KeyError(state_field)
             else:
                 for tool_arg, state_field in injected.state.items():
                     injected_args[tool_arg] = (
@@ -1853,6 +1856,7 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
     store_arg: str | None = None
     runtime_arg: str | None = None
     all_injected_keys: set[str] = set()
+    optional_state_args: set[str] = set()
 
     for name, type_ in all_annotations.items():
         # Track all InjectedToolArg-annotated params (including custom subclasses)
@@ -1867,6 +1871,9 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
         if state_inj := _get_injection_from_type(type_, InjectedState):
             if isinstance(state_inj, InjectedState) and state_inj.field:
                 state_args[name] = state_inj.field
+                field_info = full_schema.model_fields.get(name)
+                if field_info and not field_info.is_required():
+                    optional_state_args.add(name)
             else:
                 state_args[name] = None
 
@@ -1883,4 +1890,5 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
         store=store_arg,
         runtime=runtime_arg,
         all_injected_keys=all_injected_keys,
+        optional_state_args=optional_state_args,
     )
