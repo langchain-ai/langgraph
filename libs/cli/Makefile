@@ -1,4 +1,4 @@
-.PHONY: test lint type format test-integration update-schema bump-version
+.PHONY: test lint type format test-integration update-schema bump-version spell_check spell_fix
 
 ######################
 # TESTING AND COVERAGE
@@ -41,3 +41,13 @@ update-schema:
 
 bump-version:
 	uv run hatch version patch
+
+######################
+# SPELL CHECK
+######################
+
+spell_check:
+	uv run codespell --toml pyproject.toml
+
+spell_fix:
+	uv run codespell --toml pyproject.toml -w
