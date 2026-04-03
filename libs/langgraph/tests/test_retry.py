@@ -1,10 +1,12 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 
 from langgraph.graph import START, StateGraph
-from langgraph.pregel._retry import _should_retry_on
+from langgraph.pregel._retry import _checkpoint_ns_for_parent_command, _should_retry_on
+from langgraph.runtime import Runtime
 from langgraph.types import RetryPolicy
 
 
@@ -76,6 +78,22 @@ def test_should_retry_on_empty_sequence():
 
     # Should not retry when sequence is empty
     assert _should_retry_on(policy, ValueError("test error")) is False
+
+
+def test_checkpoint_ns_for_parent_command() -> None:
+    assert _checkpoint_ns_for_parent_command("") == ""
+    assert _checkpoint_ns_for_parent_command("node:1") == ""
+    assert _checkpoint_ns_for_parent_command("node:1|child:2") == "node:1"
+    assert _checkpoint_ns_for_parent_command("node:1|1|child:2") == "node:1"
+    assert _checkpoint_ns_for_parent_command("node:1|1|child:2|1") == "node:1"
+    assert (
+        _checkpoint_ns_for_parent_command("parent:1|1|child:1|1|node:1|1")
+        == "parent:1|1|child:1"
+    )
+    assert (
+        _checkpoint_ns_for_parent_command("parent:1|1|child:1|1|node:1")
+        == "parent:1|1|child:1"
+    )
 
 
 def test_should_retry_default_retry_on():
@@ -152,10 +170,15 @@ def test_graph_with_single_retry_policy():
         foo: str
 
     attempt_count = 0
+    attempt_numbers: list[int] = []
+    first_attempt_times: list[float | None] = []
 
-    def failing_node(state: State):
+    def failing_node(state: State, runtime: Runtime):
         nonlocal attempt_count
         attempt_count += 1
+        assert runtime.execution_info.node_attempt == attempt_count
+        attempt_numbers.append(runtime.execution_info.node_attempt)
+        first_attempt_times.append(runtime.execution_info.node_first_attempt_time)
         if attempt_count < 3:  # Fail the first two attempts
             raise ValueError("Intentional failure")
         return {"foo": "success"}
@@ -187,11 +210,40 @@ def test_graph_with_single_retry_policy():
 
     # Verify retry behavior
     assert attempt_count == 3  # The node should have been tried 3 times
+    assert attempt_numbers == [1, 2, 3]
+    assert len(first_attempt_times) == 3
+    assert first_attempt_times[0] is not None
+    assert first_attempt_times[1] == first_attempt_times[0]
+    assert first_attempt_times[2] == first_attempt_times[0]
     assert result["foo"] == "other_node"  # Final result should be from other_node
 
     # Verify the sleep intervals
     call_args_list = [args[0][0] for args in mock_sleep.call_args_list]
     assert call_args_list == [0.01, 0.02]
+
+
+def test_runtime_execution_info_defaults_without_retry():
+    """Test execution_info defaults when no retry and no config are provided."""
+
+    class State(TypedDict):
+        foo: str
+
+    captured = {}
+
+    def node(state: State, runtime: Runtime):
+        captured["node_attempt"] = runtime.execution_info.node_attempt
+        captured["node_first_attempt_time"] = (
+            runtime.execution_info.node_first_attempt_time
+        )
+        return {"foo": "ok"}
+
+    graph = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
+
+    result = graph.invoke({"foo": ""})
+
+    assert result["foo"] == "ok"
+    assert captured["node_attempt"] == 1
+    assert isinstance(captured["node_first_attempt_time"], float)
 
 
 def test_graph_with_jitter_retry_policy():
@@ -342,3 +394,65 @@ def test_graph_with_max_attempts_exceeded():
         graph.invoke({"foo": ""})
 
     mock_sleep.assert_called_with(0.01)
+
+
+def test_execution_info_identity_fields_populated_on_retry():
+    """Test that thread_id, task_id, run_id, etc. are populated in execution_info during retries."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempt_count = 0
+    captured_infos: list[dict] = []
+
+    def failing_node(state: State, runtime: Runtime):
+        nonlocal attempt_count
+        attempt_count += 1
+        info = runtime.execution_info
+        captured_infos.append(
+            {
+                "thread_id": info.thread_id,
+                "run_id": info.run_id,
+                "node_attempt": info.node_attempt,
+                "node_first_attempt_time": info.node_first_attempt_time,
+                "checkpoint_ns": info.checkpoint_ns,
+            }
+        )
+        if attempt_count < 2:
+            raise ValueError("Intentional failure")
+        return {"foo": "success"}
+
+    retry_policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.01,
+        jitter=False,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, retry_policy=retry_policy)
+        .add_edge(START, "failing_node")
+        .compile(checkpointer=MemorySaver())
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke(
+            {"foo": ""},
+            config={"configurable": {"thread_id": "retry-thread"}},
+        )
+
+    assert result["foo"] == "success"
+    assert len(captured_infos) == 2
+
+    # Both attempts should have the same thread_id and first_attempt_time
+    assert captured_infos[0]["thread_id"] == "retry-thread"
+    assert captured_infos[1]["thread_id"] == "retry-thread"
+    assert (
+        captured_infos[0]["node_first_attempt_time"]
+        == captured_infos[1]["node_first_attempt_time"]
+    )
+
+    # node_attempt should increment
+    assert captured_infos[0]["node_attempt"] == 1
+    assert captured_infos[1]["node_attempt"] == 2

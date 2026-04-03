@@ -6,6 +6,7 @@ import typing
 import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
+from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
@@ -14,6 +15,7 @@ from typing import (
     Any,
     Generic,
     Literal,
+    TypeVar,
     Union,
     cast,
     get_args,
@@ -29,6 +31,7 @@ from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
+from langgraph._internal import _serde
 from langgraph._internal._constants import (
     INTERRUPT,
     NS_END,
@@ -300,7 +303,56 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
+
         Will take the name of the function/runnable as the node name.
+
+        Args:
+            node: The function or runnable this node will run.
+            defer: Whether to defer the execution of the node until the run is about to end.
+            metadata: The metadata associated with the node.
+            input_schema: The input schema for the node. (Default: the graph's state schema)
+            retry_policy: The retry policy for the node.
+
+                If a sequence is provided, the first matching policy will be applied.
+            cache_policy: The cache policy for the node.
+            destinations: Destinations that indicate where a node can route to.
+
+                Useful for edgeless graphs with nodes that return `Command` objects.
+
+                If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+
+                If a `tuple` is provided, the values will be used as the target node names.
+
+                !!! warning
+
+                    This is only used for graph rendering and doesn't have any effect on the graph execution.
+
+        Example:
+            ```python
+            from typing_extensions import TypedDict
+
+            from langchain_core.runnables import RunnableConfig
+            from langgraph.graph import START, StateGraph
+
+
+            class State(TypedDict):
+                x: int
+
+
+            def my_node(state: State, config: RunnableConfig) -> State:
+                return {"x": state["x"] + 1}
+
+
+            builder = StateGraph(State)
+            builder.add_node(my_node)  # node name will be 'my_node'
+            builder.add_edge(START, "my_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
+            ```
+
+        Returns:
+            Self: The instance of the `StateGraph`, allowing for method chaining.
         """
         ...
 
@@ -317,8 +369,61 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the `StateGraph`, input schema is specified.
+        """Add a new node to the `StateGraph` where input schema is specified.
+
         Will take the name of the function/runnable as the node name.
+
+        Args:
+            node: The function or runnable this node will run.
+            defer: Whether to defer the execution of the node until the run is about to end.
+            metadata: The metadata associated with the node.
+            input_schema: The input schema for the node.
+            retry_policy: The retry policy for the node.
+
+                If a sequence is provided, the first matching policy will be applied.
+            cache_policy: The cache policy for the node.
+            destinations: Destinations that indicate where a node can route to.
+
+                Useful for edgeless graphs with nodes that return `Command` objects.
+
+                If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+
+                If a `tuple` is provided, the values will be used as the target node names.
+
+                !!! warning
+
+                    This is only used for graph rendering and doesn't have any effect on the graph execution.
+
+        Example:
+            ```python
+            from typing_extensions import TypedDict
+
+            from langchain_core.runnables import RunnableConfig
+            from langgraph.graph import START, StateGraph
+
+
+            class State(TypedDict):
+                x: int
+
+
+            class NodeInput(TypedDict):
+                x: int
+
+
+            def my_node(state: NodeInput, config: RunnableConfig) -> State:
+                return {"x": state["x"] + 1}
+
+
+            builder = StateGraph(State)
+            builder.add_node(my_node, input_schema=NodeInput)  # node name will be 'my_node'
+            builder.add_edge(START, "my_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
+            ```
+
+        Returns:
+            Self: The instance of the `StateGraph`, allowing for method chaining.
         """
         ...
 
@@ -336,7 +441,57 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the `StateGraph`, input schema is inferred as the state schema."""
+        """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
+
+        Args:
+            node: The name of the node.
+            action: The function or runnable this node will run.
+            defer: Whether to defer the execution of the node until the run is about to end.
+            metadata: The metadata associated with the node.
+            input_schema: The input schema for the node. (Default: the graph's state schema)
+            retry_policy: The retry policy for the node.
+
+                If a sequence is provided, the first matching policy will be applied.
+            cache_policy: The cache policy for the node.
+            destinations: Destinations that indicate where a node can route to.
+
+                Useful for edgeless graphs with nodes that return `Command` objects.
+
+                If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+
+                If a `tuple` is provided, the values will be used as the target node names.
+
+                !!! warning
+
+                    This is only used for graph rendering and doesn't have any effect on the graph execution.
+
+        Example:
+            ```python
+            from typing_extensions import TypedDict
+
+            from langchain_core.runnables import RunnableConfig
+            from langgraph.graph import START, StateGraph
+
+
+            class State(TypedDict):
+                x: int
+
+
+            def my_node(state: State, config: RunnableConfig) -> State:
+                return {"x": state["x"] + 1}
+
+
+            builder = StateGraph(State)
+            builder.add_node("my_fair_node", my_node)
+            builder.add_edge(START, "my_fair_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
+            ```
+
+        Returns:
+            Self: The instance of the `StateGraph`, allowing for method chaining.
+        """
         ...
 
     @overload
@@ -353,7 +508,65 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the `StateGraph`, input schema is specified."""
+        """Add a new node to the `StateGraph`, input schema is specified.
+
+        Args:
+            node: The function or runnable this node will run.
+
+                If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
+            action: The action associated with the node.
+
+                Will be used as the node function or runnable if `node` is a string (node name).
+            defer: Whether to defer the execution of the node until the run is about to end.
+            metadata: The metadata associated with the node.
+            input_schema: The input schema for the node.
+            retry_policy: The retry policy for the node.
+
+                If a sequence is provided, the first matching policy will be applied.
+            cache_policy: The cache policy for the node.
+            destinations: Destinations that indicate where a node can route to.
+
+                Useful for edgeless graphs with nodes that return `Command` objects.
+
+                If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+
+                If a `tuple` is provided, the values will be used as the target node names.
+
+                !!! warning
+
+                    This is only used for graph rendering and doesn't have any effect on the graph execution.
+
+        Example:
+            ```python
+            from typing_extensions import TypedDict
+
+            from langchain_core.runnables import RunnableConfig
+            from langgraph.graph import START, StateGraph
+
+
+            class State(TypedDict):
+                x: int
+
+
+            class NodeInput(TypedDict):
+                x: int
+
+
+            def my_node(state: NodeInput, config: RunnableConfig) -> State:
+                return {"x": state["x"] + 1}
+
+
+            builder = StateGraph(State)
+            builder.add_node("my_fair_node", my_node, input_schema=NodeInput)
+            builder.add_edge(START, "my_fair_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
+            ```
+
+        Returns:
+            Self: The instance of the `StateGraph`, allowing for method chaining.
+        """
         ...
 
     def add_node(
@@ -376,6 +589,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
                 If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
             action: The action associated with the node.
+
                 Will be used as the node function or runnable if `node` is a string (node name).
             defer: Whether to defer the execution of the node until the run is about to end.
             metadata: The metadata associated with the node.
@@ -392,7 +606,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
                 If a `tuple` is provided, the values will be used as the target node names.
 
-                !!! note
+                !!! warning
 
                     This is only used for graph rendering and doesn't have any effect on the graph execution.
 
@@ -846,6 +1060,19 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 If `None`, it may inherit the parent graph's checkpointer when used as a subgraph.
 
                 If `False`, it will not use or inherit any checkpointer.
+
+                **Important**: When a checkpointer is enabled, you should pass a `thread_id`
+                in the config when invoking the graph:
+
+                ```python
+                config = {"configurable": {"thread_id": "my-thread"}}
+                graph.invoke(inputs, config)
+                ```
+
+                The `thread_id` is the key used to store and retrieve checkpoints. Use a
+                unique ID for independent runs, or reuse the same ID to accumulate state
+                across invocations (e.g., for conversation memory).
+
             interrupt_before: An optional list of node names to interrupt before.
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
@@ -855,6 +1082,28 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             CompiledStateGraph: The compiled `StateGraph`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
+        serde_allowlist: set[tuple[str, ...]] | None = None
+        if _serde.STRICT_MSGPACK_ENABLED:
+            schema_types: list[type[Any]] = [
+                self.state_schema,
+                self.input_schema,
+                self.output_schema,
+            ]
+            if self.context_schema is not None:
+                schema_types.append(self.context_schema)
+            for node in self.nodes.values():
+                schema_types.append(node.input_schema)
+            for branches in self.branches.values():
+                for branch in branches.values():
+                    if branch.input_schema is not None:
+                        schema_types.append(branch.input_schema)
+            serde_allowlist = _serde.build_serde_allowlist(
+                schemas=schema_types,
+                channels=self.channels,
+            )
+            checkpointer = _serde.apply_checkpointer_allowlist(
+                checkpointer, serde_allowlist
+            )
 
         # assign default values
         interrupt_before = interrupt_before or []
@@ -911,10 +1160,25 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             cache=cache,
             name=name or "LangGraph",
         )
+        compiled._serde_allowlist = serde_allowlist
 
         compiled.attach_node(START, None)
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
+
+        # Record output/state mappers for v2 stream coercion (pydantic/dataclass only)
+        compiled._output_mapper = _pick_mapper(
+            list(output_channels)
+            if isinstance(output_channels, list)
+            else [output_channels],
+            self.output_schema,
+        )
+        compiled._state_mapper = _pick_mapper(
+            list(stream_channels)
+            if isinstance(stream_channels, list)
+            else [stream_channels],
+            self.state_schema,
+        )
 
         for start, end in self.edges:
             compiled.attach_edge(start, end)
@@ -935,6 +1199,8 @@ class CompiledStateGraph(
 ):
     builder: StateGraph[StateT, ContextT, InputT, OutputT]
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
+    _output_mapper: Callable[[Any], Any] | None
+    _state_mapper: Callable[[Any], Any] | None
 
     def __init__(
         self,
@@ -1256,12 +1522,15 @@ def _pick_mapper(
 ) -> Callable[[Any], Any] | None:
     if state_keys == ["__root__"]:
         return None
-    if isclass(schema) and issubclass(schema, dict):
-        return None
-    return partial(_coerce_state, schema)
+    if isclass(schema) and (issubclass(schema, BaseModel) or is_dataclass(schema)):
+        return partial(_coerce_state, schema)
+    return None
 
 
-def _coerce_state(schema: type[Any], input: dict[str, Any]) -> dict[str, Any]:
+_S = TypeVar("_S")
+
+
+def _coerce_state(schema: type[_S], input: dict[str, Any]) -> _S:
     return schema(**input)
 
 

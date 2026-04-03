@@ -151,6 +151,7 @@ class PoolConfig(TypedDict, total=False):
     """Connection pool settings for PostgreSQL connections.
 
     Controls connection lifecycle and resource utilization:
+
     - Small pools (1-5) suit low-concurrency workloads
     - Larger pools handle concurrent requests but consume more resources
     - Setting max_size prevents resource exhaustion under load
@@ -166,6 +167,7 @@ class PoolConfig(TypedDict, total=False):
     """Additional connection arguments passed to each connection in the pool.
     
     Default kwargs set automatically:
+
     - autocommit: True
     - prepare_threshold: 0
     - row_factory: dict_row
@@ -656,7 +658,8 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             item = store.get(("users", "123"), "prefs")
         ```
 
-        Or using the convenient from_conn_string helper:
+        Or using the convenient `from_conn_string` helper:
+
         ```python
         from langgraph.store.postgres import PostgresStore
 

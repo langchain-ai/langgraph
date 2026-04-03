@@ -21,7 +21,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.tools import BaseTool, ToolException
+from langchain_core.tools import BaseTool, InjectedToolArg, ToolException
 from langchain_core.tools import tool as dec_tool
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
@@ -59,10 +59,16 @@ def _create_mock_runtime(store: BaseStore | None = None) -> Mock:
     which is injected by RunnableCallable from config["configurable"]["__pregel_runtime"].
     When testing ToolNode directly (outside a graph), we need to provide this manually.
     """
+    from langgraph.runtime import ExecutionInfo
+
     mock_runtime = Mock()
     mock_runtime.store = store
     mock_runtime.context = None
     mock_runtime.stream_writer = lambda *args, **kwargs: None
+    mock_runtime.execution_info = ExecutionInfo(
+        checkpoint_id="test-cp", checkpoint_ns="", task_id="test-task"
+    )
+    mock_runtime.server_info = None
     return mock_runtime
 
 
@@ -1860,3 +1866,339 @@ async def test_tool_node_inject_async_all_types_with_schema() -> None:
         "foo_from_runtime=foo_value, "
         "tool_call_id=test_call_789"
     )
+
+
+async def test_tool_node_tool_runtime_generic() -> None:
+    """Test that ToolRuntime with generic type arguments is correctly injected."""
+
+    @dataclasses.dataclass
+    class MyContext:
+        some_info: str
+
+    @dec_tool
+    def get_info(rt: ToolRuntime[MyContext]):
+        """This tool returns info from context."""
+        return rt.context.some_info
+
+    # Create a mock runtime with context
+    mock_runtime = _create_mock_runtime()
+    mock_runtime.context = MyContext(some_info="test_info")
+
+    config = {"configurable": {"__pregel_runtime": mock_runtime}}
+
+    result = await ToolNode([get_info]).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "call tool",
+                    tool_calls=[
+                        {
+                            "name": "get_info",
+                            "args": {},
+                            "id": "call_1",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=config,
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.content == "test_info"
+    assert tool_message.tool_call_id == "call_1"
+
+
+def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call() -> None:
+    """Test that ToolRuntime is injected for dynamically registered tools.
+
+    Regression test for https://github.com/langchain-ai/langchain/issues/35305.
+    When a tool is dynamically provided via wrap_tool_call (not registered at
+    ToolNode init time), ToolRuntime should still be injected into the tool.
+    """
+
+    @dec_tool
+    def static_tool(x: int) -> str:
+        """A static tool registered at init."""
+        return f"static: {x}"
+
+    @dec_tool
+    def dynamic_tool_with_runtime(x: int, runtime: ToolRuntime) -> str:
+        """A dynamic tool that needs ToolRuntime injection."""
+        return f"dynamic: x={x}, tool_call_id={runtime.tool_call_id}"
+
+    def wrap_tool_call(request, execute):
+        """Middleware that swaps in a dynamic tool."""
+        if request.tool_call["name"] == "dynamic_tool_with_runtime":
+            # Override tool to the dynamic one (not registered at init)
+            new_request = request.override(tool=dynamic_tool_with_runtime)
+            return execute(new_request)
+        return execute(request)
+
+    # ToolNode only knows about static_tool at init time
+    tool_node = ToolNode(
+        [static_tool],
+        wrap_tool_call=wrap_tool_call,
+    )
+
+    # Verify the dynamic tool is NOT in the tool node's registered tools
+    assert "dynamic_tool_with_runtime" not in tool_node.tools_by_name
+
+    # Call the dynamic tool
+    tool_call = {
+        "name": "dynamic_tool_with_runtime",
+        "args": {"x": 42},
+        "id": "call_dynamic_1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = tool_node.invoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    # ToolRuntime should be injected and the tool should execute successfully
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_1"
+    assert tool_message.tool_call_id == "call_dynamic_1"
+
+
+async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() -> None:
+    """Test that ToolRuntime is injected for dynamically registered tools (async).
+
+    Async version of the regression test for
+    https://github.com/langchain-ai/langchain/issues/35305.
+    """
+
+    @dec_tool
+    def static_tool(x: int) -> str:
+        """A static tool registered at init."""
+        return f"static: {x}"
+
+    @dec_tool
+    async def dynamic_tool_with_runtime(x: int, runtime: ToolRuntime) -> str:
+        """A dynamic async tool that needs ToolRuntime injection."""
+        return f"dynamic: x={x}, tool_call_id={runtime.tool_call_id}"
+
+    async def awrap_tool_call(request, execute):
+        """Async middleware that swaps in a dynamic tool."""
+        if request.tool_call["name"] == "dynamic_tool_with_runtime":
+            new_request = request.override(tool=dynamic_tool_with_runtime)
+            return await execute(new_request)
+        return await execute(request)
+
+    # ToolNode only knows about static_tool at init time
+    tool_node = ToolNode(
+        [static_tool],
+        awrap_tool_call=awrap_tool_call,
+    )
+
+    # Verify the dynamic tool is NOT in the tool node's registered tools
+    assert "dynamic_tool_with_runtime" not in tool_node.tools_by_name
+
+    # Call the dynamic tool
+    tool_call = {
+        "name": "dynamic_tool_with_runtime",
+        "args": {"x": 42},
+        "id": "call_dynamic_2",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = await tool_node.ainvoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    # ToolRuntime should be injected and the tool should execute successfully
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_2"
+    assert tool_message.tool_call_id == "call_dynamic_2"
+
+
+def test_tool_runtime_forwards_execution_info_and_server_info() -> None:
+    """Test that execution_info and server_info are forwarded from Runtime to ToolRuntime."""
+    from langgraph.runtime import ExecutionInfo, ServerInfo
+
+    exec_info = ExecutionInfo(
+        thread_id="t-1",
+        checkpoint_id="cp-1",
+        checkpoint_ns="",
+        task_id="tk-1",
+        run_id="r-1",
+    )
+    server_info = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
+
+    mock_runtime = Mock()
+    mock_runtime.store = None
+    mock_runtime.context = None
+    mock_runtime.stream_writer = lambda *args, **kwargs: None
+    mock_runtime.execution_info = exec_info
+    mock_runtime.server_info = server_info
+
+    captured: dict = {}
+
+    @dec_tool
+    def info_tool(x: int, runtime: ToolRuntime) -> str:
+        """Tool that captures runtime info."""
+        captured["execution_info"] = runtime.execution_info
+        captured["server_info"] = runtime.server_info
+        return "ok"
+
+    node = ToolNode([info_tool])
+    tool_call = {
+        "name": "info_tool",
+        "args": {"x": 1},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    config: RunnableConfig = {"configurable": {"__pregel_runtime": mock_runtime}}
+    node.invoke({"messages": [msg]}, config=config)
+
+    assert captured["execution_info"] is exec_info
+    assert captured["execution_info"].thread_id == "t-1"
+    assert captured["execution_info"].task_id == "tk-1"
+    assert captured["server_info"] is server_info
+    assert captured["server_info"].assistant_id == "asst-1"
+
+
+async def test_tool_runtime_forwards_execution_info_and_server_info_async() -> None:
+    """Test that execution_info and server_info are forwarded in async path."""
+    from langgraph.runtime import ExecutionInfo, ServerInfo
+
+    exec_info = ExecutionInfo(
+        thread_id="t-2",
+        checkpoint_id="cp-2",
+        checkpoint_ns="",
+        task_id="tk-2",
+        run_id="r-2",
+    )
+    server_info = ServerInfo(assistant_id="asst-2", graph_id="graph-2")
+
+    mock_runtime = Mock()
+    mock_runtime.store = None
+    mock_runtime.context = None
+    mock_runtime.stream_writer = lambda *args, **kwargs: None
+    mock_runtime.execution_info = exec_info
+    mock_runtime.server_info = server_info
+
+    captured: dict = {}
+
+    @dec_tool
+    async def info_tool_async(x: int, runtime: ToolRuntime) -> str:
+        """Async tool that captures runtime info."""
+        captured["execution_info"] = runtime.execution_info
+        captured["server_info"] = runtime.server_info
+        return "ok"
+
+    node = ToolNode([info_tool_async])
+    tool_call = {
+        "name": "info_tool_async",
+        "args": {"x": 1},
+        "id": "call-2",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    config: RunnableConfig = {"configurable": {"__pregel_runtime": mock_runtime}}
+    await node.ainvoke({"messages": [msg]}, config=config)
+
+    assert captured["execution_info"] is exec_info
+    assert captured["execution_info"].thread_id == "t-2"
+    assert captured["server_info"] is server_info
+    assert captured["server_info"].graph_id == "graph-2"
+
+
+# --- InjectedToolArg security tests ---
+
+
+def test_tool_node_strips_plain_injected_tool_arg() -> None:
+    """Plain InjectedToolArg values supplied by the LLM should be stripped."""
+
+    @dec_tool
+    def read_secret(
+        query: str,
+        auth: Annotated[dict, InjectedToolArg()],
+    ) -> str:
+        """Return secret data based on auth role."""
+        if auth.get("role") == "admin":
+            return "ADMIN_SECRET"
+        return "PUBLIC_DATA"
+
+    node = ToolNode([read_secret], handle_tool_errors=True)
+
+    # LLM tries to supply the hidden 'auth' field
+    tool_call = {
+        "name": "read_secret",
+        "args": {"query": "hello", "auth": {"role": "admin"}},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = node.invoke({"messages": [msg]}, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    # auth should have been stripped, so tool should fail (missing required arg)
+    assert "ADMIN_SECRET" not in tool_message.content
+
+
+def test_tool_node_strips_custom_injected_tool_arg_subclass() -> None:
+    """Custom InjectedToolArg subclasses should also be stripped."""
+
+    class InjectedAuth(InjectedToolArg):
+        pass
+
+    @dec_tool
+    def read_secret(
+        query: str,
+        auth: Annotated[dict, InjectedAuth()],
+    ) -> str:
+        """Return secret data based on auth role."""
+        if auth.get("role") == "admin":
+            return "ADMIN_SECRET"
+        return "PUBLIC_DATA"
+
+    node = ToolNode([read_secret], handle_tool_errors=True)
+
+    tool_call = {
+        "name": "read_secret",
+        "args": {"query": "hello", "auth": {"role": "admin"}},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = node.invoke({"messages": [msg]}, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    assert "ADMIN_SECRET" not in tool_message.content
+
+
+def test_tool_node_injected_state_overwrites_llm_value() -> None:
+    """InjectedState should use graph state, not LLM-supplied values."""
+
+    @dec_tool
+    def read_secret(
+        query: str,
+        auth: Annotated[dict, InjectedState("auth")],
+    ) -> str:
+        """Return secret data based on auth from graph state."""
+        if auth.get("role") == "admin":
+            return "ADMIN_SECRET"
+        return "PUBLIC_DATA"
+
+    node = ToolNode([read_secret])
+
+    # LLM tries to supply auth as admin
+    tool_call = {
+        "name": "read_secret",
+        "args": {"query": "hello", "auth": {"role": "admin"}},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    # Graph state has auth as viewer
+    result = node.invoke(
+        {"messages": [msg], "auth": {"role": "viewer"}},
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "PUBLIC_DATA"

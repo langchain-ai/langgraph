@@ -53,3 +53,5 @@ sdk-js (standalone)
 ```
 
 Changes to a library may impact all of its dependents shown above.
+
+- Do NOT use Sphinx-style double backtick formatting (` ``code`` `). Use single backticks (`` `code` ``) for inline code references in docstrings and comments.
