@@ -9,7 +9,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-import langgraph_cli.cli as cli_module
+import langgraph_cli.deploy as deploy_module
 from langgraph_cli.cli import cli, prepare_args_and_stdin
 from langgraph_cli.config import Config, _get_pip_cleanup_lines, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
@@ -346,7 +346,7 @@ def test_deploy_list_command(monkeypatch) -> None:
                 ]
             }
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -386,7 +386,7 @@ def test_deploy_list_command_no_results(monkeypatch) -> None:
         def list_deployments(self, name_contains: str = ""):
             return {"resources": []}
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -432,7 +432,7 @@ def test_deploy_revisions_list_command(monkeypatch) -> None:
                 ]
             }
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -473,7 +473,7 @@ def test_deploy_revisions_list_command_no_results(monkeypatch) -> None:
         def list_revisions(self, deployment_id: str, limit: int = 1):
             return {"resources": []}
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -506,7 +506,7 @@ def test_deploy_revisions_list_command_with_explicit_limit(monkeypatch) -> None:
             captured["limit"] = str(limit)
             return {"resources": []}
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -552,7 +552,7 @@ def test_deploy_delete_command(monkeypatch) -> None:
             captured["deployment_id"] = deployment_id
             return None
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -594,7 +594,7 @@ def test_deploy_delete_command_cancelled(monkeypatch) -> None:
             deleted = True
             return None
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -629,7 +629,7 @@ def test_deploy_delete_command_force(monkeypatch) -> None:
             captured["deployment_id"] = deployment_id
             return None
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,

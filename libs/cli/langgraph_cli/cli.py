@@ -1,172 +1,30 @@
 """CLI entrypoint for LangGraph API server."""
 
-import base64
-import copy
-import json as json_mod
 import os
 import pathlib
-import platform
-import re
 import shutil
 import sys
-import tempfile
-import time
-from collections.abc import Callable, Sequence
-from contextlib import contextmanager
-from datetime import datetime, timezone
+from collections.abc import Sequence
 
 import click
 import click.exceptions
-from click import secho
-from dotenv import dotenv_values, set_key
 
 import langgraph_cli.config
 import langgraph_cli.docker
 from langgraph_cli.analytics import log_command
 from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
-from langgraph_cli.docker import DockerCapabilities
+from langgraph_cli.deploy import deploy
+from langgraph_cli.docker import DockerCapabilities, build_docker_image
 from langgraph_cli.exec import Runner, subp_exec
-from langgraph_cli.helpers import format_log_entry, level_fg, resolve_deployment_id
-from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
-from langgraph_cli.util import (
-    format_deployments_table,
-    format_revisions_table,
-    warn_non_wolfi_distro,
-)
+from langgraph_cli.util import warn_non_wolfi_distro
 from langgraph_cli.version import __version__
 
-RESERVED_ENV_VARS = frozenset(
-    [
-        # LANGCHAIN_RESERVED_ENV_VARS from host-backend
-        "LANGCHAIN_TRACING_V2",
-        "LANGSMITH_TRACING_V2",
-        "LANGCHAIN_ENDPOINT",
-        "LANGCHAIN_PROJECT",
-        "LANGSMITH_PROJECT",
-        "LANGSMITH_LANGGRAPH_GIT_REPO",
-        "LANGGRAPH_GIT_REPO_PATH",
-        "LANGCHAIN_API_KEY",
-        "LANGSMITH_CONTROL_PLANE_API_KEY",
-        "POSTGRES_URI",
-        "POSTGRES_PASSWORD",
-        "DATABASE_URI",
-        "LANGSMITH_LANGGRAPH_GIT_REF",
-        "LANGSMITH_LANGGRAPH_GIT_REF_SHA",
-        "LANGGRAPH_AUTH_TYPE",
-        "LANGSMITH_AUTH_ENDPOINT",
-        "LANGSMITH_TENANT_ID",
-        "LANGSMITH_AUTH_VERIFY_TENANT_ID",
-        "LANGSMITH_HOST_PROJECT_ID",
-        "LANGSMITH_HOST_PROJECT_NAME",
-        "LANGSMITH_HOST_REVISION_ID",
-        "LOG_JSON",
-        "LOG_DICT_TRACEBACKS",
-        "REDIS_URI",
-        "LANGCHAIN_CALLBACKS_BACKGROUND",
-        "DD_TRACE_PSYCOPG_ENABLED",
-        "DD_TRACE_REDIS_ENABLED",
-        "LANGSMITH_DEPLOYMENT_NAME",
-        "LANGGRAPH_CLOUD_LICENSE_KEY",
-        # ALLOWED_SELF_HOSTED_ENV_VARS (rejected for non-self-hosted)
-        "LANGSMITH_API_KEY",
-        "LANGSMITH_ENDPOINT",
-        "POSTGRES_URI_CUSTOM",
-        "REDIS_URI_CUSTOM",
-        "PATH",
-        "PORT",
-        "MOUNT_PREFIX",
-        "LSD_ENV",
-        "LSD_DD_API_KEY",
-        "LSD_DD_ENDPOINT",
-        "LSD_DEPLOYMENT_TYPE",
-    ]
-)
-
-_API_KEY_ENV_NAMES = (
-    "LANGGRAPH_HOST_API_KEY",
-    "LANGSMITH_API_KEY",
-    "LANGCHAIN_API_KEY",
-)
-
-_DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
-
-
-def _resolve_env_path(
-    config_json: dict, config_path: pathlib.Path
-) -> pathlib.Path | None:
-    """Return the .env file path implied by the config, or None for inline dicts."""
-    env_field = config_json.get("env")
-    if isinstance(env_field, dict) and env_field:
-        return None
-    if isinstance(env_field, str):
-        env_path = (config_path.parent / env_field).resolve()
-        if not env_path.exists():
-            click.secho(
-                f"Warning: env file '{env_field}' specified in langgraph.json not found.",
-                fg="yellow",
-            )
-            return None
-        return env_path
-    return pathlib.Path.cwd() / ".env"
-
-
-def _parse_env_from_config(
-    config_json: dict, config_path: pathlib.Path
-) -> dict[str, str]:
-    """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
-    env_field = config_json.get("env")
-    if isinstance(env_field, dict) and env_field:
-        return {str(k): str(v) for k, v in env_field.items()}
-    env_path = _resolve_env_path(config_json, config_path)
-    if env_path is None:
-        return {}
-    return {k: v for k, v in dotenv_values(env_path).items() if v is not None}
-
-
-def _secrets_from_env(
-    env_vars: dict[str, str],
-) -> list[dict[str, str]]:
-    """Convert env dict to secrets list, filtering reserved vars with warnings."""
-    secrets: list[dict[str, str]] = []
-    for name, value in env_vars.items():
-        if name in RESERVED_ENV_VARS:
-            click.secho(f"   Skipping reserved env var: {name}", fg="yellow")
-            continue
-        if not value:
-            continue
-        secrets.append({"name": name, "value": value})
-    return secrets
-
-
-_TERMINAL_STATUSES = frozenset(
-    [
-        "DEPLOYED",
-        "CREATE_FAILED",
-        "BUILD_FAILED",
-        "DEPLOY_FAILED",
-        "SKIPPED",
-    ]
-)
-
-
-@contextmanager
-def _docker_config_for_token(registry_host: str, token: str):
-    """Create a temporary Docker config with only the push token.
-
-    Yields the path to a temporary config directory that can be passed
-    to ``docker --config <path>`` so that system credential helpers
-    (e.g. gcloud) don't interfere with the push token.
-    """
-    auth_b64 = base64.b64encode(f"oauth2accesstoken:{token}".encode()).decode()
-    config_data = {"auths": {registry_host: {"auth": auth_b64}}}
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with open(os.path.join(tmpdir, "config.json"), "w") as f:
-            json_mod.dump(config_data, f)
-        yield tmpdir
-
+# ---------------------------------------------------------------------------
+# Shared Click options (non-deploy)
+# ---------------------------------------------------------------------------
 
 OPT_DOCKER_COMPOSE = click.option(
     "--docker-compose",
@@ -304,39 +162,17 @@ OPT_API_VERSION = click.option(
     help="API server version to use for the base image. If unspecified, the latest version will be used.",
 )
 
-OPT_HOST_API_KEY = click.option(
-    "--api-key",
-    envvar="LANGGRAPH_HOST_API_KEY",
-    help=(
-        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
-        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
-    ),
-)
-
-
-OPT_HOST_DEPLOYMENT_NAME = click.option(
-    "--name",
-    envvar=_DEPLOYMENT_NAME_ENV,
-    help=(
-        "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
-        "environment variable or .env file. Defaults to current directory name "
-        "if --deployment-id is not provided."
-    ),
-)
-
-OPT_HOST_URL = click.option(
-    "--host-url",
-    envvar="LANGGRAPH_HOST_URL",
-    default="https://api.host.langchain.com",
-    hidden=True,
-)
-
 OPT_ENGINE_RUNTIME_MODE = click.option(
     "--engine-runtime-mode",
     type=click.Choice(["combined_queue_worker", "distributed"]),
     default="combined_queue_worker",
     help="Runtime mode. 'distributed' uses separate executor and orchestrator containers.",
 )
+
+
+# ---------------------------------------------------------------------------
+# Top-level CLI group
+# ---------------------------------------------------------------------------
 
 
 class NestedHelpGroup(click.Group):
@@ -384,42 +220,19 @@ class NestedHelpGroup(click.Group):
                 formatter.write_dl(rows)
 
 
-class DeployGroup(NestedHelpGroup):
-    """Group that treats leading '-' args as passthrough docker flags."""
-
-    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
-        """Treat leading option-like subcommand tokens as passthrough args.
-
-        Click stores the unresolved nested command token on the context after
-        ``Group.parse_args()`` runs, but the backing attribute changed across
-        supported Click versions. Click 8.1.x stores the value directly on
-        ``protected_args``, while Click 8.2+ stores it on ``_protected_args``
-        and exposes ``protected_args`` as a deprecated compatibility property.
-        Since this package allows ``click>=8.1.7``, we need to check both
-        names to support the full version range without relying on one
-        version-specific internal detail.
-        """
-        result = super().parse_args(ctx, args)
-        protected_args = ctx.__dict__.get("protected_args")
-        if protected_args is None:
-            protected_args = ctx.__dict__.get("_protected_args", [])
-        if protected_args and protected_args[0].startswith("-"):
-            # Click stores the would-be subcommand in _protected_args; if it looks
-            # like an option (e.g. --build-arg) treat it as passthrough docker
-            # args instead of insisting on a nested command.
-            ctx.args = [*protected_args, *ctx.args]
-            if "protected_args" in ctx.__dict__:
-                ctx.protected_args = []
-            elif "_protected_args" in ctx.__dict__:
-                ctx._protected_args = []
-            return ctx.args
-        return result
-
-
 @click.group(cls=NestedHelpGroup)
 @click.version_option(version=__version__, prog_name="LangGraph CLI")
 def cli():
     pass
+
+
+# Wire the deploy group (defined in deploy.py) into the top-level CLI.
+cli.add_command(deploy)
+
+
+# ---------------------------------------------------------------------------
+# up command
+# ---------------------------------------------------------------------------
 
 
 @OPT_RECREATE
@@ -552,79 +365,9 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
         )
 
 
-def _build(
-    runner,
-    set: Callable[[str], None],
-    config: pathlib.Path,
-    config_json: dict,
-    base_image: str | None,
-    api_version: str | None,
-    pull: bool,
-    tag: str,
-    passthrough: Sequence[str] = (),
-    install_command: str | None = None,
-    build_command: str | None = None,
-    docker_command: Sequence[str] | None = None,
-    extra_flags: Sequence[str] = (),
-    verbose: bool = True,
-):
-    # pull latest images
-    if pull:
-        runner.run(
-            subp_exec(
-                "docker",
-                "pull",
-                langgraph_cli.config.docker_tag(config_json, base_image, api_version),
-                verbose=verbose,
-            )
-        )
-    set("Building...")
-    # apply options
-    args = [
-        "-f",
-        "-",  # stdin
-        "-t",
-        tag,
-    ]
-    # determine build context: use current directory for JS projects, config parent for Python
-    is_js_project = config_json.get("node_version") and not config_json.get(
-        "python_version"
-    )
-    # build/install commands only apply to JS projects for now
-    # without install/build command, JS projects will follow the old behavior
-    if is_js_project and (build_command or install_command):
-        build_context = str(pathlib.Path.cwd())
-    else:
-        build_context = str(config.parent)
-
-    # Deep copy to avoid mutating the caller's config (config_to_docker
-    # rewrites graph paths to container-internal paths in place).
-    config_json = copy.deepcopy(config_json)
-    stdin, additional_contexts = langgraph_cli.config.config_to_docker(
-        config_path=config,
-        config=config_json,
-        base_image=base_image,
-        api_version=api_version,
-        install_command=install_command,
-        build_command=build_command,
-        build_context=build_context,
-    )
-    # add additional_contexts
-    if additional_contexts:
-        for k, v in additional_contexts.items():
-            args.extend(["--build-context", f"{k}={v}"])
-    cmd = tuple(docker_command) if docker_command else ("docker", "build")
-    runner.run(
-        subp_exec(
-            *cmd,
-            *args,
-            *extra_flags,
-            *passthrough,
-            build_context,
-            input=stdin,
-            verbose=verbose,
-        )
-    )
+# ---------------------------------------------------------------------------
+# build command
+# ---------------------------------------------------------------------------
 
 
 @OPT_CONFIG
@@ -699,7 +442,7 @@ def build(
             effective_base_image = langgraph_cli.config.default_base_image(
                 config_json, engine_runtime_mode=engine_runtime_mode
             )
-        _build(
+        build_docker_image(
             runner,
             set,
             config,
@@ -714,833 +457,9 @@ def build(
         )
 
 
-def _deploy_base_options(
-    func: Callable | None = None,
-    *,
-    include_docker_args: bool = True,
-    validate_config_path: bool = True,
-):
-    """Apply shared deploy flags.
-
-    The group shares most options but should not consume subcommands, so the
-    docker build args are only attached when requested.
-    """
-
-    def _apply(target: Callable) -> Callable:
-        decorators = [
-            OPT_HOST_API_KEY,
-            OPT_HOST_DEPLOYMENT_NAME,
-            click.option(
-                "--deployment-id",
-                help=(
-                    "ID of an existing deployment to update. If omitted, "
-                    "--name is used to find or create the deployment."
-                ),
-            ),
-            click.option(
-                "--deployment-type",
-                type=click.Choice(["dev", "prod"]),
-                default="dev",
-                show_default=True,
-                help="Deployment type (used when creating a new deployment).",
-            ),
-            click.option(
-                "--no-wait",
-                is_flag=True,
-                default=False,
-                help="Skip waiting for deployment status.",
-            ),
-            OPT_VERBOSE,
-            OPT_HOST_URL,
-            click.option("--image-name", hidden=True),
-            click.option(
-                "--tag",
-                "-t",
-                default="latest",
-                show_default=True,
-                help="Tag to use for the pushed deployment image.",
-            ),
-            click.option(
-                "--config",
-                "-c",
-                default=DEFAULT_CONFIG,
-                hidden=True,
-                type=click.Path(
-                    exists=validate_config_path,
-                    file_okay=True,
-                    dir_okay=False,
-                    resolve_path=True,
-                    path_type=pathlib.Path,
-                ),
-            ),
-            click.option("--pull/--no-pull", default=True, hidden=True),
-            click.option("--base-image", hidden=True),
-            click.option("--install-command", hidden=True),
-            click.option("--build-command", hidden=True),
-            click.option("--api-version", type=str, hidden=True),
-        ]
-        if include_docker_args:
-            # Only attach build args to the default command; on the group they
-            # would capture subcommand names like `list` before Click resolves
-            # them, making those subcommands unreachable.
-            decorators.append(
-                click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
-            )
-        for decorator in reversed(decorators):
-            target = decorator(target)
-        return target
-
-    return _apply(func) if func is not None else _apply
-
-
-@cli.group(
-    cls=DeployGroup,
-    help=(
-        "[Beta] Build and deploy a LangGraph image to LangSmith Deployment.\n\n"
-        "This command is in beta and under active development. "
-        "Expect frequent updates and improvements.\n\n"
-        "Run from the root of your LangGraph project (where langgraph.json "
-        "is located). This command also accepts build flags (--base-image, "
-        "--config, --pull, etc.). See 'langgraph build --help' for details."
-    ),
-    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
-    invoke_without_command=True,  # allow `deploy` click group to execute without command
-)
-@_deploy_base_options(include_docker_args=False, validate_config_path=False)
-@click.pass_context
-@log_command
-def deploy(ctx: click.Context, **_: object):
-    # We register deploy as both a group and a command here.
-    # if we detect no subcommand, we run _deploy (basically run langgraph deploy as a top level command)
-    # otherwise, we return None here and click will proceed to actually run the subcommand (list or delete)
-    if ctx.invoked_subcommand is not None:
-        return
-    docker_build_args = tuple(ctx.args)
-    ctx.args = []  # Prevent Click from re-processing passthrough args later.
-    return ctx.forward(_deploy, docker_build_args=docker_build_args)
-
-
-@deploy.group(
-    "revisions", cls=NestedHelpGroup, help="[Beta] Manage deployment revisions."
-)
-def deploy_revisions() -> None:
-    pass
-
-
-@_deploy_base_options()
-@click.command(context_settings=dict(ignore_unknown_options=True))
-def _deploy(
-    config: pathlib.Path,
-    pull: bool,
-    verbose: bool,
-    api_version: str | None,
-    host_url: str | None,
-    api_key: str | None,
-    deployment_id: str | None,
-    deployment_type: str,
-    name: str | None,
-    image_name: str | None,
-    tag: str,
-    base_image: str | None,
-    install_command: str | None,
-    build_command: str | None,
-    no_wait: bool,
-    docker_build_args: Sequence[str],
-):
-    click.secho(
-        "Note: 'langgraph deploy' is in beta. Expect frequent updates and improvements.",
-        fg="yellow",
-    )
-    click.echo()
-    config_json = langgraph_cli.config.validate_config_file(config)
-    warn_non_wolfi_distro(config_json)
-
-    env_vars = _parse_env_from_config(config_json, config)
-
-    if not deployment_id and not name:
-        name = env_vars.get(_DEPLOYMENT_NAME_ENV)
-    if not deployment_id and not name:
-        default_name = _normalize_image_name(pathlib.Path.cwd().name)
-        name = click.prompt("Deployment name", default=default_name)
-        # Persist so the user doesn't have to type it again next time
-        env_path = _resolve_env_path(config_json, config)
-        if env_path is not None:
-            set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
-            click.echo(f"Saved deployment name to {env_path}")
-
-    # Remove deployment name before converting to secrets — it's consumed above
-    # and is in RESERVED_ENV_VARS, so _secrets_from_env would warn about it.
-    env_vars.pop(_DEPLOYMENT_NAME_ENV, None)
-    secrets = _secrets_from_env(env_vars)
-
-    # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
-    # (e.g. Apple Silicon). On amd64 hosts, plain docker build is sufficient.
-    needs_buildx = platform.machine() != "x86_64"
-    local_tag = f"langgraph-deploy-tmp:{int(time.time())}"
-
-    with Runner() as runner:
-        if shutil.which("docker") is None:
-            raise click.UsageError(
-                "Docker is required but not installed.\n"
-                "Install Docker Desktop: https://docs.docker.com/get-docker/\n\n"
-                "Remote builds (no Docker required) are coming in a future update."
-            )
-        if needs_buildx:
-            try:
-                runner.run(subp_exec("docker", "buildx", "version", collect=True))
-            except click.exceptions.Exit:
-                raise click.UsageError(
-                    "Docker Buildx is required but not installed.\n"
-                    "Your machine architecture ("
-                    + platform.machine()
-                    + ") requires Buildx to cross-compile images for linux/amd64.\n"
-                    "Install Buildx: https://docs.docker.com/build/install-buildx/\n\n"
-                    "Remote builds (no Docker required) are coming in a future update."
-                ) from None
-
-        def log_step(message: str) -> None:
-            click.secho(message, fg="cyan")
-
-        client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
-        step = 1
-        needs_creation = False
-
-        if deployment_id:
-            log_step(f"{step}. Using deployment {deployment_id}")
-            _call_host_backend_with_optional_tenant(
-                client, lambda c: c.get_deployment(deployment_id)
-            )
-            step += 1
-        else:
-            log_step(f"{step}. Looking up deployment '{name}'")
-            existing = _call_host_backend_with_optional_tenant(
-                client, lambda c: c.list_deployments(name_contains=name)
-            )
-            found_id = None
-            if isinstance(existing, dict):
-                for dep in existing.get("resources", []):
-                    if isinstance(dep, dict) and dep.get("name") == name:
-                        found_id = dep.get("id")
-                        break
-            if found_id:
-                deployment_id = str(found_id)
-                click.secho(
-                    f"   Found existing deployment (ID: {deployment_id})",
-                    fg="green",
-                )
-            else:
-                needs_creation = True
-                click.secho(
-                    "   No deployment found. Will create after build.", fg="yellow"
-                )
-            step += 1
-
-        # -- Step: Build image --
-        log_step(f"{step}. Building image")
-        if needs_buildx:
-            build_flags: list[str] = [
-                "--platform",
-                "linux/amd64",
-                "--load",
-            ]
-            if not verbose:
-                build_flags.append("--progress=quiet")
-            with Progress(message="Building...", elapsed=not verbose):
-                _build(
-                    runner,
-                    lambda _msg: None,
-                    config,
-                    config_json,
-                    base_image,
-                    api_version,
-                    pull,
-                    local_tag,
-                    docker_build_args,
-                    install_command,
-                    build_command,
-                    docker_command=("docker", "buildx", "build"),
-                    extra_flags=build_flags,
-                    verbose=verbose,
-                )
-        else:
-            with Progress(message="Building...", elapsed=not verbose):
-                _build(
-                    runner,
-                    lambda _msg: None,
-                    config,
-                    config_json,
-                    base_image,
-                    api_version,
-                    pull,
-                    local_tag,
-                    docker_build_args,
-                    install_command,
-                    build_command,
-                    verbose=verbose,
-                )
-        step += 1
-
-        if needs_creation:
-            log_step(f"{step}. Creating deployment '{name}'")
-            payload = {
-                "name": name,
-                "source": "internal_docker",
-                "source_config": {"deployment_type": deployment_type},
-                "source_revision_config": {},
-                "secrets": secrets,
-            }
-            created = client.create_deployment(payload)
-            created_id = created.get("id") if isinstance(created, dict) else None
-            if not isinstance(created_id, str) or not created_id:
-                raise HostBackendError(
-                    "POST /v2/deployments succeeded but response missing a valid 'id'"
-                )
-            deployment_id = created_id
-            click.secho(f"   Deployment ID: {deployment_id}", fg="green")
-            step += 1
-
-        # -- Step: Get push token and authenticate --
-        log_step(f"{step}. Requesting push token")
-        try:
-            push_data = client.request_push_token(deployment_id)
-        except HostBackendError as err:
-            if (
-                err.status_code == 400
-                and "only available for 'internal_docker' source deployments"
-                in err.message
-            ):
-                raise click.ClickException(
-                    f"Deployment '{deployment_id}' was not created by 'langgraph deploy' "
-                    "and cannot be updated with this command.\n"
-                    "Please create a new deployment by running 'langgraph deploy' "
-                    "without --deployment-id, or use a different --name."
-                ) from None
-            raise
-        deployment_token = push_data.get("token")
-        registry_url = push_data.get("registry_url")
-        if not deployment_token or not registry_url:
-            raise click.ClickException(
-                "Push token response missing token or registry_url"
-            )
-        step += 1
-
-        normalized_registry = registry_url.rstrip("/")
-        if "://" in normalized_registry:
-            normalized_registry = normalized_registry.split("//", 1)[1]
-        repo_seed = image_name or name or config.parent.name
-        repo_name = _normalize_image_name(repo_seed)
-        tag_value = _normalize_image_tag(tag)
-        remote_image = f"{normalized_registry}/{repo_name}:{tag_value}"
-
-        registry_host = normalized_registry.split("/")[0]
-
-        # Use a clean Docker config with only the push token so that
-        # system credential helpers (e.g. gcloud) don't interfere.
-        with _docker_config_for_token(registry_host, deployment_token) as cfg:
-            log_step(f"{step}. Logging into {registry_host}")
-            token_input = (
-                deployment_token
-                if deployment_token.endswith("\n")
-                else f"{deployment_token}\n"
-            )
-            runner.run(
-                subp_exec(
-                    "docker",
-                    "--config",
-                    cfg,
-                    "login",
-                    "-u",
-                    "oauth2accesstoken",
-                    "--password-stdin",
-                    registry_host,
-                    input=token_input,
-                    verbose=verbose,
-                )
-            )
-            step += 1
-
-            # -- Step: Tag and push --
-            log_step(f"{step}. Pushing image {remote_image}")
-            runner.run(
-                subp_exec(
-                    "docker",
-                    "tag",
-                    local_tag,
-                    remote_image,
-                    verbose=verbose,
-                )
-            )
-            max_push_retries = 3
-            for attempt in range(max_push_retries):
-                try:
-                    with Progress(message="Pushing...", elapsed=not verbose):
-                        runner.run(
-                            subp_exec(
-                                "docker",
-                                "--config",
-                                cfg,
-                                "push",
-                                remote_image,
-                                verbose=verbose,
-                            )
-                        )
-                    break
-                except click.exceptions.Exit:
-                    if attempt < max_push_retries - 1:
-                        click.secho(
-                            f"   Push failed, retrying (attempt {attempt + 2} of {max_push_retries})...",
-                            fg="yellow",
-                        )
-                    else:
-                        raise
-        step += 1
-
-        # -- Step: Update deployment --
-        log_step(f"{step}. Updating deployment {deployment_id}")
-        updated = client.update_deployment(deployment_id, remote_image, secrets=secrets)
-        tenant_id = updated.get("tenant_id") if isinstance(updated, dict) else None
-        if tenant_id:
-            status_url = (
-                f"https://smith.langchain.com/o/{tenant_id}"
-                f"/host/deployments/{deployment_id}"
-            )
-            click.secho(f"   View status: {status_url}", fg="cyan")
-
-        if no_wait:
-            click.secho("   Deployment updated", fg="green")
-            return
-
-        # -- Poll revision status --
-        revisions_resp = client.list_revisions(deployment_id, limit=1)
-        resources = (
-            revisions_resp.get("resources", [])
-            if isinstance(revisions_resp, dict)
-            else []
-        )
-        if not resources:
-            click.secho("   Deployment updated", fg="green")
-            return
-
-        revision_id = str(resources[0]["id"])
-        last_status = ""
-
-        deadline = time.time() + 300
-        with Progress(message="Deploying...", elapsed=True) as set_progress:
-            while time.time() < deadline:
-                rev = client.get_revision(deployment_id, revision_id)
-                status = (
-                    rev.get("status", "UNKNOWN") if isinstance(rev, dict) else "UNKNOWN"
-                )
-                if status != last_status:
-                    last_status = status
-                    # pause spinner so we can avoid conflict when writing status
-                    set_progress("")
-                    click.secho(f"   Status: {status}", fg="cyan")
-                    if status in _TERMINAL_STATUSES:
-                        break
-                    set_progress(f"{status}...")
-                time.sleep(1)
-            else:
-                set_progress("")
-
-        dep_info = client.get_deployment(deployment_id)
-        custom_url = None
-        if isinstance(dep_info, dict):
-            sc = dep_info.get("source_config")
-            if isinstance(sc, dict):
-                custom_url = sc.get("custom_url")
-
-        if last_status == "DEPLOYED":
-            click.secho("   Deployment successful!", fg="green")
-            if custom_url:
-                click.secho(f"   URL: {custom_url}", fg="green")
-        elif last_status in ("BUILD_FAILED", "DEPLOY_FAILED", "CREATE_FAILED"):
-            click.secho(f"   Deployment failed: {last_status}", fg="red")
-            raise click.exceptions.Exit(1)
-        else:
-            click.secho(
-                f"   Timed out waiting for deployment (last status: {last_status}).",
-                fg="yellow",
-            )
-            if custom_url:
-                click.secho(
-                    f"   Check status at: {custom_url}",
-                    fg="yellow",
-                )
-            else:
-                click.secho(
-                    "   Check status in the LangSmith Deployment dashboard.",
-                    fg="yellow",
-                )
-
-
-def _create_host_backend_client(
-    host_url: str | None,
-    api_key: str | None,
-    env_vars: dict[str, str] | None = None,
-) -> HostBackendClient:
-    if env_vars is None:
-        env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
-    resolved_api_key = api_key
-    if not resolved_api_key:
-        for key_name in _API_KEY_ENV_NAMES:
-            val = env_vars.get(key_name)
-            if val:
-                resolved_api_key = val
-                break
-            val = os.environ.get(key_name)
-            if val:
-                resolved_api_key = val
-                break
-    if not resolved_api_key:
-        click.secho(
-            "No LangSmith API key found. Create one at Settings > API Keys in LangSmith.",
-            fg="yellow",
-        )
-        resolved_api_key = click.prompt("Enter LangSmith API key", hide_input=True)
-    return HostBackendClient(host_url, resolved_api_key)
-
-
-def _call_host_backend_with_optional_tenant(
-    client: HostBackendClient,
-    operation: Callable[[HostBackendClient], object],
-) -> object:
-    """Run *operation*, prompting for a workspace ID on org-scoped 403s.
-
-    On success the original *client* is returned as-is.  If the user is
-    prompted for a workspace ID, the tenant header is set on *client*
-    in-place so all subsequent calls through the same instance are
-    tenant-aware.
-    """
-    prompted_for_tenant = False
-
-    while True:
-        try:
-            return operation(client)
-        except HostBackendError as err:
-            if (
-                not prompted_for_tenant
-                and err.status_code == 403
-                and "requires workspace specification" in err.message
-            ):
-                click.secho(
-                    "Your API key is org-scoped and requires a workspace ID.",
-                    fg="yellow",
-                )
-                click.secho(
-                    "Find your workspace ID in LangSmith under Settings > Workspaces.",
-                    fg="yellow",
-                )
-                client._client.headers["X-Tenant-ID"] = click.prompt("Workspace ID")
-                prompted_for_tenant = True
-                continue
-            if err.status_code == 403 and "not enabled" in err.message.lower():
-                from urllib.parse import urlparse
-
-                smith_host = "smith.langchain.com"
-                parsed = urlparse(client._base_url)
-                if (parsed.hostname or "").startswith("eu."):
-                    smith_host = "eu.smith.langchain.com"
-                raise HostBackendError(
-                    "LangSmith Deployment is not enabled for this organization. "
-                    f"Enable it at https://{smith_host}/host/deployments"
-                    " (ensure this matches the organization for your API key).",
-                    status_code=403,
-                ) from None
-            raise
-
-
-@OPT_HOST_API_KEY
-@OPT_HOST_URL
-@click.option(
-    "--name-contains",
-    default="",
-    help="Only show deployments whose names contain this value.",
-)
-@deploy.command("list", help="[Beta] List LangSmith Deployments.")
-def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -> None:
-    client = _create_host_backend_client(host_url, api_key)
-    response = _call_host_backend_with_optional_tenant(
-        client,
-        lambda c: c.list_deployments(name_contains=name_contains),
-    )
-    resources = response.get("resources", []) if isinstance(response, dict) else []
-    deployments = [item for item in resources if isinstance(item, dict)]
-    if not deployments:
-        click.echo("No deployments found.")
-        return
-    click.echo(format_deployments_table(deployments))
-
-
-@OPT_HOST_API_KEY
-@OPT_HOST_URL
-@click.option(
-    "--limit",
-    type=int,
-    default=10,
-    show_default=True,
-    help="Maximum number of revisions to return.",
-)
-@click.argument("deployment_id")
-@deploy_revisions.command(
-    "list",
-    help=(
-        "[Beta] List revisions for a LangSmith Deployment.\n\n"
-        "Use the `deploy list` command to list deployment IDs."
-    ),
-)
-def deploy_revisions_list(
-    api_key: str | None, host_url: str | None, limit: int, deployment_id: str
-) -> None:
-    client = _create_host_backend_client(host_url, api_key)
-    response = _call_host_backend_with_optional_tenant(
-        client,
-        lambda c: c.list_revisions(deployment_id, limit=limit),
-    )
-    resources = response.get("resources", []) if isinstance(response, dict) else []
-    revisions = [item for item in resources if isinstance(item, dict)]
-    if not revisions:
-        click.echo(f"No revisions found for deployment {deployment_id}.")
-        return
-    click.echo(format_revisions_table(revisions))
-
-
-@OPT_HOST_API_KEY
-@OPT_HOST_URL
-@click.option(
-    "--force",
-    is_flag=True,
-    default=False,
-    help="Delete without prompting for confirmation.",
-)
-@click.argument("deployment_id")
-@deploy.command(
-    "delete",
-    help=(
-        "[Beta] Delete a LangSmith Deployment.\n\n"
-        "Use the `deploy list` command to list deployment IDs."
-    ),
-)
-def deploy_delete(
-    api_key: str | None, host_url: str | None, force: bool, deployment_id: str
-) -> None:
-    if not force:
-        response = click.prompt(
-            click.style(
-                f"Are you sure you want to delete deployment ID {deployment_id}? (Y/n)",
-                fg="yellow",
-            ),
-            default="Y",
-            show_default=False,
-        )
-        if response.strip().lower() not in {"y", "yes"}:
-            raise click.Abort()
-    client = _create_host_backend_client(host_url, api_key)
-    _call_host_backend_with_optional_tenant(
-        client,
-        lambda c: c.delete_deployment(deployment_id),
-    )
-    click.secho(f"Deleted deployment {deployment_id}.", fg="green")
-
-
-def _normalize_image_name(value: str | None) -> str:
-    """Sanitize a deployment/directory name into a valid Docker repository name.
-
-    Docker repository names must be lowercase and may only contain
-    [a-z0-9._-].  Invalid characters are replaced with hyphens.
-    """
-    if not value:
-        return "app"
-    slug = re.sub(r"[^a-z0-9._-]+", "-", value.lower()).strip("-.")
-    return slug or "app"
-
-
-def _normalize_image_tag(value: str) -> str:
-    """Validate and return a Docker image tag.
-
-    Tags may only contain [A-Za-z0-9_.-].  Defaults to "latest" when empty.
-    """
-    if not value:
-        value = "latest"
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+", value):
-        raise click.UsageError(
-            "Image tag may only contain characters A-Z, a-z, 0-9, '_', '-', '.'"
-        )
-    return value
-
-
-@OPT_HOST_API_KEY
-@OPT_HOST_DEPLOYMENT_NAME
-@click.option(
-    "--deployment-id",
-    help="Deployment ID. If omitted, --name is used to find the deployment.",
-)
-@click.option(
-    "--type",
-    "log_type",
-    type=click.Choice(["deploy", "build"]),
-    default="deploy",
-    show_default=True,
-    help=(
-        "Log stream to fetch: 'deploy' shows agent server runtime logs; "
-        "'build' shows build logs (for deployments built remotely)."
-    ),
-)
-@click.option(
-    "--revision-id",
-    help="Specific revision ID. For build logs, defaults to latest revision.",
-)
-@click.option(
-    "--level",
-    type=click.Choice(
-        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
-    ),
-    help="Filter by log level.",
-)
-@click.option(
-    "--limit",
-    type=int,
-    default=100,
-    show_default=True,
-    help="Max log entries to fetch.",
-)
-@click.option(
-    "--query",
-    "-q",
-    help="Search string filter.",
-)
-@click.option(
-    "--start-time",
-    help="ISO8601 start time (e.g. 2026-03-08T00:00:00Z).",
-)
-@click.option(
-    "--end-time",
-    help="ISO8601 end time. (e.g. 2026-03-08T00:00:00Z)",
-)
-@click.option(
-    "--follow",
-    "-f",
-    is_flag=True,
-    default=False,
-    help="Continuously poll for new logs.",
-)
-@OPT_HOST_URL
-@deploy.command(
-    "logs",
-    help=(
-        "[Beta] Fetch LangSmith Deployment logs. Use 'deploy' for agent runtime "
-        "logs, or 'build' for remote build logs."
-    ),
-)
-@log_command
-def deploy_logs(
-    api_key: str | None,
-    name: str | None,
-    deployment_id: str | None,
-    log_type: str,
-    revision_id: str | None,
-    level: str | None,
-    limit: int,
-    query: str | None,
-    start_time: str | None,
-    end_time: str | None,
-    follow: bool,
-    host_url: str,
-):
-    env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
-    client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
-    if not deployment_id and not name:
-        name = env_vars.get(_DEPLOYMENT_NAME_ENV)
-    dep_id = _call_host_backend_with_optional_tenant(
-        client, lambda c: resolve_deployment_id(c, deployment_id, name)
-    )
-
-    if log_type == "build" and not revision_id:
-        revisions_resp = client.list_revisions(dep_id, limit=1)
-        resources = (
-            revisions_resp.get("resources", [])
-            if isinstance(revisions_resp, dict)
-            else []
-        )
-        if not resources:
-            raise click.ClickException(
-                "No revisions found for this deployment. Cannot fetch build logs."
-            )
-        revision_id = str(resources[0]["id"])
-        click.secho(f"Using latest revision: {revision_id}", fg="cyan")
-
-    payload: dict = {"limit": limit, "order": "desc"}
-    if level:
-        payload["level"] = level.upper()
-    if query:
-        payload["query"] = query
-    if start_time:
-        payload["start_time"] = start_time
-    if end_time:
-        payload["end_time"] = end_time
-
-    def _fetch(request_payload: dict) -> list[dict]:
-        if log_type == "build":
-            resp = client.get_build_logs(dep_id, revision_id, request_payload)
-        else:
-            resp = client.get_deploy_logs(dep_id, request_payload, revision_id)
-
-        if isinstance(resp, dict):
-            return resp.get("logs", [])
-        return []
-
-    def _print_entries(entries: list[dict], *, reverse: bool = False) -> None:
-        iterable = reversed(entries) if reverse else entries
-        for entry in iterable:
-            line = format_log_entry(entry)
-            fg = level_fg(entry.get("level", ""))
-            click.secho(line, fg=fg)
-
-    def _fetch_and_print(request_payload: dict, *, reverse: bool = False) -> list[dict]:
-        entries = _fetch(request_payload)
-        _print_entries(entries, reverse=reverse)
-        return entries
-
-    def _fetch_and_print_new(request_payload: dict, seen_ids: set[str]) -> list[dict]:
-        entries = _fetch(request_payload)
-        new = [e for e in entries if e.get("id", "") not in seen_ids]
-        if new:
-            _print_entries(new)
-            seen_ids.update(e.get("id", "") for e in new)
-        return new
-
-    # initial log fetch will be newest -> oldest, so we need to reverse
-    entries = _fetch_and_print(payload, reverse=True)
-
-    if not follow:
-        if not entries:
-            click.secho("No log entries found.", fg="yellow")
-        return
-
-    payload["order"] = "asc"
-    seen_ids: set[str] = {e.get("id", "") for e in entries if e.get("id")}
-
-    def _update_start_time(ts) -> None:
-        if ts is None:
-            return
-        if isinstance(ts, (int, float)):
-            dt = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
-            payload["start_time"] = dt.isoformat()
-        else:
-            payload["start_time"] = str(ts)
-
-    if entries:
-        # entries are in descending order here, so index 0 is the newest log
-        _update_start_time(entries[0].get("timestamp"))
-
-    try:
-        while True:
-            time.sleep(2)
-            new_entries = _fetch_and_print_new(payload, seen_ids)
-            if new_entries:
-                _update_start_time(new_entries[-1].get("timestamp"))
-    except KeyboardInterrupt:
-        click.echo("\nStopped.")
+# ---------------------------------------------------------------------------
+# dockerfile command
+# ---------------------------------------------------------------------------
 
 
 def _get_docker_ignore_content() -> str:
@@ -1604,7 +523,6 @@ tests
     help="🐳 Generate a Dockerfile for the LangGraph API server, with Docker Compose options."
 )
 @click.option(
-    # Add a flag for adding a docker-compose.yml file as part of the output
     "--add-docker-compose",
     help=(
         "Add additional files for running the LangGraph API server with "
@@ -1630,6 +548,8 @@ def dockerfile(
     api_version: str | None = None,
     engine_runtime_mode: str = "combined_queue_worker",
 ) -> None:
+    from click import secho
+
     save_path = pathlib.Path(save_path).absolute()
     secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
     config_json = langgraph_cli.config.validate_config_file(config)
@@ -1643,14 +563,14 @@ def dockerfile(
         )
 
     secho(f"📝 Generating Dockerfile at {save_path}", fg="yellow")
-    dockerfile, additional_contexts = langgraph_cli.config.config_to_docker(
+    dockerfile_content, additional_contexts = langgraph_cli.config.config_to_docker(
         config_path=config,
         config=config_json,
         base_image=effective_base_image,
         api_version=api_version,
     )
     with open(str(save_path), "w", encoding="utf-8") as f:
-        f.write(dockerfile)
+        f.write(dockerfile_content)
     secho("✅ Created: Dockerfile", fg="green")
 
     if additional_contexts:
@@ -1726,6 +646,11 @@ def dockerfile(
         fg="cyan",
         bold=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# dev command
+# ---------------------------------------------------------------------------
 
 
 @click.option(
@@ -1892,6 +817,11 @@ def dev(
     )
 
 
+# ---------------------------------------------------------------------------
+# new command
+# ---------------------------------------------------------------------------
+
+
 @click.argument("path", required=False)
 @click.option(
     "--template",
@@ -1903,6 +833,11 @@ def dev(
 def new(path: str | None, template: str | None) -> None:
     """Create a new LangGraph project from a template."""
     return create_new(path, template)
+
+
+# ---------------------------------------------------------------------------
+# Compose helpers (used by up and tests)
+# ---------------------------------------------------------------------------
 
 
 def prepare_args_and_stdin(
