@@ -901,7 +901,7 @@ def get_build_tools_to_uninstall(config: Config) -> tuple[str]:
     else:
         raise ValueError(
             f"Invalid value for keep_pkg_tools: {keep_pkg_tools}."
-            " Expected True or a list containing any of {expected}."
+            f" Expected True or a list containing any of {expected}."
         )
 
 

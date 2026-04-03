@@ -586,7 +586,7 @@ class SyncThreadsClient:
 
             ```python
 
-            response = await client.threads.update_state(
+            response = client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
