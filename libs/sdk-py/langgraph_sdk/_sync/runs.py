@@ -266,7 +266,7 @@ class SyncRunsClient:
 
             ```python
             client = get_sync_client(url="http://localhost:2024")
-            async for chunk in client.runs.stream(
+            for chunk in client.runs.stream(
                 thread_id=None,
                 assistant_id="agent",
                 input={"messages": [{"role": "user", "content": "how are you?"}]},

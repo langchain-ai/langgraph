@@ -34,7 +34,7 @@ class ThreadsClient:
     ???+ example "Example"
 
         ```python
-        client = get_client(url="http://localhost:2024"))
+        client = get_client(url="http://localhost:2024")
         new_thread = await client.threads.create(metadata={"user_id": "123"})
         ```
     """
@@ -239,7 +239,7 @@ class ThreadsClient:
         ???+ example "Example Usage"
 
             ```python
-            client = get_client(url="http://localhost2024)
+            client = get_client(url="http://localhost:2024")
             await client.threads.delete(
                 thread_id="my_thread_id"
             )
@@ -381,7 +381,7 @@ class ThreadsClient:
         ???+ example "Example Usage"
 
             ```python
-            client = get_client(url="http://localhost:2024)
+            client = get_client(url="http://localhost:2024")
             await client.threads.copy(
                 thread_id="my_thread_id"
             )
@@ -459,7 +459,7 @@ class ThreadsClient:
         ???+ example "Example Usage"
 
             ```python
-            client = get_client(url="http://localhost:2024)
+            client = get_client(url="http://localhost:2024")
             thread_state = await client.threads.get_state(
                 thread_id="my_thread_id",
                 checkpoint_id="my_checkpoint_id"
@@ -597,7 +597,7 @@ class ThreadsClient:
         ???+ example "Example Usage"
 
             ```python
-            client = get_client(url="http://localhost:2024)
+            client = get_client(url="http://localhost:2024")
             response = await client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
@@ -660,7 +660,7 @@ class ThreadsClient:
         ???+ example "Example Usage"
 
             ```python
-            client = get_client(url="http://localhost:2024)
+            client = get_client(url="http://localhost:2024")
             thread_state = await client.threads.get_history(
                 thread_id="my_thread_id",
                 limit=5,

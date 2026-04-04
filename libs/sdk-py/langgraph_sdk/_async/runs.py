@@ -266,7 +266,7 @@ class RunsClient:
         ???+ example "Example Usage"
 
             ```python
-            client = get_client(url="http://localhost:2024)
+            client = get_client(url="http://localhost:2024")
             async for chunk in client.runs.stream(
                 thread_id=None,
                 assistant_id="agent",

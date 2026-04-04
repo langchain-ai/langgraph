@@ -24,7 +24,7 @@ class SyncStoreClient:
     ???+ example "Example"
 
         ```python
-        client = get_sync_client(url="http://localhost:2024"))
+        client = get_sync_client(url="http://localhost:2024")
         client.store.put_item(["users", "profiles"], "user123", {"name": "Alice", "age": 30})
         ```
     """

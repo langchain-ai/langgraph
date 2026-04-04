@@ -35,7 +35,7 @@ class CronClient:
     ???+ example "Example Usage"
 
         ```python
-        client = get_client(url="http://localhost:2024"))
+        client = get_client(url="http://localhost:2024")
         cron_job = await client.crons.create_for_thread(
             thread_id="thread_123",
             assistant_id="asst_456",
