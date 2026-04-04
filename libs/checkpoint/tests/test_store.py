@@ -1045,3 +1045,30 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+def test_put_preserves_created_at_on_update() -> None:
+    """Test that updating an existing key preserves the original created_at."""
+    import time
+
+    store = InMemoryStore()
+    ns = ("test",)
+
+    # Initial put
+    store.put(ns, "key", {"v": 1})
+    item1 = store.get(ns, "key")
+    assert item1 is not None
+    original_created_at = item1.created_at
+
+    # Brief wait so timestamps differ
+    time.sleep(0.01)
+
+    # Update same key
+    store.put(ns, "key", {"v": 2})
+    item2 = store.get(ns, "key")
+    assert item2 is not None
+
+    # created_at should be preserved, updated_at should be newer
+    assert item2.created_at == original_created_at
+    assert item2.updated_at > original_created_at
+    assert item2.value == {"v": 2}
