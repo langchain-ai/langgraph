@@ -1,13 +1,27 @@
+from collections import deque
 from unittest.mock import Mock, patch
 
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
+    CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_RUNTIME,
+    CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_THREAD_ID,
+)
 from langgraph.graph import START, StateGraph
-from langgraph.pregel._retry import _checkpoint_ns_for_parent_command, _should_retry_on
-from langgraph.runtime import Runtime
-from langgraph.types import RetryPolicy
+from langgraph.pregel._retry import (
+    _checkpoint_ns_for_parent_command,
+    _ensure_execution_info,
+    _should_retry_on,
+    run_with_retry,
+)
+from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
+from langgraph.types import PregelExecutableTask, RetryPolicy
 
 
 def test_should_retry_on_single_exception():
@@ -456,3 +470,100 @@ def test_execution_info_identity_fields_populated_on_retry():
     # node_attempt should increment
     assert captured_infos[0]["node_attempt"] == 1
     assert captured_infos[1]["node_attempt"] == 2
+
+
+def test_ensure_execution_info_noop_when_already_set():
+    """Test that _ensure_execution_info is a no-op when execution_info exists."""
+    existing_info = ExecutionInfo(
+        checkpoint_id="cp-1", checkpoint_ns="ns-1", task_id="task-1"
+    )
+    runtime = DEFAULT_RUNTIME.override(execution_info=existing_info)
+    config = {CONF: {CONFIG_KEY_THREAD_ID: "thread-1"}}
+    task = Mock(id="task-2")
+
+    result = _ensure_execution_info(runtime, config, task)
+    assert result is runtime
+    assert result.execution_info is existing_info
+
+
+def test_ensure_execution_info_creates_from_config():
+    """Test that _ensure_execution_info creates ExecutionInfo from config when missing."""
+    runtime = DEFAULT_RUNTIME.override(execution_info=None)
+    config = {
+        "run_id": "run-123",
+        CONF: {
+            CONFIG_KEY_CHECKPOINT_ID: "cp-42",
+            CONFIG_KEY_CHECKPOINT_NS: "ns-42",
+            CONFIG_KEY_TASK_ID: "task-42",
+            CONFIG_KEY_THREAD_ID: "thread-42",
+        },
+    }
+    task = Mock(id="fallback-task-id")
+
+    result = _ensure_execution_info(runtime, config, task)
+    assert result.execution_info is not None
+    assert result.execution_info.checkpoint_id == "cp-42"
+    assert result.execution_info.checkpoint_ns == "ns-42"
+    assert result.execution_info.task_id == "task-42"
+    assert result.execution_info.thread_id == "thread-42"
+    assert result.execution_info.run_id == "run-123"
+
+
+def test_ensure_execution_info_falls_back_to_task_id():
+    """Test that _ensure_execution_info uses task.id when CONFIG_KEY_TASK_ID is missing."""
+    runtime = DEFAULT_RUNTIME.override(execution_info=None)
+    config = {CONF: {}}
+    task = Mock(id="fallback-task-id")
+
+    result = _ensure_execution_info(runtime, config, task)
+    assert result.execution_info.task_id == "fallback-task-id"
+    assert result.execution_info.checkpoint_id == ""
+    assert result.execution_info.checkpoint_ns == ""
+
+
+def test_run_with_retry_creates_execution_info_when_missing():
+    """Test that run_with_retry works when runtime has no execution_info (distributed runtime scenario)."""
+    captured_infos: list[ExecutionInfo] = []
+
+    class FakeProc:
+        def invoke(self, input, config):
+            runtime = config[CONF][CONFIG_KEY_RUNTIME]
+            captured_infos.append(runtime.execution_info)
+            return input
+
+    runtime = DEFAULT_RUNTIME.override(execution_info=None)
+    config = {
+        "run_id": "run-abc",
+        CONF: {
+            CONFIG_KEY_RUNTIME: runtime,
+            CONFIG_KEY_CHECKPOINT_ID: "cp-99",
+            CONFIG_KEY_CHECKPOINT_NS: "__start__:task123",
+            CONFIG_KEY_TASK_ID: "task123",
+            CONFIG_KEY_THREAD_ID: "thread-xyz",
+        },
+    }
+
+    task = PregelExecutableTask(
+        name="__start__",
+        input={"messages": []},
+        proc=FakeProc(),
+        writes=deque(),
+        config=config,
+        triggers=["__start__"],
+        retry_policy=[],
+        cache_key=None,
+        id="task123",
+        path=("__pregel_pull", "__start__"),
+    )
+
+    run_with_retry(task, retry_policy=None)
+
+    assert len(captured_infos) == 1
+    info = captured_infos[0]
+    assert info.checkpoint_id == "cp-99"
+    assert info.checkpoint_ns == "__start__:task123"
+    assert info.task_id == "task123"
+    assert info.thread_id == "thread-xyz"
+    assert info.run_id == "run-abc"
+    assert info.node_attempt == 1
+    assert info.node_first_attempt_time is not None
