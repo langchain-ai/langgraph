@@ -7,8 +7,10 @@ declared as NotRequired in the custom state schema, the ToolNode should graceful
 handle missing fields by injecting None instead of raising KeyError.
 """
 
+import sys
 from typing import Annotated
 
+import pytest
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
 from langgraph.graph.message import add_messages
@@ -77,6 +79,10 @@ def _create_config_with_runtime(store=None, state=None):
     }
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="InjectedState field extraction from Optional[Annotated[...]] not supported on Python <3.11",
+)
 def test_injected_state_not_required_field_missing_injects_none():
     """Test that InjectedState with NotRequired field injects None when field is missing.
 
@@ -108,6 +114,10 @@ def test_injected_state_not_required_field_missing_injects_none():
     assert "No city provided" in tool_msg.content
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="InjectedState field extraction from Optional[Annotated[...]] not supported on Python <3.11",
+)
 def test_injected_state_not_required_field_present_works():
     """Test that InjectedState with NotRequired field works when field IS present."""
     tool_node = ToolNode([get_weather])
@@ -137,6 +147,10 @@ def test_injected_state_not_required_field_present_works():
     assert "San Francisco" in tool_msg.content
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="InjectedState field extraction from Optional[Annotated[...]] not supported on Python <3.11",
+)
 def test_create_react_agent_injected_state_not_required_field_missing():
     """Test create_react_agent with InjectedState using NotRequired field that is missing.
 
@@ -167,6 +181,10 @@ def test_create_react_agent_injected_state_not_required_field_missing():
     assert "No city provided" in tool_messages[0].content
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="InjectedState field extraction from Optional[Annotated[...]] not supported on Python <3.11",
+)
 def test_create_react_agent_injected_state_not_required_field_present():
     """Test create_react_agent with InjectedState using NotRequired field that IS present."""
     model = FakeToolCallingModel(
