@@ -210,8 +210,16 @@ class Runtime(Generic[ContextT]):
     def patch_execution_info(self, **overrides: Any) -> Runtime[ContextT]:
         """Return a new runtime with selected execution_info fields replaced."""
         if self.execution_info is None:
-            msg = "Cannot patch execution_info before it has been set"
-            raise RuntimeError(msg)
+            defaults: dict[str, Any] = {
+                "checkpoint_id": "",
+                "checkpoint_ns": "",
+                "task_id": "",
+            }
+            defaults.update(overrides)
+            return replace(
+                self,
+                execution_info=ExecutionInfo(**defaults),
+            )
         return replace(
             self,
             execution_info=self.execution_info.patch(**overrides),

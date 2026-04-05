@@ -418,6 +418,34 @@ def test_execution_info_defaults_and_patch() -> None:
         info.thread_id = "t2"  # type: ignore[misc]
 
 
+def test_patch_execution_info_initializes_when_none() -> None:
+    """patch_execution_info creates a default ExecutionInfo when execution_info is None."""
+    rt = Runtime()
+    assert rt.execution_info is None
+
+    patched_rt = rt.patch_execution_info(node_first_attempt_time=123.0)
+    assert patched_rt.execution_info is not None
+    assert patched_rt.execution_info.checkpoint_id == ""
+    assert patched_rt.execution_info.checkpoint_ns == ""
+    assert patched_rt.execution_info.task_id == ""
+    assert patched_rt.execution_info.node_first_attempt_time == 123.0
+    assert patched_rt.execution_info.node_attempt == 1
+
+    # overrides can include identity fields too
+    patched_rt2 = rt.patch_execution_info(
+        checkpoint_id="c1", task_id="t1", node_attempt=2
+    )
+    assert patched_rt2.execution_info.checkpoint_id == "c1"
+    assert patched_rt2.execution_info.task_id == "t1"
+    assert patched_rt2.execution_info.node_attempt == 2
+
+    # can be re-patched after initialization from None
+    repatched = patched_rt.patch_execution_info(node_attempt=3)
+    assert repatched.execution_info.node_attempt == 3
+    assert repatched.execution_info.node_first_attempt_time == 123.0
+    assert repatched.execution_info.checkpoint_id == ""
+
+
 # --- ServerInfo / Runtime unit tests ---
 
 
