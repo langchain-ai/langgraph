@@ -17,7 +17,7 @@ from langgraph.checkpoint.base import (
     get_serializable_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
-from psycopg import Capabilities, Connection, Cursor, Pipeline
+from psycopg import Capabilities, Connection, Cursor, Pipeline, sql
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
@@ -39,8 +39,15 @@ class PostgresSaver(BasePostgresSaver):
         conn: _internal.Conn,
         pipe: Pipeline | None = None,
         serde: SerializerProtocol | None = None,
+        schema: str = "public",
     ) -> None:
         super().__init__(serde=serde)
+        if not schema or not isinstance(schema, str):
+            raise ValueError("Invalid schema")
+
+        self.schema = schema
+        self._setup_queries(schema)
+
         if isinstance(conn, ConnectionPool) and pipe is not None:
             raise ValueError(
                 "Pipeline should be used only with a single Connection, not ConnectionPool."
@@ -54,7 +61,7 @@ class PostgresSaver(BasePostgresSaver):
     @classmethod
     @contextmanager
     def from_conn_string(
-        cls, conn_string: str, *, pipeline: bool = False
+        cls, conn_string: str, *, pipeline: bool = False, schema: str = "public"
     ) -> Iterator[PostgresSaver]:
         """Create a new PostgresSaver instance from a connection string.
 
@@ -70,9 +77,9 @@ class PostgresSaver(BasePostgresSaver):
         ) as conn:
             if pipeline:
                 with conn.pipeline() as pipe:
-                    yield cls(conn, pipe)
+                    yield cls(conn, pipe, schema=schema)
             else:
-                yield cls(conn)
+                yield cls(conn, schema=schema)
 
     def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -82,9 +89,16 @@ class PostgresSaver(BasePostgresSaver):
         the first time checkpointer is used.
         """
         with self._cursor() as cur:
+            cur.execute(
+                sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
+                    sql.Identifier(self.schema)
+                )
+            )
             cur.execute(self.MIGRATIONS[0])
             results = cur.execute(
-                "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                sql.SQL("SELECT v FROM {} ORDER BY v DESC LIMIT 1").format(
+                    sql.Identifier(self.schema, "checkpoint_migrations")
+                )
             )
             row = results.fetchone()
             if row is None:
@@ -97,7 +111,12 @@ class PostgresSaver(BasePostgresSaver):
                 strict=False,
             ):
                 cur.execute(migration)
-                cur.execute("INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,))
+                cur.execute(
+                    sql.SQL("INSERT INTO {} (v) VALUES (%s)").format(
+                        sql.Identifier(self.schema, "checkpoint_migrations")
+                    ),
+                    (v,),
+                )
         if self.pipe:
             self.pipe.sync()
 
@@ -378,15 +397,21 @@ class PostgresSaver(BasePostgresSaver):
         """
         with self._cursor(pipeline=True) as cur:
             cur.execute(
-                "DELETE FROM checkpoints WHERE thread_id = %s",
+                sql.SQL("DELETE FROM {} WHERE thread_id = %s").format(
+                    sql.Identifier(self.schema, "checkpoints")
+                ),
                 (str(thread_id),),
             )
             cur.execute(
-                "DELETE FROM checkpoint_blobs WHERE thread_id = %s",
+                sql.SQL("DELETE FROM {} WHERE thread_id = %s").format(
+                    sql.Identifier(self.schema, "checkpoint_blobs")
+                ),
                 (str(thread_id),),
             )
             cur.execute(
-                "DELETE FROM checkpoint_writes WHERE thread_id = %s",
+                sql.SQL("DELETE FROM {} WHERE thread_id = %s").format(
+                    sql.Identifier(self.schema, "checkpoint_writes")
+                ),
                 (str(thread_id),),
             )
 

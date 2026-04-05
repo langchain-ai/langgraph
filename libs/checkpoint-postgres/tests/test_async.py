@@ -371,3 +371,62 @@ async def test_get_checkpoint_no_channel_values(
 
         checkpoint = await saver.aget_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+@pytest.mark.asyncio
+async def test_custom_schema() -> None:
+    """Test that explicit schema handling works for both new and existing schemas."""
+    database = f"test_{uuid4().hex[:16]}"
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI + database,
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row,
+        ) as conn:
+            # 1. Custom schema that does not exist yet
+            saver = AsyncPostgresSaver(conn, schema="tenant_a")
+            await saver.setup()
+
+            config = {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "",
+                }
+            }
+            chkpnt = empty_checkpoint()
+            chkpnt["id"] = "chk_1"
+            await saver.aput(config, chkpnt, {}, {})
+
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT count(*) as count FROM tenant_a.checkpoints")
+                row = await cur.fetchone()
+                assert row["count"] == 1
+
+            # 2. Existing schema
+            async with conn.cursor() as cur:
+                await cur.execute("CREATE SCHEMA IF NOT EXISTS tenant_b")
+
+            saver_b = AsyncPostgresSaver(conn, schema="tenant_b")
+            await saver_b.setup()  # Should run safely
+
+            await saver_b.aput(config, chkpnt, {}, {})
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT count(*) as count FROM tenant_b.checkpoints")
+                row = await cur.fetchone()
+                assert row["count"] == 1
+
+                # Check isolation
+                await cur.execute("SELECT count(*) as count FROM tenant_a.checkpoints")
+                row = await cur.fetchone()
+                assert row["count"] == 1
+    finally:
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")

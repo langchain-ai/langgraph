@@ -17,7 +17,7 @@ from langgraph.checkpoint.base import (
     get_serializable_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
-from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
+from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities, sql
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
@@ -39,8 +39,15 @@ class AsyncPostgresSaver(BasePostgresSaver):
         conn: _ainternal.Conn,
         pipe: AsyncPipeline | None = None,
         serde: SerializerProtocol | None = None,
+        schema: str = "public",
     ) -> None:
         super().__init__(serde=serde)
+        if not schema or not isinstance(schema, str):
+            raise ValueError("Invalid schema")
+
+        self.schema = schema
+        self._setup_queries(schema)
+
         if isinstance(conn, AsyncConnectionPool) and pipe is not None:
             raise ValueError(
                 "Pipeline should be used only with a single AsyncConnection, not AsyncConnectionPool."
@@ -60,6 +67,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         *,
         pipeline: bool = False,
         serde: SerializerProtocol | None = None,
+        schema: str = "public",
     ) -> AsyncIterator[AsyncPostgresSaver]:
         """Create a new AsyncPostgresSaver instance from a connection string.
 
@@ -75,9 +83,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
         ) as conn:
             if pipeline:
                 async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                    yield cls(conn=conn, pipe=pipe, serde=serde, schema=schema)
             else:
-                yield cls(conn=conn, serde=serde)
+                yield cls(conn=conn, serde=serde, schema=schema)
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -87,9 +95,16 @@ class AsyncPostgresSaver(BasePostgresSaver):
         the first time checkpointer is used.
         """
         async with self._cursor() as cur:
+            await cur.execute(
+                sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
+                    sql.Identifier(self.schema)
+                )
+            )
             await cur.execute(self.MIGRATIONS[0])
             results = await cur.execute(
-                "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                sql.SQL("SELECT v FROM {} ORDER BY v DESC LIMIT 1").format(
+                    sql.Identifier(self.schema, "checkpoint_migrations")
+                )
             )
             row = await results.fetchone()
             if row is None:
@@ -103,7 +118,10 @@ class AsyncPostgresSaver(BasePostgresSaver):
             ):
                 await cur.execute(migration)
                 await cur.execute(
-                    "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
+                    sql.SQL("INSERT INTO {} (v) VALUES (%s)").format(
+                        sql.Identifier(self.schema, "checkpoint_migrations")
+                    ),
+                    (v,),
                 )
         if self.pipe:
             await self.pipe.sync()
@@ -337,15 +355,21 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """
         async with self._cursor(pipeline=True) as cur:
             await cur.execute(
-                "DELETE FROM checkpoints WHERE thread_id = %s",
+                sql.SQL("DELETE FROM {} WHERE thread_id = %s").format(
+                    sql.Identifier(self.schema, "checkpoints")
+                ),
                 (str(thread_id),),
             )
             await cur.execute(
-                "DELETE FROM checkpoint_blobs WHERE thread_id = %s",
+                sql.SQL("DELETE FROM {} WHERE thread_id = %s").format(
+                    sql.Identifier(self.schema, "checkpoint_blobs")
+                ),
                 (str(thread_id),),
             )
             await cur.execute(
-                "DELETE FROM checkpoint_writes WHERE thread_id = %s",
+                sql.SQL("DELETE FROM {} WHERE thread_id = %s").format(
+                    sql.Identifier(self.schema, "checkpoint_writes")
+                ),
                 (str(thread_id),),
             )
 

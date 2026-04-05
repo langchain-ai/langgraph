@@ -358,3 +358,54 @@ def test_get_checkpoint_no_channel_values(
 
         checkpoint = saver.get_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+def test_custom_schema() -> None:
+    """Test that explicit schema handling works for both new and existing schemas."""
+    database = f"test_{uuid4().hex[:16]}"
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        with Connection.connect(
+            DEFAULT_POSTGRES_URI + database,
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row,
+        ) as conn:
+            # 1. Custom schema that does not exist yet
+            saver = PostgresSaver(conn, schema="tenant_a")
+            saver.setup()
+
+            config = {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "",
+                }
+            }
+            chkpnt = empty_checkpoint()
+            chkpnt["id"] = "chk_1"
+            saver.put(config, chkpnt, {}, {})
+
+            with conn.cursor() as cur:
+                cur.execute("SELECT count(*) as count FROM tenant_a.checkpoints")
+                assert cur.fetchone()["count"] == 1
+
+            # 2. Existing schema
+            with conn.cursor() as cur:
+                cur.execute("CREATE SCHEMA IF NOT EXISTS tenant_b")
+
+            saver_b = PostgresSaver(conn, schema="tenant_b")
+            saver_b.setup()  # Should run safely
+
+            saver_b.put(config, chkpnt, {}, {})
+            with conn.cursor() as cur:
+                cur.execute("SELECT count(*) as count FROM tenant_b.checkpoints")
+                assert cur.fetchone()["count"] == 1
+
+                # Check isolation
+                cur.execute("SELECT count(*) as count FROM tenant_a.checkpoints")
+                assert cur.fetchone()["count"] == 1
+    finally:
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
