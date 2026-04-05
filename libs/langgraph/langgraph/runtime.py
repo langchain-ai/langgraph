@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Generic, cast
 
 from langgraph.store.base import BaseStore
+from langgraph_sdk.auth.types import BaseUser
 from typing_extensions import TypedDict, Unpack
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
@@ -11,7 +12,66 @@ from langgraph.config import get_config
 from langgraph.types import _DC_KWARGS, StreamWriter
 from langgraph.typing import ContextT
 
-__all__ = ("Runtime", "get_runtime")
+__all__ = (
+    "BaseUser",
+    "ExecutionInfo",
+    "Runtime",
+    "ServerInfo",
+    "get_runtime",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionInfo:
+    """Read-only execution info/metadata for the execution of current thread/run/node."""
+
+    checkpoint_id: str
+    """The checkpoint ID for the current execution."""
+
+    checkpoint_ns: str
+    """The checkpoint namespace for the current execution."""
+
+    task_id: str
+    """The task ID for the current execution."""
+
+    thread_id: str | None = None
+    """The thread ID for the current execution.
+
+    None when running without a checkpointer (i.e., no persistence)."""
+
+    run_id: str | None = None
+    """The run ID for the current execution.
+
+    None when `run_id` is not provided in the RunnableConfig."""
+
+    node_attempt: int = 1
+    """Current node execution attempt number (1-indexed)."""
+
+    node_first_attempt_time: float | None = None
+    """Unix timestamp (seconds) for when the first attempt started."""
+
+    def patch(self, **overrides: Any) -> ExecutionInfo:
+        """Return a new execution info object with selected fields replaced."""
+        return replace(self, **overrides)
+
+
+@dataclass(frozen=True, slots=True)
+class ServerInfo:
+    """Metadata injected by LangGraph Server. None when running open-source LangGraph without LangSmith deployments."""
+
+    assistant_id: str
+    """The assistant ID for the current execution."""
+
+    graph_id: str
+    """The graph ID for the current execution."""
+
+    user: BaseUser | None = None
+    """The authenticated user, if any.
+
+    This implements the `BaseUser` protocol from `langgraph_sdk.auth.types`,
+    which supports both attribute access (e.g. `user.identity`) and dict-like
+    access (e.g. `user["identity"]`).
+    """
 
 
 def _no_op_stream_writer(_: Any) -> None: ...
@@ -22,6 +82,8 @@ class _RuntimeOverrides(TypedDict, Generic[ContextT], total=False):
     store: BaseStore | None
     stream_writer: StreamWriter
     previous: Any
+    execution_info: ExecutionInfo
+    server_info: ServerInfo | None
 
 
 @dataclass(**_DC_KWARGS)
@@ -29,7 +91,7 @@ class Runtime(Generic[ContextT]):
     """Convenience class that bundles run-scoped context and other runtime utilities.
 
     This class is injected into graph nodes and middleware. It provides access to
-    `context`, `store`, `stream_writer`, and `previous`.
+    `context`, `store`, `stream_writer`, `previous`, and `execution_info`.
 
     !!! note "Accessing `config`"
 
@@ -115,6 +177,14 @@ class Runtime(Generic[ContextT]):
     Only available with the functional API when a checkpointer is provided.
     """
 
+    execution_info: ExecutionInfo | None = field(default=None)
+    """Read-only execution information/metadata for the current node run.
+
+    None before task preparation populates it."""
+
+    server_info: ServerInfo | None = field(default=None)
+    """Metadata injected by LangGraph Server. None when running open-source LangGraph without LangSmith deployments."""
+
     def merge(self, other: Runtime[ContextT]) -> Runtime[ContextT]:
         """Merge two runtimes together.
 
@@ -127,6 +197,8 @@ class Runtime(Generic[ContextT]):
             if other.stream_writer is not _no_op_stream_writer
             else self.stream_writer,
             previous=self.previous if other.previous is None else other.previous,
+            execution_info=other.execution_info or self.execution_info,
+            server_info=other.server_info or self.server_info,
         )
 
     def override(
@@ -135,12 +207,23 @@ class Runtime(Generic[ContextT]):
         """Replace the runtime with a new runtime with the given overrides."""
         return replace(self, **overrides)
 
+    def patch_execution_info(self, **overrides: Any) -> Runtime[ContextT]:
+        """Return a new runtime with selected execution_info fields replaced."""
+        if self.execution_info is None:
+            msg = "Cannot patch execution_info before it has been set"
+            raise RuntimeError(msg)
+        return replace(
+            self,
+            execution_info=self.execution_info.patch(**overrides),
+        )
+
 
 DEFAULT_RUNTIME = Runtime(
     context=None,
     store=None,
     stream_writer=_no_op_stream_writer,
     previous=None,
+    execution_info=None,
 )
 
 

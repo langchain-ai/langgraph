@@ -35,16 +35,16 @@ jobs:
       - name: Get changed files
         id: changed-files
         if: github.event_name != 'workflow_dispatch'
-        uses: Ana06/get-changed-files@v2.3.0
+        uses: Ana06/get-changed-files@25f79e676e7ea1868813e21465014798211fad8c # v2.3.0
         with:
           filter: "${{ inputs.working-directory }}/**"
       - name: Set up Python ${{ matrix.python-version }}
         if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ matrix.python-version }}
-          enable-cache: true
           cache-suffix: lint-${{ inputs.working-directory }}
+          working-directory: ${{ inputs.working-directory }}
 
       - name: Install dependencies
         if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'

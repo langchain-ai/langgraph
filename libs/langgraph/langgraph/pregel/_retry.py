@@ -9,18 +9,49 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
+
 from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
 from langgraph._internal._constants import (
     CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_RUNTIME,
+    CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_THREAD_ID,
     NS_SEP,
 )
 from langgraph.errors import GraphBubbleUp, ParentCommand
+from langgraph.runtime import ExecutionInfo, Runtime
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 
 logger = logging.getLogger(__name__)
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
+
+
+def _ensure_execution_info(
+    runtime: Runtime, config: RunnableConfig, task: PregelExecutableTask
+) -> Runtime:
+    """Ensure runtime has execution_info, creating one from config if needed.
+
+    In the distributed runtime (LangGraph Platform), tasks are prepared by the
+    server and deserialized in the executor, bypassing the OSS _algo.py code
+    that normally creates ExecutionInfo. This function fills in execution_info
+    from the task config when it's missing.
+    """
+    if runtime.execution_info is not None:
+        return runtime
+    configurable = config.get(CONF, {})
+    return runtime.override(
+        execution_info=ExecutionInfo(
+            checkpoint_id=configurable.get(CONFIG_KEY_CHECKPOINT_ID) or "",
+            checkpoint_ns=configurable.get(CONFIG_KEY_CHECKPOINT_NS) or "",
+            task_id=configurable.get(CONFIG_KEY_TASK_ID) or task.id,
+            thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+            run_id=str(rid) if (rid := config.get("run_id")) else None,
+        ),
+    )
 
 
 def _checkpoint_ns_for_parent_command(ns: str) -> str:
@@ -60,10 +91,34 @@ def run_with_retry(
     """Run a task with retries."""
     retry_policy = task.retry_policy or retry_policy
     attempts = 0
+    node_first_attempt_time = time.time()
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
+    runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+    if isinstance(runtime, Runtime):
+        runtime = _ensure_execution_info(runtime, config, task)
+        config = patch_configurable(
+            config,
+            {
+                CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                    node_first_attempt_time=node_first_attempt_time,
+                )
+            },
+        )
     while True:
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+        if isinstance(runtime, Runtime):
+            config = patch_configurable(
+                config,
+                {
+                    CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                        # node_attempt is execution count (1-indexed): 1 on first run,
+                        # then 2, 3, ... on subsequent retries.
+                        node_attempt=attempts + 1,
+                    )
+                },
+            )
         try:
             # clear any writes from previous attempts
             task.writes.clear()
@@ -102,7 +157,7 @@ def run_with_retry(
             if not matching_policy:
                 raise
 
-            # increment attempts
+            # attempts tracks failed tries only; it increments after a failure.
             attempts += 1
             # check if we should give up
             if attempts >= matching_policy.max_attempts:
@@ -141,15 +196,39 @@ async def arun_with_retry(
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
     attempts = 0
+    node_first_attempt_time = time.time()
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
+    runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+    if isinstance(runtime, Runtime):
+        runtime = _ensure_execution_info(runtime, config, task)
+        config = patch_configurable(
+            config,
+            {
+                CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                    node_first_attempt_time=node_first_attempt_time,
+                )
+            },
+        )
     if match_cached_writes is not None and task.cache_key is not None:
         for t in await match_cached_writes():
             if t is task:
                 # if the task is already cached, return
                 return
     while True:
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+        if isinstance(runtime, Runtime):
+            config = patch_configurable(
+                config,
+                {
+                    CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                        # node_attempt is execution count (1-indexed): 1 on first run,
+                        # then 2, 3, ... on subsequent retries.
+                        node_attempt=attempts + 1,
+                    )
+                },
+            )
         try:
             # clear any writes from previous attempts
             task.writes.clear()
@@ -194,7 +273,8 @@ async def arun_with_retry(
             if not matching_policy:
                 raise
 
-            # increment attempts
+            # attempts tracks failed tries only; it increments after a failure.
+            # The next execution's node_attempt is derived as attempts + 1.
             attempts += 1
             # check if we should give up
             if attempts >= matching_policy.max_attempts:

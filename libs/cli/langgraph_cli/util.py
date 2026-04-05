@@ -1,3 +1,5 @@
+"""General-purpose utilities shared across the LangGraph CLI."""
+
 import click
 
 

@@ -3,109 +3,186 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
-      all-dependencies:
+      minor-and-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   - package-ecosystem: "uv"
     directory: "/libs/checkpoint"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
-      all-dependencies:
+      minor-and-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+
   - package-ecosystem: "uv"
     directory: "/libs/checkpoint-conformance"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
-      all-dependencies:
+      minor-and-patch:
         patterns:
           - "*"
-
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   - package-ecosystem: "uv"
     directory: "/libs/checkpoint-postgres"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
-      all-dependencies:
+      minor-and-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   - package-ecosystem: "uv"
     directory: "/libs/checkpoint-sqlite"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
-      all-dependencies:
+      minor-and-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   - package-ecosystem: "uv"
     directory: "/libs/cli"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
-      all-dependencies:
+      minor-and-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   - package-ecosystem: "uv"
     directory: "/libs/langgraph"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
-      all-dependencies:
+      minor-and-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   - package-ecosystem: "uv"
     directory: "/libs/prebuilt"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
-      all-dependencies:
+      minor-and-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   - package-ecosystem: "uv"
     directory: "/libs/sdk-py"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
-      all-dependencies:
+      minor-and-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   - package-ecosystem: "npm"
     directory: "/libs/cli/js-examples"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
-      all-dependencies:
+      minor-and-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
 
   - package-ecosystem: "npm"
     directory: "/libs/cli/js-monorepo-example"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     groups:
-      all-dependencies:
+      minor-and-patch:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
