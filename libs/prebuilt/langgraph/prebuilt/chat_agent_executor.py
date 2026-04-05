@@ -134,7 +134,36 @@ def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
     )
 
 
-def _get_prompt_runnable(prompt: Prompt | None) -> Runnable:
+def get_prompt_runnable(prompt: Prompt | None) -> Runnable:
+    """Convert a prompt value into a `Runnable` that prepends it to state messages.
+
+    This is the helper that `create_react_agent` and `create_agent_node` use
+    internally. Exposing it lets you apply the same prompt-handling logic when
+    building custom LangGraph nodes.
+
+    Args:
+        prompt: One of:
+            - `None`: returns the `messages` list from state unchanged.
+            - `str`: wrapped in a `SystemMessage` and prepended to `messages`.
+            - `SystemMessage`: prepended to `messages`.
+            - `Callable`: called with the full graph state; its return value is
+              passed directly to the model.
+            - `Runnable`: invoked with the full graph state; its output is passed
+              to the model.
+
+    Returns:
+        A `Runnable` that accepts graph state and returns model input.
+
+    Example:
+        ```python
+        from langchain_core.messages import SystemMessage
+        from langgraph.prebuilt import get_prompt_runnable
+
+        prompt_runnable = get_prompt_runnable("You are a helpful assistant.")
+        # prompt_runnable.invoke({"messages": [HumanMessage("hi")]})
+        # -> [SystemMessage("You are a helpful assistant."), HumanMessage("hi")]
+        ```
+    """
     prompt_runnable: Runnable
     if prompt is None:
         prompt_runnable = RunnableCallable(
@@ -168,6 +197,10 @@ def _get_prompt_runnable(prompt: Prompt | None) -> Runnable:
         raise ValueError(f"Got unexpected type for `prompt`: {type(prompt)}")
 
     return prompt_runnable
+
+
+def _get_prompt_runnable(prompt: Prompt | None) -> Runnable:
+    return get_prompt_runnable(prompt)
 
 
 def _should_bind_tools(
@@ -269,6 +302,265 @@ def _validate_chat_history(
         error_code=ErrorCode.INVALID_CHAT_HISTORY,
     )
     raise ValueError(error_message)
+
+
+def create_agent_node(
+    model: str
+    | LanguageModelLike
+    | Callable[[Any, Runtime[ContextT]], BaseChatModel]
+    | Callable[[Any, Runtime[ContextT]], Awaitable[BaseChatModel]]
+    | Callable[[Any, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]]
+    | Callable[
+        [Any, Runtime[ContextT]],
+        Awaitable[Runnable[LanguageModelInput, BaseMessage]],
+    ],
+    tools: Sequence[BaseTool | Callable | dict[str, Any]] | ToolNode = (),
+    *,
+    prompt: Prompt | None = None,
+    name: str | None = None,
+) -> RunnableCallable:
+    """Create a reusable LLM-calling node for use in custom LangGraph graphs.
+
+    This is the lower-level counterpart to `create_react_agent`. While
+    `create_react_agent` returns a fully compiled graph, `create_agent_node`
+    returns only the agent node—the component that calls the language model—
+    which you can embed in any `StateGraph` you build yourself.
+
+    Using `create_agent_node` instead of `create_react_agent` lets you:
+
+    - Keep full ownership of graph topology, edges, and compilation options.
+    - Insert custom nodes before or after the LLM call without monkey-patching
+      a prebuilt graph.
+    - Reuse the same prompt-wrapping and tool-binding logic across multiple
+      graphs or sub-graphs.
+    - Inspect and extend the graph structure with standard LangGraph APIs.
+
+    The returned node expects state that contains at least a `messages` key
+    (following the `add_messages` reducer convention). Optionally, state may
+    also include:
+
+    - `remaining_steps` (`RemainingSteps`): when present and low, the node
+      returns a graceful "need more steps" message instead of calling the model,
+      avoiding a `GraphRecursionError`.
+    - `llm_input_messages`: when present (e.g. set by an upstream pre-model-hook
+      node), these are used as the model input instead of `messages`, without
+      modifying the stored message history.
+
+    The node returns `{"messages": [AIMessage(...)]}`.
+
+    Args:
+        model: The language model. Accepts the same forms as `create_react_agent`:
+
+            - A chat model instance (e.g. `ChatOpenAI(...)`).
+            - A string identifier (e.g. `"openai:gpt-4o"`); requires `langchain`.
+            - A callable `(state, runtime) -> BaseChatModel` for dynamic model
+              selection at runtime. Coroutines are also supported.
+
+            If the model already has tools bound via `.bind_tools()`, those bound
+            tools must be a subset of the `tools` argument.
+
+        tools: Tools to make available to the model. Can be a list of callables,
+            `BaseTool` instances, or raw dicts (OpenAI/Anthropic tool specs), or
+            a pre-built `ToolNode`. Defaults to no tools.
+        prompt: Optional prompt to prepend to messages before each model call.
+            Accepts a `str`, `SystemMessage`, a callable `(state) -> messages`,
+            or a `Runnable`. See `get_prompt_runnable` for full details.
+        name: Optional string written to `AIMessage.name` on every response.
+            Useful for identifying which agent produced a message in multi-agent
+            graphs.
+
+    Returns:
+        A `RunnableCallable` ready to pass to `StateGraph.add_node`.
+
+    Example:
+        Build the same ReAct loop as `create_react_agent`, but with full control:
+
+        ```python
+        from typing import Annotated
+        from typing_extensions import TypedDict
+
+        from langgraph.graph import END, StateGraph
+        from langgraph.graph.message import add_messages
+        from langgraph.managed import RemainingSteps
+        from langgraph.prebuilt import ToolNode, create_agent_node, tools_condition
+
+        class MyState(TypedDict):
+            messages: Annotated[list, add_messages]
+            remaining_steps: RemainingSteps
+
+        def search(query: str) -> str:
+            '''Search the web.'''
+            return f"Results for: {query}"
+
+        tools = [search]
+        agent_node = create_agent_node(
+            "openai:gpt-4o",
+            tools,
+            prompt="You are a helpful assistant.",
+        )
+
+        workflow = StateGraph(MyState)
+        workflow.add_node("agent", agent_node)
+        workflow.add_node("tools", ToolNode(tools))
+        workflow.set_entry_point("agent")
+        workflow.add_conditional_edges("agent", tools_condition)
+        workflow.add_edge("tools", "agent")
+        graph = workflow.compile()
+        ```
+
+    Example:
+        Insert a custom auditing node before every LLM call:
+
+        ```python
+        def audit_node(state: MyState) -> dict:
+            print(f"About to call LLM with {len(state['messages'])} messages")
+            return {}
+
+        workflow = StateGraph(MyState)
+        workflow.add_node("audit", audit_node)
+        workflow.add_node("agent", create_agent_node("openai:gpt-4o", tools))
+        workflow.add_node("tools", ToolNode(tools))
+        workflow.set_entry_point("audit")
+        workflow.add_edge("audit", "agent")
+        workflow.add_conditional_edges("agent", tools_condition)
+        workflow.add_edge("tools", "audit")
+        graph = workflow.compile()
+        ```
+    """
+    llm_builtin_tools: list[dict] = []
+    if isinstance(tools, ToolNode):
+        tool_classes = list(tools.tools_by_name.values())
+    else:
+        llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
+        _tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
+        tool_classes = list(_tool_node.tools_by_name.values())
+
+    is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
+    is_async_dynamic_model = is_dynamic_model and inspect.iscoroutinefunction(model)
+
+    if not is_dynamic_model:
+        if isinstance(model, str):
+            try:
+                from langchain.chat_models import (  # type: ignore[import-not-found]
+                    init_chat_model,
+                )
+            except ImportError:
+                raise ImportError(
+                    "Please install langchain (`pip install langchain`) to "
+                    "use '<provider>:<model>' string syntax for `model` parameter."
+                )
+
+            model = cast(BaseChatModel, init_chat_model(model))
+
+        if (
+            _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
+            and len(tool_classes + llm_builtin_tools) > 0
+        ):
+            model = cast(BaseChatModel, model).bind_tools(
+                tool_classes + llm_builtin_tools  # type: ignore[operator]
+            )
+
+        static_model: Runnable | None = get_prompt_runnable(prompt) | model  # type: ignore[operator]
+    else:
+        static_model = None
+
+    should_return_direct = {t.name for t in tool_classes if t.return_direct}
+
+    def _resolve_model(state: Any, runtime: Runtime[ContextT]) -> LanguageModelLike:
+        if is_dynamic_model:
+            return get_prompt_runnable(prompt) | model(state, runtime)  # type: ignore[operator]
+        return static_model  # type: ignore[return-value]
+
+    async def _aresolve_model(
+        state: Any, runtime: Runtime[ContextT]
+    ) -> LanguageModelLike:
+        if is_async_dynamic_model:
+            resolved = await model(state, runtime)  # type: ignore[misc,operator]
+            return get_prompt_runnable(prompt) | resolved
+        elif is_dynamic_model:
+            return get_prompt_runnable(prompt) | model(state, runtime)  # type: ignore[operator]
+        return static_model  # type: ignore[return-value]
+
+    def _are_more_steps_needed(state: Any, response: BaseMessage) -> bool:
+        has_tool_calls = isinstance(response, AIMessage) and bool(response.tool_calls)
+        all_tools_return_direct = (
+            all(call["name"] in should_return_direct for call in response.tool_calls)
+            if isinstance(response, AIMessage)
+            else False
+        )
+        remaining_steps = _get_state_value(state, "remaining_steps", None)
+        if remaining_steps is not None:
+            if remaining_steps < 1 and all_tools_return_direct:
+                return True
+            if remaining_steps < 2 and has_tool_calls:
+                return True
+        return False
+
+    def _prepare_model_input(state: Any) -> Any:
+        """Return a copy of state with messages set to the effective model input.
+
+        If a preceding node stored `llm_input_messages` in state (the pre-model-hook
+        convention), those are used as model input without altering the persisted
+        `messages`. Otherwise, `messages` is used directly.
+        """
+        messages = _get_state_value(state, "llm_input_messages") or _get_state_value(
+            state, "messages"
+        )
+        if messages is None:
+            raise ValueError(
+                f"Expected state to have a 'messages' key, got: {state!r}"
+            )
+        _validate_chat_history(messages)
+        # Produce a shallow copy with the effective messages set under 'messages'
+        # so the prompt runnable can access them via state["messages"].
+        if isinstance(state, BaseModel):
+            model_input = state.model_copy(update={"messages": messages})
+        else:
+            model_input = {**state, "messages": messages}
+        return model_input
+
+    def call_model(
+        state: Any, runtime: Runtime[ContextT], config: RunnableConfig
+    ) -> dict:
+        if is_async_dynamic_model:
+            raise RuntimeError(
+                "Async model callable provided but node invoked synchronously. "
+                "Use .ainvoke() / .astream(), or provide a sync model callable."
+            )
+        model_input = _prepare_model_input(state)
+        resolved = _resolve_model(state, runtime)
+        response = cast(AIMessage, resolved.invoke(model_input, config))
+        response.name = name
+        if _are_more_steps_needed(state, response):
+            return {
+                "messages": [
+                    AIMessage(
+                        id=response.id,
+                        content="Sorry, need more steps to process this request.",
+                    )
+                ]
+            }
+        return {"messages": [response]}
+
+    async def acall_model(
+        state: Any, runtime: Runtime[ContextT], config: RunnableConfig
+    ) -> dict:
+        model_input = _prepare_model_input(state)
+        resolved = await _aresolve_model(state, runtime)
+        response = cast(AIMessage, await resolved.ainvoke(model_input, config))
+        response.name = name
+        if _are_more_steps_needed(state, response):
+            return {
+                "messages": [
+                    AIMessage(
+                        id=response.id,
+                        content="Sorry, need more steps to process this request.",
+                    )
+                ]
+            }
+        return {"messages": [response]}
+
+    return RunnableCallable(call_model, acall_model)
 
 
 @deprecated(
@@ -1007,7 +1299,9 @@ create_tool_calling_executor = create_react_agent
 
 __all__ = [
     "create_react_agent",
+    "create_agent_node",
     "create_tool_calling_executor",
+    "get_prompt_runnable",
     "AgentState",
     "AgentStatePydantic",
     "AgentStateWithStructuredResponse",
