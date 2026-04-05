@@ -269,6 +269,8 @@ EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
+EXT_PANDAS_DATAFRAME = 7
+EXT_PANDAS_SERIES = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -492,6 +494,18 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             meta = (obj.dtype.str, obj.shape, order, buf)
             return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
 
+    elif (pd_mod := sys.modules.get("pandas")) is not None and isinstance(
+        obj, pd_mod.DataFrame
+    ):
+        buf = obj.to_parquet(engine="pyarrow")
+        return ormsgpack.Ext(EXT_PANDAS_DATAFRAME, buf)
+    elif (pd_mod := sys.modules.get("pandas")) is not None and isinstance(
+        obj, pd_mod.Series
+    ):
+        # Serialize Series as a single-column DataFrame to preserve dtype and index
+        buf = obj.to_frame(name=obj.name or 0).to_parquet(engine="pyarrow")
+        meta = (obj.name, buf)
+        return ormsgpack.Ext(EXT_PANDAS_SERIES, _msgpack_enc(meta))
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:
@@ -681,6 +695,30 @@ def _create_msgpack_ext_hook(
                 return arr.reshape(shape, order=order)
             except Exception:
                 return None
+        elif code == EXT_PANDAS_DATAFRAME:
+            try:
+                import io
+
+                import pandas as _pd
+
+                return _pd.read_parquet(io.BytesIO(data), engine="pyarrow")
+            except Exception:
+                return None
+        elif code == EXT_PANDAS_SERIES:
+            try:
+                import io
+
+                import pandas as _pd
+
+                name, buf = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                df = _pd.read_parquet(io.BytesIO(buf), engine="pyarrow")
+                series = df.iloc[:, 0]
+                series.name = name
+                return series
+            except Exception:
+                return None
         return None
 
     return ext_hook
@@ -779,6 +817,31 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
             return arr.reshape(shape, order=order).tolist()
+        except Exception:
+            return
+    elif code == EXT_PANDAS_DATAFRAME:
+        try:
+            import io
+
+            import pandas as _pd
+
+            df = _pd.read_parquet(io.BytesIO(data), engine="pyarrow")
+            return df.to_dict(orient="list")
+        except Exception:
+            return
+    elif code == EXT_PANDAS_SERIES:
+        try:
+            import io
+
+            import pandas as _pd
+
+            name, buf = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            df = _pd.read_parquet(io.BytesIO(buf), engine="pyarrow")
+            return df.iloc[:, 0].tolist()
         except Exception:
             return
 
