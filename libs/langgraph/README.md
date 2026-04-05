@@ -1,17 +1,27 @@
-<picture class="github-only">
-  <source media="(prefers-color-scheme: light)" srcset="https://langchain-ai.github.io/langgraph/static/wordmark_dark.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="https://langchain-ai.github.io/langgraph/static/wordmark_light.svg">
-  <img alt="LangGraph Logo" src="https://langchain-ai.github.io/langgraph/static/wordmark_dark.svg" width="80%">
-</picture>
-
-<div>
-<br>
+<div align="center">
+  <a href="https://www.langchain.com/langgraph">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="../../.github/images/logo-dark.svg">
+      <source media="(prefers-color-scheme: light)" srcset="../../.github/images/logo-light.svg">
+      <img alt="LangGraph Logo" src=".github/images/logo-dark.svg" width="50%">
+    </picture>
+  </a>
 </div>
 
-[![Version](https://img.shields.io/pypi/v/langgraph.svg)](https://pypi.org/project/langgraph/)
-[![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
-[![Open Issues](https://img.shields.io/github/issues-raw/langchain-ai/langgraph)](https://github.com/langchain-ai/langgraph/issues)
-[![Docs](https://img.shields.io/badge/docs-latest-blue)](https://docs.langchain.com/oss/python/langgraph/overview)
+<div align="center">
+  <h3>Low-level orchestration framework for building stateful agents.</h3>
+</div>
+
+<div align="center">
+  <a href="https://opensource.org/licenses/MIT" target="_blank"><img src="https://img.shields.io/pypi/l/langgraph" alt="PyPI - License"></a>
+  <a href="https://pypistats.org/packages/langgraph" target="_blank"><img src="https://img.shields.io/pepy/dt/langgraph" alt="PyPI - Downloads"></a>
+  <a href="https://pypi.org/project/langgraph/" target="_blank"><img src="https://img.shields.io/pypi/v/langgraph.svg?label=%20" alt="Version"></a>
+  <a href="https://github.com/langchain-ai/langgraph/issues" target="_blank"><img src="https://img.shields.io/github/issues-raw/langchain-ai/langgraph" alt="Open Issues"></a>
+  <a href="https://docs.langchain.com/oss/python/langgraph/overview" target="_blank"><img src="https://img.shields.io/badge/docs-latest-blue" alt="Docs"></a>
+  <a href="https://x.com/langchain" target="_blank"><img src="https://img.shields.io/twitter/url/https/twitter.com/langchain.svg?style=social&label=Follow%20%40LangChain" alt="Twitter / X"></a>
+</div>
+
+<br>
 
 Trusted by companies shaping the future of agents – including Klarna, Replit, Elastic, and more – LangGraph is a low-level orchestration framework for building, managing, and deploying long-running, stateful agents.
 

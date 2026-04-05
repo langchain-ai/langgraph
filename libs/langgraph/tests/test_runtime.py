@@ -2,11 +2,12 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.runtime import Runtime, get_runtime
+from langgraph.runtime import ExecutionInfo, Runtime, ServerInfo, get_runtime
 
 
 def test_injected_runtime() -> None:
@@ -389,3 +390,259 @@ def test_context_coercion_pydantic_validation_errors() -> None:
         compiled.invoke(
             {"message": "test"}, context={"api_key": "sk_test", "timeout": "not_an_int"}
         )
+
+
+# --- ExecutionInfo unit tests ---
+
+
+def test_execution_info_defaults_and_patch() -> None:
+    info = ExecutionInfo(checkpoint_id="c1", checkpoint_ns="ns1", task_id="t1")
+    assert info.checkpoint_id == "c1"
+    assert info.checkpoint_ns == "ns1"
+    assert info.task_id == "t1"
+    assert info.thread_id is None
+    assert info.run_id is None
+    assert info.node_attempt == 1
+    assert info.node_first_attempt_time is None
+
+    # patch returns new instance, original unchanged
+    patched = info.patch(thread_id="th1", node_attempt=3, task_id="tk1")
+    assert patched.thread_id == "th1"
+    assert patched.node_attempt == 3
+    assert patched.task_id == "tk1"
+    assert info.node_attempt == 1
+    assert info.task_id == "t1"
+
+    # frozen
+    with pytest.raises(AttributeError):
+        info.thread_id = "t2"  # type: ignore[misc]
+
+
+# --- ServerInfo / Runtime unit tests ---
+
+
+def test_server_info_and_runtime_merge() -> None:
+    si = ServerInfo(assistant_id="asst-1", graph_id="graph-1")
+    assert si.assistant_id == "asst-1"
+    assert si.user is None
+
+    # frozen
+    with pytest.raises(AttributeError):
+        si.assistant_id = "asst-2"  # type: ignore[misc]
+
+    # runtime default is None
+    assert Runtime().server_info is None
+
+    # merge preserves server_info from self when other has None
+    r1 = Runtime(server_info=si)
+    merged = r1.merge(Runtime())
+    assert merged.server_info is si
+
+    # merge takes server_info from other when present
+    si2 = ServerInfo(assistant_id="asst-2", graph_id="graph-2")
+    merged2 = r1.merge(Runtime(server_info=si2))
+    assert merged2.server_info is si2
+
+
+# --- Integration tests ---
+
+
+def _make_capture_graph(
+    capture: dict[str, Any],
+    *,
+    checkpointer: Any = None,
+) -> Any:
+    """Helper: build a simple graph that captures runtime info."""
+
+    class State(TypedDict):
+        message: str
+
+    def capture_node(state: State, runtime: Runtime) -> dict[str, Any]:
+        capture["execution_info"] = runtime.execution_info
+        capture["server_info"] = runtime.server_info
+        return {"message": "done"}
+
+    graph = StateGraph(state_schema=State)
+    graph.add_node("capture", capture_node)
+    graph.add_edge(START, "capture")
+    graph.add_edge("capture", END)
+    return graph.compile(checkpointer=checkpointer)
+
+
+def test_execution_info_populated_in_graph() -> None:
+    """execution_info fields are populated when running with a checkpointer."""
+    captured: dict[str, Any] = {}
+    compiled = _make_capture_graph(captured, checkpointer=MemorySaver())
+    compiled.invoke(
+        {"message": "hi"},
+        config={"configurable": {"thread_id": "t-123"}},
+    )
+    info = captured["execution_info"]
+    assert info.thread_id == "t-123"
+    assert info.task_id is not None
+    assert info.checkpoint_id is not None
+    assert info.checkpoint_ns is not None
+    assert info.node_attempt == 1
+    assert isinstance(info.node_first_attempt_time, float)
+
+
+@pytest.mark.anyio
+async def test_execution_info_populated_in_graph_async() -> None:
+    """execution_info fields are populated in async execution."""
+    captured: dict[str, Any] = {}
+    compiled = _make_capture_graph(captured, checkpointer=MemorySaver())
+    await compiled.ainvoke(
+        {"message": "hi"},
+        config={"configurable": {"thread_id": "t-xyz"}},
+    )
+    info = captured["execution_info"]
+    assert info.thread_id == "t-xyz"
+    assert info.node_attempt == 1
+    assert isinstance(info.node_first_attempt_time, float)
+
+
+def test_server_info_from_metadata() -> None:
+    """server_info is built from assistant_id/graph_id in config metadata."""
+    captured: dict[str, Any] = {}
+    compiled = _make_capture_graph(captured)
+    compiled.invoke(
+        {"message": "hi"},
+        config={"metadata": {"assistant_id": "asst-abc", "graph_id": "my-graph"}},
+    )
+    si = captured["server_info"]
+    assert si is not None
+    assert si.assistant_id == "asst-abc"
+    assert si.graph_id == "my-graph"
+    assert si.user is None
+
+
+def test_server_info_none_without_metadata() -> None:
+    """server_info is None when no assistant_id/graph_id in metadata."""
+    captured: dict[str, Any] = {}
+    compiled = _make_capture_graph(captured)
+    compiled.invoke({"message": "hi"})
+    assert captured["server_info"] is None
+
+
+def test_server_info_user_from_auth_user() -> None:
+    """server_info.user is populated from configurable['langgraph_auth_user'].
+
+    Tests both a proper BaseUser protocol object and a starlette-style proxy
+    that provides `permissions` via __getattr__ (which the Protocol isinstance
+    check may not see).
+    """
+
+    class _ProxyUser:
+        """Mimics langgraph_api's ProxyUser: identity/display_name as properties,
+        permissions via __getattr__."""
+
+        def __init__(self, data: dict[str, Any]) -> None:
+            self._data = data
+
+        @property
+        def identity(self) -> str:
+            return self._data["identity"]
+
+        @property
+        def display_name(self) -> str:
+            return self._data.get("display_name", self.identity)
+
+        @property
+        def is_authenticated(self) -> bool:
+            return True
+
+        def __getattr__(self, name: str) -> Any:
+            return self._data[name]
+
+        def __getitem__(self, key: str) -> Any:
+            return self._data[key]
+
+        def __contains__(self, key: str) -> bool:
+            return key in self._data
+
+        def __iter__(self) -> Any:
+            return iter(self._data)
+
+    proxy = _ProxyUser(
+        {
+            "identity": "proxy-user",
+            "display_name": "Proxy User",
+            "is_authenticated": True,
+            "permissions": ["read"],
+        }
+    )
+    assert not isinstance(proxy, dict)
+    assert hasattr(proxy, "identity")
+
+    captured: dict[str, Any] = {}
+    compiled = _make_capture_graph(captured)
+    compiled.invoke(
+        {"message": "hi"},
+        config={
+            "configurable": {"langgraph_auth_user": proxy},
+            "metadata": {"assistant_id": "asst-proxy", "graph_id": "graph-proxy"},
+        },
+    )
+    si = captured["server_info"]
+    assert si is not None
+    assert si.assistant_id == "asst-proxy"
+    assert si.user is not None
+    assert si.user.identity == "proxy-user"
+    assert si.user["display_name"] == "Proxy User"
+
+
+def test_execution_info_inherited_by_subgraph() -> None:
+    """execution_info is correctly populated for subgraph nodes, including namespace."""
+    captured_main: dict[str, Any] = {}
+    captured_sub: dict[str, Any] = {}
+
+    class State(TypedDict, total=False):
+        message: str
+
+    def subgraph_node(state: State, runtime: Runtime) -> dict[str, str]:
+        captured_sub["execution_info"] = runtime.execution_info
+        return {"message": "from_sub"}
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node("sub_node", subgraph_node)
+    subgraph_builder.add_edge(START, "sub_node")
+    subgraph = subgraph_builder.compile()
+
+    def main_node(state: State, runtime: Runtime) -> dict[str, str]:
+        captured_main["execution_info"] = runtime.execution_info
+        return {"message": "from_main"}
+
+    builder = StateGraph(State)
+    builder.add_node("main_node", main_node)
+    builder.add_node("subgraph", subgraph)
+    builder.add_edge(START, "main_node")
+    builder.add_edge("main_node", "subgraph")
+    graph = builder.compile(checkpointer=MemorySaver())
+
+    graph.invoke(
+        {"message": "hi"},
+        config={"configurable": {"thread_id": "sub-thread"}},
+    )
+
+    main_info = captured_main["execution_info"]
+    sub_info = captured_sub["execution_info"]
+
+    # Both share the same thread_id
+    assert main_info.thread_id == "sub-thread"
+    assert sub_info.thread_id == "sub-thread"
+
+    # Both have node_attempt = 1
+    assert main_info.node_attempt == 1
+    assert sub_info.node_attempt == 1
+
+    # Main namespace is "main_node:<task_id>" (top-level, no separator)
+    assert main_info.checkpoint_ns.startswith("main_node:")
+    assert "|" not in main_info.checkpoint_ns
+
+    # Subgraph namespace is "subgraph:<task_id>|sub_node:<task_id>" (nested)
+    assert sub_info.checkpoint_ns.startswith("subgraph:")
+    assert "|sub_node:" in sub_info.checkpoint_ns
+
+    # task_id appears in its own namespace segment
+    assert main_info.task_id in main_info.checkpoint_ns
+    assert sub_info.task_id in sub_info.checkpoint_ns
