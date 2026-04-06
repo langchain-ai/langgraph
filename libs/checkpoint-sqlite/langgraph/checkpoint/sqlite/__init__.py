@@ -4,6 +4,7 @@ import json
 import random
 import sqlite3
 import threading
+from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import closing, contextmanager
 from typing import Any, cast
@@ -334,6 +335,27 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             param_values = (*param_values, limit)
         with self.cursor(transaction=False) as cur, closing(self.conn.cursor()) as wcur:
             cur.execute(query, param_values)
+            rows = cur.fetchall()
+            if not rows:
+                return
+            # Batch-fetch all writes for the returned checkpoints in a single query
+            writes_query = f"""SELECT w.thread_id, w.checkpoint_ns, w.checkpoint_id, w.task_id, w.channel, w.type, w.value
+            FROM writes w
+            INNER JOIN (
+                SELECT thread_id, checkpoint_ns, checkpoint_id
+                FROM checkpoints
+                {where}
+                ORDER BY checkpoint_id DESC
+                {"LIMIT ?" if limit is not None else ""}
+            ) c ON w.thread_id = c.thread_id AND w.checkpoint_ns = c.checkpoint_ns AND w.checkpoint_id = c.checkpoint_id
+            ORDER BY w.thread_id, w.checkpoint_ns, w.checkpoint_id, w.task_id, w.idx"""
+            wcur.execute(writes_query, param_values)
+            # Group writes by (thread_id, checkpoint_ns, checkpoint_id)
+            writes_by_checkpoint: dict[tuple[str, str, str], list[tuple[str, str, str, bytes]]] = defaultdict(list)
+            for w_thread_id, w_checkpoint_ns, w_checkpoint_id, task_id, channel, w_type, value in wcur:
+                writes_by_checkpoint[(w_thread_id, w_checkpoint_ns, w_checkpoint_id)].append(
+                    (task_id, channel, w_type, value)
+                )
             for (
                 thread_id,
                 checkpoint_ns,
@@ -342,11 +364,8 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 type,
                 checkpoint,
                 metadata,
-            ) in cur:
-                wcur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
-                    (thread_id, checkpoint_ns, checkpoint_id),
-                )
+            ) in rows:
+                pending_writes = writes_by_checkpoint.get((thread_id, checkpoint_ns, checkpoint_id), [])
                 yield CheckpointTuple(
                     {
                         "configurable": {
@@ -372,8 +391,8 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                         else None
                     ),
                     [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        for task_id, channel, type, value in wcur
+                        (task_id, channel, self.serde.loads_typed((w_type, value)))
+                        for task_id, channel, w_type, value in pending_writes
                     ],
                 )
 
