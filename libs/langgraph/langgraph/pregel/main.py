@@ -2675,7 +2675,7 @@ class Pregel(
             _state_mapper = self._state_mapper if version == "v2" else None
 
             def emit_graph_lifecycle_events(loop: SyncPregelLoop) -> None:
-                while (event := loop.shift_graph_lifecycle_event()) is not None:
+                while (event := loop._pop_lifecycle_event()) is not None:
                     if event.kind == "resume":
                         graph_callback_manager.on_resume(
                             status=event.status,
@@ -3073,7 +3073,7 @@ class Pregel(
             _state_mapper = self._state_mapper if version == "v2" else None
 
             async def aemit_graph_lifecycle_events(loop: AsyncPregelLoop) -> None:
-                while (event := loop.shift_graph_lifecycle_event()) is not None:
+                while (event := loop._pop_lifecycle_event()) is not None:
                     if event.kind == "resume":
                         await graph_callback_manager.aon_resume(
                             status=event.status,

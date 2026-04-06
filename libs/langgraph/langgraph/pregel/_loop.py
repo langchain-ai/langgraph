@@ -215,7 +215,7 @@ class PregelLoop:
     tasks: dict[str, PregelExecutableTask]
     output: None | dict[str, Any] | Any = None
     updated_channels: set[str] | None = None
-    _graph_lifecycle_events: list[GraphLifecycleEvent]
+    _graph_lifecycle_events: deque[GraphLifecycleEvent]
 
     # public
 
@@ -265,7 +265,7 @@ class PregelLoop:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
-        self._graph_lifecycle_events = []
+        self._graph_lifecycle_events = deque()
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -334,10 +334,10 @@ class PregelLoop:
             )
         )
 
-    def shift_graph_lifecycle_event(self) -> GraphLifecycleEvent | None:
+    def _pop_lifecycle_event(self) -> GraphLifecycleEvent | None:
         if not self._graph_lifecycle_events:
             return None
-        return self._graph_lifecycle_events.pop(0)
+        return self._graph_lifecycle_events.popleft()
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
@@ -923,9 +923,8 @@ class PregelLoop:
             self._put_checkpoint(self.checkpoint_metadata)
             self._put_pending_writes()
         # suppress interrupt
-        suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
-        if suppress:
-            interrupt = cast(GraphInterrupt, exc_value)
+        if isinstance(exc_value, GraphInterrupt) and not self.is_nested:
+            interrupt = exc_value
             interrupts = tuple(interrupt.args[0]) if interrupt.args else ()
             self._push_graph_lifecycle_event("interrupt", interrupts=interrupts)
             # emit one last "values" event, with pending writes applied
@@ -954,12 +953,11 @@ class PregelLoop:
                         self.channels,
                     )
             # emit INTERRUPT if exception is empty (otherwise emitted by put_writes)
-            if exc_value is not None and (not exc_value.args or not exc_value.args[0]):
+            if not interrupt.args or not interrupt.args[0]:
+                interrupt_payload = interrupt.args[0] if interrupt.args else ()
                 self._emit(
                     "updates",
-                    lambda: iter(
-                        [{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]
-                    ),
+                    lambda: iter([{INTERRUPT: interrupt_payload}]),
                 )
             # save final output
             self.output = read_channels(self.channels, self.output_keys)
@@ -1177,7 +1175,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     # context manager
 
     def __enter__(self) -> Self:
-        self._graph_lifecycle_events = []
+        self._graph_lifecycle_events = deque()
         if not self.checkpointer:
             saved = None
         elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
@@ -1377,7 +1375,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     # context manager
 
     async def __aenter__(self) -> Self:
-        self._graph_lifecycle_events = []
+        self._graph_lifecycle_events = deque()
         if not self.checkpointer:
             saved = None
         elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):

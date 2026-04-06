@@ -1,26 +1,21 @@
 from __future__ import annotations
 
-import asyncio
-import inspect
-from collections.abc import Coroutine, Sequence
-from typing import Any, TypeAlias, cast
+from collections.abc import Sequence
+from typing import Any, TypeAlias
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler, BaseCallbackManager
+from langchain_core.callbacks.manager import ahandle_event, handle_event
 from langchain_core.runnables import RunnableConfig
 
-from langgraph._internal._constants import CONF
 from langgraph.types import Interrupt
 
 __all__ = (
-    "GRAPH_CALLBACKS_KEY",
     "GraphCallbackHandler",
     "GraphCallbackManager",
     "GraphCallbacks",
     "get_graph_callback_manager_for_config",
 )
-
-GRAPH_CALLBACKS_KEY = "graph_callbacks"
 
 
 class GraphCallbackHandler(BaseCallbackHandler):
@@ -68,11 +63,15 @@ class GraphCallbackManager(BaseCallbackManager):
         inheritable_metadata: dict[str, Any] | None = None,
         run_id: UUID | None = None,
     ) -> None:
+        base_handlers: list[BaseCallbackHandler] = []
+        base_inheritable_handlers: list[BaseCallbackHandler] = []
+        if handlers is not None:
+            base_handlers.extend(handlers)
+        if inheritable_handlers is not None:
+            base_inheritable_handlers.extend(inheritable_handlers)
         super().__init__(
-            handlers=cast(list[BaseCallbackHandler], list(handlers or [])),
-            inheritable_handlers=cast(
-                list[BaseCallbackHandler], list(inheritable_handlers or [])
-            ),
+            handlers=base_handlers,
+            inheritable_handlers=base_inheritable_handlers,
             parent_run_id=parent_run_id,
             tags=tags,
             inheritable_tags=inheritable_tags,
@@ -87,7 +86,7 @@ class GraphCallbackManager(BaseCallbackManager):
         inherit: bool = True,  # noqa: FBT001,FBT002
     ) -> None:
         if not isinstance(handler, GraphCallbackHandler):
-            raise TypeError("graph_callbacks entries must inherit GraphCallbackHandler")
+            raise TypeError("handlers must inherit GraphCallbackHandler")
         super().add_handler(handler, inherit=inherit)
 
     def copy(
@@ -95,23 +94,37 @@ class GraphCallbackManager(BaseCallbackManager):
         *,
         run_id: UUID | None | object = _MISSING,
     ) -> GraphCallbackManager:
+        resolved_run_id: UUID | None
+        if run_id is _MISSING:
+            resolved_run_id = self.run_id
+        else:
+            if run_id is not None and not isinstance(run_id, UUID):
+                raise TypeError("run_id must be a UUID or None")
+            resolved_run_id = run_id
+
         return self.__class__(
-            handlers=cast(list[GraphCallbackHandler], self.handlers.copy()),
-            inheritable_handlers=cast(
-                list[GraphCallbackHandler], self.inheritable_handlers.copy()
-            ),
+            handlers=[
+                handler
+                for handler in self.handlers
+                if isinstance(handler, GraphCallbackHandler)
+            ],
+            inheritable_handlers=[
+                handler
+                for handler in self.inheritable_handlers
+                if isinstance(handler, GraphCallbackHandler)
+            ],
             parent_run_id=self.parent_run_id,
             tags=self.tags.copy(),
             inheritable_tags=self.inheritable_tags.copy(),
             metadata=self.metadata.copy(),
             inheritable_metadata=self.inheritable_metadata.copy(),
-            run_id=self.run_id if run_id is _MISSING else cast(UUID | None, run_id),
+            run_id=resolved_run_id,
         )
 
     @classmethod
     def configure(
         cls,
-        callbacks: GraphCallbacks = None,
+        callbacks: object | None = None,
         *,
         run_id: UUID | None = None,
     ) -> GraphCallbackManager:
@@ -119,16 +132,36 @@ class GraphCallbackManager(BaseCallbackManager):
             return cls(run_id=run_id)
         if isinstance(callbacks, GraphCallbackManager):
             return callbacks.copy(run_id=run_id)
+        if isinstance(callbacks, BaseCallbackManager):
+            handlers = [
+                handler
+                for handler in callbacks.handlers
+                if isinstance(handler, GraphCallbackHandler)
+            ]
+            inheritable_handlers = [
+                handler
+                for handler in callbacks.inheritable_handlers
+                if isinstance(handler, GraphCallbackHandler)
+            ]
+            return cls(
+                handlers=handlers,
+                inheritable_handlers=inheritable_handlers,
+                parent_run_id=callbacks.parent_run_id,
+                tags=callbacks.tags.copy(),
+                inheritable_tags=callbacks.inheritable_tags.copy(),
+                metadata=callbacks.metadata.copy(),
+                inheritable_metadata=callbacks.inheritable_metadata.copy(),
+                run_id=run_id,
+            )
         if isinstance(callbacks, GraphCallbackHandler):
             return cls((callbacks,), run_id=run_id)
-        if not isinstance(callbacks, Sequence):
-            raise TypeError("graph_callbacks must be a handler, sequence, or manager")
-        handlers = list(callbacks)
-        for handler in handlers:
-            if not isinstance(handler, GraphCallbackHandler):
-                raise TypeError(
-                    "graph_callbacks entries must inherit GraphCallbackHandler"
-                )
+        if isinstance(callbacks, (str, bytes)) or not isinstance(callbacks, Sequence):
+            raise TypeError("callbacks must be a handler, sequence, or manager")
+        handlers = [
+            handler
+            for handler in callbacks
+            if isinstance(handler, GraphCallbackHandler)
+        ]
         return cls(handlers, run_id=run_id)
 
     def on_interrupt(
@@ -140,18 +173,17 @@ class GraphCallbackManager(BaseCallbackManager):
         checkpoint_ns: tuple[str, ...],
         is_nested: bool,
     ) -> None:
-        for handler in self.handlers:
-            graph_handler = cast(GraphCallbackHandler, handler)
-            result = graph_handler.on_interrupt(
-                interrupts,
-                run_id=self.run_id,
-                status=status,
-                checkpoint_id=checkpoint_id,
-                checkpoint_ns=checkpoint_ns,
-                is_nested=is_nested,
-            )
-            if inspect.iscoroutine(result):
-                self._drain_coroutine(result)
+        handle_event(
+            self.handlers,
+            "on_interrupt",
+            None,
+            interrupts,
+            run_id=self.run_id,
+            status=status,
+            checkpoint_id=checkpoint_id,
+            checkpoint_ns=checkpoint_ns,
+            is_nested=is_nested,
+        )
 
     def on_resume(
         self,
@@ -161,17 +193,16 @@ class GraphCallbackManager(BaseCallbackManager):
         checkpoint_ns: tuple[str, ...],
         is_nested: bool,
     ) -> None:
-        for handler in self.handlers:
-            graph_handler = cast(GraphCallbackHandler, handler)
-            result = graph_handler.on_resume(
-                run_id=self.run_id,
-                status=status,
-                checkpoint_id=checkpoint_id,
-                checkpoint_ns=checkpoint_ns,
-                is_nested=is_nested,
-            )
-            if inspect.iscoroutine(result):
-                self._drain_coroutine(result)
+        handle_event(
+            self.handlers,
+            "on_resume",
+            None,
+            run_id=self.run_id,
+            status=status,
+            checkpoint_id=checkpoint_id,
+            checkpoint_ns=checkpoint_ns,
+            is_nested=is_nested,
+        )
 
     async def aon_interrupt(
         self,
@@ -182,18 +213,17 @@ class GraphCallbackManager(BaseCallbackManager):
         checkpoint_ns: tuple[str, ...],
         is_nested: bool,
     ) -> None:
-        for handler in self.handlers:
-            graph_handler = cast(GraphCallbackHandler, handler)
-            result = graph_handler.on_interrupt(
-                interrupts,
-                run_id=self.run_id,
-                status=status,
-                checkpoint_id=checkpoint_id,
-                checkpoint_ns=checkpoint_ns,
-                is_nested=is_nested,
-            )
-            if inspect.isawaitable(result):
-                await result
+        await ahandle_event(
+            self.handlers,
+            "on_interrupt",
+            None,
+            interrupts,
+            run_id=self.run_id,
+            status=status,
+            checkpoint_id=checkpoint_id,
+            checkpoint_ns=checkpoint_ns,
+            is_nested=is_nested,
+        )
 
     async def aon_resume(
         self,
@@ -203,30 +233,25 @@ class GraphCallbackManager(BaseCallbackManager):
         checkpoint_ns: tuple[str, ...],
         is_nested: bool,
     ) -> None:
-        for handler in self.handlers:
-            graph_handler = cast(GraphCallbackHandler, handler)
-            result = graph_handler.on_resume(
-                run_id=self.run_id,
-                status=status,
-                checkpoint_id=checkpoint_id,
-                checkpoint_ns=checkpoint_ns,
-                is_nested=is_nested,
-            )
-            if inspect.isawaitable(result):
-                await result
-
-    @staticmethod
-    def _drain_coroutine(coro: Coroutine[Any, Any, Any]) -> None:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            asyncio.run(coro)
-        else:
-            loop.create_task(coro)
+        await ahandle_event(
+            self.handlers,
+            "on_resume",
+            None,
+            run_id=self.run_id,
+            status=status,
+            checkpoint_id=checkpoint_id,
+            checkpoint_ns=checkpoint_ns,
+            is_nested=is_nested,
+        )
 
 
 GraphCallbacks: TypeAlias = (
-    GraphCallbackManager | GraphCallbackHandler | Sequence[GraphCallbackHandler] | None
+    GraphCallbackManager
+    | BaseCallbackManager
+    | GraphCallbackHandler
+    | Sequence[BaseCallbackHandler]
+    | Sequence[GraphCallbackHandler]
+    | None
 )
 
 
@@ -235,10 +260,7 @@ def get_graph_callback_manager_for_config(
     *,
     run_id: UUID | None = None,
 ) -> GraphCallbackManager:
-    configured = cast(
-        GraphCallbacks,
-        config.get(CONF, {}).get(GRAPH_CALLBACKS_KEY)
-        if CONF in config
-        else config.get(GRAPH_CALLBACKS_KEY),
+    return GraphCallbackManager.configure(
+        config.get("callbacks"),
+        run_id=run_id,
     )
-    return GraphCallbackManager.configure(configured, run_id=run_id)
