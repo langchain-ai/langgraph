@@ -96,6 +96,7 @@ from langgraph._internal._runnable import (
     coerce_to_runnable,
 )
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
+from langgraph.callbacks import get_graph_callback_manager_for_config
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
@@ -2585,6 +2586,10 @@ class Pregel(
             name=config.get("run_name", self.get_name()),
             run_id=config.get("run_id"),
         )
+        graph_callback_manager = get_graph_callback_manager_for_config(
+            config,
+            run_id=run_manager.run_id,
+        )
         try:
             # assign defaults
             (
@@ -2669,6 +2674,24 @@ class Pregel(
             _output_mapper = self._output_mapper if version == "v2" else None
             _state_mapper = self._state_mapper if version == "v2" else None
 
+            def emit_graph_lifecycle_events(loop: SyncPregelLoop) -> None:
+                while (event := loop.shift_graph_lifecycle_event()) is not None:
+                    if event.kind == "resume":
+                        graph_callback_manager.on_resume(
+                            status=event.status,
+                            checkpoint_id=event.checkpoint_id,
+                            checkpoint_ns=event.checkpoint_ns,
+                            is_nested=event.is_nested,
+                        )
+                    else:
+                        graph_callback_manager.on_interrupt(
+                            event.interrupts,
+                            status=event.status,
+                            checkpoint_id=event.checkpoint_id,
+                            checkpoint_ns=event.checkpoint_ns,
+                            is_nested=event.is_nested,
+                        )
+
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
@@ -2690,6 +2713,7 @@ class Pregel(
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
             ) as loop:
+                emit_graph_lifecycle_events(loop)
                 # create runner
                 runner = PregelRunner(
                     submit=config[CONF].get(
@@ -2751,9 +2775,11 @@ class Pregel(
                             _state_mapper,
                         )
                     loop.after_tick()
+                    emit_graph_lifecycle_events(loop)
                     # wait for checkpoint
                     if durability_ == "sync":
                         loop._put_checkpoint_fut.result()
+            emit_graph_lifecycle_events(loop)
             # emit output
             yield from _output(
                 stream_mode,
@@ -2928,6 +2954,10 @@ class Pregel(
             name=config.get("run_name", self.get_name()),
             run_id=config.get("run_id"),
         )
+        graph_callback_manager = get_graph_callback_manager_for_config(
+            config,
+            run_id=run_manager.run_id,
+        )
         # if running from astream_log() run each proc with streaming
         do_stream = (
             next(
@@ -3042,6 +3072,24 @@ class Pregel(
             _output_mapper = self._output_mapper if version == "v2" else None
             _state_mapper = self._state_mapper if version == "v2" else None
 
+            async def aemit_graph_lifecycle_events(loop: AsyncPregelLoop) -> None:
+                while (event := loop.shift_graph_lifecycle_event()) is not None:
+                    if event.kind == "resume":
+                        await graph_callback_manager.aon_resume(
+                            status=event.status,
+                            checkpoint_id=event.checkpoint_id,
+                            checkpoint_ns=event.checkpoint_ns,
+                            is_nested=event.is_nested,
+                        )
+                    else:
+                        await graph_callback_manager.aon_interrupt(
+                            event.interrupts,
+                            status=event.status,
+                            checkpoint_id=event.checkpoint_id,
+                            checkpoint_ns=event.checkpoint_ns,
+                            is_nested=event.is_nested,
+                        )
+
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
@@ -3063,6 +3111,7 @@ class Pregel(
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
             ) as loop:
+                await aemit_graph_lifecycle_events(loop)
                 # create runner
                 runner = PregelRunner(
                     submit=config[CONF].get(
@@ -3144,6 +3193,7 @@ class Pregel(
                             ):
                                 yield o
                         loop.after_tick()
+                        await aemit_graph_lifecycle_events(loop)
                         # wait for checkpoint
                         if durability_ == "sync":
                             await cast(asyncio.Future, loop._put_checkpoint_fut)
@@ -3151,6 +3201,8 @@ class Pregel(
                     # ensure waiter doesn't remain pending on cancel/shutdown
                     if _cleanup_waiter is not None:
                         await _cleanup_waiter()
+
+            await aemit_graph_lifecycle_events(loop)
 
             # emit output
             for o in _output(
