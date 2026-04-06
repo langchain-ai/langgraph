@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from langchain_core.callbacks import (
     AsyncCallbackManager,
+    BaseCallbackManager,
     CallbackManager,
     Callbacks,
 )
