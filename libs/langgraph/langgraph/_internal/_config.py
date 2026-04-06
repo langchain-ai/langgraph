@@ -303,6 +303,37 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
             if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
                     empty[k] = cast(dict, v).copy()
+                elif k == "callbacks":
+                    base_callbacks = empty.get("callbacks")
+                    if base_callbacks is None:
+                        if isinstance(v, list):
+                            empty["callbacks"] = v.copy()
+                        elif isinstance(v, BaseCallbackManager):
+                            empty["callbacks"] = v.copy()
+                        else:
+                            empty["callbacks"] = v
+                    elif isinstance(v, list):
+                        if isinstance(base_callbacks, list):
+                            empty["callbacks"] = base_callbacks + v
+                        elif isinstance(base_callbacks, BaseCallbackManager):
+                            mngr = base_callbacks.copy()
+                            for callback in v:
+                                mngr.add_handler(callback, inherit=True)
+                            empty["callbacks"] = mngr
+                        else:
+                            empty["callbacks"] = v
+                    elif isinstance(v, BaseCallbackManager):
+                        if isinstance(base_callbacks, list):
+                            mngr = v.copy()
+                            for callback in base_callbacks:
+                                mngr.add_handler(callback, inherit=True)
+                            empty["callbacks"] = mngr
+                        elif isinstance(base_callbacks, BaseCallbackManager):
+                            empty["callbacks"] = base_callbacks.merge(v)
+                        else:
+                            empty["callbacks"] = v
+                    else:
+                        empty["callbacks"] = v
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
