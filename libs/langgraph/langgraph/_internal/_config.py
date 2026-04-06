@@ -7,7 +7,6 @@ from typing import Any, cast
 
 from langchain_core.callbacks import (
     AsyncCallbackManager,
-    BaseCallbackManager,
     CallbackManager,
     Callbacks,
 )
@@ -224,8 +223,8 @@ def get_callback_manager_for_config(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
+            langsmith_metadata=_get_local_tracing_metadata_defaults(config),
         )
-    _ensure_local_tracing_metadata(manager, config)
     return manager
 
 
@@ -264,9 +263,8 @@ def get_async_callback_manager_for_config(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
+            langsmith_metadata=_get_local_tracing_metadata_defaults(config),
         )
-    # If not already specified in metadata, port specific configurable values over.
-    _ensure_local_tracing_metadata(manager, config)
     return manager
 
 
@@ -316,21 +314,23 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
     return empty
 
 
-def _ensure_local_tracing_metadata(
-    manager: BaseCallbackManager,
+def _get_local_tracing_metadata_defaults(
     config: RunnableConfig,
-) -> None:
-    """Patch in configurable keys as non-inheritable.
+) -> dict[str, str] | None:
+    """Get tracer-only metadata defaults from configurable values."""
+    configurable = config.get("configurable")
+    if not configurable:
+        return None
 
-    Mutates the manager in-place.
-    """
-    _conf = config.get("configurable")
-    if not _conf:
-        return
-    metadata = manager.metadata
+    config_metadata = config.get("metadata")
+    metadata: dict[str, str] = {}
     for key in _PROPAGATE_TO_METADATA:
-        if key not in metadata and (value := _conf.get(key)):
+        if config_metadata is not None and key in config_metadata:
+            continue
+        value = configurable.get(key)
+        if value:
             metadata[key] = value
+    return metadata or None
 
 
 _PROPAGATE_TO_METADATA = frozenset(
