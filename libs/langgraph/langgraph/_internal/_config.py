@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import ChainMap
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from os import getenv
 from typing import Any, cast
 
@@ -226,6 +226,7 @@ def get_callback_manager_for_config(
             inheritable_metadata=config.get("metadata"),
         )
     _ensure_local_tracing_metadata(manager, config)
+    return manager
 
 
 def get_async_callback_manager_for_config(

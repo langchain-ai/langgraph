@@ -17,7 +17,11 @@ import langsmith
 import pytest
 from typing_extensions import NotRequired, Required, TypedDict
 
-from langgraph._internal._config import _is_not_empty, ensure_config
+from langgraph._internal._config import (
+    _is_not_empty,
+    ensure_config,
+    get_callback_manager_for_config,
+)
 from langgraph._internal._fields import (
     _is_optional_type,
     get_enhanced_type_hints,
@@ -298,7 +302,7 @@ def test_is_not_empty() -> None:
     assert not _is_not_empty({})
 
 
-def test_configurable_metadata():
+def test_configurable_metadata() -> None:
     config = {
         "configurable": {
             "a-key": "foo",
@@ -323,30 +327,45 @@ def test_configurable_metadata():
         },
         "metadata": {"nooverride": 18},
     }
-    expected = {
-        "nooverride",
-        "thread_id",
-        "checkpoint_id",
-        "checkpoint_ns",
-        "task_id",
-        "run_id",
-        "assistant_id",
-        "graph_id",
-        "model",
-        "user_id",
-        "cron_id",
-        "langgraph_auth_user_id",
-    }
+    expected = {"nooverride"}
     merged = ensure_config(config)
     metadata = merged["metadata"]
     assert metadata.keys() == expected
     assert metadata["nooverride"] == 18
-    assert metadata["thread_id"] == "th-123"
-    assert metadata["run_id"] == "run-456"
-    # existing metadata should not be overridden
-    config2 = {
-        "configurable": {"thread_id": "from-configurable"},
-        "metadata": {"thread_id": "from-metadata"},
+
+
+def test_callback_manager_copies_whitelisted_configurable_ids_to_metadata() -> None:
+    config = {
+        "configurable": {
+            "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
+            "langgraph_auth_user_id": "user-1",
+        },
+        "metadata": {
+            "thread_id": "from-metadata",
+            "nooverride": 18,
+        },
     }
-    merged2 = ensure_config(config2)
-    assert merged2["metadata"]["thread_id"] == "from-metadata"
+    manager = ensure_config(config)
+    callback_manager = get_callback_manager_for_config(manager)
+    assert callback_manager.metadata == {
+        "thread_id": "from-metadata",
+        "nooverride": 18,
+        "checkpoint_id": "ckpt-1",
+        "checkpoint_ns": "ns-1",
+        "task_id": "task-1",
+        "run_id": "run-456",
+        "assistant_id": "asst-789",
+        "graph_id": "graph-0",
+        "user_id": "uid-1",
+        "cron_id": "cron-1",
+        "langgraph_auth_user_id": "user-1",
+    }

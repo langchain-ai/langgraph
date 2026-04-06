@@ -15,6 +15,7 @@ dependencies = [
     "click>=8.1.7",
     "httpx>=0.24.0",
     "langgraph-sdk>=0.1.0 ; python_version >= '3.11'",
+    "pathspec>=0.11.0",
     "python-dotenv>=0.8.0",
 ]
 [tool.hatch.version]
