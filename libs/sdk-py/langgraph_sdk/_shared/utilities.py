@@ -8,6 +8,7 @@ import re
 from collections.abc import Mapping
 from datetime import tzinfo
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import urlparse
 
 import httpx
 
@@ -156,6 +157,40 @@ def _resolve_timezone(tz: str | tzinfo | ZoneInfo | None) -> str | None:
     raise TypeError(
         f"Expected str, datetime.tzinfo, or None for timezone, got {type(tz).__name__}"
     )
+
+
+def _default_port(scheme: str) -> int:
+    return 443 if scheme == "https" else 80
+
+
+def _validate_reconnect_location(base_url: httpx.URL, location: str) -> str:
+    """Validate that a reconnect Location URL is same-origin as the base URL.
+
+    Raises ValueError if the Location header points to a different origin
+    (scheme + host + port), which would leak credentials to an external server.
+    """
+    parsed = urlparse(location)
+    # Relative URLs are safe — they resolve against the base
+    if not parsed.scheme and not parsed.netloc:
+        return location
+    # Compare origin components (normalize default ports to avoid mismatches)
+    base_scheme = str(base_url.scheme)
+    base_origin = (
+        base_scheme,
+        str(base_url.host),
+        base_url.port or _default_port(base_scheme),
+    )
+    loc_origin = (
+        parsed.scheme,
+        parsed.hostname or "",
+        parsed.port or _default_port(parsed.scheme),
+    )
+    if base_origin != loc_origin:
+        raise ValueError(
+            f"Refusing to follow cross-origin reconnect Location: {location!r} "
+            f"(origin {loc_origin}) does not match base URL origin {base_origin}"
+        )
+    return location
 
 
 def _provided_vals(d: Mapping[str, Any]) -> dict[str, Any]:
