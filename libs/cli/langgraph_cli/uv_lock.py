@@ -834,21 +834,12 @@ RUN cd {uv_export_project_dir} && {global_reqs_pip_install} -r uv_requirements.t
 RUN rm -rf /tmp/uv_export
 # -- End of uv.lock dependencies install --"""
 
-    local_pkgs_str = os.linesep.join(
+    workspace_pkgs_str = os.linesep.join(
         [
             f"""# -- Adding workspace package {package.root.relative_to(plan.project_root).as_posix() or "."} --
 {copy_from_project_root(pathlib.PurePosixPath(*package.root.relative_to(plan.project_root).parts), plan.container_roots[package.root].as_posix())}
+RUN cd {plan.container_roots[package.root].as_posix()} && {global_reqs_pip_install} --no-deps -e .
 # -- End of workspace package {package.root.relative_to(plan.project_root).as_posix() or "."} --"""
-            for package in plan.install_order
-        ]
-    )
-
-    install_local_pkgs_str = os.linesep.join(
-        [
-            (
-                f"RUN cd {plan.container_roots[package.root].as_posix()} && "
-                f"{global_reqs_pip_install} --no-deps -e ."
-            )
             for package in plan.install_order
         ]
     )
@@ -860,7 +851,8 @@ RUN rm -rf /tmp/uv_export
     )
     installs = f"{os.linesep}{os.linesep}".join(
         filter(
-            None, [install_node_str, pip_config_file_str, uv_lock_str, local_pkgs_str]
+            None,
+            [install_node_str, pip_config_file_str, uv_lock_str, workspace_pkgs_str],
         )
     )
 
@@ -895,10 +887,6 @@ RUN rm -rf /tmp/uv_export
             os.linesep.join(config["dockerfile_lines"]),
             "",
             installs,
-            "",
-            "# -- Installing workspace packages --",
-            install_local_pkgs_str,
-            "# -- End of workspace packages install --",
             os.linesep.join(env_vars),
             "",
             js_inst_str,

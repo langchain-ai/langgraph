@@ -1360,8 +1360,17 @@ def test_config_to_docker_uv_lock():
         agent_install = agent_install.replace("PIP_CONFIG_FILE=/pipconfig.txt ", "")
         assert shared_install in docker
         assert agent_install in docker
+        shared_copy = (
+            "COPY --from=uv-workspace-root libs/shared /deps/workspace/libs/shared"
+        )
+        agent_copy = (
+            "COPY --from=uv-workspace-root apps/agent /deps/workspace/apps/agent"
+        )
+        assert docker.index(shared_copy) < docker.index(shared_install)
+        assert docker.index(shared_install) < docker.index(agent_copy)
         assert docker.index(shared_install) < docker.index(agent_install)
         assert "for dep in /deps/*" not in docker
+        assert "# -- Installing workspace packages --" not in docker
         assert "RUN cd /tmp/uv_export/project &&" in docker
         assert (
             '"path": "/deps/workspace/libs/shared/src/shared/auth.py:create_auth"'
