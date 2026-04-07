@@ -344,29 +344,6 @@ def _get_tracing_metadata_defaults(
     return metadata or None
 
 
-def _get_inheritable_metadata(config: RunnableConfig) -> dict[str, Any] | None:
-    """Get inheritable metadata passed to callback handlers for this config."""
-    metadata = config.get("metadata")
-    configurable = config.get("configurable")
-    if not configurable:
-        return metadata
-
-    checkpoint_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS)
-    if (
-        not isinstance(checkpoint_ns, str)
-        or metadata is not None
-        and CONFIG_KEY_CHECKPOINT_NS in metadata
-    ):
-        return metadata
-
-    checkpoint_ns = f"{checkpoint_ns.rsplit(NS_END, 1)[0]}{NS_END}" if NS_END in checkpoint_ns else checkpoint_ns
-
-    if metadata is None:
-        return {CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns}
-
-    return {**metadata, CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns}
-
-
 _PROPAGATE_TO_METADATA = frozenset(
     (
         "thread_id",
