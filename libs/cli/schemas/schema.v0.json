@@ -1187,7 +1187,9 @@
           "type": "string"
         }
       },
-      "required": []
+      "required": [
+        "kind"
+      ]
     },
     "StoreConfig": {
       "title": "StoreConfig",
