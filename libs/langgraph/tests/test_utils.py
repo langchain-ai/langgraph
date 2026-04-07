@@ -374,7 +374,5 @@ def test_callback_manager_copies_whitelisted_configurable_ids_to_metadata() -> N
         "run_id": "run-456",
         "assistant_id": "asst-789",
         "graph_id": "graph-0",
-        "user_id": "uid-1",
         "cron_id": "cron-1",
-        "langgraph_auth_user_id": "user-1",
     }
