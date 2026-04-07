@@ -65,7 +65,7 @@ def _parse_dependency_name(
     match = re.match(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)", dependency)
     if not match:
         raise click.UsageError(
-            "pip_installer 'uv_lock' only supports PEP 508 dependency strings "
+            "source.kind 'uv' only supports PEP 508 dependency strings "
             f"with an explicit package name. Could not parse dependency "
             f"{dependency!r} in {pyproject_path} for package '{package_name}'."
         )
@@ -86,7 +86,7 @@ def _get_dependency_names(
         isinstance(spec, str) for spec in dependency_specs
     ):
         raise click.UsageError(
-            "pip_installer 'uv_lock' requires [project].dependencies to be a "
+            "source.kind 'uv' requires [project].dependencies to be a "
             f"list of strings in {pyproject_path}."
         )
     return tuple(
@@ -209,7 +209,7 @@ def _get_uv_lock_package_enabled(package: UvLockPackage) -> bool:
     uv_tool = package.raw_uv_tool
     if uv_tool and not isinstance(uv_tool, dict):
         raise click.UsageError(
-            "pip_installer 'uv_lock' requires [tool.uv] to be a table "
+            "source.kind 'uv' requires [tool.uv] to be a table "
             f"in {package.pyproject_path}."
         )
     package_enabled = (
@@ -217,7 +217,7 @@ def _get_uv_lock_package_enabled(package: UvLockPackage) -> bool:
     )
     if not isinstance(package_enabled, bool):
         raise click.UsageError(
-            "pip_installer 'uv_lock' requires [tool.uv].package to be a boolean "
+            "source.kind 'uv' requires [tool.uv].package to be a boolean "
             f"in {package.pyproject_path}."
         )
     return package_enabled
@@ -232,7 +232,7 @@ def _get_uv_lock_source_entries(
 ) -> tuple[UvLockSourceEntry, ...]:
     if not isinstance(raw_root_source_entries, dict):
         raise click.UsageError(
-            "pip_installer 'uv_lock' requires [tool.uv.sources] to be a table "
+            "source.kind 'uv' requires [tool.uv.sources] to be a table "
             f"in {root_pyproject_path}."
         )
 
@@ -242,7 +242,7 @@ def _get_uv_lock_source_entries(
     )
     if not isinstance(package_source_entries, dict):
         raise click.UsageError(
-            "pip_installer 'uv_lock' requires [tool.uv.sources] to be a table "
+            "source.kind 'uv' requires [tool.uv.sources] to be a table "
             f"in {package.pyproject_path}."
         )
 
@@ -331,13 +331,13 @@ def _discover_uv_lock_workspace_packages(
     )
     if workspace_members and not isinstance(workspace_members, list):
         raise click.UsageError(
-            "pip_installer 'uv_lock' requires [tool.uv.workspace].members to be a list."
+            "source.kind 'uv' requires [tool.uv.workspace].members to be a list."
         )
 
     for pattern in workspace_members:
         if not isinstance(pattern, str):
             raise click.UsageError(
-                "pip_installer 'uv_lock' requires every [tool.uv.workspace].members "
+                "source.kind 'uv' requires every [tool.uv.workspace].members "
                 "entry to be a string."
             )
         for match in sorted(project_root.glob(pattern)):
