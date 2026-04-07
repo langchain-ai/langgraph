@@ -290,12 +290,13 @@ def validate_config(config: Config) -> Config:
             )
 
     if source_kind == "uv":
-        if config.get("node_version"):
-            raise click.UsageError(
-                "source.kind 'uv' does not support Node.js graphs or "
-                "`node_version`. Use only Python graph entrypoints."
-            )
         errors: list[str] = []
+        if not config.get("python_version"):
+            errors.append(
+                "source.kind 'uv' requires `python_version` — "
+                "it is a Python-only deployment mode. "
+                "Node.js-only graphs are not supported."
+            )
         if config["dependencies"]:
             errors.append(
                 "Remove `dependencies` from your config. With "
@@ -309,6 +310,8 @@ def validate_config(config: Config) -> Config:
                 "your langgraph.json to the directory containing pyproject.toml "
                 'and uv.lock (e.g. "root": "../..").'
             )
+        elif not isinstance(root, str):
+            errors.append(f"`source.root` must be a string, got {type(root).__name__}.")
         if errors:
             detail = "\n".join(f"  - {e}" for e in errors)
             raise click.UsageError(

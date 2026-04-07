@@ -445,7 +445,7 @@ def test_validate_config_pip_installer():
             }
         )
 
-    with pytest.raises(click.UsageError, match="does not support Node.js graphs"):
+    with pytest.raises(click.UsageError, match="requires `python_version`"):
         validate_config(
             {
                 "node_version": "20",
@@ -454,14 +454,36 @@ def test_validate_config_pip_installer():
             }
         )
 
-    with pytest.raises(click.UsageError, match="does not support Node.js graphs"):
+    # Mixed Python+Node graphs are allowed (python_version auto-defaults)
+    config = validate_config(
+        {
+            "graphs": {
+                "agent": "./agent.py:graph",
+                "ui": "./agent.ts:graph",
+            },
+            "source": {"kind": "uv", "root": "../..", "package": "agent"},
+        }
+    )
+    assert config["python_version"] is not None
+
+    # node_version is allowed alongside python_version (for UI builds)
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "node_version": "20",
+            "graphs": {"agent": "./agent.py:graph"},
+            "source": {"kind": "uv", "root": "../.."},
+        }
+    )
+    assert config["node_version"] == "20"
+    assert config["source"] == {"kind": "uv", "root": "../.."}
+
+    with pytest.raises(click.UsageError, match="must be a string"):
         validate_config(
             {
-                "graphs": {
-                    "agent": "./agent.py:graph",
-                    "ui": "./agent.ts:graph",
-                },
-                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+                "python_version": "3.11",
+                "graphs": {"agent": "./agent.py:graph"},
+                "source": {"kind": "uv", "root": 123},
             }
         )
 
@@ -1735,6 +1757,39 @@ def test_config_to_docker_uv_lock_rejects_paths_outside_target_closure():
             {
                 "python_version": "3.11",
                 "graphs": {
+                    "agent": "../../libs/extra/src/extra/graph.py:graph",
+                },
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+            }
+        )
+
+        with pytest.raises(
+            click.UsageError,
+            match="not inside the target package 'agent'",
+        ):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.47"
+            )
+
+
+def test_config_to_docker_uv_lock_rejects_unrelated_member_when_root_in_closure():
+    """When the workspace root is in the closure, paths under unrelated members
+    should still be rejected instead of silently matching the root."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        # Agent depends on workspace-root (puts project_root in container_roots)
+        _, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            agent_dependencies=["workspace-root", "shared", "httpx>=0.28"],
+            root_sources="[tool.uv.sources]\nshared = { workspace = true }\nworkspace-root = { workspace = true }",
+            agent_sources="[tool.uv.sources]\nshared = { workspace = true }\nworkspace-root = { workspace = true }",
+        )
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    # extra is a workspace member but NOT a dependency of agent
                     "agent": "../../libs/extra/src/extra/graph.py:graph",
                 },
                 "source": {"kind": "uv", "root": "../..", "package": "agent"},

@@ -53,6 +53,7 @@ class UvLockPlan:
     install_order: tuple[UvLockPackage, ...]
     container_roots: dict[pathlib.Path, pathlib.PurePosixPath]
     working_dir: str
+    all_workspace_roots: frozenset[pathlib.Path] = frozenset()
 
 
 def _normalize_package_name(name: str) -> str:
@@ -420,12 +421,42 @@ def _resolve_uv_lock_container_path(
         plan.container_roots, key=lambda path: len(path.parts), reverse=True
     ):
         if host_path == package_root or package_root in host_path.parents:
+            # Guard against the workspace root matching paths inside
+            # unrelated workspace members that are not in the closure.
+            if plan.all_workspace_roots and _path_in_unrelated_member(
+                host_path, package_root, plan
+            ):
+                continue
             relative_path = host_path.relative_to(package_root)
             container_root = plan.container_roots[package_root]
             if relative_path == pathlib.Path("."):
                 return container_root
             return container_root.joinpath(*relative_path.parts)
     return None
+
+
+def _path_in_unrelated_member(
+    host_path: pathlib.Path,
+    matched_root: pathlib.Path,
+    plan: UvLockPlan,
+) -> bool:
+    """Return True if host_path is inside a workspace member NOT in the closure.
+
+    When matched_root is the project root (workspace root), it is a parent of
+    every file in the workspace.  We need to reject paths that actually belong
+    to a sibling workspace member that was not selected for deployment.
+    """
+    for ws_root in plan.all_workspace_roots:
+        if ws_root == matched_root:
+            continue
+        # ws_root is more specific than matched_root
+        if ws_root in matched_root.parents or ws_root == matched_root:
+            continue
+        if host_path == ws_root or ws_root in host_path.parents:
+            # host_path is inside this workspace member
+            if ws_root not in plan.container_roots:
+                return True
+    return False
 
 
 def _infer_uv_lock_target_package(
@@ -561,6 +592,10 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
         for package in install_order
     }
 
+    all_workspace_roots = frozenset(
+        package.root for package in packages_by_name.values()
+    )
+
     working_dir = _resolve_uv_lock_container_path(
         config_root,
         UvLockPlan(
@@ -574,6 +609,7 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
             working_dir=str(
                 _container_root_for_uv_lock_package(project_root, target.root)
             ),
+            all_workspace_roots=all_workspace_roots,
         ),
     )
     if working_dir is None:
@@ -588,6 +624,7 @@ def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLock
         install_order=tuple(install_order),
         container_roots=container_roots,
         working_dir=str(working_dir),
+        all_workspace_roots=all_workspace_roots,
     )
 
 
