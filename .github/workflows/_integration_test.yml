@@ -150,7 +150,7 @@ jobs:
         run: |
           cp .env.example .env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
-          timeout 60 python ../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-simple
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-simple
 
       - name: Build uv monorepo service
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
@@ -165,4 +165,4 @@ jobs:
         run: |
           cp .env.example .env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
-          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-monorepo
+          timeout 60 python ../../../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-monorepo

@@ -364,7 +364,7 @@ def _discover_uv_lock_workspace_packages(
         )
         if not isinstance(package_name, str) or not package_name.strip():
             raise click.UsageError(
-                "pip_installer 'uv_lock' requires every workspace package to define "
+                "source.kind 'uv' requires every workspace package to define "
                 f"[project].name in {member_pyproject_path}."
             )
 
@@ -385,7 +385,7 @@ def _discover_uv_lock_workspace_packages(
         existing = packages_by_name.get(package.normalized_name)
         if existing is not None:
             raise click.UsageError(
-                "pip_installer 'uv_lock' requires unique workspace package names, "
+                "source.kind 'uv' requires unique workspace package names, "
                 f"but both {existing.pyproject_path} and {package.pyproject_path} "
                 f"define '{package.name}'."
             )
@@ -726,7 +726,7 @@ def python_config_to_docker_uv_lock(
     base_image: str,
     api_version: str | None = None,
     *,
-    build_tools_to_uninstall: tuple[str] | None,
+    build_tools_to_uninstall: tuple[str, ...] | None,
 ) -> tuple[str, dict[str, str]]:
     from langgraph_cli.config import (
         DEFAULT_NODE_VERSION,
@@ -740,7 +740,7 @@ def python_config_to_docker_uv_lock(
 
     if not _image_supports_uv(base_image):
         raise ValueError(
-            "pip_installer 'uv_lock' requires a base image with uv support "
+            "source.kind 'uv' requires a base image with uv support "
             "(langchain/langgraph-api >= 0.2.47)"
         )
 

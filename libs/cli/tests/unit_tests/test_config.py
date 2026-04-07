@@ -445,7 +445,7 @@ def test_validate_config_pip_installer():
             }
         )
 
-    with pytest.raises(click.UsageError, match="only supported for Python deployments"):
+    with pytest.raises(click.UsageError, match="does not support Node.js graphs"):
         validate_config(
             {
                 "node_version": "20",

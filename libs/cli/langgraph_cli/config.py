@@ -290,10 +290,6 @@ def validate_config(config: Config) -> Config:
             )
 
     if source_kind == "uv":
-        if not config.get("python_version"):
-            raise click.UsageError(
-                "source.kind 'uv' is only supported for Python deployments."
-            )
         if config.get("node_version"):
             raise click.UsageError(
                 "source.kind 'uv' does not support Node.js graphs or "
