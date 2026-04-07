@@ -1177,7 +1177,7 @@ def _deploy_base_options(
                 "--image",
                 help=(
                     "Use an existing local image reference (e.g. repo:tag) and "
-                    "skip building."
+                    "skip building. The image must target linux/amd64."
                 ),
             ),
             click.option(
