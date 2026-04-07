@@ -1176,8 +1176,8 @@ def _deploy_base_options(
             click.option(
                 "--image",
                 help=(
-                    "Use an existing local image (must include a tag) instead of "
-                    "building a new one."
+                    "Use an existing local image reference (e.g. repo:tag) and "
+                    "skip building."
                 ),
             ),
             click.option(
