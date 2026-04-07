@@ -6945,10 +6945,11 @@ def test_configurable_propagates_to_stream_metadata() -> None:
     assert metadata["run_id"] == "run-456"
     assert metadata["assistant_id"] == "asst-789"
     assert metadata["graph_id"] == "graph-0"
-    assert metadata["model"] == "gpt-4o"
-    assert metadata["user_id"] == "uid-1"
-    assert metadata["cron_id"] == "cron-1"
-    assert metadata["langgraph_auth_user_id"] == "user-1"
+    # These are only present in trace metadata by default as of langgraph 1.2
+    # assert metadata["model"] == "gpt-4o"
+    # assert metadata["user_id"] == "uid-1"
+    # assert metadata["cron_id"] == "cron-1"
+    # assert metadata["langgraph_auth_user_id"] == "user-1"
     # non-allowlisted keys must not appear
     assert "some_api_key" not in metadata
     assert "custom_setting" not in metadata

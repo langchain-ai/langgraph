@@ -327,10 +327,19 @@ def test_configurable_metadata() -> None:
         },
         "metadata": {"nooverride": 18},
     }
-    expected = {"nooverride"}
     merged = ensure_config(config)
     metadata = merged["metadata"]
-    assert metadata.keys() == expected
+    assert set(metadata) == {
+        "nooverride",
+        "assistant_id",
+        "thread_id",
+        "checkpoint_id",
+        "cron_id",
+        "run_id",
+        "graph_id",
+        "checkpoint_ns",
+        "task_id",
+    }
     assert metadata["nooverride"] == 18
 
 

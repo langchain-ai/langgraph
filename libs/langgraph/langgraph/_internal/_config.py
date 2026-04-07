@@ -224,7 +224,7 @@ def get_callback_manager_for_config(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
-            langsmith_metadata=_get_local_tracing_metadata_defaults(config),
+            langsmith_metadata=_get_tracing_metadata_defaults(config),
         )
     return manager
 
@@ -264,7 +264,7 @@ def get_async_callback_manager_for_config(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
-            langsmith_metadata=_get_local_tracing_metadata_defaults(config),
+            langsmith_metadata=_get_tracing_metadata_defaults(config),
         )
     return manager
 
@@ -312,20 +312,30 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         for k, v in config.items():
             if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
+
+    configurable = empty.get("configurable")
+    metadata = empty.get("metadata")
+    if configurable and metadata is not None:
+        for key in _PROPAGATE_TO_METADATA:
+            if key in metadata:
+                continue
+            value = configurable.get(key)
+            if value:
+                metadata[key] = value
     return empty
 
 
-def _get_local_tracing_metadata_defaults(
+def _get_tracing_metadata_defaults(
     config: RunnableConfig,
 ) -> dict[str, str] | None:
-    """Get tracer-only metadata defaults from configurable values."""
+    """Get tracer-only identity metadata defaults from configurable values."""
     configurable = config.get("configurable")
     if not configurable:
         return None
 
     config_metadata = config.get("metadata")
     metadata: dict[str, str] = {}
-    for key in _PROPAGATE_TO_METADATA:
+    for key in _PROPAGATE_TO_TRACING_METADATA:
         if config_metadata is not None and key in config_metadata:
             continue
         value = configurable.get(key)
@@ -343,8 +353,13 @@ _PROPAGATE_TO_METADATA = frozenset(
         "run_id",
         "assistant_id",
         "graph_id",
-        "user_id",
         "cron_id",
+    )
+)
+
+_PROPAGATE_TO_TRACING_METADATA = frozenset(
+    (
+        "user_id",
         "langgraph_auth_user_id",
     )
 )
