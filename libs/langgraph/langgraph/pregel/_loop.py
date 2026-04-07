@@ -11,7 +11,6 @@ from contextlib import (
     AsyncExitStack,
     ExitStack,
 )
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from inspect import signature
 from types import TracebackType
@@ -93,6 +92,7 @@ from langgraph.pregel._checkpoint import (
     create_checkpoint,
     empty_checkpoint,
 )
+from langgraph.pregel._events import GraphLifecycleEvent
 from langgraph.pregel._executor import (
     AsyncBackgroundExecutor,
     BackgroundExecutor,
@@ -130,16 +130,6 @@ P = ParamSpec("P")
 
 
 WritesT = Sequence[tuple[str, Any]]
-
-
-@dataclass(slots=True, frozen=True)
-class GraphLifecycleEvent:
-    kind: Literal["resume", "interrupt"]
-    status: str
-    checkpoint_id: str
-    checkpoint_ns: tuple[str, ...]
-    is_nested: bool
-    interrupts: tuple[Interrupt, ...] = ()
 
 
 def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
