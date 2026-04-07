@@ -191,7 +191,9 @@ def _validate_uv_lock_source_entry(
             )
         workspace_dependencies.add(package.normalized_name)
 
-    for nested_value in source_value.values():
+    for key, nested_value in source_value.items():
+        if key in {"workspace", "path"}:
+            continue
         workspace_dependencies.update(
             _validate_uv_lock_source_entry(
                 source_name=source_name,
@@ -414,6 +416,48 @@ def _container_root_for_uv_lock_package(
     return container_root.joinpath(*relative_root.parts)
 
 
+def _uv_lock_package_copy_items(
+    package: UvLockPackage, plan: UvLockPlan
+) -> tuple[tuple[pathlib.PurePosixPath, pathlib.PurePosixPath], ...]:
+    if package.root != plan.project_root:
+        relative_root = pathlib.PurePosixPath(
+            *package.root.relative_to(plan.project_root).parts
+        )
+        return ((relative_root, plan.container_roots[package.root]),)
+
+    root_container = plan.container_roots[package.root]
+    workspace_member_roots = plan.all_workspace_roots - {plan.project_root}
+
+    def iter_entries(
+        current_dir: pathlib.Path,
+    ) -> tuple[tuple[pathlib.PurePosixPath, pathlib.PurePosixPath], ...]:
+        entries: list[tuple[pathlib.PurePosixPath, pathlib.PurePosixPath]] = []
+        for child in sorted(current_dir.iterdir(), key=lambda path: path.name):
+            if child in workspace_member_roots:
+                # Workspace members are copied separately if they are in the closure,
+                # and excluded entirely otherwise.
+                continue
+
+            descendant_member_roots = [
+                ws_root
+                for ws_root in workspace_member_roots
+                if child in ws_root.parents
+            ]
+            if child.is_dir() and descendant_member_roots:
+                entries.extend(iter_entries(child))
+                continue
+
+            relative_child = pathlib.PurePosixPath(
+                *child.relative_to(plan.project_root).parts
+            )
+            entries.append(
+                (relative_child, root_container.joinpath(*relative_child.parts))
+            )
+        return tuple(entries)
+
+    return iter_entries(plan.project_root)
+
+
 def _resolve_uv_lock_container_path(
     host_path: pathlib.Path, plan: UvLockPlan
 ) -> pathlib.PurePosixPath | None:
@@ -450,7 +494,7 @@ def _path_in_unrelated_member(
         if ws_root == matched_root:
             continue
         # ws_root is more specific than matched_root
-        if ws_root in matched_root.parents or ws_root == matched_root:
+        if ws_root in matched_root.parents:
             continue
         if host_path == ws_root or ws_root in host_path.parents:
             # host_path is inside this workspace member
@@ -468,7 +512,9 @@ def _infer_uv_lock_target_package(
     packages_by_root: dict[pathlib.Path, UvLockPackage],
 ) -> UvLockPackage:
     package_name = source.get("package")
-    if isinstance(package_name, str) and package_name:
+    if package_name is not None:
+        if not isinstance(package_name, str) or not package_name.strip():
+            raise click.UsageError("`source.package` must be a non-empty string.")
         target = packages_by_name.get(_normalize_package_name(package_name))
         if target is None:
             available_packages = ", ".join(
@@ -518,21 +564,24 @@ def _infer_uv_lock_target_package(
 def _plan_uv_lock_workspace(config_path: pathlib.Path, config: Config) -> UvLockPlan:
     config_root = config_path.parent.resolve()
     source = config["source"]
-    project_root = (config_root / source["root"]).resolve()
+    root = source.get("root", ".")
+    if not isinstance(root, str) or not root.strip():
+        raise click.UsageError('`source.root` must be a non-empty string. Use `"."`.')
+    project_root = (config_root / root).resolve()
     pyproject_path = project_root / "pyproject.toml"
     uv_lock_path = project_root / "uv.lock"
 
     if not uv_lock_path.exists():
         raise click.UsageError(
             f"No uv.lock found at {uv_lock_path}. Your langgraph.json sets "
-            f"source.root={source['root']!r}, which resolves to "
+            f"source.root={root!r}, which resolves to "
             f"{project_root}. Make sure this is the directory where you run "
             "`uv lock` (it should contain both pyproject.toml and uv.lock)."
         )
     if not pyproject_path.exists():
         raise click.UsageError(
             f"No pyproject.toml found at {pyproject_path}. Your langgraph.json "
-            f"sets source.root={source['root']!r}, which resolves to "
+            f"sets source.root={root!r}, which resolves to "
             f"{project_root}. This should be your uv workspace root."
         )
 
@@ -836,10 +885,22 @@ RUN rm -rf /tmp/uv_export
 
     workspace_pkgs_str = os.linesep.join(
         [
-            f"""# -- Adding workspace package {package.root.relative_to(plan.project_root).as_posix() or "."} --
-{copy_from_project_root(pathlib.PurePosixPath(*package.root.relative_to(plan.project_root).parts), plan.container_roots[package.root].as_posix())}
-RUN cd {plan.container_roots[package.root].as_posix()} && {global_reqs_pip_install} --no-deps -e .
-# -- End of workspace package {package.root.relative_to(plan.project_root).as_posix() or "."} --"""
+            os.linesep.join(
+                [
+                    f"# -- Adding workspace package {package.root.relative_to(plan.project_root).as_posix() or '.'} --",
+                    *(
+                        copy_from_project_root(source, destination.as_posix())
+                        for source, destination in _uv_lock_package_copy_items(
+                            package, plan
+                        )
+                    ),
+                    (
+                        f"RUN cd {plan.container_roots[package.root].as_posix()} && "
+                        f"{global_reqs_pip_install} --no-deps -e ."
+                    ),
+                    f"# -- End of workspace package {package.root.relative_to(plan.project_root).as_posix() or '.'} --",
+                ]
+            )
             for package in plan.install_order
         ]
     )

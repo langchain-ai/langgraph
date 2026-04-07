@@ -303,15 +303,16 @@ def validate_config(config: Config) -> Config:
                 '`source.kind = "uv"`, all dependencies '
                 "are read from your pyproject.toml and uv.lock instead."
             )
-        root = source.get("root") if source else None
-        if not root:
-            errors.append(
-                "Add `source.root`: the relative path from "
-                "your langgraph.json to the directory containing pyproject.toml "
-                'and uv.lock (e.g. "root": "../..").'
-            )
-        elif not isinstance(root, str):
+        root = source.get("root", ".") if source else "."
+        if not isinstance(root, str):
             errors.append(f"`source.root` must be a string, got {type(root).__name__}.")
+        elif not root.strip():
+            errors.append('`source.root` must be a non-empty string. Use `"."`.')
+        package_name = source.get("package") if source else None
+        if package_name is not None and (
+            not isinstance(package_name, str) or not package_name.strip()
+        ):
+            errors.append("`source.package` must be a non-empty string.")
         if errors:
             detail = "\n".join(f"  - {e}" for e in errors)
             raise click.UsageError(

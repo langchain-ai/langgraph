@@ -426,12 +426,23 @@ def test_validate_config_pip_installer():
             }
         )
 
-    with pytest.raises(click.UsageError, match="Add `source.root`"):
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "graphs": {"agent": "./agent.py:graph"},
+            "source": {"kind": "uv"},
+        }
+    )
+    assert config["source"] == {"kind": "uv"}
+
+    with pytest.raises(
+        click.UsageError, match="`source.package` must be a non-empty string"
+    ):
         validate_config(
             {
                 "python_version": "3.11",
                 "graphs": {"agent": "./agent.py:graph"},
-                "source": {"kind": "uv"},
+                "source": {"kind": "uv", "package": 123},
             }
         )
 
@@ -1737,7 +1748,7 @@ def test_config_to_docker_uv_lock_supports_single_uv_project_root():
             {
                 "python_version": "3.11",
                 "graphs": {"agent": "./src/agent.py:graph"},
-                "source": {"kind": "uv", "root": "."},
+                "source": {"kind": "uv"},
             }
         )
         docker, additional_contexts = config_to_docker(
@@ -1752,6 +1763,30 @@ def test_config_to_docker_uv_lock_supports_single_uv_project_root():
         )
         assert '"agent": "/deps/workspace/src/agent.py:graph"' in docker
         assert additional_contexts == {}
+
+
+def test_config_to_docker_uv_lock_rejects_invalid_source_package_type():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        _, config_path = _write_uv_lock_workspace(tmpdir_path)
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    "agent": "../../apps/agent/src/agent/graph.py:graph",
+                },
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+            }
+        )
+        config["source"]["package"] = 123
+
+        with pytest.raises(
+            click.UsageError, match="`source.package` must be a non-empty string"
+        ):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.47"
+            )
 
 
 def test_config_to_docker_uv_lock_rejects_paths_outside_target_closure():
@@ -1812,6 +1847,50 @@ def test_config_to_docker_uv_lock_rejects_unrelated_member_when_root_in_closure(
             config_to_docker(
                 config_path, config, base_image="langchain/langgraph-api:0.2.47"
             )
+
+
+def test_config_to_docker_uv_lock_root_package_copy_skips_unrelated_members():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            agent_dependencies=["workspace-root", "shared", "httpx>=0.28"],
+            root_sources="[tool.uv.sources]\nshared = { workspace = true }\nworkspace-root = { workspace = true }",
+            agent_sources="[tool.uv.sources]\nshared = { workspace = true }\nworkspace-root = { workspace = true }",
+        )
+        root_src = project_root / "src" / "workspace_root"
+        root_src.mkdir(parents=True)
+        (root_src / "__init__.py").write_text("__all__ = []\n")
+        (project_root / "README.md").write_text("workspace root package\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    "agent": "../../apps/agent/src/agent/graph.py:graph",
+                },
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert "COPY --from=uv-workspace-root . /deps/workspace" not in docker
+        assert "COPY --from=uv-workspace-root src /deps/workspace/src" in docker
+        assert (
+            "COPY --from=uv-workspace-root README.md /deps/workspace/README.md"
+            in docker
+        )
+        assert (
+            "COPY --from=uv-workspace-root libs/extra /deps/workspace/libs/extra"
+            not in docker
+        )
+        assert (
+            "RUN cd /deps/workspace && "
+            "PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir "
+            "-c /api/constraints.txt --no-deps -e ." in docker
+        )
 
 
 def test_config_to_docker_uv_lock_missing_lockfile():
