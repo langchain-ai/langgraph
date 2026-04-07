@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import ChainMap
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from os import getenv
 from typing import Any, cast
 
