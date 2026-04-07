@@ -224,7 +224,7 @@ def get_callback_manager_for_config(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
-            langsmith_metadata=_get_tracing_metadata_defaults(config),
+            langsmith_inheritable_metadata=_get_tracing_metadata_defaults(config),
         )
     return manager
 
@@ -264,7 +264,7 @@ def get_async_callback_manager_for_config(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
-            langsmith_metadata=_get_tracing_metadata_defaults(config),
+            langsmith_inheritable_metadata=_get_tracing_metadata_defaults(config),
         )
     return manager
 
