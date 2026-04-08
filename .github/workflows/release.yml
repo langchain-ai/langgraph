@@ -13,6 +13,7 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.11"
+  GO_VERSION: "1.23"
 
 jobs:
   build:
@@ -34,6 +35,70 @@ jobs:
           cache-suffix: "release"
           working-directory: ${{ inputs.working-directory }}
 
+      # -- Go cross-compilation (libs/cli only) --
+      # When releasing the CLI, we cross-compile the Go binary for each
+      # platform and build platform-specific wheels that bundle it.
+      - name: Set up Go
+        if: inputs.working-directory == 'libs/cli'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cross-compile Go binaries
+        if: inputs.working-directory == 'libs/cli'
+        working-directory: ${{ inputs.working-directory }}
+        run: make build-go-all
+
+      - name: Run Go tests
+        if: inputs.working-directory == 'libs/cli'
+        working-directory: ${{ inputs.working-directory }}
+        run: go test -count=1 -race ./...
+
+      - name: Build CLI platform wheels
+        if: inputs.working-directory == 'libs/cli'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # Each entry: GO_BINARY_KEY WHEEL_PLATFORM_TAG
+          #
+          # Since Go builds are statically linked (CGO_ENABLED=0), the same
+          # linux binary works on both glibc and musl. We produce separate
+          # manylinux and musllinux wheels so pip installs the right one.
+          TARGETS=(
+            # Linux glibc
+            "linux-amd64     manylinux_2_17_x86_64.manylinux2014_x86_64"
+            "linux-arm64     manylinux_2_17_aarch64.manylinux2014_aarch64"
+            "linux-arm       manylinux_2_17_armv7l.manylinux2014_armv7l"
+            "linux-386       manylinux_2_17_i686.manylinux2014_i686"
+            "linux-ppc64le   manylinux_2_17_ppc64le.manylinux2014_ppc64le"
+            "linux-s390x     manylinux_2_17_s390x.manylinux2014_s390x"
+            # Linux musl (same Go binaries, different wheel tag)
+            "linux-amd64     musllinux_1_2_x86_64"
+            "linux-arm64     musllinux_1_2_aarch64"
+            "linux-arm       musllinux_1_2_armv7l"
+            "linux-386       musllinux_1_2_i686"
+            # macOS
+            "darwin-amd64    macosx_11_0_x86_64"
+            "darwin-arm64    macosx_11_0_arm64"
+            # Windows
+            "windows-amd64   win_amd64"
+            "windows-arm64   win_arm64"
+            "windows-386     win32"
+          )
+          for entry in "${TARGETS[@]}"; do
+            key=$(echo "$entry" | awk '{print $1}')
+            plat=$(echo "$entry" | awk '{print $2}')
+            ext=""
+            if [[ "$key" == windows-* ]]; then ext=".exe"; fi
+            binary="langgraph_cli/bin/langgraph-${key}${ext}"
+            echo "Building wheel for ${key} -> ${plat}..."
+            LANGGRAPH_GO_BINARY="$binary" LANGGRAPH_WHEEL_PLAT="$plat" uv build --wheel
+          done
+          # Also build the sdist and pure-Python fallback wheel
+          uv build
+          echo "All wheels built:"
+          ls -lh dist/
+
+      # -- Standard build (all other packages) --
       # We want to keep this build stage *separate* from the release stage,
       # so that there's no sharing of permissions between them.
       # The release stage has trusted publishing and GitHub repo contents write access,
@@ -46,6 +111,7 @@ jobs:
       # > from the publish job.
       # https://github.com/pypa/gh-action-pypi-publish#non-goals
       - name: Build project for distribution
+        if: inputs.working-directory != 'libs/cli'
         run: uv build
         working-directory: ${{ inputs.working-directory }}
 

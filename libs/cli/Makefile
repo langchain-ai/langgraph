@@ -64,13 +64,22 @@ GO_LDFLAGS=-s -w \
   -X '$(GO_VERSION_PKG).Commit=$(GO_COMMIT)' \
   -X '$(GO_VERSION_PKG).Date=$(GO_DATE)'
 
-# Platform matrix — matches orjson support as proxy for practical CLI targets.
+# Platform matrix — covers every platform orjson ships for. Since the Go
+# binary is statically linked (CGO_ENABLED=0), the same linux binary works
+# on both glibc and musl. Musllinux wheels reuse the linux binary but are
+# tagged differently so pip installs them on Alpine/musl systems.
 GO_PLATFORMS = \
   linux/amd64 \
   linux/arm64 \
+  linux/arm \
+  linux/386 \
+  linux/ppc64le \
+  linux/s390x \
   darwin/amd64 \
   darwin/arm64 \
-  windows/amd64
+  windows/amd64 \
+  windows/arm64 \
+  windows/386
 
 # Build for the current platform (development).
 build-go:
