@@ -908,7 +908,7 @@ class BaseStore(ABC):
             store.put(("docs",), "report", {"memory": "Will likes ai"}, index=["memory"])
             ```
         """
-        _validate_namespace(namespace)
+        namespace = _validate_namespace(namespace)
         if ttl not in (NOT_PROVIDED, None) and not self.supports_ttl:
             raise NotImplementedError(
                 f"TTL is not supported by {self.__class__.__name__}. "
@@ -1169,7 +1169,7 @@ class BaseStore(ABC):
             )
             ```
         """
-        _validate_namespace(namespace)
+        namespace = _validate_namespace(namespace)
         if ttl not in (NOT_PROVIDED, None) and not self.supports_ttl:
             raise NotImplementedError(
                 f"TTL is not supported by {self.__class__.__name__}. "
@@ -1252,15 +1252,15 @@ class BaseStore(ABC):
         return (await self.abatch([op]))[0]
 
 
-def _validate_namespace(namespace: tuple[str, ...]) -> None:
+def _validate_namespace(namespace: tuple[str, ...]) -> tuple[str, ...]:
     if not namespace:
         raise InvalidNamespaceError("Namespace cannot be empty.")
+    coerced = False
+    labels: list[str] = []
     for label in namespace:
         if not isinstance(label, str):
-            raise InvalidNamespaceError(
-                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels"
-                f" must be strings, but got {type(label).__name__}."
-            )
+            label = str(label)
+            coerced = True
         if "." in label:
             raise InvalidNamespaceError(
                 f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain periods ('.')."
@@ -1269,10 +1269,13 @@ def _validate_namespace(namespace: tuple[str, ...]) -> None:
             raise InvalidNamespaceError(
                 f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
             )
-    if namespace[0] == "langgraph":
+        labels.append(label)
+    result = tuple(labels) if coerced else namespace
+    if result[0] == "langgraph":
         raise InvalidNamespaceError(
-            f'Root label for namespace cannot be "langgraph". Got: {namespace}'
+            f'Root label for namespace cannot be "langgraph". Got: {result}'
         )
+    return result
 
 
 def _ensure_refresh(

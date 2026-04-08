@@ -138,7 +138,7 @@ class AsyncBatchedBaseStore(BaseStore):
         ttl: float | None | NotProvided = NOT_PROVIDED,
     ) -> None:
         self._ensure_task()
-        _validate_namespace(namespace)
+        namespace = _validate_namespace(namespace)
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
             (
@@ -236,7 +236,7 @@ class AsyncBatchedBaseStore(BaseStore):
         *,
         ttl: float | None | NotProvided = NOT_PROVIDED,
     ) -> None:
-        _validate_namespace(namespace)
+        namespace = _validate_namespace(namespace)
         asyncio.run_coroutine_threadsafe(
             self.aput(
                 namespace,

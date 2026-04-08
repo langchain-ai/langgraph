@@ -515,6 +515,35 @@ async def test_cannot_put_empty_namespace() -> None:
     assert (await async_store.aget(("valid", "namespace"), "key")) is None
 
 
+async def test_namespace_non_string_labels_coerced() -> None:
+    """Non-string namespace labels (e.g. int user IDs) are coerced to strings.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/7427.
+    """
+    store = InMemoryStore()
+    doc = {"memory": "likes ai"}
+
+    # int label should be coerced to str, not raise
+    store.put(("rag-agent", 1, "memories"), "k1", doc)
+    assert store.get(("rag-agent", "1", "memories"), "k1").value == doc  # type: ignore[union-attr]
+
+    # async path
+    await store.aput(("app", 42, "data"), "k2", doc)
+    assert (await store.aget(("app", "42", "data"), "k2")).value == doc  # type: ignore[union-attr]
+
+    # AsyncBatchedBaseStore path
+    async_store = MockAsyncBatchedStore()
+    await async_store.aput(("agent", 7, "ctx"), "k3", doc)
+    val = await async_store.aget(("agent", "7", "ctx"), "k3")
+    assert val is not None
+    assert val.value == doc
+
+    # search works with the coerced namespace
+    results = store.search(("rag-agent", "1", "memories"))
+    assert len(results) == 1
+    assert results[0].value == doc
+
+
 async def test_async_batch_store_deduplication(mocker: MockerFixture) -> None:
     abatch = mocker.spy(InMemoryStore, "batch")
     store = MockAsyncBatchedStore()
