@@ -818,6 +818,23 @@ def dev(
 
 
 # ---------------------------------------------------------------------------
+# validate command
+# ---------------------------------------------------------------------------
+
+
+@OPT_CONFIG
+@cli.command(help="✅ Validate the LangGraph configuration file.")
+@log_command
+def validate(config: pathlib.Path):
+    config_json = langgraph_cli.config.validate_config_file(config)
+    num_graphs = len(config_json.get("graphs", {}))
+    click.echo(
+        f"Configuration file {config} is valid. "
+        f"({num_graphs} graph{'s' if num_graphs != 1 else ''} found)"
+    )
+
+
+# ---------------------------------------------------------------------------
 # new command
 # ---------------------------------------------------------------------------
 
