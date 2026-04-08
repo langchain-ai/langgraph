@@ -11,6 +11,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GO_VERSION: "1.23"
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,12 +29,23 @@ jobs:
     name: "test #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v6
+      - name: Get changed files
+        id: changed-files
+        if: ${{ inputs.working-directory == 'libs/cli' && github.event_name != 'workflow_dispatch' }}
+        uses: Ana06/get-changed-files@25f79e676e7ea1868813e21465014798211fad8c # v2.3.0
+        with:
+          filter: "libs/cli/**"
       - name: Set up Python ${{ matrix.python-version }}
         uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ matrix.python-version }}
           cache-suffix: test-${{ inputs.working-directory }}
           working-directory: ${{ inputs.working-directory }}
+      - name: Set up Go
+        if: ${{ inputs.working-directory == 'libs/cli' && (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
       - name: Login to Docker Hub
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
         if: ${{ !github.event.pull_request.head.repo.fork }}
@@ -44,10 +58,25 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         run: uv sync --frozen --group test --no-dev
 
+      - name: Build Go CLI binary
+        if: ${{ inputs.working-directory == 'libs/cli' && (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') }}
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: make build-go
+
       - name: Run tests
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         run: make test
+
+      - name: Run Go CLI smoke tests
+        if: ${{ inputs.working-directory == 'libs/cli' && (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') }}
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
+        run: TEST='tests/unit_tests/test_go_cli_smoke.py' make test
 
       - name: Ensure the tests did not create any additional files
         shell: bash

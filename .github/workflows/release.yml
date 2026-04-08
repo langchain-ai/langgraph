@@ -308,6 +308,13 @@ jobs:
         run: make test
         working-directory: ${{ inputs.working-directory }}
 
+      - name: Run Go CLI smoke tests
+        if: inputs.working-directory == 'libs/cli'
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          LANGGRAPH_USE_GO_CLI: "1"
+        run: uv run pytest tests/unit_tests/test_go_cli_smoke.py
+
   publish:
     needs:
       - build
