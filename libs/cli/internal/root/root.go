@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/langchain-ai/langgraph/libs/cli/internal/config"
 	"github.com/langchain-ai/langgraph/libs/cli/internal/deploy"
@@ -596,8 +597,10 @@ Options:
 		EngineRuntimeMode: flags.engineRuntimeMode,
 	})
 
-	// Merge compose: infra + app overlay
-	fullCompose := infraYAML + composeSnippet
+	// Wrap the app config snippet into a valid compose overlay YAML.
+	// ConfigToCompose returns content indented at the service-property level
+	// (8 spaces), so we wrap it in the correct compose structure.
+	appOverlayYAML := "services:\n    langgraph-api:" + composeSnippet
 
 	// Pull
 	if flags.pull && flags.image == "" {
@@ -606,15 +609,25 @@ Options:
 		_ = lgexec.Run("docker", []string{"pull", tag}, lgexec.RunOpts{Verbose: flags.verbose})
 	}
 
-	// Write compose to temp file and run
-	tmpFile, err := os.CreateTemp("", "langgraph-compose-*.yml")
+	// Write infrastructure compose and app overlay to separate temp files.
+	// Docker compose handles merging when given multiple -f flags.
+	tmpInfra, err := os.CreateTemp("", "langgraph-infra-*.yml")
 	if err != nil {
 		errPrint(stderr, err.Error())
 		return 1
 	}
-	defer os.Remove(tmpFile.Name())
-	_, _ = tmpFile.WriteString(fullCompose)
-	tmpFile.Close()
+	defer os.Remove(tmpInfra.Name())
+	_, _ = tmpInfra.WriteString(infraYAML)
+	tmpInfra.Close()
+
+	tmpApp, err := os.CreateTemp("", "langgraph-app-*.yml")
+	if err != nil {
+		errPrint(stderr, err.Error())
+		return 1
+	}
+	defer os.Remove(tmpApp.Name())
+	_, _ = tmpApp.WriteString(appOverlayYAML)
+	tmpApp.Close()
 
 	composeCmd := "docker"
 	composeArgs := []string{"compose"}
@@ -623,7 +636,7 @@ Options:
 		composeArgs = nil
 	}
 
-	upArgs := append(composeArgs, "-f", tmpFile.Name(), "up")
+	upArgs := append(composeArgs, "-f", tmpInfra.Name(), "-f", tmpApp.Name(), "up")
 	if flags.wait {
 		upArgs = append(upArgs, "--wait")
 	} else {
@@ -926,7 +939,6 @@ Options:
 
 	_ = tag
 	_ = deploymentType
-	_ = noWait
 	_ = verbose
 	_ = remote
 	_ = name
@@ -1025,6 +1037,21 @@ Options:
 	if err != nil {
 		errPrint(stderr, err.Error())
 		return 1
+	}
+
+	if !noWait {
+		_, _ = fmt.Fprintln(stdout, "Waiting for deployment...")
+		finalStatus, pollErr := deploy.PollDeploymentStatus(client, depID, 300, 2, func(status string) {
+			_, _ = fmt.Fprintf(stdout, "  Status: %s\n", status)
+		})
+		if pollErr != nil {
+			errPrint(stderr, pollErr.Error())
+			return 1
+		}
+		if finalStatus != "DEPLOYED" {
+			errPrint(stderr, fmt.Sprintf("Deployment failed with status: %s", finalStatus))
+			return 1
+		}
 	}
 
 	_, _ = fmt.Fprintf(stdout, "%sDeployment updated successfully!%s\n", colorGreen, colorReset)
@@ -1340,7 +1367,65 @@ Options:
 		payload["query"] = query
 	}
 
-	_ = follow // TODO: implement follow mode with polling
+	if follow {
+		payload["order"] = "asc"
+		seen := make(map[string]bool)
+		for {
+			var resp map[string]any
+			var err error
+			if logType == "build" {
+				if revisionID == "" {
+					revResp, rerr := client.ListRevisions(deploymentID, 1)
+					if rerr != nil {
+						errPrint(stderr, rerr.Error())
+						return 1
+					}
+					revisions, _ := revResp["revisions"].([]any)
+					if len(revisions) > 0 {
+						rev, _ := revisions[0].(map[string]any)
+						revisionID, _ = rev["id"].(string)
+					}
+				}
+				if revisionID == "" {
+					time.Sleep(2 * time.Second)
+					continue
+				}
+				resp, err = client.GetBuildLogs(deploymentID, revisionID, payload)
+			} else {
+				resp, err = client.GetDeployLogs(deploymentID, payload, revisionID)
+			}
+			if err != nil {
+				errPrint(stderr, err.Error())
+				return 1
+			}
+			logs, _ := resp["logs"].([]any)
+			for _, l := range logs {
+				entry, _ := l.(map[string]any)
+				id, _ := entry["id"].(string)
+				if id == "" {
+					// Fall back to timestamp+message as key
+					ts, _ := entry["timestamp"].(string)
+					msg, _ := entry["message"].(string)
+					id = ts + "|" + msg
+				}
+				if seen[id] {
+					continue
+				}
+				seen[id] = true
+				ts, _ := entry["timestamp"].(string)
+				lvl, _ := entry["level"].(string)
+				msg, _ := entry["message"].(string)
+				if ts != "" {
+					_, _ = fmt.Fprintf(stdout, "[%s] ", ts)
+				}
+				if lvl != "" {
+					_, _ = fmt.Fprintf(stdout, "[%s] ", lvl)
+				}
+				_, _ = fmt.Fprintln(stdout, msg)
+			}
+			time.Sleep(2 * time.Second)
+		}
+	}
 
 	var resp map[string]any
 	var err error

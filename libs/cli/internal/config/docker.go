@@ -765,13 +765,14 @@ func PythonConfigToDocker(
 	escapeVariables bool,
 ) (string, map[string]string, error) {
 	sourceKind := getSourceKind(config)
-	if sourceKind == "uv" {
-		return "", nil, fmt.Errorf("UV lock mode not yet supported in Go CLI")
-	}
 
 	buildToolsToUninstall, err := GetBuildToolsToUninstall(config)
 	if err != nil {
 		return "", nil, err
+	}
+
+	if sourceKind == "uv" {
+		return PythonConfigToDockerUVLock(configPath, config, baseImage, apiVersion, buildToolsToUninstall)
 	}
 
 	pipInstaller, _ := config["pip_installer"].(string)

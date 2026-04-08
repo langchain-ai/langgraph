@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/langchain-ai/langgraph/libs/cli/internal/config"
 )
 
 // DefaultPostgresURI is the default connection string used when no custom
@@ -496,9 +498,21 @@ func BuildDockerImage(opts BuildImageOpts) error {
 		}
 	}
 
-	// Generate the Dockerfile. This is a placeholder that will call into
-	// the config package once ConfigToDocker is implemented.
-	dockerfile := generateDockerfileStub(opts)
+	// Generate the Dockerfile using the real config.ConfigToDocker.
+	dockerfile, additionalContexts, err := config.ConfigToDocker(opts.ConfigPath, opts.ConfigJSON, config.DockerOpts{
+		BaseImage:      opts.BaseImage,
+		APIVersion:     opts.APIVersion,
+		InstallCommand: opts.InstallCommand,
+		BuildCommand:   opts.BuildCommand,
+	})
+	if err != nil {
+		return fmt.Errorf("generating Dockerfile: %w", err)
+	}
+
+	// Add additional build contexts (for dependencies outside the main context).
+	for name, path := range additionalContexts {
+		args = append(args, "--build-context", fmt.Sprintf("%s=%s", name, path))
+	}
 
 	// Assemble the full command.
 	fullArgs := append(dockerCmd[1:], args...)
@@ -512,15 +526,4 @@ func BuildDockerImage(opts BuildImageOpts) error {
 	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
-}
-
-// generateDockerfileStub is a placeholder that will be replaced by a call to
-// config.ConfigToDocker once that function is implemented in the config package.
-func generateDockerfileStub(opts BuildImageOpts) string {
-	// Placeholder: produce a minimal Dockerfile from the base image.
-	base := opts.BaseImage
-	if base == "" {
-		base = "langchain/langgraph-api"
-	}
-	return fmt.Sprintf("FROM %s\n", base)
 }

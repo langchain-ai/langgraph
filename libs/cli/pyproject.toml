@@ -61,6 +61,9 @@ default-groups = ['dev']
 [tool.hatch.build.targets.wheel]
 include = ["langgraph_cli"]
 
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
+
 [tool.pytest.ini_options]
 addopts = "--strict-markers --strict-config --durations=5 -vv"
 asyncio_mode = "auto"

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // APIKeyEnvNames lists the environment variable names checked (in order) when
@@ -249,6 +250,43 @@ func ResolvedReservedEnvVars() map[string]bool {
 		result[k] = v
 	}
 	return result
+}
+
+// TerminalStatuses are deployment statuses that indicate completion.
+var TerminalStatuses = map[string]bool{
+	"DEPLOYED":      true,
+	"CREATE_FAILED": true,
+	"BUILD_FAILED":  true,
+	"DEPLOY_FAILED": true,
+	"SKIPPED":       true,
+}
+
+// PollDeploymentStatus polls a deployment until it reaches a terminal status or times out.
+func PollDeploymentStatus(client *HostBackendClient, deploymentID string, timeoutSeconds, pollIntervalSeconds int, onStatus func(string)) (string, error) {
+	deadline := time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
+	interval := time.Duration(pollIntervalSeconds) * time.Second
+
+	for time.Now().Before(deadline) {
+		resp, err := client.ListRevisions(deploymentID, 1)
+		if err != nil {
+			return "", err
+		}
+		revisions, _ := resp["revisions"].([]any)
+		if len(revisions) == 0 {
+			time.Sleep(interval)
+			continue
+		}
+		rev, _ := revisions[0].(map[string]any)
+		status, _ := rev["status"].(string)
+		if onStatus != nil {
+			onStatus(status)
+		}
+		if TerminalStatuses[status] {
+			return status, nil
+		}
+		time.Sleep(interval)
+	}
+	return "", fmt.Errorf("deployment timed out after %d seconds", timeoutSeconds)
 }
 
 // SecretsFromEnv converts an env var map into a Secret slice, filtering out

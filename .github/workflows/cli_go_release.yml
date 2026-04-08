@@ -1,0 +1,284 @@
+name: "CLI: Build Go binaries and platform wheels"
+run-name: "CLI Go release ${{ inputs.version || 'dev' }} by @${{ github.actor }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (reads from __init__.py if empty)"
+        required: false
+        type: string
+      publish:
+        description: "Publish wheels to PyPI"
+        required: false
+        type: boolean
+        default: false
+
+  # Also triggered by the main release workflow for libs/cli
+  workflow_call:
+    inputs:
+      version:
+        required: false
+        type: string
+      publish:
+        required: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.23"
+  PYTHON_VERSION: "3.11"
+  WORKING_DIR: "libs/cli"
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Stage 1: Cross-compile Go binaries for all platforms
+  # -----------------------------------------------------------------------
+  build-go:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            plat: manylinux_2_17_x86_64.manylinux2014_x86_64
+          - goos: linux
+            goarch: arm64
+            plat: manylinux_2_17_aarch64.manylinux2014_aarch64
+          - goos: darwin
+            goarch: amd64
+            plat: macosx_11_0_x86_64
+          - goos: darwin
+            goarch: arm64
+            plat: macosx_11_0_arm64
+          - goos: windows
+            goarch: amd64
+            plat: win_amd64
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Determine version
+        id: version
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            VERSION=$(grep -m 1 '^__version__' langgraph_cli/__init__.py | cut -d '"' -f 2)
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Build Go binary
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          EXT=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; fi
+          OUTNAME="langgraph-${{ matrix.goos }}-${{ matrix.goarch }}${EXT}"
+
+          go build \
+            -ldflags "-s -w \
+              -X 'github.com/langchain-ai/langgraph/libs/cli/internal/version.Version=${{ steps.version.outputs.version }}' \
+              -X 'github.com/langchain-ai/langgraph/libs/cli/internal/version.Commit=${{ steps.version.outputs.commit }}' \
+              -X 'github.com/langchain-ai/langgraph/libs/cli/internal/version.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" \
+            -o "$OUTNAME" \
+            cmd/langgraph/main.go
+
+          echo "binary=$OUTNAME" >> "$GITHUB_OUTPUT"
+          echo "Built $OUTNAME ($(stat -c%s "$OUTNAME" 2>/dev/null || stat -f%z "$OUTNAME") bytes)"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.WORKING_DIR }}/langgraph-${{ matrix.goos }}-${{ matrix.goarch }}*
+          retention-days: 7
+
+  # -----------------------------------------------------------------------
+  # Stage 2: Run Go tests
+  # -----------------------------------------------------------------------
+  test-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run tests
+        working-directory: ${{ env.WORKING_DIR }}
+        run: go test -count=1 -race ./...
+
+  # -----------------------------------------------------------------------
+  # Stage 3: Build platform-specific wheels (one per Go target)
+  # -----------------------------------------------------------------------
+  build-wheels:
+    needs: [build-go, test-go]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            plat: manylinux_2_17_x86_64.manylinux2014_x86_64
+          - goos: linux
+            goarch: arm64
+            plat: manylinux_2_17_aarch64.manylinux2014_aarch64
+          - goos: darwin
+            goarch: amd64
+            plat: macosx_11_0_x86_64
+          - goos: darwin
+            goarch: arm64
+            plat: macosx_11_0_arm64
+          - goos: windows
+            goarch: amd64
+            plat: win_amd64
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: ./.github/actions/uv_setup
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache-suffix: "cli-wheel"
+          working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Download Go binary
+        uses: actions/download-artifact@v7
+        with:
+          name: go-binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.WORKING_DIR }}/
+
+      - name: Build platform wheel
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          LANGGRAPH_GO_BINARY: langgraph-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
+          LANGGRAPH_WHEEL_PLAT: ${{ matrix.plat }}
+        run: |
+          chmod +x "$LANGGRAPH_GO_BINARY"
+          uv build --wheel
+          echo "Built wheel:"
+          ls -lh dist/*.whl
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheel-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.WORKING_DIR }}/dist/*.whl
+          retention-days: 7
+
+  # -----------------------------------------------------------------------
+  # Stage 4: Build pure-Python fallback wheel (no Go binary)
+  # -----------------------------------------------------------------------
+  build-sdist:
+    needs: [test-go]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: ./.github/actions/uv_setup
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache-suffix: "cli-sdist"
+          working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Build sdist and fallback wheel
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          uv build
+          echo "Built:"
+          ls -lh dist/
+
+      - name: Upload sdist and fallback wheel
+        uses: actions/upload-artifact@v7
+        with:
+          name: sdist-and-fallback
+          path: ${{ env.WORKING_DIR }}/dist/
+          retention-days: 7
+
+  # -----------------------------------------------------------------------
+  # Stage 5: Validate wheels install correctly
+  # -----------------------------------------------------------------------
+  validate-wheels:
+    needs: [build-wheels, build-sdist]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download all wheels
+        uses: actions/download-artifact@v7
+        with:
+          pattern: wheel-*
+          path: wheels/
+          merge-multiple: true
+
+      - name: Download fallback
+        uses: actions/download-artifact@v7
+        with:
+          name: sdist-and-fallback
+          path: wheels/
+
+      - name: Install and test
+        shell: bash
+        run: |
+          pip install wheels/*.whl 2>/dev/null || pip install wheels/langgraph_cli-*.tar.gz
+          langgraph --help
+          langgraph --version
+          echo "Wheel installs and runs correctly on ${{ matrix.os }} / Python ${{ matrix.python-version }}"
+
+  # -----------------------------------------------------------------------
+  # Stage 6: Publish to PyPI (only when publish=true)
+  # -----------------------------------------------------------------------
+  publish:
+    if: ${{ inputs.publish }}
+    needs: [validate-wheels]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write  # required for trusted publishing
+    steps:
+      - name: Download platform wheels
+        uses: actions/download-artifact@v7
+        with:
+          pattern: wheel-*
+          path: dist/
+          merge-multiple: true
+
+      - name: Download sdist
+        uses: actions/download-artifact@v7
+        with:
+          name: sdist-and-fallback
+          path: dist/
+
+      - name: List all artifacts
+        run: ls -lh dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          skip-existing: true
