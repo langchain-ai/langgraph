@@ -1356,20 +1356,16 @@ def test_config_to_docker_uv_lock():
         )
         assert "libs/extra /deps/workspace/libs/extra" not in docker
 
+        shared_workdir = "WORKDIR /deps/workspace/libs/shared"
         shared_install = (
-            "RUN cd /deps/workspace/libs/shared && "
-            "PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 "
-            "uv pip install --system --no-cache-dir -c /api/constraints.txt --no-deps -e ."
+            "RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir "
+            "-c /api/constraints.txt --no-deps -e ."
         )
-        agent_install = (
-            "RUN cd /deps/workspace/apps/agent && "
-            "PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 "
-            "uv pip install --system --no-cache-dir -c /api/constraints.txt --no-deps -e ."
-        )
-        # pip_config_file is absent here, so compare without it.
-        shared_install = shared_install.replace("PIP_CONFIG_FILE=/pipconfig.txt ", "")
-        agent_install = agent_install.replace("PIP_CONFIG_FILE=/pipconfig.txt ", "")
+        agent_workdir = "WORKDIR /deps/workspace/apps/agent"
+        agent_install = shared_install
+        assert shared_workdir in docker
         assert shared_install in docker
+        assert agent_workdir in docker
         assert agent_install in docker
         shared_copy = (
             "COPY --from=uv-workspace-root libs/shared /deps/workspace/libs/shared"
@@ -1377,12 +1373,13 @@ def test_config_to_docker_uv_lock():
         agent_copy = (
             "COPY --from=uv-workspace-root apps/agent /deps/workspace/apps/agent"
         )
-        assert docker.index(shared_copy) < docker.index(shared_install)
-        assert docker.index(shared_install) < docker.index(agent_copy)
-        assert docker.index(shared_install) < docker.index(agent_install)
+        assert docker.index(shared_copy) < docker.index(shared_workdir)
+        assert docker.index(shared_workdir) < docker.index(agent_copy)
+        assert docker.index(shared_workdir) < docker.index(agent_workdir)
         assert "for dep in /deps/*" not in docker
         assert "# -- Installing workspace packages --" not in docker
-        assert "RUN cd /tmp/uv_export/project &&" in docker
+        assert "WORKDIR /tmp/uv_export/project" in docker
+        assert "RUN cd " not in docker
         assert (
             '"path": "/deps/workspace/libs/shared/src/shared/auth.py:create_auth"'
             in docker
@@ -1708,14 +1705,49 @@ def test_config_to_docker_uv_lock_detects_js_pm_from_target_package_root():
             config_path, config, base_image="langchain/langgraph-api:0.2.47"
         )
 
+        assert "WORKDIR /deps/workspace/apps/agent" in docker
         assert (
-            "RUN cd /deps/workspace/apps/agent && pnpm i --frozen-lockfile && tsx /api/langgraph_api/js/build.mts"
+            "RUN pnpm i --frozen-lockfile && tsx /api/langgraph_api/js/build.mts"
             in docker
         )
         assert (
             'ENV LANGGRAPH_UI=\'{"agent": "/deps/workspace/apps/agent/ui.tsx"}\''
             in docker
         )
+
+
+def test_config_to_docker_uv_lock_uses_workdir_for_js_install_with_special_chars():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            config_relative_dir="apps/agent;echo pwned",
+        )
+        agent_dir = project_root / "apps" / "agent;echo pwned"
+        (agent_dir / "package.json").write_text('{"packageManager":"pnpm@9.0.0"}\n')
+        (agent_dir / "pnpm-lock.yaml").write_text("lockfileVersion: 9.0\n")
+        (agent_dir / "ui.tsx").write_text("export const ui = null;\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    "agent": "../../apps/agent;echo pwned/src/agent/graph.py:graph",
+                },
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+                "ui": {"agent": "../../apps/agent;echo pwned/ui.tsx"},
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert "WORKDIR /deps/workspace/apps/agent;echo pwned" in docker
+        assert (
+            "RUN pnpm i --frozen-lockfile && tsx /api/langgraph_api/js/build.mts"
+            in docker
+        )
+        assert "RUN cd /deps/workspace/apps/agent;echo pwned" not in docker
 
 
 def test_config_to_docker_uv_lock_supports_single_uv_project_root():
@@ -1886,9 +1918,9 @@ def test_config_to_docker_uv_lock_root_package_copy_skips_unrelated_members():
             "COPY --from=uv-workspace-root libs/extra /deps/workspace/libs/extra"
             not in docker
         )
+        assert "WORKDIR /deps/workspace" in docker
         assert (
-            "RUN cd /deps/workspace && "
-            "PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir "
+            "RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir "
             "-c /api/constraints.txt --no-deps -e ." in docker
         )
 

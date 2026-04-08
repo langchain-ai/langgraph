@@ -56,6 +56,29 @@ class UvLockPlan:
     all_workspace_roots: frozenset[pathlib.Path] = frozenset()
 
 
+@dataclass(slots=True)
+class DockerBuildPlan:
+    lines: list[str]
+
+    def add_blank(self) -> None:
+        self.lines.append("")
+
+    def add_raw(self, line: str) -> None:
+        self.lines.append(line)
+
+    def add_instruction(self, opcode: str, value: str | None = None) -> None:
+        if value:
+            self.lines.append(f"{opcode} {value}")
+        else:
+            self.lines.append(opcode)
+
+    def extend_nonempty(self, items: list[str]) -> None:
+        self.lines.extend(item for item in items if item)
+
+    def render(self) -> str:
+        return os.linesep.join(self.lines)
+
+
 def _normalize_package_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
@@ -875,91 +898,103 @@ def python_config_to_docker_uv_lock(
         return f"ADD {relative_source} {destination}"
 
     uv_export_project_dir = "/tmp/uv_export/project"
-    uv_lock_str = f"""# -- Installing dependencies from uv.lock --
-{copy_from_project_root(pathlib.PurePosixPath("pyproject.toml"), f"{uv_export_project_dir}/pyproject.toml")}
-{copy_from_project_root(pathlib.PurePosixPath("uv.lock"), f"{uv_export_project_dir}/uv.lock")}
-RUN cd {uv_export_project_dir} && uv export --package {shlex.quote(plan.target.name)} --frozen --no-hashes --no-emit-project --no-emit-workspace -o uv_requirements.txt
-RUN cd {uv_export_project_dir} && {global_reqs_pip_install} -r uv_requirements.txt
-RUN rm -rf /tmp/uv_export
-# -- End of uv.lock dependencies install --"""
-
-    workspace_pkgs_str = os.linesep.join(
-        [
-            os.linesep.join(
-                [
-                    f"# -- Adding workspace package {package.root.relative_to(plan.project_root).as_posix() or '.'} --",
-                    *(
-                        copy_from_project_root(source, destination.as_posix())
-                        for source, destination in _uv_lock_package_copy_items(
-                            package, plan
-                        )
-                    ),
-                    (
-                        f"RUN cd {plan.container_roots[package.root].as_posix()} && "
-                        f"{global_reqs_pip_install} --no-deps -e ."
-                    ),
-                    f"# -- End of workspace package {package.root.relative_to(plan.project_root).as_posix() or '.'} --",
-                ]
-            )
-            for package in plan.install_order
-        ]
-    )
-
-    install_node_str = (
-        "RUN /storage/install-node.sh"
-        if (config.get("ui") or config.get("node_version")) and plan.working_dir
-        else ""
-    )
-    installs = f"{os.linesep}{os.linesep}".join(
-        filter(
-            None,
-            [install_node_str, pip_config_file_str, uv_lock_str, workspace_pkgs_str],
-        )
-    )
-
     env_vars = _build_runtime_env_vars(config)
 
-    js_inst_str = ""
-    if (config.get("ui") or config.get("node_version")) and plan.working_dir:
-        js_inst_str = os.linesep.join(
-            [
-                "# -- Installing JS dependencies --",
-                f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
-                f"RUN cd {plan.working_dir} && {_get_node_pm_install_cmd(plan.target_root)} && tsx /api/langgraph_api/js/build.mts",
-                "# -- End of JS dependencies install --",
-            ]
-        )
-
     image_str = docker_tag(config, base_image, api_version)
-    docker_file_contents = []
+    docker_plan = DockerBuildPlan(lines=[])
 
     if additional_contexts:
-        docker_file_contents.extend(
-            [
-                "# syntax=docker/dockerfile:1.4",
-                "",
-            ]
+        docker_plan.add_raw("# syntax=docker/dockerfile:1.4")
+        docker_plan.add_blank()
+
+    docker_plan.add_instruction("FROM", image_str)
+    docker_plan.add_blank()
+    docker_plan.extend_nonempty(config["dockerfile_lines"])
+    if config["dockerfile_lines"]:
+        docker_plan.add_blank()
+
+    if (config.get("ui") or config.get("node_version")) and plan.working_dir:
+        docker_plan.add_instruction("RUN", "/storage/install-node.sh")
+        docker_plan.add_blank()
+
+    if pip_config_file_str:
+        docker_plan.add_raw(pip_config_file_str)
+        docker_plan.add_blank()
+
+    docker_plan.add_raw("# -- Installing dependencies from uv.lock --")
+    docker_plan.add_raw(
+        copy_from_project_root(
+            pathlib.PurePosixPath("pyproject.toml"),
+            f"{uv_export_project_dir}/pyproject.toml",
         )
-
-    docker_file_contents.extend(
-        [
-            f"FROM {image_str}",
-            "",
-            os.linesep.join(config["dockerfile_lines"]),
-            "",
-            installs,
-            os.linesep.join(env_vars),
-            "",
-            js_inst_str,
-            "",
-            _get_pip_cleanup_lines(
-                install_cmd=install_cmd,
-                to_uninstall=build_tools_to_uninstall,
-                pip_installer="uv",
-            ),
-            "",
-            f"WORKDIR {plan.working_dir}" if plan.working_dir else "",
-        ]
     )
+    docker_plan.add_raw(
+        copy_from_project_root(
+            pathlib.PurePosixPath("uv.lock"),
+            f"{uv_export_project_dir}/uv.lock",
+        )
+    )
+    docker_plan.add_instruction("WORKDIR", uv_export_project_dir)
+    docker_plan.add_instruction(
+        "RUN",
+        " ".join(
+            [
+                "uv export",
+                f"--package {shlex.quote(plan.target.name)}",
+                "--frozen",
+                "--no-hashes",
+                "--no-emit-project",
+                "--no-emit-workspace",
+                "-o uv_requirements.txt",
+            ]
+        ),
+    )
+    docker_plan.add_instruction(
+        "RUN", f"{global_reqs_pip_install} -r uv_requirements.txt"
+    )
+    docker_plan.add_instruction("RUN", "rm -rf /tmp/uv_export")
+    docker_plan.add_raw("# -- End of uv.lock dependencies install --")
+    docker_plan.add_blank()
 
-    return os.linesep.join(docker_file_contents), additional_contexts
+    for package in plan.install_order:
+        package_label = package.root.relative_to(plan.project_root).as_posix() or "."
+        docker_plan.add_raw(f"# -- Adding workspace package {package_label} --")
+        for source, destination in _uv_lock_package_copy_items(package, plan):
+            docker_plan.add_raw(copy_from_project_root(source, destination.as_posix()))
+        docker_plan.add_instruction(
+            "WORKDIR", plan.container_roots[package.root].as_posix()
+        )
+        docker_plan.add_instruction("RUN", f"{global_reqs_pip_install} --no-deps -e .")
+        docker_plan.add_raw(f"# -- End of workspace package {package_label} --")
+        docker_plan.add_blank()
+
+    docker_plan.extend_nonempty(env_vars)
+    if env_vars:
+        docker_plan.add_blank()
+
+    if (config.get("ui") or config.get("node_version")) and plan.working_dir:
+        docker_plan.add_raw("# -- Installing JS dependencies --")
+        docker_plan.add_instruction(
+            "ENV", f"NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}"
+        )
+        docker_plan.add_instruction("WORKDIR", plan.working_dir)
+        docker_plan.add_instruction(
+            "RUN",
+            f"{_get_node_pm_install_cmd(plan.target_root)} && "
+            "tsx /api/langgraph_api/js/build.mts",
+        )
+        docker_plan.add_raw("# -- End of JS dependencies install --")
+        docker_plan.add_blank()
+
+    docker_plan.add_raw(
+        _get_pip_cleanup_lines(
+            install_cmd=install_cmd,
+            to_uninstall=build_tools_to_uninstall,
+            pip_installer="uv",
+        )
+    )
+    docker_plan.add_blank()
+    if plan.working_dir:
+        docker_plan.add_instruction("WORKDIR", plan.working_dir)
+
+    return docker_plan.render(), additional_contexts
