@@ -22,9 +22,9 @@ __all__ = ("BinaryOperatorAggregate",)
 def _strip_extras(t):  # type: ignore[no-untyped-def]
     """Strips Annotated, Required and NotRequired from a given type."""
     if hasattr(t, "__origin__"):
+        if t.__origin__ in (Required, NotRequired):
+            return _strip_extras(t.__args__[0])
         return _strip_extras(t.__origin__)
-    if hasattr(t, "__origin__") and t.__origin__ in (Required, NotRequired):
-        return _strip_extras(t.__args__[0])
 
     return t
 
