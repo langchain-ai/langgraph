@@ -34,7 +34,7 @@ Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
 [project.scripts]
-langgraph = "langgraph_cli.cli:cli"
+langgraph = "langgraph_cli.entrypoint:main"
 
 [dependency-groups]
 test = [
