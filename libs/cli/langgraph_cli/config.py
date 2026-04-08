@@ -3,6 +3,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import textwrap
 from collections import Counter
 from typing import Literal, NamedTuple
@@ -10,6 +11,7 @@ from typing import Literal, NamedTuple
 import click
 
 from langgraph_cli.schemas import Config, Distros
+from langgraph_cli.uv_lock import python_config_to_docker_uv_lock
 
 MIN_NODE_VERSION = "20"
 DEFAULT_NODE_VERSION = "20"
@@ -139,6 +141,14 @@ def _is_node_graph(spec: str | dict) -> bool:
     ]
 
 
+def _get_source_kind(config: Config) -> str | None:
+    source = config.get("source")
+    if not isinstance(source, dict):
+        return None
+    kind = source.get("kind")
+    return kind if isinstance(kind, str) else None
+
+
 def validate_config(config: Config) -> Config:
     """Validate a configuration dictionary."""
 
@@ -157,6 +167,8 @@ def validate_config(config: Config) -> Config:
     image_distro = config.get("image_distro", DEFAULT_IMAGE_DISTRO)
     internal_docker_tag = config.get("_INTERNAL_docker_tag")
     api_version = config.get("api_version")
+    legacy_project_root = config.get("project_root")
+    legacy_package = config.get("package")
     if internal_docker_tag:
         if api_version:
             raise click.UsageError(
@@ -177,6 +189,7 @@ def validate_config(config: Config) -> Config:
         "python_version": python_version,
         "pip_config_file": config.get("pip_config_file"),
         "pip_installer": config.get("pip_installer", "auto"),
+        "source": config.get("source"),
         "base_image": config.get("base_image"),
         "image_distro": image_distro,
         "dependencies": config.get("dependencies", []),
@@ -212,6 +225,26 @@ def validate_config(config: Config) -> Config:
         except ValueError as e:
             raise click.UsageError(str(e)) from None
 
+    if pip_installer := config.get("pip_installer"):
+        if pip_installer == "uv_lock":
+            raise click.UsageError(
+                "pip_installer 'uv_lock' has been replaced. Use "
+                '`source: {"kind": "uv", "root": "..", '
+                '"package": "my-agent"}`.'
+            )
+        if pip_installer not in ["auto", "pip", "uv"]:
+            raise click.UsageError(
+                f"Invalid pip_installer: '{pip_installer}'. "
+                "Must be 'auto', 'pip', or 'uv'."
+            )
+
+    source = config.get("source")
+    source_kind = _get_source_kind(config)
+    if source is not None and not isinstance(source, dict):
+        raise click.UsageError("`source` must be an object.")
+    if source is not None and source_kind != "uv":
+        raise click.UsageError("Invalid source.kind. Supported values: 'uv'.")
+
     if config.get("python_version"):
         pyversion = config["python_version"]
         if not pyversion.count(".") == 1 or not all(
@@ -233,7 +266,7 @@ def validate_config(config: Config) -> Config:
                 "Please use 'bookworm' or 'debian' instead."
             )
 
-        if not config["dependencies"]:
+        if source_kind != "uv" and not config["dependencies"]:
             raise click.UsageError(
                 "No dependencies found in config. "
                 "Add at least one dependency to 'dependencies' list."
@@ -257,12 +290,42 @@ def validate_config(config: Config) -> Config:
                 "Must be one of 'debian', 'wolfi', or 'bookworm'."
             )
 
-    if pip_installer := config.get("pip_installer"):
-        if pip_installer not in ["auto", "pip", "uv"]:
-            raise click.UsageError(
-                f"Invalid pip_installer: '{pip_installer}'. "
-                "Must be 'auto', 'pip', or 'uv'."
+    if source_kind == "uv":
+        errors: list[str] = []
+        if not config.get("python_version"):
+            errors.append(
+                "source.kind 'uv' requires `python_version` — "
+                "it is a Python-only deployment mode. "
+                "Node.js-only graphs are not supported."
             )
+        if config["dependencies"]:
+            errors.append(
+                "Remove `dependencies` from your config. With "
+                '`source.kind = "uv"`, all dependencies '
+                "are read from your pyproject.toml and uv.lock instead."
+            )
+        root = source.get("root", ".") if source else "."
+        if not isinstance(root, str):
+            errors.append(f"`source.root` must be a string, got {type(root).__name__}.")
+        elif not root.strip():
+            errors.append('`source.root` must be a non-empty string. Use `"."`.')
+        package_name = source.get("package") if source else None
+        if package_name is not None and (
+            not isinstance(package_name, str) or not package_name.strip()
+        ):
+            errors.append("`source.package` must be a non-empty string.")
+        if errors:
+            detail = "\n".join(f"  - {e}" for e in errors)
+            raise click.UsageError(
+                "source.kind 'uv' requires a different "
+                f"config shape than dependency-based installs:\n{detail}"
+            )
+
+    if legacy_project_root or legacy_package:
+        raise click.UsageError(
+            "Top-level `project_root` and `package` are no longer supported. "
+            "Use `source.root` and `source.package` instead."
+        )
 
     # Validate auth config
     if auth_conf := config.get("auth"):
@@ -807,9 +870,65 @@ def _update_http_app_path(
         http_config["app"] = f"{module_str}:{attr_str}"
 
 
-def _get_node_pm_install_cmd(config_path: pathlib.Path, config: Config) -> str:
+def _build_python_install_commands(
+    config: Config, install_cmd: str
+) -> tuple[str, str, str]:
+    base_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
+    local_reqs_pip_install = base_install
+    global_reqs_pip_install = base_install
+
+    if config.get("pip_config_file"):
+        local_reqs_pip_install = (
+            f"PIP_CONFIG_FILE=/pipconfig.txt {local_reqs_pip_install}"
+        )
+        global_reqs_pip_install = (
+            f"PIP_CONFIG_FILE=/pipconfig.txt {global_reqs_pip_install}"
+        )
+
+    pip_config_file_str = (
+        f"ADD {config['pip_config_file']} /pipconfig.txt"
+        if config.get("pip_config_file")
+        else ""
+    )
+    return local_reqs_pip_install, global_reqs_pip_install, pip_config_file_str
+
+
+def _build_runtime_env_vars(config: Config) -> list[str]:
+    env_vars = []
+
+    if (store_config := config.get("store")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
+
+    if (auth_config := config.get("auth")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
+
+    if (encryption_config := config.get("encryption")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
+
+    if (http_config := config.get("http")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
+
+    if (webhooks_config := config.get("webhooks")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
+
+    if (checkpointer_config := config.get("checkpointer")) is not None:
+        env_vars.append(
+            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
+        )
+
+    if (ui := config.get("ui")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
+
+    if (ui_config := config.get("ui_config")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
+
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    return env_vars
+
+
+def _get_node_pm_install_cmd(project_dir: pathlib.Path) -> str:
     def test_file(file_name):
-        full_path = config_path.parent / file_name
+        full_path = project_dir / file_name
         try:
             return full_path.is_file()
         except OSError:
@@ -818,7 +937,7 @@ def _get_node_pm_install_cmd(config_path: pathlib.Path, config: Config) -> str:
     # inspired by `package-manager-detector`
     def get_pkg_manager_name():
         try:
-            with open(config_path.parent / "package.json") as f:
+            with open(project_dir / "package.json") as f:
                 pkg = json.load(f)
 
                 if (pkg_manager_name := pkg.get("packageManager")) and isinstance(
@@ -914,8 +1033,17 @@ def python_config_to_docker(
     escape_variables: bool = False,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
+    source_kind = _get_source_kind(config)
     pip_installer = config.get("pip_installer", "auto")
     build_tools_to_uninstall = get_build_tools_to_uninstall(config)
+    if source_kind == "uv":
+        return python_config_to_docker_uv_lock(
+            config_path,
+            config,
+            base_image,
+            api_version=api_version,
+            build_tools_to_uninstall=build_tools_to_uninstall,
+        )
     if pip_installer == "auto":
         if _image_supports_uv(base_image):
             pip_installer = "uv"
@@ -928,21 +1056,11 @@ def python_config_to_docker(
     else:
         raise ValueError(f"Invalid pip_installer: {pip_installer}")
 
-    # configure pip
-    local_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
-    global_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
-    if config.get("pip_config_file"):
-        local_reqs_pip_install = (
-            f"PIP_CONFIG_FILE=/pipconfig.txt {local_reqs_pip_install}"
-        )
-        global_reqs_pip_install = (
-            f"PIP_CONFIG_FILE=/pipconfig.txt {global_reqs_pip_install}"
-        )
-    pip_config_file_str = (
-        f"ADD {config['pip_config_file']} /pipconfig.txt"
-        if config.get("pip_config_file")
-        else ""
-    )
+    (
+        local_reqs_pip_install,
+        global_reqs_pip_install,
+        pip_config_file_str,
+    ) = _build_python_install_commands(config, install_cmd)
 
     # collect dependencies
     pypi_deps = [dep for dep in config["dependencies"] if not dep.startswith(".")]
@@ -998,7 +1116,7 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/outer-{fullpath.name}/pyproject.toml; \\
+        echo "$line" >> {shlex.quote(f"/deps/outer-{fullpath.name}/pyproject.toml")}; \\
     done
 # -- End of non-package dependency {fullpath.name} --"""
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
@@ -1017,56 +1135,50 @@ ADD {relpath} /deps/{name}
         for fullpath, (relpath, name) in local_deps.real_pkgs.items()
     )
 
+    additional_contexts: dict[str, str] = {}
+    additional_context_names: dict[pathlib.Path, str] = {}
+    used_context_names: set[str] = set()
+
+    def register_additional_context(path: pathlib.Path, preferred_name: str) -> str:
+        if path in additional_context_names:
+            return additional_context_names[path]
+
+        name = preferred_name
+        suffix = 1
+        while name in used_context_names:
+            name = f"{preferred_name}_{suffix}"
+            suffix += 1
+
+        used_context_names.add(name)
+        additional_context_names[path] = name
+        additional_contexts[name] = str(path)
+        return name
+
+    for p in local_deps.additional_contexts:
+        if p in local_deps.real_pkgs:
+            preferred_name = local_deps.real_pkgs[p][1]
+        elif p in local_deps.faux_pkgs:
+            preferred_name = f"outer-{p.name}"
+        else:
+            raise RuntimeError(f"Unknown additional context: {p}")
+        register_additional_context(p, preferred_name)
+
     install_node_str: str = (
         "RUN /storage/install-node.sh"
         if (config.get("ui") or config.get("node_version")) and local_deps.working_dir
         else ""
     )
 
+    install_steps = [install_node_str, pip_config_file_str, pip_pkgs_str, pip_reqs_str]
+    install_steps.extend([local_pkgs_str, faux_pkgs_str])
     installs = f"{os.linesep}{os.linesep}".join(
         filter(
             None,
-            [
-                install_node_str,
-                pip_config_file_str,
-                pip_pkgs_str,
-                pip_reqs_str,
-                local_pkgs_str,
-                faux_pkgs_str,
-            ],
+            install_steps,
         )
     )
 
-    env_vars = []
-
-    if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
-
-    if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
-
-    if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
-
-    if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
-
-    # Inject webhooks configuration if provided
-    if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
-
-    if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
-        )
-
-    if (ui := config.get("ui")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
-
-    if (ui_config := config.get("ui_config")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
-
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    env_vars = _build_runtime_env_vars(config)
 
     js_inst_str: str = ""
     if (config.get("ui") or config.get("node_version")) and local_deps.working_dir:
@@ -1074,7 +1186,8 @@ ADD {relpath} /deps/{name}
             [
                 "# -- Installing JS dependencies --",
                 f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
-                f"RUN cd {local_deps.working_dir} && {_get_node_pm_install_cmd(config_path, config)} && tsx /api/langgraph_api/js/build.mts",
+                f"WORKDIR {local_deps.working_dir}",
+                f"RUN {_get_node_pm_install_cmd(config_path.parent)} && tsx /api/langgraph_api/js/build.mts",
                 "# -- End of JS dependencies install --",
             ]
         )
@@ -1084,7 +1197,7 @@ ADD {relpath} /deps/{name}
     docker_file_contents = []
 
     # Add syntax directive if we have additional contexts (requires BuildKit frontend.contexts capability)
-    if local_deps.additional_contexts:
+    if additional_contexts:
         docker_file_contents.extend(
             [
                 "# syntax=docker/dockerfile:1.4",
@@ -1094,6 +1207,13 @@ ADD {relpath} /deps/{name}
 
     # Add main dockerfile content
     dep_vname = "$$dep" if escape_variables else "$dep"
+    local_deps_install_str = f"""RUN for dep in /deps/*; do \
+            echo "Installing {dep_vname}"; \
+            if [ -d "{dep_vname}" ]; then \
+                echo "Installing {dep_vname}"; \
+                (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
+            fi; \
+        done"""
     docker_file_contents.extend(
         [
             f"FROM {image_str}",
@@ -1103,13 +1223,7 @@ ADD {relpath} /deps/{name}
             installs,
             "",
             "# -- Installing all local dependencies --",
-            f"""RUN for dep in /deps/*; do \
-            echo "Installing {dep_vname}"; \
-            if [ -d "{dep_vname}" ]; then \
-                echo "Installing {dep_vname}"; \
-                (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
-            fi; \
-        done""",
+            local_deps_install_str,
             "# -- End of local dependencies install --",
             os.linesep.join(env_vars),
             "",
@@ -1126,16 +1240,6 @@ ADD {relpath} /deps/{name}
         ]
     )
 
-    additional_contexts: dict[str, str] = {}
-    for p in local_deps.additional_contexts:
-        if p in local_deps.real_pkgs:
-            name = local_deps.real_pkgs[p][1]
-        elif p in local_deps.faux_pkgs:
-            name = f"outer-{p.name}"
-        else:
-            raise RuntimeError(f"Unknown additional context: {p}")
-        additional_contexts[name] = str(p)
-
     return os.linesep.join(docker_file_contents), additional_contexts
 
 
@@ -1149,6 +1253,10 @@ def node_config_to_docker(
     build_context: str | None = None,
 ) -> tuple[str, dict[str, str]]:
     # Calculate paths for monorepo support
+    install_root = (
+        pathlib.Path(build_context).resolve() if build_context else config_path.parent
+    )
+    install_cmd = install_command or _get_node_pm_install_cmd(install_root)
     if build_context:
         relative_workdir = _calculate_relative_workdir(config_path, build_context)
         container_name = pathlib.Path(build_context).name
@@ -1160,59 +1268,31 @@ def node_config_to_docker(
         # Backward compatibility: use the original behavior
         faux_path = f"/deps/{config_path.parent.name}"
 
-    # Use custom install command or auto-detect
-    if install_command:
-        install_cmd = install_command
-    else:
-        install_cmd = _get_node_pm_install_cmd(config_path, config)
-
     image_str = docker_tag(config, base_image, api_version)
 
-    env_vars: list[str] = []
-
-    if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
-
-    if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
-
-    if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
-
-    if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
-
-    # Inject webhooks configuration if provided
-    if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
-
-    if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
-        )
-
-    if ui := config.get("ui"):
-        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
-
-    if ui_config := config.get("ui_config"):
-        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
-
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    env_vars = _build_runtime_env_vars(config)
 
     # For monorepo support, we need to handle install and build commands differently
     if build_context:
         # Monorepo case: install from root, build from config directory
         container_root = f"/deps/{pathlib.Path(build_context).name}"
-        install_step = f"RUN cd {container_root} && {install_cmd}"
+        install_workdir = container_root
+        install_step = f"RUN {install_cmd}"
 
         if build_command:
-            build_step = f"RUN cd {faux_path} && {build_command}"
+            build_step = f"RUN {build_command}"
         else:
             build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
     else:
         # Original behavior: everything happens in the same directory
-        install_step = f"RUN cd {faux_path} && {install_cmd}"
+        install_workdir = faux_path
+        install_step = f"RUN {install_cmd}"
         build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
+
+    if build_context:
+        build_workdir = faux_path
+    else:
+        build_workdir = faux_path
 
     docker_file_contents = [
         f"FROM {image_str}",
@@ -1221,11 +1301,13 @@ def node_config_to_docker(
         "",
         f"ADD . {faux_path if not build_context else container_root}",
         "",
+        f"WORKDIR {install_workdir}",
+        "",
         install_step,
         "",
         os.linesep.join(env_vars),
         "",
-        f"WORKDIR {faux_path}",
+        f"WORKDIR {build_workdir}",
         "",
         build_step,
     ]

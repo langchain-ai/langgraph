@@ -136,3 +136,33 @@ jobs:
         working-directory: libs/cli/examples/graph_prerelease_reqs_fail
         run: |
           langgraph build -t langgraph-test-i || [ $? -eq 1 ]
+
+      - name: Build uv simple service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
+        working-directory: libs/cli/uv-examples/simple
+        run: |
+          langgraph build -t langgraph-test-uv-simple
+      - name: Test uv simple service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        working-directory: libs/cli/uv-examples/simple
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
+          cp .env.example .env
+          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-simple
+
+      - name: Build uv monorepo service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
+        working-directory: libs/cli/uv-examples/monorepo/apps/agent
+        run: |
+          langgraph build -t langgraph-test-uv-monorepo
+      - name: Test uv monorepo service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        working-directory: libs/cli/uv-examples/monorepo/apps/agent
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
+          cp .env.example .env
+          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
+          timeout 60 python ../../../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-monorepo

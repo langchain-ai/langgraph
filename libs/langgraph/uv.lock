@@ -1693,6 +1693,7 @@ dependencies = [
     { name = "langgraph-sdk", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
     { name = "pathspec", marker = "python_full_version < '3.14'" },
     { name = "python-dotenv", marker = "python_full_version < '3.14'" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 
 [package.optional-dependencies]
@@ -1710,6 +1711,7 @@ requires-dist = [
     { name = "langgraph-sdk", marker = "python_full_version >= '3.11'", specifier = ">=0.1.0" },
     { name = "pathspec", specifier = ">=0.11.0" },
     { name = "python-dotenv", specifier = ">=0.8.0" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.1" },
 ]
 provides-extras = ["inmem"]
 
