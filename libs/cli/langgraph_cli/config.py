@@ -3,6 +3,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import textwrap
 from collections import Counter
 from typing import Literal, NamedTuple
@@ -1115,7 +1116,7 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/outer-{fullpath.name}/pyproject.toml; \\
+        echo "$line" >> {shlex.quote(f"/deps/outer-{fullpath.name}/pyproject.toml")}; \\
     done
 # -- End of non-package dependency {fullpath.name} --"""
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
@@ -1185,7 +1186,8 @@ ADD {relpath} /deps/{name}
             [
                 "# -- Installing JS dependencies --",
                 f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
-                f"RUN cd {local_deps.working_dir} && {_get_node_pm_install_cmd(config_path.parent)} && tsx /api/langgraph_api/js/build.mts",
+                f"WORKDIR {local_deps.working_dir}",
+                f"RUN {_get_node_pm_install_cmd(config_path.parent)} && tsx /api/langgraph_api/js/build.mts",
                 "# -- End of JS dependencies install --",
             ]
         )
@@ -1274,16 +1276,23 @@ def node_config_to_docker(
     if build_context:
         # Monorepo case: install from root, build from config directory
         container_root = f"/deps/{pathlib.Path(build_context).name}"
-        install_step = f"RUN cd {container_root} && {install_cmd}"
+        install_workdir = container_root
+        install_step = f"RUN {install_cmd}"
 
         if build_command:
-            build_step = f"RUN cd {faux_path} && {build_command}"
+            build_step = f"RUN {build_command}"
         else:
             build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
     else:
         # Original behavior: everything happens in the same directory
-        install_step = f"RUN cd {faux_path} && {install_cmd}"
+        install_workdir = faux_path
+        install_step = f"RUN {install_cmd}"
         build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
+
+    if build_context:
+        build_workdir = faux_path
+    else:
+        build_workdir = faux_path
 
     docker_file_contents = [
         f"FROM {image_str}",
@@ -1292,11 +1301,13 @@ def node_config_to_docker(
         "",
         f"ADD . {faux_path if not build_context else container_root}",
         "",
+        f"WORKDIR {install_workdir}",
+        "",
         install_step,
         "",
         os.linesep.join(env_vars),
         "",
-        f"WORKDIR {faux_path}",
+        f"WORKDIR {build_workdir}",
         "",
         build_step,
     ]

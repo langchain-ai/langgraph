@@ -984,7 +984,8 @@ def test_config_to_docker_nodejs():
 ARG meow
 ARG foo
 ADD . /deps/unit_tests
-RUN cd /deps/unit_tests && npm i
+WORKDIR /deps/unit_tests
+RUN npm i
 ENV LANGGRAPH_AUTH='{"path": "./graphs/auth.mts:auth"}'
 ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
 ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'
@@ -1071,7 +1072,8 @@ def test_config_to_docker_nodejs_internal_docker_tag():
 ARG meow
 ARG foo
 ADD . /deps/unit_tests
-RUN cd /deps/unit_tests && npm i
+WORKDIR /deps/unit_tests
+RUN npm i
 ENV LANGGRAPH_AUTH='{"path": "./graphs/auth.mts:auth"}'
 ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
 ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'
@@ -1201,7 +1203,8 @@ ENV LANGGRAPH_UI_CONFIG='{{"shared": ["nuqs"]}}'
 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 # -- Installing JS dependencies --
 ENV NODE_VERSION=20
-RUN cd /deps/outer-unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
+WORKDIR /deps/outer-unit_tests/unit_tests
+RUN npm i && tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
 {FORMATTED_CLEANUP_LINES}
 WORKDIR /deps/outer-unit_tests/unit_tests"""
@@ -1245,13 +1248,68 @@ RUN for dep in /deps/*; do             echo "Installing $dep";             if [ 
 ENV LANGSERVE_GRAPHS='{{"python": "/deps/outer-unit_tests/unit_tests/multiplatform/python.py:graph", "js": "/deps/outer-unit_tests/unit_tests/multiplatform/js.mts:graph"}}'
 # -- Installing JS dependencies --
 ENV NODE_VERSION=22
-RUN cd /deps/outer-unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
+WORKDIR /deps/outer-unit_tests/unit_tests
+RUN npm i && tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
 {FORMATTED_CLEANUP_LINES}
 WORKDIR /deps/outer-unit_tests/unit_tests"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
+
+
+def test_config_to_docker_gen_ui_python_uses_workdir_with_special_chars():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_dir = tmpdir_path / "proj;echo pwned"
+        project_dir.mkdir()
+        config_path = project_dir / "langgraph.json"
+        config_path.write_text("{}\n")
+        (project_dir / "agent.py").write_text("graph = object()\n")
+        (project_dir / "ui.jsx").write_text("export default null;\n")
+
+        docker, _ = config_to_docker(
+            config_path,
+            validate_config(
+                {
+                    "dependencies": ["."],
+                    "graphs": {"agent": "./agent.py:graph"},
+                    "ui": {"agent": "./ui.jsx"},
+                }
+            ),
+            base_image="langchain/langgraph-api",
+        )
+
+        assert "WORKDIR /deps/outer-proj;echo pwned/src" in docker
+        assert "RUN npm i && tsx /api/langgraph_api/js/build.mts" in docker
+        assert "RUN cd /deps/outer-proj;echo pwned/src" not in docker
+        assert ">> '/deps/outer-proj;echo pwned/pyproject.toml'" in docker
+
+
+def test_config_to_docker_nodejs_uses_workdir_with_special_chars():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_dir = tmpdir_path / "proj;echo pwned"
+        project_dir.mkdir()
+        config_path = project_dir / "langgraph.json"
+        config_path.write_text("{}\n")
+        (project_dir / "agent.js").write_text("export const graph = {};\n")
+        (project_dir / "package.json").write_text('{"name":"test"}\n')
+
+        docker, _ = config_to_docker(
+            config_path,
+            validate_config(
+                {
+                    "node_version": "20",
+                    "graphs": {"agent": "./agent.js:graph"},
+                }
+            ),
+            base_image="langchain/langgraphjs-api",
+        )
+
+        assert "WORKDIR /deps/proj;echo pwned" in docker
+        assert "RUN npm i" in docker
+        assert "RUN cd /deps/proj;echo pwned" not in docker
 
 
 def test_config_to_docker_pip_installer():
