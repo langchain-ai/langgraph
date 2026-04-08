@@ -317,3 +317,15 @@ def test_configurable_metadata():
     metadata = merged["metadata"]
     assert metadata.keys() == expected
     assert metadata["nooverride"] == 18
+
+
+def test_ensure_config_does_not_mutate_input_metadata():
+    original_config = {"metadata": {"user": "alice"}}
+    new_config = {"configurable": {"thread_id": "thread-1"}}
+
+    ensure_config(original_config, new_config)
+
+    assert original_config["metadata"] == {"user": "alice"}, (
+        "ensure_config mutated the original "
+        f"metadata dict: {original_config['metadata']}"
+    )
