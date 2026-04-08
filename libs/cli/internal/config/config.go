@@ -475,16 +475,39 @@ func ValidateConfig(raw map[string]any) (map[string]any, error) {
 
 // ValidateConfigFile loads a config file, validates it, and returns the result.
 func ValidateConfigFile(configPath string) (map[string]any, error) {
+	raw, err := LoadRawConfigFile(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return validateConfigFile(configPath, raw)
+}
+
+// LoadRawConfigFile loads a config file and requires the top-level JSON value
+// to be an object.
+func LoadRawConfigFile(configPath string) (map[string]any, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not read config file: %w", err)
 	}
 
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
+	var rawAny any
+	if err := json.Unmarshal(data, &rawAny); err != nil {
 		return nil, fmt.Errorf("Invalid JSON in %s: %s", configPath, err.Error())
 	}
 
+	raw, ok := rawAny.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf(
+			"Invalid config in %s: top-level JSON value must be an object.",
+			configPath,
+		)
+	}
+
+	return raw, nil
+}
+
+func validateConfigFile(configPath string, raw map[string]any) (map[string]any, error) {
 	validated, err := ValidateConfig(raw)
 	if err != nil {
 		return nil, err
@@ -512,7 +535,10 @@ func validatePackageJSON(path string) error {
 
 	var pkg map[string]any
 	if err := json.Unmarshal(data, &pkg); err != nil {
-		return fmt.Errorf("Invalid package.json: %s", err.Error())
+		return fmt.Errorf(
+			"Invalid package.json found in langgraph config directory %s: file is not valid JSON",
+			path,
+		)
 	}
 
 	enginesRaw, ok := pkg["engines"]

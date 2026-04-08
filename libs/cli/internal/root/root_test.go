@@ -2,6 +2,7 @@ package root
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,6 +118,22 @@ func TestRunValidateWithInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestRunValidateWithNonObjectJSON(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	path := writeTempConfig(t, `[]`)
+
+	exitCode := Run([]string{"validate", "-c", path}, &stdout, &stderr)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "top-level JSON value must be an object") {
+		t.Fatalf("expected stderr to mention object-shaped config, got %q", stderr.String())
+	}
+}
+
 func TestRunValidateDefaultConfigMissing(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -201,5 +218,70 @@ func TestRunValidateWithWarningsAndErrors(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(errOut), "warning") {
 		t.Fatalf("expected stderr to contain 'warning', got %q", errOut)
+	}
+}
+
+func TestRunValidateWithInvalidPackageJSON(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "langgraph.json")
+	packagePath := filepath.Join(dir, "package.json")
+	if err := os.WriteFile(
+		configPath,
+		[]byte(`{"node_version":"20","graphs":{"agent":"./agent.js:graph"}}`),
+		0644,
+	); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	if err := os.WriteFile(packagePath, []byte(`{invalid json`), 0644); err != nil {
+		t.Fatalf("failed to write package.json: %v", err)
+	}
+
+	exitCode := Run([]string{"validate", "-c", configPath}, &stdout, &stderr)
+
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "Invalid package.json found") {
+		t.Fatalf("expected stderr to mention invalid package.json, got %q", stderr.String())
+	}
+}
+
+func TestRunDeployDelegatesToPythonCLI(t *testing.T) {
+	t.Setenv("LANGGRAPH_CALLING_PYTHON", "/custom/python")
+
+	originalRunPythonSubprocess := runPythonSubprocess
+	t.Cleanup(func() {
+		runPythonSubprocess = originalRunPythonSubprocess
+	})
+
+	var gotPython string
+	var gotArgs []string
+	runPythonSubprocess = func(
+		pythonExe string,
+		args []string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) error {
+		gotPython = pythonExe
+		gotArgs = append([]string(nil), args...)
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := Run([]string{"deploy", "--remote", "--install-command", "make deps"}, &stdout, &stderr)
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %q", exitCode, stderr.String())
+	}
+	if gotPython != "/custom/python" {
+		t.Fatalf("expected delegated python to be /custom/python, got %q", gotPython)
+	}
+	expected := []string{"-m", "langgraph_cli.cli", "deploy", "--remote", "--install-command", "make deps"}
+	if strings.Join(gotArgs, "\x00") != strings.Join(expected, "\x00") {
+		t.Fatalf("unexpected delegated args: got %q want %q", gotArgs, expected)
 	}
 }

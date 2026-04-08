@@ -24,6 +24,10 @@ class GoBinaryBuildHook(BuildHookInterface):
     PLUGIN_NAME = "go-binary"
 
     def initialize(self, version: str, build_data: dict) -> None:
+        bin_dir = Path("langgraph_cli/bin")
+        if bin_dir.exists():
+            shutil.rmtree(bin_dir)
+
         binary_path = os.environ.get("LANGGRAPH_GO_BINARY")
         if not binary_path:
             return
@@ -33,7 +37,6 @@ class GoBinaryBuildHook(BuildHookInterface):
             msg = f"LANGGRAPH_GO_BINARY points to missing file: {source}"
             raise FileNotFoundError(msg)
 
-        bin_dir = Path("langgraph_cli/bin")
         bin_dir.mkdir(parents=True, exist_ok=True)
 
         # Determine output name (langgraph or langgraph.exe)

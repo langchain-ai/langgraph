@@ -47,7 +47,7 @@ jobs:
       - name: Cross-compile Go binaries
         if: inputs.working-directory == 'libs/cli'
         working-directory: ${{ inputs.working-directory }}
-        run: make build-go-all
+        run: make build-go-all GO_BIN_DIR=build/go-bin
 
       - name: Run Go tests
         if: inputs.working-directory == 'libs/cli'
@@ -89,11 +89,12 @@ jobs:
             plat=$(echo "$entry" | awk '{print $2}')
             ext=""
             if [[ "$key" == windows-* ]]; then ext=".exe"; fi
-            binary="langgraph_cli/bin/langgraph-${key}${ext}"
+            binary="build/go-bin/langgraph-${key}${ext}"
             echo "Building wheel for ${key} -> ${plat}..."
             LANGGRAPH_GO_BINARY="$binary" LANGGRAPH_WHEEL_PLAT="$plat" uv build --wheel
           done
           # Also build the sdist and pure-Python fallback wheel
+          rm -rf langgraph_cli/bin
           uv build
           echo "All wheels built:"
           ls -lh dist/

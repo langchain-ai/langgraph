@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -17,6 +18,19 @@ import (
 	"github.com/langchain-ai/langgraph/libs/cli/internal/templates"
 	"github.com/langchain-ai/langgraph/libs/cli/internal/version"
 )
+
+var runPythonSubprocess = func(
+	pythonExe string,
+	args []string,
+	stdout io.Writer,
+	stderr io.Writer,
+) error {
+	cmd := osexec.Command(pythonExe, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	return cmd.Run()
+}
 
 const helpText = `Usage: langgraph [OPTIONS] COMMAND [ARGS]...
 
@@ -229,17 +243,13 @@ func loadAndValidateConfig(configPath string, stderr io.Writer) (map[string]any,
 		errPrint(stderr, fmt.Sprintf("Path '%s' does not exist.", configPath))
 		return nil, nil, false
 	}
-	data, err := os.ReadFile(configPath)
+
+	raw, err := config.LoadRawConfigFile(configPath)
 	if err != nil {
 		errPrint(stderr, err.Error())
 		return nil, nil, false
 	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		errPrint(stderr, fmt.Sprintf("Invalid JSON in %s: %s", configPath, err.Error()))
-		return nil, nil, false
-	}
-	validated, err := config.ValidateConfig(raw)
+	validated, err := config.ValidateConfigFile(configPath)
 	if err != nil {
 		errPrint(stderr, err.Error())
 		return nil, nil, false
@@ -289,15 +299,27 @@ Options:
 		_, _ = fmt.Fprintf(stderr, "%sError: %s%s\n", colorRed, err, colorReset)
 		return 1
 	}
-	var rawConfig map[string]any
-	if err := json.Unmarshal(data, &rawConfig); err != nil {
+
+	var rawAny any
+	if err := json.Unmarshal(data, &rawAny); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: Invalid JSON in %s: %s\n", configPath, err.Error())
+		return 1
+	}
+	rawConfig, ok := rawAny.(map[string]any)
+	if !ok {
+		_, _ = fmt.Fprintf(
+			stderr,
+			"%sError: Invalid config in %s: top-level JSON value must be an object.%s\n",
+			colorRed,
+			configPath,
+			colorReset,
+		)
 		return 1
 	}
 
 	unknownWarnings := config.GetUnknownKeys(rawConfig)
 
-	validated, validErr := config.ValidateConfig(rawConfig)
+	validated, validErr := config.ValidateConfigFile(configPath)
 	if validErr != nil {
 		_, _ = fmt.Fprintf(stderr, "%sError: %s%s\n", colorRed, validErr, colorReset)
 		if len(unknownWarnings) > 0 {
@@ -683,29 +705,7 @@ Options:
 		}
 	}
 
-	// Dev command: subprocess back into Python.
-	// The Go CLI handles argument parsing, but the actual dev server runs in Python.
-	pythonExe := os.Getenv("LANGGRAPH_CALLING_PYTHON")
-	if pythonExe == "" {
-		// Try to find python in the environment
-		for _, name := range []string{"python3", "python"} {
-			if p, _, err := lgexec.RunCollect("which", []string{name}); err == nil && strings.TrimSpace(p) != "" {
-				pythonExe = strings.TrimSpace(p)
-				break
-			}
-		}
-	}
-	if pythonExe == "" {
-		errPrint(stderr, "Could not find Python interpreter. Set LANGGRAPH_CALLING_PYTHON.")
-		return 1
-	}
-
-	// Forward all args to the Python dev command
-	pyArgs := append([]string{"-m", "langgraph_cli.cli", "dev"}, args...)
-	if err := lgexec.Run(pythonExe, pyArgs, lgexec.RunOpts{Verbose: true}); err != nil {
-		return 1
-	}
-	return 0
+	return runPythonCLI("dev", args, stdout, stderr)
 }
 
 // ---------------------------------------------------------------------------
@@ -767,37 +767,33 @@ Available templates:
 // ---------------------------------------------------------------------------
 
 func runDeploy(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		return runDeployMain(args, stdout, stderr)
+	return runPythonCLI("deploy", args, stdout, stderr)
+}
+
+func runPythonCLI(subcommand string, args []string, stdout, stderr io.Writer) int {
+	pythonExe := os.Getenv("LANGGRAPH_CALLING_PYTHON")
+	if pythonExe == "" {
+		for _, name := range []string{"python3", "python"} {
+			if p, _, err := lgexec.RunCollect("which", []string{name}); err == nil && strings.TrimSpace(p) != "" {
+				pythonExe = strings.TrimSpace(p)
+				break
+			}
+		}
 	}
-	switch args[0] {
-	case "--help", "-h":
-		_, _ = fmt.Fprintln(stdout, `Usage: langgraph deploy [OPTIONS] COMMAND [ARGS]...
-
-  [Beta] Build and deploy a LangGraph image to LangSmith Deployment.
-
-Commands:
-  list       List LangSmith Deployments.
-  revisions  Manage deployment revisions.
-  delete     Delete a LangSmith Deployment.
-  logs       Fetch LangSmith Deployment logs.
-
-Run 'langgraph deploy COMMAND --help' for more information on a command.
-
-If no subcommand is given, deploys the current project.`)
-		return 0
-	case "list":
-		return runDeployList(args[1:], stdout, stderr)
-	case "revisions":
-		return runDeployRevisions(args[1:], stdout, stderr)
-	case "delete":
-		return runDeployDelete(args[1:], stdout, stderr)
-	case "logs":
-		return runDeployLogs(args[1:], stdout, stderr)
-	default:
-		// No subcommand → main deploy flow
-		return runDeployMain(args, stdout, stderr)
+	if pythonExe == "" {
+		errPrint(stderr, "Could not find Python interpreter. Set LANGGRAPH_CALLING_PYTHON.")
+		return 1
 	}
+
+	pyArgs := append([]string{"-m", "langgraph_cli.cli", subcommand}, args...)
+	if err := runPythonSubprocess(pythonExe, pyArgs, stdout, stderr); err != nil {
+		if exitErr, ok := err.(*osexec.ExitError); ok {
+			return exitErr.ExitCode()
+		}
+		errPrint(stderr, err.Error())
+		return 1
+	}
+	return 0
 }
 
 func resolveDeployClient(args []string, stderr io.Writer) (apiKey, hostURL string, extra []string) {
