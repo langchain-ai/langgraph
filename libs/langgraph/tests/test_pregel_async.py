@@ -7579,7 +7579,7 @@ async def test_configurable_propagates_to_stream_metadata() -> None:
             "user_id": "uid-1",
             "cron_id": "cron-1",
             "langgraph_auth_user_id": "user-1",
-            # these should NOT leak into metadata
+            # these should NOT be propagated into metadata
             "some_api_key": "secret",
             "custom_setting": {"nested": True},
         },
