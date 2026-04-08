@@ -826,12 +826,37 @@ def dev(
 @cli.command(help="✅ Validate the LangGraph configuration file.")
 @log_command
 def validate(config: pathlib.Path):
-    config_json = langgraph_cli.config.validate_config_file(config)
+    import json
+
+    try:
+        with open(config) as f:
+            raw_config = json.load(f)
+    except json.JSONDecodeError as e:
+        raise click.UsageError(f"Invalid JSON in {config}: {e.args[0]}") from None
+
+    # Check for unknown keys before validation so they show alongside any error.
+    unknown_warnings = langgraph_cli.config.get_unknown_keys(raw_config)
+
+    try:
+        config_json = langgraph_cli.config.validate_config_file(config)
+    except (click.UsageError, ValueError) as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        if unknown_warnings:
+            click.echo(err=True)
+            for warning in unknown_warnings:
+                click.secho(f"  warning: {warning}", fg="yellow", err=True)
+        raise SystemExit(1) from None
+
     num_graphs = len(config_json.get("graphs", {}))
-    click.echo(
+    click.secho(
         f"Configuration file {config} is valid. "
-        f"({num_graphs} graph{'s' if num_graphs != 1 else ''} found)"
+        f"({num_graphs} graph{'s' if num_graphs != 1 else ''} found)",
+        fg="green",
     )
+    if unknown_warnings:
+        click.echo()
+        for warning in unknown_warnings:
+            click.secho(f"  warning: {warning}", fg="yellow")
 
 
 # ---------------------------------------------------------------------------

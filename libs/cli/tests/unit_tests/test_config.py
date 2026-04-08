@@ -404,7 +404,7 @@ def test_validate_config_pip_installer():
             }
         )
     assert "Invalid pip_installer: 'conda'" in str(exc_info.value)
-    assert "Must be 'auto', 'pip', or 'uv'" in str(exc_info.value)
+    assert "uv-based source management" in str(exc_info.value)
 
     with pytest.raises(click.UsageError) as exc_info:
         validate_config(
@@ -417,7 +417,7 @@ def test_validate_config_pip_installer():
         )
     assert "Invalid pip_installer: 'invalid'" in str(exc_info.value)
 
-    with pytest.raises(click.UsageError, match="has been replaced"):
+    with pytest.raises(click.UsageError, match="Invalid pip_installer: 'uv_lock'"):
         validate_config(
             {
                 "python_version": "3.11",
