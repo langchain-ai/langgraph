@@ -604,7 +604,7 @@ class UvSource(TypedDict, total=False):
     """
 
     package: str
-    """Optional. Workspace package name to deploy when `root` is ambiguous.
+    """Optional. Workspace package name to deploy when the target is ambiguous.
 
     If omitted, the CLI tries to infer the target package from the location of
     `langgraph.json`, or falls back to the only package if the root contains
