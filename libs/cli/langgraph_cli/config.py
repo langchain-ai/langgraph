@@ -182,7 +182,11 @@ def validate_config(config: Config) -> Config:
                     "Version must be major or major.minor or major.minor.patch."
                 )
         except TypeError:
-            raise click.UsageError(f"Invalid version format: {api_version}") from None
+            raise click.UsageError(
+                f"Invalid version format: {api_version}.\n\n"
+                "Pin to a minor version, e.g.:\n"
+                '  "api_version": "0.8"'
+            ) from None
 
     config = {
         "node_version": node_version,
@@ -220,45 +224,51 @@ def validate_config(config: Config) -> Config:
             if major < min_major:
                 raise click.UsageError(
                     f"Node.js version {node_version} is not supported. "
-                    f"Minimum required version is {MIN_NODE_VERSION}."
+                    f"Minimum required version is {MIN_NODE_VERSION}.\n\n"
+                    f"Set node_version to {MIN_NODE_VERSION} or higher:\n"
+                    f'  "node_version": "{MIN_NODE_VERSION}"'
                 )
         except ValueError as e:
             raise click.UsageError(str(e)) from None
 
     if pip_installer := config.get("pip_installer"):
-        if pip_installer == "uv_lock":
-            raise click.UsageError(
-                "pip_installer 'uv_lock' has been replaced. Use "
-                '`source: {"kind": "uv", "root": "..", '
-                '"package": "my-agent"}`.'
-            )
         if pip_installer not in ["auto", "pip", "uv"]:
             raise click.UsageError(
                 f"Invalid pip_installer: '{pip_installer}'. "
-                "Must be 'auto', 'pip', or 'uv'."
+                "Consider using uv-based source management instead:\n\n"
+                '  "source": {"kind": "uv", "root": ".."}'
             )
 
     source = config.get("source")
     source_kind = _get_source_kind(config)
     if source is not None and not isinstance(source, dict):
-        raise click.UsageError("`source` must be an object.")
+        raise click.UsageError(
+            "`source` must be an object, e.g.:\n"
+            '  "source": {"kind": "uv", "root": ".."}'
+        )
     if source is not None and source_kind != "uv":
-        raise click.UsageError("Invalid source.kind. Supported values: 'uv'.")
+        raise click.UsageError(
+            "Invalid source.kind. The only supported value is 'uv':\n"
+            '  "source": {"kind": "uv", "root": ".."}'
+        )
 
     if config.get("python_version"):
         pyversion = config["python_version"]
         if not pyversion.count(".") == 1 or not all(
             part.isdigit() for part in pyversion.split("-")[0].split(".")
         ):
+            parts = pyversion.split("-")[0].split(".")
+            fix = f"{parts[0]}.{parts[1]}" if len(parts) >= 2 else MIN_PYTHON_VERSION
             raise click.UsageError(
                 f"Invalid Python version format: {pyversion}. "
-                "Use 'major.minor' format (e.g., '3.11'). "
-                "Patch version cannot be specified."
+                "Use 'major.minor' format — patch version cannot be specified.\n\n"
+                f'  "python_version": "{fix}"'
             )
         if _parse_version(pyversion) < _parse_version(MIN_PYTHON_VERSION):
             raise click.UsageError(
                 f"Python version {pyversion} is not supported. "
-                f"Minimum required version is {MIN_PYTHON_VERSION}."
+                f"Minimum required version is {MIN_PYTHON_VERSION}.\n\n"
+                f'  "python_version": "{MIN_PYTHON_VERSION}"'
             )
         if "bullseye" in pyversion:
             raise click.UsageError(
@@ -269,12 +279,16 @@ def validate_config(config: Config) -> Config:
         if source_kind != "uv" and not config["dependencies"]:
             raise click.UsageError(
                 "No dependencies found in config. "
-                "Add at least one dependency to 'dependencies' list."
+                "Consider using uv-based source management:\n\n"
+                '  "source": {"kind": "uv", "root": ".."}'
             )
 
     if not config.get("graphs"):
         raise click.UsageError(
-            "No graphs found in config. Add at least one graph to 'graphs' dictionary."
+            "No graphs found in config. Add at least one graph, e.g.:\n"
+            '  "graphs": {\n'
+            '    "agent": "./my_agent/graph.py:graph"\n'
+            "  }"
         )
 
     # Validate image_distro config
@@ -287,7 +301,8 @@ def validate_config(config: Config) -> Config:
         if image_distro not in Distros.__args__:
             raise click.UsageError(
                 f"Invalid image_distro: '{image_distro}'. "
-                "Must be one of 'debian', 'wolfi', or 'bookworm'."
+                f"Must be one of: {', '.join(repr(d) for d in Distros.__args__)}.\n\n"
+                '  "image_distro": "wolfi"  (recommended)'
             )
 
     if source_kind == "uv":
@@ -367,6 +382,51 @@ def validate_config(config: Config) -> Config:
                 " 'pip', 'setuptools', and/or 'wheel')."
             )
     return config
+
+
+# Keys recognized by validate_config (used to detect unknown fields).
+_KNOWN_CONFIG_KEYS = {
+    "python_version",
+    "node_version",
+    "api_version",
+    "base_image",
+    "image_distro",
+    "pip_config_file",
+    "pip_installer",
+    "source",
+    "dependencies",
+    "dockerfile_lines",
+    "graphs",
+    "env",
+    "store",
+    "auth",
+    "encryption",
+    "http",
+    "webhooks",
+    "checkpointer",
+    "ui",
+    "ui_config",
+    "keep_pkg_tools",
+    # Internal / legacy (still recognized, may error separately)
+    "_INTERNAL_docker_tag",
+    "project_root",
+    "package",
+}
+
+
+def get_unknown_keys(raw_config: dict) -> list[str]:
+    """Return warnings for unrecognized top-level keys (typos, etc.)."""
+    import difflib
+
+    unknown = set(raw_config) - _KNOWN_CONFIG_KEYS
+    warnings: list[str] = []
+    for key in sorted(unknown):
+        close = difflib.get_close_matches(key, _KNOWN_CONFIG_KEYS, n=1)
+        if close:
+            warnings.append(f"Unknown key '{key}' — did you mean '{close[0]}'?")
+        else:
+            warnings.append(f"Unknown key '{key}' is not a recognized config field.")
+    return warnings
 
 
 def validate_config_file(config_path: pathlib.Path) -> Config:
