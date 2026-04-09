@@ -339,7 +339,6 @@ async def test_list_metadata_custom_keys(
     assert results[0].metadata["run_id"] == "run-abc"
 
 
-
 ALL_LIST_TESTS = [
     test_list_all,
     test_list_by_thread,
