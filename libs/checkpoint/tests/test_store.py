@@ -1023,6 +1023,30 @@ async def test_embed_with_path(fake_embeddings: CharacterEmbeddings) -> None:
     assert doc5_result.score is None
 
 
+def test_put_preserves_created_at_on_update() -> None:
+    """Updating an existing key must not overwrite its created_at timestamp."""
+    store = InMemoryStore()
+    namespace = ("test", "ns")
+    key = "item1"
+
+    store.put(namespace, key, {"v": 1})
+    original = store.get(namespace, key)
+    assert original is not None
+    original_created_at = original.created_at
+
+    store.put(namespace, key, {"v": 2})
+    updated = store.get(namespace, key)
+    assert updated is not None
+
+    assert updated.created_at == original_created_at, (
+        "created_at must not change when updating an existing key"
+    )
+    assert updated.updated_at > original.updated_at, (
+        "updated_at must advance after an update"
+    )
+    assert updated.value == {"v": 2}
+
+
 def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     """Test support for non-ascii characters"""
     store = InMemoryStore(
