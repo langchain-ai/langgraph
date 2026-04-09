@@ -1329,20 +1329,22 @@ def test_imp_nested(
     }
 
     thread1 = {"configurable": {"thread_id": "1"}}
-    assert [*graph.stream([0, 1], thread1, durability=durability)] == [
-        {"submapper": "0"},
+    result = [*graph.stream([0, 1], thread1, durability=durability)]
+    # nested tasks run concurrently so output order is non-deterministic
+    assert sorted(result[:-1], key=lambda d: str(d)) == [
         {"mapper": "00"},
-        {"submapper": "1"},
         {"mapper": "11"},
-        {
-            "__interrupt__": (
-                Interrupt(
-                    value="question",
-                    id=AnyStr(),
-                ),
-            )
-        },
+        {"submapper": "0"},
+        {"submapper": "1"},
     ]
+    assert result[-1] == {
+        "__interrupt__": (
+            Interrupt(
+                value="question",
+                id=AnyStr(),
+            ),
+        )
+    }
 
     assert graph.invoke(Command(resume="answer"), thread1, durability=durability) == [
         "00answera",
