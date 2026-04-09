@@ -635,9 +635,7 @@ class Pregel(
     name: str = "LangGraph"
 
     trigger_to_nodes: Mapping[str, Sequence[str]]
-    graph_error_handler_node: str | None = None
-    graph_error_trigger_channel: str | None = None
-    graph_error_info_channel: str | None = None
+    node_error_handler_map: Mapping[str, str]
 
     def __init__(
         self,
@@ -662,9 +660,7 @@ class Pregel(
         context_schema: type[ContextT] | None = None,
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
-        graph_error_handler_node: str | None = None,
-        graph_error_trigger_channel: str | None = None,
-        graph_error_info_channel: str | None = None,
+        node_error_handler_map: Mapping[str, str] | None = None,
         name: str = "LangGraph",
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
@@ -711,9 +707,7 @@ class Pregel(
         self.context_schema = context_schema
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
-        self.graph_error_handler_node = graph_error_handler_node
-        self.graph_error_trigger_channel = graph_error_trigger_channel
-        self.graph_error_info_channel = graph_error_info_channel
+        self.node_error_handler_map = node_error_handler_map or {}
         self.name = name
         self._serde_allowlist: set[tuple[str, ...]] | None = None
         if auto_validate:
@@ -2695,9 +2689,8 @@ class Pregel(
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
-                    graph_error_handler_node=self.graph_error_handler_node,
-                    graph_error_trigger_channel=self.graph_error_trigger_channel,
-                    graph_error_info_channel=self.graph_error_info_channel,
+                    node_error_handler_map=self.node_error_handler_map,
+                    schedule_error_handler=loop.schedule_error_handler,
                 )
                 # enable subgraph streaming
                 if subgraphs:
@@ -3066,9 +3059,8 @@ class Pregel(
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     use_astream=do_stream,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
-                    graph_error_handler_node=self.graph_error_handler_node,
-                    graph_error_trigger_channel=self.graph_error_trigger_channel,
-                    graph_error_info_channel=self.graph_error_info_channel,
+                    node_error_handler_map=self.node_error_handler_map,
+                    aschedule_error_handler=loop.aschedule_error_handler,
                 )
                 # enable subgraph streaming
                 if subgraphs:
