@@ -18,6 +18,7 @@ dependencies = [
     "pathspec>=0.11.0",
     "python-dotenv>=0.8.0",
     "tomli>=2.0.1 ; python_version < '3.11'",
+    "typing-extensions>=4.2.0",
 ]
 [tool.hatch.version]
 path = "langgraph_cli/__init__.py"
