@@ -29,8 +29,6 @@ from langgraph._internal._constants import (
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
-    ERROR,
-    GRAPH_ERROR_INFO,
 )
 from langgraph._internal._runnable import RunnableCallable
 from langgraph._internal._timeout import coerce_timeout_policy
@@ -40,10 +38,6 @@ from langgraph.errors import GraphInterrupt, NodeTimeoutError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph, add_messages
 from langgraph.pregel import NodeBuilder, Pregel
-from langgraph.pregel._algo import (
-    _read_errors_for_task_ids_from_pending_writes,
-    _read_failed_node_names_from_pending_writes,
-)
 from langgraph.pregel._read import PregelNode
 from langgraph.pregel._retry import (
     _checkpoint_ns_for_parent_command,
@@ -1775,10 +1769,10 @@ def test_graph_error_handler_runs_after_retry_exhaustion():
         attempts += 1
         raise ValueError("Always fails")
 
-    def err_handler_node(state: State, runtime: Runtime) -> State:
-        captured["from_node_names"] = runtime.execution_info.from_node_names
-        captured["from_node_errors"] = runtime.execution_info.from_node_errors
-        return {"foo": "handled"}
+    def err_handler_node(state: State, runtime: Runtime) -> Command:
+        captured["from_node_name"] = runtime.execution_info.from_node_name
+        captured["from_node_error"] = runtime.execution_info.from_node_error
+        return Command(update={"foo": "handled"}, goto="after_handler")
 
     def after_handler(state: State) -> State:
         return {"foo": f"{state['foo']}_after"}
@@ -1792,11 +1786,14 @@ def test_graph_error_handler_runs_after_retry_exhaustion():
 
     graph = (
         StateGraph(State)
-        .add_node("always_failing", always_failing_node, retry_policy=retry_policy)
-        .set_graph_error_handler("err_handler", err_handler_node)
+        .add_node(
+            "always_failing",
+            always_failing_node,
+            retry_policy=retry_policy,
+            error_handler=err_handler_node,
+        )
         .add_node("after_handler", after_handler)
         .add_edge(START, "always_failing")
-        .add_edge("err_handler", "after_handler")
         .compile()
     )
 
@@ -1805,10 +1802,8 @@ def test_graph_error_handler_runs_after_retry_exhaustion():
 
     assert attempts == 2
     assert result["foo"] == "handled_after"
-    assert captured["from_node_names"] == ("always_failing",)
-    assert isinstance(captured["from_node_errors"], tuple)
-    assert len(captured["from_node_errors"]) == 1
-    assert isinstance(captured["from_node_errors"][0], BaseException)
+    assert captured["from_node_name"] == "always_failing"
+    assert isinstance(captured["from_node_error"], BaseException)
 
 
 def test_graph_error_handler_can_route_with_command():
@@ -1837,11 +1832,11 @@ def test_graph_error_handler_can_route_with_command():
 
     graph = (
         StateGraph(State)
-        .add_node("always_failing", always_failing_node, retry_policy=retry_policy)
-        .set_graph_error_handler(
-            "err_handler",
-            err_handler_node,
-            destinations=("next_node",),
+        .add_node(
+            "always_failing",
+            always_failing_node,
+            retry_policy=retry_policy,
+            error_handler=err_handler_node,
         )
         .add_node("next_node", next_node)
         .add_edge(START, "always_failing")
@@ -1865,8 +1860,7 @@ def test_graph_error_handler_failure_fails_run():
 
     graph = (
         StateGraph(State)
-        .add_node("always_failing", always_failing_node)
-        .set_graph_error_handler("err_handler", err_handler_node)
+        .add_node("always_failing", always_failing_node, error_handler=err_handler_node)
         .add_edge(START, "always_failing")
         .compile()
     )
@@ -1891,8 +1885,8 @@ def test_graph_error_handler_handles_subgraph_internal_failure():
     def parent_handler(state: ParentState, runtime: Runtime) -> ParentState:
         nonlocal parent_handler_called
         parent_handler_called = True
-        captured["from_node_names"] = runtime.execution_info.from_node_names
-        captured["from_node_errors"] = runtime.execution_info.from_node_errors
+        captured["from_node_name"] = runtime.execution_info.from_node_name
+        captured["from_node_error"] = runtime.execution_info.from_node_error
         return {"foo": "handled_by_parent"}
 
     subgraph = (
@@ -1904,8 +1898,7 @@ def test_graph_error_handler_handles_subgraph_internal_failure():
 
     parent_graph = (
         StateGraph(ParentState)
-        .add_node("subgraph_node", subgraph)
-        .set_graph_error_handler("parent_handler", parent_handler)
+        .add_node("subgraph_node", subgraph, error_handler=parent_handler)
         .add_edge(START, "subgraph_node")
         .compile()
     )
@@ -1913,10 +1906,8 @@ def test_graph_error_handler_handles_subgraph_internal_failure():
     result = parent_graph.invoke({"foo": ""})
     assert result["foo"] == "handled_by_parent"
     assert parent_handler_called is True
-    assert captured["from_node_names"] == ("subgraph_node",)
-    assert isinstance(captured["from_node_errors"], tuple)
-    assert len(captured["from_node_errors"]) == 1
-    assert isinstance(captured["from_node_errors"][0], BaseException)
+    assert captured["from_node_name"] == "subgraph_node"
+    assert isinstance(captured["from_node_error"], BaseException)
 
 
 def test_graph_error_handler_error_context_survives_checkpoint_resume():
@@ -1929,18 +1920,20 @@ def test_graph_error_handler_error_context_survives_checkpoint_resume():
         raise RuntimeError("failed before handler")
 
     def err_handler_node(state: State, runtime: Runtime) -> State:
-        captured["from_node_names"] = runtime.execution_info.from_node_names
-        captured["from_node_errors"] = runtime.execution_info.from_node_errors
+        captured["from_node_name"] = runtime.execution_info.from_node_name
+        captured["from_node_error"] = runtime.execution_info.from_node_error
         return {"foo": "handled_after_resume"}
 
     checkpointer = InMemorySaver()
     config = {"configurable": {"thread_id": "graph-error-resume"}}
     graph = (
         StateGraph(State)
-        .add_node("always_failing", always_failing_node)
-        .set_graph_error_handler("err_handler", err_handler_node)
+        .add_node("always_failing", always_failing_node, error_handler=err_handler_node)
         .add_edge(START, "always_failing")
-        .compile(checkpointer=checkpointer, interrupt_before=["err_handler"])
+        .compile(
+            checkpointer=checkpointer,
+            interrupt_before=["__error_handler__always_failing"],
+        )
     )
 
     # First run pauses before handler, after failure context is checkpointed.
@@ -1949,35 +1942,15 @@ def test_graph_error_handler_error_context_survives_checkpoint_resume():
     result = graph.invoke(None, config)
 
     assert result["foo"] == "handled_after_resume"
-    assert captured["from_node_names"] == ("always_failing",)
-    assert isinstance(captured["from_node_errors"], tuple)
-    assert len(captured["from_node_errors"]) == 1
-    assert isinstance(captured["from_node_errors"][0], BaseException)
-
-
-def test_graph_error_info_supports_multiple_failures_from_pending_writes():
-    pending_writes = [
-        ("task_a", GRAPH_ERROR_INFO, "fail_a"),
-        ("task_b", GRAPH_ERROR_INFO, "fail_b"),
-        ("task_a", ERROR, ValueError("a failed")),
-        ("task_b", ERROR, KeyError("b failed")),
-    ]
-
-    failed_node_names = _read_failed_node_names_from_pending_writes(pending_writes)
-    assert failed_node_names == [("task_a", "fail_a"), ("task_b", "fail_b")]
-    errors = _read_errors_for_task_ids_from_pending_writes(
-        pending_writes, tuple(task_id for task_id, _ in failed_node_names)
-    )
-    assert len(errors) == 2
-    assert isinstance(errors[0], ValueError)
-    assert isinstance(errors[1], KeyError)
+    assert captured["from_node_name"] == "always_failing"
+    assert isinstance(captured["from_node_error"], BaseException)
 
 
 def test_graph_error_handler_does_not_swallow_interrupt_concurrent():
     """When a graph error handler is configured and a node calls interrupt()
     concurrently with other nodes, the interrupt must still be raised — not
     silently swallowed."""
-    from langgraph.types import interrupt, Send
+    from langgraph.types import interrupt
 
     class State(TypedDict):
         foo: str
@@ -1996,9 +1969,8 @@ def test_graph_error_handler_does_not_swallow_interrupt_concurrent():
     checkpointer = InMemorySaver()
     graph = (
         StateGraph(State)
-        .add_node("node_a", node_a)
+        .add_node("node_a", node_a, error_handler=err_handler)
         .add_node("node_b", node_b)
-        .set_graph_error_handler("err_handler", err_handler)
         # Fan-out: both node_a and node_b run concurrently
         .add_edge(START, "node_a")
         .add_edge(START, "node_b")
@@ -2008,17 +1980,14 @@ def test_graph_error_handler_does_not_swallow_interrupt_concurrent():
     config = {"configurable": {"thread_id": "test-interrupt-concurrent"}}
 
     # First invoke should pause at the interrupt, not silently complete
-    result = graph.invoke({"foo": ""}, config)
+    graph.invoke({"foo": ""}, config)
 
     # The graph should have an interrupt pending
     state = graph.get_state(config)
     assert len(state.tasks) > 0
 
     # There should be a pending interrupt from node_a
-    interrupts = [
-        t for t in state.tasks
-        if hasattr(t, 'interrupts') and t.interrupts
-    ]
+    interrupts = [t for t in state.tasks if hasattr(t, "interrupts") and t.interrupts]
     assert len(interrupts) > 0, (
         "GraphInterrupt was swallowed — interrupt() in node_a "
         "should have paused execution"

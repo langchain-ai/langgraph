@@ -50,6 +50,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     ERROR,
+    ERROR_SOURCE_NODE,
     INPUT,
     INTERRUPT,
     NS_END,
@@ -86,6 +87,7 @@ from langgraph.pregel._algo import (
     checkpoint_null_version,
     increment,
     prepare_next_tasks,
+    prepare_node_error_handler_task,
     prepare_single_task,
     sanitize_untracked_values_in_send,
     should_interrupt,
@@ -503,6 +505,16 @@ class PregelLoop:
             # return the new task, to be started if not run before
             return pushed
 
+    def schedule_error_handler(
+        self, failed_task: PregelExecutableTask, error: BaseException
+    ) -> PregelExecutableTask | None:
+        raise NotImplementedError
+
+    async def aschedule_error_handler(
+        self, failed_task: PregelExecutableTask, error: BaseException
+    ) -> PregelExecutableTask | None:
+        raise NotImplementedError
+
     def tick(self) -> bool:
         """Execute a single iteration of the Pregel loop.
 
@@ -627,7 +639,7 @@ class PregelLoop:
 
     def _match_writes(self, tasks: Mapping[str, PregelExecutableTask]) -> None:
         for tid, k, v in self.checkpoint_pending_writes:
-            if k in (ERROR, INTERRUPT, RESUME):
+            if k in (ERROR, ERROR_SOURCE_NODE, INTERRUPT, RESUME):
                 continue
             if task := tasks.get(tid):
                 task.writes.append((k, v))
@@ -1200,6 +1212,45 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
                 self.output_writes(task.id, task.writes, cached=True)
         return pushed
 
+    def schedule_error_handler(
+        self, failed_task: PregelExecutableTask, error: BaseException
+    ) -> PregelExecutableTask | None:
+        handler_node = self.nodes[failed_task.name].error_handler_node
+        if not handler_node:
+            return None
+        writes = list(failed_task.writes)
+        writes.append((ERROR_SOURCE_NODE, failed_task.name))
+        self.put_writes(
+            failed_task.id,
+            writes,
+        )
+        handler_task = prepare_node_error_handler_task(
+            failed_task,
+            handler_node_name=handler_node,
+            failed_error=error,
+            checkpoint=self.checkpoint,
+            pending_writes=self.checkpoint_pending_writes,
+            processes=self.nodes,
+            channels=self.channels,
+            managed=self.managed,
+            config=failed_task.config,
+            step=self.step,
+            stop=self.stop,
+            store=self.store,
+            checkpointer=self.checkpointer,
+            manager=self.manager,
+            retry_policy=self.retry_policy,
+            cache_policy=self.cache_policy,
+        )
+        if handler_task is None:
+            return None
+        self.tasks[handler_task.id] = handler_task
+        if not self.is_replaying:
+            self._match_writes({handler_task.id: handler_task})
+        for task in self.match_cached_writes():
+            self.output_writes(task.id, task.writes, cached=True)
+        return handler_task
+
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
         super().put_writes(task_id, writes)
@@ -1398,6 +1449,45 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             for task in await self.amatch_cached_writes():
                 self.output_writes(task.id, task.writes, cached=True)
         return pushed
+
+    async def aschedule_error_handler(
+        self, failed_task: PregelExecutableTask, error: BaseException
+    ) -> PregelExecutableTask | None:
+        handler_node = self.nodes[failed_task.name].error_handler_node
+        if not handler_node:
+            return None
+        writes = list(failed_task.writes)
+        writes.append((ERROR_SOURCE_NODE, failed_task.name))
+        self.put_writes(
+            failed_task.id,
+            writes,
+        )
+        handler_task = prepare_node_error_handler_task(
+            failed_task,
+            handler_node_name=handler_node,
+            failed_error=error,
+            checkpoint=self.checkpoint,
+            pending_writes=self.checkpoint_pending_writes,
+            processes=self.nodes,
+            channels=self.channels,
+            managed=self.managed,
+            config=failed_task.config,
+            step=self.step,
+            stop=self.stop,
+            store=self.store,
+            checkpointer=self.checkpointer,
+            manager=self.manager,
+            retry_policy=self.retry_policy,
+            cache_policy=self.cache_policy,
+        )
+        if handler_task is None:
+            return None
+        self.tasks[handler_task.id] = handler_task
+        if not self.is_replaying:
+            self._match_writes({handler_task.id: handler_task})
+        for task in await self.amatch_cached_writes():
+            self.output_writes(task.id, task.writes, cached=True)
+        return handler_task
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""

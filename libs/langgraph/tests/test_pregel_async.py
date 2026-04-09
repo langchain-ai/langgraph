@@ -9726,8 +9726,8 @@ async def test_graph_error_handler_async_runtime_info() -> None:
         raise ValueError("Always fails async")
 
     async def err_handler_node(state: State, runtime: Runtime) -> State:
-        captured["from_node_names"] = runtime.execution_info.from_node_names
-        captured["from_node_errors"] = runtime.execution_info.from_node_errors
+        captured["from_node_name"] = runtime.execution_info.from_node_name
+        captured["from_node_error"] = runtime.execution_info.from_node_error
         return {"foo": "handled_async"}
 
     graph = (
@@ -9741,8 +9741,8 @@ async def test_graph_error_handler_async_runtime_info() -> None:
                 jitter=False,
                 retry_on=ValueError,
             ),
+            error_handler=err_handler_node,
         )
-        .set_graph_error_handler("err_handler", err_handler_node)
         .add_edge(START, "always_failing")
         .compile()
     )
@@ -9752,10 +9752,8 @@ async def test_graph_error_handler_async_runtime_info() -> None:
 
     assert attempts == 2
     assert result["foo"] == "handled_async"
-    assert captured["from_node_names"] == ("always_failing",)
-    assert isinstance(captured["from_node_errors"], tuple)
-    assert len(captured["from_node_errors"]) == 1
-    assert isinstance(captured["from_node_errors"][0], BaseException)
+    assert captured["from_node_name"] == "always_failing"
+    assert isinstance(captured["from_node_error"], BaseException)
 
 
 async def test_graph_error_handler_does_not_swallow_interrupt_concurrent() -> None:
@@ -9779,9 +9777,8 @@ async def test_graph_error_handler_does_not_swallow_interrupt_concurrent() -> No
     checkpointer = InMemorySaver()
     graph = (
         StateGraph(State)
-        .add_node("node_a", node_a)
+        .add_node("node_a", node_a, error_handler=err_handler)
         .add_node("node_b", node_b)
-        .set_graph_error_handler("err_handler", err_handler)
         .add_edge(START, "node_a")
         .add_edge(START, "node_b")
         .compile(checkpointer=checkpointer)
@@ -9789,15 +9786,12 @@ async def test_graph_error_handler_does_not_swallow_interrupt_concurrent() -> No
 
     config = {"configurable": {"thread_id": "test-interrupt-concurrent-async"}}
 
-    result = await graph.ainvoke({"foo": ""}, config)
+    await graph.ainvoke({"foo": ""}, config)
 
     state = await graph.aget_state(config)
     assert len(state.tasks) > 0
 
-    interrupts = [
-        t for t in state.tasks
-        if hasattr(t, 'interrupts') and t.interrupts
-    ]
+    interrupts = [t for t in state.tasks if hasattr(t, "interrupts") and t.interrupts]
     assert len(interrupts) > 0, (
         "GraphInterrupt was swallowed — interrupt() in node_a "
         "should have paused execution"
