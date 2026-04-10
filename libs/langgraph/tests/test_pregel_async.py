@@ -44,6 +44,7 @@ from langgraph._internal._queue import AsyncQueue
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.config import get_stream_writer
 from langgraph.errors import (
     GraphRecursionError,
     InvalidUpdateError,
@@ -5203,6 +5204,86 @@ async def test_stream_buffering_single_node(
         (FloatBetween(0.0, 0.1), "Before sleep"),
         (FloatBetween(0.2, 0.3), "After sleep"),
     ]
+
+
+@NEEDS_CONTEXTVARS
+async def test_astream_events_custom_stream_preserves_node_metadata(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        value: str
+
+    async def node(state: State) -> dict[str, str]:
+        writer = get_stream_writer()
+        writer({"custom": "first"})
+        await asyncio.sleep(0)
+        writer({"custom": "second"})
+        return {"value": state["value"] + "!"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node", node)
+        .add_edge(START, "node")
+        .add_edge("node", END)
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "custom-events"}}
+    events = [
+        event
+        async for event in graph.astream_events(
+            {"value": "x"},
+            config,
+            version="v2",
+            stream_mode="custom",
+        )
+    ]
+
+    root_run_id = events[0]["run_id"]
+    custom_events = [event for event in events if event["event"] == "on_custom_event"]
+
+    assert custom_events == [
+        {
+            "event": "on_custom_event",
+            "run_id": AnyStr(),
+            "name": "custom",
+            "tags": ["seq:step:1"],
+            "metadata": {
+                "thread_id": "custom-events",
+                "langgraph_step": 1,
+                "langgraph_node": "node",
+                "langgraph_triggers": ("branch:to:node",),
+                "langgraph_path": ("__pregel_pull", "node"),
+                "langgraph_checkpoint_ns": AnyStr(),
+                "checkpoint_ns": AnyStr(),
+            },
+            "data": {"custom": "first"},
+            "parent_ids": [root_run_id],
+        },
+        {
+            "event": "on_custom_event",
+            "run_id": AnyStr(),
+            "name": "custom",
+            "tags": ["seq:step:1"],
+            "metadata": {
+                "thread_id": "custom-events",
+                "langgraph_step": 1,
+                "langgraph_node": "node",
+                "langgraph_triggers": ("branch:to:node",),
+                "langgraph_path": ("__pregel_pull", "node"),
+                "langgraph_checkpoint_ns": AnyStr(),
+                "checkpoint_ns": AnyStr(),
+            },
+            "data": {"custom": "second"},
+            "parent_ids": [root_run_id],
+        },
+    ]
+    assert not any(
+        event["event"] == "on_chain_stream"
+        and event["name"] == "LangGraph"
+        and event["data"].get("chunk") in ({"custom": "first"}, {"custom": "second"})
+        for event in events
+    )
 
 
 async def test_nested_graph_interrupts_parallel(
