@@ -9756,6 +9756,7 @@ async def test_graph_error_handler_async_runtime_info() -> None:
     assert isinstance(captured["from_node_error"], BaseException)
 
 
+@NEEDS_CONTEXTVARS
 async def test_graph_error_handler_does_not_swallow_interrupt_concurrent() -> None:
     """When a graph error handler is configured and a node calls interrupt()
     concurrently with other nodes, the interrupt must still be raised — not
