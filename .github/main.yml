@@ -1,0 +1,22 @@
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  document:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call PR Analysis API
+        env:
+          PR_ANALYSIS_API_URL: ${{ secrets.PR_ANALYSIS_API_URL }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          curl -X POST "${{ env.PR_ANALYSIS_API_URL }}/analyze-pr" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "owner": "${{ github.repository_owner }}",
+              "repo": "${{ github.event.repository.name }}",
+              "pr_number": ${{ github.event.pull_request.number }},
+              "github_token": "${{ env.GITHUB_TOKEN }}"
+            }'
