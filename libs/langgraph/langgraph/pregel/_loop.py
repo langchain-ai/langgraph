@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import binascii
-import concurrent.futures
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import (
@@ -27,7 +26,6 @@ from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
-    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -91,6 +89,11 @@ from langgraph.pregel._checkpoint import (
     copy_checkpoint,
     create_checkpoint,
     empty_checkpoint,
+)
+from langgraph.pregel._checkpoint_writer import (
+    AsyncCheckpointWriter,
+    CheckpointRequest,
+    SyncCheckpointWriter,
 )
 from langgraph.pregel._executor import (
     AsyncBackgroundExecutor,
@@ -166,19 +169,6 @@ class PregelLoop:
     checkpointer_get_next_version: GetNextVersion
     checkpointer_put_writes: Callable[[RunnableConfig, WritesT, str], Any] | None
     checkpointer_put_writes_accepts_task_path: bool
-    _checkpointer_put_after_previous: (
-        Callable[
-            [
-                concurrent.futures.Future | None,
-                RunnableConfig,
-                Checkpoint,
-                str,
-                ChannelVersions,
-            ],
-            Any,
-        ]
-        | None
-    )
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
@@ -491,7 +481,7 @@ class PregelLoop:
         )
 
         # produce debug output
-        if self._checkpointer_put_after_previous is not None:
+        if self.checkpointer is not None:
             self._emit(
                 "checkpoints",
                 map_debug_checkpoint,
@@ -537,7 +527,7 @@ class PregelLoop:
 
         return True
 
-    def after_tick(self) -> None:
+    def _after_tick(self) -> CheckpointRequest | None:
         # finish superstep
         writes = [w for t in self.tasks.values() for w in t.writes]
         # all tasks have finished
@@ -562,14 +552,14 @@ class PregelLoop:
         # only replay (re-execute) done tasks on the first tick
         self.is_replaying = False
         # save checkpoint
-        self._put_checkpoint({"source": "loop"})
-        # after execution, check if we should interrupt
+        return self._prepare_checkpoint({"source": "loop"})
+
+    def _finish_after_tick(self) -> None:
         if self.interrupt_after and should_interrupt(
             self.checkpoint, self.interrupt_after, self.tasks.values()
         ):
             self.status = "interrupt_after"
             raise GraphInterrupt()
-        # unset resuming flag
         self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
 
     def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
@@ -619,7 +609,7 @@ class PregelLoop:
 
     def _first(
         self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
-    ) -> set[str] | None:
+    ) -> tuple[set[str] | None, CheckpointRequest | None]:
         # Resuming from a previous checkpoint requires two things:
         # 1. A prior checkpoint exists (channel_versions is non-empty)
         # 2. The input signals continuation (not a fresh run with new input)
@@ -713,6 +703,7 @@ class PregelLoop:
             )
             if updated_channels is not None:
                 updated_channels.update(null_updated_channels)
+        checkpoint_request = None
         # proceed past previous checkpoint
         if is_resuming:
             self.checkpoint["versions_seen"].setdefault(INTERRUPT, {})
@@ -755,7 +746,7 @@ class PregelLoop:
             )
             # save input checkpoint
             self.updated_channels = updated_channels
-            self._put_checkpoint({"source": "input"})
+            checkpoint_request = self._prepare_checkpoint({"source": "input"})
         elif CONFIG_KEY_RESUMING not in configurable:
             raise EmptyInputError(f"Received no input for {input_keys}")
         # Propagate resuming and replaying flags to subgraphs.
@@ -785,9 +776,11 @@ class PregelLoop:
             )
         # set flag
         self.status = "pending"
-        return updated_channels
+        return updated_channels, checkpoint_request
 
-    def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
+    def _prepare_checkpoint(
+        self, metadata: CheckpointMetadata
+    ) -> CheckpointRequest | None:
         # assign step and parents
         exiting = metadata is self.checkpoint_metadata
         if exiting and self.checkpoint["id"] == self.checkpoint_id_saved:
@@ -797,8 +790,7 @@ class PregelLoop:
             metadata["step"] = self.step
             metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
             self.checkpoint_metadata = metadata
-        # do checkpoint?
-        do_checkpoint = self._checkpointer_put_after_previous is not None and (
+        do_checkpoint = self.checkpointer is not None and (
             exiting or self.durability != "exit"
         )
         # create new checkpoint
@@ -820,9 +812,8 @@ class PregelLoop:
                 for value in self.checkpoint["channel_values"][TASKS]
             ]
             self.checkpoint["channel_values"][TASKS] = sanitized_tasks
-        # bail if no checkpointer
-
-        if do_checkpoint and self._checkpointer_put_after_previous is not None:
+        request = None
+        if do_checkpoint:
             self.prev_checkpoint_config = (
                 self.checkpoint_config
                 if CONFIG_KEY_CHECKPOINT_ID in self.checkpoint_config[CONF]
@@ -844,17 +835,11 @@ class PregelLoop:
                 self.checkpoint_previous_versions, channel_versions
             )
             self.checkpoint_previous_versions = channel_versions
-
-            # save it, without blocking
-            # if there's a previous checkpoint save in progress, wait for it
-            # ensuring checkpointers receive checkpoints in order
-            self._put_checkpoint_fut = self.submit(
-                self._checkpointer_put_after_previous,
-                getattr(self, "_put_checkpoint_fut", None),
-                self.checkpoint_config,
-                copy_checkpoint(self.checkpoint),
-                self.checkpoint_metadata,
-                new_versions,
+            request = CheckpointRequest(
+                config=self.checkpoint_config,
+                checkpoint=copy_checkpoint(self.checkpoint),
+                metadata=self.checkpoint_metadata,
+                new_versions=new_versions,
             )
             self.checkpoint_config = {
                 **self.checkpoint_config,
@@ -866,28 +851,18 @@ class PregelLoop:
         if not exiting:
             # increment step
             self.step += 1
+        return request
 
-    def _suppress_interrupt(
+    def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
+        raise NotImplementedError
+
+    def _finalize_suppress(
         self,
         exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
-        traceback: TracebackType | None,
     ) -> bool | None:
-        # persist current checkpoint and writes
-        if self.durability == "exit" and (
-            # if it's a top graph
-            not self.is_nested
-            # or a nested graph with error or interrupt
-            or exc_value is not None
-            # or a nested graph with checkpointer=True
-            or all(NS_END not in part for part in self.checkpoint_ns)
-        ):
-            self._put_checkpoint(self.checkpoint_metadata)
-            self._put_pending_writes()
-        # suppress interrupt
         suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
         if suppress:
-            # emit one last "values" event, with pending writes applied
             if (
                 hasattr(self, "tasks")
                 and self.checkpoint_pending_writes
@@ -912,7 +887,6 @@ class PregelLoop:
                         [w for t in self.tasks.values() for w in t.writes],
                         self.channels,
                     )
-            # emit INTERRUPT if exception is empty (otherwise emitted by put_writes)
             if exc_value is not None and (not exc_value.args or not exc_value.args[0]):
                 self._emit(
                     "updates",
@@ -920,13 +894,26 @@ class PregelLoop:
                         [{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]
                     ),
                 )
-            # save final output
             self.output = read_channels(self.channels, self.output_keys)
-            # suppress interrupt
             return True
         elif exc_type is None:
-            # save final output
             self.output = read_channels(self.channels, self.output_keys)
+        return None
+
+    def _suppress_interrupt(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
+        if self.durability == "exit" and (
+            not self.is_nested
+            or exc_value is not None
+            or all(NS_END not in part for part in self.checkpoint_ns)
+        ):
+            self._put_checkpoint(self.checkpoint_metadata)
+            self._put_pending_writes()
+        return self._finalize_suppress(exc_type, exc_value)
 
     def _emit(
         self,
@@ -1072,25 +1059,29 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             )
         else:
             self.checkpointer_get_next_version = increment
-            self._checkpointer_put_after_previous = None  # type: ignore[assignment]
             self.checkpointer_put_writes = None
             self.checkpointer_put_writes_accepts_task_path = False
+        self._checkpoint_writer: SyncCheckpointWriter | None = None
 
-    def _checkpointer_put_after_previous(
-        self,
-        prev: concurrent.futures.Future | None,
-        config: RunnableConfig,
-        checkpoint: Checkpoint,
-        metadata: CheckpointMetadata,
-        new_versions: ChannelVersions,
-    ) -> RunnableConfig:
-        try:
-            if prev is not None:
-                prev.result()
-        finally:
+    def _dispatch_checkpoint_request(self, request: CheckpointRequest) -> None:
+        if self.durability == "async" and self._checkpoint_writer is not None:
+            self._checkpoint_writer.submit(request)
+        else:
             cast(BaseCheckpointSaver, self.checkpointer).put(
-                config, checkpoint, metadata, new_versions
+                request.config,
+                request.checkpoint,
+                request.metadata,
+                request.new_versions,
             )
+
+    def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
+        if request := self._prepare_checkpoint(metadata):
+            self._dispatch_checkpoint_request(request)
+
+    def after_tick(self) -> None:
+        if request := self._after_tick():
+            self._dispatch_checkpoint_request(request)
+        self._finish_after_tick()
 
     def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         if self.cache is None:
@@ -1186,6 +1177,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             else []
         )
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
+        if self.checkpointer is not None and self.durability == "async":
+            self._checkpoint_writer = self.stack.enter_context(
+                SyncCheckpointWriter(self.checkpointer.put)
+            )
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
         )
@@ -1194,12 +1189,14 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
         self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
-        self.updated_channels = self._first(
+        self.updated_channels, checkpoint_request = self._first(
             input_keys=self.input_keys,
             updated_channels=set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
             if self.checkpoint.get("updated_channels")
             else None,
         )
+        if checkpoint_request is not None:
+            self._dispatch_checkpoint_request(checkpoint_request)
 
         return self
 
@@ -1268,25 +1265,25 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             )
         else:
             self.checkpointer_get_next_version = increment
-            self._checkpointer_put_after_previous = None  # type: ignore[assignment]
             self.checkpointer_put_writes = None
             self.checkpointer_put_writes_accepts_task_path = False
+        self._checkpoint_writer: AsyncCheckpointWriter | None = None
 
-    async def _checkpointer_put_after_previous(
-        self,
-        prev: asyncio.Task | None,
-        config: RunnableConfig,
-        checkpoint: Checkpoint,
-        metadata: CheckpointMetadata,
-        new_versions: ChannelVersions,
-    ) -> RunnableConfig:
-        try:
-            if prev is not None:
-                await prev
-        finally:
+    async def _dispatch_checkpoint_request(self, request: CheckpointRequest) -> None:
+        if self.durability == "async" and self._checkpoint_writer is not None:
+            await self._checkpoint_writer.submit(request)
+        else:
             await cast(BaseCheckpointSaver, self.checkpointer).aput(
-                config, checkpoint, metadata, new_versions
+                request.config,
+                request.checkpoint,
+                request.metadata,
+                request.new_versions,
             )
+
+    async def aafter_tick(self) -> None:
+        if request := self._after_tick():
+            await self._dispatch_checkpoint_request(request)
+        self._finish_after_tick()
 
     async def amatch_cached_writes(self) -> Sequence[PregelExecutableTask]:
         if self.cache is None:
@@ -1331,6 +1328,22 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
                 )
             },
         )
+
+    async def _asuppress_interrupt(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
+        if self.durability == "exit" and (
+            not self.is_nested
+            or exc_value is not None
+            or all(NS_END not in part for part in self.checkpoint_ns)
+        ):
+            if request := self._prepare_checkpoint(self.checkpoint_metadata):
+                await self._dispatch_checkpoint_request(request)
+            self._put_pending_writes()
+        return self._finalize_suppress(exc_type, exc_value)
 
     # context manager
 
@@ -1387,20 +1400,26 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )
+        if self.checkpointer is not None and self.durability == "async":
+            self._checkpoint_writer = await self.stack.enter_async_context(
+                AsyncCheckpointWriter(self.checkpointer.aput)
+            )
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
         )
-        self.stack.push(self._suppress_interrupt)
+        self.stack.push_async_exit(self._asuppress_interrupt)
         self.status = "input"
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
         self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
-        self.updated_channels = self._first(
+        self.updated_channels, checkpoint_request = self._first(
             input_keys=self.input_keys,
             updated_channels=set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
             if self.checkpoint.get("updated_channels")
             else None,
         )
+        if checkpoint_request is not None:
+            await self._dispatch_checkpoint_request(checkpoint_request)
 
         return self
 

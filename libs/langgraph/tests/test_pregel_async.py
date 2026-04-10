@@ -53,6 +53,7 @@ from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
 from langgraph.pregel import NodeBuilder, Pregel
+from langgraph.pregel._checkpoint_writer import DEFAULT_CHECKPOINT_BACKLOG
 from langgraph.pregel._loop import AsyncPregelLoop
 from langgraph.pregel._runner import PregelRunner
 from langgraph.types import (
@@ -482,6 +483,61 @@ async def test_checkpoint_put_after_cancellation_stream_events_anext() -> None:
         ], "Checkpoint put is not cancelled"
     else:
         assert False, "Task should be cancelled"
+
+
+async def test_async_durability_applies_checkpoint_backpressure() -> None:
+    first_put_started = asyncio.Event()
+    release_first_put = asyncio.Event()
+    put_calls = 0
+    visited: list[int] = []
+
+    class SlowFirstPutCheckpointer(InMemorySaver):
+        async def aput(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: ChannelVersions,
+        ) -> RunnableConfig:
+            nonlocal put_calls
+            put_calls += 1
+            if put_calls == 1:
+                first_put_started.set()
+                await release_first_put.wait()
+            return await super().aput(config, checkpoint, metadata, new_versions)
+
+    class State(TypedDict):
+        counter: int
+
+    def increment(state: State) -> State:
+        visited.append(state["counter"])
+        return {"counter": state["counter"] + 1}
+
+    def should_continue(state: State) -> str:
+        return "loop" if state["counter"] < 4 else "done"
+
+    builder = StateGraph(State)
+    builder.add_node("increment", increment)
+    builder.add_edge(START, "increment")
+    builder.add_conditional_edges(
+        "increment", should_continue, {"loop": "increment", "done": END}
+    )
+
+    graph = builder.compile(checkpointer=SlowFirstPutCheckpointer())
+    task = asyncio.create_task(
+        graph.ainvoke(
+            {"counter": 0}, {"configurable": {"thread_id": "1"}}, durability="async"
+        )
+    )
+
+    await first_put_started.wait()
+    await asyncio.sleep(0.05)
+
+    assert not task.done()
+    assert len(visited) <= DEFAULT_CHECKPOINT_BACKLOG + 1
+
+    release_first_put.set()
+    assert await task == {"counter": 4}
 
 
 async def test_node_cancellation_on_external_cancel() -> None:
