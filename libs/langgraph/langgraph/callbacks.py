@@ -77,7 +77,11 @@ class GraphResumeEvent:
 
 
 GraphLifecycleEvent: TypeAlias = GraphInterruptEvent | GraphResumeEvent
-"""Union of all public graph lifecycle callback event payloads."""
+"""Union of all public graph lifecycle callback event payloads.
+
+Use this alias when a callback or helper can receive either interrupt or resume
+lifecycle events.
+"""
 
 
 class GraphCallbackHandler(BaseCallbackHandler):
@@ -86,13 +90,25 @@ class GraphCallbackHandler(BaseCallbackHandler):
     Subclass this handler to observe graph lifecycle transitions that are
     specific to LangGraph execution, rather than generic LangChain runnable
     callbacks.
+
+    Instances can be passed through `config["callbacks"]` when invoking a
+    graph. Only handlers that inherit from `GraphCallbackHandler` receive these
+    lifecycle events.
     """
 
     def on_interrupt(self, event: GraphInterruptEvent) -> Any:
-        """Run when graph execution pauses due to one or more interrupts."""
+        """Run when graph execution pauses due to one or more interrupts.
+
+        Args:
+            event: Interrupt lifecycle event payload.
+        """
 
     def on_resume(self, event: GraphResumeEvent) -> Any:
-        """Run when graph execution resumes from a persisted checkpoint."""
+        """Run when graph execution resumes from a persisted checkpoint.
+
+        Args:
+            event: Resume lifecycle event payload.
+        """
 
 
 _MISSING = object()
@@ -367,6 +383,12 @@ def get_sync_graph_callback_manager_for_config(
     *,
     run_id: UUID | None = None,
 ) -> _GraphCallbackManager:
+    """Build a sync graph lifecycle callback manager from a runnable config.
+
+    This helper filters `config["callbacks"]` down to handlers that inherit
+    from `GraphCallbackHandler` and binds the provided `run_id` onto the
+    returned manager.
+    """
     return _GraphCallbackManager.configure(
         config.get("callbacks"),
         run_id=run_id,
@@ -378,6 +400,12 @@ def get_async_graph_callback_manager_for_config(
     *,
     run_id: UUID | None = None,
 ) -> _AsyncGraphCallbackManager:
+    """Build an async graph lifecycle callback manager from a runnable config.
+
+    This helper filters `config["callbacks"]` down to handlers that inherit
+    from `GraphCallbackHandler` and binds the provided `run_id` onto the
+    returned manager.
+    """
     return _AsyncGraphCallbackManager.configure(
         config.get("callbacks"),
         run_id=run_id,
