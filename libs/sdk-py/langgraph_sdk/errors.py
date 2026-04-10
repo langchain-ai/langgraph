@@ -37,7 +37,7 @@ class APIError(httpx.HTTPStatusError, LangGraphError):
             req = response_or_request
             response = None
 
-        httpx.HTTPStatusError.__init__(self, message, request=req, response=response)  # type: ignore[arg-type]
+        httpx.HTTPStatusError.__init__(self, message, request=req, response=response)  # type: ignore[arg-type]  # ty:ignore[invalid-argument-type]
         LangGraphError.__init__(self, message)
 
         self.request = req

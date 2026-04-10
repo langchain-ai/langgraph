@@ -16,10 +16,10 @@ T = TypeVar("T")
 CacheStatus = Literal["miss", "fresh", "stale", "expired"]
 
 try:
-    from langgraph_api.cache import (  # type: ignore[unresolved-import]
+    from langgraph_api.cache import (  # type: ignore[unresolved-import]  # ty:ignore[unresolved-import]
         cache_get as _cache_get,
     )
-    from langgraph_api.cache import (  # type: ignore[unresolved-import]
+    from langgraph_api.cache import (  # type: ignore[unresolved-import]  # ty:ignore[unresolved-import]
         cache_set as _cache_set,
     )
 except ImportError:
@@ -28,8 +28,12 @@ except ImportError:
 
 
 try:
-    from langgraph_api.cache import SWRResult  # type: ignore[unresolved-import]
-    from langgraph_api.cache import swr as _api_swr  # type: ignore[unresolved-import]
+    from langgraph_api.cache import (  # type: ignore[unresolved-import]  # ty:ignore[unresolved-import]
+        SWRResult,
+    )
+    from langgraph_api.cache import (  # type: ignore[unresolved-import]  # ty:ignore[unresolved-import]
+        swr as _api_swr,
+    )
 
 except ImportError:
     _api_swr = None
@@ -40,7 +44,7 @@ except ImportError:
         value: T
         status: CacheStatus
 
-        async def mutate(self, value: T = ...) -> T:  # type: ignore[assignment]
+        async def mutate(self, value: T = ...) -> T:  # type: ignore[assignment]  # ty:ignore[empty-body, invalid-parameter-default]
             """Update or revalidate the cached value."""
             ...
 
