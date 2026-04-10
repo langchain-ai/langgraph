@@ -26,8 +26,5 @@ class GraphLifecycleEvent:
     checkpoint_ns: tuple[str, ...]
     """Checkpoint namespace path for the current graph/subgraph."""
 
-    is_nested: bool
-    """Whether the event originated from a nested graph invocation."""
-
     interrupts: tuple[Interrupt, ...] = ()
     """Interrupt payloads (populated for `kind="interrupt"`)."""

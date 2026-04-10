@@ -96,7 +96,10 @@ from langgraph._internal._runnable import (
     coerce_to_runnable,
 )
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
-from langgraph.callbacks import get_graph_callback_manager_for_config
+from langgraph.callbacks import (
+    get_async_graph_callback_manager_for_config,
+    get_graph_callback_manager_for_config,
+)
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
@@ -2681,7 +2684,6 @@ class Pregel(
                             status=event.status,
                             checkpoint_id=event.checkpoint_id,
                             checkpoint_ns=event.checkpoint_ns,
-                            is_nested=event.is_nested,
                         )
                     else:
                         graph_callback_manager.on_interrupt(
@@ -2689,7 +2691,6 @@ class Pregel(
                             status=event.status,
                             checkpoint_id=event.checkpoint_id,
                             checkpoint_ns=event.checkpoint_ns,
-                            is_nested=event.is_nested,
                         )
 
             with SyncPregelLoop(
@@ -2954,7 +2955,7 @@ class Pregel(
             name=config.get("run_name", self.get_name()),
             run_id=config.get("run_id"),
         )
-        graph_callback_manager = get_graph_callback_manager_for_config(
+        graph_callback_manager = get_async_graph_callback_manager_for_config(
             config,
             run_id=run_manager.run_id,
         )
@@ -3075,19 +3076,17 @@ class Pregel(
             async def aemit_graph_lifecycle_events(loop: AsyncPregelLoop) -> None:
                 while (event := loop._pop_lifecycle_event()) is not None:
                     if event.kind == "resume":
-                        await graph_callback_manager.aon_resume(
+                        await graph_callback_manager.on_resume(
                             status=event.status,
                             checkpoint_id=event.checkpoint_id,
                             checkpoint_ns=event.checkpoint_ns,
-                            is_nested=event.is_nested,
                         )
                     else:
-                        await graph_callback_manager.aon_interrupt(
+                        await graph_callback_manager.on_interrupt(
                             event.interrupts,
                             status=event.status,
                             checkpoint_id=event.checkpoint_id,
                             checkpoint_ns=event.checkpoint_ns,
-                            is_nested=event.is_nested,
                         )
 
             async with AsyncPregelLoop(

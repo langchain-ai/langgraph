@@ -319,7 +319,6 @@ class PregelLoop:
                 status=self.status,
                 checkpoint_id=self.checkpoint["id"],
                 checkpoint_ns=self.checkpoint_ns,
-                is_nested=self.is_nested,
                 interrupts=interrupts,
             )
         )

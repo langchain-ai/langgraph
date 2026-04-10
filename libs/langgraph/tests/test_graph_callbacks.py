@@ -33,7 +33,6 @@ class _GraphEventHandler(GraphCallbackHandler):
         status: str,
         checkpoint_id: str,
         checkpoint_ns: tuple[str, ...],
-        is_nested: bool,
     ) -> Any:
         self.interrupt_events.append(
             {
@@ -41,7 +40,6 @@ class _GraphEventHandler(GraphCallbackHandler):
                 "status": status,
                 "checkpoint_id": checkpoint_id,
                 "checkpoint_ns": checkpoint_ns,
-                "is_nested": is_nested,
                 "interrupts": interrupts,
             }
         )
@@ -53,7 +51,6 @@ class _GraphEventHandler(GraphCallbackHandler):
         status: str,
         checkpoint_id: str,
         checkpoint_ns: tuple[str, ...],
-        is_nested: bool,
     ) -> Any:
         self.resume_events.append(
             {
@@ -61,7 +58,6 @@ class _GraphEventHandler(GraphCallbackHandler):
                 "status": status,
                 "checkpoint_id": checkpoint_id,
                 "checkpoint_ns": checkpoint_ns,
-                "is_nested": is_nested,
             }
         )
 
@@ -96,7 +92,6 @@ class _RaisingGraphEventHandler(GraphCallbackHandler):
         status: str,
         checkpoint_id: str,
         checkpoint_ns: tuple[str, ...],
-        is_nested: bool,
     ) -> Any:
         if self.raise_on_interrupt:
             raise ValueError("boom-interrupt")
@@ -108,7 +103,6 @@ class _RaisingGraphEventHandler(GraphCallbackHandler):
         status: str,
         checkpoint_id: str,
         checkpoint_ns: tuple[str, ...],
-        is_nested: bool,
     ) -> Any:
         if self.raise_on_resume:
             raise ValueError("boom-resume")
@@ -134,7 +128,6 @@ class _AsyncRaisingGraphEventHandler(GraphCallbackHandler):
         status: str,
         checkpoint_id: str,
         checkpoint_ns: tuple[str, ...],
-        is_nested: bool,
     ) -> Any:
         if self.raise_on_interrupt:
             raise ValueError("boom-interrupt")
@@ -146,7 +139,6 @@ class _AsyncRaisingGraphEventHandler(GraphCallbackHandler):
         status: str,
         checkpoint_id: str,
         checkpoint_ns: tuple[str, ...],
-        is_nested: bool,
     ) -> Any:
         if self.raise_on_resume:
             raise ValueError("boom-resume")
@@ -180,9 +172,9 @@ def test_graph_callbacks_interrupt_and_resume_sync() -> None:
     assert "__interrupt__" in first
 
     assert len(handler.interrupt_events) == 1
-    assert handler.interrupt_events[0]["is_nested"] is False
     assert handler.interrupt_events[0]["interrupts"]
     assert isinstance(handler.interrupt_events[0]["interrupts"][0], Interrupt)
+    assert handler.interrupt_events[0]["checkpoint_ns"] == ()
     assert langchain_handler.events == []
 
     handler.resume_events.clear()
@@ -190,7 +182,7 @@ def test_graph_callbacks_interrupt_and_resume_sync() -> None:
     assert resumed == {"answer": "done"}
 
     assert len(handler.resume_events) == 1
-    assert handler.resume_events[0]["is_nested"] is False
+    assert handler.resume_events[0]["checkpoint_ns"] == ()
     assert langchain_handler.events == []
 
 
@@ -209,9 +201,9 @@ async def test_graph_callbacks_interrupt_and_resume_async() -> None:
     assert "__interrupt__" in first
 
     assert len(handler.interrupt_events) == 1
-    assert handler.interrupt_events[0]["is_nested"] is False
     assert handler.interrupt_events[0]["interrupts"]
     assert isinstance(handler.interrupt_events[0]["interrupts"][0], Interrupt)
+    assert handler.interrupt_events[0]["checkpoint_ns"] == ()
     assert langchain_handler.events == []
 
     handler.resume_events.clear()
@@ -219,7 +211,7 @@ async def test_graph_callbacks_interrupt_and_resume_async() -> None:
     assert resumed == {"answer": "done"}
 
     assert len(handler.resume_events) == 1
-    assert handler.resume_events[0]["is_nested"] is False
+    assert handler.resume_events[0]["checkpoint_ns"] == ()
     assert langchain_handler.events == []
 
 
