@@ -1,3 +1,9 @@
+"""Graph lifecycle callback interfaces and event payloads.
+
+This module defines the public callback surface for observing LangGraph-specific
+lifecycle transitions such as interrupt and resume.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -14,6 +20,7 @@ from langgraph.types import Interrupt
 __all__ = (
     "GraphCallbackHandler",
     "GraphInterruptEvent",
+    "GraphLifecycleEvent",
     "GraphLifecycleStatus",
     "GraphResumeEvent",
     "get_async_graph_callback_manager_for_config",
@@ -29,33 +36,63 @@ GraphLifecycleStatus: TypeAlias = Literal[
     "interrupt_after",
     "out_of_steps",
 ]
+"""Allowed lifecycle statuses reported in graph lifecycle callback events."""
 
 
 @dataclass(frozen=True)
 class GraphInterruptEvent:
+    """Graph lifecycle event emitted when execution pauses for interrupts."""
+
     run_id: UUID | None
+    """Run id for the current graph execution, if available."""
+
     status: GraphLifecycleStatus
+    """Loop status when the interrupt was captured."""
+
     checkpoint_id: str
+    """Checkpoint id associated with the interrupted execution."""
+
     checkpoint_ns: tuple[str, ...]
+    """Checkpoint namespace path for the current graph or subgraph."""
+
     interrupts: tuple[Interrupt, ...]
+    """Interrupt payloads that caused the graph to pause."""
 
 
 @dataclass(frozen=True)
 class GraphResumeEvent:
+    """Graph lifecycle event emitted when execution resumes from a checkpoint."""
+
     run_id: UUID | None
+    """Run id for the current graph execution, if available."""
+
     status: GraphLifecycleStatus
+    """Loop status when the resume was captured."""
+
     checkpoint_id: str
+    """Checkpoint id the graph resumed from."""
+
     checkpoint_ns: tuple[str, ...]
+    """Checkpoint namespace path for the current graph or subgraph."""
+
+
+GraphLifecycleEvent: TypeAlias = GraphInterruptEvent | GraphResumeEvent
+"""Union of all public graph lifecycle callback event payloads."""
 
 
 class GraphCallbackHandler(BaseCallbackHandler):
-    """Base class for graph-level lifecycle callbacks."""
+    """Base class for graph-level lifecycle callbacks.
+
+    Subclass this handler to observe graph lifecycle transitions that are
+    specific to LangGraph execution, rather than generic LangChain runnable
+    callbacks.
+    """
 
     def on_interrupt(self, event: GraphInterruptEvent) -> Any:
-        """Run when graph execution pauses due to interrupts."""
+        """Run when graph execution pauses due to one or more interrupts."""
 
     def on_resume(self, event: GraphResumeEvent) -> Any:
-        """Run when graph execution resumes from a checkpoint."""
+        """Run when graph execution resumes from a persisted checkpoint."""
 
 
 _MISSING = object()

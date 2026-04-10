@@ -62,6 +62,11 @@ from langgraph._internal._constants import (
 from langgraph._internal._replay import ReplayState
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
+from langgraph.callbacks import (
+    GraphInterruptEvent,
+    GraphLifecycleEvent,
+    GraphResumeEvent,
+)
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
@@ -92,7 +97,6 @@ from langgraph.pregel._checkpoint import (
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.pregel._events import GraphLifecycleEvent
 from langgraph.pregel._executor import (
     AsyncBackgroundExecutor,
     BackgroundExecutor,
@@ -313,15 +317,28 @@ class PregelLoop:
         *,
         interrupts: tuple[Interrupt, ...] = (),
     ) -> None:
-        self._graph_lifecycle_events.append(
-            GraphLifecycleEvent(
-                kind=kind,
-                status=self.status,
-                checkpoint_id=self.checkpoint["id"],
-                checkpoint_ns=self.checkpoint_ns,
-                interrupts=interrupts,
+        if kind == "resume":
+            self._graph_lifecycle_events.append(
+                GraphResumeEvent(
+                    run_id=None,
+                    status=self.status,
+                    checkpoint_id=self.checkpoint["id"],
+                    checkpoint_ns=self.checkpoint_ns,
+                )
             )
-        )
+        elif kind == "interrupt":
+            self._graph_lifecycle_events.append(
+                GraphInterruptEvent(
+                    run_id=None,
+                    status=self.status,
+                    checkpoint_id=self.checkpoint["id"],
+                    checkpoint_ns=self.checkpoint_ns,
+                    interrupts=interrupts,
+                )
+            )
+        else:
+            msg = f"Unknown graph lifecycle event type: {kind}"
+            raise AssertionError(msg)
 
     def _pop_lifecycle_event(self) -> GraphLifecycleEvent | None:
         if not self._graph_lifecycle_events:

@@ -2681,7 +2681,7 @@ class Pregel(
 
             def emit_graph_lifecycle_events(loop: SyncPregelLoop) -> None:
                 while (event := loop._pop_lifecycle_event()) is not None:
-                    if event.kind == "resume":
+                    if isinstance(event, GraphResumeEvent):
                         graph_callback_manager.on_resume(
                             GraphResumeEvent(
                                 run_id=graph_callback_manager.run_id,
@@ -3083,7 +3083,7 @@ class Pregel(
 
             async def aemit_graph_lifecycle_events(loop: AsyncPregelLoop) -> None:
                 while (event := loop._pop_lifecycle_event()) is not None:
-                    if event.kind == "resume":
+                    if isinstance(event, GraphResumeEvent):
                         await graph_callback_manager.on_resume(
                             GraphResumeEvent(
                                 run_id=graph_callback_manager.run_id,
