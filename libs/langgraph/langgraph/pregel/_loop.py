@@ -23,17 +23,6 @@ from typing import (
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
-from langgraph.cache.base import BaseCache
-from langgraph.checkpoint.base import (
-    WRITES_IDX_MAP,
-    BaseCheckpointSaver,
-    ChannelVersions,
-    Checkpoint,
-    CheckpointMetadata,
-    CheckpointTuple,
-    PendingWrite,
-)
-from langgraph.store.base import BaseStore
 from typing_extensions import ParamSpec, Self
 
 from langgraph._internal._config import patch_configurable
@@ -62,8 +51,18 @@ from langgraph._internal._constants import (
 from langgraph._internal._replay import ReplayState
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
+from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.untracked_value import UntrackedValue
+from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
+    BaseCheckpointSaver,
+    ChannelVersions,
+    Checkpoint,
+    CheckpointMetadata,
+    CheckpointTuple,
+    PendingWrite,
+)
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
@@ -112,6 +111,7 @@ from langgraph.pregel.debug import (
     map_debug_tasks,
 )
 from langgraph.pregel.protocol import StreamChunk, StreamProtocol
+from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     CachePolicy,
@@ -766,7 +766,11 @@ class PregelLoop:
             # checkpoint ID since the fork was created after the subgraph's
             # checkpoints from the original execution.
             replay_state: ReplayState | None = None
-            if self.is_replaying:
+            # Command(resume=...) continues from the current interrupt and
+            # should not force nested subgraphs into replay mode.
+            if self.is_replaying and not (
+                input_is_command and cast(Command, self.input).resume is not None
+            ):
                 replay_checkpoint_id = self.checkpoint["id"]
                 if (
                     self.checkpoint_metadata.get("source") == "update"
