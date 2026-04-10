@@ -2683,22 +2683,11 @@ class Pregel(
                 while (event := loop._pop_lifecycle_event()) is not None:
                     if isinstance(event, GraphResumeEvent):
                         graph_callback_manager.on_resume(
-                            GraphResumeEvent(
-                                run_id=graph_callback_manager.run_id,
-                                status=event.status,
-                                checkpoint_id=event.checkpoint_id,
-                                checkpoint_ns=event.checkpoint_ns,
-                            )
+                            replace(event, run_id=graph_callback_manager.run_id)
                         )
                     else:
                         graph_callback_manager.on_interrupt(
-                            GraphInterruptEvent(
-                                run_id=graph_callback_manager.run_id,
-                                status=event.status,
-                                checkpoint_id=event.checkpoint_id,
-                                checkpoint_ns=event.checkpoint_ns,
-                                interrupts=event.interrupts,
-                            )
+                            replace(event, run_id=graph_callback_manager.run_id)
                         )
 
             with SyncPregelLoop(
