@@ -127,6 +127,9 @@ ANY_TYPE = object()
 
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
 
+# Cache for inspect.signature results, keyed by function object
+_SIGNATURE_CACHE: dict[Callable, inspect.Signature] = {}
+
 # List of keyword arguments that can be injected into nodes / tasks / tools at runtime.
 # A named argument may appear multiple times if it appears with distinct types.
 KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
@@ -291,7 +294,16 @@ class RunnableCallable(Runnable):
             raise ValueError("At least one of func or afunc must be provided.")
 
         self.func_accepts: dict[str, tuple[str, Any]] = {}
-        params = inspect.signature(cast(Callable, func or afunc)).parameters
+        target = cast(Callable, func or afunc)
+        try:
+            sig = _SIGNATURE_CACHE[target]
+        except (KeyError, TypeError):
+            sig = inspect.signature(target)
+            try:
+                _SIGNATURE_CACHE[target] = sig
+            except TypeError:
+                pass  # unhashable function, skip caching
+        params = sig.parameters
 
         for kw, typ, runtime_key, default in KWARGS_CONFIG_KEYS:
             p = params.get(kw)
