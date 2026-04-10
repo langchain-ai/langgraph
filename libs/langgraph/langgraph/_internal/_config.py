@@ -76,6 +76,32 @@ def patch_checkpoint_map(
         return config
 
 
+def _merge_callbacks(base: Callbacks, new: Callbacks) -> Callbacks:
+    # callbacks can be either None, list[handler] or manager
+    # so merging two callbacks values has 6 cases
+    if base is None:
+        if isinstance(new, (list, BaseCallbackManager)):
+            return new.copy()
+        return new
+    if isinstance(new, list):
+        if isinstance(base, list):
+            return base + new
+        if isinstance(base, BaseCallbackManager):
+            mngr = base.copy()
+            for cb in new:
+                mngr.add_handler(cb, inherit=True)
+            return mngr
+    elif isinstance(new, BaseCallbackManager):
+        if isinstance(base, list):
+            mngr = new.copy()
+            for cb in base:
+                mngr.add_handler(cb, inherit=True)
+            return mngr
+        if isinstance(base, BaseCallbackManager):
+            return base.merge(new)
+    raise NotImplementedError(f"Unsupported callback types: {type(base)}, {type(new)}")
+
+
 def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
     """Merge multiple configs into one.
 
@@ -110,34 +136,9 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
                 else:
                     base[key] = value
             elif key == "callbacks":
-                base_callbacks = base.get("callbacks")
-                # callbacks can be either None, list[handler] or manager
-                # so merging two callbacks values has 6 cases
-                if isinstance(value, list):
-                    if base_callbacks is None:
-                        base["callbacks"] = value.copy()
-                    elif isinstance(base_callbacks, list):
-                        base["callbacks"] = base_callbacks + value
-                    else:
-                        # base_callbacks is a manager
-                        mngr = base_callbacks.copy()
-                        for callback in value:
-                            mngr.add_handler(callback, inherit=True)
-                        base["callbacks"] = mngr
-                elif isinstance(value, BaseCallbackManager):
-                    # value is a manager
-                    if base_callbacks is None:
-                        base["callbacks"] = value.copy()
-                    elif isinstance(base_callbacks, list):
-                        mngr = value.copy()
-                        for callback in base_callbacks:
-                            mngr.add_handler(callback, inherit=True)
-                        base["callbacks"] = mngr
-                    else:
-                        # base_callbacks is also a manager
-                        base["callbacks"] = base_callbacks.merge(value)
-                else:
-                    raise NotImplementedError
+                base["callbacks"] = _merge_callbacks(
+                    base.get("callbacks"), cast(Callbacks, value)
+                )
             elif key == "recursion_limit":
                 if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
                     base["recursion_limit"] = config["recursion_limit"]
@@ -303,6 +304,8 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
             if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
                     empty[k] = cast(dict, v).copy()
+                elif k == "callbacks" and isinstance(v, (list, BaseCallbackManager)):
+                    empty["callbacks"] = _merge_callbacks(empty.get("callbacks"), v)
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
