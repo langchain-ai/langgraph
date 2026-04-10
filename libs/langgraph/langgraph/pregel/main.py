@@ -2752,8 +2752,9 @@ class Pregel(
                         )
                     loop.after_tick()
                     # wait for checkpoint
-                    if durability_ == "sync":
-                        loop._put_checkpoint_fut.result()
+                    fut = getattr(loop, "_put_checkpoint_fut", None)
+                    if fut is not None and (durability_ == "sync" or not fut.done()):
+                        fut.result()
             # emit output
             yield from _output(
                 stream_mode,
@@ -3145,8 +3146,12 @@ class Pregel(
                                 yield o
                         loop.after_tick()
                         # wait for checkpoint
-                        if durability_ == "sync":
-                            await cast(asyncio.Future, loop._put_checkpoint_fut)
+                        fut = getattr(loop, "_put_checkpoint_fut", None)
+                        if fut is not None and (
+                            durability_ == "sync"
+                            or not cast(asyncio.Future, fut).done()
+                        ):
+                            await cast(asyncio.Future, fut)
                 finally:
                     # ensure waiter doesn't remain pending on cancel/shutdown
                     if _cleanup_waiter is not None:
