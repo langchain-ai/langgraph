@@ -501,13 +501,13 @@ async def test_execution_info_populated_in_graph_async() -> None:
     assert isinstance(info.node_first_attempt_time, float)
 
 
-def test_server_info_from_metadata() -> None:
-    """server_info is built from assistant_id/graph_id in config metadata."""
+def test_server_info_from_configurable() -> None:
+    """server_info is built from assistant_id/graph_id in config configurable."""
     captured: dict[str, Any] = {}
     compiled = _make_capture_graph(captured)
     compiled.invoke(
         {"message": "hi"},
-        config={"metadata": {"assistant_id": "asst-abc", "graph_id": "my-graph"}},
+        config={"configurable": {"assistant_id": "asst-abc", "graph_id": "my-graph"}},
     )
     si = captured["server_info"]
     assert si is not None
@@ -516,8 +516,8 @@ def test_server_info_from_metadata() -> None:
     assert si.user is None
 
 
-def test_server_info_none_without_metadata() -> None:
-    """server_info is None when no assistant_id/graph_id in metadata."""
+def test_server_info_none_without_configurable() -> None:
+    """server_info is None when no assistant_id/graph_id in configurable."""
     captured: dict[str, Any] = {}
     compiled = _make_capture_graph(captured)
     compiled.invoke({"message": "hi"})
@@ -579,8 +579,11 @@ def test_server_info_user_from_auth_user() -> None:
     compiled.invoke(
         {"message": "hi"},
         config={
-            "configurable": {"langgraph_auth_user": proxy},
-            "metadata": {"assistant_id": "asst-proxy", "graph_id": "graph-proxy"},
+            "configurable": {
+                "langgraph_auth_user": proxy,
+                "assistant_id": "asst-proxy",
+                "graph_id": "graph-proxy",
+            },
         },
     )
     si = captured["server_info"]
