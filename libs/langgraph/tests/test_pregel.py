@@ -57,9 +57,7 @@ from langgraph.pregel import (
 from langgraph.pregel._checkpoint_writer import (
     CHECKPOINT_BACKLOG_ENV_VAR,
     DEFAULT_CHECKPOINT_BACKLOG,
-    AsyncCheckpointWriter,
-    SyncCheckpointWriter,
-    resolve_checkpoint_backlog,
+    _resolve_checkpoint_backlog,
 )
 from langgraph.pregel._loop import SyncPregelLoop
 from langgraph.pregel._runner import PregelRunner
@@ -3828,20 +3826,17 @@ def test_sync_durability_applies_checkpoint_backpressure() -> None:
 
 def test_checkpoint_backlog_uses_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(CHECKPOINT_BACKLOG_ENV_VAR, "7")
-
-    assert resolve_checkpoint_backlog() == 7
-    assert SyncCheckpointWriter(lambda *_args: None).queue.maxsize == 7
-    assert AsyncCheckpointWriter(lambda *_args: None).queue.maxsize == 7
+    assert _resolve_checkpoint_backlog() == 7
 
 
 def test_checkpoint_backlog_invalid_env_uses_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(CHECKPOINT_BACKLOG_ENV_VAR, "not-an-int")
-    assert resolve_checkpoint_backlog() == DEFAULT_CHECKPOINT_BACKLOG
+    assert _resolve_checkpoint_backlog() == DEFAULT_CHECKPOINT_BACKLOG
 
     monkeypatch.setenv(CHECKPOINT_BACKLOG_ENV_VAR, "0")
-    assert resolve_checkpoint_backlog() == DEFAULT_CHECKPOINT_BACKLOG
+    assert _resolve_checkpoint_backlog() == DEFAULT_CHECKPOINT_BACKLOG
 
 
 def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:

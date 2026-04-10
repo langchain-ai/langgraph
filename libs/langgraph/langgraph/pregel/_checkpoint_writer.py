@@ -22,7 +22,21 @@ CHECKPOINT_BACKLOG_ENV_VAR = "LANGGRAPH_CHECKPOINT_BACKLOG"
 DEFAULT_CHECKPOINT_BACKLOG = 10
 
 
-@dataclass(frozen=True)
+def _resolve_checkpoint_backlog() -> int:
+    if raw := os.getenv(CHECKPOINT_BACKLOG_ENV_VAR):
+        try:
+            backlog = int(raw)
+        except ValueError:
+            return DEFAULT_CHECKPOINT_BACKLOG
+        if backlog > 0:
+            return backlog
+    return DEFAULT_CHECKPOINT_BACKLOG
+
+
+CHECKPOINT_BACKLOG = _resolve_checkpoint_backlog()
+
+
+@dataclass(frozen=True, slots=True)
 class CheckpointRequest:
     config: RunnableConfig
     checkpoint: Checkpoint
@@ -34,18 +48,9 @@ def _raise(error: BaseException) -> None:
     raise error
 
 
-def resolve_checkpoint_backlog() -> int:
-    if raw := os.getenv(CHECKPOINT_BACKLOG_ENV_VAR):
-        try:
-            backlog = int(raw)
-        except ValueError:
-            return DEFAULT_CHECKPOINT_BACKLOG
-        if backlog > 0:
-            return backlog
-    return DEFAULT_CHECKPOINT_BACKLOG
-
-
 class SyncCheckpointWriter(AbstractContextManager):
+    __slots__ = ("put", "queue", "error", "closed", "thread")
+
     def __init__(
         self,
         put: Callable[
@@ -55,9 +60,7 @@ class SyncCheckpointWriter(AbstractContextManager):
         max_pending: int | None = None,
     ) -> None:
         self.put = put
-        max_pending = (
-            resolve_checkpoint_backlog() if max_pending is None else max_pending
-        )
+        max_pending = CHECKPOINT_BACKLOG if max_pending is None else max_pending
         self.queue: queue.Queue[CheckpointRequest | None] = queue.Queue(max_pending)
         self.error: BaseException | None = None
         self.closed = False
@@ -130,6 +133,8 @@ class SyncCheckpointWriter(AbstractContextManager):
 
 
 class AsyncCheckpointWriter(AbstractAsyncContextManager):
+    __slots__ = ("put", "queue", "error", "closed", "task")
+
     def __init__(
         self,
         put: Callable[
@@ -139,9 +144,7 @@ class AsyncCheckpointWriter(AbstractAsyncContextManager):
         max_pending: int | None = None,
     ) -> None:
         self.put = put
-        max_pending = (
-            resolve_checkpoint_backlog() if max_pending is None else max_pending
-        )
+        max_pending = CHECKPOINT_BACKLOG if max_pending is None else max_pending
         self.queue: asyncio.Queue[CheckpointRequest | None] = asyncio.Queue(max_pending)
         self.error: BaseException | None = None
         self.closed = False
