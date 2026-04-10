@@ -50,6 +50,12 @@ class ExecutionInfo:
     node_first_attempt_time: float | None = None
     """Unix timestamp (seconds) for when the first attempt started."""
 
+    from_node_name: str | None = None
+    """Failed source node name for node-level error handler."""
+
+    from_node_error: BaseException | None = None
+    """Failed source node exception for node-level error handler."""
+
     def patch(self, **overrides: Any) -> ExecutionInfo:
         """Return a new execution info object with selected fields replaced."""
         return replace(self, **overrides)

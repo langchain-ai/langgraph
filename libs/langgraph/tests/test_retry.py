@@ -1,8 +1,10 @@
+import operator
 from collections import deque
+from typing import Annotated
 from unittest.mock import Mock, patch
 
 import pytest
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver, MemorySaver
 from typing_extensions import TypedDict
 
 from langgraph._internal._constants import (
@@ -21,7 +23,7 @@ from langgraph.pregel._retry import (
     run_with_retry,
 )
 from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
-from langgraph.types import PregelExecutableTask, RetryPolicy
+from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 
 
 def test_should_retry_on_single_exception():
@@ -410,6 +412,302 @@ def test_graph_with_max_attempts_exceeded():
     mock_sleep.assert_called_with(0.01)
 
 
+def test_graph_error_handler_runs_after_retry_exhaustion():
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+    captured: dict[str, object] = {}
+
+    def always_failing_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("Always fails")
+
+    def err_handler_node(state: State, runtime: Runtime) -> Command:
+        captured["from_node_name"] = runtime.execution_info.from_node_name
+        captured["from_node_error"] = runtime.execution_info.from_node_error
+        return Command(update={"foo": "handled"}, goto="after_handler")
+
+    def after_handler(state: State) -> State:
+        return {"foo": f"{state['foo']}_after"}
+
+    retry_policy = RetryPolicy(
+        max_attempts=2,
+        initial_interval=0.01,
+        jitter=False,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "always_failing",
+            always_failing_node,
+            retry_policy=retry_policy,
+            error_handler=err_handler_node,
+        )
+        .add_node("after_handler", after_handler)
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke({"foo": ""})
+
+    assert attempts == 2
+    assert result["foo"] == "handled_after"
+    assert captured["from_node_name"] == "always_failing"
+    assert isinstance(captured["from_node_error"], BaseException)
+
+
+def test_graph_error_handler_can_route_with_command():
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+
+    def always_failing_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("Always fails")
+
+    def err_handler_node(state: State) -> Command:
+        return Command(update={"foo": "handled"}, goto="next_node")
+
+    def next_node(state: State) -> State:
+        return {"foo": f"{state['foo']}_next"}
+
+    retry_policy = RetryPolicy(
+        max_attempts=1,
+        initial_interval=0.01,
+        jitter=False,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "always_failing",
+            always_failing_node,
+            retry_policy=retry_policy,
+            error_handler=err_handler_node,
+        )
+        .add_node("next_node", next_node)
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    result = graph.invoke({"foo": ""})
+    assert attempts == 1
+    assert result["foo"] == "handled_next"
+
+
+def test_graph_error_handler_failure_fails_run():
+    class State(TypedDict):
+        foo: str
+
+    def always_failing_node(state: State) -> State:
+        raise ValueError("Always fails")
+
+    def err_handler_node(state: State) -> State:
+        raise RuntimeError("handler failed")
+
+    graph = (
+        StateGraph(State)
+        .add_node("always_failing", always_failing_node, error_handler=err_handler_node)
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    with pytest.raises(RuntimeError, match="handler failed"):
+        graph.invoke({"foo": ""})
+
+
+def test_graph_error_handler_handles_subgraph_internal_failure():
+    class SubState(TypedDict):
+        foo: str
+
+    class ParentState(TypedDict):
+        foo: str
+
+    parent_handler_called = False
+    captured: dict[str, object] = {}
+
+    def sub_fail_node(state: SubState) -> SubState:
+        raise ValueError("subgraph boom")
+
+    def parent_handler(state: ParentState, runtime: Runtime) -> ParentState:
+        nonlocal parent_handler_called
+        parent_handler_called = True
+        captured["from_node_name"] = runtime.execution_info.from_node_name
+        captured["from_node_error"] = runtime.execution_info.from_node_error
+        return {"foo": "handled_by_parent"}
+
+    subgraph = (
+        StateGraph(SubState)
+        .add_node("sub_fail_node", sub_fail_node)
+        .add_edge(START, "sub_fail_node")
+        .compile()
+    )
+
+    parent_graph = (
+        StateGraph(ParentState)
+        .add_node("subgraph_node", subgraph, error_handler=parent_handler)
+        .add_edge(START, "subgraph_node")
+        .compile()
+    )
+
+    result = parent_graph.invoke({"foo": ""})
+    assert result["foo"] == "handled_by_parent"
+    assert parent_handler_called is True
+    assert captured["from_node_name"] == "subgraph_node"
+    assert isinstance(captured["from_node_error"], BaseException)
+
+
+def test_graph_error_handler_error_context_survives_checkpoint_resume():
+    class State(TypedDict):
+        foo: str
+
+    captured: dict[str, object] = {}
+
+    def always_failing_node(state: State) -> State:
+        raise RuntimeError("failed before handler")
+
+    def err_handler_node(state: State, runtime: Runtime) -> State:
+        captured["from_node_name"] = runtime.execution_info.from_node_name
+        captured["from_node_error"] = runtime.execution_info.from_node_error
+        return {"foo": "handled_after_resume"}
+
+    checkpointer = InMemorySaver()
+    config = {"configurable": {"thread_id": "graph-error-resume"}}
+    graph = (
+        StateGraph(State)
+        .add_node("always_failing", always_failing_node, error_handler=err_handler_node)
+        .add_edge(START, "always_failing")
+        .compile(
+            checkpointer=checkpointer,
+            interrupt_before=["__error_handler__always_failing"],
+        )
+    )
+
+    # First run pauses before handler, after failure context is checkpointed.
+    graph.invoke({"foo": ""}, config)
+    # Resume should execute handler and recover serialized error context.
+    result = graph.invoke(None, config)
+
+    assert result["foo"] == "handled_after_resume"
+    assert captured["from_node_name"] == "always_failing"
+    assert isinstance(captured["from_node_error"], BaseException)
+
+
+def test_graph_error_handler_does_not_swallow_interrupt_concurrent():
+    """When a graph error handler is configured and a node calls interrupt()
+    concurrently with other nodes, the interrupt must still be raised — not
+    silently swallowed."""
+    from langgraph.types import interrupt
+
+    class State(TypedDict):
+        foo: str
+
+    def node_a(state: State) -> State:
+        # This node uses interrupt() which raises GraphInterrupt
+        val = interrupt("need human input")
+        return {"foo": f"a_{val}"}
+
+    def node_b(state: State) -> State:
+        return {}
+
+    def err_handler(state: State) -> State:
+        return {"foo": "handled"}
+
+    checkpointer = InMemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a, error_handler=err_handler)
+        .add_node("node_b", node_b)
+        # Fan-out: both node_a and node_b run concurrently
+        .add_edge(START, "node_a")
+        .add_edge(START, "node_b")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "test-interrupt-concurrent"}}
+
+    # First invoke should pause at the interrupt, not silently complete
+    graph.invoke({"foo": ""}, config)
+
+    # The graph should have an interrupt pending
+    state = graph.get_state(config)
+    assert len(state.tasks) > 0
+
+    # There should be a pending interrupt from node_a
+    interrupts = [t for t in state.tasks if hasattr(t, "interrupts") and t.interrupts]
+    assert len(interrupts) > 0, (
+        "GraphInterrupt was swallowed — interrupt() in node_a "
+        "should have paused execution"
+    )
+
+
+def test_node_error_handlers_route_to_matching_handler():
+    class State(TypedDict):
+        route: str
+        foo: Annotated[list[str], operator.add]
+
+    def route_node(state: State) -> State:
+        return {"foo": []}
+
+    def choose_node(state: State) -> str:
+        return state["route"]
+
+    def fail_a(state: State) -> State:
+        raise ValueError("a failed")
+
+    def fail_b(state: State) -> State:
+        raise RuntimeError("b failed")
+
+    def handler_a(state: State, runtime: Runtime) -> State:
+        assert runtime.execution_info.from_node_name == "fail_a"
+        return {"foo": ["handled_a"]}
+
+    def handler_b(state: State, runtime: Runtime) -> State:
+        assert runtime.execution_info.from_node_name == "fail_b"
+        return {"foo": ["handled_b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("route_node", route_node)
+        .add_node("fail_a", fail_a, error_handler=handler_a)
+        .add_node("fail_b", fail_b, error_handler=handler_b)
+        .add_edge(START, "route_node")
+        .add_conditional_edges("route_node", choose_node, path_map=["fail_a", "fail_b"])
+        .compile()
+    )
+
+    result_a = graph.invoke({"route": "fail_a", "foo": []})
+    result_b = graph.invoke({"route": "fail_b", "foo": []})
+    assert result_a["foo"] == ["handled_a"]
+    assert result_b["foo"] == ["handled_b"]
+
+
+def test_node_without_error_handler_still_fails_run():
+    class State(TypedDict):
+        foo: str
+
+    def fail_without_handler(state: State) -> State:
+        raise ValueError("no handler")
+
+    graph = (
+        StateGraph(State)
+        .add_node("fail_without_handler", fail_without_handler)
+        .add_edge(START, "fail_without_handler")
+        .compile()
+    )
+
+    with pytest.raises(ValueError, match="no handler"):
+        graph.invoke({"foo": ""})
+
+
 def test_execution_info_identity_fields_populated_on_retry():
     """Test that thread_id, task_id, run_id, etc. are populated in execution_info during retries."""
 
@@ -458,16 +756,12 @@ def test_execution_info_identity_fields_populated_on_retry():
 
     assert result["foo"] == "success"
     assert len(captured_infos) == 2
-
-    # Both attempts should have the same thread_id and first_attempt_time
     assert captured_infos[0]["thread_id"] == "retry-thread"
     assert captured_infos[1]["thread_id"] == "retry-thread"
     assert (
         captured_infos[0]["node_first_attempt_time"]
         == captured_infos[1]["node_first_attempt_time"]
     )
-
-    # node_attempt should increment
     assert captured_infos[0]["node_attempt"] == 1
     assert captured_infos[1]["node_attempt"] == 2
 

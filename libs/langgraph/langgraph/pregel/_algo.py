@@ -47,6 +47,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     ERROR,
+    ERROR_SOURCE_NODE,
     INTERRUPT,
     NO_WRITES,
     NS_END,
@@ -281,7 +282,15 @@ def apply_writes(
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
     for task in tasks:
         for chan, val in task.writes:
-            if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT, RETURN, ERROR):
+            if chan in (
+                NO_WRITES,
+                PUSH,
+                RESUME,
+                INTERRUPT,
+                RETURN,
+                ERROR,
+                ERROR_SOURCE_NODE,
+            ):
                 pass
             elif chan in channels:
                 pending_writes_by_channel[chan].append(val)
@@ -677,6 +686,10 @@ def prepare_single_task(
                             run_id=str(rid) if (rid := config.get("run_id")) else None,
                         ),
                     )
+                    runtime = runtime.patch_execution_info(
+                        from_node_name=None,
+                        from_node_error=None,
+                    )
                     additional_config = {
                         "metadata": metadata,
                         "tags": proc.tags,
@@ -736,6 +749,42 @@ def prepare_single_task(
                     )
             else:
                 return PregelTask(task_id, name, task_path[:3])
+
+
+def _coerce_pending_error(value: Any) -> BaseException:
+    if isinstance(value, BaseException):
+        return value
+    return Exception(str(value))
+
+
+def _read_errors_from_pending_writes(
+    pending_writes: list[PendingWrite],
+) -> list[BaseException]:
+    errors: list[BaseException] = []
+    for _, channel, value in pending_writes:
+        if channel == ERROR:
+            errors.append(_coerce_pending_error(value))
+    return errors
+
+
+def _read_error_for_task_id_from_pending_writes(
+    pending_writes: list[PendingWrite], task_id: str
+) -> BaseException | None:
+    for pending_task_id, channel, value in reversed(pending_writes):
+        if pending_task_id == task_id and channel == ERROR:
+            return _coerce_pending_error(value)
+    return None
+
+
+def _read_error_source_node_from_pending_writes(
+    pending_writes: list[PendingWrite], task_id: str
+) -> str | None:
+    for pending_task_id, channel, value in reversed(pending_writes):
+        if pending_task_id == task_id and channel == ERROR_SOURCE_NODE:
+            if isinstance(value, str):
+                return value
+            return str(value)
+    return None
 
 
 def prepare_push_task_functional(
@@ -1044,6 +1093,148 @@ def prepare_push_task_send(
         )
     else:
         return PregelTask(task_id, packet.node, translated_task_path)
+
+
+def prepare_node_error_handler_task(
+    failed_task: PregelExecutableTask,
+    *,
+    handler_node_name: str,
+    failed_error: BaseException,
+    checkpoint: Checkpoint,
+    pending_writes: list[PendingWrite],
+    processes: Mapping[str, PregelNode],
+    channels: Mapping[str, BaseChannel],
+    managed: ManagedValueMapping,
+    config: RunnableConfig,
+    step: int,
+    stop: int,
+    store: BaseStore | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
+    manager: None | ParentRunManager | AsyncParentRunManager = None,
+    cache_policy: CachePolicy | None = None,
+    retry_policy: Sequence[RetryPolicy] = (),
+) -> PregelExecutableTask | None:
+    """Prepare an immediate node-level error handler task for a failed task."""
+    if handler_node_name not in processes:
+        return None
+    proc = processes[handler_node_name]
+    proc_node = proc.node
+    if proc_node is None:
+        return None
+
+    checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
+    task_id_func = _xxhash_str if checkpoint["v"] > 1 else _uuid5_str
+    configurable = config.get(CONF, {})
+    parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
+    checkpoint_ns = (
+        f"{parent_ns}{NS_SEP}{handler_node_name}" if parent_ns else handler_node_name
+    )
+    task_id = task_id_func(
+        checkpoint_id_bytes,
+        checkpoint_ns,
+        str(step),
+        handler_node_name,
+        PUSH,
+        "node_error_handler",
+        failed_task.id,
+    )
+    task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+    translated_task_path = (*failed_task.path[:3], "node_error_handler", False)
+    metadata = {
+        "langgraph_step": step,
+        "langgraph_node": handler_node_name,
+        "langgraph_triggers": PUSH_TRIGGER,
+        "langgraph_path": translated_task_path,
+        "langgraph_checkpoint_ns": task_checkpoint_ns,
+    }
+    if proc.metadata:
+        metadata.update(proc.metadata)
+    writes: deque[tuple[str, Any]] = deque()
+
+    effective_retry_policy = proc.retry_policy or retry_policy
+    effective_cache_policy = proc.cache_policy or cache_policy
+    if effective_cache_policy:
+        args_key = effective_cache_policy.key_func(failed_task.input)
+        cache_key = CacheKey(
+            (
+                CACHE_NS_WRITES,
+                (identifier(proc) or "__dynamic__"),
+                handler_node_name,
+            ),
+            xxh3_128_hexdigest(
+                args_key.encode() if isinstance(args_key, str) else args_key
+            ),
+            effective_cache_policy.ttl,
+        )
+    else:
+        cache_key = None
+
+    scratchpad = _scratchpad(
+        config[CONF].get(CONFIG_KEY_SCRATCHPAD),
+        pending_writes,
+        task_id,
+        xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+        config[CONF].get(CONFIG_KEY_RESUME_MAP),
+        step,
+        stop,
+    )
+    runtime = cast(Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME))
+    runtime = runtime.override(
+        store=store, previous=checkpoint["channel_values"].get(PREVIOUS, None)
+    )
+    runtime = runtime.patch_execution_info(
+        from_node_name=failed_task.name,
+        from_node_error=failed_error,
+    )
+    additional_config: RunnableConfig = {
+        "metadata": metadata,
+        "tags": proc.tags,
+    }
+    return PregelExecutableTask(
+        handler_node_name,
+        failed_task.input,
+        proc_node,
+        writes,
+        patch_config(
+            merge_configs(config, additional_config),
+            run_name=handler_node_name,
+            callbacks=manager.get_child(f"graph:step:{step}") if manager else None,
+            configurable={
+                CONFIG_KEY_TASK_ID: task_id,
+                CONFIG_KEY_SEND: writes.extend,
+                CONFIG_KEY_READ: partial(
+                    local_read,
+                    scratchpad,
+                    channels,
+                    managed,
+                    PregelTaskWrites(
+                        translated_task_path,
+                        handler_node_name,
+                        writes,
+                        PUSH_TRIGGER,
+                    ),
+                ),
+                CONFIG_KEY_CHECKPOINTER: (
+                    checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
+                ),
+                CONFIG_KEY_CHECKPOINT_MAP: {
+                    **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
+                    parent_ns: checkpoint["id"],
+                },
+                CONFIG_KEY_CHECKPOINT_ID: None,
+                CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
+                CONFIG_KEY_SCRATCHPAD: scratchpad,
+                CONFIG_KEY_RUNTIME: runtime,
+            },
+        ),
+        PUSH_TRIGGER,
+        effective_retry_policy,
+        cache_key,
+        task_id,
+        translated_task_path,
+        writers=proc.flat_writers,
+        subgraphs=proc.subgraphs,
+    )
 
 
 def checkpoint_null_version(
