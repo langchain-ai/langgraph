@@ -1,5 +1,6 @@
 import operator
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import pytest
 
@@ -9,6 +10,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph.types import Overwrite
 
 pytestmark = pytest.mark.anyio
 
@@ -88,6 +90,44 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_binop_overwrite_on_missing_initial_value() -> None:
+    """Overwrite on a channel with no default constructor must unwrap the value."""
+
+    @dataclass
+    class Metrics:
+        count: int
+
+        def __add__(self, other: "Metrics") -> "Metrics":
+            return Metrics(self.count + other.count)
+
+    # Bug 1: Overwrite on MISSING initial value must unwrap, not store the wrapper.
+    channel: BinaryOperatorAggregate[Metrics] = BinaryOperatorAggregate(
+        Metrics, operator.add
+    )
+    assert channel.value is MISSING
+    channel.update([Overwrite(Metrics(count=42))])
+    assert channel.get() == Metrics(count=42), (
+        "Overwrite on MISSING channel stored the wrapper instead of the value"
+    )
+
+    # Bug 2: A second Overwrite in the same super-step must still raise.
+    channel2: BinaryOperatorAggregate[Metrics] = BinaryOperatorAggregate(
+        Metrics, operator.add
+    )
+    with pytest.raises(InvalidUpdateError):
+        channel2.update([Overwrite(Metrics(1)), Overwrite(Metrics(2))])
+
+    # Normal accumulation still works after an Overwrite resets an initialised channel.
+    channel3: BinaryOperatorAggregate[Metrics] = BinaryOperatorAggregate(
+        Metrics, operator.add
+    )
+    channel3.update([Metrics(count=10)])
+    channel3.update([Overwrite(Metrics(count=5))])
+    assert channel3.get() == Metrics(count=5)
+    channel3.update([Metrics(count=3)])
+    assert channel3.get() == Metrics(count=8)
 
 
 def test_untracked_value() -> None:
