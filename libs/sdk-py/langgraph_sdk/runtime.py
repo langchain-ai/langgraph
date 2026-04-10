@@ -156,7 +156,7 @@ class _ExecutionRuntime(_ServerRuntimeBase[ContextT], Generic[ContextT]):
         This API is in beta and may change in future releases.
     """
 
-    context: ContextT = field(default=None)  # type: ignore[assignment]
+    context: ContextT = field(default=None)  # type: ignore[assignment]  # ty:ignore[invalid-assignment]
     """The graph run context, typed by the graph's `context_schema`.
 
     Only available during `threads.create_run`.
