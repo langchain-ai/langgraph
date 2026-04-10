@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, TypeAlias
+from typing import Any, TypeAlias, TypeVar
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler, BaseCallbackManager
@@ -335,9 +335,6 @@ class AsyncGraphCallbackManager(BaseCallbackManager):
             checkpoint_ns=checkpoint_ns,
         )
 
-
-# TypeVar for shared configure/copy helpers.
-from typing import TypeVar  # noqa: E402
 
 _GraphManagerT = TypeVar(
     "_GraphManagerT", GraphCallbackManager, AsyncGraphCallbackManager
