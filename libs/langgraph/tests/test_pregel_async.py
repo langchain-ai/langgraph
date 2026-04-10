@@ -9769,7 +9769,7 @@ async def test_graph_error_handler_does_not_swallow_interrupt_concurrent() -> No
         return {"foo": f"a_{val}"}
 
     async def node_b(state: State) -> State:
-        return {"foo": "b_done"}
+        return {}
 
     async def err_handler(state: State) -> State:
         return {"foo": "handled"}
