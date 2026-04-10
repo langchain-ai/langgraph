@@ -1331,20 +1331,22 @@ def test_imp_nested(
     }
 
     thread1 = {"configurable": {"thread_id": "1"}}
-    assert [*graph.stream([0, 1], thread1, durability=durability)] == [
-        {"submapper": "0"},
+    result = [*graph.stream([0, 1], thread1, durability=durability)]
+    # nested tasks run concurrently so output order is non-deterministic
+    assert sorted(result[:-1], key=lambda d: str(d)) == [
         {"mapper": "00"},
-        {"submapper": "1"},
         {"mapper": "11"},
-        {
-            "__interrupt__": (
-                Interrupt(
-                    value="question",
-                    id=AnyStr(),
-                ),
-            )
-        },
+        {"submapper": "0"},
+        {"submapper": "1"},
     ]
+    assert result[-1] == {
+        "__interrupt__": (
+            Interrupt(
+                value="question",
+                id=AnyStr(),
+            ),
+        )
+    }
 
     assert graph.invoke(Command(resume="answer"), thread1, durability=durability) == [
         "00answera",
@@ -6982,8 +6984,10 @@ def test_tags_stream_mode_messages() -> None:
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),
+                "_type": "generic-fake-chat-model",
                 "ls_provider": "genericfakechatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
                 "tags": ["meow"],
             },
         )
@@ -7019,6 +7023,7 @@ def test_stream_mode_messages_command() -> None:
         (
             _AnyIdHumanMessage(content="foo"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 1,
                 "langgraph_node": "my_node",
                 "langgraph_triggers": ("branch:to:my_node",),
@@ -7029,6 +7034,7 @@ def test_stream_mode_messages_command() -> None:
         (
             _AnyIdHumanMessage(content="bar"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 2,
                 "langgraph_node": "my_other_node",
                 "langgraph_triggers": ("branch:to:my_other_node",),
@@ -7039,6 +7045,7 @@ def test_stream_mode_messages_command() -> None:
         (
             _AnyIdHumanMessage(content="baz"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 3,
                 "langgraph_node": "my_last_node",
                 "langgraph_triggers": ("branch:to:my_last_node",),

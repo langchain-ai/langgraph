@@ -6,12 +6,17 @@ import functools
 import os
 import re
 from collections.abc import Mapping
-from typing import Any, cast
+from datetime import tzinfo
+from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import urlparse
 
 import httpx
 
 import langgraph_sdk
 from langgraph_sdk.schema import RunCreateMetadata
+
+if TYPE_CHECKING:
+    from zoneinfo import ZoneInfo
 
 RESERVED_HEADERS = ("x-api-key",)
 
@@ -105,6 +110,87 @@ def _get_run_metadata_from_response(
         )
 
     return None
+
+
+def _sse_to_v2_dict(event: str, data: Any) -> dict[str, Any] | None:
+    """Convert an SSE event+data pair into a v2 stream part dict.
+
+    Returns None for ``end`` events (signals end of stream).
+    """
+    if event == "end":
+        return None
+    parts = event.split("|")
+    event_type = parts[0]
+    ns = parts[1:] if len(parts) > 1 else []
+    result: dict[str, Any] = {"type": event_type, "ns": ns, "data": data}
+    if event_type == "values" and isinstance(data, dict):
+        result["interrupts"] = data.pop("__interrupt__", [])
+    else:
+        result["interrupts"] = []
+    return result
+
+
+def _resolve_timezone(tz: str | tzinfo | ZoneInfo | None) -> str | None:
+    """Convert a timezone argument to an IANA timezone string.
+
+    Accepts:
+        - A string (returned as-is, assumed to be an IANA timezone name)
+        - A ``datetime.tzinfo`` instance (e.g. ``zoneinfo.ZoneInfo("America/New_York")``,
+          ``datetime.timezone.utc``). The ``key`` attribute is used if available,
+          otherwise ``tzname(None)`` is used.
+        - ``None`` (returned as ``None``)
+    """
+    if tz is None or isinstance(tz, str):
+        return tz
+    if isinstance(tz, tzinfo):
+        # ZoneInfo objects have a .key attribute with the IANA name
+        if hasattr(tz, "key"):
+            return tz.key  # type: ignore[union-attr]
+        # Fall back to tzname for fixed-offset timezones like datetime.timezone.utc
+        name = tz.tzname(None)
+        if name is not None:
+            return name
+        raise ValueError(
+            f"Cannot determine timezone name from {tz!r}. "
+            "Use a zoneinfo.ZoneInfo instance or pass a string like 'America/New_York'."
+        )
+    raise TypeError(
+        f"Expected str, datetime.tzinfo, or None for timezone, got {type(tz).__name__}"
+    )
+
+
+def _default_port(scheme: str) -> int:
+    return 443 if scheme == "https" else 80
+
+
+def _validate_reconnect_location(base_url: httpx.URL, location: str) -> str:
+    """Validate that a reconnect Location URL is same-origin as the base URL.
+
+    Raises ValueError if the Location header points to a different origin
+    (scheme + host + port), which would leak credentials to an external server.
+    """
+    parsed = urlparse(location)
+    # Relative URLs are safe — they resolve against the base
+    if not parsed.scheme and not parsed.netloc:
+        return location
+    # Compare origin components (normalize default ports to avoid mismatches)
+    base_scheme = str(base_url.scheme)
+    base_origin = (
+        base_scheme,
+        str(base_url.host),
+        base_url.port or _default_port(base_scheme),
+    )
+    loc_origin = (
+        parsed.scheme,
+        parsed.hostname or "",
+        parsed.port or _default_port(parsed.scheme),
+    )
+    if base_origin != loc_origin:
+        raise ValueError(
+            f"Refusing to follow cross-origin reconnect Location: {location!r} "
+            f"(origin {loc_origin}) does not match base URL origin {base_origin}"
+        )
+    return location
 
 
 def _provided_vals(d: Mapping[str, Any]) -> dict[str, Any]:

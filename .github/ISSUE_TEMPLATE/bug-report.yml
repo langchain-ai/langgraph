@@ -8,6 +8,8 @@ body:
       value: |
         Thank you for taking the time to file a bug report.
 
+        > **All contributions must be in English.** See the [language policy](https://docs.langchain.com/oss/python/contributing/overview#language-policy).
+
         For usage questions, feature requests and general design questions, please use the [LangChain Forum](https://forum.langchain.com/).
 
         Check these before submitting to see if your issue has already been reported, fixed or if there's another way to solve your problem:
@@ -37,6 +39,16 @@ body:
           required: true
         - label: I posted a self-contained, minimal, reproducible example. A maintainer can copy it and run it AS IS.
           required: true
+  - type: textarea
+    id: related
+    validations:
+      required: false
+    attributes:
+      label: Related Issues / PRs
+      description: |
+        If this bug is related to any existing issues or pull requests, please link them here.
+      placeholder: |
+        * e.g. #123, #456
   - type: textarea
     id: reproduction
     validations:
