@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, TypeAlias, TypeVar
+from dataclasses import dataclass
+from typing import Any, Literal, TypeAlias, TypeVar
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler, BaseCallbackManager
@@ -11,36 +12,49 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Interrupt
 
 __all__ = (
-    "AsyncGraphCallbackManager",
     "GraphCallbackHandler",
-    "GraphCallbackManager",
-    "GraphCallbacks",
-    "get_graph_callback_manager_for_config",
+    "GraphInterruptEvent",
+    "GraphLifecycleStatus",
+    "GraphResumeEvent",
+    "get_async_graph_callback_manager_for_config",
+    "get_sync_graph_callback_manager_for_config",
 )
+
+
+GraphLifecycleStatus: TypeAlias = Literal[
+    "input",
+    "pending",
+    "done",
+    "interrupt_before",
+    "interrupt_after",
+    "out_of_steps",
+]
+
+
+@dataclass(frozen=True)
+class GraphInterruptEvent:
+    run_id: UUID | None
+    status: GraphLifecycleStatus
+    checkpoint_id: str
+    checkpoint_ns: tuple[str, ...]
+    interrupts: tuple[Interrupt, ...]
+
+
+@dataclass(frozen=True)
+class GraphResumeEvent:
+    run_id: UUID | None
+    status: GraphLifecycleStatus
+    checkpoint_id: str
+    checkpoint_ns: tuple[str, ...]
 
 
 class GraphCallbackHandler(BaseCallbackHandler):
     """Base class for graph-level lifecycle callbacks."""
 
-    def on_interrupt(
-        self,
-        interrupts: Sequence[Interrupt],
-        *,
-        run_id: UUID | None,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> Any:
+    def on_interrupt(self, event: GraphInterruptEvent) -> Any:
         """Run when graph execution pauses due to interrupts."""
 
-    def on_resume(
-        self,
-        *,
-        run_id: UUID | None,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> Any:
+    def on_resume(self, event: GraphResumeEvent) -> Any:
         """Run when graph execution resumes from a checkpoint."""
 
 
@@ -94,7 +108,7 @@ def _configure_graph_callbacks(
         return cls(run_id=run_id)
     if isinstance(callbacks, cls):
         return callbacks.copy(run_id=run_id)
-    if isinstance(callbacks, (GraphCallbackManager, AsyncGraphCallbackManager)):
+    if isinstance(callbacks, (_GraphCallbackManager, _AsyncGraphCallbackManager)):
         # Cross-type: extract handlers into the requested cls.
         return cls(
             handlers=_filter_graph_handlers(callbacks.handlers),
@@ -125,7 +139,7 @@ def _configure_graph_callbacks(
 
 
 def _copy_graph_manager(
-    manager: GraphCallbackManager | AsyncGraphCallbackManager,
+    manager: _GraphCallbackManager | _AsyncGraphCallbackManager,
     cls: type[_GraphManagerT],
     run_id: UUID | None | object,
 ) -> _GraphManagerT:
@@ -149,7 +163,7 @@ def _copy_graph_manager(
     )
 
 
-class GraphCallbackManager(BaseCallbackManager):
+class _GraphCallbackManager(BaseCallbackManager):
     """Sync dispatcher for graph lifecycle events."""
 
     run_id: UUID | None
@@ -191,8 +205,8 @@ class GraphCallbackManager(BaseCallbackManager):
         self,
         *,
         run_id: UUID | None | object = _MISSING,
-    ) -> GraphCallbackManager:
-        return _copy_graph_manager(self, GraphCallbackManager, run_id)
+    ) -> _GraphCallbackManager:
+        return _copy_graph_manager(self, _GraphCallbackManager, run_id)
 
     @classmethod
     def configure(
@@ -200,47 +214,27 @@ class GraphCallbackManager(BaseCallbackManager):
         callbacks: object | None = None,
         *,
         run_id: UUID | None = None,
-    ) -> GraphCallbackManager:
+    ) -> _GraphCallbackManager:
         return _configure_graph_callbacks(cls, callbacks, run_id=run_id)
 
-    def on_interrupt(
-        self,
-        interrupts: Sequence[Interrupt],
-        *,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> None:
+    def on_interrupt(self, event: GraphInterruptEvent) -> None:
         handle_event(
             self.handlers,
             "on_interrupt",
             None,
-            interrupts,
-            run_id=self.run_id,
-            status=status,
-            checkpoint_id=checkpoint_id,
-            checkpoint_ns=checkpoint_ns,
+            event,
         )
 
-    def on_resume(
-        self,
-        *,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> None:
+    def on_resume(self, event: GraphResumeEvent) -> None:
         handle_event(
             self.handlers,
             "on_resume",
             None,
-            run_id=self.run_id,
-            status=status,
-            checkpoint_id=checkpoint_id,
-            checkpoint_ns=checkpoint_ns,
+            event,
         )
 
 
-class AsyncGraphCallbackManager(BaseCallbackManager):
+class _AsyncGraphCallbackManager(BaseCallbackManager):
     """Async dispatcher for graph lifecycle events."""
 
     run_id: UUID | None
@@ -287,8 +281,8 @@ class AsyncGraphCallbackManager(BaseCallbackManager):
         self,
         *,
         run_id: UUID | None | object = _MISSING,
-    ) -> AsyncGraphCallbackManager:
-        return _copy_graph_manager(self, AsyncGraphCallbackManager, run_id)
+    ) -> _AsyncGraphCallbackManager:
+        return _copy_graph_manager(self, _AsyncGraphCallbackManager, run_id)
 
     @classmethod
     def configure(
@@ -296,53 +290,33 @@ class AsyncGraphCallbackManager(BaseCallbackManager):
         callbacks: object | None = None,
         *,
         run_id: UUID | None = None,
-    ) -> AsyncGraphCallbackManager:
+    ) -> _AsyncGraphCallbackManager:
         return _configure_graph_callbacks(cls, callbacks, run_id=run_id)
 
-    async def on_interrupt(
-        self,
-        interrupts: Sequence[Interrupt],
-        *,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> None:
+    async def on_interrupt(self, event: GraphInterruptEvent) -> None:
         await ahandle_event(
             self.handlers,
             "on_interrupt",
             None,
-            interrupts,
-            run_id=self.run_id,
-            status=status,
-            checkpoint_id=checkpoint_id,
-            checkpoint_ns=checkpoint_ns,
+            event,
         )
 
-    async def on_resume(
-        self,
-        *,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> None:
+    async def on_resume(self, event: GraphResumeEvent) -> None:
         await ahandle_event(
             self.handlers,
             "on_resume",
             None,
-            run_id=self.run_id,
-            status=status,
-            checkpoint_id=checkpoint_id,
-            checkpoint_ns=checkpoint_ns,
+            event,
         )
 
 
 _GraphManagerT = TypeVar(
-    "_GraphManagerT", GraphCallbackManager, AsyncGraphCallbackManager
+    "_GraphManagerT", _GraphCallbackManager, _AsyncGraphCallbackManager
 )
 
 GraphCallbacks: TypeAlias = (
-    GraphCallbackManager
-    | AsyncGraphCallbackManager
+    _GraphCallbackManager
+    | _AsyncGraphCallbackManager
     | BaseCallbackManager
     | GraphCallbackHandler
     | Sequence[BaseCallbackHandler]
@@ -351,12 +325,12 @@ GraphCallbacks: TypeAlias = (
 )
 
 
-def get_graph_callback_manager_for_config(
+def get_sync_graph_callback_manager_for_config(
     config: RunnableConfig,
     *,
     run_id: UUID | None = None,
-) -> GraphCallbackManager:
-    return GraphCallbackManager.configure(
+) -> _GraphCallbackManager:
+    return _GraphCallbackManager.configure(
         config.get("callbacks"),
         run_id=run_id,
     )
@@ -366,8 +340,8 @@ def get_async_graph_callback_manager_for_config(
     config: RunnableConfig,
     *,
     run_id: UUID | None = None,
-) -> AsyncGraphCallbackManager:
-    return AsyncGraphCallbackManager.configure(
+) -> _AsyncGraphCallbackManager:
+    return _AsyncGraphCallbackManager.configure(
         config.get("callbacks"),
         run_id=run_id,
     )

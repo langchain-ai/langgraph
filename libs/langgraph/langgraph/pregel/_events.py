@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from langgraph.callbacks import GraphLifecycleStatus
 from langgraph.types import Interrupt
 
 
@@ -17,7 +18,7 @@ class GraphLifecycleEvent:
     kind: Literal["resume", "interrupt"]
     """Lifecycle transition kind."""
 
-    status: str
+    status: GraphLifecycleStatus
     """Loop status when the event was captured."""
 
     checkpoint_id: str

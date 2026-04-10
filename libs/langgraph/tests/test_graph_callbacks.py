@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Sequence
 from typing import Any
 
 import pytest
@@ -10,7 +9,11 @@ from langchain_core.callbacks.manager import CallbackManager
 from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
-from langgraph.callbacks import GraphCallbackHandler
+from langgraph.callbacks import (
+    GraphCallbackHandler,
+    GraphInterruptEvent,
+    GraphResumeEvent,
+)
 from langgraph.graph import START, StateGraph
 from langgraph.types import Command, Interrupt, interrupt
 
@@ -22,44 +25,14 @@ NEEDS_CONTEXTVARS = pytest.mark.skipif(
 
 class _GraphEventHandler(GraphCallbackHandler):
     def __init__(self) -> None:
-        self.interrupt_events: list[dict[str, Any]] = []
-        self.resume_events: list[dict[str, Any]] = []
+        self.interrupt_events: list[GraphInterruptEvent] = []
+        self.resume_events: list[GraphResumeEvent] = []
 
-    def on_interrupt(
-        self,
-        interrupts: list[Interrupt] | tuple[Interrupt, ...],
-        *,
-        run_id: Any,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> Any:
-        self.interrupt_events.append(
-            {
-                "run_id": run_id,
-                "status": status,
-                "checkpoint_id": checkpoint_id,
-                "checkpoint_ns": checkpoint_ns,
-                "interrupts": interrupts,
-            }
-        )
+    def on_interrupt(self, event: GraphInterruptEvent) -> Any:
+        self.interrupt_events.append(event)
 
-    def on_resume(
-        self,
-        *,
-        run_id: Any,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> Any:
-        self.resume_events.append(
-            {
-                "run_id": run_id,
-                "status": status,
-                "checkpoint_id": checkpoint_id,
-                "checkpoint_ns": checkpoint_ns,
-            }
-        )
+    def on_resume(self, event: GraphResumeEvent) -> Any:
+        self.resume_events.append(event)
 
 
 class _LangChainCustomEventHandler(BaseCallbackHandler):
@@ -84,26 +57,11 @@ class _RaisingGraphEventHandler(GraphCallbackHandler):
         self.raise_on_resume = raise_on_resume
         self.raise_error = raise_error
 
-    def on_interrupt(
-        self,
-        interrupts: Sequence[Interrupt],
-        *,
-        run_id: Any,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> Any:
+    def on_interrupt(self, event: GraphInterruptEvent) -> Any:
         if self.raise_on_interrupt:
             raise ValueError("boom-interrupt")
 
-    def on_resume(
-        self,
-        *,
-        run_id: Any,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> Any:
+    def on_resume(self, event: GraphResumeEvent) -> Any:
         if self.raise_on_resume:
             raise ValueError("boom-resume")
 
@@ -120,26 +78,11 @@ class _AsyncRaisingGraphEventHandler(GraphCallbackHandler):
         self.raise_on_resume = raise_on_resume
         self.raise_error = raise_error
 
-    async def on_interrupt(
-        self,
-        interrupts: Sequence[Interrupt],
-        *,
-        run_id: Any,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> Any:
+    async def on_interrupt(self, event: GraphInterruptEvent) -> Any:
         if self.raise_on_interrupt:
             raise ValueError("boom-interrupt")
 
-    async def on_resume(
-        self,
-        *,
-        run_id: Any,
-        status: str,
-        checkpoint_id: str,
-        checkpoint_ns: tuple[str, ...],
-    ) -> Any:
+    async def on_resume(self, event: GraphResumeEvent) -> Any:
         if self.raise_on_resume:
             raise ValueError("boom-resume")
 
@@ -172,9 +115,9 @@ def test_graph_callbacks_interrupt_and_resume_sync() -> None:
     assert "__interrupt__" in first
 
     assert len(handler.interrupt_events) == 1
-    assert handler.interrupt_events[0]["interrupts"]
-    assert isinstance(handler.interrupt_events[0]["interrupts"][0], Interrupt)
-    assert handler.interrupt_events[0]["checkpoint_ns"] == ()
+    assert handler.interrupt_events[0].interrupts
+    assert isinstance(handler.interrupt_events[0].interrupts[0], Interrupt)
+    assert handler.interrupt_events[0].checkpoint_ns == ()
     assert langchain_handler.events == []
 
     handler.resume_events.clear()
@@ -182,7 +125,7 @@ def test_graph_callbacks_interrupt_and_resume_sync() -> None:
     assert resumed == {"answer": "done"}
 
     assert len(handler.resume_events) == 1
-    assert handler.resume_events[0]["checkpoint_ns"] == ()
+    assert handler.resume_events[0].checkpoint_ns == ()
     assert langchain_handler.events == []
 
 
@@ -201,9 +144,9 @@ async def test_graph_callbacks_interrupt_and_resume_async() -> None:
     assert "__interrupt__" in first
 
     assert len(handler.interrupt_events) == 1
-    assert handler.interrupt_events[0]["interrupts"]
-    assert isinstance(handler.interrupt_events[0]["interrupts"][0], Interrupt)
-    assert handler.interrupt_events[0]["checkpoint_ns"] == ()
+    assert handler.interrupt_events[0].interrupts
+    assert isinstance(handler.interrupt_events[0].interrupts[0], Interrupt)
+    assert handler.interrupt_events[0].checkpoint_ns == ()
     assert langchain_handler.events == []
 
     handler.resume_events.clear()
@@ -211,7 +154,7 @@ async def test_graph_callbacks_interrupt_and_resume_async() -> None:
     assert resumed == {"answer": "done"}
 
     assert len(handler.resume_events) == 1
-    assert handler.resume_events[0]["checkpoint_ns"] == ()
+    assert handler.resume_events[0].checkpoint_ns == ()
     assert langchain_handler.events == []
 
 

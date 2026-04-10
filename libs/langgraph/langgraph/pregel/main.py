@@ -97,8 +97,10 @@ from langgraph._internal._runnable import (
 )
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.callbacks import (
+    GraphInterruptEvent,
+    GraphResumeEvent,
     get_async_graph_callback_manager_for_config,
-    get_graph_callback_manager_for_config,
+    get_sync_graph_callback_manager_for_config,
 )
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -2589,7 +2591,7 @@ class Pregel(
             name=config.get("run_name", self.get_name()),
             run_id=config.get("run_id"),
         )
-        graph_callback_manager = get_graph_callback_manager_for_config(
+        graph_callback_manager = get_sync_graph_callback_manager_for_config(
             config,
             run_id=run_manager.run_id,
         )
@@ -2681,16 +2683,22 @@ class Pregel(
                 while (event := loop._pop_lifecycle_event()) is not None:
                     if event.kind == "resume":
                         graph_callback_manager.on_resume(
-                            status=event.status,
-                            checkpoint_id=event.checkpoint_id,
-                            checkpoint_ns=event.checkpoint_ns,
+                            GraphResumeEvent(
+                                run_id=graph_callback_manager.run_id,
+                                status=event.status,
+                                checkpoint_id=event.checkpoint_id,
+                                checkpoint_ns=event.checkpoint_ns,
+                            )
                         )
                     else:
                         graph_callback_manager.on_interrupt(
-                            event.interrupts,
-                            status=event.status,
-                            checkpoint_id=event.checkpoint_id,
-                            checkpoint_ns=event.checkpoint_ns,
+                            GraphInterruptEvent(
+                                run_id=graph_callback_manager.run_id,
+                                status=event.status,
+                                checkpoint_id=event.checkpoint_id,
+                                checkpoint_ns=event.checkpoint_ns,
+                                interrupts=event.interrupts,
+                            )
                         )
 
             with SyncPregelLoop(
@@ -3077,16 +3085,22 @@ class Pregel(
                 while (event := loop._pop_lifecycle_event()) is not None:
                     if event.kind == "resume":
                         await graph_callback_manager.on_resume(
-                            status=event.status,
-                            checkpoint_id=event.checkpoint_id,
-                            checkpoint_ns=event.checkpoint_ns,
+                            GraphResumeEvent(
+                                run_id=graph_callback_manager.run_id,
+                                status=event.status,
+                                checkpoint_id=event.checkpoint_id,
+                                checkpoint_ns=event.checkpoint_ns,
+                            )
                         )
                     else:
                         await graph_callback_manager.on_interrupt(
-                            event.interrupts,
-                            status=event.status,
-                            checkpoint_id=event.checkpoint_id,
-                            checkpoint_ns=event.checkpoint_ns,
+                            GraphInterruptEvent(
+                                run_id=graph_callback_manager.run_id,
+                                status=event.status,
+                                checkpoint_id=event.checkpoint_id,
+                                checkpoint_ns=event.checkpoint_ns,
+                                interrupts=event.interrupts,
+                            )
                         )
 
             async with AsyncPregelLoop(
