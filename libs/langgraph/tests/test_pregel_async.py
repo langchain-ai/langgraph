@@ -7543,8 +7543,10 @@ async def test_tags_stream_mode_messages() -> None:
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),
+                "_type": "generic-fake-chat-model",
                 "ls_provider": "genericfakechatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
                 "tags": ["meow"],
             },
         )
@@ -7578,6 +7580,7 @@ async def test_stream_mode_messages_command() -> None:
         (
             _AnyIdHumanMessage(content="foo"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 1,
                 "langgraph_node": "my_node",
                 "langgraph_triggers": ("branch:to:my_node",),
@@ -7588,6 +7591,7 @@ async def test_stream_mode_messages_command() -> None:
         (
             _AnyIdHumanMessage(content="bar"),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 2,
                 "langgraph_node": "my_other_node",
                 "langgraph_triggers": ("branch:to:my_other_node",),
@@ -8646,7 +8650,7 @@ async def test_imp_exception(
             "name": "LangGraph",
             "tags": [],
             "run_id": AnyStr(),
-            "metadata": {"thread_id": "1"},
+            "metadata": {"thread_id": "1", "ls_integration": "langgraph"},
             "parent_ids": [],
         },
         {
@@ -8657,6 +8661,7 @@ async def test_imp_exception(
             "run_id": AnyStr(),
             "metadata": {
                 "thread_id": "1",
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "my_workflow",
                 "langgraph_triggers": ("__start__",),
@@ -8673,6 +8678,7 @@ async def test_imp_exception(
             "run_id": AnyStr(),
             "metadata": {
                 "thread_id": "1",
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "my_task",
                 "langgraph_triggers": ("__pregel_push",),
@@ -8696,6 +8702,7 @@ async def test_imp_exception(
             "tags": ["seq:step:1"],
             "metadata": {
                 "thread_id": "1",
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "my_task",
                 "langgraph_triggers": ("__pregel_push",),
@@ -8721,6 +8728,7 @@ async def test_imp_exception(
             "tags": ["seq:step:1"],
             "metadata": {
                 "thread_id": "1",
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "my_task",
                 "langgraph_triggers": ("__pregel_push",),
@@ -8742,7 +8750,7 @@ async def test_imp_exception(
             "run_id": AnyStr(),
             "name": "LangGraph",
             "tags": [],
-            "metadata": {"thread_id": "1"},
+            "metadata": {"thread_id": "1", "ls_integration": "langgraph"},
             "data": {"chunk": {"my_task": 2}},
             "parent_ids": [],
         },
@@ -8754,6 +8762,7 @@ async def test_imp_exception(
             "run_id": AnyStr(),
             "metadata": {
                 "thread_id": "1",
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "my_task",
                 "langgraph_triggers": ("__pregel_push",),
@@ -8778,6 +8787,7 @@ async def test_imp_exception(
             "run_id": AnyStr(),
             "metadata": {
                 "thread_id": "1",
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "my_task",
                 "langgraph_triggers": ("__pregel_push",),
@@ -8801,6 +8811,7 @@ async def test_imp_exception(
             "tags": ["seq:step:1"],
             "metadata": {
                 "thread_id": "1",
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "my_task",
                 "langgraph_triggers": ("__pregel_push",),
@@ -8826,6 +8837,7 @@ async def test_imp_exception(
             "tags": ["seq:step:1"],
             "metadata": {
                 "thread_id": "1",
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "my_task",
                 "langgraph_triggers": ("__pregel_push",),
@@ -8849,6 +8861,7 @@ async def test_imp_exception(
             "tags": ["graph:step:4"],
             "metadata": {
                 "thread_id": "1",
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "my_workflow",
                 "langgraph_triggers": ("__start__",),
@@ -8863,7 +8876,7 @@ async def test_imp_exception(
             "run_id": AnyStr(),
             "name": "LangGraph",
             "tags": [],
-            "metadata": {"thread_id": "1"},
+            "metadata": {"thread_id": "1", "ls_integration": "langgraph"},
             "data": {"chunk": {"my_task": 2}},
             "parent_ids": [],
         },
@@ -8875,6 +8888,7 @@ async def test_imp_exception(
             "tags": ["graph:step:4"],
             "metadata": {
                 "thread_id": "1",
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "my_workflow",
                 "langgraph_triggers": ("__start__",),
@@ -8888,7 +8902,7 @@ async def test_imp_exception(
             "run_id": AnyStr(),
             "name": "LangGraph",
             "tags": [],
-            "metadata": {"thread_id": "1"},
+            "metadata": {"thread_id": "1", "ls_integration": "langgraph"},
             "data": {"chunk": {"my_workflow": "done"}},
             "parent_ids": [],
         },
@@ -8898,7 +8912,7 @@ async def test_imp_exception(
             "run_id": AnyStr(),
             "name": "LangGraph",
             "tags": [],
-            "metadata": {"thread_id": "1"},
+            "metadata": {"thread_id": "1", "ls_integration": "langgraph"},
             "parent_ids": [],
         },
     ]
@@ -9718,3 +9732,40 @@ async def test_graph_error_handler_does_not_swallow_interrupt_concurrent() -> No
         "GraphInterrupt was swallowed — interrupt() in node_a "
         "should have paused execution"
     )
+
+
+async def test_node_error_handler_handles_subgraph_internal_failure_async() -> None:
+    class SubState(TypedDict):
+        foo: str
+
+    class ParentState(TypedDict):
+        foo: str
+
+    captured: dict[str, object] = {}
+
+    async def sub_fail_node(state: SubState) -> SubState:
+        raise ValueError("async subgraph boom")
+
+    async def parent_handler(state: ParentState, runtime: Runtime) -> ParentState:
+        captured["from_node_name"] = runtime.execution_info.from_node_name
+        captured["from_node_error"] = runtime.execution_info.from_node_error
+        return {"foo": "handled_async_subgraph"}
+
+    subgraph = (
+        StateGraph(SubState)
+        .add_node("sub_fail_node", sub_fail_node)
+        .add_edge(START, "sub_fail_node")
+        .compile()
+    )
+
+    parent_graph = (
+        StateGraph(ParentState)
+        .add_node("subgraph_node", subgraph, error_handler=parent_handler)
+        .add_edge(START, "subgraph_node")
+        .compile()
+    )
+
+    result = await parent_graph.ainvoke({"foo": ""})
+    assert result["foo"] == "handled_async_subgraph"
+    assert captured["from_node_name"] == "subgraph_node"
+    assert isinstance(captured["from_node_error"], BaseException)
