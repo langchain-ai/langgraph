@@ -16,7 +16,7 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from dataclasses import is_dataclass
+from dataclasses import is_dataclass, replace
 from functools import partial
 from inspect import isclass
 from typing import (
@@ -2710,6 +2710,7 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
             ) as loop:
                 emit_graph_lifecycle_events(loop)
                 # create runner
@@ -3112,6 +3113,7 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
             ) as loop:
                 await aemit_graph_lifecycle_events(loop)
                 # create runner

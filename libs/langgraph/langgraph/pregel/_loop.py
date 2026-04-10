@@ -210,6 +210,7 @@ class PregelLoop:
     output: None | dict[str, Any] | Any = None
     updated_channels: set[str] | None = None
     _graph_lifecycle_events: deque[GraphLifecycleEvent]
+    _has_graph_lifecycle_callbacks: bool
 
     # public
 
@@ -235,6 +236,7 @@ class PregelLoop:
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         self.stream = stream
         self.config = config
@@ -259,6 +261,7 @@ class PregelLoop:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
+        self._has_graph_lifecycle_callbacks = has_graph_lifecycle_callbacks
         self._graph_lifecycle_events = deque()
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
@@ -1085,6 +1088,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         super().__init__(
             input,
@@ -1106,6 +1110,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1282,6 +1287,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         super().__init__(
             input,
@@ -1303,6 +1309,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
         )
         self.stack = AsyncExitStack()
         if checkpointer:
