@@ -6271,7 +6271,7 @@ def test_sync_streaming_with_functional_api() -> None:
     @task()
     def slow() -> dict:
         time.sleep(time_delay)  # Simulate a delay of 10 ms
-        return {"tic": time.time()}
+        return {"tic": time.monotonic()}
 
     @entrypoint()
     def graph(inputs: dict) -> list:
@@ -6284,7 +6284,7 @@ def test_sync_streaming_with_functional_api() -> None:
     for chunk in graph.stream({}):
         if "slow" not in chunk:  # We'll just look at the updates from `slow`
             continue
-        arrival_times.append(time.time())
+        arrival_times.append(time.monotonic())
 
     assert len(arrival_times) == 2
     delta = arrival_times[1] - arrival_times[0]
