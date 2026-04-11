@@ -13,6 +13,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     get_serializable_checkpoint_metadata,
+    validate_checkpoint_schema,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import TASKS
@@ -279,16 +280,19 @@ class ShallowPostgresSaver(BasePostgresSaver):
         with self._cursor() as cur:
             cur.execute(query, params, binary=True)
             for value in cur:
-                checkpoint: Checkpoint = {
-                    **value["checkpoint"],
-                    "channel_values": self._load_blobs(value["channel_values"]),
-                    "pending_sends": [
-                        self.serde.loads_typed((t.decode(), v))
-                        for t, v in value["pending_sends"]
-                    ]
-                    if value["pending_sends"]
-                    else [],
-                }
+                checkpoint = validate_checkpoint_schema(
+                    {
+                        **value["checkpoint"],
+                        "channel_values": self._load_blobs(value["channel_values"]),
+                        "pending_sends": [
+                            self.serde.loads_typed((t.decode(), v))
+                            for t, v in value["pending_sends"]
+                        ]
+                        if value["pending_sends"]
+                        else [],
+                    },
+                    source="postgres checkpoint",
+                )
                 yield CheckpointTuple(
                     config={
                         "configurable": {
@@ -348,16 +352,19 @@ class ShallowPostgresSaver(BasePostgresSaver):
             )
 
             for value in cur:
-                checkpoint: Checkpoint = {
-                    **value["checkpoint"],
-                    "channel_values": self._load_blobs(value["channel_values"]),
-                    "pending_sends": [
-                        self.serde.loads_typed((t.decode(), v))
-                        for t, v in value["pending_sends"]
-                    ]
-                    if value["pending_sends"]
-                    else [],
-                }
+                checkpoint = validate_checkpoint_schema(
+                    {
+                        **value["checkpoint"],
+                        "channel_values": self._load_blobs(value["channel_values"]),
+                        "pending_sends": [
+                            self.serde.loads_typed((t.decode(), v))
+                            for t, v in value["pending_sends"]
+                        ]
+                        if value["pending_sends"]
+                        else [],
+                    },
+                    source="postgres checkpoint",
+                )
                 return CheckpointTuple(
                     config={
                         "configurable": {
@@ -645,16 +652,19 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         async with self._cursor() as cur:
             await cur.execute(query, params, binary=True)
             async for value in cur:
-                checkpoint: Checkpoint = {
-                    **value["checkpoint"],
-                    "channel_values": self._load_blobs(value["channel_values"]),
-                    "pending_sends": [
-                        self.serde.loads_typed((t.decode(), v))
-                        for t, v in value["pending_sends"]
-                    ]
-                    if value["pending_sends"]
-                    else [],
-                }
+                checkpoint = validate_checkpoint_schema(
+                    {
+                        **value["checkpoint"],
+                        "channel_values": self._load_blobs(value["channel_values"]),
+                        "pending_sends": [
+                            self.serde.loads_typed((t.decode(), v))
+                            for t, v in value["pending_sends"]
+                        ]
+                        if value["pending_sends"]
+                        else [],
+                    },
+                    source="postgres checkpoint",
+                )
                 yield CheckpointTuple(
                     config={
                         "configurable": {
@@ -695,16 +705,19 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             )
 
             async for value in cur:
-                checkpoint: Checkpoint = {
-                    **value["checkpoint"],
-                    "channel_values": self._load_blobs(value["channel_values"]),
-                    "pending_sends": [
-                        self.serde.loads_typed((t.decode(), v))
-                        for t, v in value["pending_sends"]
-                    ]
-                    if value["pending_sends"]
-                    else [],
-                }
+                checkpoint = validate_checkpoint_schema(
+                    {
+                        **value["checkpoint"],
+                        "channel_values": self._load_blobs(value["channel_values"]),
+                        "pending_sends": [
+                            self.serde.loads_typed((t.decode(), v))
+                            for t, v in value["pending_sends"]
+                        ]
+                        if value["pending_sends"]
+                        else [],
+                    },
+                    source="postgres checkpoint",
+                )
                 return CheckpointTuple(
                     config={
                         "configurable": {

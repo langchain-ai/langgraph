@@ -23,6 +23,7 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
     get_checkpoint_id,
     get_checkpoint_metadata,
+    validate_checkpoint_schema,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,32 @@ class InMemorySaver(
                     channel_values[k] = self.serde.loads_typed(vv)
         return channel_values
 
+    def _hydrate_and_validate_checkpoint(
+        self,
+        checkpoint: tuple[str, bytes],
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+    ) -> Checkpoint:
+        raw_checkpoint = self.serde.loads_typed(checkpoint)
+        if not isinstance(raw_checkpoint, dict):
+            raise ValueError(
+                "Invalid in-memory checkpoint schema: expected dict, got "
+                f"{type(raw_checkpoint).__name__}"
+            )
+        hydrated_checkpoint = raw_checkpoint.copy()
+        channel_versions = hydrated_checkpoint.get("channel_versions")
+        if "channel_values" not in hydrated_checkpoint and isinstance(
+            channel_versions, dict
+        ):
+            hydrated_checkpoint["channel_values"] = self._load_blobs(
+                thread_id, checkpoint_ns, channel_versions
+            )
+        return validate_checkpoint_schema(
+            hydrated_checkpoint,
+            source="in-memory checkpoint",
+        )
+
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.
 
@@ -152,15 +179,14 @@ class InMemorySaver(
             if saved := self.storage[thread_id][checkpoint_ns].get(checkpoint_id):
                 checkpoint, metadata, parent_checkpoint_id = saved
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
-                checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
+                checkpoint_: Checkpoint = self._hydrate_and_validate_checkpoint(
+                    checkpoint,
+                    thread_id=thread_id,
+                    checkpoint_ns=checkpoint_ns,
+                )
                 return CheckpointTuple(
                     config=config,
-                    checkpoint={
-                        **checkpoint_,
-                        "channel_values": self._load_blobs(
-                            thread_id, checkpoint_ns, checkpoint_["channel_versions"]
-                        ),
-                    },
+                    checkpoint=checkpoint_,
                     metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
                         (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
@@ -182,7 +208,11 @@ class InMemorySaver(
                 checkpoint_id = max(checkpoints.keys())
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
-                checkpoint_ = self.serde.loads_typed(checkpoint)
+                checkpoint_ = self._hydrate_and_validate_checkpoint(
+                    checkpoint,
+                    thread_id=thread_id,
+                    checkpoint_ns=checkpoint_ns,
+                )
                 return CheckpointTuple(
                     config={
                         "configurable": {
@@ -191,12 +221,7 @@ class InMemorySaver(
                             "checkpoint_id": checkpoint_id,
                         }
                     },
-                    checkpoint={
-                        **checkpoint_,
-                        "channel_values": self._load_blobs(
-                            thread_id, checkpoint_ns, checkpoint_["channel_versions"]
-                        ),
-                    },
+                    checkpoint=checkpoint_,
                     metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
                         (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
@@ -288,7 +313,11 @@ class InMemorySaver(
                         (thread_id, checkpoint_ns, checkpoint_id)
                     ].values()
 
-                    checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
+                    checkpoint_: Checkpoint = self._hydrate_and_validate_checkpoint(
+                        checkpoint,
+                        thread_id=thread_id,
+                        checkpoint_ns=checkpoint_ns,
+                    )
 
                     yield CheckpointTuple(
                         config={
@@ -298,14 +327,7 @@ class InMemorySaver(
                                 "checkpoint_id": checkpoint_id,
                             }
                         },
-                        checkpoint={
-                            **checkpoint_,
-                            "channel_values": self._load_blobs(
-                                thread_id,
-                                checkpoint_ns,
-                                checkpoint_["channel_versions"],
-                            ),
-                        },
+                        checkpoint=checkpoint_,
                         metadata=metadata,
                         parent_config=(
                             {
