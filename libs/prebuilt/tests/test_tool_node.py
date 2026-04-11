@@ -562,6 +562,114 @@ def test_tool_node_individual_tool_error_handling() -> None:
     assert tool_message.tool_call_id == "some 0"
 
 
+def test_tool_node_error_includes_response_metadata() -> None:
+    """Error messages include model output metadata when available."""
+    metadata = {"stop_reason": "max_tokens", "output_tokens": 16384}
+    result = ToolNode([tool1], handle_tool_errors=True).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 0, "some_other_val": "foo"},
+                            "id": "some 0",
+                        },
+                    ],
+                    response_metadata=metadata,
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message: ToolMessage = result["messages"][-1]
+    assert tool_message.status == "error"
+    assert "Model output metadata:" in tool_message.content
+    assert "max_tokens" in tool_message.content
+    assert "16384" in tool_message.content
+
+
+def test_tool_node_error_no_metadata_when_empty() -> None:
+    """No metadata suffix when response_metadata is empty."""
+    result = ToolNode([tool1], handle_tool_errors=True).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 0, "some_other_val": "foo"},
+                            "id": "some 0",
+                        },
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message: ToolMessage = result["messages"][-1]
+    assert tool_message.status == "error"
+    assert "Model output metadata:" not in tool_message.content
+
+
+def test_tool_node_error_metadata_not_on_success() -> None:
+    """No metadata appended to successful tool results."""
+    result = ToolNode([tool1]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 1, "some_other_val": "foo"},
+                            "id": "some 0",
+                        },
+                    ],
+                    response_metadata={"stop_reason": "max_tokens"},
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message: ToolMessage = result["messages"][-1]
+    assert tool_message.status != "error"
+    assert "Model output metadata:" not in tool_message.content
+
+
+async def test_tool_node_error_includes_response_metadata_async() -> None:
+    """Metadata surfacing works in async path."""
+    metadata = {"finish_reason": "length", "usage": {"output_tokens": 4096}}
+    result = await ToolNode([tool1], handle_tool_errors=True).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 0, "some_other_val": "foo"},
+                            "id": "some 0",
+                        },
+                    ],
+                    response_metadata=metadata,
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message: ToolMessage = result["messages"][-1]
+    assert tool_message.status == "error"
+    assert "Model output metadata:" in tool_message.content
+    assert "length" in tool_message.content
+
+
 def test_tool_node_incorrect_tool_name() -> None:
     result_incorrect_name = ToolNode([tool1, tool2]).invoke(
         {
