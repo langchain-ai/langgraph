@@ -12,7 +12,11 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.serde.jsonplus import (
+    JsonPlusSerializer,
+    _warned_blocked_types,
+    _warned_unregistered_types,
+)
 
 
 class MemoryPydantic(BaseModel):
@@ -211,6 +215,7 @@ async def test_memory_saver() -> None:
 def test_memory_saver_warns_on_unregistered_msgpack(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    _warned_unregistered_types.clear()
     serde = JsonPlusSerializer()
     memory_saver = InMemorySaver(serde=serde)
     obj = MemoryPydantic(foo="bar")
@@ -261,6 +266,7 @@ def test_memory_saver_allowlist_silences_warning(
 def test_memory_saver_strict_blocks_unregistered(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    _warned_blocked_types.clear()
     serde = JsonPlusSerializer(allowed_msgpack_modules=None)
     memory_saver = InMemorySaver(serde=serde)
     obj = MemoryPydantic(foo="bar")

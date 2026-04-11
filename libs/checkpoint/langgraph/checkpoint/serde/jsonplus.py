@@ -46,6 +46,13 @@ LC_REVIVER = Reviver()
 EMPTY_BYTES = b""
 logger = logging.getLogger(__name__)
 
+# Track types we've already warned about to avoid log spam.
+# Module-level set so it persists for the lifetime of the process.
+# Capped to avoid unbounded growth if types are dynamically generated.
+_MAX_WARNED_TYPES = 1000
+_warned_unregistered_types: set[tuple[str, str]] = set()
+_warned_blocked_types: set[tuple[str, str]] = set()
+
 
 class JsonPlusSerializer(SerializerProtocol):
     """Serializer that uses ormsgpack, with optional fallbacks.
@@ -527,15 +534,18 @@ def _create_msgpack_ext_hook(
                     "name": name,
                 }
             )
-            logger.warning(
-                "Deserializing unregistered type %s.%s from checkpoint. "
-                "This will be blocked in a future version. "
-                "Add to allowed_msgpack_modules to silence: [(%r, %r)]",
-                module,
-                name,
-                module,
-                name,
-            )
+            if key not in _warned_unregistered_types:
+                if len(_warned_unregistered_types) < _MAX_WARNED_TYPES:
+                    _warned_unregistered_types.add(key)
+                logger.warning(
+                    "Deserializing unregistered type %s.%s from checkpoint. "
+                    "This will be blocked in a future version. "
+                    "Add to allowed_msgpack_modules to silence: [(%r, %r)]",
+                    module,
+                    name,
+                    module,
+                    name,
+                )
             return True
         if allowed_modules is not None:
             if key in allowed_modules:
@@ -548,14 +558,17 @@ def _create_msgpack_ext_hook(
                 "name": name,
             }
         )
-        logger.warning(
-            "Blocked deserialization of %s.%s - not in allowed_msgpack_modules. "
-            "Add to allowed_msgpack_modules to allow: [(%r, %r)]",
-            module,
-            name,
-            module,
-            name,
-        )
+        if key not in _warned_blocked_types:
+            if len(_warned_blocked_types) < _MAX_WARNED_TYPES:
+                _warned_blocked_types.add(key)
+            logger.warning(
+                "Blocked deserialization of %s.%s - not in allowed_msgpack_modules. "
+                "Add to allowed_msgpack_modules to allow: [(%r, %r)]",
+                module,
+                name,
+                module,
+                name,
+            )
         return False
 
     def _check_allowed_method(module: str, name: str, method: str) -> bool:
