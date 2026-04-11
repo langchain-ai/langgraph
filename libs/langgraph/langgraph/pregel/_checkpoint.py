@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping
 from datetime import datetime, timezone
 
@@ -81,7 +82,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         v=checkpoint["v"],
         ts=checkpoint["ts"],
         id=checkpoint["id"],
-        channel_values=checkpoint["channel_values"].copy(),
+        channel_values=copy.deepcopy(checkpoint["channel_values"]),
         channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         updated_channels=checkpoint.get("updated_channels", None),
