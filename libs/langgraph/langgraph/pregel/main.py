@@ -176,6 +176,16 @@ __all__ = ("NodeBuilder", "Pregel")
 _WriteValue = Callable[[Input], Output] | Any
 
 
+def _normalize_messages_keys(
+    messages_key: str | Sequence[str] | None,
+) -> set[str] | None:
+    if messages_key is None:
+        return None
+    if isinstance(messages_key, str):
+        return {messages_key}
+    return set(messages_key)
+
+
 class NodeBuilder:
     __slots__ = (
         "_channels",
@@ -602,6 +612,9 @@ class Pregel(
     stream_mode: StreamMode = "values"
     """Mode to stream output, defaults to 'values'."""
 
+    messages_keys: set[str] | None = None
+    """Optional state keys to include when streaming in `messages` mode."""
+
     stream_eager: bool = False
     """Whether to force emitting stream events eagerly, automatically turned on
     for stream_mode "messages" and "custom"."""
@@ -654,6 +667,7 @@ class Pregel(
         channels: dict[str, BaseChannel | ManagedValueSpec] | None,
         auto_validate: bool = True,
         stream_mode: StreamMode = "values",
+        messages_key: str | Sequence[str] | None = None,
         stream_eager: bool = False,
         output_channels: str | Sequence[str],
         stream_channels: str | Sequence[str] | None = None,
@@ -698,6 +712,7 @@ class Pregel(
         else:
             self.channels[TASKS] = Topic(Send, accumulate=False)
         self.stream_mode = stream_mode
+        self.messages_keys = _normalize_messages_keys(messages_key)
         self.stream_eager = stream_eager
         self.output_channels = output_channels
         self.stream_channels = stream_channels
@@ -2458,6 +2473,7 @@ class Pregel(
         *,
         context: ContextT | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        messages_key: str | Sequence[str] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2523,6 +2539,8 @@ class Pregel(
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
                     - Will be emitted as 2-tuples `(LLM token, metadata)`.
+            messages_key: Optional state key or keys to include when `stream_mode` includes `"messages"`.
+                If omitted, uses the graph-level default from compile time. If neither is set, all keys are included.
                 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
                 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
@@ -2626,11 +2644,17 @@ class Pregel(
             # set up messages stream mode
             if "messages" in stream_modes:
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                messages_keys_ = _normalize_messages_keys(messages_key)
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(
                         stream.put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
+                        messages_keys=(
+                            self.messages_keys
+                            if messages_keys_ is None
+                            else messages_keys_
+                        ),
                     )
                 )
 
@@ -2852,6 +2876,7 @@ class Pregel(
         *,
         context: ContextT | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        messages_key: str | Sequence[str] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2880,6 +2905,8 @@ class Pregel(
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
                     - Will be emitted as 2-tuples `(LLM token, metadata)`.
+            messages_key: Optional state key or keys to include when `stream_mode` includes `"messages"`.
+                If omitted, uses the graph-level default from compile time. If neither is set, all keys are included.
                 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
                 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
@@ -3003,11 +3030,17 @@ class Pregel(
             if "messages" in stream_modes:
                 # namespace can be None in a root level graph?
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                messages_keys_ = _normalize_messages_keys(messages_key)
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(
                         stream_put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
+                        messages_keys=(
+                            self.messages_keys
+                            if messages_keys_ is None
+                            else messages_keys_
+                        ),
                     )
                 )
 
