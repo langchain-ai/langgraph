@@ -1,4 +1,5 @@
 import collections.abc
+import copy
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
@@ -48,11 +49,17 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     ```
     """
 
-    __slots__ = ("value", "operator")
+    __slots__ = ("value", "operator", "default")
 
-    def __init__(self, typ: type[Value], operator: Callable[[Value, Value], Value]):
+    def __init__(
+        self,
+        typ: type[Value],
+        operator: Callable[[Value, Value], Value],
+        default: Any = MISSING,
+    ):
         super().__init__(typ)
         self.operator = operator
+        self.default = default
         # special forms from typing or collections.abc are not instantiable
         # so we need to replace them with their concrete counterparts
         typ = _strip_extras(typ)
@@ -62,17 +69,23 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
             typ = set
         if typ in (collections.abc.Mapping, collections.abc.MutableMapping):
             typ = dict
-        try:
-            self.value = typ()
-        except Exception:
-            self.value = MISSING
+        if default is not MISSING:
+            self.value = copy.deepcopy(default)
+        else:
+            try:
+                self.value = typ()
+            except Exception:
+                self.value = MISSING
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, BinaryOperatorAggregate) and (
-            value.operator is self.operator
-            if value.operator.__name__ != "<lambda>"
-            and self.operator.__name__ != "<lambda>"
-            else True
+            (
+                value.operator is self.operator
+                if value.operator.__name__ != "<lambda>"
+                and self.operator.__name__ != "<lambda>"
+                else True
+            )
+            and value.default == self.default
         )
 
     @property
@@ -87,13 +100,13 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def copy(self) -> Self:
         """Return a copy of the channel."""
-        empty = self.__class__(self.typ, self.operator)
+        empty = self.__class__(self.typ, self.operator, self.default)
         empty.key = self.key
         empty.value = self.value
         return empty
 
     def from_checkpoint(self, checkpoint: Value) -> Self:
-        empty = self.__class__(self.typ, self.operator)
+        empty = self.__class__(self.typ, self.operator, self.default)
         empty.key = self.key
         if checkpoint is not MISSING:
             empty.value = checkpoint
