@@ -23,6 +23,7 @@ from typing import (
     Protocol,
     TypeGuard,
     cast,
+    get_type_hints,
 )
 
 from langchain_core.runnables.base import (
@@ -60,6 +61,61 @@ try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
 except ImportError:
     _StreamingCallbackHandler = None  # type: ignore
+
+
+def _filter_state_for_tracing(state: Any, metadata: dict[str, Any] | None) -> Any:
+    """Filter state based on tracing annotations before sending to LangSmith.
+
+    Args:
+        state: The state to filter (can be dict or other types).
+        metadata: Metadata that may contain langgraph_step to determine if root.
+
+    Returns:
+        Filtered state with masked values where appropriate.
+    """
+    # Only filter dict-like state objects
+    if not isinstance(state, dict):
+        return state
+
+    # Determine if this is a root run (step 0) or a child node run
+    is_root = metadata is None or metadata.get("langgraph_step", 1) == 0
+
+    # Try to get type hints from the state's class if it has annotations
+    type_hints = {}
+    if hasattr(state, "__class__"):
+        try:
+            type_hints = get_type_hints(state.__class__, include_extras=True)
+        except Exception:
+            # If we can't get type hints, continue without filtering
+            pass
+
+    # If no type hints found, return state as-is
+    if not type_hints:
+        return state
+
+    # Import tracing module to check for annotations
+    try:
+        from langgraph.tracing import get_trace_annotation
+    except ImportError:
+        return state
+
+    # Filter state based on annotations
+    filtered = {}
+    for key, value in state.items():
+        if key not in type_hints:
+            # No type hint, include as-is
+            filtered[key] = value
+            continue
+
+        annotation = get_trace_annotation(type_hints[key])
+        if annotation is None:
+            # No tracing annotation, include as-is
+            filtered[key] = value
+        else:
+            # Apply tracing annotation
+            filtered[key] = annotation.get_trace_value(value, is_root)
+
+    return filtered
 
 
 def _set_config_context(
@@ -373,9 +429,12 @@ class RunnableCallable(Runnable):
 
         if self.trace:
             callback_manager = get_callback_manager_for_config(config, self.tags)
+            # Filter input for tracing based on annotations
+            metadata = config.get("metadata")
+            filtered_input = _filter_state_for_tracing(input, metadata)
             run_manager = callback_manager.on_chain_start(
                 None,
-                input,
+                filtered_input,
                 name=config.get("run_name") or self.get_name(),
                 run_id=config.pop("run_id", None),
             )
@@ -395,7 +454,9 @@ class RunnableCallable(Runnable):
                 run_manager.on_chain_error(e)
                 raise
             else:
-                run_manager.on_chain_end(ret)
+                # Filter output for tracing based on annotations
+                filtered_ret = _filter_state_for_tracing(ret, metadata)
+                run_manager.on_chain_end(filtered_ret)
         else:
             ret = self.func(*args, **kwargs)
         if self.recurse and isinstance(ret, Runnable):
@@ -444,9 +505,12 @@ class RunnableCallable(Runnable):
 
         if self.trace:
             callback_manager = get_async_callback_manager_for_config(config, self.tags)
+            # Filter input for tracing based on annotations
+            metadata = config.get("metadata")
+            filtered_input = _filter_state_for_tracing(input, metadata)
             run_manager = await callback_manager.on_chain_start(
                 None,
-                input,
+                filtered_input,
                 name=config.get("run_name") or self.name,
                 run_id=config.pop("run_id", None),
             )
@@ -468,7 +532,9 @@ class RunnableCallable(Runnable):
                 await run_manager.on_chain_error(e)
                 raise
             else:
-                await run_manager.on_chain_end(ret)
+                # Filter output for tracing based on annotations
+                filtered_ret = _filter_state_for_tracing(ret, metadata)
+                await run_manager.on_chain_end(filtered_ret)
         else:
             ret = await self.afunc(*args, **kwargs)
         if self.recurse and isinstance(ret, Runnable):
