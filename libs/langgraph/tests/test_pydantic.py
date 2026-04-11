@@ -6,12 +6,14 @@ import re
 import sys
 import uuid
 from enum import Enum
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
+import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import (
     BaseModel,
     ByteSize,
+    ConfigDict,
     Field,
     SecretStr,
     confloat,
@@ -360,3 +362,332 @@ def test_interrupt_functional_pydantic(sync_checkpointer: BaseCheckpointSaver) -
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar", "b": "bar"}
     assert called_count == 1
+
+
+def test_pydantic_aliased_fields():
+    """Test that Pydantic state with aliased fields works correctly.
+
+    When using Field(alias=...), the graph should accept input using either
+    the alias or the field name.
+
+    This addresses GitHub issue #2555.
+    """
+
+    class State(BaseModel):
+        foo: str = Field(alias="bar")
+        other: str = Field(default="default")
+
+    def node_fn(state: State) -> dict:
+        # The state should have the correct value
+        assert state.foo == "hello"
+        assert state.other == "default"
+        return {"other": "updated"}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias key
+    result = graph.invoke({"bar": "hello"})
+    assert result["foo"] == "hello"
+    assert result["other"] == "updated"
+
+
+def test_pydantic_multiple_aliased_fields():
+    """Test multiple aliased fields work correctly."""
+
+    class State(BaseModel):
+        first_name: str = Field(alias="firstName")
+        last_name: str = Field(alias="lastName")
+        age: int = Field(alias="userAge")
+
+    def node_fn(state: State) -> dict:
+        assert state.first_name == "John"
+        assert state.last_name == "Doe"
+        assert state.age == 30
+        return {"age": 31}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias keys (camelCase)
+    result = graph.invoke({"firstName": "John", "lastName": "Doe", "userAge": 30})
+    assert result["first_name"] == "John"
+    assert result["last_name"] == "Doe"
+    assert result["age"] == 31
+
+
+def test_pydantic_mixed_alias_and_fieldname():
+    """Test mixing aliased and non-aliased fields."""
+
+    class State(BaseModel):
+        aliased_field: str = Field(alias="aliasedField")
+        normal_field: str
+
+    def node_fn(state: State) -> dict:
+        assert state.aliased_field == "alias_value"
+        assert state.normal_field == "normal_value"
+        return {}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias for aliased field and field name for normal field
+    result = graph.invoke(
+        {"aliasedField": "alias_value", "normal_field": "normal_value"}
+    )
+    assert result["aliased_field"] == "alias_value"
+    assert result["normal_field"] == "normal_value"
+
+
+def test_pydantic_alias_with_reducer():
+    """Test aliased fields work with reducers."""
+
+    def concat_reducer(a: list[str], b: str | list[str]) -> list[str]:
+        if isinstance(b, list):
+            return a + b
+        return a + [b]
+
+    class State(BaseModel):
+        messages: Annotated[list[str], concat_reducer] = Field(
+            default_factory=list, alias="msgs"
+        )
+
+    def node_fn(state: State) -> dict:
+        return {"messages": "processed"}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias key and list initial value
+    result = graph.invoke({"msgs": ["hello"]})
+    assert result["messages"] == ["hello", "processed"]
+
+
+def test_pydantic_aliased_fields_multinode_with_checkpointer():
+    """Integration test: aliased fields with multiple nodes and checkpointing."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    class State(BaseModel):
+        user_name: str = Field(alias="userName")
+        step_count: int = Field(default=0, alias="stepCount")
+        processed_by: Annotated[list[str], lambda a, b: a + [b]] = Field(
+            default_factory=list, alias="processedBy"
+        )
+
+    def node_a(state: State) -> dict:
+        assert state.user_name == "Alice"
+        return {"step_count": state.step_count + 1, "processed_by": "node_a"}
+
+    def node_b(state: State) -> dict:
+        assert state.user_name == "Alice"
+        assert state.step_count == 1
+        assert "node_a" in state.processed_by
+        return {"step_count": state.step_count + 1, "processed_by": "node_b"}
+
+    def node_c(state: State) -> dict:
+        assert state.step_count == 2
+        assert state.processed_by == ["node_a", "node_b"]
+        return {"step_count": state.step_count + 1, "processed_by": "node_c"}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_node("node_c", node_c)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_b", "node_c")
+    builder.add_edge("node_c", END)
+
+    # Test without checkpointer - full run
+    graph = builder.compile()
+    result = graph.invoke({"userName": "Alice"})
+    assert result["user_name"] == "Alice"
+    assert result["step_count"] == 3
+    assert result["processed_by"] == ["node_a", "node_b", "node_c"]
+
+    # Test with checkpointer and interrupt
+    checkpointer = InMemorySaver()
+    graph_with_cp = builder.compile(
+        checkpointer=checkpointer, interrupt_after=["node_a"]
+    )
+
+    config = {"configurable": {"thread_id": "test-1"}}
+
+    # First invocation - should stop after node_a
+    result1 = graph_with_cp.invoke({"userName": "Alice"}, config)
+    assert result1["step_count"] == 1
+    assert result1["processed_by"] == ["node_a"]
+
+    # Check state
+    state = graph_with_cp.get_state(config)
+    assert state.next == ("node_b",)
+
+    # Resume - should complete
+    result2 = graph_with_cp.invoke(None, config)
+    assert result2["step_count"] == 3
+    assert result2["processed_by"] == ["node_a", "node_b", "node_c"]
+
+
+@pytest.mark.anyio
+async def test_pydantic_aliased_fields_async():
+    """Integration test: aliased fields with async graph."""
+
+    class State(BaseModel):
+        query: str = Field(alias="q")
+        result: str = Field(default="", alias="res")
+
+    async def process(state: State) -> dict:
+        assert state.query == "hello"
+        return {"result": f"processed: {state.query}"}
+
+    builder = StateGraph(State)
+    builder.add_node("process", process)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test async invoke with alias
+    result = await graph.ainvoke({"q": "hello"})
+    assert result["query"] == "hello"
+    assert result["result"] == "processed: hello"
+
+
+def test_pydantic_aliased_channel_naming_wire_format_integration() -> None:
+    """Integration test: alias channel naming keeps wire-format keys consistent."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    class Payload(BaseModel):
+        model_config = ConfigDict(serialize_by_alias=True)
+        foo_zero: str = Field(alias="fooZero")
+
+    class State(BaseModel):
+        model_config = ConfigDict(serialize_by_alias=True)
+        channel_zero: str = Field(alias="channelZero")
+        channel_one: Payload = Field(alias="channelOne")
+        step_count: int = Field(default=0, alias="stepCount")
+
+    def node_a(state: State) -> dict[str, Any]:
+        return {"step_count": state.step_count + 1}
+
+    def node_b(state: State) -> dict[str, Any]:
+        return {"step_count": state.step_count + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_b", END)
+
+    graph = builder.compile(
+        checkpointer=InMemorySaver(),
+        interrupt_after=["node_a"],
+        channel_naming="alias",
+    )
+
+    config = {"configurable": {"thread_id": "alias-wire-format"}}
+    first = graph.invoke(
+        {
+            "channelZero": "Alice",
+            "channelOne": {"fooZero": "payload"},
+        },
+        config,
+    )
+    assert first["channelZero"] == "Alice"
+    assert first["stepCount"] == 1
+    assert "step_count" not in first
+
+    snapshot = graph.get_state(config)
+    assert snapshot.values["channelZero"] == "Alice"
+    assert snapshot.values["stepCount"] == 1
+    assert "step_count" not in snapshot.values
+
+    resumed_values = list(graph.stream(None, config, stream_mode="values"))
+    assert resumed_values[-1]["stepCount"] == 2
+    assert "step_count" not in resumed_values[-1]
+
+    updates = list(
+        graph.stream(
+            {
+                "channelZero": "Bob",
+                "channelOne": {"fooZero": "payload2"},
+            },
+            {"configurable": {"thread_id": "alias-wire-format-updates"}},
+            stream_mode="updates",
+        )
+    )
+    assert updates[0]["node_a"]["stepCount"] == 1
+    assert "step_count" not in updates[0]["node_a"]
+
+
+def test_pydantic_aliased_debug_stream_and_snapshot_integration() -> None:
+    """Integration test: debug stream + snapshots use alias keys with alias naming."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    class State(BaseModel):
+        channel_zero: str = Field(alias="channelZero")
+        step_count: int = Field(default=0, alias="stepCount")
+
+    def node_a(state: State) -> dict[str, Any]:
+        return {"step_count": state.step_count + 1}
+
+    def node_b(state: State) -> dict[str, Any]:
+        return {"step_count": state.step_count + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_b", END)
+
+    graph = builder.compile(
+        checkpointer=InMemorySaver(),
+        channel_naming="alias",
+    )
+
+    config = {"configurable": {"thread_id": "alias-debug-snapshots"}}
+    saw_checkpoint_payload = False
+    saw_step_alias_in_checkpoint = False
+    saw_inline_snapshot = False
+
+    for mode, event in graph.stream(
+        {"channelZero": "streamed"}, config, stream_mode=["debug"]
+    ):
+        assert mode == "debug"
+        if event["type"] != "checkpoint":
+            continue
+        values = event["payload"]["values"]
+        if not values:
+            continue
+        saw_checkpoint_payload = True
+        assert "channelZero" in values
+        assert "channel_zero" not in values
+        if "stepCount" in values:
+            saw_step_alias_in_checkpoint = True
+        inline_snapshot = graph.get_state(config)
+        if inline_snapshot.values:
+            saw_inline_snapshot = True
+            assert "channelZero" in inline_snapshot.values
+            assert "channel_zero" not in inline_snapshot.values
+
+    assert saw_checkpoint_payload
+    assert saw_step_alias_in_checkpoint
+    assert saw_inline_snapshot
+
+    history = list(graph.get_state_history(config))
+    assert history
+    assert any("channelZero" in snap.values for snap in history if snap.values)
+    assert all("channel_zero" not in snap.values for snap in history if snap.values)
