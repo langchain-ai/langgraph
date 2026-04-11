@@ -28,6 +28,12 @@ dependencies = [
     "langchain-core>=1.0.0",
 ]
 
+[project.optional-dependencies]
+dns-aid = [
+    "dns-aid>=0.1.0; python_version>='3.11'",
+    "httpx>=0.24.0",
+]
+
 [project.urls]
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/prebuilt"
 Twitter = "https://x.com/LangChain"
