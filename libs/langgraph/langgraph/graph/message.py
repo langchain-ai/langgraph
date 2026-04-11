@@ -321,7 +321,34 @@ def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
         warnings.warn(msg)
         return list(messages)
     else:
-        return convert_to_messages(convert_to_openai_messages(messages))
+        # Save additional_kwargs keyed by message ID before the round-trip,
+        # since convert_to_openai_messages drops non-standard fields.
+        saved_kwargs: dict[str, dict] = {}
+        for message in messages:
+            if message.id and message.additional_kwargs:
+                saved_kwargs[message.id] = message.additional_kwargs
+
+        # include_id was added in langchain-core 0.3.78; fall back for
+        # older versions that don't support it yet.
+        try:
+            openai_msgs = convert_to_openai_messages(messages, include_id=True)
+        except TypeError:
+            openai_msgs = convert_to_openai_messages(messages)
+
+        formatted = convert_to_messages(openai_msgs)
+
+        # Restore additional_kwargs that were lost during conversion.
+        for message in formatted:
+            if message.id and message.id in saved_kwargs:
+                lost_kwargs = {
+                    field_name: field_value
+                    for field_name, field_value in saved_kwargs[message.id].items()
+                    if field_name not in message.additional_kwargs
+                }
+                if lost_kwargs:
+                    message.additional_kwargs.update(lost_kwargs)
+
+        return formatted
 
 
 def push_message(
