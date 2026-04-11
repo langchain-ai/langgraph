@@ -57,7 +57,7 @@ class Topic(
         """Return a copy of the channel."""
         empty = self.__class__(self.typ, self.accumulate)
         empty.key = self.key
-        empty.values = self.values.copy()
+        empty.values = self.values.copy() if self.values is not None else []
         return empty
 
     def checkpoint(self) -> list[Value]:
@@ -66,7 +66,7 @@ class Topic(
     def from_checkpoint(self, checkpoint: list[Value]) -> Self:
         empty = self.__class__(self.typ, self.accumulate)
         empty.key = self.key
-        if checkpoint is not MISSING:
+        if checkpoint is not MISSING and checkpoint is not None:
             if isinstance(checkpoint, tuple):
                 # backwards compatibility
                 empty.values = checkpoint[1]
