@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from langgraph.checkpoint.conformance.capabilities import (
     Capability,
     DetectedCapabilities,
 )
-from langgraph.checkpoint.conformance.initializer import RegisteredCheckpointer
+from langgraph.checkpoint.conformance.initializer import (
+    RegisteredCheckpointer,
+    _noop_lifespan,
+)
 from langgraph.checkpoint.conformance.report import (
     CapabilityReport,
     CapabilityResult,
@@ -97,9 +102,25 @@ async def validate(
                     if progress and progress.on_capability_start:
                         progress.on_capability_start(cap.value, True)
 
+                    runner_kwargs: dict[str, Any] = {
+                        "on_test_result": progress.on_test_result if progress else None,
+                    }
+                    # Pass factory for restart-safety tests only when the
+                    # checkpointer persists state externally (indicated by a
+                    # custom lifespan, e.g. a database).  In-memory savers use
+                    # the default noop lifespan; their factory returns a fresh
+                    # empty instance each time, so the restart branch would
+                    # produce false failures.
+                    if cap == Capability.PUT_WRITES:
+                        has_persistent_storage = (
+                            registered.lifespan is not _noop_lifespan
+                        )
+                        runner_kwargs["saver_factory"] = (
+                            registered.factory if has_persistent_storage else None
+                        )
                     passed, failed, failures = await runner(
                         saver,
-                        on_test_result=progress.on_test_result if progress else None,
+                        **runner_kwargs,
                     )
 
                     if progress and progress.on_capability_end:
