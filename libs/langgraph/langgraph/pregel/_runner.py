@@ -187,6 +187,8 @@ class PregelRunner:
                     fut.set_exception(exc)
                     futures.done.add(fut)
                 elif reraise:
+                    # yield control so caller can drain stream (e.g. task_result events)
+                    yield
                     if tb := exc.__traceback__:
                         while tb.tb_next is not None and any(
                             tb.tb_frame.f_code.co_filename.endswith(name)
@@ -327,6 +329,8 @@ class PregelRunner:
                     fut.set_exception(exc)
                     futures.done.add(fut)
                 elif reraise:
+                    # yield control so caller can drain stream (e.g. task_result events)
+                    yield
                     if tb := exc.__traceback__:
                         while tb.tb_next is not None and any(
                             tb.tb_frame.f_code.co_filename.endswith(name)
