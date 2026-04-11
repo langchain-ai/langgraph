@@ -1041,17 +1041,19 @@ def test_pending_writes_resume(
             "step": 0,
             "source": "loop",
         },
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": (
-                    checkpoints[2].config["configurable"]["checkpoint_id"]
-                ),
+        parent_config=(
+            {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": (
+                        checkpoints[2].config["configurable"]["checkpoint_id"]
+                    ),
+                }
             }
-        }
-        if durability != "exit"
-        else None,
+            if durability != "exit"
+            else None
+        ),
         pending_writes=(
             UnsortedSequence(
                 (AnyStr(), "value", 2),
@@ -2232,9 +2234,11 @@ def test_in_one_fan_out_state_graph_defer_node(
                     "query": "analyzed: query: what is weather in sf",
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                 },
-                "triggers": ("branch:to:qa", "join:retriever_one+retriever_two:qa")
-                if use_waiting_edge
-                else ("branch:to:qa",),
+                "triggers": (
+                    ("branch:to:qa", "join:retriever_one+retriever_two:qa")
+                    if use_waiting_edge
+                    else ("branch:to:qa",)
+                ),
             },
         },
         {
@@ -2853,24 +2857,32 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple(
     }
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
-        {
-            "rewrite_query": {"query": "query: what is weather in sf"},
-            "__metadata__": {"cached": True},
-        }
-        if with_cache
-        else {"rewrite_query": {"query": "query: what is weather in sf"}},
+        (
+            {
+                "rewrite_query": {"query": "query: what is weather in sf"},
+                "__metadata__": {"cached": True},
+            }
+            if with_cache
+            else {"rewrite_query": {"query": "query: what is weather in sf"}}
+        ),
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"decider": None},
-        {
-            "rewrite_query": {"query": "query: analyzed: query: what is weather in sf"},
-            "__metadata__": {"cached": True},
-        }
-        if with_cache
-        else {
-            "rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}
-        },
+        (
+            {
+                "rewrite_query": {
+                    "query": "query: analyzed: query: what is weather in sf"
+                },
+                "__metadata__": {"cached": True},
+            }
+            if with_cache
+            else {
+                "rewrite_query": {
+                    "query": "query: analyzed: query: what is weather in sf"
+                }
+            }
+        ),
         {
             "analyzer_one": {
                 "query": "analyzed: query: analyzed: query: what is weather in sf"
@@ -4856,9 +4868,11 @@ def test_interrupt_multiple(
         event
         for event in graph.stream(
             Command(
-                resume="answer 1"
-                if resume_style == "null"
-                else {result[0]["__interrupt__"][0].id: "answer 1"},
+                resume=(
+                    "answer 1"
+                    if resume_style == "null"
+                    else {result[0]["__interrupt__"][0].id: "answer 1"}
+                ),
                 update={"my_key": " foofoo "},
             ),
             thread1,
@@ -4879,9 +4893,11 @@ def test_interrupt_multiple(
         event
         for event in graph.stream(
             Command(
-                resume="answer 2"
-                if resume_style == "null"
-                else {result[0]["__interrupt__"][0].id: "answer 2"}
+                resume=(
+                    "answer 2"
+                    if resume_style == "null"
+                    else {result[0]["__interrupt__"][0].id: "answer 2"}
+                )
             ),
             thread1,
             stream_mode="values",
@@ -5932,9 +5948,9 @@ def test_no_redundant_put_writes_for_cached_task(
     # Should be exactly 2: the ask task and the entrypoint task.
     # If 3, the cached setup task is being redundantly re-committed.
     non_null = set(tid for tid in put_writes_task_ids if not tid.startswith("00000000"))
-    assert len(non_null) == 2, (
-        f"Expected 2 task IDs in put_writes (ask + entrypoint), got {len(non_null)}"
-    )
+    assert (
+        len(non_null) == 2
+    ), f"Expected 2 task IDs in put_writes (ask + entrypoint), got {len(non_null)}"
 
 
 def test_node_before_interrupt_resume_graph_api(
@@ -6532,6 +6548,81 @@ def test_multiple_subgraphs_functional(sync_checkpointer: BaseCheckpointSaver) -
 
     config = {"configurable": {"thread_id": "2"}}
     assert parent_call_multiple_subgraphs.invoke([2, 3], config) == [5, 6]
+
+
+def test_get_subgraphs_namespace_common_prefix() -> None:
+    """Regression test for #6924: get_subgraphs must use exact segment matching,
+    not prefix matching, so sibling nodes like 'common_prefix' and
+    'common_prefix_2' are not confused."""
+
+    class State(TypedDict):
+        do_not_care: str
+
+    def generic_node(state: State) -> State:
+        return state
+
+    # Grandchild graph
+    grandchild_graph_builder = StateGraph(State)
+    grandchild_graph_builder.add_node("grandchild", generic_node)
+    grandchild_graph_builder.set_entry_point("grandchild")
+    grandchild_graph_builder.add_edge("grandchild", END)
+    grandchild_graph = grandchild_graph_builder.compile()
+
+    # Child graph containing the grandchild graph
+    child_graph_builder = StateGraph(State)
+    child_graph_builder.add_node("child_subgraph", grandchild_graph)
+    child_graph_builder.set_entry_point("child_subgraph")
+    child_graph_builder.add_edge("child_subgraph", END)
+    child_graph = child_graph_builder.compile()
+
+    # Parent graph with two sibling subgraphs sharing a prefix
+    parent_graph_builder = StateGraph(State)
+    parent_graph_builder.add_node("common_prefix", child_graph)
+    parent_graph_builder.add_node("common_prefix_2", child_graph)
+    parent_graph_builder.set_entry_point("common_prefix")
+    parent_graph_builder.add_edge("common_prefix", "common_prefix_2")
+    parent_graph_builder.add_edge("common_prefix_2", END)
+    parent_graph = parent_graph_builder.compile()
+
+    # --- Core regression case (issue #6924) ---
+    # Querying a deep namespace under the *second* prefix-sharing node
+    results = list(
+        parent_graph.get_subgraphs(
+            namespace="common_prefix_2|child_subgraph", recurse=True
+        )
+    )
+    assert len(results) == 1
+    assert results[0][0] == "common_prefix_2|child_subgraph"
+
+    # --- Exact single-segment match returns only the targeted node ---
+    results = list(parent_graph.get_subgraphs(namespace="common_prefix"))
+    assert len(results) == 1
+    assert results[0][0] == "common_prefix"
+
+    results = list(parent_graph.get_subgraphs(namespace="common_prefix_2"))
+    assert len(results) == 1
+    assert results[0][0] == "common_prefix_2"
+
+    # --- namespace=None lists all immediate subgraphs ---
+    results = list(parent_graph.get_subgraphs())
+    assert {name for name, _ in results} == {"common_prefix", "common_prefix_2"}
+
+    # --- namespace=None with recurse lists the full tree ---
+    results = list(parent_graph.get_subgraphs(recurse=True))
+    names = {name for name, _ in results}
+    assert len(names) == 4
+    assert "common_prefix" in names
+    assert "common_prefix_2" in names
+    assert "common_prefix|child_subgraph" in names
+    assert "common_prefix_2|child_subgraph" in names
+
+    # --- recurse=False with a deep namespace returns nothing ---
+    results = list(
+        parent_graph.get_subgraphs(
+            namespace="common_prefix_2|child_subgraph", recurse=False
+        )
+    )
+    assert len(results) == 0
 
 
 def test_multiple_subgraphs_mixed_entrypoint(
