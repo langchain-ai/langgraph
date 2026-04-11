@@ -82,6 +82,9 @@ MIGRATIONS = [
     CREATE INDEX CONCURRENTLY IF NOT EXISTS checkpoint_writes_thread_id_idx ON checkpoint_writes(thread_id);
     """,
     """ALTER TABLE checkpoint_writes ADD COLUMN IF NOT EXISTS task_path TEXT NOT NULL DEFAULT '';""",
+    """CREATE TABLE IF NOT EXISTS checkpoint_deleted_threads (
+    thread_id TEXT PRIMARY KEY
+);""",
 ]
 
 SELECT_SQL = """
@@ -152,6 +155,18 @@ INSERT_CHECKPOINT_WRITES_SQL = """
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
 """
 
+INSERT_CHECKPOINT_DELETED_THREAD_SQL = """
+    INSERT INTO checkpoint_deleted_threads (thread_id)
+    VALUES (%s)
+    ON CONFLICT (thread_id) DO NOTHING
+"""
+
+CHECK_CHECKPOINT_DELETED_THREAD_SQL = """
+    SELECT 1
+    FROM checkpoint_deleted_threads
+    WHERE thread_id = %s
+"""
+
 
 class BasePostgresSaver(BaseCheckpointSaver[str]):
     SELECT_SQL = SELECT_SQL
@@ -161,6 +176,8 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
     UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL
     UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
     INSERT_CHECKPOINT_WRITES_SQL = INSERT_CHECKPOINT_WRITES_SQL
+    INSERT_CHECKPOINT_DELETED_THREAD_SQL = INSERT_CHECKPOINT_DELETED_THREAD_SQL
+    CHECK_CHECKPOINT_DELETED_THREAD_SQL = CHECK_CHECKPOINT_DELETED_THREAD_SQL
 
     supports_pipeline: bool
 
