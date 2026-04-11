@@ -68,6 +68,23 @@ class JsonPlusSerializer(SerializerProtocol):
         ) = _lg_msgpack._SENTINEL,
         __unpack_ext_hook__: Callable[[int, bytes], Any] | None = None,
     ) -> None:
+        """Initialize the serializer.
+
+        Args:
+            pickle_fallback: If `True`, fall back to pickle for objects that
+                cannot be serialized via msgpack.
+            allowed_json_modules: Modules allowed for JSON constructor-based
+                deserialization. Pass a list of `(module, name)` tuples to
+                allowlist specific symbols, `True` to allow all, or `None`
+                to block all.
+            allowed_msgpack_modules: Modules allowed for msgpack ext-type
+                deserialization. Same format as `allowed_json_modules`.
+                Defaults to allowing all when `LANGGRAPH_STRICT_MSGPACK` is
+                not set, or blocking unregistered types when it is.
+            __unpack_ext_hook__: Custom ext hook for msgpack deserialization.
+                When provided, overrides the default allowlist-based hook.
+                Intended for internal use.
+        """
         if allowed_msgpack_modules is _lg_msgpack._SENTINEL:
             if _lg_msgpack.STRICT_MSGPACK_ENABLED:
                 allowed_msgpack_modules = None

@@ -11,6 +11,12 @@ class EncryptedSerializer(SerializerProtocol):
     def __init__(
         self, cipher: CipherProtocol, serde: SerializerProtocol = JsonPlusSerializer()
     ) -> None:
+        """Initialize the encrypted serializer.
+
+        Args:
+            cipher: The encryption protocol to use.
+            serde: The base serializer for object conversion. Defaults to `JsonPlusSerializer`.
+        """
         self.cipher = cipher
         self.serde = serde
 
@@ -24,6 +30,18 @@ class EncryptedSerializer(SerializerProtocol):
         return f"{typ}+{ciphername}", ciphertext
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
+        """Decrypt and deserialize an object from a `(type, bytes)` tuple.
+
+        If the type string does not contain a cipher indicator (no `+`),
+        the data is passed directly to the base serializer without decryption.
+
+        Args:
+            data: A `(type, bytes)` tuple, where the type may include a cipher
+                suffix (e.g. `"msgpack+aes"`).
+
+        Returns:
+            The deserialized object.
+        """
         enc_cipher, ciphertext = data
         # unencrypted data
         if "+" not in enc_cipher:
