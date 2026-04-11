@@ -1173,6 +1173,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         task = self.tasks.get(task_id)
         if task is None or task.cache_key is None:
             return
+        if writes[0][0] in (INTERRUPT, ERROR):
+            # only cache successful tasks
+            return
         self.submit(
             self.cache.set,
             {

@@ -5802,6 +5802,46 @@ def test_multiple_interrupts_functional_cache(
     assert counter == 6
 
 
+def test_sync_cache_does_not_store_error_writes(
+    sync_checkpointer: BaseCheckpointSaver, cache: BaseCache
+) -> None:
+    """Regression: SyncPregelLoop.put_writes must not cache ERROR writes.
+
+    AsyncPregelLoop guards against caching ERROR/INTERRUPT writes; the sync
+    path had the same guard missing, causing failed tasks to be replayed from
+    cache on subsequent invocations.
+    """
+    call_count = 0
+
+    @task(cache_policy=CachePolicy())
+    def failing_task(x: int) -> int:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise ValueError("first call fails")
+        return x * 2
+
+    @entrypoint(checkpointer=sync_checkpointer, cache=cache)
+    def graph(state: dict) -> dict:
+        return {"result": failing_task(state["x"]).result()}
+
+    configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+    # First invocation — task raises; should NOT be cached.
+    with pytest.raises(ValueError, match="first call fails"):
+        graph.invoke({"x": 5}, configurable)
+    assert call_count == 1
+
+    # Second invocation — if the error were cached, the task would not be
+    # re-executed and call_count would stay at 1. With the fix, the task runs
+    # again and succeeds.
+    result = graph.invoke({"x": 5}, configurable)
+    assert result == {"result": 10}
+    assert call_count == 2, (
+        "Task was not re-executed after prior failure — ERROR write was incorrectly cached"
+    )
+
+
 def test_task_before_interrupt_resume(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
