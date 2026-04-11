@@ -381,11 +381,11 @@ class ToolInvocationError(ToolException):
 def _default_handle_tool_errors(e: Exception) -> str:
     """Default error handler for tool errors.
 
-    If the tool is a tool invocation error, return its message.
-    Otherwise, raise the error.
+    If the exception is a `ToolException` (including `ToolInvocationError`),
+    return its string representation. Otherwise, raise the error.
     """
-    if isinstance(e, ToolInvocationError):
-        return e.message
+    if isinstance(e, ToolException):
+        return str(e)
     raise e
 
 
