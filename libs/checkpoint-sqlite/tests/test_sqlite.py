@@ -1,3 +1,5 @@
+import os
+import tempfile
 from typing import Any, cast
 
 import pytest
@@ -127,6 +129,34 @@ class TestSqliteSaver:
             )
             assert len(search_results_7) == 1
             assert search_results_7[0].config["configurable"]["thread_id"] == "thread-2"
+
+    def test_put_writes_is_idempotent_across_restarts(self) -> None:
+        """Replaying the same pending writes after reopening should not duplicate them."""
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file.close()
+        try:
+            with SqliteSaver.from_conn_string(temp_file.name) as saver:
+                stored = saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
+                writes = [("channel1", {"data": "value1"})]
+                task_id = "task-1"
+                saver.put_writes(stored, writes, task_id)
+
+            with SqliteSaver.from_conn_string(temp_file.name) as restarted:
+                restarted.put_writes(stored, writes, task_id)
+
+                checkpoint = restarted.get_tuple(stored)
+                assert checkpoint is not None
+                assert checkpoint.pending_writes == [
+                    ("task-1", "channel1", {"data": "value1"})
+                ]
+
+                listed = list(
+                    restarted.list({"configurable": {"thread_id": "thread-1"}})
+                )
+                assert len(listed) == 1
+                assert listed[0].pending_writes == checkpoint.pending_writes
+        finally:
+            os.unlink(temp_file.name)
 
     def test_search_where(self) -> None:
         # call method / assertions
