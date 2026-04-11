@@ -30,6 +30,7 @@ dependencies = [
     "langgraph-prebuilt>=1.0.9,<1.1.0",
     "xxhash>=3.5.0",
     "pydantic>=2.7.4",
+    "httpx>=0.25.0",
 ]
 
 
