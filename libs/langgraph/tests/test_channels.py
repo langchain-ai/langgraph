@@ -9,6 +9,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph.types import Overwrite
 
 pytestmark = pytest.mark.anyio
 
@@ -88,6 +89,35 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_binop_overwrite_on_missing_channel() -> None:
+    class Uninstantiable:
+        def __init__(self) -> None:
+            raise TypeError("no default constructor")
+
+    def make() -> BinaryOperatorAggregate:
+        ch = BinaryOperatorAggregate(Uninstantiable, operator.add).from_checkpoint(
+            MISSING
+        )
+        assert ch.value is MISSING
+        return ch
+
+    channel = make()
+    channel.update([Overwrite(["x"])])
+    assert channel.get() == ["x"]
+
+    channel = make()
+    with pytest.raises(InvalidUpdateError, match="Can receive only one Overwrite"):
+        channel.update([Overwrite(["x"]), Overwrite(["y"])])
+
+    channel = make()
+    channel.update([Overwrite(["x"]), ["y"]])
+    assert channel.get() == ["x"]
+
+    channel = make()
+    channel.update([{"__overwrite__": ["x"]}])
+    assert channel.get() == ["x"]
 
 
 def test_untracked_value() -> None:
