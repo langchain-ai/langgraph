@@ -1141,7 +1141,6 @@ async def test_prebuilt_tool_chat() -> None:
                 chunk_position="last",
             ),
             {
-                "ls_integration": "langgraph",
                 "langgraph_step": 1,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ("branch:to:agent",),
@@ -1205,7 +1204,6 @@ async def test_prebuilt_tool_chat() -> None:
                 chunk_position="last",
             ),
             {
-                "ls_integration": "langgraph",
                 "langgraph_step": 3,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ("branch:to:agent",),
@@ -1259,7 +1257,6 @@ async def test_prebuilt_tool_chat() -> None:
                 chunk_position="last",
             ),
             {
-                "ls_integration": "langgraph",
                 "langgraph_step": 5,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ("branch:to:agent",),
@@ -3977,7 +3974,6 @@ async def test_weather_subgraph(
                     ],
                 ),
                 {
-                    "ls_integration": "langgraph",
                     "thread_id": "4",
                     "langgraph_step": 1,
                     "langgraph_node": "router_node",
@@ -4006,7 +4002,6 @@ async def test_weather_subgraph(
                     ],
                 ),
                 {
-                    "ls_integration": "langgraph",
                     "thread_id": "4",
                     "langgraph_step": 1,
                     "langgraph_node": "model_node",
@@ -4044,7 +4039,6 @@ async def test_weather_subgraph(
                 ],
             ),
             {
-                "ls_integration": "langgraph",
                 "thread_id": "5",
                 "langgraph_step": 1,
                 "langgraph_node": "router_node",

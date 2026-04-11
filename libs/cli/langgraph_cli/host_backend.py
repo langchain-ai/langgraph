@@ -70,7 +70,25 @@ class HostBackendClient:
                 f"Failed to decode response from {path}: {err}"
             ) from None
 
-    def create_deployment(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def create_deployment(
+        self,
+        name: str,
+        deployment_type: str,
+        source: str,
+        config_path: str | None = None,
+        secrets: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        """Create a deployment."""
+        payload: dict[str, Any] = {
+            "name": name,
+            "source": source,
+            "source_config": {"deployment_type": deployment_type},
+            "source_revision_config": {},
+        }
+        if source == "internal_source" and config_path:
+            payload["source_revision_config"]["langgraph_config_path"] = config_path
+        if secrets is not None:
+            payload["secrets"] = secrets
         return self._request("POST", "/v2/deployments", payload)
 
     def list_deployments(self, name_contains: str = "") -> dict[str, Any]:
@@ -92,6 +110,13 @@ class HostBackendClient:
             f"/v2/deployments/{deployment_id}/push-token",
         )
 
+    def request_upload_url(self, deployment_id: str) -> dict[str, Any]:
+        """Get a signed GCS URL for uploading the source tarball."""
+        return self._request(
+            "POST",
+            f"/v2/deployments/{deployment_id}/upload-url",
+        )
+
     def update_deployment(
         self,
         deployment_id: str,
@@ -99,6 +124,7 @@ class HostBackendClient:
         secrets: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
+            "revision_source": "internal_docker",
             "source_revision_config": {"image_uri": image_uri},
         }
         if secrets is not None:
@@ -108,6 +134,36 @@ class HostBackendClient:
             f"/v2/deployments/{deployment_id}",
             payload,
         )
+
+    def update_deployment_internal_source(
+        self,
+        deployment_id: str,
+        source_tarball_path: str,
+        config_path: str,
+        secrets: list[dict[str, str]] | None = None,
+        install_command: str | None = None,
+        build_command: str | None = None,
+    ) -> dict[str, Any]:
+        """Trigger a remote build revision with the uploaded tarball."""
+        payload: dict[str, Any] = {
+            "revision_source": "internal_source",
+            "source_revision_config": {
+                "source_tarball_path": source_tarball_path,
+                "langgraph_config_path": config_path,
+            },
+        }
+
+        source_config: dict[str, Any] = {}
+        if install_command is not None:
+            source_config["install_command"] = install_command
+        if build_command is not None:
+            source_config["build_command"] = build_command
+        if source_config:
+            payload["source_config"] = source_config
+
+        if secrets is not None:
+            payload["secrets"] = secrets
+        return self._request("PATCH", f"/v2/deployments/{deployment_id}", payload)
 
     def list_revisions(self, deployment_id: str, limit: int = 1) -> dict[str, Any]:
         return self._request(

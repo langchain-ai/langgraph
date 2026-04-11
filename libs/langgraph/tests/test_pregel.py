@@ -1329,20 +1329,22 @@ def test_imp_nested(
     }
 
     thread1 = {"configurable": {"thread_id": "1"}}
-    assert [*graph.stream([0, 1], thread1, durability=durability)] == [
-        {"submapper": "0"},
+    result = [*graph.stream([0, 1], thread1, durability=durability)]
+    # nested tasks run concurrently so output order is non-deterministic
+    assert sorted(result[:-1], key=lambda d: str(d)) == [
         {"mapper": "00"},
-        {"submapper": "1"},
         {"mapper": "11"},
-        {
-            "__interrupt__": (
-                Interrupt(
-                    value="question",
-                    id=AnyStr(),
-                ),
-            )
-        },
+        {"submapper": "0"},
+        {"submapper": "1"},
     ]
+    assert result[-1] == {
+        "__interrupt__": (
+            Interrupt(
+                value="question",
+                id=AnyStr(),
+            ),
+        )
+    }
 
     assert graph.invoke(Command(resume="answer"), thread1, durability=durability) == [
         "00answera",
@@ -6293,7 +6295,7 @@ def test_sync_streaming_with_functional_api() -> None:
     @task()
     def slow() -> dict:
         time.sleep(time_delay)  # Simulate a delay of 10 ms
-        return {"tic": time.time()}
+        return {"tic": time.monotonic()}
 
     @entrypoint()
     def graph(inputs: dict) -> list:
@@ -6306,7 +6308,7 @@ def test_sync_streaming_with_functional_api() -> None:
     for chunk in graph.stream({}):
         if "slow" not in chunk:  # We'll just look at the updates from `slow`
             continue
-        arrival_times.append(time.time())
+        arrival_times.append(time.monotonic())
 
     assert len(arrival_times) == 2
     delta = arrival_times[1] - arrival_times[0]
@@ -6909,7 +6911,6 @@ def test_tags_stream_mode_messages() -> None:
         (
             _AnyIdAIMessageChunk(content="foo", chunk_position="last"),
             {
-                "ls_integration": "langgraph",
                 "langgraph_step": 1,
                 "langgraph_node": "call_model",
                 "langgraph_triggers": ("branch:to:call_model",),
