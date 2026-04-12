@@ -1,0 +1,5 @@
+langchain-suprawall
+langchain-openai
+langchain-core
+langgraph
+python-dotenv
