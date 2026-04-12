@@ -1643,7 +1643,7 @@ def _get_channel(
 def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
-        # Search through all annotated medata to find channel annotations
+        # Search through all annotated metadata to find channel annotations
         for item in meta:
             if isinstance(item, BaseChannel):
                 return item
