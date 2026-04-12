@@ -46,7 +46,7 @@ test = [
     "langgraph-checkpoint-sqlite",
     "langgraph-checkpoint-postgres",
     "syrupy",
-    "psycopg-binary",
+    "psycopg-binary; python_version < '3.14'",
 ]
 lint = [
     "ruff",
