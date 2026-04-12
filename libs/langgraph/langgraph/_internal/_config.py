@@ -272,6 +272,12 @@ def _is_not_empty(value: Any) -> bool:
         return value is not None
 
 
+def _copy_if_copiable(key: str, value: Any) -> Any:
+    if key in COPIABLE_KEYS:
+        return value.copy()  # type: ignore[attr-defined]
+    return value
+
+
 def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
     """Return a config with all keys, merging any provided configs.
 
@@ -291,7 +297,7 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
     if var_config := var_child_runnable_config.get():
         empty.update(
             {
-                k: v.copy() if k in COPIABLE_KEYS else v  # type: ignore[attr-defined]
+                k: _copy_if_copiable(k, v)
                 for k, v in var_config.items()
                 if _is_not_empty(v)
             },
@@ -304,7 +310,7 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                 if k == CONF:
                     empty[k] = cast(dict, v).copy()
                 else:
-                    empty[k] = v  # type: ignore[literal-required]
+                    empty[k] = _copy_if_copiable(k, v)  # type: ignore[literal-required]
         for k, v in config.items():
             if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v

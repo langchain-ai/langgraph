@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import langsmith
 import pytest
+from langchain_core.runnables.config import var_child_runnable_config
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph._internal._config import _is_not_empty, ensure_config
@@ -317,3 +318,200 @@ def test_configurable_metadata():
     metadata = merged["metadata"]
     assert metadata.keys() == expected
     assert metadata["nooverride"] == 18
+
+
+def test_ensure_config_does_not_mutate_explicit_metadata() -> None:
+    metadata = {"existing": "value"}
+    config = {
+        "metadata": metadata,
+        "configurable": {
+            "thread_id": "thread-123",
+            "visible": "propagated",
+            "secret_token": "hidden",
+        },
+    }
+
+    merged = ensure_config(config)
+
+    assert metadata == {"existing": "value"}
+    assert merged["metadata"] == {
+        "existing": "value",
+        "thread_id": "thread-123",
+        "visible": "propagated",
+    }
+    assert merged["metadata"] is not metadata
+
+
+def test_ensure_config_reuses_input_metadata_safely_across_calls() -> None:
+    metadata = {"origin": "caller"}
+    config = {
+        "metadata": metadata,
+        "configurable": {
+            "visible": "first",
+        },
+    }
+
+    first = ensure_config(config)
+    second = ensure_config(config)
+
+    assert metadata == {"origin": "caller"}
+    assert first["metadata"] == {
+        "origin": "caller",
+        "visible": "first",
+    }
+    assert second["metadata"] == {
+        "origin": "caller",
+        "visible": "first",
+    }
+    assert first["metadata"] is not second["metadata"]
+    assert first["metadata"] is not metadata
+    assert second["metadata"] is not metadata
+
+
+def test_ensure_config_does_not_leak_mutations_between_merged_configs() -> None:
+    base_metadata = {"shared": "metadata"}
+    derived_metadata = {"child": "metadata"}
+
+    base = {
+        "metadata": base_metadata,
+        "configurable": {
+            "base_value": "alpha",
+        },
+    }
+    derived = {
+        "metadata": derived_metadata,
+        "configurable": {
+            "derived_value": "beta",
+        },
+    }
+
+    merged = ensure_config(base, derived)
+
+    assert base_metadata == {"shared": "metadata"}
+    assert derived_metadata == {"child": "metadata"}
+    assert merged["metadata"] == {
+        "child": "metadata",
+        "derived_value": "beta",
+    }
+    assert merged["metadata"] is not derived_metadata
+    assert merged["metadata"] is not base_metadata
+
+
+def test_ensure_config_copies_copiable_keys_from_explicit_configs() -> None:
+    tags = ["outer"]
+    metadata = {"owner": "caller"}
+    config = {
+        "tags": tags,
+        "metadata": metadata,
+        "configurable": {
+            "visible": "value",
+        },
+    }
+
+    merged = ensure_config(config)
+    merged["tags"].append("inner")
+    merged["metadata"]["mutated"] = True
+
+    assert tags == ["outer"]
+    assert metadata == {"owner": "caller"}
+    assert merged["tags"] == ["outer", "inner"]
+    assert merged["metadata"] == {
+        "owner": "caller",
+        "visible": "value",
+        "mutated": True,
+    }
+
+
+def test_ensure_config_keeps_var_child_metadata_isolated() -> None:
+    inherited_metadata = {"inherited": "yes"}
+    inherited_tags = ["parent"]
+    inherited_config = {
+        "metadata": inherited_metadata,
+        "tags": inherited_tags,
+        "configurable": {
+            "thread_id": "thread-123",
+            "shared_flag": "on",
+        },
+    }
+
+    token = var_child_runnable_config.set(inherited_config)
+    try:
+        merged = ensure_config(
+            {
+                "configurable": {
+                    "child_value": "present",
+                },
+            },
+        )
+    finally:
+        var_child_runnable_config.reset(token)
+
+    assert inherited_metadata == {"inherited": "yes"}
+    assert inherited_tags == ["parent"]
+    assert merged["metadata"] == {
+        "inherited": "yes",
+        "child_value": "present",
+    }
+    assert merged["metadata"] is not inherited_metadata
+    assert merged["tags"] is not inherited_tags
+    assert merged["tags"] == ["parent"]
+
+
+def test_ensure_config_preserves_chainmap_behavior_without_mutating_inputs() -> None:
+    metadata = {"existing": "value"}
+    config = {
+        "metadata": metadata,
+        "configurable": {
+            "visible": "yes",
+            "another": 2,
+        },
+    }
+
+    merged = ensure_config(config)
+    metadata_view = merged["metadata"]
+
+    assert metadata == {"existing": "value"}
+    assert metadata_view["existing"] == "value"
+    assert metadata_view["visible"] == "yes"
+    assert metadata_view["another"] == 2
+
+    metadata_view["local"] = "override"
+
+    assert metadata == {"existing": "value"}
+    assert metadata_view["local"] == "override"
+
+
+def test_ensure_config_ignores_non_metadata_configurable_values_without_touching_input() -> (
+    None
+):
+    metadata = {"existing": "value"}
+    nested = {"foo": "bar"}
+    config = {
+        "metadata": metadata,
+        "configurable": {
+            "visible": "yes",
+            "nested": nested,
+            "private_secret": "hidden",
+            "__internal": "skip",
+        },
+    }
+
+    merged = ensure_config(config)
+
+    assert metadata == {"existing": "value"}
+    assert nested == {"foo": "bar"}
+    assert merged["metadata"] == {
+        "existing": "value",
+        "visible": "yes",
+    }
+
+
+def test_ensure_config_creates_fresh_metadata_for_empty_inputs() -> None:
+    first = ensure_config({"metadata": {}})
+    second = ensure_config({"metadata": {}})
+
+    first["metadata"]["local"] = "value"
+
+    assert second["metadata"] == {}
+    assert first["metadata"] == {"local": "value"}
+    assert first["metadata"] is not second["metadata"]
