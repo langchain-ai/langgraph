@@ -59,7 +59,7 @@ test = [
     "langgraph-checkpoint-sqlite",
     "langgraph-checkpoint-postgres",
     "langgraph-sdk",
-    "psycopg[binary]",
+    "psycopg[binary]; python_version < '3.14'",
     "uvloop==0.22.1",
     "pyperf",
     "py-spy",
