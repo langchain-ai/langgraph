@@ -1,0 +1,7 @@
+{
+  "dependencies": ["langchain-openai", "langchain-suprawall", "langgraph"],
+  "graphs": {
+    "billing_desk": "./example.py:app"
+  },
+  "env": ".env"
+}

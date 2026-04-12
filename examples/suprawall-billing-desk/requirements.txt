@@ -1,0 +1,4 @@
+langgraph>=0.0.30
+langchain-openai
+langchain-suprawall
+requests
