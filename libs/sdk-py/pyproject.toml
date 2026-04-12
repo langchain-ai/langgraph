@@ -54,7 +54,7 @@ asyncio_mode = "auto"
 default-groups = ['dev']
 
 [tool.uv.sources]
-langgraph = { path = "../langgraph", editable = true }
+langgraph = { workspace = true }
 
 [tool.ruff]
 exclude = ["venv", ".venv", "build", "dist"]
