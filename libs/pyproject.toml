@@ -8,7 +8,6 @@ dependencies = [
   'langgraph-checkpoint',
   'langgraph-checkpoint-postgres',
   'langgraph-checkpoint-sqlite',
-  'langgraph-prebuilt',
   'langgraph-sdk',
   'langgraph-cli'
 ]
