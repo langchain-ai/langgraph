@@ -62,10 +62,10 @@ dev = [
 default-groups = ['dev']
 
 [tool.uv.sources]
-langgraph = { path = "../langgraph", editable = true }
-langgraph-checkpoint = { path = "../checkpoint", editable = true }
-langgraph-checkpoint-sqlite = { path = "../checkpoint-sqlite", editable = true }
-langgraph-checkpoint-postgres = { path = "../checkpoint-postgres", editable = true }
+langgraph = { workspace = true }
+langgraph-checkpoint = { workspace = true }
+langgraph-checkpoint-sqlite = { workspace = true }
+langgraph-checkpoint-postgres = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 include = ["langgraph"]
