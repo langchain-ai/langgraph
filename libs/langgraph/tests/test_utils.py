@@ -1,6 +1,7 @@
 import functools
 import sys
 import uuid
+from unittest.mock import MagicMock
 from collections.abc import Callable
 from typing import (
     Annotated,
@@ -15,6 +16,7 @@ from unittest.mock import patch
 
 import langsmith
 import pytest
+from langchain_core.runnables import RunnableConfig
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph._internal._config import (
@@ -29,6 +31,7 @@ from langgraph._internal._fields import (
 )
 from langgraph._internal._runnable import is_async_callable, is_async_generator
 from langgraph.constants import END
+from langchain_core.tracers import LangChainTracer
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -377,7 +380,8 @@ def test_callback_manager_copies_whitelisted_configurable_ids_to_metadata() -> N
 
 
 def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
-    config = {
+    tracer = LangChainTracer(client=MagicMock())
+    config: RunnableConfig = {
         "configurable": {
             "thread_id": "th-123",
             "checkpoint_id": "ckpt-1",
@@ -387,6 +391,7 @@ def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
             "assistant_id": "asst-789",
             "graph_id": "graph-0",
             "model": "gpt-4o",
+            "thread_id": "th-123",
             "user_id": "uid-1",
             "cron_id": "cron-1",
             "langgraph_auth_user_id": "user-1",
@@ -401,11 +406,16 @@ def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
             "user_id": "from-metadata-user",
             "includeme": "from-metadata",
         },
+        "callbacks": [tracer],
     }
+
     manager = ensure_config(config)
     callback_manager = get_callback_manager_for_config(manager)
-    tracing_metadata = callback_manager._configure_hook.langsmith_extra["metadata"]
-    assert tracing_metadata == {
+    handlers = callback_manager.handlers
+    tracers = [handler for handler in handlers if isinstance(handler, LangChainTracer)]
+    assert len(tracers) == 1
+    tracer = tracers[0]
+    assert tracer.tracing_metadata == {
         "checkpoint_id": "ckpt-1",
         "checkpoint_ns": "ns-1",
         "task_id": "task-1",
@@ -415,4 +425,7 @@ def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
         "model": "gpt-4o",
         "cron_id": "cron-1",
         "andme": 42,
+        "includeme": "hi",
+        "thread_id": "th-123",
+        "user_id": "uid-1",
     }

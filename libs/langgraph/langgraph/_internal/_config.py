@@ -328,12 +328,11 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
 _OMIT = ("key", "token", "secret", "password", "auth")
 
 
-def _exclude_as_metadata(key: str, value: Any, metadata: Mapping[str, Any]) -> bool:
+def _exclude_as_metadata(key: str, value: Any) -> bool:
     key_lower = key.casefold()
     return (
         key.startswith("__")
         or not isinstance(value, (str, int, float, bool))
-        or key in metadata
         or any(substr in key_lower for substr in _OMIT)
     )
 
@@ -345,11 +344,9 @@ def _get_tracing_metadata_defaults(
     configurable = config.get("configurable")
     if not configurable:
         return None
-
-    config_metadata = config.get("metadata") or {}
     metadata: dict[str, Any] = {}
     for key, value in configurable.items():
-        if _exclude_as_metadata(key, value, config_metadata):
+        if _exclude_as_metadata(key, value):
             continue
         metadata[key] = value
     return metadata or None
