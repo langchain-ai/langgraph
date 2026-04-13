@@ -144,7 +144,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             stream_metadata = dict(metadata)
             stream_metadata["langgraph_checkpoint_ns"] = checkpoint_ns
             # Preserve backwards-compatible streamed checkpoint metadata shape.
-            stream_metadata.setdefault("checkpoint_ns", checkpoint_ns)
+            stream_metadata["checkpoint_ns"] = checkpoint_ns
             if tags:
                 if filtered_tags := [t for t in tags if not t.startswith("seq:step")]:
                     stream_metadata["tags"] = filtered_tags
