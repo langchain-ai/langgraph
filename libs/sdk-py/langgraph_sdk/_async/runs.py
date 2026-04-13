@@ -26,6 +26,7 @@ from langgraph_sdk.schema import (
     Durability,
     IfNotExists,
     Input,
+    LangSmithTracing,
     MultitaskStrategy,
     OnCompletionBehavior,
     QueryParamTypes,
@@ -93,6 +94,7 @@ class RunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
@@ -124,6 +126,7 @@ class RunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
@@ -152,6 +155,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         webhook: str | None = None,
         after_seconds: int | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
@@ -180,6 +184,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         webhook: str | None = None,
         after_seconds: int | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
@@ -211,6 +216,7 @@ class RunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
@@ -250,6 +256,8 @@ class RunsClient:
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
+            langsmith_tracing: LangSmith tracing configuration. Allows routing traces
+                to a specific project or associating with a dataset example.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
             on_run_created: Callback when a run is created.
@@ -326,6 +334,7 @@ class RunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
             "durability": durability,
+            "langsmith_tracer": langsmith_tracing,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -371,6 +380,7 @@ class RunsClient:
         on_completion: OnCompletionBehavior | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
@@ -399,6 +409,7 @@ class RunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
@@ -427,6 +438,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         on_completion: OnCompletionBehavior | None = None,
         after_seconds: int | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
@@ -462,6 +474,8 @@ class RunsClient:
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
+            langsmith_tracing: LangSmith tracing configuration. Allows routing traces
+                to a specific project or associating with a dataset example.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
             durability: The durability to use for the run. Values are "sync", "async", or "exit".
@@ -572,6 +586,7 @@ class RunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
             "durability": durability,
+            "langsmith_tracer": langsmith_tracing,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
 
@@ -626,6 +641,7 @@ class RunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
         raise_error: bool = True,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
@@ -651,6 +667,7 @@ class RunsClient:
         on_completion: OnCompletionBehavior | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
         raise_error: bool = True,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
@@ -678,6 +695,7 @@ class RunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
+        langsmith_tracing: LangSmithTracing | None = None,
         raise_error: bool = True,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
@@ -712,6 +730,8 @@ class RunsClient:
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
+            langsmith_tracing: LangSmith tracing configuration. Allows routing traces
+                to a specific project or associating with a dataset example.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
             durability: The durability to use for the run. Values are "sync", "async", or "exit".
@@ -798,6 +818,7 @@ class RunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
             "durability": durability,
+            "langsmith_tracer": langsmith_tracing,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
