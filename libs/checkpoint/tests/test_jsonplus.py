@@ -93,6 +93,19 @@ class MyEnum(Enum):
     BAR = "bar"
 
 
+class StrReconstructable:
+    """Mimics types like bson.ObjectId that round-trip via str()."""
+
+    def __init__(self, value: str = "default") -> None:
+        self.value = value
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, StrReconstructable) and self.value == other.value
+
+
 @dataclasses_json.dataclass_json
 @dataclasses.dataclass
 class Person:
@@ -578,6 +591,32 @@ def test_msgpack_safe_types_no_warning(caplog: pytest.LogCaptureFixture) -> None
             f"Unexpected warning for {type(obj)}"
         )
         assert result is not None
+
+
+def test_serde_str_reconstructable_roundtrip() -> None:
+    """Objects with custom __str__ serialize via the str-fallback and round-trip."""
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[
+            (StrReconstructable.__module__, StrReconstructable.__name__)
+        ]
+    )
+    obj = StrReconstructable("abc123")
+    dumped = serde.dumps_typed(obj)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, StrReconstructable)
+    assert result == obj
+
+
+def test_serde_str_fallback_not_triggered_for_plain_object() -> None:
+    """Objects without custom __str__ still raise TypeError."""
+    serde = JsonPlusSerializer()
+
+    class PlainObj:
+        pass
+
+    with pytest.raises(ormsgpack.MsgpackEncodeError):
+        serde.dumps_typed(PlainObj())
 
 
 def test_msgpack_pydantic_warns_by_default(caplog: pytest.LogCaptureFixture) -> None:
