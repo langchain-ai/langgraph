@@ -335,8 +335,14 @@ async def test_replay_interrupt_stable_across_replays(
         r = await graph.ainvoke(None, before_ask.config)
         results.append(r)
 
-    assert all(r == results[0] for r in results)
-    assert "__interrupt__" in results[0]
+    # Each replay creates a fork with a unique interrupt ID, so we compare
+    # interrupt values and state values rather than full equality.
+    assert all("__interrupt__" in r for r in results)
+    assert all(
+        r["__interrupt__"][0].value == results[0]["__interrupt__"][0].value
+        for r in results
+    )
+    assert all(r["value"] == results[0]["value"] for r in results)
 
 
 @NEEDS_CONTEXTVARS
@@ -2088,13 +2094,15 @@ async def test_replay_creates_branch_preserving_old_checkpoints(
     # -- Post-replay checkpoint history (newest first) --
     post_replay_history = [s async for s in graph.aget_state_history(config)]
     post_summary = _checkpoint_summary(post_replay_history)
-    assert len(post_summary) == 7  # 5 original + 2 new branch checkpoints
+    # 5 original + 1 fork + 2 new branch checkpoints = 8
+    assert len(post_summary) == 8
 
     assert [s["next"] for s in post_summary] == [
-        (),  # new branch tip (C6)
-        ("node_c",),  # new branch (C5)
-        (),  # old branch tip (C4)
-        ("node_c",),  # old (C3)
+        (),  # new branch tip
+        ("node_c",),  # new branch
+        ("node_b",),  # fork from replay point
+        (),  # old branch tip
+        ("node_c",),  # old
         ("node_b",),  # branch point (C2)
         ("node_a",),  # old (C1)
         ("__start__",),  # old (C0)
@@ -2102,6 +2110,7 @@ async def test_replay_creates_branch_preserving_old_checkpoints(
     assert [s["values"] for s in post_summary] == [
         {"value": ["a", "b2", "c"]},  # new branch tip
         {"value": ["a", "b2"]},  # new: node_b re-ran with call_count=2
+        {"value": ["a"]},  # fork from replay point
         {"value": ["a", "b1", "c"]},  # old branch tip preserved
         {"value": ["a", "b1"]},  # old
         {"value": ["a"]},  # branch point
