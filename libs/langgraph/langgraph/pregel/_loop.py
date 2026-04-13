@@ -774,19 +774,16 @@ class PregelLoop:
             # subsequent resumes load the wrong state.
             # Skip for update_state forks (source=update/fork) since they
             # already have their own fork checkpoint.
-            if (
-                is_time_traveling
-                and self.checkpoint_metadata.get("source")
-                not in ("update", "fork")
+            if is_time_traveling and self.checkpoint_metadata.get("source") not in (
+                "update",
+                "fork",
             ):
                 # Clear old INTERRUPT writes from the loaded checkpoint.
                 # The fork will have a new checkpoint_id which changes
                 # task IDs — stale interrupt writes would accumulate and
                 # confuse the multiple-interrupt check in future resumes.
                 self.checkpoint_pending_writes = [
-                    w
-                    for w in self.checkpoint_pending_writes
-                    if w[1] != INTERRUPT
+                    w for w in self.checkpoint_pending_writes if w[1] != INTERRUPT
                 ]
                 self._put_checkpoint({"source": "fork"})
             # produce values output
@@ -838,12 +835,9 @@ class PregelLoop:
             if self.is_replaying:
                 replay_checkpoint_id = self.checkpoint["id"]
                 if (
-                    (
-                        self.checkpoint_metadata.get("source") == "update"
-                        or is_time_traveling
-                    )
-                    and self.prev_checkpoint_config
-                ):
+                    self.checkpoint_metadata.get("source") == "update"
+                    or is_time_traveling
+                ) and self.prev_checkpoint_config:
                     # For forks (source=update) and time-travel forks, use
                     # the parent checkpoint ID since the fork was created
                     # after the subgraph's checkpoints from the original
