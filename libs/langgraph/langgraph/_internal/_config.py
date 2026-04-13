@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import ChainMap
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from os import getenv
 from typing import Any, cast
 
@@ -325,22 +325,33 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
     return empty
 
 
+_OMIT = ("key", "token", "secret", "password", "auth")
+
+
+def _exclude_as_metadata(key: str, value: Any, metadata: Mapping[str, Any]) -> bool:
+    key_lower = key.casefold()
+    return (
+        key.startswith("__")
+        or not isinstance(value, (str, int, float, bool))
+        or key in metadata
+        or any(substr in key_lower for substr in _OMIT)
+    )
+
+
 def _get_tracing_metadata_defaults(
     config: RunnableConfig,
-) -> dict[str, str] | None:
-    """Get tracer-only identity metadata defaults from configurable values."""
+) -> dict[str, Any] | None:
+    """Get tracer-only metadata defaults from configurable values."""
     configurable = config.get("configurable")
     if not configurable:
         return None
 
-    config_metadata = config.get("metadata")
-    metadata: dict[str, str] = {}
-    for key in _PROPAGATE_TO_TRACING_METADATA:
-        if config_metadata is not None and key in config_metadata:
+    config_metadata = config.get("metadata") or {}
+    metadata: dict[str, Any] = {}
+    for key, value in configurable.items():
+        if _exclude_as_metadata(key, value, config_metadata):
             continue
-        value = configurable.get(key)
-        if value:
-            metadata[key] = value
+        metadata[key] = value
     return metadata or None
 
 
@@ -353,13 +364,5 @@ _PROPAGATE_TO_METADATA = frozenset(
         "run_id",
         "assistant_id",
         "graph_id",
-        "cron_id",
-    )
-)
-
-_PROPAGATE_TO_TRACING_METADATA = frozenset(
-    (
-        "user_id",
-        "langgraph_auth_user_id",
     )
 )

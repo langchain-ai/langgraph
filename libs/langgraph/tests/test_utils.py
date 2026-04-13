@@ -334,7 +334,6 @@ def test_configurable_metadata() -> None:
         "assistant_id",
         "thread_id",
         "checkpoint_id",
-        "cron_id",
         "run_id",
         "graph_id",
         "checkpoint_ns",
@@ -374,5 +373,46 @@ def test_callback_manager_copies_whitelisted_configurable_ids_to_metadata() -> N
         "run_id": "run-456",
         "assistant_id": "asst-789",
         "graph_id": "graph-0",
+    }
+
+
+def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
+    config = {
+        "configurable": {
+            "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
+            "langgraph_auth_user_id": "user-1",
+            "includeme": "hi",
+            "andme": 42,
+            "__dontinclude": "bar",
+            "some_api_key": "secret",
+            "custom_setting": {"nested": True},
+        },
+        "metadata": {
+            "thread_id": "from-metadata",
+            "user_id": "from-metadata-user",
+            "includeme": "from-metadata",
+        },
+    }
+    manager = ensure_config(config)
+    callback_manager = get_callback_manager_for_config(manager)
+    tracing_metadata = callback_manager._configure_hook.langsmith_extra["metadata"]
+    assert tracing_metadata == {
+        "checkpoint_id": "ckpt-1",
+        "checkpoint_ns": "ns-1",
+        "task_id": "task-1",
+        "run_id": "run-456",
+        "assistant_id": "asst-789",
+        "graph_id": "graph-0",
+        "model": "gpt-4o",
         "cron_id": "cron-1",
+        "andme": 42,
     }
