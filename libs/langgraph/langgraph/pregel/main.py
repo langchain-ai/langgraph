@@ -3715,15 +3715,14 @@ def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> Non
 def _build_server_info(
     config: RunnableConfig, parent_runtime: Runtime[Any]
 ) -> ServerInfo | None:
-    """Build ServerInfo from config metadata and configurable.
+    """Build ServerInfo from config configurable.
 
-    The server puts assistant_id/graph_id in config metadata and the
+    The server puts assistant_id/graph_id in config configurable and the
     authenticated user dict in configurable["langgraph_auth_user"].
     """
-    metadata = config.get("metadata") or {}
     configurable = config.get(CONF) or {}
-    assistant_id = metadata.get("assistant_id")
-    graph_id = metadata.get("graph_id")
+    assistant_id = configurable.get("assistant_id")
+    graph_id = configurable.get("graph_id")
 
     # Read authenticated user from configurable (set by LangGraph Server).
     # We prefer isinstance(BaseUser) but fall back to hasattr("identity")
