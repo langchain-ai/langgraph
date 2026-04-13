@@ -129,10 +129,7 @@ from langgraph.pregel._checkpoint import (
 )
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
-from langgraph.pregel._loop import (
-    AsyncPregelLoop,
-    SyncPregelLoop,
-)
+from langgraph.pregel._loop import AsyncPregelLoop, SyncPregelLoop
 from langgraph.pregel._messages import StreamMessagesHandler
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
@@ -617,6 +614,9 @@ class Pregel(
 
     input_channels: str | Sequence[str]
 
+    input_alias_map: dict[str, str] | None = None
+    """Mapping of alias -> field_name for Pydantic models with aliased fields."""
+
     step_timeout: float | None = None
     """Maximum time to wait for a step to complete, in seconds."""
 
@@ -660,6 +660,7 @@ class Pregel(
         interrupt_after_nodes: All | Sequence[str] = (),
         interrupt_before_nodes: All | Sequence[str] = (),
         input_channels: str | Sequence[str],
+        input_alias_map: dict[str, str] | None = None,
         step_timeout: float | None = None,
         debug: bool | None = None,
         checkpointer: Checkpointer = None,
@@ -704,6 +705,7 @@ class Pregel(
         self.interrupt_after_nodes = interrupt_after_nodes
         self.interrupt_before_nodes = interrupt_before_nodes
         self.input_channels = input_channels
+        self.input_alias_map = input_alias_map
         self.step_timeout = step_timeout
         self.debug = debug if debug is not None else get_debug()
         self.checkpointer = checkpointer
@@ -1620,7 +1622,11 @@ class Pregel(
                         "Cannot apply multiple updates when updating as input"
                     )
 
-                if input_writes := deque(map_input(self.input_channels, values)):
+                if input_writes := deque(
+                    map_input(
+                        self.input_channels, values, alias_map=self.input_alias_map
+                    )
+                ):
                     apply_writes(
                         checkpoint,
                         channels,
@@ -2063,7 +2069,11 @@ class Pregel(
                         "Cannot apply multiple updates when updating as input"
                     )
 
-                if input_writes := deque(map_input(self.input_channels, values)):
+                if input_writes := deque(
+                    map_input(
+                        self.input_channels, values, alias_map=self.input_alias_map
+                    )
+                ):
                     apply_writes(
                         checkpoint,
                         channels,
@@ -2701,6 +2711,7 @@ class Pregel(
                 specs=self.channels,
                 output_keys=output_keys,
                 input_keys=self.input_channels,
+                input_alias_map=self.input_alias_map,
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
@@ -3104,6 +3115,7 @@ class Pregel(
                 specs=self.channels,
                 output_keys=output_keys,
                 input_keys=self.input_channels,
+                input_alias_map=self.input_alias_map,
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
