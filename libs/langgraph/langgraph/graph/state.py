@@ -1330,6 +1330,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             if not spec.is_error_handler and spec.error_handler_node is not None
         }
 
+        # Compute alias map for input schema (Pydantic models with aliased fields)
+        input_alias_map = _get_pydantic_alias_map(self.input_schema) or None
+
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
             schema_to_mapper={},
@@ -1341,6 +1344,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 START: EphemeralValue(self.input_schema),
             },
             input_channels=START,
+            input_alias_map=input_alias_map,
             stream_mode="updates",
             output_channels=output_channels,
             stream_channels=stream_channels,
@@ -1435,10 +1439,13 @@ class CompiledStateGraph(
                 for k, v in self.builder.schemas[self.builder.input_schema].items()
                 if not is_managed_value(v)
             ]
+            # Get alias map for input schema to translate alias keys to field names
+            alias_map = _get_pydantic_alias_map(self.builder.input_schema)
         else:
             output_keys = list(self.builder.channels) + [
                 k for k, v in self.builder.managed.items()
             ]
+            alias_map = {}
 
         def _get_updates(
             input: None | dict | Any,
@@ -1446,7 +1453,12 @@ class CompiledStateGraph(
             if input is None:
                 return None
             elif isinstance(input, dict):
-                return [(k, v) for k, v in input.items() if k in output_keys]
+                # Translate alias keys to field names using alias_map
+                return [
+                    (alias_map.get(k, k), v)
+                    for k, v in input.items()
+                    if alias_map.get(k, k) in output_keys
+                ]
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:
                     return None
@@ -1729,6 +1741,17 @@ _S = TypeVar("_S")
 
 
 def _coerce_state(schema: type[_S], input: dict[str, Any]) -> _S:
+    # Pydantic rejects field names for aliased fields (it expects the alias).
+    # Channels are keyed by field name, so translate where needed.
+    if isclass(schema) and issubclass(schema, BaseModel):
+        if any(fi.alias for fi in schema.model_fields.values()):
+            return schema(
+                **{
+                    (fi.alias or k): input[k]
+                    for k, fi in schema.model_fields.items()
+                    if k in input
+                }
+            )
     return schema(**input)
 
 
@@ -1796,6 +1819,33 @@ def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
         return updates
     elif input is not None:
         return [("__root__", input)]
+
+
+def _get_pydantic_alias_map(schema: type[Any]) -> dict[str, str]:
+    """Extract a mapping of alias -> field_name for Pydantic models.
+
+    For Pydantic models with aliased fields, this returns a dict mapping
+    the alias name to the actual field name. This allows input data using
+    aliases to be properly mapped to channels.
+
+    Args:
+        schema: The schema class (Pydantic model or other type)
+
+    Returns:
+        A dict mapping alias -> field_name for fields that have aliases.
+        Empty dict for non-Pydantic schemas or schemas without aliases.
+    """
+    if not (isclass(schema) and issubclass(schema, BaseModel)):
+        return {}
+
+    alias_map: dict[str, str] = {}
+    for field_name, field_info in schema.model_fields.items():
+        # Get the alias if it exists
+        alias = field_info.alias
+        if alias is not None and alias != field_name:
+            alias_map[alias] = field_name
+
+    return alias_map
 
 
 def _get_channels(
