@@ -37,6 +37,7 @@ def _checkpoint_summary(history: list) -> list[dict]:
     Returns a list of dicts (newest-first, matching get_state_history order) with:
       - id: short checkpoint id suffix (last 6 chars)
       - parent_id: short parent checkpoint id suffix or None
+      - source: checkpoint metadata source (input, loop, fork, update)
       - next: tuple of next node names
       - values: channel values snapshot
     """
@@ -52,6 +53,7 @@ def _checkpoint_summary(history: list) -> list[dict]:
             {
                 "id": cid[-6:],
                 "parent_id": pid[-6:] if pid else None,
+                "source": s.metadata.get("source"),
                 "next": s.next,
                 "values": s.values,
             }
@@ -284,8 +286,27 @@ def test_replay_from_before_interrupt_then_resume(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Replay from checkpoint before interrupt node, then resume with a new
-    answer and verify the graph completes with the new value. Checks full
-    checkpoint history at each stage to verify forking works correctly."""
+    answer and verify the graph completes with the new value.
+
+    Graph: START --> node_a --> ask_human (interrupt) --> node_b --> END
+
+    Original run:
+      source=input  next=(__start__,)  values=[]
+      source=loop   next=(node_a,)     values=[]
+      source=loop   next=(ask_human,)  values=[a]            <-- replay from here
+      source=loop   next=(node_b,)     values=[a, human:old_answer]
+      source=loop   next=()            values=[a, human:old_answer, b]
+
+    After replay (fork created) + resume with "new_answer":
+      source=input  next=(__start__,)  values=[]
+      source=loop   next=(node_a,)     values=[]
+      source=loop   next=(ask_human,)  values=[a]            <-- branch point
+      source=loop   next=(node_b,)     values=[a, human:old_answer]
+      source=loop   next=()            values=[a, human:old_answer, b]  (old branch)
+      source=fork   next=(ask_human,)  values=[a]            <-- fork from branch point
+      source=loop   next=(node_b,)     values=[a, human:new_answer]
+      source=loop   next=()            values=[a, human:new_answer, b]  (new branch)
+    """
 
     called: list[str] = []
 
@@ -315,92 +336,59 @@ def test_replay_from_before_interrupt_then_resume(
 
     config = {"configurable": {"thread_id": "1"}}
 
-    # Run until interrupt, then resume to complete
+    # --- Original run: invoke until interrupt, then resume to complete ---
     graph.invoke({"value": []}, config)
     graph.invoke(Command(resume="old_answer"), config)
 
-    # Original history (newest first)
     original_history = list(graph.get_state_history(config))
-    assert [s.next for s in original_history] == [
-        (),  # done
-        ("node_b",),
-        ("ask_human",),  # after node_a
-        ("node_a",),
-        ("__start__",),
-    ]
-    assert [s.metadata["source"] for s in original_history] == [
-        "loop",
-        "loop",
-        "loop",
-        "loop",
-        "input",
+    original = _checkpoint_summary(original_history)
+    assert [(s["source"], s["next"], s["values"]) for s in original] == [
+        ("loop", (), {"value": ["a", "human:old_answer", "b"]}),
+        ("loop", ("node_b",), {"value": ["a", "human:old_answer"]}),
+        ("loop", ("ask_human",), {"value": ["a"]}),
+        ("loop", ("node_a",), {"value": []}),
+        ("input", ("__start__",), {"value": []}),
     ]
 
-    # Find checkpoint before ask_human (after node_a)
-    before_ask = [s for s in original_history if s.next == ("ask_human",)][-1]
+    # --- Replay from checkpoint before ask_human ---
+    before_ask = next(s for s in original_history if s.next == ("ask_human",))
 
-    # Replay — interrupt re-fires
     called.clear()
     replay_result = graph.invoke(None, before_ask.config)
-    assert "__interrupt__" in replay_result
     assert replay_result["__interrupt__"][0].value == "What is your input?"
     assert "ask_human" in called
-    assert "node_a" not in called  # before checkpoint, not re-executed
+    assert "node_a" not in called  # before the replay point, not re-executed
 
-    # Verify fork checkpoint was created
-    post_replay_history = list(graph.get_state_history(config))
-    assert [s.next for s in post_replay_history] == [
-        ("ask_human",),  # fork (latest, interrupt pending)
-        (),  # original done
-        ("node_b",),
-        ("ask_human",),
-        ("node_a",),
-        ("__start__",),
+    # A fork checkpoint is now the latest — it branches from the replay point
+    post_replay = _checkpoint_summary(list(graph.get_state_history(config)))
+    assert [(s["source"], s["next"]) for s in post_replay] == [
+        ("fork", ("ask_human",)),  # <-- new fork (latest)
+        ("loop", ()),  # original done
+        ("loop", ("node_b",)),
+        ("loop", ("ask_human",)),  # branch point
+        ("loop", ("node_a",)),
+        ("input", ("__start__",)),
     ]
-    assert [s.metadata["source"] for s in post_replay_history] == [
-        "fork",
-        "loop",
-        "loop",
-        "loop",
-        "loop",
-        "input",
-    ]
-    # Fork's parent should be the replay point
-    fork = post_replay_history[0]
-    assert (
-        fork.parent_config["configurable"]["checkpoint_id"]
-        == before_ask.config["configurable"]["checkpoint_id"]
-    )
 
-    # Resume with a new answer — graph should complete with new value
+    # --- Resume with a new answer ---
     called.clear()
     final_result = graph.invoke(Command(resume="new_answer"), config)
-    assert "__interrupt__" not in final_result
     assert final_result["value"] == ["a", "human:new_answer", "b"]
     assert "ask_human" in called
     assert "node_b" in called
 
-    # Final history
-    final_history = list(graph.get_state_history(config))
-    assert [s.next for s in final_history] == [
-        (),  # new branch done
-        ("node_b",),  # new branch
-        ("ask_human",),  # fork
-        (),  # original done
-        ("node_b",),
-        ("ask_human",),
-        ("node_a",),
-        ("__start__",),
-    ]
-    assert [s.metadata["source"] for s in final_history] == [
-        "loop",
-        "loop",
-        "fork",
-        "loop",
-        "loop",
-        "loop",
-        "loop",
-        "input",
+    final = _checkpoint_summary(list(graph.get_state_history(config)))
+    assert [(s["source"], s["next"], s["values"]) for s in final] == [
+        # New branch (from fork)
+        ("loop", (), {"value": ["a", "human:new_answer", "b"]}),
+        ("loop", ("node_b",), {"value": ["a", "human:new_answer"]}),
+        ("fork", ("ask_human",), {"value": ["a"]}),
+        # Original branch (preserved)
+        ("loop", (), {"value": ["a", "human:old_answer", "b"]}),
+        ("loop", ("node_b",), {"value": ["a", "human:old_answer"]}),
+        ("loop", ("ask_human",), {"value": ["a"]}),
+        ("loop", ("node_a",), {"value": []}),
+        ("input", ("__start__",), {"value": []}),
     ]
 
 
@@ -1712,11 +1700,22 @@ def test_subgraph_time_travel_resume_from_first_interrupt(
 
     This verifies the key bug fix: after time-traveling to a subgraph
     checkpoint with an interrupt, a fork checkpoint is created so that
-    subsequent resumes find the correct state.
+    subsequent resumes find the correct state (not the old branch tip).
 
-    Architecture:
-      Parent:    START --> executor (subgraph, checkpointer=True) --> END
-      Executor:  START --> step_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> END
+    Parent:    START --> executor (subgraph, checkpointer=True) --> END
+    Executor:  START --> step_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> END
+
+    Parent history after original run completes:
+      source=input  next=(__start__,)   values=[]
+      source=loop   next=(executor,)    values=[]
+      source=loop   next=()             values=[step_a_done, ask_1:answer_1, ask_2:answer_2]
+
+    After time-traveling to 1st interrupt + resuming with new answers:
+      source=input  next=(__start__,)   values=[]
+      source=loop   next=(executor,)    values=[]          <-- branch point
+      source=loop   next=()             values=[..., ask_2:answer_2]  (old branch)
+      source=fork   next=(executor,)    values=[]          <-- fork from time travel
+      source=loop   next=()             values=[..., ask_2:new_answer_2]  (new branch)
     """
 
     called: list[str] = []
@@ -1756,39 +1755,62 @@ def test_subgraph_time_travel_resume_from_first_interrupt(
 
     config = {"configurable": {"thread_id": "1"}}
 
-    # Run through both interrupts
+    # --- Original run: hit both interrupts and resume ---
     graph.invoke({"value": []}, config)
     sub_config_at_first = graph.get_state(config, subgraphs=True).tasks[0].state.config
     graph.invoke(Command(resume="answer_1"), config)
     graph.invoke(Command(resume="answer_2"), config)
 
-    # Time travel to first interrupt
+    original = _checkpoint_summary(list(graph.get_state_history(config)))
+    assert [(s["source"], s["next"], s["values"]) for s in original] == [
+        ("loop", (), {"value": ["step_a_done", "ask_1:answer_1", "ask_2:answer_2"]}),
+        ("loop", ("executor",), {"value": []}),
+        ("input", ("__start__",), {"value": []}),
+    ]
+
+    # --- Time travel to first interrupt's subgraph checkpoint ---
     called.clear()
     replay_result = graph.invoke(None, sub_config_at_first)
-    assert "__interrupt__" in replay_result
     assert replay_result["__interrupt__"][0].value == "Question 1?"
-    assert "step_a" not in called
+    assert "step_a" not in called  # before interrupt, not re-executed
 
-    # A fork checkpoint should be the latest parent checkpoint
-    state_after_tt = graph.get_state(config)
-    assert state_after_tt.next == ("executor",)
-    assert state_after_tt.metadata["source"] == "fork"
+    # Fork is now the latest parent checkpoint
+    post_tt = _checkpoint_summary(list(graph.get_state_history(config)))
+    assert [(s["source"], s["next"]) for s in post_tt] == [
+        ("fork", ("executor",)),  # <-- new fork (latest)
+        ("loop", ()),  # original done
+        ("loop", ("executor",)),
+        ("input", ("__start__",)),
+    ]
 
-    # Resume from the time-traveled interrupt with a NEW answer
+    # --- Resume both interrupts with new answers ---
     called.clear()
     resume_1 = graph.invoke(Command(resume="new_answer_1"), config)
-    assert "__interrupt__" in resume_1
     assert resume_1["__interrupt__"][0].value == "Question 2?"
     assert "ask_1" in called
 
-    # Resume second interrupt
     called.clear()
     resume_2 = graph.invoke(Command(resume="new_answer_2"), config)
-    assert "__interrupt__" not in resume_2
     assert resume_2["value"] == [
         "step_a_done",
         "ask_1:new_answer_1",
         "ask_2:new_answer_2",
+    ]
+
+    # Verify final history: original branch preserved, new branch appended
+    final = _checkpoint_summary(list(graph.get_state_history(config)))
+    assert [(s["source"], s["next"], s["values"]) for s in final] == [
+        # New branch (from time travel fork)
+        (
+            "loop",
+            (),
+            {"value": ["step_a_done", "ask_1:new_answer_1", "ask_2:new_answer_2"]},
+        ),
+        ("fork", ("executor",), {"value": []}),
+        # Original branch (preserved)
+        ("loop", (), {"value": ["step_a_done", "ask_1:answer_1", "ask_2:answer_2"]}),
+        ("loop", ("executor",), {"value": []}),
+        ("input", ("__start__",), {"value": []}),
     ]
 
 
@@ -1796,11 +1818,13 @@ def test_subgraph_time_travel_resume_from_second_interrupt(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Time travel to a subgraph checkpoint at the second interrupt, then
-    resume with a new answer. Previous interrupt answers should be preserved.
+    resume with a new answer. The first interrupt's answer should be preserved.
 
-    Architecture:
-      Parent:    START --> executor (subgraph, checkpointer=True) --> END
-      Executor:  START --> step_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> END
+    Parent:    START --> executor (subgraph, checkpointer=True) --> END
+    Executor:  START --> step_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> END
+
+    Key assertion: after resuming from a time-travel to the 2nd interrupt,
+    the final state keeps ask_1's original answer but uses the new ask_2 answer.
     """
 
     called: list[str] = []
@@ -1840,29 +1864,59 @@ def test_subgraph_time_travel_resume_from_second_interrupt(
 
     config = {"configurable": {"thread_id": "1"}}
 
-    # Run through both interrupts
+    # --- Original run: hit both interrupts and resume ---
     graph.invoke({"value": []}, config)
     graph.invoke(Command(resume="answer_1"), config)
     sub_config_at_second = graph.get_state(config, subgraphs=True).tasks[0].state.config
     graph.invoke(Command(resume="answer_2"), config)
 
-    # Time travel to second interrupt
+    original = _checkpoint_summary(list(graph.get_state_history(config)))
+    assert [(s["source"], s["next"], s["values"]) for s in original] == [
+        ("loop", (), {"value": ["step_a_done", "ask_1:answer_1", "ask_2:answer_2"]}),
+        ("loop", ("executor",), {"value": []}),
+        ("input", ("__start__",), {"value": []}),
+    ]
+
+    # --- Time travel to second interrupt ---
     called.clear()
     replay_result = graph.invoke(None, sub_config_at_second)
-    assert "__interrupt__" in replay_result
     assert replay_result["__interrupt__"][0].value == "Question 2?"
     assert "step_a" not in called
-    assert "ask_1" not in called
+    assert "ask_1" not in called  # already resolved, not re-executed
 
-    # Resume with a new answer
+    # Fork is now the latest parent checkpoint
+    post_tt = _checkpoint_summary(list(graph.get_state_history(config)))
+    assert [(s["source"], s["next"]) for s in post_tt] == [
+        ("fork", ("executor",)),  # <-- new fork (latest)
+        ("loop", ()),  # original done
+        ("loop", ("executor",)),
+        ("input", ("__start__",)),
+    ]
+
+    # --- Resume with a new answer for ask_2 only ---
     called.clear()
     resume_result = graph.invoke(Command(resume="new_answer_2"), config)
-    assert "__interrupt__" not in resume_result
-    # step_a and ask_1 answers preserved from original, ask_2 uses new answer
+    # ask_1's original answer preserved, ask_2 uses the new answer
     assert resume_result["value"] == [
         "step_a_done",
         "ask_1:answer_1",
         "ask_2:new_answer_2",
+    ]
+
+    # Verify final history: original branch preserved, new branch appended
+    final = _checkpoint_summary(list(graph.get_state_history(config)))
+    assert [(s["source"], s["next"], s["values"]) for s in final] == [
+        # New branch (from time travel fork)
+        (
+            "loop",
+            (),
+            {"value": ["step_a_done", "ask_1:answer_1", "ask_2:new_answer_2"]},
+        ),
+        ("fork", ("executor",), {"value": []}),
+        # Original branch (preserved)
+        ("loop", (), {"value": ["step_a_done", "ask_1:answer_1", "ask_2:answer_2"]}),
+        ("loop", ("executor",), {"value": []}),
+        ("input", ("__start__",), {"value": []}),
     ]
 
 
@@ -1870,12 +1924,23 @@ def test_subgraph_time_travel_checkpoint_pattern(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Verify the checkpoint pattern created by time travel to a subgraph
-    interrupt. A fork checkpoint should be created as the latest parent
-    checkpoint, branching from the replay point.
+    interrupt. A fork checkpoint should branch from the replay point and
+    become the latest parent checkpoint.
 
-    Architecture:
-      Parent:    START --> executor (subgraph, checkpointer=True) --> END
-      Executor:  START --> ask (interrupt) --> END
+    Parent:    START --> executor (subgraph, checkpointer=True) --> END
+    Executor:  START --> ask (interrupt) --> END
+
+    Original run (after completing):
+      source=input  next=(__start__,)  values=[]
+      source=loop   next=(executor,)   values=[]          <-- replay point
+      source=loop   next=()            values=[a:first]
+
+    After time travel to interrupt + resume with "second":
+      source=input  next=(__start__,)  values=[]
+      source=loop   next=(executor,)   values=[]          <-- branch point
+      source=loop   next=()            values=[a:first]   (old branch)
+      source=fork   next=(executor,)   values=[]          <-- fork
+      source=loop   next=()            values=[a:second]  (new branch)
     """
 
     def ask(state: State) -> State:
@@ -1903,29 +1968,43 @@ def test_subgraph_time_travel_checkpoint_pattern(
     sub_config = graph.get_state(config, subgraphs=True).tasks[0].state.config
     graph.invoke(Command(resume="first"), config)
 
-    # Capture parent checkpoint history before time travel
-    history_before = list(graph.get_state_history(config))
-    original_count = len(history_before)
+    original = _checkpoint_summary(list(graph.get_state_history(config)))
+    assert [(s["source"], s["next"], s["values"]) for s in original] == [
+        ("loop", (), {"value": ["a:first"]}),
+        ("loop", ("executor",), {"value": []}),
+        ("input", ("__start__",), {"value": []}),
+    ]
 
     # Time travel to the interrupt
     graph.invoke(None, sub_config)
 
-    # Verify a fork was created
-    history_after = list(graph.get_state_history(config))
-    assert len(history_after) == original_count + 1
-
-    # The fork should be the latest checkpoint
-    latest = history_after[0]
-    assert latest.metadata["source"] == "fork"
-    assert latest.next == ("executor",)
-
-    # The fork's parent should be the original replay point
+    # Fork is now the latest, branching from the original replay point
+    post_tt = list(graph.get_state_history(config))
+    post_tt_summary = _checkpoint_summary(post_tt)
+    assert [(s["source"], s["next"]) for s in post_tt_summary] == [
+        ("fork", ("executor",)),  # <-- new fork (latest)
+        ("loop", ()),
+        ("loop", ("executor",)),  # <-- replay point / fork parent
+        ("input", ("__start__",)),
+    ]
+    # Verify the fork's parent is the original replay point
     replay_point_id = sub_config["configurable"]["checkpoint_map"][""]
-    assert latest.parent_config["configurable"]["checkpoint_id"] == replay_point_id
+    assert post_tt[0].parent_config["configurable"]["checkpoint_id"] == replay_point_id
 
-    # Resume from the fork
+    # Resume from the fork — graph completes with new answer
     result = graph.invoke(Command(resume="second"), config)
     assert result["value"] == ["a:second"]
+
+    final = _checkpoint_summary(list(graph.get_state_history(config)))
+    assert [(s["source"], s["next"], s["values"]) for s in final] == [
+        # New branch
+        ("loop", (), {"value": ["a:second"]}),
+        ("fork", ("executor",), {"value": []}),
+        # Original branch
+        ("loop", (), {"value": ["a:first"]}),
+        ("loop", ("executor",), {"value": []}),
+        ("input", ("__start__",), {"value": []}),
+    ]
 
 
 def test_subgraph_time_travel_after_completion(

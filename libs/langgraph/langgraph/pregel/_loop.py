@@ -834,10 +834,14 @@ class PregelLoop:
             replay_state: ReplayState | None = None
             if self.is_replaying:
                 replay_checkpoint_id = self.checkpoint["id"]
-                if self.checkpoint_metadata.get("source") in (
-                    "update",
-                    "fork",
-                ) and self.prev_checkpoint_config:
+                if (
+                    self.checkpoint_metadata.get("source")
+                    in (
+                        "update",
+                        "fork",
+                    )
+                    and self.prev_checkpoint_config
+                ):
                     replay_checkpoint_id = self.prev_checkpoint_config[CONF].get(
                         CONFIG_KEY_CHECKPOINT_ID, replay_checkpoint_id
                     )
