@@ -60,6 +60,11 @@ from langgraph._internal._constants import (
 from langgraph._internal._replay import ReplayState
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
+from langgraph.callbacks import (
+    GraphInterruptEvent,
+    GraphLifecycleEvent,
+    GraphResumeEvent,
+)
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
@@ -120,6 +125,7 @@ from langgraph.types import (
     CachePolicy,
     Command,
     Durability,
+    Interrupt,
     PregelExecutableTask,
     RetryPolicy,
     Send,
@@ -193,6 +199,8 @@ class PregelLoop:
     tasks: dict[str, PregelExecutableTask]
     output: None | dict[str, Any] | Any = None
     updated_channels: set[str] | None = None
+    _graph_lifecycle_events: deque[GraphLifecycleEvent]
+    _has_graph_lifecycle_callbacks: bool
 
     # public
 
@@ -218,6 +226,7 @@ class PregelLoop:
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         self.stream = stream
         self.config = config
@@ -242,6 +251,8 @@ class PregelLoop:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
+        self._has_graph_lifecycle_callbacks = has_graph_lifecycle_callbacks
+        self._graph_lifecycle_events = deque()
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -292,6 +303,40 @@ class PregelLoop:
             else ()
         )
         self.prev_checkpoint_config = None
+
+    def _push_graph_lifecycle_event(
+        self,
+        kind: Literal["resume", "interrupt"],
+        *,
+        interrupts: tuple[Interrupt, ...] = (),
+    ) -> None:
+        if kind == "resume":
+            self._graph_lifecycle_events.append(
+                GraphResumeEvent(
+                    run_id=None,
+                    status=self.status,
+                    checkpoint_id=self.checkpoint["id"],
+                    checkpoint_ns=self.checkpoint_ns,
+                )
+            )
+        elif kind == "interrupt":
+            self._graph_lifecycle_events.append(
+                GraphInterruptEvent(
+                    run_id=None,
+                    status=self.status,
+                    checkpoint_id=self.checkpoint["id"],
+                    checkpoint_ns=self.checkpoint_ns,
+                    interrupts=interrupts,
+                )
+            )
+        else:
+            msg = f"Unknown graph lifecycle event type: {kind}"
+            raise AssertionError(msg)
+
+    def _pop_lifecycle_event(self) -> GraphLifecycleEvent | None:
+        if not self._graph_lifecycle_events:
+            return None
+        return self._graph_lifecycle_events.popleft()
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
@@ -776,6 +821,8 @@ class PregelLoop:
             )
         # set flag
         self.status = "pending"
+        if is_resuming:
+            self._push_graph_lifecycle_event("resume")
         return updated_channels, checkpoint_request
 
     def _prepare_checkpoint(
@@ -861,8 +908,11 @@ class PregelLoop:
         exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
     ) -> bool | None:
-        suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
-        if suppress:
+        if isinstance(exc_value, GraphInterrupt) and not self.is_nested:
+            interrupt = exc_value
+            interrupts = tuple(interrupt.args[0]) if interrupt.args else ()
+            self._push_graph_lifecycle_event("interrupt", interrupts=interrupts)
+            # emit one last "values" event, with pending writes applied
             if (
                 hasattr(self, "tasks")
                 and self.checkpoint_pending_writes
@@ -887,12 +937,12 @@ class PregelLoop:
                         [w for t in self.tasks.values() for w in t.writes],
                         self.channels,
                     )
-            if exc_value is not None and (not exc_value.args or not exc_value.args[0]):
+            # emit INTERRUPT if exception is empty (otherwise emitted by put_writes)
+            if not interrupt.args or not interrupt.args[0]:
+                interrupt_payload = interrupt.args[0] if interrupt.args else ()
                 self._emit(
                     "updates",
-                    lambda: iter(
-                        [{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]
-                    ),
+                    lambda: iter([{INTERRUPT: interrupt_payload}]),
                 )
             self.output = read_channels(self.channels, self.output_keys)
             return True
@@ -1027,6 +1077,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         super().__init__(
             input,
@@ -1048,6 +1099,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1127,6 +1179,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     # context manager
 
     def __enter__(self) -> Self:
+        self._graph_lifecycle_events = deque()
         if not self.checkpointer:
             saved = None
         elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
@@ -1233,6 +1286,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         super().__init__(
             input,
@@ -1254,6 +1308,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
         )
         self.stack = AsyncExitStack()
         if checkpointer:
@@ -1348,6 +1403,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     # context manager
 
     async def __aenter__(self) -> Self:
+        self._graph_lifecycle_events = deque()
         if not self.checkpointer:
             saved = None
         elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
