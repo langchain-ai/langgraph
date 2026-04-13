@@ -828,20 +828,16 @@ class PregelLoop:
         if not self.is_nested:
             # Pass the resolved before-bound checkpoint ID so subgraphs can
             # find their corresponding checkpoint without re-fetching the
-            # parent. For forks (source=update), use the fork's parent
+            # parent. For forks (source=update/fork), use the fork's parent
             # checkpoint ID since the fork was created after the subgraph's
             # checkpoints from the original execution.
             replay_state: ReplayState | None = None
             if self.is_replaying:
                 replay_checkpoint_id = self.checkpoint["id"]
-                if (
-                    self.checkpoint_metadata.get("source") == "update"
-                    or is_time_traveling
+                if self.checkpoint_metadata.get("source") in (
+                    "update",
+                    "fork",
                 ) and self.prev_checkpoint_config:
-                    # For forks (source=update) and time-travel forks, use
-                    # the parent checkpoint ID since the fork was created
-                    # after the subgraph's checkpoints from the original
-                    # execution.
                     replay_checkpoint_id = self.prev_checkpoint_config[CONF].get(
                         CONFIG_KEY_CHECKPOINT_ID, replay_checkpoint_id
                     )
