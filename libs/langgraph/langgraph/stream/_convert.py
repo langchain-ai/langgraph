@@ -41,16 +41,11 @@ def convert_to_protocol_event(
     The ``seq`` field is left as ``0`` here; the :class:`StreamMux` is
     the sole seq assigner and overwrites it inside ``push()``.
 
-    Parameters
-    ----------
-    ns:
-        Namespace tuple from the ``StreamChunk``.
-    mode:
-        Stream mode string (``"values"``, ``"updates"``, etc.).
-    payload:
-        The raw payload from the stream.
-    node:
-        Optional node name for provenance.
+    Args:
+        ns: Namespace tuple from the ``StreamChunk``.
+        mode: Stream mode string (``"values"``, ``"updates"``, etc.).
+        payload: The raw payload from the stream.
+        node: Optional node name for provenance.
     """
     if mode not in _SUPPORTED_MODES:
         return None
