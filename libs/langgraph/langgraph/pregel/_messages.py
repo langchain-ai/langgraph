@@ -14,7 +14,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from pydantic import BaseModel
 
-from langgraph._internal._constants import NS_SEP
+from langgraph._internal._constants import NS_END, NS_SEP
 from langgraph.constants import TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
 from langgraph.types import Command
@@ -132,15 +132,23 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         if metadata and (not tags or (TAG_NOSTREAM not in tags)):
-            ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
-                :-1
-            ]
+            task_checkpoint_ns = cast(str, metadata["langgraph_checkpoint_ns"])
+            checkpoint_ns = (
+                f"{task_checkpoint_ns.rsplit(NS_END, 1)[0]}{NS_END}"
+                if NS_END in task_checkpoint_ns
+                else task_checkpoint_ns
+            )
+            ns = tuple(task_checkpoint_ns.split(NS_SEP))[:-1]
             if not self.subgraphs and len(ns) > 0 and ns != self.parent_ns:
                 return
+            stream_metadata = dict(metadata)
+            stream_metadata["langgraph_checkpoint_ns"] = checkpoint_ns
+            # Preserve backwards-compatible streamed checkpoint metadata shape.
+            stream_metadata["checkpoint_ns"] = checkpoint_ns
             if tags:
                 if filtered_tags := [t for t in tags if not t.startswith("seq:step")]:
-                    metadata["tags"] = filtered_tags
-            self.metadata[run_id] = (ns, metadata)
+                    stream_metadata["tags"] = filtered_tags
+            self.metadata[run_id] = (ns, stream_metadata)
 
     def on_llm_new_token(
         self,

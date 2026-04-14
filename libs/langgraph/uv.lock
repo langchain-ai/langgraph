@@ -1348,7 +1348,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.2.22"
+version = "1.3.0a2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -1360,9 +1360,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b1/a3/c4cd6827a1df46c821e7214b7f7b7a28b189e6c9b84ef15c6d629c5e3179/langchain_core-1.2.22.tar.gz", hash = "sha256:8d8f726d03d3652d403da915126626bb6250747e8ba406537d849e68b9f5d058", size = 842487, upload-time = "2026-03-24T18:48:44.9Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/bc/0bff31fcaff174d86031cc713471a3e85ed4ec8e5cd95ad0217f2aced20e/langchain_core-1.3.0a2.tar.gz", hash = "sha256:52d978c84552b74b9a3f16c1fced84f9e27cc96d7a67c601925ce6cbc4ea3cf9", size = 854580, upload-time = "2026-04-13T14:37:55.745Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c7/a6/2ffacf0f1a3788f250e75d0b52a24896c413be11be3a6d42bcdf46fbea48/langchain_core-1.2.22-py3-none-any.whl", hash = "sha256:7e30d586b75918e828833b9ec1efc25465723566845dd652c277baf751e9c04b", size = 506829, upload-time = "2026-03-24T18:48:43.286Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/14/03c09686602567059f26af29de0c44546a83af2f2aa29925e61040e43ea2/langchain_core-1.3.0a2-py3-none-any.whl", hash = "sha256:9e929a34f0b0c6c1255e395a1de34f8626893ceb4cdae550a22a0bd18c87be54", size = 510233, upload-time = "2026-04-13T14:37:54.277Z" },
 ]
 
 [[package]]
@@ -1439,7 +1439,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=0.1" },
+    { name = "langchain-core", specifier = "==1.3.0a2" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-prebuilt", editable = "../prebuilt" },
     { name = "langgraph-sdk", editable = "../sdk-py" },

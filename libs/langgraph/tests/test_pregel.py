@@ -6893,7 +6893,6 @@ def test_tags_stream_mode_messages() -> None:
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),
-                "_type": "generic-fake-chat-model",
                 "ls_provider": "genericfakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
@@ -6901,6 +6900,60 @@ def test_tags_stream_mode_messages() -> None:
             },
         )
     ]
+
+
+def test_configurable_propagates_to_stream_metadata() -> None:
+    """Regression: thread_id, run_id, assistant_id, graph_id,
+    and langgraph_auth_user_id from configurable must appear
+    in stream_mode='messages' metadata."""
+
+    def my_node(state):
+        return {"messages": HumanMessage(content="hello")}
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("my_node", my_node)
+        .add_edge(START, "my_node")
+        .compile()
+    )
+
+    config = {
+        "configurable": {
+            "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
+            "langgraph_auth_user_id": "user-1",
+            # these should NOT be propagated into metadata
+            "some_api_key": "secret",
+            "custom_setting": {"nested": True},
+        },
+    }
+    results = list(graph.stream({"messages": []}, config, stream_mode="messages"))
+    assert len(results) == 1
+    _, metadata = results[0]
+    # propagated keys
+    assert metadata["thread_id"] == "th-123"
+    assert metadata["checkpoint_id"] == "ckpt-1"
+    assert metadata["checkpoint_ns"] == "ns-1"
+    assert metadata["task_id"] == "task-1"
+    assert metadata["run_id"] == "run-456"
+    assert metadata["assistant_id"] == "asst-789"
+    assert metadata["graph_id"] == "graph-0"
+    # These are only present in trace metadata by default as of langgraph 1.2
+    # assert metadata["model"] == "gpt-4o"
+    # assert metadata["user_id"] == "uid-1"
+    # assert metadata["cron_id"] == "cron-1"
+    # assert metadata["langgraph_auth_user_id"] == "user-1"
+    # non-allowlisted keys must not appear
+    assert "some_api_key" not in metadata
+    assert "custom_setting" not in metadata
 
 
 def test_stream_mode_messages_command() -> None:
