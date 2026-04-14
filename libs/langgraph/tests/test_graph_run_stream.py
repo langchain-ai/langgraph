@@ -9,7 +9,7 @@ from typing_extensions import TypedDict
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.stream import AsyncChatModelStream, StreamingHandler
-from langgraph.stream._types import ProtocolEvent
+from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from tests.fake_chat import FakeChatModel
 
 
@@ -379,7 +379,7 @@ async def test_subgraph_child_output():
 # ---------------------------------------------------------------------------
 
 
-class _CountTransformer:
+class _CountTransformer(StreamTransformer):
     """Counts events. Exposes count via .value for extensions."""
 
     name = "event_count"
@@ -428,6 +428,73 @@ def test_sync_custom_reducer_extensions():
 
 
 # ---------------------------------------------------------------------------
+# Double iteration over .values
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_async_values_double_iteration():
+    """Iterating over run.values twice should yield the same snapshots both times."""
+    graph = make_simple_graph()
+    run = await StreamingHandler(graph).astream({"value": "x", "items": []})
+    await asyncio.sleep(0.1)
+
+    first = []
+    async for v in run.values:
+        first.append(v)
+
+    second = []
+    async for v in run.values:
+        second.append(v)
+
+    assert len(first) == 3
+    assert first == second
+
+
+def test_sync_values_double_iteration():
+    """Iterating over run.values twice should yield the same snapshots both times."""
+    graph = make_simple_graph()
+    run = StreamingHandler(graph).stream({"value": "x", "items": []})
+
+    first = list(run.values)
+    second = list(run.values)
+
+    assert len(first) == 3
+    assert first == second
+
+
+@pytest.mark.anyio
+async def test_async_raw_events_double_iteration():
+    """Iterating over the raw event stream twice should yield the same events."""
+    graph = make_simple_graph()
+    run = await StreamingHandler(graph).astream({"value": "x", "items": []})
+    await asyncio.sleep(0.1)
+
+    first = []
+    async for event in run:
+        first.append(event)
+
+    second = []
+    async for event in run:
+        second.append(event)
+
+    assert len(first) > 0
+    assert first == second
+
+
+def test_sync_raw_events_double_iteration():
+    """Iterating over the raw event stream twice should yield the same events."""
+    graph = make_simple_graph()
+    run = StreamingHandler(graph).stream({"value": "x", "items": []})
+
+    first = list(run)
+    second = list(run)
+
+    assert len(first) > 0
+    assert first == second
+
+
+# ---------------------------------------------------------------------------
 # Tool transformer via extensions
 # ---------------------------------------------------------------------------
 
@@ -440,15 +507,13 @@ class _ToolExecution:
         self.output = output
 
 
-class _ToolsTransformer:
+class _ToolsTransformer(StreamTransformer):
     """Groups tool-started/tool-finished custom events into _ToolExecution objects."""
 
     name = "tools"
 
     def __init__(self) -> None:
-        from langgraph.stream._event_log import EventLog
-
-        self._log: EventLog[_ToolExecution] = EventLog()
+        self._log: list[_ToolExecution] = []
         self._pending: dict[str, dict] = {}
         self.value = self._log
 
@@ -483,10 +548,10 @@ class _ToolsTransformer:
         return True
 
     def finalize(self) -> None:
-        self._log.close()
+        pass
 
     def fail(self, err: BaseException) -> None:
-        self._log.fail(err)
+        pass
 
 
 def _make_tool_graph():

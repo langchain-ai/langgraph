@@ -130,22 +130,22 @@ class ChatModelStream:
 
 
 # ---------------------------------------------------------------------------
-# Async dual-projection helpers
+# Dual-projection helpers — sync data container + async notification layer
 # ---------------------------------------------------------------------------
 
 
 class _DualProjection:
-    """Async iterable of deltas that is also awaitable for the final value.
+    """Sync data container for incremental deltas and a final value.
 
-    When iterated, yields delta values (e.g. text fragments) as they arrive.
-    When awaited, returns the accumulated final value (e.g. full text string).
+    Stores deltas as they arrive and tracks the final accumulated value.
+    No async primitives — see :class:`_AsyncDualProjection` for the
+    async-iterable + awaitable extension.
     """
 
     def __init__(self) -> None:
         self._deltas: list[Any] = []
         self._done = False
         self._error: BaseException | None = None
-        self._waiters: list[asyncio.Future[None]] = []
         self._final_value: Any = None
         self._final_set = False
 
@@ -154,33 +154,48 @@ class _DualProjection:
     def _push(self, delta: Any) -> None:
         """Add a new delta value."""
         self._deltas.append(delta)
-        self._wake()
 
     def _finish(self, accumulated: Any) -> None:
         """Set the final accumulated value and mark as done."""
         self._final_value = accumulated
         self._final_set = True
         self._done = True
-        self._wake()
 
     def _fail(self, error: BaseException) -> None:
         self._error = error
         self._done = True
-        self._wake()
 
-    def _wake(self) -> None:
-        for fut in self._waiters:
-            if not fut.done():
-                try:
-                    fut.get_loop().call_soon_threadsafe(fut.set_result, None)
-                except RuntimeError:
-                    pass
-        self._waiters.clear()
+
+class _AsyncDualProjection(_DualProjection):
+    """Async extension of :class:`_DualProjection`.
+
+    Async iterable of deltas that is also awaitable for the final value.
+    Uses an ``asyncio.Event`` to notify async consumers when new data
+    arrives — the same pattern as :class:`AsyncStreamMux`.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._notify: asyncio.Event = asyncio.Event()
+
+    # -- Producer overrides (extend to notify) -----------------------------
+
+    def _push(self, delta: Any) -> None:
+        super()._push(delta)
+        self._notify.set()
+
+    def _finish(self, accumulated: Any) -> None:
+        super()._finish(accumulated)
+        self._notify.set()
+
+    def _fail(self, error: BaseException) -> None:
+        super()._fail(error)
+        self._notify.set()
 
     # -- Async iterable (yields deltas) ------------------------------------
 
-    def __aiter__(self) -> _DualProjectionIterator:
-        return _DualProjectionIterator(self)
+    def __aiter__(self) -> _AsyncDualProjectionIterator:
+        return _AsyncDualProjectionIterator(self)
 
     # -- Awaitable (returns final value) -----------------------------------
 
@@ -191,25 +206,23 @@ class _DualProjection:
         while not self._final_set:
             if self._error is not None:
                 raise self._error
-            loop = asyncio.get_running_loop()
-            fut: asyncio.Future[None] = loop.create_future()
-            self._waiters.append(fut)
-            await fut
+            self._notify.clear()
+            await self._notify.wait()
         if self._error is not None:
             raise self._error
         return self._final_value
 
 
-class _DualProjectionIterator:
-    """Async iterator over a :class:`_DualProjection`'s deltas."""
+class _AsyncDualProjectionIterator:
+    """Async iterator over an :class:`_AsyncDualProjection`'s deltas."""
 
     __slots__ = ("_proj", "_offset")
 
-    def __init__(self, proj: _DualProjection) -> None:
+    def __init__(self, proj: _AsyncDualProjection) -> None:
         self._proj = proj
         self._offset = 0
 
-    def __aiter__(self) -> _DualProjectionIterator:
+    def __aiter__(self) -> _AsyncDualProjectionIterator:
         return self
 
     async def __anext__(self) -> Any:
@@ -222,10 +235,8 @@ class _DualProjectionIterator:
                 raise self._proj._error
             if self._proj._done:
                 raise StopAsyncIteration
-            loop = asyncio.get_running_loop()
-            fut: asyncio.Future[None] = loop.create_future()
-            self._proj._waiters.append(fut)
-            await fut
+            self._proj._notify.clear()
+            await self._proj._notify.wait()
 
 
 # ---------------------------------------------------------------------------
@@ -257,24 +268,24 @@ class AsyncChatModelStream(ChatModelStream):
         message_id: str | None = None,
     ) -> None:
         super().__init__(namespace=namespace, node=node, message_id=message_id)
-        self._text_proj = _DualProjection()
-        self._reasoning_proj = _DualProjection()
-        self._usage_proj = _DualProjection()
+        self._text_proj = _AsyncDualProjection()
+        self._reasoning_proj = _AsyncDualProjection()
+        self._usage_proj = _AsyncDualProjection()
 
     # -- Public projections (override sync properties) ---------------------
 
     @property
-    def text(self) -> _DualProjection:
+    def text(self) -> _AsyncDualProjection:
         """Text content — async iterable of deltas, awaitable for full text."""
         return self._text_proj
 
     @property
-    def reasoning(self) -> _DualProjection:
+    def reasoning(self) -> _AsyncDualProjection:
         """Reasoning content — async iterable of deltas, awaitable for full text."""
         return self._reasoning_proj
 
     @property
-    def usage(self) -> _DualProjection:
+    def usage(self) -> _AsyncDualProjection:
         """Usage info — awaitable for :class:`UsageInfo`."""
         return self._usage_proj
 

@@ -1,23 +1,20 @@
 """StreamChannel — typed push-based channel for StreamTransformer projections.
 
-A ``StreamChannel`` wraps an :class:`EventLog` and declares a protocol
-channel name.  When the :class:`StreamMux` detects a ``StreamChannel``
-in a transformer's ``init()`` return, it wires every ``push()`` call to
-inject a :class:`ProtocolEvent` into the main event stream using the
-channel's name as the ``method``.
+A ``StreamChannel`` wraps a list and declares a protocol channel name.
+When the :class:`StreamMux` detects a ``StreamChannel`` in a transformer's
+``init()`` return, it wires every ``push()`` call to inject a
+:class:`ProtocolEvent` into the main event stream using the channel's
+name as the ``method``.
 
-In-process consumers iterate the channel directly (it is an async
-iterable).  Remote SDK clients subscribe via
-``session.subscribe("custom:<channelName>")``.
+In-process consumers iterate the channel directly.  Remote SDK clients
+subscribe via ``session.subscribe("custom:<channelName>")``.
 
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from typing import Any, Generic, TypeVar
-
-from langgraph.stream._event_log import EventLog
 
 T = TypeVar("T")
 
@@ -31,27 +28,18 @@ class StreamChannel(Generic[T]):
     channel on run completion.
     """
 
-    __slots__ = ("channel_name", "_log", "_on_push")
+    __slots__ = ("channel_name", "_items", "_on_push")
 
     def __init__(self, name: str) -> None:
         self.channel_name = name
-        self._log: EventLog[T] = EventLog()
+        self._items: list[T] = []
         self._on_push: Callable[[Any], None] | None = None
 
     def push(self, item: T) -> None:
-        """Push an item to the channel.
-
-        If the mux has wired this channel, the push also injects a
-        protocol event into the main event stream.
-        """
-        self._log.append(item)
+        """Push an item to the channel."""
+        self._items.append(item)
         if self._on_push is not None:
             self._on_push(item)
-
-    # -- Async iteration (in-process consumption) ---------------------------
-
-    def __aiter__(self) -> AsyncIterator[T]:
-        return self._log.subscribe(0)
 
     # -- Internal (called by the mux) ---------------------------------------
 
@@ -60,12 +48,12 @@ class StreamChannel(Generic[T]):
         self._on_push = fn
 
     def _close(self) -> None:
-        """Close the underlying log.  Called by the mux on normal completion."""
-        self._log.close()
+        """No-op for compatibility.  Called by the mux on normal completion."""
+        pass
 
     def _fail(self, err: BaseException) -> None:
-        """Fail the underlying log.  Called by the mux on failure."""
-        self._log.fail(err)
+        """No-op for compatibility.  Called by the mux on failure."""
+        pass
 
 
 def is_stream_channel(value: object) -> bool:

@@ -2,9 +2,13 @@
 
 These are the top-level objects returned by
 ``StreamingHandler.stream()`` / ``StreamingHandler.astream()``.
-They wrap a :class:`StreamMux` and expose named
-projections (``.values``, ``.messages``, ``.subgraphs``, ``.output``)
-for ergonomic consumption.
+
+``AsyncGraphRunStream`` wraps an :class:`AsyncStreamMux` and exposes
+``.values``, ``.messages``, ``.subgraphs``, ``.output``, and
+``.messages_from()``.
+
+``GraphRunStream`` wraps a :class:`StreamMux` and exposes the sync
+equivalents: ``.values``, ``.messages``, and ``.output``.
 """
 
 from __future__ import annotations
@@ -14,8 +18,7 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 from langgraph.stream._convert import convert_to_protocol_event
-from langgraph.stream._event_log import EventLog
-from langgraph.stream._mux import StreamMux
+from langgraph.stream._mux import AsyncStreamMux, StreamMux
 from langgraph.stream._types import InterruptPayload, ProtocolEvent, StreamTransformer
 from langgraph.stream.chat_model_stream import AsyncChatModelStream, ChatModelStream
 from langgraph.stream.transformers import MessagesTransformer, ValuesTransformer
@@ -30,7 +33,7 @@ class _ValuesProjection:
 
     def __init__(
         self,
-        mux: StreamMux,
+        mux: AsyncStreamMux,
         values_transformer: ValuesTransformer,
         ns: list[str],
         mapper: Callable[[Any], Any] | None = None,
@@ -40,8 +43,23 @@ class _ValuesProjection:
         self._ns = ns
         self._mapper = mapper
 
-    def __aiter__(self) -> AsyncIterator[Any]:
-        return _ValuesIterator(self._values_transformer, self._ns, self._mapper)
+    async def __aiter__(self) -> AsyncIterator[Any]:
+        log = self._values_transformer.values_log
+        cursor = 0
+        while True:
+            while cursor < len(log):
+                item = log[cursor]
+                cursor += 1
+                if item.get("namespace", []) == self._ns:
+                    data = item["data"]
+                    if data is not None and self._mapper is not None:
+                        yield self._mapper(data)
+                    else:
+                        yield data
+            if self._mux._closed:
+                return
+            self._mux._notify.clear()
+            await self._mux._notify.wait()
 
     def __await__(self) -> Any:
         return self._await_impl().__await__()
@@ -53,33 +71,6 @@ class _ValuesProjection:
         return value
 
 
-class _ValuesIterator:
-    """Filters the values log to events matching a namespace."""
-
-    def __init__(
-        self,
-        transformer: ValuesTransformer,
-        ns: list[str],
-        mapper: Callable[[Any], Any] | None = None,
-    ) -> None:
-        self._cursor = transformer.values_log.subscribe(0)
-        self._ns = ns
-        self._mapper = mapper
-
-    def __aiter__(self) -> _ValuesIterator:
-        return self
-
-    async def __anext__(self) -> Any:
-        while True:
-            item = await self._cursor.__anext__()
-            item_ns = item.get("namespace", [])
-            if item_ns == self._ns:
-                data = item["data"]
-                if data is not None and self._mapper is not None:
-                    return self._mapper(data)
-                return data
-
-
 # ---------------------------------------------------------------------------
 # Messages projection
 # ---------------------------------------------------------------------------
@@ -88,11 +79,21 @@ class _ValuesIterator:
 class _MessagesProjection:
     """Async iterable of :class:`AsyncChatModelStream` instances."""
 
-    def __init__(self, messages_transformer: MessagesTransformer) -> None:
+    def __init__(self, mux: AsyncStreamMux, messages_transformer: MessagesTransformer) -> None:
+        self._mux = mux
         self._transformer = messages_transformer
 
-    def __aiter__(self) -> AsyncIterator[AsyncChatModelStream]:
-        return self._transformer.messages_log.subscribe(0)
+    async def __aiter__(self) -> AsyncIterator[AsyncChatModelStream]:
+        log = self._transformer.messages_log
+        cursor = 0
+        while True:
+            while cursor < len(log):
+                yield log[cursor]
+                cursor += 1
+            if self._mux._closed:
+                return
+            self._mux._notify.clear()
+            await self._mux._notify.wait()
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +104,7 @@ class _MessagesProjection:
 class _SubgraphsProjection:
     """Async iterable yielding :class:`AsyncSubgraphRunStream` for each discovered subgraph."""
 
-    def __init__(self, mux: StreamMux, ns: list[str]) -> None:
+    def __init__(self, mux: AsyncStreamMux, ns: list[str]) -> None:
         self._mux = mux
         self._ns = ns
 
@@ -143,7 +144,7 @@ class AsyncGraphRunStream:
     def __init__(
         self,
         *,
-        mux: StreamMux,
+        mux: AsyncStreamMux,
         namespace: list[str] | None = None,
         transformers: list[StreamTransformer],
         abort_event: asyncio.Event | None = None,
@@ -186,7 +187,7 @@ class AsyncGraphRunStream:
     def messages(self) -> _MessagesProjection:
         """Async iterable of :class:`AsyncChatModelStream` instances."""
         t = self._find_transformer("messages")
-        return _MessagesProjection(t)
+        return _MessagesProjection(self._mux, t)
 
     def messages_from(self, node: str) -> _MessagesProjection:
         """Async iterable of messages from a specific node."""
@@ -196,7 +197,7 @@ class AsyncGraphRunStream:
             stream_cls=AsyncChatModelStream,
         )
         self._mux.register_transformer(filtered)
-        return _MessagesProjection(filtered)
+        return _MessagesProjection(self._mux, filtered)
 
     @property
     def subgraphs(self) -> _SubgraphsProjection:
@@ -308,7 +309,7 @@ async def create_async_graph_run_stream(
         if projection is not None:
             projections.append(projection)
 
-    mux = StreamMux(transformers=all_transformers)
+    mux = AsyncStreamMux(transformers=all_transformers)
 
     # Wire any StreamChannel instances found in transformer projections
     for projection in projections:
@@ -355,15 +356,16 @@ async def create_async_graph_run_stream(
 
 
 class _PumpDrivenLog:
-    """Wraps an ``EventLog`` so that iteration drives the sync pump.
+    """Wraps a list so that iteration drives the sync pump.
 
-    Used by :attr:`GraphRunStream.extensions` to make extension logs
-    iterable without requiring the caller to drain the stream first.
+    Used by all :class:`GraphRunStream` projections (``__iter__``,
+    ``.values``, ``.messages``, ``.extensions``) so that iterating
+    any projection lazily consumes the source.
     """
 
     __slots__ = ("_log", "_pump_one")
 
-    def __init__(self, log: EventLog, pump_one: Callable[[], bool]) -> None:
+    def __init__(self, log: list, pump_one: Callable[[], bool]) -> None:
         self._log = log
         self._pump_one = pump_one
 
@@ -527,7 +529,7 @@ class GraphRunStream:
             name = getattr(t, "name", None)
             value = getattr(t, "value", None)
             if name is not None and value is not None:
-                if isinstance(value, EventLog):
+                if isinstance(value, list):
                     result[name] = _PumpDrivenLog(value, self._pump_one)
                 else:
                     result[name] = value

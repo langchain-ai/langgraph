@@ -1,8 +1,7 @@
 """Stream protocol types and infrastructure for LangGraph."""
 
 from langgraph.stream._convert import STREAM_V2_MODES, convert_to_protocol_event
-from langgraph.stream._event_log import EventLog
-from langgraph.stream._mux import StreamMux
+from langgraph.stream._mux import AsyncStreamMux, StreamMux
 from langgraph.stream._types import (
     InterruptPayload,
     ProtocolEvent,
@@ -27,9 +26,9 @@ __all__ = [
     "STREAM_V2_MODES",
     "AsyncChatModelStream",
     "AsyncGraphRunStream",
+    "AsyncStreamMux",
     "AsyncSubgraphRunStream",
     "ChatModelStream",
-    "EventLog",
     "GraphRunStream",
     "InterruptPayload",
     "MessagesTransformer",

@@ -9,36 +9,33 @@ from __future__ import annotations
 
 from typing import Any
 
-from langgraph.stream._event_log import EventLog
-from langgraph.stream._types import ProtocolEvent
+from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from langgraph.stream.chat_model_stream import ChatModelStream
 
 # Type alias for the stream class constructor signature
 _StreamCls = type[ChatModelStream]
 
 
-class ValuesTransformer:
-    """Extracts ``values`` events and populates a values event log.
+class ValuesTransformer(StreamTransformer):
+    """Extracts ``values`` events and populates a values log.
 
     Maintains the latest state per namespace and provides a separate
-    event log that :class:`AsyncGraphRunStream` / :class:`GraphRunStream` uses for ``.values``
+    log that :class:`AsyncGraphRunStream` / :class:`GraphRunStream` uses for ``.values``
     iteration.
-
-    Implements the :class:`StreamTransformer` protocol.
     """
 
     name = "values"
 
     def __init__(self) -> None:
-        self._values_log: EventLog[dict[str, Any]] = EventLog()
+        self._values_log: list[dict[str, Any]] = []
         self._latest: dict[str, Any] = {}
 
     @property
-    def value(self) -> EventLog[dict[str, Any]]:
+    def value(self) -> list[dict[str, Any]]:
         return self._values_log
 
     @property
-    def values_log(self) -> EventLog[dict[str, Any]]:
+    def values_log(self) -> list[dict[str, Any]]:
         return self._values_log
 
     def get_latest(self, ns_key: str = "") -> Any:
@@ -61,20 +58,18 @@ class ValuesTransformer:
         return True
 
     def finalize(self) -> None:
-        self._values_log.close()
+        pass
 
     def fail(self, err: BaseException) -> None:
-        self._values_log.fail(err)
+        pass
 
 
-class MessagesTransformer:
+class MessagesTransformer(StreamTransformer):
     """Groups ``messages`` events into :class:`ChatModelStream` instances.
 
     One ``ChatModelStream`` is created per ``message-start`` event.
     Content-block events are routed to the active stream until
     ``message-finish`` or ``message-error`` closes it.
-
-    Implements the :class:`StreamTransformer` protocol.
     """
 
     name = "messages"
@@ -91,17 +86,17 @@ class MessagesTransformer:
         self._stream_cls: _StreamCls = stream_cls or ChatModelStream
 
         # Message log for .messages iteration
-        self._messages_log: EventLog[ChatModelStream] = EventLog()
+        self._messages_log: list[ChatModelStream] = []
 
         # Current active stream per namespace key
         self._active: dict[str, ChatModelStream] = {}
 
     @property
-    def value(self) -> EventLog[ChatModelStream]:
+    def value(self) -> list[ChatModelStream]:
         return self._messages_log
 
     @property
-    def messages_log(self) -> EventLog[ChatModelStream]:
+    def messages_log(self) -> list[ChatModelStream]:
         return self._messages_log
 
     def init(self) -> Any:
@@ -160,17 +155,15 @@ class MessagesTransformer:
         return True
 
     def finalize(self) -> None:
-        # Close any remaining active streams
+        # Finish any remaining active streams
         for stream in self._active.values():
             stream._finish({"reason": "stop"})
         self._active.clear()
-        self._messages_log.close()
 
     def fail(self, err: BaseException) -> None:
         for stream in self._active.values():
             stream._fail(err)
         self._active.clear()
-        self._messages_log.fail(err)
 
 
 __all__ = [

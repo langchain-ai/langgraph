@@ -51,13 +51,6 @@ def test_namespace_passthrough():
     assert evt["params"]["namespace"] == ["agent", "0"]
 
 
-def test_timestamp_populated():
-    evt = convert_to_protocol_event((), "values", {})
-    assert evt is not None
-    assert isinstance(evt["params"]["timestamp"], int)
-    assert evt["params"]["timestamp"] > 0
-
-
 def test_unknown_mode_returns_none():
     assert convert_to_protocol_event((), "unknown_mode", {}) is None
 

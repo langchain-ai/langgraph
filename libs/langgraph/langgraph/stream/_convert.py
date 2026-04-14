@@ -7,7 +7,6 @@ original payload.
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from langgraph.stream._types import ProtocolEvent, _ProtocolEventParams
@@ -58,7 +57,6 @@ def convert_to_protocol_event(
 
     params: _ProtocolEventParams = {
         "namespace": list(ns),
-        "timestamp": _now_ms(),
         "data": payload,
     }
     if node is not None:
@@ -69,11 +67,6 @@ def convert_to_protocol_event(
         method=mode,
         params=params,
     )
-
-
-def _now_ms() -> int:
-    """Current time in milliseconds since epoch."""
-    return int(time.time() * 1000)
 
 
 __all__ = ["STREAM_V2_MODES", "convert_to_protocol_event"]

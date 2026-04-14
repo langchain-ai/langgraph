@@ -6,7 +6,8 @@ in-process-only types needed by the LangGraph streaming infrastructure.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from abc import ABC, abstractmethod
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Re-exports from langchain-protocol (CDDL-derived)
@@ -55,7 +56,6 @@ class _ProtocolEventParams(TypedDict):
     """Payload envelope for a :class:`ProtocolEvent`."""
 
     namespace: Namespace
-    timestamp: int
     node: NotRequired[str]
     data: Any
 
@@ -74,8 +74,7 @@ class ProtocolEvent(TypedDict):
     params: _ProtocolEventParams
 
 
-@runtime_checkable
-class StreamTransformer(Protocol):
+class StreamTransformer(ABC):
     """Extension point for custom stream projections.
 
     Implementations are registered with ``StreamingHandler`` and receive every
@@ -87,6 +86,7 @@ class StreamTransformer(Protocol):
 
     """
 
+    @abstractmethod
     def init(self) -> Any:
         """Return the initial projection value.
 
@@ -96,6 +96,7 @@ class StreamTransformer(Protocol):
         """
         ...
 
+    @abstractmethod
     def process(self, event: ProtocolEvent) -> bool:
         """Process an event.
 
@@ -110,7 +111,6 @@ class StreamTransformer(Protocol):
         Optional — the mux auto-closes any :class:`StreamChannel` instances,
         so transformers that only use channels can omit this.
         """
-        ...
 
     def fail(self, err: BaseException) -> None:
         """Called once when the run fails.
@@ -118,7 +118,6 @@ class StreamTransformer(Protocol):
         Optional — the mux auto-fails any :class:`StreamChannel` instances,
         so transformers that only use channels can omit this.
         """
-        ...
 
 
 class InterruptPayload(TypedDict):

@@ -22,52 +22,34 @@ def _event(
 # -- ValuesTransformer ---------------------------------------------------------
 
 
-@pytest.mark.anyio
-async def test_values_captures_values_events():
+def test_values_captures_values_events():
     reducer = ValuesTransformer()
     reducer.init()
     reducer.process(_event("values", {"a": 1}))
     reducer.process(_event("values", {"b": 2}))
     reducer.finalize()
 
-    collected = []
-    async for item in reducer.values_log.subscribe(0):
-        collected.append(item)
-    assert len(collected) == 2
-    assert collected[0]["data"] == {"a": 1}
-    assert collected[1]["data"] == {"b": 2}
+    assert len(reducer.values_log) == 2
+    assert reducer.values_log[0]["data"] == {"a": 1}
+    assert reducer.values_log[1]["data"] == {"b": 2}
 
 
-@pytest.mark.anyio
-async def test_values_ignores_other_modes():
+def test_values_ignores_other_modes():
     reducer = ValuesTransformer()
     reducer.init()
     reducer.process(_event("updates", {"x": 1}))
     reducer.process(_event("messages", {"event": "message-start"}))
     reducer.finalize()
 
-    collected = []
-    async for item in reducer.values_log.subscribe(0):
-        collected.append(item)
-    assert len(collected) == 0
+    assert len(reducer.values_log) == 0
 
 
-@pytest.mark.anyio
-async def test_values_latest_per_namespace():
+def test_values_latest_per_namespace():
     reducer = ValuesTransformer()
     reducer.init()
     reducer.process(_event("values", {"v": 1}, ns=["child:0"]))
     reducer.process(_event("values", {"v": 2}, ns=["child:0"]))
     assert reducer.get_latest("child:0") == {"v": 2}
-
-
-@pytest.mark.anyio
-async def test_values_finalize_closes_log():
-    reducer = ValuesTransformer()
-    reducer.init()
-    reducer.process(_event("values", {"a": 1}))
-    reducer.finalize()
-    assert reducer.values_log.closed
 
 
 # -- MessagesTransformer -------------------------------------------------------
@@ -103,8 +85,7 @@ def _msg_finish(ns=None, node=None):
     )
 
 
-@pytest.mark.anyio
-async def test_messages_groups_lifecycle():
+def test_messages_groups_lifecycle():
     reducer = MessagesTransformer()
     reducer.init()
     reducer.process(_msg_start())
@@ -112,16 +93,12 @@ async def test_messages_groups_lifecycle():
     reducer.process(_msg_finish())
     reducer.finalize()
 
-    collected = []
-    async for stream in reducer.messages_log.subscribe(0):
-        collected.append(stream)
-    assert len(collected) == 1
-    assert isinstance(collected[0], ChatModelStream)
-    assert collected[0].done
+    assert len(reducer.messages_log) == 1
+    assert isinstance(reducer.messages_log[0], ChatModelStream)
+    assert reducer.messages_log[0].done
 
 
-@pytest.mark.anyio
-async def test_messages_multiple_sequential():
+def test_messages_multiple_sequential():
     reducer = MessagesTransformer()
     reducer.init()
     reducer.process(_msg_start(message_id="m1"))
@@ -130,14 +107,10 @@ async def test_messages_multiple_sequential():
     reducer.process(_msg_finish())
     reducer.finalize()
 
-    collected = []
-    async for stream in reducer.messages_log.subscribe(0):
-        collected.append(stream)
-    assert len(collected) == 2
+    assert len(reducer.messages_log) == 2
 
 
-@pytest.mark.anyio
-async def test_messages_namespace_filter():
+def test_messages_namespace_filter():
     reducer = MessagesTransformer(namespace=["root"])
     reducer.init()
     reducer.process(_msg_start(ns=["root"]))
@@ -146,14 +119,10 @@ async def test_messages_namespace_filter():
     reducer.process(_msg_finish(ns=["other"]))
     reducer.finalize()
 
-    collected = []
-    async for stream in reducer.messages_log.subscribe(0):
-        collected.append(stream)
-    assert len(collected) == 1
+    assert len(reducer.messages_log) == 1
 
 
-@pytest.mark.anyio
-async def test_messages_node_filter():
+def test_messages_node_filter():
     reducer = MessagesTransformer(node_filter="agent")
     reducer.init()
     reducer.process(_msg_start(node="agent"))
@@ -162,14 +131,10 @@ async def test_messages_node_filter():
     reducer.process(_msg_finish(node="tools"))
     reducer.finalize()
 
-    collected = []
-    async for stream in reducer.messages_log.subscribe(0):
-        collected.append(stream)
-    assert len(collected) == 1
+    assert len(reducer.messages_log) == 1
 
 
-@pytest.mark.anyio
-async def test_messages_error_event():
+def test_messages_error_event():
     """An error event should fail the active ChatModelStream."""
     reducer = MessagesTransformer()
     reducer.init()
@@ -180,35 +145,17 @@ async def test_messages_error_event():
     )
     reducer.finalize()
 
-    collected: list[ChatModelStream] = []
-    async for stream in reducer.messages_log.subscribe(0):
-        collected.append(stream)
-    assert len(collected) == 1
-    assert collected[0].done
+    assert len(reducer.messages_log) == 1
+    assert reducer.messages_log[0].done
 
 
-@pytest.mark.anyio
-async def test_messages_fail_propagates_to_active():
-    """transformer.fail() should propagate the error to any active streams."""
+def test_messages_fail_propagates_to_active():
+    """transformer.fail() should mark active streams as done."""
     reducer = MessagesTransformer()
     reducer.init()
     reducer.process(_msg_start())
     reducer.process(_content_delta("partial"))
     reducer.fail(RuntimeError("graph failed"))
 
-    # The messages log should be failed too
-    with pytest.raises(RuntimeError, match="graph failed"):
-        async for _ in reducer.messages_log.subscribe(0):
-            pass
-
-
-@pytest.mark.anyio
-async def test_values_fail_propagates():
-    reducer = ValuesTransformer()
-    reducer.init()
-    reducer.process(_event("values", {"a": 1}))
-    reducer.fail(RuntimeError("graph failed"))
-
-    with pytest.raises(RuntimeError, match="graph failed"):
-        async for _ in reducer.values_log.subscribe(0):
-            pass
+    assert len(reducer.messages_log) == 1
+    assert reducer.messages_log[0].done

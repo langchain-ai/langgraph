@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from langgraph.stream._mux import StreamMux
+from langgraph.stream._mux import AsyncStreamMux, StreamMux
 from langgraph.stream._types import ProtocolEvent
 from langgraph.stream.chat_model_stream import ChatModelStream
 from langgraph.stream.run_stream import (
@@ -44,7 +44,7 @@ async def test_aiter_yields_all_events():
 @pytest.mark.anyio
 async def test_subgraph_name_and_index():
     vr, mr = ValuesTransformer(), MessagesTransformer()
-    mux = StreamMux(transformers=[vr, mr])
+    mux = AsyncStreamMux(transformers=[vr, mr])
     sub = AsyncSubgraphRunStream(
         mux=mux,
         namespace=["researcher:2"],
@@ -57,7 +57,7 @@ async def test_subgraph_name_and_index():
 @pytest.mark.anyio
 async def test_subgraph_name_no_index():
     vr, mr = ValuesTransformer(), MessagesTransformer()
-    mux = StreamMux(transformers=[vr, mr])
+    mux = AsyncStreamMux(transformers=[vr, mr])
     sub = AsyncSubgraphRunStream(
         mux=mux, namespace=["agent"], transformers=[vr, mr]
     )
@@ -132,7 +132,7 @@ async def test_messages_yields_streams():
 @pytest.mark.anyio
 async def test_interrupted_false_by_default():
     vr, mr = ValuesTransformer(), MessagesTransformer()
-    mux = StreamMux(transformers=[vr, mr])
+    mux = AsyncStreamMux(transformers=[vr, mr])
     run = AsyncGraphRunStream(mux=mux, transformers=[vr, mr])
     assert run.interrupted is False
 
@@ -140,7 +140,7 @@ async def test_interrupted_false_by_default():
 @pytest.mark.anyio
 async def test_abort_sets_signal():
     vr, mr = ValuesTransformer(), MessagesTransformer()
-    mux = StreamMux(transformers=[vr, mr])
+    mux = AsyncStreamMux(transformers=[vr, mr])
     run = AsyncGraphRunStream(mux=mux, transformers=[vr, mr])
     assert not run.signal.is_set()
     run.abort()
