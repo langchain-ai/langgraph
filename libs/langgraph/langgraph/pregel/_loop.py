@@ -599,14 +599,6 @@ class PregelLoop:
         # save checkpoint
         return self._prepare_checkpoint({"source": "loop"})
 
-    def _finish_after_tick(self) -> None:
-        if self.interrupt_after and should_interrupt(
-            self.checkpoint, self.interrupt_after, self.tasks.values()
-        ):
-            self.status = "interrupt_after"
-            raise GraphInterrupt()
-        self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
-
     def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         raise NotImplementedError
 
@@ -900,14 +892,12 @@ class PregelLoop:
             self.step += 1
         return request
 
-    def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
-        raise NotImplementedError
-
     def _finalize_suppress(
         self,
         exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
     ) -> bool | None:
+        # suppress interrupt
         if isinstance(exc_value, GraphInterrupt) and not self.is_nested:
             interrupt = exc_value
             interrupts = tuple(interrupt.args[0]) if interrupt.args else ()
@@ -944,26 +934,14 @@ class PregelLoop:
                     "updates",
                     lambda: iter([{INTERRUPT: interrupt_payload}]),
                 )
+            # save final output
             self.output = read_channels(self.channels, self.output_keys)
+            # suppress interrupt
             return True
         elif exc_type is None:
+            # save final output
             self.output = read_channels(self.channels, self.output_keys)
         return None
-
-    def _suppress_interrupt(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> bool | None:
-        if self.durability == "exit" and (
-            not self.is_nested
-            or exc_value is not None
-            or all(NS_END not in part for part in self.checkpoint_ns)
-        ):
-            self._put_checkpoint(self.checkpoint_metadata)
-            self._put_pending_writes()
-        return self._finalize_suppress(exc_type, exc_value)
 
     def _emit(
         self,
@@ -1130,10 +1108,37 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         if request := self._prepare_checkpoint(metadata):
             self._dispatch_checkpoint_request(request)
 
+    def _suppress_interrupt(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
+        # persist current checkpoint and writes
+        if self.durability == "exit" and (
+            # if it's a top graph
+            not self.is_nested
+            # or a nested graph with error or interrupt
+            or exc_value is not None
+            # or a nested graph with checkpointer=True
+            or all(NS_END not in part for part in self.checkpoint_ns)
+        ):
+            self._put_checkpoint(self.checkpoint_metadata)
+            self._put_pending_writes()
+        return self._finalize_suppress(exc_type, exc_value)
+
     def after_tick(self) -> None:
+        # compute tick state and save checkpoint
         if request := self._after_tick():
             self._dispatch_checkpoint_request(request)
-        self._finish_after_tick()
+        # after execution, check if we should interrupt
+        if self.interrupt_after and should_interrupt(
+            self.checkpoint, self.interrupt_after, self.tasks.values()
+        ):
+            self.status = "interrupt_after"
+            raise GraphInterrupt()
+        # unset resuming flag
+        self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
 
     def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         if self.cache is None:
@@ -1336,9 +1341,17 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             )
 
     async def aafter_tick(self) -> None:
+        # compute tick state and save checkpoint
         if request := self._after_tick():
             await self._dispatch_checkpoint_request(request)
-        self._finish_after_tick()
+        # after execution, check if we should interrupt
+        if self.interrupt_after and should_interrupt(
+            self.checkpoint, self.interrupt_after, self.tasks.values()
+        ):
+            self.status = "interrupt_after"
+            raise GraphInterrupt()
+        # unset resuming flag
+        self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
 
     async def amatch_cached_writes(self) -> Sequence[PregelExecutableTask]:
         if self.cache is None:
@@ -1390,9 +1403,19 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> bool | None:
+        """Async counterpart of SyncPregelLoop._suppress_interrupt.
+
+        Uses async checkpoint dispatch so we don't block the event loop
+        (the sync version was previously used here via stack.push, which
+        would call the blocking checkpointer.put instead of aput).
+        """
+        # persist current checkpoint and writes
         if self.durability == "exit" and (
+            # if it's a top graph
             not self.is_nested
+            # or a nested graph with error or interrupt
             or exc_value is not None
+            # or a nested graph with checkpointer=True
             or all(NS_END not in part for part in self.checkpoint_ns)
         ):
             if request := self._prepare_checkpoint(self.checkpoint_metadata):
