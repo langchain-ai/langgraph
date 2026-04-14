@@ -32,7 +32,6 @@ class StreamMux:
     def __init__(self, transformers: list[StreamTransformer] | None = None) -> None:
         self._event_log: list[ProtocolEvent] = []
         self._transformers: list[StreamTransformer] = list(transformers or [])
-        self._channels: list[StreamChannel[Any]] = []
         self._current_namespace: list[str] = []
         self._next_emit_seq: int = 0
 
@@ -115,13 +114,8 @@ class StreamMux:
             return
         self._closed = True
 
-        # Finalize transformers
         for transformer in self._transformers:
             transformer.finalize()
-
-        # Close wired channels
-        for channel in self._channels:
-            channel._close()
 
     def fail(self, error: BaseException) -> None:
         """Fail the mux and propagate the error to all consumers."""
@@ -130,13 +124,8 @@ class StreamMux:
         self._closed = True
         self._error = error
 
-        # Fail transformers
         for transformer in self._transformers:
             transformer.fail(error)
-
-        # Fail wired channels
-        for channel in self._channels:
-            channel._fail(error)
 
     # -- Inspection ---------------------------------------------------------
 
@@ -202,8 +191,6 @@ class StreamMux:
         for _key, value in items.items():
             if is_stream_channel(value):
                 channel: StreamChannel[Any] = value
-                self._channels.append(channel)
-
                 def _make_forwarder(ch: StreamChannel[Any]) -> Any:
                     def _forward(item: Any) -> None:
                         if self._closed:

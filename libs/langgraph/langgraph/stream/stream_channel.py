@@ -5,10 +5,6 @@ When the :class:`StreamMux` detects a ``StreamChannel`` in a transformer's
 ``init()`` return, it wires every ``push()`` call to inject a
 :class:`ProtocolEvent` into the main event stream using the channel's
 name as the ``method``.
-
-In-process consumers iterate the channel directly.  Remote SDK clients
-subscribe via ``session.subscribe("custom:<channelName>")``.
-
 """
 
 from __future__ import annotations
@@ -24,8 +20,7 @@ class StreamChannel(Generic[T]):
 
     Transformer authors create a ``StreamChannel`` in ``init()`` and
     call ``push()`` inside ``process()`` to emit domain objects.  The
-    mux auto-wires pushes to protocol events and auto-closes/fails the
-    channel on run completion.
+    mux auto-wires pushes to protocol events.
     """
 
     __slots__ = ("channel_name", "_items", "_on_push")
@@ -41,19 +36,9 @@ class StreamChannel(Generic[T]):
         if self._on_push is not None:
             self._on_push(item)
 
-    # -- Internal (called by the mux) ---------------------------------------
-
     def _wire(self, fn: Callable[[Any], None]) -> None:
         """Wire a callback invoked on every ``push()``.  Called by the mux."""
         self._on_push = fn
-
-    def _close(self) -> None:
-        """No-op for compatibility.  Called by the mux on normal completion."""
-        pass
-
-    def _fail(self, err: BaseException) -> None:
-        """No-op for compatibility.  Called by the mux on failure."""
-        pass
 
 
 def is_stream_channel(value: object) -> bool:
