@@ -128,6 +128,10 @@ from langgraph.pregel._loop import (
     SyncPregelLoop,
 )
 from langgraph.pregel._messages import StreamMessagesHandler
+from langgraph.pregel._messages_v2 import (
+    PROTOCOL_MESSAGES_STREAM_KEY,
+    StreamProtocolMessagesHandler,
+)
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
@@ -2616,8 +2620,15 @@ class Pregel(
             # set up messages stream mode
             if "messages" in stream_modes:
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                _msg_cls = (
+                    StreamProtocolMessagesHandler
+                    if config.get("configurable", {}).get(
+                        PROTOCOL_MESSAGES_STREAM_KEY, False
+                    )
+                    else StreamMessagesHandler
+                )
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(
+                    _msg_cls(
                         stream.put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
@@ -2935,7 +2946,10 @@ class Pregel(
                     True
                     for h in run_manager.handlers
                     if isinstance(h, _StreamingCallbackHandler)
-                    and not isinstance(h, StreamMessagesHandler)
+                    and not isinstance(
+                        h,
+                        (StreamMessagesHandler, StreamProtocolMessagesHandler),
+                    )
                 ),
                 False,
             )
@@ -2972,10 +2986,16 @@ class Pregel(
                 config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
-                # namespace can be None in a root level graph?
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                _msg_cls = (
+                    StreamProtocolMessagesHandler
+                    if config.get("configurable", {}).get(
+                        PROTOCOL_MESSAGES_STREAM_KEY, False
+                    )
+                    else StreamMessagesHandler
+                )
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(
+                    _msg_cls(
                         stream_put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
