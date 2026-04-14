@@ -327,3 +327,32 @@ def _exclude_as_metadata(key: str, value: Any, metadata: Mapping[str, Any]) -> b
         or key in metadata
         or any(substr in key_lower for substr in _OMIT)
     )
+
+
+def sanitize_config_value(v: Any) -> Any:
+    """Recursively sanitize a config value to ensure it contains only primitives.
+
+    Returns ``None`` for values that cannot be serialized to JSON.
+    Used by ``RemoteGraph`` and ``A2ARemoteGraph`` to strip non-serializable
+    entries before sending configs over the wire.
+    """
+    from uuid import UUID
+
+    if isinstance(v, (str, int, float, bool, UUID)):
+        return v
+    elif isinstance(v, dict):
+        sanitized_dict = {}
+        for k, val in v.items():
+            if isinstance(k, str):
+                sanitized_value = sanitize_config_value(val)
+                if sanitized_value is not None:
+                    sanitized_dict[k] = sanitized_value
+        return sanitized_dict
+    elif isinstance(v, (list, tuple)):
+        sanitized_list = []
+        for item in v:
+            sanitized_item = sanitize_config_value(item)
+            if sanitized_item is not None:
+                sanitized_list.append(sanitized_item)
+        return sanitized_list
+    return None
