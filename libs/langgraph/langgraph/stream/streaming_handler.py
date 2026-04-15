@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import threading
 from collections.abc import Sequence
 from typing import Any
 
@@ -60,33 +59,28 @@ class StreamingHandler:
     ) -> GraphRunStream:
         """Start a sync streaming run.
 
-        Returns a `GraphRunStream` immediately. A background daemon thread
-        pumps events from the graph into the transformer pipeline.
+        Returns a `GraphRunStream` immediately. The caller's iteration on
+        any projection drives the graph forward — no background thread is
+        used. This matches v1's model where the caller's ``for`` loop is
+        the pump.
         """
         mux, extensions, native_keys, values_t = self._setup(
             transformers, is_async=False
         )
 
-        def pump() -> None:
-            try:
-                for part in self._graph.stream(
-                    input,
-                    config,
-                    stream_mode=STREAM_V2_MODES,
-                    subgraphs=True,
-                    version="v2",
-                    interrupt_before=interrupt_before,
-                    interrupt_after=interrupt_after,
-                ):
-                    mux.push(convert_to_protocol_event(part))
-                mux.close()
-            except BaseException as e:
-                mux.fail(e)
+        graph_iter = iter(
+            self._graph.stream(
+                input,
+                config,
+                stream_mode=STREAM_V2_MODES,
+                subgraphs=True,
+                version="v2",
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+            )
+        )
 
-        thread = threading.Thread(target=pump, daemon=True)
-        thread.start()
-
-        run = GraphRunStream(mux, extensions, values_t, thread)
+        run = GraphRunStream(graph_iter, mux, extensions, values_t)
         for key in native_keys:
             setattr(run, key, extensions[key])
         return run

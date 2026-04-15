@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Generic, TypeVar
 
 T = TypeVar("T")
@@ -52,22 +52,23 @@ class _EventLogBase(Generic[T]):
 
 
 class EventLog(_EventLogBase[T]):
-    """Sync event log with multi-cursor iteration.
+    """Sync event log with pull-based iteration.
 
     Each call to ``__iter__`` creates a new cursor starting from the
-    beginning. Cursors block via ``threading.Condition`` when they
-    catch up to the producer.
+    beginning. When a cursor catches up to the buffer and the log is
+    not yet closed, it calls ``_request_more`` to pull more data from
+    the producer (typically the graph iterator via the run stream).
+
+    If no ``_request_more`` callback is set, the cursor returns
+    immediately when it reaches the end of the buffer — this is the
+    behavior used in unit tests where items are pushed before iteration.
 
     Use ``AsyncEventLog`` for async consumers.
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self._cond = threading.Condition(self._lock)
-
-    def _notify(self) -> None:
-        with self._lock:
-            self._cond.notify_all()
+        self._request_more: Callable[[], bool] | None = None
 
     def __iter__(self) -> Iterator[T]:
         """Return a new independent sync cursor over the log."""
@@ -76,17 +77,23 @@ class EventLog(_EventLogBase[T]):
     def _sync_cursor(self) -> Iterator[T]:
         cursor = 0
         while True:
-            with self._lock:
-                while cursor >= len(self._items) and not self._closed:
-                    self._cond.wait()
-                if cursor < len(self._items):
-                    item = self._items[cursor]
-                    cursor += 1
-                elif self._error is not None:
+            if cursor < len(self._items):
+                item = self._items[cursor]
+                cursor += 1
+                yield item
+            elif self._closed:
+                if self._error is not None:
                     raise self._error
-                else:
-                    return
-            yield item
+                return
+            elif self._request_more is not None:
+                # Pull from the producer until this log gets a new item
+                # or the graph is exhausted (which closes the log).
+                while cursor >= len(self._items) and not self._closed:
+                    if not self._request_more():
+                        break
+            else:
+                # No producer callback and not closed — buffer is complete.
+                return
 
 
 class AsyncEventLog(_EventLogBase[T]):
