@@ -51,7 +51,7 @@ class StreamChannel(Generic[T]):
     # -- Async iteration (in-process consumption) ---------------------------
 
     def __aiter__(self) -> AsyncIterator[T]:
-        return self._log.subscribe(0)
+        return aiter(self._log)
 
     # -- Internal (called by the mux) ---------------------------------------
 

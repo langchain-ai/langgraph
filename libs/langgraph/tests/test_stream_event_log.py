@@ -12,7 +12,7 @@ async def test_push_and_iterate_in_order():
     log.append("b")
     log.append("c")
     log.close()
-    items = [item async for item in log.subscribe(0)]
+    items = [item async for item in aiter(log)]
     assert items == ["a", "b", "c"]
 
 
@@ -22,8 +22,8 @@ async def test_multiple_independent_cursors():
     log.append("x")
     log.append("y")
     log.close()
-    items1 = [item async for item in log.subscribe(0)]
-    items2 = [item async for item in log.subscribe(0)]
+    items1 = [item async for item in aiter(log)]
+    items2 = [item async for item in aiter(log)]
     assert items1 == ["x", "y"]
     assert items2 == ["x", "y"]
 
@@ -32,7 +32,7 @@ async def test_multiple_independent_cursors():
 async def test_close_ends_iteration():
     log = EventLog()
     log.close()
-    items = [item async for item in log.subscribe(0)]
+    items = [item async for item in aiter(log)]
     assert items == []
 
 
@@ -41,19 +41,8 @@ async def test_fail_raises_error():
     log = EventLog()
     log.fail(RuntimeError("boom"))
     with pytest.raises(RuntimeError, match="boom"):
-        async for _ in log.subscribe(0):
+        async for _ in aiter(log):
             pass
-
-
-@pytest.mark.anyio
-async def test_nonzero_offset():
-    log = EventLog()
-    log.append("x")
-    log.append("y")
-    log.append("z")
-    log.close()
-    items = [item async for item in log.subscribe(2)]
-    assert items == ["z"]
 
 
 @pytest.mark.anyio
@@ -62,7 +51,7 @@ async def test_concurrent_push_and_iterate():
     received = []
 
     async def consumer():
-        async for item in log.subscribe(0):
+        async for item in aiter(log):
             received.append(item)
 
     async def producer():
@@ -80,7 +69,7 @@ async def test_items_before_cursor_visible():
     log = EventLog()
     log.append("a")
     log.append("b")
-    cursor = log.subscribe(0)
+    cursor = aiter(log)
     log.append("c")
     log.close()
     items = [item async for item in cursor]
@@ -91,7 +80,7 @@ async def test_items_before_cursor_visible():
 async def test_empty_log_closed_yields_nothing():
     log = EventLog()
     log.close()
-    items = [item async for item in log.subscribe(0)]
+    items = [item async for item in aiter(log)]
     assert items == []
 
 
@@ -102,7 +91,7 @@ async def test_fail_mid_iteration():
     received = []
 
     async def consumer():
-        async for item in log.subscribe(0):
+        async for item in aiter(log):
             received.append(item)
 
     async def producer():
@@ -129,7 +118,7 @@ async def test_abandoned_cursor_cleans_up_waiters():
     log: EventLog[str] = EventLog()
 
     for _ in range(10):
-        cursor = log.subscribe(0)
+        cursor = aiter(log)
         task = asyncio.ensure_future(cursor.__anext__())
         await asyncio.sleep(0)  # let task register its waiter
         task.cancel()

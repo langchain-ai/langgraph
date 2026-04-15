@@ -15,7 +15,7 @@ from typing import Any
 
 from langgraph.stream._convert import convert_to_protocol_event
 from langgraph.stream._event_log import EventLog
-from langgraph.stream._mux import StreamMux
+from langgraph.stream._mux import AsyncStreamMux, StreamMux
 from langgraph.stream._types import InterruptPayload, ProtocolEvent, StreamTransformer
 from langgraph.stream.chat_model_stream import AsyncChatModelStream, ChatModelStream
 from langgraph.stream.transformers import MessagesTransformer, ValuesTransformer
@@ -30,7 +30,7 @@ class _ValuesProjection:
 
     def __init__(
         self,
-        mux: StreamMux,
+        mux: AsyncStreamMux,
         values_transformer: ValuesTransformer,
         ns: list[str],
         mapper: Callable[[Any], Any] | None = None,
@@ -62,7 +62,7 @@ class _ValuesIterator:
         ns: list[str],
         mapper: Callable[[Any], Any] | None = None,
     ) -> None:
-        self._cursor = transformer.values_log.subscribe(0)
+        self._cursor = aiter(transformer.values_log)
         self._ns = ns
         self._mapper = mapper
 
@@ -92,7 +92,7 @@ class _MessagesProjection:
         self._transformer = messages_transformer
 
     def __aiter__(self) -> AsyncIterator[AsyncChatModelStream]:
-        return self._transformer.messages_log.subscribe(0)
+        return aiter(self._transformer.messages_log)
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +103,7 @@ class _MessagesProjection:
 class _SubgraphsProjection:
     """Async iterable yielding :class:`AsyncSubgraphRunStream` for each discovered subgraph."""
 
-    def __init__(self, mux: StreamMux, ns: list[str]) -> None:
+    def __init__(self, mux: AsyncStreamMux, ns: list[str]) -> None:
         self._mux = mux
         self._ns = ns
 
@@ -143,7 +143,7 @@ class AsyncGraphRunStream:
     def __init__(
         self,
         *,
-        mux: StreamMux,
+        mux: AsyncStreamMux,
         namespace: list[str] | None = None,
         transformers: list[StreamTransformer],
         abort_event: asyncio.Event | None = None,
@@ -308,7 +308,7 @@ async def create_async_graph_run_stream(
         if projection is not None:
             projections.append(projection)
 
-    mux = StreamMux(transformers=all_transformers)
+    mux = AsyncStreamMux(transformers=all_transformers)
 
     # Wire any StreamChannel instances found in transformer projections
     for projection in projections:
@@ -492,20 +492,91 @@ class GraphRunStream:
     def messages(self) -> Iterator[ChatModelStream]:
         """Sync iterable of :class:`ChatModelStream` instances.
 
-        Each yielded ``ChatModelStream`` is fully populated (``done=True``)
-        so that sync consumers can read ``.text``, ``.reasoning``, and
-        ``.usage`` immediately.
+        Each ``ChatModelStream`` is yielded as soon as the LLM begins
+        responding (on ``message-start``).  Its ``.text`` and
+        ``.reasoning`` properties are pump-driven
+        :class:`~langgraph.stream.chat_model_stream._SyncDualProjection`
+        instances that yield deltas as tokens arrive::
+
+            for msg in run.messages:
+                for delta in msg.text:
+                    print(delta, end="", flush=True)
+
+        If you don't need streaming, ``str(msg.text)`` pumps until
+        the message completes and returns the full text.
+
+        After each message is consumed, the pump advances through
+        non-message events (tool completions, values, etc.) so that
+        other transformer state is up-to-date before the next message
+        is yielded.  This means you can check
+        ``run.extensions["tools"]`` between messages and see inline
+        results.
         """
         t = self._find_transformer("messages")
         if t is None:
             return
-        for msg in _PumpDrivenLog(t.value, self._pump_one):
-            # Pump until this message is complete so sync consumers
-            # get a fully populated ChatModelStream.
-            while not msg.done:
+        log = t.value
+        for msg in _PumpDrivenLog(log, self._pump_one):
+            msg._bind_pump(self._pump_one)
+            yield msg
+            # Advance the pump past non-message events so other
+            # transformers have up-to-date state before the next
+            # message is yielded.
+            prev_count = len(log)
+            while len(log) == prev_count:
                 if not self._pump_one():
                     break
-            yield msg
+
+    # -- Subgraphs ----------------------------------------------------------
+
+    @property
+    def subgraphs(self) -> Iterator[SubgraphRunStream]:
+        """Sync iterable of :class:`SubgraphRunStream` for child graphs.
+
+        Namespaces are discovered lazily as events are pumped from the
+        source.  Each yielded stream has its own ``values``, ``messages``,
+        and ``output`` projections scoped to the child namespace.
+
+        After yielding a subgraph, the caller may consume its projections
+        (e.g. ``sub.values``), which pumps more events and can discover
+        new namespaces.  The loop re-checks for newly discovered
+        namespaces after each yield before attempting another pump.
+        """
+        yielded: set[str] = set()
+
+        while True:
+            # Yield any newly discovered namespaces.  Re-check after
+            # each yield because consuming a subgraph's projections
+            # can pump events that discover further namespaces.
+            found_new = False
+            for ns_segment in list(self._mux._discovered_ns):
+                if ns_segment in yielded:
+                    continue
+                found_new = True
+                yielded.add(ns_segment)
+                child_ns = self._ns + [ns_segment]
+                child_transformers: list[StreamTransformer] = [
+                    ValuesTransformer(),
+                    MessagesTransformer(namespace=child_ns),
+                ]
+                for t in child_transformers:
+                    t.init()
+                    self._mux.register_transformer(t)
+
+                yield SubgraphRunStream(
+                    mux=self._mux,
+                    namespace=child_ns,
+                    transformers=child_transformers,
+                    pump_one=self._pump_one,
+                    output_mapper=self._output_mapper,
+                )
+
+            if found_new:
+                continue  # re-check before pumping
+
+            # No new namespaces — pump one event
+            if not self._pump_one():
+                break
 
     # -- State --------------------------------------------------------------
 
@@ -532,6 +603,133 @@ class GraphRunStream:
                 else:
                     result[name] = value
         return result
+
+
+# ---------------------------------------------------------------------------
+# SubgraphRunStream — sync child stream
+# ---------------------------------------------------------------------------
+
+
+class SubgraphRunStream:
+    """Synchronous run stream for a child subgraph.
+
+    Shares the parent's :class:`StreamMux` and pump function.  Has its
+    own transformer set registered on the shared mux so that projections
+    (``values``, ``messages``, ``output``) are scoped to the child
+    namespace.
+
+    Adds ``.name`` and ``.index`` parsed from the last namespace segment
+    (e.g. ``"researcher:2"`` → ``name="researcher"``, ``index=2``).
+    """
+
+    def __init__(
+        self,
+        *,
+        mux: StreamMux,
+        namespace: list[str],
+        transformers: list[StreamTransformer],
+        pump_one: Callable[[], bool],
+        output_mapper: Callable[[Any], Any] | None = None,
+    ) -> None:
+        self._mux = mux
+        self._ns = namespace
+        self._transformers = transformers
+        self._pump_one = pump_one
+        self._output_mapper = output_mapper
+
+    # -- Identity -----------------------------------------------------------
+
+    @property
+    def name(self) -> str:
+        if self._ns:
+            segment = self._ns[-1]
+            return segment.split(":")[0] if ":" in segment else segment
+        return ""
+
+    @property
+    def index(self) -> int:
+        if self._ns:
+            segment = self._ns[-1]
+            if ":" in segment:
+                try:
+                    return int(segment.split(":")[-1])
+                except ValueError:
+                    pass
+        return 0
+
+    # -- Transformer lookup -------------------------------------------------
+
+    def _find_transformer(self, name: str) -> StreamTransformer | None:
+        for t in self._transformers:
+            if getattr(t, "name", None) == name:
+                return t
+        return None
+
+    # -- Helpers ------------------------------------------------------------
+
+    def _map(self, value: Any) -> Any:
+        if value is not None and self._output_mapper is not None:
+            return self._output_mapper(value)
+        return value
+
+    def _pump_all(self) -> None:
+        while self._pump_one():
+            pass
+
+    # -- Raw event iteration (sync) -----------------------------------------
+
+    def __iter__(self) -> Iterator[ProtocolEvent]:
+        for event in _PumpDrivenLog(self._mux.event_log, self._pump_one):
+            ns = event["params"].get("namespace", [])
+            if ns[: len(self._ns)] == self._ns:
+                yield event
+
+    # -- Named projections (sync) -------------------------------------------
+
+    @property
+    def output(self) -> Any:
+        """The final output state (blocking). Drains the source."""
+        self._pump_all()
+        return self._map(self._mux.get_latest_values(self._ns))
+
+    @property
+    def values(self) -> Iterator[Any]:
+        """Sync iterable of intermediate state snapshots."""
+        t = self._find_transformer("values")
+        if t is None:
+            return
+        for item in _PumpDrivenLog(t.value, self._pump_one):
+            if item.get("namespace", []) == self._ns:
+                yield self._map(item["data"])
+
+    @property
+    def messages(self) -> Iterator[ChatModelStream]:
+        """Sync iterable of :class:`ChatModelStream` instances.
+
+        Each ``ChatModelStream`` is yielded as soon as the LLM begins
+        responding.  See :attr:`GraphRunStream.messages` for usage.
+        """
+        t = self._find_transformer("messages")
+        if t is None:
+            return
+        log = t.value
+        for msg in _PumpDrivenLog(log, self._pump_one):
+            msg._bind_pump(self._pump_one)
+            yield msg
+            prev_count = len(log)
+            while len(log) == prev_count:
+                if not self._pump_one():
+                    break
+
+    # -- State --------------------------------------------------------------
+
+    @property
+    def interrupted(self) -> bool:
+        return self._mux.interrupted
+
+    @property
+    def interrupts(self) -> list[InterruptPayload]:
+        return self._mux.interrupts
 
 
 def create_graph_run_stream(
@@ -579,6 +777,7 @@ __all__ = [
     "AsyncGraphRunStream",
     "AsyncSubgraphRunStream",
     "GraphRunStream",
+    "SubgraphRunStream",
     "create_async_graph_run_stream",
     "create_graph_run_stream",
 ]

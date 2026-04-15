@@ -13,10 +13,68 @@ or ``full = await msg.text``).
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Generator
+from collections.abc import Callable, Generator, Iterator
 from typing import Any
 
 from langgraph.stream._types import UsageInfo
+
+
+# ---------------------------------------------------------------------------
+# Sync dual projection — iterable of deltas, str() for accumulated text
+# ---------------------------------------------------------------------------
+
+
+class _SyncDualProjection:
+    """Pump-driven sync iterable of string deltas.
+
+    Iterating yields incremental text fragments as the pump delivers
+    new ``content-block-delta`` events.  Calling ``str()`` drains the
+    pump and returns the full accumulated string.
+
+    This is the sync counterpart of :class:`_DualProjection` (the async
+    variant used by ``AsyncChatModelStream``).
+    """
+
+    __slots__ = ("_stream", "_attr", "_pump_one")
+
+    def __init__(
+        self,
+        stream: ChatModelStream,
+        attr: str,
+        pump_one: Callable[[], bool],
+    ) -> None:
+        self._stream = stream
+        self._attr = attr
+        self._pump_one = pump_one
+
+    def __iter__(self) -> Iterator[str]:
+        prev_len = 0
+        while True:
+            cur = getattr(self._stream, self._attr)
+            if len(cur) > prev_len:
+                yield cur[prev_len:]
+                prev_len = len(cur)
+            if self._stream._done:
+                return
+            if not self._pump_one():
+                # Source exhausted — yield any remaining
+                cur = getattr(self._stream, self._attr)
+                if len(cur) > prev_len:
+                    yield cur[prev_len:]
+                return
+
+    def __str__(self) -> str:
+        while not self._stream._done:
+            if not self._pump_one():
+                break
+        return getattr(self._stream, self._attr)
+
+    def __repr__(self) -> str:
+        return repr(getattr(self._stream, self._attr))
+
+    def __bool__(self) -> bool:
+        return bool(getattr(self._stream, self._attr))
+
 
 # ---------------------------------------------------------------------------
 # Sync variant
@@ -56,21 +114,52 @@ class ChatModelStream:
         self._usage_value: UsageInfo | None = None
         self._done = False
 
+        # Optional pump for sync streaming (set via _bind_pump)
+        self._pump_one: Callable[[], bool] | None = None
+
+    # -- Pump binding (called by GraphRunStream) ---------------------------
+
+    def _bind_pump(self, pump_one: Callable[[], bool]) -> None:
+        """Bind a pump function for sync token-by-token streaming.
+
+        When bound, ``.text`` and ``.reasoning`` return
+        :class:`_SyncDualProjection` instances that drive the pump and
+        yield deltas as the LLM produces tokens.
+        """
+        self._pump_one = pump_one
+
     # -- Public projections ------------------------------------------------
 
     @property
-    def text(self) -> str:
-        """Accumulated text content."""
+    def text(self) -> str | _SyncDualProjection:
+        """Text content.
+
+        When a pump is bound (sync streaming), returns a
+        :class:`_SyncDualProjection` — iterable of deltas,
+        ``str()`` for the full accumulated text.  Otherwise returns
+        the accumulated text string directly.
+        """
+        if self._pump_one is not None and not self._done:
+            return _SyncDualProjection(self, "_text_acc", self._pump_one)
         return self._text_acc
 
     @property
-    def reasoning(self) -> str:
-        """Accumulated reasoning content."""
+    def reasoning(self) -> str | _SyncDualProjection:
+        """Reasoning content.
+
+        Same dual behavior as :attr:`text`.
+        """
+        if self._pump_one is not None and not self._done:
+            return _SyncDualProjection(self, "_reasoning_acc", self._pump_one)
         return self._reasoning_acc
 
     @property
     def usage(self) -> UsageInfo | None:
         """Usage info, available after the message finishes."""
+        if self._pump_one is not None and not self._done:
+            while not self._done:
+                if not self._pump_one():
+                    break
         return self._usage_value
 
     @property
@@ -310,4 +399,4 @@ class AsyncChatModelStream(ChatModelStream):
         self._usage_proj._fail(error)
 
 
-__all__ = ["AsyncChatModelStream", "ChatModelStream"]
+__all__ = ["AsyncChatModelStream", "ChatModelStream", "_SyncDualProjection"]

@@ -1,9 +1,12 @@
 """Central event dispatcher with transformer pipeline for StreamingHandler.
 
-``StreamMux`` is the core coordination point: it holds the main
+``StreamMux`` is the sync-safe core: it holds the main
 :class:`EventLog`, tracks discovered namespaces for subgraph stream
 creation, and pipes every event through the registered
 :class:`StreamTransformer` pipeline before appending it to the log.
+
+``AsyncStreamMux`` extends the base with async subscription endpoints
+(output futures, namespace waiters, filtered event iteration).
 """
 
 from __future__ import annotations
@@ -19,11 +22,13 @@ from langgraph.stream.stream_channel import StreamChannel, is_stream_channel
 
 
 class StreamMux:
-    """Central event dispatcher for the StreamingHandler infrastructure.
+    """Sync-safe event dispatcher for the StreamingHandler infrastructure.
 
     The mux owns the main event log, applies the transformer pipeline to
-    every incoming event, and provides subscription endpoints for
-    filtered event iteration and subgraph discovery.
+    every incoming event, and tracks namespace discovery and latest values.
+
+    For async subscription endpoints (output futures, namespace waiters,
+    filtered event iteration), use :class:`AsyncStreamMux`.
     """
 
     def __init__(self, transformers: list[StreamTransformer] | None = None) -> None:
@@ -35,8 +40,6 @@ class StreamMux:
 
         # Namespace discovery: maps top-level ns segment → True
         self._discovered_ns: dict[str, bool] = {}
-        # Waiters for new namespace discovery
-        self._ns_waiters: list[asyncio.Future[None]] = []
 
         # Latest values per namespace (list-of-strings key)
         self._latest_values: dict[str, Any] = {}
@@ -44,9 +47,6 @@ class StreamMux:
         # Interrupt tracking
         self._interrupts: list[InterruptPayload] = []
         self._interrupted = False
-
-        # Output promise tracking
-        self._output_futures: dict[str, asyncio.Future[Any]] = {}
 
         # Closed state
         self._closed = False
@@ -76,7 +76,7 @@ class StreamMux:
             top_segment = ns[0]
             if top_segment not in self._discovered_ns:
                 self._discovered_ns[top_segment] = True
-                self._wake_ns_waiters()
+                self._on_ns_discovered(top_segment)
 
         # Track values
         if event["method"] == "values":
@@ -113,7 +113,7 @@ class StreamMux:
             self._event_log.append(event)
 
     def close(self, output: Any = None) -> None:
-        """Close the mux, resolving all output futures."""
+        """Close the mux, finalizing transformers and the event log."""
         if self._closed:
             return
         self._closed = True
@@ -130,20 +130,8 @@ class StreamMux:
         # Close the event log
         self._event_log.close()
 
-        # Resolve output futures
-        for ns_key, fut in self._output_futures.items():
-            if not fut.done():
-                value = self._latest_values.get(ns_key)
-                try:
-                    fut.get_loop().call_soon_threadsafe(fut.set_result, value)
-                except RuntimeError:
-                    pass
-
-        # Wake namespace waiters
-        self._wake_ns_waiters()
-
     def fail(self, error: BaseException) -> None:
-        """Fail the mux, rejecting all output futures."""
+        """Fail the mux, propagating the error to transformers and channels."""
         if self._closed:
             return
         self._closed = True
@@ -160,83 +148,6 @@ class StreamMux:
 
         # Fail the event log
         self._event_log.fail(error)
-
-        # Reject output futures
-        for fut in self._output_futures.values():
-            if not fut.done():
-                try:
-                    fut.get_loop().call_soon_threadsafe(fut.set_exception, error)
-                except RuntimeError:
-                    pass
-
-        # Wake namespace waiters
-        self._wake_ns_waiters()
-
-    # -- Consumer API -------------------------------------------------------
-
-    def subscribe_events(
-        self, path: list[str] | None = None, offset: int = 0
-    ) -> AsyncIterator[ProtocolEvent]:
-        """Return an async iterator over events matching *path*.
-
-        If *path* is ``None`` or empty, all events are yielded.
-        Otherwise, only events whose namespace starts with *path*
-        are yielded.
-        """
-        cursor = self._event_log.subscribe(offset)
-        if not path:
-            return cursor
-        return _FilteredEventIterator(cursor, path)
-
-    async def subscribe_subgraphs(
-        self, path: list[str] | None = None, offset: int = 0
-    ) -> AsyncIterator[str]:
-        """Yield top-level namespace segments as they are discovered.
-
-        Each yielded value is the first namespace segment of a newly
-        discovered subgraph (e.g. ``"agent:0"``).
-        """
-        yielded: set[str] = set()
-        while True:
-            # Yield any newly discovered namespaces
-            for ns_segment in list(self._discovered_ns):
-                if ns_segment not in yielded:
-                    # Filter by path prefix if specified
-                    if path:
-                        if not ns_segment.startswith(path[0]):
-                            continue
-                    yielded.add(ns_segment)
-                    yield ns_segment
-
-            if self._closed:
-                return
-
-            # Wait for new namespaces
-            loop = asyncio.get_running_loop()
-            fut: asyncio.Future[None] = loop.create_future()
-            self._ns_waiters.append(fut)
-            await fut
-
-    def get_output_future(self, ns: list[str] | None = None) -> asyncio.Future[Any]:
-        """Get or create an output future for a namespace.
-
-        The future resolves to the latest ``values`` event data when
-        the mux is closed.
-        """
-        ns_key = _ns_key(ns or [])
-        if ns_key not in self._output_futures:
-            loop = asyncio.get_running_loop()
-            self._output_futures[ns_key] = loop.create_future()
-
-            # If already closed, resolve immediately
-            if self._closed:
-                value = self._latest_values.get(ns_key)
-                if self._error is not None:
-                    self._output_futures[ns_key].set_exception(self._error)
-                else:
-                    self._output_futures[ns_key].set_result(value)
-
-        return self._output_futures[ns_key]
 
     # -- Inspection ---------------------------------------------------------
 
@@ -257,6 +168,13 @@ class StreamMux:
         return self._latest_values.get(_ns_key(ns or []))
 
     # -- Internal -----------------------------------------------------------
+
+    def _on_ns_discovered(self, segment: str) -> None:
+        """Hook called when a new top-level namespace segment is discovered.
+
+        The base implementation is a no-op.  :class:`AsyncStreamMux`
+        overrides this to wake namespace waiters.
+        """
 
     def register_transformer(self, transformer: StreamTransformer) -> None:
         """Register a new transformer and replay all buffered events through it.
@@ -333,6 +251,135 @@ class StreamMux:
 
                 channel._wire(_make_forwarder(channel))
 
+
+class AsyncStreamMux(StreamMux):
+    """Async extension of :class:`StreamMux`.
+
+    Adds output futures, namespace waiters, and async subscription
+    endpoints (``subscribe_events``, ``subscribe_subgraphs``,
+    ``get_output_future``).
+    """
+
+    def __init__(self, transformers: list[StreamTransformer] | None = None) -> None:
+        super().__init__(transformers)
+        # Waiters for new namespace discovery
+        self._ns_waiters: list[asyncio.Future[None]] = []
+        # Output promise tracking
+        self._output_futures: dict[str, asyncio.Future[Any]] = {}
+
+    # -- Producer API overrides ---------------------------------------------
+
+    def close(self, output: Any = None) -> None:
+        """Close the mux, resolving all output futures."""
+        if self._closed:
+            return
+
+        # Let the base class finalize transformers, channels, and event log
+        super().close(output)
+
+        # Resolve output futures
+        for ns_key, fut in self._output_futures.items():
+            if not fut.done():
+                value = self._latest_values.get(ns_key)
+                try:
+                    fut.get_loop().call_soon_threadsafe(fut.set_result, value)
+                except RuntimeError:
+                    pass
+
+        # Wake namespace waiters
+        self._wake_ns_waiters()
+
+    def fail(self, error: BaseException) -> None:
+        """Fail the mux, rejecting all output futures."""
+        if self._closed:
+            return
+
+        # Let the base class fail transformers, channels, and event log
+        super().fail(error)
+
+        # Reject output futures
+        for fut in self._output_futures.values():
+            if not fut.done():
+                try:
+                    fut.get_loop().call_soon_threadsafe(fut.set_exception, error)
+                except RuntimeError:
+                    pass
+
+        # Wake namespace waiters
+        self._wake_ns_waiters()
+
+    # -- Consumer API -------------------------------------------------------
+
+    def subscribe_events(
+        self, path: list[str] | None = None
+    ) -> AsyncIterator[ProtocolEvent]:
+        """Return an async iterator over events matching *path*.
+
+        If *path* is ``None`` or empty, all events are yielded.
+        Otherwise, only events whose namespace starts with *path*
+        are yielded.
+        """
+        cursor = aiter(self._event_log)
+        if not path:
+            return cursor
+        return _FilteredEventIterator(cursor, path)
+
+    async def subscribe_subgraphs(
+        self, path: list[str] | None = None, offset: int = 0
+    ) -> AsyncIterator[str]:
+        """Yield top-level namespace segments as they are discovered.
+
+        Each yielded value is the first namespace segment of a newly
+        discovered subgraph (e.g. ``"agent:0"``).
+        """
+        yielded: set[str] = set()
+        while True:
+            # Yield any newly discovered namespaces
+            for ns_segment in list(self._discovered_ns):
+                if ns_segment not in yielded:
+                    # Filter by path prefix if specified
+                    if path:
+                        if not ns_segment.startswith(path[0]):
+                            continue
+                    yielded.add(ns_segment)
+                    yield ns_segment
+
+            if self._closed:
+                return
+
+            # Wait for new namespaces
+            loop = asyncio.get_running_loop()
+            fut: asyncio.Future[None] = loop.create_future()
+            self._ns_waiters.append(fut)
+            await fut
+
+    def get_output_future(self, ns: list[str] | None = None) -> asyncio.Future[Any]:
+        """Get or create an output future for a namespace.
+
+        The future resolves to the latest ``values`` event data when
+        the mux is closed.
+        """
+        ns_key = _ns_key(ns or [])
+        if ns_key not in self._output_futures:
+            loop = asyncio.get_running_loop()
+            self._output_futures[ns_key] = loop.create_future()
+
+            # If already closed, resolve immediately
+            if self._closed:
+                value = self._latest_values.get(ns_key)
+                if self._error is not None:
+                    self._output_futures[ns_key].set_exception(self._error)
+                else:
+                    self._output_futures[ns_key].set_result(value)
+
+        return self._output_futures[ns_key]
+
+    # -- Internal -----------------------------------------------------------
+
+    def _on_ns_discovered(self, segment: str) -> None:
+        """Wake namespace waiters when a new namespace is discovered."""
+        self._wake_ns_waiters()
+
     def _wake_ns_waiters(self) -> None:
         for fut in self._ns_waiters:
             if not fut.done():
@@ -375,4 +422,4 @@ def _ns_starts_with(ns: list[str], prefix: list[str]) -> bool:
     return ns[: len(prefix)] == prefix
 
 
-__all__ = ["StreamMux"]
+__all__ = ["AsyncStreamMux", "StreamMux"]

@@ -15,6 +15,17 @@ from typing import Generic, TypeVar
 T = TypeVar("T")
 
 
+def _resolve_future(fut: asyncio.Future[None]) -> None:
+    """Set a future's result if it hasn't already completed or been cancelled.
+
+    Runs on the event loop thread (scheduled via ``call_soon_threadsafe``)
+    so that the ``done()`` check and ``set_result`` are atomic with
+    respect to cancellation.
+    """
+    if not fut.done():
+        fut.set_result(None)
+
+
 class EventLog(Generic[T]):
     """Append-only event buffer with cursor-based async iteration.
 
@@ -56,14 +67,9 @@ class EventLog(Generic[T]):
 
     # -- Consumer API -------------------------------------------------------
 
-    def subscribe(self, offset: int = 0) -> _Cursor[T]:
-        """Create a new cursor starting at *offset*.
-
-        If *offset* is 0 the cursor replays the entire log.  If
-        *offset* equals ``len(self)`` the cursor starts from the
-        current tip and only sees future events.
-        """
-        return _Cursor(self, offset)
+    def __aiter__(self) -> _Cursor[T]:
+        """Return a fresh cursor from the beginning of the log."""
+        return _Cursor(self)
 
     # -- Inspection ---------------------------------------------------------
 
@@ -81,12 +87,11 @@ class EventLog(Generic[T]):
 
     def _wake_all(self) -> None:
         for fut in self._waiters:
-            if not fut.done():
-                try:
-                    fut.get_loop().call_soon_threadsafe(fut.set_result, None)
-                except RuntimeError:
-                    # Loop already closed — ignore.
-                    pass
+            try:
+                fut.get_loop().call_soon_threadsafe(_resolve_future, fut)
+            except RuntimeError:
+                # Loop already closed — ignore.
+                pass
         self._waiters.clear()
 
 
@@ -95,9 +100,9 @@ class _Cursor(Generic[T]):
 
     __slots__ = ("_log", "_offset")
 
-    def __init__(self, log: EventLog[T], offset: int) -> None:
+    def __init__(self, log: EventLog[T]) -> None:
         self._log = log
-        self._offset = offset
+        self._offset = 0
 
     def __aiter__(self) -> _Cursor[T]:
         return self
@@ -114,18 +119,17 @@ class _Cursor(Generic[T]):
                 if self._log._closed:
                     raise StopAsyncIteration
                 # Nothing available yet — register a waiter
-                loop = asyncio.get_running_loop()
-                fut: asyncio.Future[None] = loop.create_future()
+                fut: asyncio.Future[None] = asyncio.get_running_loop().create_future()
                 self._log._waiters.append(fut)
             # Wait outside the lock
             try:
                 await fut
             except asyncio.CancelledError:
-                # Remove our future so it doesn't accumulate in the list.
-                try:
-                    self._log._waiters.remove(fut)
-                except ValueError:
-                    pass  # Already removed by _wake_all
+                with self._log._lock:
+                    try:
+                        self._log._waiters.remove(fut)
+                    except ValueError:
+                        pass  # Already removed by _wake_all
                 raise
 
 

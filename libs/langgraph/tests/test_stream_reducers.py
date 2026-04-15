@@ -31,7 +31,7 @@ async def test_values_captures_values_events():
     reducer.finalize()
 
     collected = []
-    async for item in reducer.values_log.subscribe(0):
+    async for item in reducer.values_log:
         collected.append(item)
     assert len(collected) == 2
     assert collected[0]["data"] == {"a": 1}
@@ -47,7 +47,7 @@ async def test_values_ignores_other_modes():
     reducer.finalize()
 
     collected = []
-    async for item in reducer.values_log.subscribe(0):
+    async for item in reducer.values_log:
         collected.append(item)
     assert len(collected) == 0
 
@@ -113,7 +113,7 @@ async def test_messages_groups_lifecycle():
     reducer.finalize()
 
     collected = []
-    async for stream in reducer.messages_log.subscribe(0):
+    async for stream in reducer.messages_log:
         collected.append(stream)
     assert len(collected) == 1
     assert isinstance(collected[0], ChatModelStream)
@@ -131,7 +131,7 @@ async def test_messages_multiple_sequential():
     reducer.finalize()
 
     collected = []
-    async for stream in reducer.messages_log.subscribe(0):
+    async for stream in reducer.messages_log:
         collected.append(stream)
     assert len(collected) == 2
 
@@ -147,7 +147,7 @@ async def test_messages_namespace_filter():
     reducer.finalize()
 
     collected = []
-    async for stream in reducer.messages_log.subscribe(0):
+    async for stream in reducer.messages_log:
         collected.append(stream)
     assert len(collected) == 1
 
@@ -163,7 +163,7 @@ async def test_messages_node_filter():
     reducer.finalize()
 
     collected = []
-    async for stream in reducer.messages_log.subscribe(0):
+    async for stream in reducer.messages_log:
         collected.append(stream)
     assert len(collected) == 1
 
@@ -181,7 +181,7 @@ async def test_messages_error_event():
     reducer.finalize()
 
     collected: list[ChatModelStream] = []
-    async for stream in reducer.messages_log.subscribe(0):
+    async for stream in reducer.messages_log:
         collected.append(stream)
     assert len(collected) == 1
     assert collected[0].done
@@ -198,7 +198,7 @@ async def test_messages_fail_propagates_to_active():
 
     # The messages log should be failed too
     with pytest.raises(RuntimeError, match="graph failed"):
-        async for _ in reducer.messages_log.subscribe(0):
+        async for _ in reducer.messages_log:
             pass
 
 
@@ -210,5 +210,5 @@ async def test_values_fail_propagates():
     reducer.fail(RuntimeError("graph failed"))
 
     with pytest.raises(RuntimeError, match="graph failed"):
-        async for _ in reducer.values_log.subscribe(0):
+        async for _ in reducer.values_log:
             pass

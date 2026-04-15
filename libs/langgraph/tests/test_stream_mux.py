@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from langgraph.stream._convert import convert_to_protocol_event
-from langgraph.stream._mux import StreamMux
+from langgraph.stream._mux import AsyncStreamMux, StreamMux
 from langgraph.stream._types import ProtocolEvent
 from langgraph.stream.stream_channel import StreamChannel
 
@@ -70,7 +70,7 @@ async def test_top_level_ns_only():
 
 @pytest.mark.anyio
 async def test_subscribe_events_filter():
-    mux = StreamMux()
+    mux = AsyncStreamMux()
     mux.push(_event("values", {"a": 1}, ns=["child:0"]))
     mux.push(_event("values", {"b": 2}, ns=["other:1"]))
     mux.push(_event("values", {"c": 3}, ns=["child:0"]))
@@ -86,7 +86,7 @@ async def test_subscribe_events_filter():
 
 @pytest.mark.anyio
 async def test_close_resolves_output():
-    mux = StreamMux()
+    mux = AsyncStreamMux()
     fut = mux.get_output_future()
     mux.push(_event("values", {"v": 1}))
     mux.push(_event("values", {"v": 2}))
@@ -97,7 +97,7 @@ async def test_close_resolves_output():
 
 @pytest.mark.anyio
 async def test_fail_rejects_output():
-    mux = StreamMux()
+    mux = AsyncStreamMux()
     fut = mux.get_output_future()
     mux.fail(ValueError("boom"))
     with pytest.raises(ValueError, match="boom"):
@@ -155,7 +155,7 @@ async def test_push_after_close_ignored():
 
 @pytest.mark.anyio
 async def test_fail_rejects_all_futures():
-    mux = StreamMux()
+    mux = AsyncStreamMux()
     fut1 = mux.get_output_future([])
     fut2 = mux.get_output_future(["child:0"])
     mux.fail(ValueError("boom"))
@@ -172,7 +172,7 @@ async def test_channel_events_bypass_transformer_pipeline():
     the JS implementation and avoids re-entrancy bugs.
     """
     mock = _MockTransformer()
-    mux = StreamMux(transformers=[mock])
+    mux = AsyncStreamMux(transformers=[mock])
 
     channel: StreamChannel[str] = StreamChannel("my_channel")
     mux.wire_channels({"ch": channel})
@@ -208,7 +208,7 @@ async def test_event_log_has_monotonic_seq_numbers():
     while channel-emitted events use a separate counter
     (``_next_emit_seq``).  When interleaved, seq numbers can duplicate.
     """
-    mux = StreamMux()
+    mux = AsyncStreamMux()
     channel: StreamChannel[str] = StreamChannel("test_ch")
     mux.wire_channels({"ch": channel})
 
@@ -266,7 +266,7 @@ async def test_channel_push_during_process_preserves_namespace():
 
     t1 = _ChannelTransformer("first")
     t2 = _ChannelTransformer("second")
-    mux = StreamMux(transformers=[t1, t2])
+    mux = AsyncStreamMux(transformers=[t1, t2])
     mux.wire_channels({"first": t1.channel})
     mux.wire_channels({"second": t2.channel})
 
