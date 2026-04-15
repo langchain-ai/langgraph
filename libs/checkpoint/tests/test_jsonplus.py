@@ -983,3 +983,109 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_msgpack_warning_dedup_default_mode(caplog: pytest.LogCaptureFixture) -> None:
+    """Repeated deserialization of the same unregistered type should only warn once."""
+    current = _lg_msgpack.STRICT_MSGPACK_ENABLED
+    _lg_msgpack.STRICT_MSGPACK_ENABLED = False
+    serde = JsonPlusSerializer()
+
+    obj = AnotherPydantic(foo="test")
+    dumped = serde.dumps_typed(obj)
+
+    caplog.clear()
+    serde.loads_typed(dumped)
+    first_count = caplog.text.lower().count("unregistered type")
+    assert first_count >= 1
+
+    caplog.clear()
+    serde.loads_typed(dumped)
+    assert caplog.text.lower().count("unregistered type") == 0
+
+    _lg_msgpack.STRICT_MSGPACK_ENABLED = current
+
+
+def test_msgpack_warning_dedup_strict_mode(caplog: pytest.LogCaptureFixture) -> None:
+    """Repeated deserialization of the same blocked type should only warn once."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+
+    obj = AnotherPydantic(foo="test")
+    dumped = serde.dumps_typed(obj)
+
+    caplog.clear()
+    serde.loads_typed(dumped)
+    first_count = caplog.text.lower().count("blocked")
+    assert first_count >= 1
+
+    caplog.clear()
+    serde.loads_typed(dumped)
+    assert caplog.text.lower().count("blocked") == 0
+
+
+def test_register_safe_types_silences_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Types added via register_safe_types should deserialize without warnings."""
+    _lg_msgpack.register_safe_types([AnotherPydantic])
+    try:
+        serde = JsonPlusSerializer()
+
+        obj = AnotherPydantic(foo="test")
+
+        caplog.clear()
+        dumped = serde.dumps_typed(obj)
+        result = serde.loads_typed(dumped)
+
+        assert "unregistered type" not in caplog.text.lower()
+        assert "blocked" not in caplog.text.lower()
+        assert result == obj
+    finally:
+        _lg_msgpack._CUSTOM_SAFE_MSGPACK_TYPES.discard(
+            (AnotherPydantic.__module__, AnotherPydantic.__name__)
+        )
+
+
+def test_register_safe_types_with_tuples(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """register_safe_types should accept (module, name) tuples."""
+    _lg_msgpack.register_safe_types([("tests.test_jsonplus", "AnotherPydantic")])
+    try:
+        serde = JsonPlusSerializer()
+
+        obj = AnotherPydantic(foo="test")
+
+        caplog.clear()
+        dumped = serde.dumps_typed(obj)
+        result = serde.loads_typed(dumped)
+
+        assert "unregistered type" not in caplog.text.lower()
+        assert "blocked" not in caplog.text.lower()
+        assert result == obj
+    finally:
+        _lg_msgpack._CUSTOM_SAFE_MSGPACK_TYPES.discard(
+            ("tests.test_jsonplus", "AnotherPydantic")
+        )
+
+
+def test_register_safe_types_strict_mode(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Types added via register_safe_types should also work in strict mode."""
+    _lg_msgpack.register_safe_types([AnotherPydantic])
+    try:
+        serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+
+        obj = AnotherPydantic(foo="test")
+
+        caplog.clear()
+        dumped = serde.dumps_typed(obj)
+        result = serde.loads_typed(dumped)
+
+        assert "blocked" not in caplog.text.lower()
+        assert result == obj
+    finally:
+        _lg_msgpack._CUSTOM_SAFE_MSGPACK_TYPES.discard(
+            (AnotherPydantic.__module__, AnotherPydantic.__name__)
+        )

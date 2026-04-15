@@ -1,5 +1,6 @@
 import os
 from collections.abc import Iterable
+from inspect import isclass
 from typing import cast
 
 STRICT_MSGPACK_ENABLED = os.getenv("LANGGRAPH_STRICT_MSGPACK", "false").lower() in (
@@ -87,3 +88,14 @@ SAFE_MSGPACK_METHODS: frozenset[tuple[str, str, str]] = frozenset(
 
 
 AllowedMsgpackModules = Iterable[tuple[str, ...] | type]
+
+_CUSTOM_SAFE_MSGPACK_TYPES: set[tuple[str, ...]] = set()
+
+
+def register_safe_types(types: Iterable[type | tuple[str, ...]]) -> None:
+    """Add types to the global safe-types allowlist so they deserialize without warnings."""
+    for t in types:
+        if isclass(t):
+            _CUSTOM_SAFE_MSGPACK_TYPES.add((t.__module__, t.__name__))
+        else:
+            _CUSTOM_SAFE_MSGPACK_TYPES.add(cast(tuple[str, ...], t))
