@@ -6,6 +6,11 @@ Implementation of LangGraph CheckpointSaver that uses Postgres.
 
 By default `langgraph-checkpoint-postgres` installs `psycopg` (Psycopg 3) without any extras. However, you can choose a specific installation that best suits your needs [here](https://www.psycopg.org/psycopg3/docs/basic/install.html) (for example, `psycopg[binary]`).
 
+## Security
+
+> [!IMPORTANT]
+> Set `LANGGRAPH_STRICT_MSGPACK=true` in production. This restricts checkpoint deserialization to a built-in allowlist, preventing code execution if the database is compromised. See the [langgraph-checkpoint README](https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint#serde) for details.
+
 ## Usage
 
 > [!IMPORTANT]

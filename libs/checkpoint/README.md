@@ -26,6 +26,9 @@ You must pass these when invoking the graph as part of the configurable part of 
 
 `langgraph_checkpoint` also defines protocol for serialization/deserialization (serde) and provides an default implementation (`langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer`) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
 
+> [!IMPORTANT]
+> **Checkpoint deserialization security:** By default the serializer allows any Python type found in checkpoint data. If your checkpoint database could be written to by an untrusted party, set the environment variable `LANGGRAPH_STRICT_MSGPACK=true` to restrict deserialization to a built-in allowlist. You can also pass an explicit `allowed_msgpack_modules` list to `JsonPlusSerializer`.
+
 ### Pending writes
 
 When a graph node fails mid-execution at a given superstep, LangGraph stores pending checkpoint writes from any other nodes that completed successfully at that superstep, so that whenever we resume graph execution from that superstep we don't re-run the successful nodes.
