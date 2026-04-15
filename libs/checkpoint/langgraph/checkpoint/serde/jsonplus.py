@@ -511,51 +511,59 @@ def _create_msgpack_ext_hook(
         An ext_hook function for use with ormsgpack.unpackb.
     """
 
+    _warned_types: set[tuple[str, ...]] = set()
+    _warned_methods: set[tuple[str, str, str]] = set()
+
     def _check_allowed(module: str, name: str) -> bool:
         """Check if type is allowed. Returns True if allowed, False if blocked."""
         key = (module, name)
 
-        if key in _lg_msgpack.SAFE_MSGPACK_TYPES:
+        if (
+            key in _lg_msgpack.SAFE_MSGPACK_TYPES
+            or key in _lg_msgpack._CUSTOM_SAFE_MSGPACK_TYPES
+        ):
             return True
 
         if allowed_modules is True:
-            # default is to warn but allow unregistered types
+            if key not in _warned_types:
+                _warned_types.add(key)
+                emit_serde_event(
+                    {
+                        "kind": "msgpack_unregistered_allowed",
+                        "module": module,
+                        "name": name,
+                    }
+                )
+                logger.warning(
+                    "Deserializing unregistered type %s.%s from checkpoint. "
+                    "This will be blocked in a future version. "
+                    "Add to allowed_msgpack_modules to silence: [(%r, %r)]",
+                    module,
+                    name,
+                    module,
+                    name,
+                )
+            return True
+        if allowed_modules is not None:
+            if key in allowed_modules:
+                return True
+        if key not in _warned_types:
+            _warned_types.add(key)
             emit_serde_event(
                 {
-                    "kind": "msgpack_unregistered_allowed",
+                    "kind": "msgpack_blocked",
                     "module": module,
                     "name": name,
                 }
             )
             logger.warning(
-                "Deserializing unregistered type %s.%s from checkpoint. "
-                "This will be blocked in a future version. "
-                "Add to allowed_msgpack_modules to silence: [(%r, %r)]",
+                "Blocked deserialization of %s.%s - not in allowed_msgpack_modules. "
+                "Add to allowed_msgpack_modules to allow: [(%r, %r)]",
                 module,
                 name,
                 module,
                 name,
             )
-            return True
-        if allowed_modules is not None:
-            if key in allowed_modules:
-                return True
-        # strict mode blocks unregistered types
-        emit_serde_event(
-            {
-                "kind": "msgpack_blocked",
-                "module": module,
-                "name": name,
-            }
-        )
-        logger.warning(
-            "Blocked deserialization of %s.%s - not in allowed_msgpack_modules. "
-            "Add to allowed_msgpack_modules to allow: [(%r, %r)]",
-            module,
-            name,
-            module,
-            name,
-        )
         return False
 
     def _check_allowed_method(module: str, name: str, method: str) -> bool:
@@ -563,21 +571,23 @@ def _create_msgpack_ext_hook(
         key = (module, name, method)
         if key in _lg_msgpack.SAFE_MSGPACK_METHODS:
             return True
-        emit_serde_event(
-            {
-                "kind": "msgpack_method_blocked",
-                "module": module,
-                "name": name,
-                "method": method,
-            }
-        )
-        logger.warning(
-            "Blocked deserialization of method call %s.%s.%s - "
-            "not in allowed methods set.",
-            module,
-            name,
-            method,
-        )
+        if key not in _warned_methods:
+            _warned_methods.add(key)
+            emit_serde_event(
+                {
+                    "kind": "msgpack_method_blocked",
+                    "module": module,
+                    "name": name,
+                    "method": method,
+                }
+            )
+            logger.warning(
+                "Blocked deserialization of method call %s.%s.%s - "
+                "not in allowed methods set.",
+                module,
+                name,
+                method,
+            )
         return False
 
     def ext_hook(code: int, data: bytes) -> Any:
