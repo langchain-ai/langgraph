@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Generic, TypeVar
 
-from langgraph.stream._event_log import EventLog
+from langgraph.stream._event_log import AsyncEventLog, EventLog, _EventLogBase
 
 T = TypeVar("T")
 
@@ -11,7 +11,7 @@ T = TypeVar("T")
 class StreamChannel(Generic[T]):
     """A named projection channel with optional protocol auto-forwarding.
 
-    Wraps an `EventLog[T]` and declares a protocol channel name. When the
+    Wraps an event log and declares a protocol channel name. When the
     `StreamMux` detects a `StreamChannel` in a transformer's ``init()``
     return value, it automatically wires every ``push()`` to inject a
     `ProtocolEvent` into the main event stream using the channel's name
@@ -25,9 +25,10 @@ class StreamChannel(Generic[T]):
     using only StreamChannels don't need ``finalize`` / ``fail`` hooks.
     """
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, *, is_async: bool = False) -> None:
         self.name = name
-        self._log: EventLog[T] = EventLog()
+        self._is_async = is_async
+        self._log: _EventLogBase[T] = AsyncEventLog() if is_async else EventLog()
         self._wire_fn: Callable[[T], None] | None = None
 
     def push(self, item: T) -> None:
@@ -53,11 +54,21 @@ class StreamChannel(Generic[T]):
         self._log.fail(err)
 
     # ------------------------------------------------------------------
-    # Iteration — delegates to the inner EventLog (multi-cursor)
+    # Iteration — delegates to the inner event log (multi-cursor)
     # ------------------------------------------------------------------
 
     def __iter__(self) -> Iterator[T]:
+        if not isinstance(self._log, EventLog):
+            raise RuntimeError(
+                "Cannot use sync iteration on an async StreamChannel. "
+                "Use 'async for' instead."
+            )
         return iter(self._log)
 
     def __aiter__(self) -> AsyncIterator[T]:
+        if not isinstance(self._log, AsyncEventLog):
+            raise RuntimeError(
+                "Cannot use async iteration on a sync StreamChannel. "
+                "Use 'for' instead."
+            )
         return self._log.__aiter__()

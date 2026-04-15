@@ -63,7 +63,9 @@ class StreamingHandler:
         Returns a `GraphRunStream` immediately. A background daemon thread
         pumps events from the graph into the transformer pipeline.
         """
-        mux, extensions, native_keys, values_t = self._setup(transformers)
+        mux, extensions, native_keys, values_t = self._setup(
+            transformers, is_async=False
+        )
 
         def pump() -> None:
             try:
@@ -103,7 +105,9 @@ class StreamingHandler:
         Returns an `AsyncGraphRunStream` immediately. A background asyncio
         task pumps events from the graph into the transformer pipeline.
         """
-        mux, extensions, native_keys, values_t = self._setup(transformers)
+        mux, extensions, native_keys, values_t = self._setup(
+            transformers, is_async=True
+        )
 
         async def pump() -> None:
             try:
@@ -135,15 +139,17 @@ class StreamingHandler:
     @staticmethod
     def _setup(
         user_transformers: list[StreamTransformer] | None,
+        *,
+        is_async: bool = False,
     ) -> tuple[StreamMux, dict[str, Any], set[str], ValuesTransformer]:
         """Create the mux, register all transformers.
 
         Returns (mux, extensions, native_keys, values_transformer).
         """
-        mux = StreamMux()
+        mux = StreamMux(is_async=is_async)
 
-        values_t = ValuesTransformer()
-        messages_t = MessagesTransformer()
+        values_t = ValuesTransformer(is_async=is_async)
+        messages_t = MessagesTransformer(is_async=is_async)
 
         all_transformers: list[StreamTransformer] = [values_t, messages_t]
         if user_transformers:

@@ -15,6 +15,7 @@ from typing_extensions import TypedDict
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.stream import (
+    AsyncEventLog,
     EventLog,
     StreamChannel,
     StreamingHandler,
@@ -164,7 +165,7 @@ class TestEventLog:
 
     @pytest.mark.anyio
     async def test_async_iteration(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: AsyncEventLog[int] = AsyncEventLog()
 
         async def producer():
             for i in range(3):
@@ -177,7 +178,7 @@ class TestEventLog:
 
     @pytest.mark.anyio
     async def test_async_multi_cursor(self) -> None:
-        log: EventLog[str] = EventLog()
+        log: AsyncEventLog[str] = AsyncEventLog()
         log.push("x")
         log.push("y")
         log.close()
@@ -188,7 +189,7 @@ class TestEventLog:
 
     @pytest.mark.anyio
     async def test_async_fail(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: AsyncEventLog[int] = AsyncEventLog()
         log.push(1)
         log.fail(RuntimeError("async error"))
         with pytest.raises(RuntimeError, match="async error"):
@@ -211,7 +212,7 @@ class TestEventLog:
     @pytest.mark.anyio
     async def test_async_cursor_yields_items_before_error(self) -> None:
         """Async cursor should yield all buffered items before raising."""
-        log: EventLog[int] = EventLog()
+        log: AsyncEventLog[int] = AsyncEventLog()
         log.push(1)
         log.push(2)
         log.push(3)
@@ -246,7 +247,7 @@ class TestEventLog:
     @pytest.mark.anyio
     async def test_empty_log_async(self) -> None:
         """Async-iterating a closed empty log should yield nothing."""
-        log: EventLog[int] = EventLog()
+        log: AsyncEventLog[int] = AsyncEventLog()
         log.close()
         assert [item async for item in log] == []
 
@@ -260,11 +261,24 @@ class TestEventLog:
     @pytest.mark.anyio
     async def test_empty_log_fail_async(self) -> None:
         """Failing an empty log should raise immediately with no items (async)."""
-        log: EventLog[int] = EventLog()
+        log: AsyncEventLog[int] = AsyncEventLog()
         log.fail(ValueError("empty fail"))
         with pytest.raises(ValueError, match="empty fail"):
             async for _ in log:
                 pass
+
+    def test_sync_has_no_aiter(self) -> None:
+        """EventLog (sync) should not support async iteration."""
+        log: EventLog[int] = EventLog()
+        log.close()
+        assert not hasattr(log, "__aiter__")
+
+    @pytest.mark.anyio
+    async def test_async_has_no_iter(self) -> None:
+        """AsyncEventLog should not support sync iteration."""
+        log: AsyncEventLog[int] = AsyncEventLog()
+        log.close()
+        assert not hasattr(log, "__iter__")
 
 
 # ---------------------------------------------------------------------------
@@ -303,8 +317,8 @@ class TestStreamChannel:
 
     @pytest.mark.anyio
     async def test_async_iteration(self) -> None:
-        """Async iteration should delegate to the inner EventLog."""
-        ch: StreamChannel[str] = StreamChannel("test")
+        """Async iteration should delegate to the inner AsyncEventLog."""
+        ch: StreamChannel[str] = StreamChannel("test", is_async=True)
         ch.push("x")
         ch.push("y")
         ch._close()

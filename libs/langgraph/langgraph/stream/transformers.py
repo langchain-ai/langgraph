@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from langgraph.stream._event_log import EventLog
+from langgraph.stream._event_log import AsyncEventLog, EventLog, _EventLogBase
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 
 
@@ -15,8 +15,10 @@ class ValuesTransformer(StreamTransformer):
 
     _native = True
 
-    def __init__(self) -> None:
-        self._log: EventLog[dict[str, Any]] = EventLog()
+    def __init__(self, *, is_async: bool = False) -> None:
+        self._log: _EventLogBase[dict[str, Any]] = (
+            AsyncEventLog() if is_async else EventLog()
+        )
         self._latest: dict[str, Any] | None = None
         self._interrupted = False
         self._interrupts: list[Any] = []
@@ -59,8 +61,10 @@ class MessagesTransformer(StreamTransformer):
 
     _native = True
 
-    def __init__(self) -> None:
-        self._log: EventLog[tuple[Any, dict[str, Any]]] = EventLog()
+    def __init__(self, *, is_async: bool = False) -> None:
+        self._log: _EventLogBase[tuple[Any, dict[str, Any]]] = (
+            AsyncEventLog() if is_async else EventLog()
+        )
 
     def init(self) -> dict[str, Any]:
         return {"messages": self._log}

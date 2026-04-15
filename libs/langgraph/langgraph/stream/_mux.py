@@ -4,7 +4,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from langgraph.stream._event_log import EventLog
+from langgraph.stream._event_log import AsyncEventLog, EventLog, _EventLogBase
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from langgraph.stream.stream_channel import StreamChannel
 
@@ -12,14 +12,21 @@ from langgraph.stream.stream_channel import StreamChannel
 class StreamMux:
     """Central event dispatcher for the streaming infrastructure.
 
-    Owns the main ``EventLog[ProtocolEvent]`` and routes events through
-    a transformer pipeline. StreamChannels discovered in transformer
-    projections are auto-wired so that every ``push()`` also injects a
-    ``ProtocolEvent`` into the main log.
+    Owns the main event log and routes events through a transformer
+    pipeline. StreamChannels discovered in transformer projections are
+    auto-wired so that every ``push()`` also injects a ``ProtocolEvent``
+    into the main log.
+
+    Pass ``is_async=True`` when the mux will be consumed via async
+    iteration (``handler.astream()``). This creates ``AsyncEventLog``
+    instances instead of ``EventLog`` instances.
     """
 
-    def __init__(self) -> None:
-        self._events: EventLog[ProtocolEvent] = EventLog()
+    def __init__(self, *, is_async: bool = False) -> None:
+        self._is_async = is_async
+        self._events: _EventLogBase[ProtocolEvent] = (
+            AsyncEventLog() if is_async else EventLog()
+        )
         self._transformers: list[StreamTransformer] = []
         self._channels: list[StreamChannel[Any]] = []
         self._seq = 0
@@ -107,6 +114,12 @@ class StreamMux:
         """Find StreamChannel instances in *projection* and wire them."""
         for value in projection.values():
             if isinstance(value, StreamChannel):
+                # Ensure the channel's log matches the mux's mode.
+                if value._is_async != self._is_async:
+                    value._is_async = self._is_async
+                    value._log = (
+                        AsyncEventLog() if self._is_async else EventLog()
+                    )
                 self._channels.append(value)
                 channel_name = value.name
 
