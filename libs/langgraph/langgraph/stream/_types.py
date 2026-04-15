@@ -45,7 +45,7 @@ class StreamTransformer(ABC):
     """
 
     @abstractmethod
-    def init(self) -> Any:
+    def init(self) -> dict[str, Any]:
         """Return the projection dict.
 
         Keys become entries in `run.extensions`. If the transformer has

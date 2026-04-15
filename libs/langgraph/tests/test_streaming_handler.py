@@ -418,7 +418,6 @@ class TestStreamingHandlerSyncErrors:
             list(run)
 
 
-
 class TestStreamingHandlerSyncInterrupt:
     def test_interrupted(self) -> None:
         graph = _build_interrupt_graph()
@@ -773,6 +772,7 @@ class TestStreamMuxResilience:
     def test_close_continues_after_finalize_error(self) -> None:
         """If a transformer's finalize() raises, the main event log and
         remaining transformers should still be closed/finalized."""
+
         class BrokenFinalizer(StreamTransformer):
             def init(self) -> dict[str, Any]:
                 return {}
@@ -812,6 +812,7 @@ class TestStreamMuxResilience:
     def test_fail_continues_after_transformer_error(self) -> None:
         """If a transformer's fail() raises, the main event log and
         remaining transformers should still be failed."""
+
         class BrokenFailer(StreamTransformer):
             def init(self) -> dict[str, Any]:
                 return {}
@@ -848,6 +849,7 @@ class TestStreamMuxResilience:
 
     def test_close_still_closes_channels_after_finalize_error(self) -> None:
         """Channels should be closed even if a transformer's finalize raises."""
+
         class BrokenWithChannel(StreamTransformer):
             def __init__(self) -> None:
                 self._channel: StreamChannel[str] = StreamChannel("ch")

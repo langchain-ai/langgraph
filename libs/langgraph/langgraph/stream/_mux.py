@@ -117,9 +117,7 @@ class StreamMux:
                 # Ensure the channel's log matches the mux's mode.
                 if value._is_async != self._is_async:
                     value._is_async = self._is_async
-                    value._log = (
-                        AsyncEventLog() if self._is_async else EventLog()
-                    )
+                    value._log = AsyncEventLog() if self._is_async else EventLog()
                 self._channels.append(value)
                 channel_name = value.name
 

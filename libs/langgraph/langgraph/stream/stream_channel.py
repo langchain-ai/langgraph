@@ -68,7 +68,6 @@ class StreamChannel(Generic[T]):
     def __aiter__(self) -> AsyncIterator[T]:
         if not isinstance(self._log, AsyncEventLog):
             raise RuntimeError(
-                "Cannot use async iteration on a sync StreamChannel. "
-                "Use 'for' instead."
+                "Cannot use async iteration on a sync StreamChannel. Use 'for' instead."
             )
         return self._log.__aiter__()
