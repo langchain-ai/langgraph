@@ -446,7 +446,7 @@ async def run_v2_async_with_transformer(question: str) -> None:
 
     _ = await run.output
 
-    snapshots = list(run.extensions["token_metrics"])
+    snapshots = [s async for s in run.extensions["token_metrics"]]
     final = next((s for s in snapshots if s.is_final), None)
     periodic = [s for s in snapshots if not s.is_final]
 
