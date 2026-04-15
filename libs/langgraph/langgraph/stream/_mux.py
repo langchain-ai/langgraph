@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -133,6 +134,7 @@ class StreamMux:
             "method": f"custom:{channel_name}",
             "params": {
                 "namespace": [],
+                "timestamp": int(time.time() * 1000),
                 "data": item,
             },
         }

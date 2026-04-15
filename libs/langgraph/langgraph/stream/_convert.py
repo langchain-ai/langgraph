@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from langgraph.stream._types import ProtocolEvent, _ProtocolEventParams
@@ -13,6 +14,7 @@ def convert_to_protocol_event(part: dict[str, Any]) -> ProtocolEvent:
     """
     params: _ProtocolEventParams = {
         "namespace": list(part["ns"]),
+        "timestamp": int(time.time() * 1000),
         "data": part["data"],
     }
     if "interrupts" in part:

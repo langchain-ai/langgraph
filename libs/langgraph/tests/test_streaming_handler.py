@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import operator
 import sys
+import time
 from typing import Annotated, Any
 
 import pytest
@@ -29,6 +30,26 @@ NEEDS_CONTEXTVARS = pytest.mark.skipif(
     sys.version_info < (3, 11),
     reason="Python 3.11+ is required for async contextvars support",
 )
+
+TS = int(time.time() * 1000)
+
+
+def _event(
+    method: str,
+    data: Any = None,
+    *,
+    namespace: list[str] | None = None,
+    interrupts: tuple[Any, ...] | None = None,
+) -> ProtocolEvent:
+    """Build a test ProtocolEvent with sensible defaults."""
+    params: dict[str, Any] = {
+        "namespace": namespace or [],
+        "timestamp": TS,
+        "data": data if data is not None else {},
+    }
+    if interrupts is not None:
+        params["interrupts"] = interrupts
+    return {"type": "event", "method": method, "params": params}
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +357,7 @@ class TestStreamingHandlerSync:
             assert event["type"] == "event"
             assert "method" in event
             assert "seq" in event
+            assert isinstance(event["params"]["timestamp"], int)
 
     def test_extensions_has_native_keys(self) -> None:
         graph = _build_simple_graph()
@@ -521,13 +543,16 @@ class TestStreamingHandlerAsyncCustom:
 
 class TestConvertToProtocolEvent:
     def test_basic_conversion(self) -> None:
+        before = int(time.time() * 1000)
         part = {"type": "values", "ns": ("sub", "graph"), "data": {"key": "val"}}
         event = convert_to_protocol_event(part)
+        after = int(time.time() * 1000)
         assert event["type"] == "event"
         assert event["method"] == "values"
         assert event["params"]["namespace"] == ["sub", "graph"]
         assert event["params"]["data"] == {"key": "val"}
         assert "interrupts" not in event["params"]
+        assert before <= event["params"]["timestamp"] <= after
 
     def test_conversion_with_interrupts(self) -> None:
         part = {
@@ -538,6 +563,7 @@ class TestConvertToProtocolEvent:
         }
         event = convert_to_protocol_event(part)
         assert event["params"]["interrupts"] == ({"value": "pause"},)
+        assert isinstance(event["params"]["timestamp"], int)
 
     def test_namespace_tuple_becomes_list(self) -> None:
         """ns tuple should be converted to a list."""
@@ -581,27 +607,9 @@ class TestStreamMux:
         mux = StreamMux()
         mux.register(FilterTransformer())
 
-        mux.push(
-            {
-                "type": "event",
-                "method": "values",
-                "params": {"namespace": [], "data": {"a": 1}},
-            }
-        )
-        mux.push(
-            {
-                "type": "event",
-                "method": "updates",
-                "params": {"namespace": [], "data": {"b": 2}},
-            }
-        )
-        mux.push(
-            {
-                "type": "event",
-                "method": "custom",
-                "params": {"namespace": [], "data": {"c": 3}},
-            }
-        )
+        mux.push(_event("values", {"a": 1}))
+        mux.push(_event("updates", {"b": 2}))
+        mux.push(_event("custom", {"c": 3}))
         mux.close()
 
         events = list(mux._events)
@@ -634,13 +642,7 @@ class TestStreamMux:
         mux.register(PassTransformer())
         mux.register(RejectTransformer())
 
-        mux.push(
-            {
-                "type": "event",
-                "method": "values",
-                "params": {"namespace": [], "data": {}},
-            }
-        )
+        mux.push(_event("values"))
         mux.close()
 
         # RejectTransformer saw the event even though it rejected it
@@ -651,13 +653,7 @@ class TestStreamMux:
     def test_empty_mux(self) -> None:
         """Push/close/fail on a mux with no transformers should work."""
         mux = StreamMux()
-        mux.push(
-            {
-                "type": "event",
-                "method": "values",
-                "params": {"namespace": [], "data": {"x": 1}},
-            }
-        )
+        mux.push(_event("values", {"x": 1}))
         mux.close()
         events = list(mux._events)
         assert len(events) == 1
@@ -682,21 +678,8 @@ class TestValuesTransformer:
         t = ValuesTransformer()
         t.init()
 
-        # Root namespace — should be captured
-        root_event: ProtocolEvent = {
-            "type": "event",
-            "method": "values",
-            "params": {"namespace": [], "data": {"val": "root"}},
-        }
-        t.process(root_event)
-
-        # Subgraph namespace — should be ignored
-        sub_event: ProtocolEvent = {
-            "type": "event",
-            "method": "values",
-            "params": {"namespace": ["sub"], "data": {"val": "sub"}},
-        }
-        t.process(sub_event)
+        t.process(_event("values", {"val": "root"}))
+        t.process(_event("values", {"val": "sub"}, namespace=["sub"]))
 
         t.finalize()
         items = list(t._log)
@@ -708,12 +691,7 @@ class TestValuesTransformer:
         t = ValuesTransformer()
         t.init()
 
-        updates_event: ProtocolEvent = {
-            "type": "event",
-            "method": "updates",
-            "params": {"namespace": [], "data": {"x": 1}},
-        }
-        result = t.process(updates_event)
+        result = t.process(_event("updates", {"x": 1}))
         assert result is True  # passed through
         t.finalize()
         assert list(t._log) == []  # but not captured
@@ -723,16 +701,13 @@ class TestValuesTransformer:
         t = ValuesTransformer()
         t.init()
 
-        event: ProtocolEvent = {
-            "type": "event",
-            "method": "values",
-            "params": {
-                "namespace": [],
-                "data": {"v": 1},
-                "interrupts": ({"value": "pause1"}, {"value": "pause2"}),
-            },
-        }
-        t.process(event)
+        t.process(
+            _event(
+                "values",
+                {"v": 1},
+                interrupts=({"value": "pause1"}, {"value": "pause2"}),
+            )
+        )
         assert t._interrupted is True
         assert len(t._interrupts) == 2
 
@@ -742,12 +717,7 @@ class TestMessagesTransformer:
         t = MessagesTransformer()
         t.init()
 
-        event: ProtocolEvent = {
-            "type": "event",
-            "method": "messages",
-            "params": {"namespace": [], "data": ("chunk", {"meta": True})},
-        }
-        t.process(event)
+        t.process(_event("messages", ("chunk", {"meta": True})))
         t.finalize()
         items = list(t._log)
         assert len(items) == 1
@@ -757,12 +727,7 @@ class TestMessagesTransformer:
         t = MessagesTransformer()
         t.init()
 
-        event: ProtocolEvent = {
-            "type": "event",
-            "method": "messages",
-            "params": {"namespace": ["sub"], "data": ("chunk", {})},
-        }
-        t.process(event)
+        t.process(_event("messages", ("chunk", {}), namespace=["sub"]))
         t.finalize()
         assert list(t._log) == []
 
@@ -770,12 +735,7 @@ class TestMessagesTransformer:
         t = MessagesTransformer()
         t.init()
 
-        event: ProtocolEvent = {
-            "type": "event",
-            "method": "values",
-            "params": {"namespace": [], "data": {"v": 1}},
-        }
-        result = t.process(event)
+        result = t.process(_event("values", {"v": 1}))
         assert result is True
         t.finalize()
         assert list(t._log) == []
@@ -799,8 +759,6 @@ class TestStreamMuxResilience:
     def test_close_continues_after_finalize_error(self) -> None:
         """If a transformer's finalize() raises, the main event log and
         remaining transformers should still be closed/finalized."""
-        from langgraph.stream._mux import StreamMux
-
         class BrokenFinalizer(StreamTransformer):
             def init(self) -> dict[str, Any]:
                 return {}
@@ -829,13 +787,7 @@ class TestStreamMuxResilience:
         good = GoodTransformer()
         mux.register(good)
 
-        mux.push(
-            {
-                "type": "event",
-                "method": "values",
-                "params": {"namespace": [], "data": {}},
-            }
-        )
+        mux.push(_event("values"))
 
         with pytest.raises(RuntimeError, match="finalize broke"):
             mux.close()
@@ -846,8 +798,6 @@ class TestStreamMuxResilience:
     def test_fail_continues_after_transformer_error(self) -> None:
         """If a transformer's fail() raises, the main event log and
         remaining transformers should still be failed."""
-        from langgraph.stream._mux import StreamMux
-
         class BrokenFailer(StreamTransformer):
             def init(self) -> dict[str, Any]:
                 return {}
@@ -884,8 +834,6 @@ class TestStreamMuxResilience:
 
     def test_close_still_closes_channels_after_finalize_error(self) -> None:
         """Channels should be closed even if a transformer's finalize raises."""
-        from langgraph.stream._mux import StreamMux
-
         class BrokenWithChannel(StreamTransformer):
             def __init__(self) -> None:
                 self._channel: StreamChannel[str] = StreamChannel("ch")
@@ -1009,7 +957,6 @@ class TestCustomTransformer:
         auto-forwarded event enters the main log before the original event.
         The seq numbers must still be in order.
         """
-        from langgraph.stream._mux import StreamMux
 
         class ChannelPusher(StreamTransformer):
             def __init__(self) -> None:
@@ -1028,20 +975,8 @@ class TestCustomTransformer:
         mux = StreamMux()
         mux.register(ChannelPusher())
 
-        mux.push(
-            {
-                "type": "event",
-                "method": "values",
-                "params": {"namespace": [], "data": {}},
-            }
-        )
-        mux.push(
-            {
-                "type": "event",
-                "method": "updates",
-                "params": {"namespace": [], "data": {}},
-            }
-        )
+        mux.push(_event("values"))
+        mux.push(_event("updates"))
         mux.close()
 
         events = list(mux._events)

@@ -10,6 +10,7 @@ class _ProtocolEventParams(TypedDict):
     """Parameters for a protocol event."""
 
     namespace: list[str]
+    timestamp: int
     data: Any
     interrupts: NotRequired[tuple[Any, ...]]
 
@@ -22,6 +23,7 @@ class ProtocolEvent(TypedDict):
     """
 
     type: Literal["event"]
+    eventId: NotRequired[str]
     seq: NotRequired[int]
     method: str  # StreamMode value: "values", "messages", "custom", etc.
     params: _ProtocolEventParams
