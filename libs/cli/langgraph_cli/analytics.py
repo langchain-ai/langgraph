@@ -31,9 +31,8 @@ def get_anonymized_params(
 ) -> dict[str, bool | str]:
     params: dict[str, bool | str] = {}
 
-    if (
-        cli_command == "deploy"
-        and (analytics_source := os.getenv("LANGGRAPH_CLI_ANALYTICS_SOURCE"))
+    if cli_command == "deploy" and (
+        analytics_source := os.getenv("LANGGRAPH_CLI_ANALYTICS_SOURCE")
     ):
         params["source"] = analytics_source
 
