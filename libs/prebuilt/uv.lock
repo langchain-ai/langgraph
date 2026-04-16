@@ -249,7 +249,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.2.31"
+version = "1.3.0a3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -261,9 +261,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/5a/7523ff55668a233beef7e909e8e2074a1cc3b620e0bbf0a4ec5f38549b3b/langchain_core-1.2.31.tar.gz", hash = "sha256:aad3ecc9e4dce2dd2bb79526c81b92e5322fd81db7834a031cb80359f2e3ebaa", size = 850756, upload-time = "2026-04-16T13:26:29.241Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f2/3b/c4f9466f2ca7d56bde381ee26e78272b3eff65255ddc3954e3c4f99ca6d5/langchain_core-1.3.0a3.tar.gz", hash = "sha256:d27d9e43060850159a84c3913ba71bfcdd5807d52a4794c6ee719116510a5f04", size = 860836, upload-time = "2026-04-16T19:40:36.856Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/02/668ddf4f1cf963ad691bdbea672a85244e6271eb0a4acfaf662bbd94a3b1/langchain_core-1.2.31-py3-none-any.whl", hash = "sha256:c407193edb99311cc36ec3e4d3667a065bbc4d7d72fbb6e368538b9b134d4033", size = 513264, upload-time = "2026-04-16T13:26:27.566Z" },
+    { url = "https://files.pythonhosted.org/packages/55/ed/e58ff8229b18a9c5cfbeb531d463b5193bb643ddfa97cf42f2c11c06d4db/langchain_core-1.3.0a3-py3-none-any.whl", hash = "sha256:f819afed6c2c48fc70dadf7f968f03f224307820e6965a885a357412090c9241", size = 515161, upload-time = "2026-04-16T19:40:35.493Z" },
 ]
 
 [[package]]
