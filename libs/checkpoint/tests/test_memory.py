@@ -23,6 +23,14 @@ class MemoryPydantic(BaseModel):
     foo: str
 
 
+@pytest.fixture(autouse=True)
+def _reset_warned_types() -> None:
+    # Warning dedup state is process-global; reset per-test so each case sees
+    # a fresh slate and assertions about warning emission are stable.
+    _warned_unregistered_types.clear()
+    _warned_blocked_types.clear()
+
+
 class TestMemorySaver:
     @pytest.fixture(autouse=True)
     def setup(self) -> None:
@@ -215,7 +223,6 @@ async def test_memory_saver() -> None:
 def test_memory_saver_warns_on_unregistered_msgpack(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    _warned_unregistered_types.clear()
     serde = JsonPlusSerializer()
     memory_saver = InMemorySaver(serde=serde)
     obj = MemoryPydantic(foo="bar")
@@ -266,7 +273,6 @@ def test_memory_saver_allowlist_silences_warning(
 def test_memory_saver_strict_blocks_unregistered(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    _warned_blocked_types.clear()
     serde = JsonPlusSerializer(allowed_msgpack_modules=None)
     memory_saver = InMemorySaver(serde=serde)
     obj = MemoryPydantic(foo="bar")

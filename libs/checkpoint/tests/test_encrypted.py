@@ -104,6 +104,13 @@ def test_msgpack_method_pathlib_blocked_encrypted_strict(
 class TestEncryptedSerializerMsgpackAllowlist:
     """Test msgpack allowlist behavior through EncryptedSerializer."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_warned_types(self) -> None:
+        # Warning dedup state is process-global; reset per-test so each case
+        # sees a fresh slate and assertions about warning emission are stable.
+        _warned_unregistered_types.clear()
+        _warned_blocked_types.clear()
+
     def test_safe_types_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """Test safe types deserialize without warnings through encryption."""
         serde = _make_encrypted_serde()
@@ -135,7 +142,6 @@ class TestEncryptedSerializerMsgpackAllowlist:
 
     def test_pydantic_warns_by_default(self, caplog: pytest.LogCaptureFixture) -> None:
         """Pydantic models not in allowlist should log warning but still deserialize."""
-        _warned_unregistered_types.clear()
         current = _lg_msgpack.STRICT_MSGPACK_ENABLED
         _lg_msgpack.STRICT_MSGPACK_ENABLED = False
         serde = _make_encrypted_serde()
@@ -156,7 +162,6 @@ class TestEncryptedSerializerMsgpackAllowlist:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Strict mode should block unregistered types through encryption."""
-        _warned_blocked_types.clear()
         serde = _make_encrypted_serde(allowed_msgpack_modules=None)
 
         obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
@@ -194,7 +199,6 @@ class TestEncryptedSerializerMsgpackAllowlist:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Allowlists should block unregistered types even through encryption."""
-        _warned_blocked_types.clear()
         serde = _make_encrypted_serde(
             allowed_msgpack_modules=[("tests.test_encrypted", "MyPydantic")]
         )
