@@ -162,6 +162,12 @@ class _ExecutionRuntime(_ServerRuntimeBase[ContextT], Generic[ContextT]):
     Only available during `threads.create_run`.
     """
 
+    previous: object = field(default=None)
+    """The previous return value for the given thread.
+
+    Only available with the functional API when a checkpointer is provided.
+    """
+
 
 @dataclass(kw_only=True, slots=True, frozen=True)
 class _ReadRuntime(_ServerRuntimeBase[ContextT], Generic[ContextT]):
@@ -173,6 +179,18 @@ class _ReadRuntime(_ServerRuntimeBase[ContextT], Generic[ContextT]):
 
     !!! warning "Beta"
         This API is in beta and may change in future releases.
+    """
+
+    context: object = field(default=None)
+    """Always `None` for non-execution contexts.
+
+    Present for interface compatibility with `langgraph.runtime.Runtime`.
+    """
+
+    previous: object = field(default=None)
+    """Always `None` for non-execution contexts.
+
+    Present for interface compatibility with `langgraph.runtime.Runtime`.
     """
 
 
