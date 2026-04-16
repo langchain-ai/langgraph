@@ -11,7 +11,7 @@ T = TypeVar("T")
 class BufferOverflowError(RuntimeError):
     """Raised when an EventLog cursor falls off the back of a bounded buffer.
 
-    Mirrors the ``restored: false`` signal from the protocol's reconnection
+    Mirrors the `restored: false` signal from the protocol's reconnection
     story (§ 06): consumers that fall behind the retention window get an
     explicit error and can decide to rebuild from a snapshot rather than
     silently losing events.
@@ -21,31 +21,27 @@ class BufferOverflowError(RuntimeError):
 class EventLog(Generic[T]):
     """Append-only buffer that supports multiple independent consumers.
 
-    Starts unbound — neither ``__iter__`` nor ``__aiter__`` is available
-    until the ``StreamMux`` calls ``_bind(is_async)``.  After binding,
-    only the matching iteration protocol works; the other raises
-    ``TypeError``.
+    Starts unbound — neither `__iter__` nor `__aiter__` is available
+    until the StreamMux calls `_bind(is_async)`. After binding, only
+    the matching iteration protocol works; the other raises `TypeError`.
 
     All access is single-threaded: sync mode is caller-driven (no
     background thread), async mode runs entirely on the event loop.
 
     Producer API:
-        push(item)  — append an item, notify all waiting cursors
-        close()     — mark the log as done
-        fail(err)   — mark the log as errored
+        - `push(item)`: append an item, notify all waiting cursors.
+        - `close()`: mark the log as done.
+        - `fail(err)`: mark the log as errored.
 
     Sync iteration is pull-based: when a cursor catches up it calls
-    ``_request_more`` to drive the graph forward.
+    `_request_more` to drive the graph forward. Async iteration uses a
+    shared `asyncio.Event` — cursors await the event when they catch
+    up, and the producer sets it on each push.
 
-    Async iteration uses a shared ``asyncio.Event`` — cursors await
-    the event when they catch up, and the producer sets it on each push.
-
-    Bounded mode
-    ------------
-    Pass ``maxlen=N`` to cap memory. When the buffer is full, ``push``
+    Pass `maxlen=N` to cap memory. When the buffer is full, `push`
     drops the oldest item to make room. Cursors track an absolute
     sequence number; a cursor that falls off the back of the retention
-    window raises ``BufferOverflowError`` on its next read.
+    window raises `BufferOverflowError` on its next read.
 
     New cursors start at the current head of the buffer, not at seq 0
     — they see whatever is still retained. This matches the protocol's
@@ -54,6 +50,16 @@ class EventLog(Generic[T]):
     """
 
     def __init__(self, maxlen: int | None = None) -> None:
+        """Initialize an empty, unbound log.
+
+        Args:
+            maxlen: Optional cap on retained items. When reached, the
+                oldest item is dropped on each new push. `None` (the
+                default) leaves the log unbounded.
+
+        Raises:
+            ValueError: If `maxlen` is not a positive integer or `None`.
+        """
         if maxlen is not None and maxlen <= 0:
             raise ValueError("EventLog maxlen must be a positive int or None")
         self._items: deque[T] = deque()
@@ -78,8 +84,14 @@ class EventLog(Generic[T]):
     def _bind(self, *, is_async: bool) -> None:
         """Bind this log to sync or async mode.
 
-        Called by the ``StreamMux`` after transformer registration.
-        Must be called exactly once before any iteration.
+        Called by the StreamMux after transformer registration. Must be
+        called exactly once before any iteration.
+
+        Args:
+            is_async: True to enable async iteration, False for sync.
+
+        Raises:
+            RuntimeError: If the log has already been bound.
         """
         if self._is_async is not None:
             raise RuntimeError("EventLog is already bound")
@@ -92,11 +104,17 @@ class EventLog(Generic[T]):
     # ------------------------------------------------------------------
 
     def push(self, item: T) -> None:
-        """Append *item* and wake all waiting cursors.
+        """Append an item and wake all waiting cursors.
 
-        In bounded mode, evicts the oldest item first if the buffer
-        is full, advancing ``_first_seq`` so cursors can detect that
-        they've fallen off the back of the retention window.
+        In bounded mode, evicts the oldest item first if the buffer is
+        full, advancing `_first_seq` so cursors can detect that they've
+        fallen off the back of the retention window.
+
+        Args:
+            item: The item to append.
+
+        Raises:
+            RuntimeError: If the log is closed.
         """
         if self._closed:
             raise RuntimeError("Cannot push to a closed EventLog")
@@ -107,12 +125,21 @@ class EventLog(Generic[T]):
         self._notify()
 
     def close(self) -> None:
-        """Mark the log as complete — open cursors will finish cleanly."""
+        """Mark the log as complete.
+
+        Open cursors will finish cleanly once they drain the buffer.
+        """
         self._closed = True
         self._notify()
 
     def fail(self, err: BaseException) -> None:
-        """Mark the log as errored — open cursors will raise *err*."""
+        """Mark the log as errored.
+
+        Open cursors will raise `err` once they drain the buffer.
+
+        Args:
+            err: The exception to surface to consumers.
+        """
         self._error = err
         self._closed = True
         self._notify()
@@ -134,7 +161,11 @@ class EventLog(Generic[T]):
     # ------------------------------------------------------------------
 
     def __iter__(self) -> Iterator[T]:
-        """Return a new independent sync cursor over the log."""
+        """Return a new independent sync cursor over the log.
+
+        Raises:
+            TypeError: If the log is unbound or bound to async mode.
+        """
         if self._is_async is None:
             raise TypeError(
                 "EventLog has not been bound yet. "
@@ -180,7 +211,11 @@ class EventLog(Generic[T]):
     # ------------------------------------------------------------------
 
     def __aiter__(self) -> AsyncIterator[T]:
-        """Return a new independent async cursor over the log."""
+        """Return a new independent async cursor over the log.
+
+        Raises:
+            TypeError: If the log is unbound or bound to sync mode.
+        """
         if self._is_async is None:
             raise TypeError(
                 "EventLog has not been bound yet. "

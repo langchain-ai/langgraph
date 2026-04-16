@@ -7,10 +7,10 @@ from langgraph.stream._types import ProtocolEvent, StreamTransformer
 
 
 class ValuesTransformer(StreamTransformer):
-    """Captures values events and projects them into an iterable of state snapshots.
+    """Capture values events as an iterable of state snapshots.
 
-    Native transformer — projection keys are exposed as direct attributes
-    on the run stream (e.g. ``run.values``).
+    Native transformer — projection keys are exposed as direct
+    attributes on the run stream (e.g. `run.values`).
     """
 
     _native = True
@@ -41,14 +41,14 @@ class ValuesTransformer(StreamTransformer):
 
 
 class MessagesTransformer(StreamTransformer):
-    """Captures messages events and passes through raw (chunk, metadata) tuples.
+    """Pass through raw (chunk, metadata) tuples from messages events.
 
-    This is the same shape as today's ``stream_mode="messages"`` output.
+    This is the same shape as today's `stream_mode="messages"` output.
     A follow-on PR will replace this with a richer transformer that
     produces ChatModelStream objects using the protocol handler.
 
-    Native transformer — projection keys are exposed as direct attributes
-    on the run stream (e.g. ``run.messages``).
+    Native transformer — projection keys are exposed as direct
+    attributes on the run stream (e.g. `run.messages`).
     """
 
     _native = True

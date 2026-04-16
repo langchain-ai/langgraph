@@ -1,6 +1,6 @@
 """Streaming infrastructure for LangGraph.
 
-Provides a ``StreamingHandler`` that wraps a compiled graph and exposes
+Provides a `StreamingHandler` that wraps a compiled graph and exposes
 ergonomic streaming projections through a transformer pipeline.
 """
 

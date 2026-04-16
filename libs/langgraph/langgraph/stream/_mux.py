@@ -19,13 +19,20 @@ class StreamMux:
 
     Owns the main event log and routes events through a transformer
     pipeline. StreamChannels discovered in transformer projections are
-    auto-wired so that every ``push()`` also injects a ``ProtocolEvent``
+    auto-wired so that every `push()` also injects a `ProtocolEvent`
     into the main log.
 
-    Pass ``is_async=True`` when the mux will be consumed via async
-    iteration (``handler.astream()``). All ``EventLog`` and
-    ``StreamChannel`` instances discovered during ``register()`` are
-    automatically bound to the matching mode.
+    Pass `is_async=True` when the mux will be consumed via async
+    iteration (`handler.astream()`). All EventLog and StreamChannel
+    instances discovered during registration are automatically bound
+    to the matching mode.
+
+    Attributes:
+        extensions: Merged projection dict across all registered
+            transformers. Treat as read-only — mutations won't be
+            reflected back in individual transformers' state.
+        native_keys: Projection keys contributed by transformers with
+            `_native = True`.
     """
 
     def __init__(
@@ -35,22 +42,30 @@ class StreamMux:
         is_async: bool = False,
         max_events: int | None = None,
     ) -> None:
-        """Initialize the mux and register *transformers* in order.
+        """Initialize the mux and register transformers in order.
 
         Transformers are fixed at construction time — there is no
-        post-init ``register()``. Each transformer's ``init()`` is called,
-        projections are merged into ``self.extensions``, ``_native``
-        keys are recorded in ``self.native_keys``, and any ``EventLog``
-        / ``StreamChannel`` instances are bound/wired.
+        post-init `register()`. Each transformer's `init()` is called,
+        projections are merged into `extensions`, `_native` keys are
+        recorded in `native_keys`, and any EventLog / StreamChannel
+        instances are bound and wired.
 
-        *max_events* sets a default capacity for every ``EventLog`` /
-        ``StreamChannel`` the mux binds, including the main event log.
-        Logs that were constructed with an explicit ``maxlen`` keep
-        their own setting — the mux only fills in ``None`` defaults.
-        Unbounded when ``max_events`` is ``None``.
+        Args:
+            transformers: Transformers to register, in dispatch order.
+                `None` or empty gives a mux with no projections.
+            is_async: True for async dispatch (`apush` / `aclose` /
+                `afail`), False for the sync path.
+            max_events: Default capacity for every EventLog and
+                StreamChannel the mux binds, including the main event
+                log. Logs constructed with an explicit `maxlen` keep
+                their own setting — the mux only fills in unset
+                defaults. `None` leaves the logs unbounded.
 
-        Raises ``RuntimeError`` if any transformer requires an async run
-        under sync mode, and ``ValueError`` on projection-key conflicts.
+        Raises:
+            RuntimeError: If any transformer requires an async run but
+                the mux is in sync mode.
+            TypeError: If a transformer's `init()` doesn't return a dict.
+            ValueError: If transformers' projection keys collide.
         """
         self._is_async = is_async
         self._default_maxlen = max_events
@@ -61,23 +76,18 @@ class StreamMux:
         self._logs: list[EventLog[Any]] = []
         self._seq = 0
 
-        #: Merged projection dict across all registered transformers.
-        #: Treat as read-only — mutations won't be reflected back in
-        #: individual transformers' state.
         self.extensions: dict[str, Any] = {}
-        #: Projection keys from transformers with ``_native = True``.
         self.native_keys: set[str] = set()
 
         for transformer in transformers or ():
             self._register(transformer)
 
     def _register(self, transformer: StreamTransformer) -> None:
-        """Register a transformer.
+        """Register a single transformer.
 
-        Calls ``transformer.init()``, stores the transformer for event
-        processing, binds any ``EventLog`` or ``StreamChannel`` instances
-        in the projection, and merges the projection into
-        ``self.extensions``.
+        Calls `transformer.init()`, stores the transformer for event
+        processing, binds any EventLog or StreamChannel instances in
+        the projection, and merges the projection into `extensions`.
         """
         if transformer_requires_async(transformer) and not self._is_async:
             raise RuntimeError(
@@ -105,18 +115,21 @@ class StreamMux:
             self.native_keys.update(projection.keys())
 
     def push(self, event: ProtocolEvent) -> None:
-        """Route *event* through all transformers, then append to the main log.
+        """Route an event through all transformers, then append to the main log.
 
-        Each transformer's ``process()`` is called in registration order.
-        If any transformer returns ``False``, the event is suppressed
-        from the main log (but transformers that already saw it keep
-        their side-effects).
+        Each transformer's `process()` is called in registration order.
+        If any transformer returns False, the event is suppressed from
+        the main log, but transformers that already saw it keep their
+        side effects.
 
         Seq is assigned right before an event enters the main log, not
         before the transformer pipeline runs. This ensures that events
-        auto-forwarded from StreamChannels during ``process()`` get
+        auto-forwarded from StreamChannels during `process()` get
         earlier seq numbers than the original event, preserving
         monotonic ordering in the log.
+
+        Args:
+            event: The protocol event to dispatch.
         """
         keep = True
         for transformer in self._transformers:
@@ -130,11 +143,16 @@ class StreamMux:
     def close(self) -> None:
         """Finalize all transformers, close all projections and the main log.
 
-        EventLogs and StreamChannels discovered in transformer projections
-        are auto-closed after ``finalize()`` runs — transformers don't need
-        to close them manually. If any transformer's ``finalize()`` raises,
-        the remaining transformers, projections, and the main log are still
-        closed. The first error is re-raised after cleanup completes.
+        EventLogs and StreamChannels discovered in transformer
+        projections are auto-closed after `finalize()` runs —
+        transformers don't need to close them manually. If any
+        transformer's `finalize()` raises, the remaining transformers,
+        projections, and the main log are still closed; the first error
+        is re-raised after cleanup completes.
+
+        Raises:
+            BaseException: The first error raised by a transformer's
+                `finalize()`, re-raised after cleanup finishes.
         """
         first_error: BaseException | None = None
         for transformer in self._transformers:
@@ -156,10 +174,14 @@ class StreamMux:
     def fail(self, err: BaseException) -> None:
         """Fail all transformers, projections, and the main log.
 
-        EventLogs and StreamChannels discovered in transformer projections
-        are auto-failed — transformers don't need to fail them manually.
-        If any transformer's ``fail()`` raises, the remaining transformers,
-        projections, and the main log are still failed.
+        EventLogs and StreamChannels discovered in transformer
+        projections are auto-failed — transformers don't need to fail
+        them manually. If any transformer's `fail()` raises, the
+        remaining transformers, projections, and the main log are still
+        failed.
+
+        Args:
+            err: The exception that ended the run.
         """
         for transformer in self._transformers:
             try:
@@ -179,13 +201,17 @@ class StreamMux:
     # ------------------------------------------------------------------
 
     async def apush(self, event: ProtocolEvent) -> None:
-        """Async counterpart to ``push``. Awaits each transformer's
-        ``aprocess`` in registration order before appending to the main log.
+        """Dispatch an event on the async lane.
 
-        A slow ``aprocess`` serializes the pipeline by design — that's the
-        guarantee that lets a later transformer (or a synchronous consumer)
-        see the result of the async work. For decoupled work, use
-        ``schedule()`` from inside ``process``/``aprocess`` instead.
+        Awaits each transformer's `aprocess` in registration order
+        before appending to the main log. A slow `aprocess` serializes
+        the pipeline by design — that's the guarantee that lets a later
+        transformer (or a synchronous consumer) see the result of the
+        async work. For decoupled work, use `schedule()` from inside
+        `process` / `aprocess` instead.
+
+        Args:
+            event: The protocol event to dispatch.
         """
         keep = True
         for transformer in self._transformers:
@@ -197,15 +223,19 @@ class StreamMux:
             self._events.push(event)
 
     async def aclose(self) -> None:
-        """Async counterpart to ``close``.
+        """Finalize on the async lane.
 
-        Awaits every task started via ``StreamTransformer.schedule()``
-        across all transformers, then calls ``afinalize()`` on each,
-        then auto-closes logs/channels and the main event log.
+        Awaits every task started via `StreamTransformer.schedule()`
+        across all transformers, then calls `afinalize()` on each,
+        then auto-closes logs, channels, and the main event log.
 
-        If any scheduled task raised under ``on_error="raise"``, or any
-        transformer's ``afinalize`` raises, the exception propagates.
-        The caller (the pump) handles it by routing into ``afail``.
+        If any scheduled task raised under `on_error="raise"`, or any
+        transformer's `afinalize` raises, the exception propagates.
+        The caller (the pump) handles it by routing into `afail`.
+
+        Raises:
+            BaseException: The first scheduled-task or `afinalize`
+                error, re-raised after cleanup.
         """
         pending = self._collect_scheduled_tasks()
         if pending:
@@ -240,11 +270,14 @@ class StreamMux:
             raise first_error
 
     async def afail(self, err: BaseException) -> None:
-        """Async counterpart to ``fail``.
+        """Fail on the async lane.
 
         Cancels every scheduled task across all transformers, awaits
-        them to completion, then runs each transformer's ``afail``
-        hook and auto-fails logs/channels and the main event log.
+        them to completion, then runs each transformer's `afail` hook
+        and auto-fails logs, channels, and the main event log.
+
+        Args:
+            err: The exception that ended the run.
         """
         pending = self._collect_scheduled_tasks()
         for task in pending:
@@ -267,7 +300,7 @@ class StreamMux:
             self._events.fail(err)
 
     def _collect_scheduled_tasks(self) -> list[asyncio.Task[Any]]:
-        """Snapshot of all in-flight tasks scheduled via transformers."""
+        """Return a snapshot of in-flight tasks scheduled via transformers."""
         return [
             task
             for transformer in self._transformers
@@ -280,7 +313,7 @@ class StreamMux:
     # ------------------------------------------------------------------
 
     def _bind_and_wire(self, projection: dict[str, Any]) -> None:
-        """Bind and wire EventLog / StreamChannel instances in *projection*."""
+        """Bind and wire EventLog / StreamChannel instances in a projection."""
         for value in projection.values():
             if isinstance(value, StreamChannel):
                 self._apply_default_maxlen(value._log)
@@ -301,7 +334,7 @@ class StreamMux:
                 self._logs.append(value)
 
     def _apply_default_maxlen(self, log: EventLog[Any]) -> None:
-        """Fill in the mux's default maxlen if the log hasn't set its own."""
+        """Fill in the mux's default maxlen when the log hasn't set its own."""
         if log._maxlen is None and self._default_maxlen is not None:
             log._maxlen = self._default_maxlen
 
@@ -310,9 +343,9 @@ class StreamMux:
 
         Forwarded events bypass the transformer pipeline to avoid
         infinite recursion (a transformer that pushes to a channel
-        during ``process()`` would re-trigger itself). These events
-        are visible in the main event log but are not passed through
-        transformers' ``process()`` methods.
+        during `process()` would re-trigger itself). These events are
+        visible in the main event log but are not passed through
+        transformers' `process()` methods.
         """
         self._seq += 1
         event: ProtocolEvent = {

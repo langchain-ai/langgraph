@@ -9,8 +9,12 @@ from langgraph.stream._types import ProtocolEvent, _ProtocolEventParams
 def convert_to_protocol_event(part: dict[str, Any]) -> ProtocolEvent:
     """Convert a v2 StreamPart dict to a ProtocolEvent.
 
-    Expects a dict with keys ``type``, ``ns``, ``data``, and optionally
-    ``interrupts`` (present on values events).
+    Args:
+        part: A stream part dict with keys `type`, `ns`, `data`, and
+            optionally `interrupts` (present on values events).
+
+    Returns:
+        The equivalent ProtocolEvent.
     """
     params: _ProtocolEventParams = {
         "namespace": list(part["ns"]),

@@ -15,16 +15,16 @@ from langgraph.stream.transformers import ValuesTransformer
 class GraphRunStream:
     """Sync run stream with caller-driven pumping.
 
-    The caller's iteration on any projection (``values``, ``messages``,
-    raw events, or ``output``) drives the graph forward. No background
-    thread is used — this matches v1's model where the caller's ``for``
+    The caller's iteration on any projection (`values`, `messages`,
+    raw events, or `output`) drives the graph forward. No background
+    thread is used — this matches v1's model where the caller's `for`
     loop is the pump.
 
-    All transformer projections live in ``extensions``. Native transformer
-    projections (those with ``_native = True``) are also set as direct
-    attributes on this instance (e.g. ``run.values``, ``run.messages``).
+    All transformer projections live in `extensions`. Native transformer
+    projections (those with `_native = True`) are also set as direct
+    attributes on this instance (e.g. `run.values`, `run.messages`).
 
-    Iterating the run stream directly yields raw ``ProtocolEvent`` objects
+    Iterating the run stream directly yields raw `ProtocolEvent` objects
     from the mux's main event log.
     """
 
@@ -34,6 +34,14 @@ class GraphRunStream:
         mux: StreamMux,
         values_transformer: ValuesTransformer,
     ) -> None:
+        """Initialize the run stream.
+
+        Args:
+            graph_iter: Pull-based iterator over the graph's stream.
+            mux: The StreamMux owning projections and the main log.
+            values_transformer: The built-in values transformer
+                providing `output` / `interrupted` / `interrupts`.
+        """
         self._graph_iter = graph_iter
         self._mux = mux
         self.extensions = mux.extensions
@@ -47,7 +55,11 @@ class GraphRunStream:
         self._wire_request_more(mux)
 
     def _wire_request_more(self, mux: StreamMux) -> None:
-        """Set _request_more on all sync EventLogs so iteration drives the graph."""
+        """Install `_request_more` on every sync EventLog.
+
+        Sync iteration is caller-driven, so a cursor that catches up to
+        the buffer's tail needs a way to ask the graph for more events.
+        """
         mux._events._request_more = self._pump_next
         for value in mux.extensions.values():
             if isinstance(value, EventLog):
@@ -56,9 +68,11 @@ class GraphRunStream:
                 value._log._request_more = self._pump_next
 
     def _pump_next(self) -> bool:
-        """Pull one event from the graph and push through the mux.
+        """Pull one event from the graph and push it through the mux.
 
-        Returns True if an event was pulled, False if the graph is exhausted.
+        Returns:
+            True if an event was pulled, False if the graph is exhausted
+            or has raised.
         """
         if self._exhausted:
             return False
@@ -110,14 +124,14 @@ class AsyncGraphRunStream:
 
     A background asyncio task pumps events from the graph into the
     transformer pipeline. This is the standard async pattern — the task
-    runs on the same event loop and async consumers can iterate multiple
-    projections concurrently.
+    runs on the same event loop and async consumers can iterate
+    multiple projections concurrently.
 
-    All transformer projections live in ``extensions``. Native transformer
-    projections (those with ``_native = True``) are also set as direct
-    attributes on this instance (e.g. ``run.values``, ``run.messages``).
+    All transformer projections live in `extensions`. Native transformer
+    projections (those with `_native = True`) are also set as direct
+    attributes on this instance (e.g. `run.values`, `run.messages`).
 
-    Async-iterating the run stream yields raw ``ProtocolEvent`` objects
+    Async-iterating the run stream yields raw `ProtocolEvent` objects
     from the mux's main event log.
     """
 
@@ -127,6 +141,14 @@ class AsyncGraphRunStream:
         values_transformer: ValuesTransformer,
         pump_task: asyncio.Task[None],
     ) -> None:
+        """Initialize the async run stream.
+
+        Args:
+            mux: The StreamMux owning projections and the main log.
+            values_transformer: The built-in values transformer
+                providing `output` / `interrupted` / `interrupts`.
+            pump_task: Background task pumping graph events into the mux.
+        """
         self._mux = mux
         self.extensions = mux.extensions
         self._values_transformer = values_transformer
@@ -139,9 +161,10 @@ class AsyncGraphRunStream:
     def output(self) -> Any:
         """Return an awaitable that resolves to the final state.
 
-        Usage::
-
+        Example:
+            ```python
             output = await run.output
+            ```
         """
         return self._get_output()
 
@@ -158,9 +181,10 @@ class AsyncGraphRunStream:
     def interrupted(self) -> Any:
         """Return an awaitable that resolves to whether the run was interrupted.
 
-        Usage::
-
+        Example:
+            ```python
             interrupted = await run.interrupted
+            ```
         """
         return self._get_interrupted()
 
@@ -175,9 +199,10 @@ class AsyncGraphRunStream:
     def interrupts(self) -> Any:
         """Return an awaitable that resolves to interrupt payloads.
 
-        Usage::
-
+        Example:
+            ```python
             interrupts = await run.interrupts
+            ```
         """
         return self._get_interrupts()
 

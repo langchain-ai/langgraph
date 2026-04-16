@@ -26,10 +26,10 @@ STREAM_V2_MODES: list[StreamMode] = [
 
 
 class StreamingHandler:
-    """Wraps a compiled graph and provides ergonomic streaming projections.
+    """Wrap a compiled graph with ergonomic streaming projections.
 
-    Usage::
-
+    Example:
+        ```python
         handler = StreamingHandler(graph)
 
         # Sync
@@ -43,9 +43,15 @@ class StreamingHandler:
         async for state in run.values:
             print(state)
         output = await run.output
+        ```
     """
 
     def __init__(self, graph: Any) -> None:
+        """Initialize the handler.
+
+        Args:
+            graph: A compiled LangGraph graph to stream from.
+        """
         self._graph = graph
 
     def stream(
@@ -60,17 +66,27 @@ class StreamingHandler:
     ) -> GraphRunStream:
         """Start a sync streaming run.
 
-        Returns a `GraphRunStream` immediately. The caller's iteration on
-        any projection drives the graph forward — no background thread is
-        used. This matches v1's model where the caller's ``for`` loop is
-        the pump.
+        Returns a GraphRunStream immediately. The caller's iteration on
+        any projection drives the graph forward — no background thread
+        is used. This matches v1's model where the caller's `for` loop
+        is the pump.
 
-        *max_events* caps the retention of every ``EventLog`` /
-        ``StreamChannel`` the mux binds (main event log plus each
-        transformer's projection logs) to the given number of items,
-        dropping the oldest when full. Transformers that constructed
-        their own logs with an explicit ``maxlen`` keep their setting.
-        Unbounded when ``None``.
+        Args:
+            input: Graph input.
+            config: Optional runnable config forwarded to the graph.
+            interrupt_before: Nodes to interrupt before, if any.
+            interrupt_after: Nodes to interrupt after, if any.
+            transformers: User transformers appended after the built-in
+                `ValuesTransformer` and `MessagesTransformer`.
+            max_events: Caps the retention of every EventLog and
+                StreamChannel the mux binds (main event log plus each
+                transformer's projection logs), dropping the oldest
+                when full. Transformers that constructed their own
+                logs with an explicit `maxlen` keep their setting.
+                Unbounded when `None`.
+
+        Returns:
+            A GraphRunStream the caller can iterate to drive the run.
         """
         values_t = ValuesTransformer()
         mux = StreamMux(
@@ -105,11 +121,23 @@ class StreamingHandler:
     ) -> AsyncGraphRunStream:
         """Start an async streaming run.
 
-        Returns an `AsyncGraphRunStream` immediately. A background asyncio
+        Returns an AsyncGraphRunStream immediately. A background asyncio
         task pumps events from the graph into the transformer pipeline.
 
-        *max_events* caps retention of every ``EventLog`` / ``StreamChannel``
-        the mux binds — see ``stream()`` for the full semantics.
+        Args:
+            input: Graph input.
+            config: Optional runnable config forwarded to the graph.
+            interrupt_before: Nodes to interrupt before, if any.
+            interrupt_after: Nodes to interrupt after, if any.
+            transformers: User transformers appended after the built-in
+                `ValuesTransformer` and `MessagesTransformer`.
+            max_events: Caps retention of every EventLog and
+                StreamChannel the mux binds — see `stream()` for the
+                full semantics.
+
+        Returns:
+            An AsyncGraphRunStream whose projections can be awaited
+            concurrently while the background pump runs.
         """
         values_t = ValuesTransformer()
         mux = StreamMux(

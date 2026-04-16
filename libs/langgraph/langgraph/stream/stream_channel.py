@@ -12,34 +12,50 @@ class StreamChannel(Generic[T]):
     """A named projection channel with optional protocol auto-forwarding.
 
     Wraps an event log and declares a protocol channel name. When the
-    ``StreamMux`` detects a ``StreamChannel`` in a transformer's ``init()``
-    return value, it automatically wires every ``push()`` to inject a
-    ``ProtocolEvent`` into the main event stream using the channel's name
-    as the ``method``.
+    StreamMux detects a StreamChannel in a transformer's `init()`
+    return value, it automatically wires every `push()` to inject a
+    `ProtocolEvent` into the main event stream using the channel's
+    name as the method.
 
-    In-process consumers iterate the channel directly (``for item in ch``
-    or ``async for item in ch``). Remote SDK clients subscribe via
-    ``session.subscribe("custom:<channelName>")``.
+    In-process consumers iterate the channel directly (`for item in ch`
+    or `async for item in ch`). Remote SDK clients subscribe via
+    `session.subscribe("custom:<channelName>")`.
 
-    Like ``EventLog``, a ``StreamChannel`` starts unbound.  The mux
-    calls ``_bind(is_async)`` during registration so the correct
-    iteration protocol is available by the time user code sees it.
+    Like EventLog, a StreamChannel starts unbound. The mux calls
+    `_bind(is_async)` during registration so the correct iteration
+    protocol is available by the time user code sees it.
 
-    Lifecycle (``_close`` / ``_fail``) is managed by the mux — transformers
-    using only StreamChannels don't need ``finalize`` / ``fail`` hooks.
+    Lifecycle (`_close` / `_fail`) is managed by the mux — transformers
+    using only StreamChannels don't need `finalize` or `fail` hooks.
     """
 
     def __init__(self, name: str, *, maxlen: int | None = None) -> None:
+        """Initialize the channel with an empty inner log.
+
+        Args:
+            name: The protocol channel name used for auto-forwarded
+                events (`custom:<name>` on the wire).
+            maxlen: Optional retention cap on the inner EventLog. See
+                `EventLog.__init__` for semantics.
+        """
         self.name = name
         self._log: EventLog[T] = EventLog(maxlen=maxlen)
         self._wire_fn: Callable[[T], None] | None = None
 
     def _bind(self, *, is_async: bool) -> None:
-        """Bind the underlying event log to sync or async mode."""
+        """Bind the underlying event log to sync or async mode.
+
+        Args:
+            is_async: True for async iteration, False for sync.
+        """
         self._log._bind(is_async=is_async)
 
     def push(self, item: T) -> None:
-        """Append *item* to the log and auto-forward if wired."""
+        """Append an item to the log and auto-forward if wired.
+
+        Args:
+            item: The item to push.
+        """
         self._log.push(item)
         if self._wire_fn is not None:
             self._wire_fn(item)
