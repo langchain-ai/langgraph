@@ -1132,14 +1132,10 @@ class Pregel(
             task_states,
             self.stream_channels_asis,
         )
-        # assemble the state snapshot
+        # assemble the state snapshot (sync version)
         # If a task has writes but also has an interrupt pending, it should still
         # be included in `next` because the graph is waiting for user input
-        pending_interrupt_task_ids = {
-            pw[0]
-            for pw in saved.pending_writes or []
-            if pw[1] == INTERRUPT
-        }
+        pending_interrupt_task_ids = _get_pending_interrupt_task_ids(saved)
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
             tuple(
@@ -1263,14 +1259,10 @@ class Pregel(
             task_states,
             self.stream_channels_asis,
         )
-        # assemble the state snapshot
+        # assemble the state snapshot (async version)
         # If a task has writes but also has an interrupt pending, it should still
         # be included in `next` because the graph is waiting for user input
-        pending_interrupt_task_ids = {
-            pw[0]
-            for pw in saved.pending_writes or []
-            if pw[1] == INTERRUPT
-        }
+        pending_interrupt_task_ids = _get_pending_interrupt_task_ids(saved)
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
             tuple(
@@ -3636,6 +3628,22 @@ class Pregel(
                 )
         # clear cache
         await self.cache.aclear(namespaces)
+
+
+def _get_pending_interrupt_task_ids(saved: CheckpointTuple) -> set[str]:
+    """Extract task IDs that have pending interrupt writes.
+    
+    Args:
+        saved: CheckpointTuple containing pending_writes
+        
+    Returns:
+        Set of task IDs that have INTERRUPT in their pending writes
+    """
+    return {
+        pw[0]
+        for pw in saved.pending_writes or []
+        if pw[1] == INTERRUPT
+    }
 
 
 def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str]]:
