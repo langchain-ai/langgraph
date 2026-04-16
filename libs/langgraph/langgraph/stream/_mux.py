@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Callable
 from typing import Any
 
 from langgraph.stream._event_log import EventLog
-from langgraph.stream._types import ProtocolEvent, StreamTransformer
+from langgraph.stream._types import (
+    ProtocolEvent,
+    StreamTransformer,
+    transformer_requires_async,
+)
 from langgraph.stream.stream_channel import StreamChannel
 
 
@@ -23,7 +28,23 @@ class StreamMux:
     automatically bound to the matching mode.
     """
 
-    def __init__(self, *, is_async: bool = False) -> None:
+    def __init__(
+        self,
+        transformers: list[StreamTransformer] | None = None,
+        *,
+        is_async: bool = False,
+    ) -> None:
+        """Initialize the mux and register *transformers* in order.
+
+        Transformers are fixed at construction time — there is no
+        post-init ``register()``. Each transformer's ``init()`` is called,
+        projections are merged into ``self.extensions``, ``_native``
+        keys are recorded in ``self.native_keys``, and any ``EventLog``
+        / ``StreamChannel`` instances are bound/wired.
+
+        Raises ``RuntimeError`` if any transformer requires an async run
+        under sync mode, and ``ValueError`` on projection-key conflicts.
+        """
         self._is_async = is_async
         self._events: EventLog[ProtocolEvent] = EventLog()
         self._events._bind(is_async=is_async)
@@ -32,22 +53,48 @@ class StreamMux:
         self._logs: list[EventLog[Any]] = []
         self._seq = 0
 
-    def register(self, transformer: StreamTransformer) -> dict[str, Any]:
-        """Register a transformer and return its projection dict.
+        #: Merged projection dict across all registered transformers.
+        #: Treat as read-only — mutations won't be reflected back in
+        #: individual transformers' state.
+        self.extensions: dict[str, Any] = {}
+        #: Projection keys from transformers with ``_native = True``.
+        self.native_keys: set[str] = set()
+
+        for transformer in transformers or ():
+            self._register(transformer)
+
+    def _register(self, transformer: StreamTransformer) -> None:
+        """Register a transformer.
 
         Calls ``transformer.init()``, stores the transformer for event
         processing, binds any ``EventLog`` or ``StreamChannel`` instances
-        in the projection, and returns the projection.
+        in the projection, and merges the projection into
+        ``self.extensions``.
         """
+        if transformer_requires_async(transformer) and not self._is_async:
+            raise RuntimeError(
+                f"{type(transformer).__name__} requires an async run — "
+                "it overrides aprocess/afinalize/afail or sets "
+                "requires_async=True. Use astream(), not stream()."
+            )
         projection = transformer.init()
         if not isinstance(projection, dict):
             raise TypeError(
                 f"StreamTransformer.init() must return a dict, "
                 f"got {type(projection).__name__}"
             )
+        conflicts = set(projection) & set(self.extensions)
+        if conflicts:
+            raise ValueError(
+                f"Transformer {type(transformer).__name__} returned "
+                f"projection keys that conflict with already-registered "
+                f"keys: {conflicts}"
+            )
         self._transformers.append(transformer)
         self._bind_and_wire(projection)
-        return projection
+        self.extensions.update(projection)
+        if getattr(transformer, "_native", False):
+            self.native_keys.update(projection.keys())
 
     def push(self, event: ProtocolEvent) -> None:
         """Route *event* through all transformers, then append to the main log.
@@ -118,6 +165,107 @@ class StreamMux:
             if not ch._log._closed:
                 ch._fail(err)
         self._events.fail(err)
+
+    # ------------------------------------------------------------------
+    # Async dispatch
+    # ------------------------------------------------------------------
+
+    async def apush(self, event: ProtocolEvent) -> None:
+        """Async counterpart to ``push``. Awaits each transformer's
+        ``aprocess`` in registration order before appending to the main log.
+
+        A slow ``aprocess`` serializes the pipeline by design — that's the
+        guarantee that lets a later transformer (or a synchronous consumer)
+        see the result of the async work. For decoupled work, use
+        ``schedule()`` from inside ``process``/``aprocess`` instead.
+        """
+        keep = True
+        for transformer in self._transformers:
+            if not await transformer.aprocess(event):
+                keep = False
+        if keep:
+            self._seq += 1
+            event["seq"] = self._seq
+            self._events.push(event)
+
+    async def aclose(self) -> None:
+        """Async counterpart to ``close``.
+
+        Awaits every task started via ``StreamTransformer.schedule()``
+        across all transformers, then calls ``afinalize()`` on each,
+        then auto-closes logs/channels and the main event log.
+
+        If any scheduled task raised under ``on_error="raise"``, or any
+        transformer's ``afinalize`` raises, the exception propagates.
+        The caller (the pump) handles it by routing into ``afail``.
+        """
+        pending = self._collect_scheduled_tasks()
+        if pending:
+            results = await asyncio.gather(*pending, return_exceptions=True)
+            first_err = next(
+                (
+                    r
+                    for r in results
+                    if isinstance(r, BaseException)
+                    and not isinstance(r, asyncio.CancelledError)
+                ),
+                None,
+            )
+            if first_err is not None:
+                raise first_err
+
+        first_error: BaseException | None = None
+        for transformer in self._transformers:
+            try:
+                await transformer.afinalize()
+            except BaseException as e:
+                if first_error is None:
+                    first_error = e
+        for log in self._logs:
+            if not log._closed:
+                log.close()
+        for ch in self._channels:
+            if not ch._log._closed:
+                ch._close()
+        self._events.close()
+        if first_error is not None:
+            raise first_error
+
+    async def afail(self, err: BaseException) -> None:
+        """Async counterpart to ``fail``.
+
+        Cancels every scheduled task across all transformers, awaits
+        them to completion, then runs each transformer's ``afail``
+        hook and auto-fails logs/channels and the main event log.
+        """
+        pending = self._collect_scheduled_tasks()
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        for transformer in self._transformers:
+            try:
+                await transformer.afail(err)
+            except BaseException:
+                pass
+        for log in self._logs:
+            if not log._closed:
+                log.fail(err)
+        for ch in self._channels:
+            if not ch._log._closed:
+                ch._fail(err)
+        if not self._events._closed:
+            self._events.fail(err)
+
+    def _collect_scheduled_tasks(self) -> list[asyncio.Task[Any]]:
+        """Snapshot of all in-flight tasks scheduled via transformers."""
+        return [
+            task
+            for transformer in self._transformers
+            for task in getattr(transformer, "_stream_scheduled_tasks", ())
+            if not task.done()
+        ]
 
     # ------------------------------------------------------------------
     # Binding and StreamChannel auto-wiring

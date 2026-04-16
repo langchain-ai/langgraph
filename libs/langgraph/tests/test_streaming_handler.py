@@ -627,7 +627,7 @@ class TestConvertToProtocolEvent:
 
 class TestStreamMux:
     def test_register_non_dict_raises(self) -> None:
-        """init() returning a non-dict should raise TypeError."""
+        """init() returning a non-dict should raise TypeError at construction."""
 
         class BadTransformer(StreamTransformer):
             def init(self) -> Any:
@@ -636,9 +636,8 @@ class TestStreamMux:
             def process(self, event: ProtocolEvent) -> bool:
                 return True
 
-        mux = StreamMux()
         with pytest.raises(TypeError, match="must return a dict"):
-            mux.register(BadTransformer())
+            StreamMux([BadTransformer()])
 
     def test_event_suppression(self) -> None:
         """When process() returns False, the event should not appear in the main log."""
@@ -651,8 +650,7 @@ class TestStreamMux:
                 # Suppress "updates" events
                 return event["method"] != "updates"
 
-        mux = StreamMux()
-        mux.register(FilterTransformer())
+        mux = StreamMux([FilterTransformer()])
 
         mux.push(_event("values", {"a": 1}))
         mux.push(_event("updates", {"b": 2}))
@@ -685,9 +683,7 @@ class TestStreamMux:
                 seen_by_second.append(event["method"])
                 return False
 
-        mux = StreamMux()
-        mux.register(PassTransformer())
-        mux.register(RejectTransformer())
+        mux = StreamMux([PassTransformer(), RejectTransformer()])
 
         mux.push(_event("values"))
         mux.close()
@@ -836,10 +832,8 @@ class TestStreamMuxResilience:
             def finalize(self) -> None:
                 self.finalized = True
 
-        mux = StreamMux()
-        mux.register(BrokenFinalizer())
         good = GoodTransformer()
-        mux.register(good)
+        mux = StreamMux([BrokenFinalizer(), good])
 
         mux.push(_event("values"))
 
@@ -876,10 +870,8 @@ class TestStreamMuxResilience:
             def fail(self, err: BaseException) -> None:
                 self.failed_with = err
 
-        mux = StreamMux()
-        mux.register(BrokenFailer())
         good = GoodTransformer()
-        mux.register(good)
+        mux = StreamMux([BrokenFailer(), good])
 
         original_error = ValueError("original")
         mux.fail(original_error)
@@ -904,8 +896,7 @@ class TestStreamMuxResilience:
                 raise RuntimeError("finalize broke")
 
         t = BrokenWithChannel()
-        mux = StreamMux()
-        mux.register(t)
+        mux = StreamMux([t])
 
         with pytest.raises(RuntimeError, match="finalize broke"):
             mux.close()
@@ -1022,8 +1013,7 @@ class TestCustomTransformer:
                 self._channel.push(f"saw:{event['method']}")
                 return True
 
-        mux = StreamMux()
-        mux.register(ChannelPusher())
+        mux = StreamMux([ChannelPusher()])
 
         mux.push(_event("values"))
         mux.push(_event("updates"))
@@ -1074,8 +1064,7 @@ class TestEventLogAutoLifecycle:
                 self._log.push("saw_event")
                 return True
 
-        mux = StreamMux()
-        mux.register(SimpleTransformer())
+        mux = StreamMux([SimpleTransformer()])
 
         mux.push(_event("values"))
         mux.close()
@@ -1100,8 +1089,7 @@ class TestEventLogAutoLifecycle:
                 return True
 
         t = SimpleTransformer()
-        mux = StreamMux()
-        mux.register(t)
+        mux = StreamMux([t])
 
         mux.push(_event("values"))
         mux.fail(ValueError("boom"))
@@ -1127,8 +1115,7 @@ class TestEventLogAutoLifecycle:
             def finalize(self) -> None:
                 self._log.close()
 
-        mux = StreamMux()
-        mux.register(ManualCloseTransformer())
+        mux = StreamMux([ManualCloseTransformer()])
         # Should not raise even though the log is closed by both
         # the transformer and the mux.
         mux.close()
@@ -1156,3 +1143,304 @@ class TestEventLogAutoLifecycle:
         _ = run.output
         items = list(run.extensions["minimal"])
         assert len(items) > 0
+
+
+# ---------------------------------------------------------------------------
+# Async transformer lane — aprocess / afinalize / afail / schedule()
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncTransformerLane:
+    @pytest.mark.anyio
+    async def test_aprocess_is_awaited_before_next_transformer(self) -> None:
+        """aprocess must complete before the next transformer sees the event.
+
+        This is the load-bearing guarantee for mutating transformers
+        like PII redaction: the downstream transformer reads the mutated
+        event synchronously.
+        """
+        order: list[str] = []
+
+        class RedactTransformer(StreamTransformer):
+            requires_async = True
+
+            def init(self) -> dict[str, Any]:
+                return {}
+
+            async def aprocess(self, event: ProtocolEvent) -> bool:
+                await asyncio.sleep(0.01)
+                order.append("redact")
+                event["params"]["data"]["redacted"] = True
+                return True
+
+        class ObserverTransformer(StreamTransformer):
+            def init(self) -> dict[str, Any]:
+                return {}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                if event["method"] == "values":
+                    order.append(f"observe:{event['params']['data'].get('redacted')}")
+                return True
+
+        mux = StreamMux([RedactTransformer(), ObserverTransformer()], is_async=True)
+
+        await mux.apush(_event("values", {"secret": "x"}))
+        await mux.aclose()
+
+        assert order == ["redact", "observe:True"]
+
+    @pytest.mark.anyio
+    async def test_schedule_joins_tasks_before_afinalize(self) -> None:
+        """Every scheduled task must complete before afinalize runs."""
+        phase: list[str] = []
+
+        class SchedTransformer(StreamTransformer):
+            requires_async = True
+
+            def __init__(self) -> None:
+                self._log: EventLog[str] = EventLog()
+
+            def init(self) -> dict[str, Any]:
+                return {"out": self._log}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                if event["method"] == "values":
+
+                    async def work() -> None:
+                        await asyncio.sleep(0.01)
+                        phase.append("task")
+                        self._log.push("done")
+
+                    self.schedule(work())
+                return True
+
+            async def afinalize(self) -> None:
+                phase.append("afinalize")
+                self._log.close()
+
+        t = SchedTransformer()
+        mux = StreamMux([t], is_async=True)
+
+        await mux.apush(_event("values", {}))
+        await mux.apush(_event("values", {}))
+        await mux.aclose()
+
+        # Both tasks ran before afinalize; the log holds both pushes.
+        assert phase.count("task") == 2
+        assert phase[-1] == "afinalize"
+
+    @pytest.mark.anyio
+    async def test_sync_stream_rejects_async_transformer(self) -> None:
+        """Registering a requires_async transformer on a sync mux raises."""
+
+        class NeedsAsync(StreamTransformer):
+            requires_async = True
+
+            def init(self) -> dict[str, Any]:
+                return {}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                return True
+
+        with pytest.raises(RuntimeError, match="requires an async run"):
+            StreamMux([NeedsAsync()], is_async=False)
+
+    @pytest.mark.anyio
+    async def test_sync_stream_rejects_aprocess_override(self) -> None:
+        """Overriding aprocess also marks the transformer as async-required."""
+
+        class HasAprocess(StreamTransformer):
+            def init(self) -> dict[str, Any]:
+                return {}
+
+            async def aprocess(self, event: ProtocolEvent) -> bool:
+                return True
+
+        with pytest.raises(RuntimeError, match="requires an async run"):
+            StreamMux([HasAprocess()], is_async=False)
+
+    def test_schedule_without_running_loop_raises(self) -> None:
+        """schedule() called outside an event loop fails with a clear message."""
+
+        class Sched(StreamTransformer):
+            requires_async = True
+
+            def init(self) -> dict[str, Any]:
+                return {}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                return True
+
+        t = Sched()
+
+        async def noop() -> None:
+            pass
+
+        coro = noop()
+        try:
+            with pytest.raises(RuntimeError, match="requires a running event loop"):
+                t.schedule(coro)
+        finally:
+            coro.close()
+
+    @pytest.mark.anyio
+    async def test_schedule_on_error_log_swallows_exceptions(self) -> None:
+        """on_error="log" (default) keeps the run alive when a task fails."""
+
+        class Bad(StreamTransformer):
+            requires_async = True
+
+            def __init__(self) -> None:
+                self._log: EventLog[str] = EventLog()
+
+            def init(self) -> dict[str, Any]:
+                return {"out": self._log}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                async def work() -> None:
+                    raise ValueError("boom")
+
+                self.schedule(work())  # default on_error="log"
+                return True
+
+            async def afinalize(self) -> None:
+                self._log.close()
+
+        mux = StreamMux([Bad()], is_async=True)
+
+        await mux.apush(_event("values", {}))
+        # Should not raise; the scheduled task's exception is logged.
+        await mux.aclose()
+
+    @pytest.mark.anyio
+    async def test_schedule_on_error_raise_fails_the_run(self) -> None:
+        """on_error="raise" propagates the exception through aclose."""
+
+        class Strict(StreamTransformer):
+            requires_async = True
+
+            def init(self) -> dict[str, Any]:
+                return {}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                async def work() -> None:
+                    raise ValueError("strict boom")
+
+                self.schedule(work(), on_error="raise")
+                return True
+
+        mux = StreamMux([Strict()], is_async=True)
+
+        await mux.apush(_event("values", {}))
+        with pytest.raises(ValueError, match="strict boom"):
+            await mux.aclose()
+
+    @pytest.mark.anyio
+    async def test_afail_cancels_pending_scheduled_tasks(self) -> None:
+        """When the run fails, outstanding scheduled tasks are cancelled."""
+        cancelled = asyncio.Event()
+
+        class Sched(StreamTransformer):
+            requires_async = True
+
+            def init(self) -> dict[str, Any]:
+                return {}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                async def work() -> None:
+                    try:
+                        await asyncio.sleep(5)
+                    except asyncio.CancelledError:
+                        cancelled.set()
+                        raise
+
+                self.schedule(work())
+                return True
+
+        mux = StreamMux([Sched()], is_async=True)
+
+        await mux.apush(_event("values", {}))
+        # Yield so the scheduled task actually starts before we cancel it;
+        # otherwise it's cancelled before its first step and the `except`
+        # inside work() never runs.
+        await asyncio.sleep(0)
+        await mux.afail(RuntimeError("run died"))
+
+        assert cancelled.is_set()
+
+    @pytest.mark.anyio
+    async def test_mixed_sync_and_async_transformers(self) -> None:
+        """Sync and async transformers coexist under astream."""
+        seen_sync: list[str] = []
+
+        class SyncOne(StreamTransformer):
+            def init(self) -> dict[str, Any]:
+                return {}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                seen_sync.append(event["method"])
+                return True
+
+        class AsyncOne(StreamTransformer):
+            requires_async = True
+
+            def __init__(self) -> None:
+                self._log: EventLog[str] = EventLog()
+
+            def init(self) -> dict[str, Any]:
+                return {"seen": self._log}
+
+            async def aprocess(self, event: ProtocolEvent) -> bool:
+                await asyncio.sleep(0)
+                self._log.push(event["method"])
+                return True
+
+            async def afinalize(self) -> None:
+                self._log.close()
+
+        async_t = AsyncOne()
+        mux = StreamMux([SyncOne(), async_t], is_async=True)
+
+        await mux.apush(_event("values", {}))
+        await mux.apush(_event("updates", {}))
+        await mux.aclose()
+
+        assert seen_sync == ["values", "updates"]
+        items = [x async for x in async_t._log]
+        assert items == ["values", "updates"]
+
+    @pytest.mark.anyio
+    async def test_handler_astream_with_scheduled_work(self) -> None:
+        """End-to-end: transformer schedules work during an astream run."""
+
+        class Scorer(StreamTransformer):
+            requires_async = True
+
+            def __init__(self) -> None:
+                self._log: EventLog[int] = EventLog()
+
+            def init(self) -> dict[str, Any]:
+                return {"scores": self._log}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                if event["method"] == "values":
+
+                    async def work() -> None:
+                        await asyncio.sleep(0.01)
+                        self._log.push(42)
+
+                    self.schedule(work())
+                return True
+
+            async def afinalize(self) -> None:
+                self._log.close()
+
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = await handler.astream(
+            {"value": "x", "items": []},
+            transformers=[Scorer()],
+        )
+        _ = await run.output
+        scores = [x async for x in run.extensions["scores"]]
+        assert scores and all(s == 42 for s in scores)

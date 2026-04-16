@@ -64,8 +64,10 @@ class StreamingHandler:
         used. This matches v1's model where the caller's ``for`` loop is
         the pump.
         """
-        mux, extensions, native_keys, values_t = self._setup(
-            transformers, is_async=False
+        values_t = ValuesTransformer()
+        mux = StreamMux(
+            [values_t, MessagesTransformer(), *(transformers or ())],
+            is_async=False,
         )
 
         graph_iter = iter(
@@ -80,10 +82,7 @@ class StreamingHandler:
             )
         )
 
-        run = GraphRunStream(graph_iter, mux, extensions, values_t)
-        for key in native_keys:
-            setattr(run, key, extensions[key])
-        return run
+        return GraphRunStream(graph_iter, mux, values_t)
 
     async def astream(
         self,
@@ -99,8 +98,10 @@ class StreamingHandler:
         Returns an `AsyncGraphRunStream` immediately. A background asyncio
         task pumps events from the graph into the transformer pipeline.
         """
-        mux, extensions, native_keys, values_t = self._setup(
-            transformers, is_async=True
+        values_t = ValuesTransformer()
+        mux = StreamMux(
+            [values_t, MessagesTransformer(), *(transformers or ())],
+            is_async=True,
         )
 
         async def pump() -> None:
@@ -114,55 +115,11 @@ class StreamingHandler:
                     interrupt_before=interrupt_before,
                     interrupt_after=interrupt_after,
                 ):
-                    mux.push(convert_to_protocol_event(part))
-                mux.close()
+                    await mux.apush(convert_to_protocol_event(part))
+                await mux.aclose()
             except BaseException as e:
-                mux.fail(e)
+                await mux.afail(e)
 
         task = asyncio.create_task(pump())
 
-        run = AsyncGraphRunStream(mux, extensions, values_t, task)
-        for key in native_keys:
-            setattr(run, key, extensions[key])
-        return run
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _setup(
-        user_transformers: list[StreamTransformer] | None,
-        *,
-        is_async: bool = False,
-    ) -> tuple[StreamMux, dict[str, Any], set[str], ValuesTransformer]:
-        """Create the mux, register all transformers.
-
-        Returns (mux, extensions, native_keys, values_transformer).
-        """
-        mux = StreamMux(is_async=is_async)
-
-        values_t = ValuesTransformer()
-        messages_t = MessagesTransformer()
-
-        all_transformers: list[StreamTransformer] = [values_t, messages_t]
-        if user_transformers:
-            all_transformers.extend(user_transformers)
-
-        extensions: dict[str, Any] = {}
-        native_keys: set[str] = set()
-
-        for t in all_transformers:
-            projection = mux.register(t)
-            conflicts = set(projection) & set(extensions)
-            if conflicts:
-                name = type(t).__name__
-                raise ValueError(
-                    f"Transformer {name} returned projection keys that "
-                    f"conflict with already-registered keys: {conflicts}"
-                )
-            extensions.update(projection)
-            if getattr(t, "_native", False):
-                native_keys.update(projection.keys())
-
-        return mux, extensions, native_keys, values_t
+        return AsyncGraphRunStream(mux, values_t, task)

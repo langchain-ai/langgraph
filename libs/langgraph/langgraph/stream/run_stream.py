@@ -32,22 +32,24 @@ class GraphRunStream:
         self,
         graph_iter: Iterator[Any],
         mux: StreamMux,
-        extensions: dict[str, Any],
         values_transformer: ValuesTransformer,
     ) -> None:
         self._graph_iter = graph_iter
         self._mux = mux
-        self.extensions = extensions
+        self.extensions = mux.extensions
         self._values_transformer = values_transformer
         self._exhausted = False
+        # Native-transformer projections also show up as direct attributes.
+        for key in mux.native_keys:
+            setattr(self, key, mux.extensions[key])
         # Wire pull-based iteration: every sync EventLog calls _pump_next
         # when its cursor catches up to the buffer.
-        self._wire_request_more(mux, extensions)
+        self._wire_request_more(mux)
 
-    def _wire_request_more(self, mux: StreamMux, extensions: dict[str, Any]) -> None:
+    def _wire_request_more(self, mux: StreamMux) -> None:
         """Set _request_more on all sync EventLogs so iteration drives the graph."""
         mux._events._request_more = self._pump_next
-        for value in extensions.values():
+        for value in mux.extensions.values():
             if isinstance(value, EventLog):
                 value._request_more = self._pump_next
             elif isinstance(value, StreamChannel):
@@ -122,14 +124,16 @@ class AsyncGraphRunStream:
     def __init__(
         self,
         mux: StreamMux,
-        extensions: dict[str, Any],
         values_transformer: ValuesTransformer,
         pump_task: asyncio.Task[None],
     ) -> None:
         self._mux = mux
-        self.extensions = extensions
+        self.extensions = mux.extensions
         self._values_transformer = values_transformer
         self._pump_task = pump_task
+        # Native-transformer projections also show up as direct attributes.
+        for key in mux.native_keys:
+            setattr(self, key, mux.extensions[key])
 
     @property
     def output(self) -> Any:
