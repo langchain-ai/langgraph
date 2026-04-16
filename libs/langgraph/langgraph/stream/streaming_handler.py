@@ -56,6 +56,7 @@ class StreamingHandler:
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         transformers: list[StreamTransformer] | None = None,
+        max_events: int | None = None,
     ) -> GraphRunStream:
         """Start a sync streaming run.
 
@@ -63,11 +64,19 @@ class StreamingHandler:
         any projection drives the graph forward — no background thread is
         used. This matches v1's model where the caller's ``for`` loop is
         the pump.
+
+        *max_events* caps the retention of every ``EventLog`` /
+        ``StreamChannel`` the mux binds (main event log plus each
+        transformer's projection logs) to the given number of items,
+        dropping the oldest when full. Transformers that constructed
+        their own logs with an explicit ``maxlen`` keep their setting.
+        Unbounded when ``None``.
         """
         values_t = ValuesTransformer()
         mux = StreamMux(
             [values_t, MessagesTransformer(), *(transformers or ())],
             is_async=False,
+            max_events=max_events,
         )
 
         graph_iter = iter(
@@ -92,16 +101,21 @@ class StreamingHandler:
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         transformers: list[StreamTransformer] | None = None,
+        max_events: int | None = None,
     ) -> AsyncGraphRunStream:
         """Start an async streaming run.
 
         Returns an `AsyncGraphRunStream` immediately. A background asyncio
         task pumps events from the graph into the transformer pipeline.
+
+        *max_events* caps retention of every ``EventLog`` / ``StreamChannel``
+        the mux binds — see ``stream()`` for the full semantics.
         """
         values_t = ValuesTransformer()
         mux = StreamMux(
             [values_t, MessagesTransformer(), *(transformers or ())],
             is_async=True,
+            max_events=max_events,
         )
 
         async def pump() -> None:

@@ -15,6 +15,7 @@ from typing_extensions import TypedDict
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.stream import (
+    BufferOverflowError,
     EventLog,
     StreamChannel,
     StreamingHandler,
@@ -1444,3 +1445,145 @@ class TestAsyncTransformerLane:
         _ = await run.output
         scores = [x async for x in run.extensions["scores"]]
         assert scores and all(s == 42 for s in scores)
+
+
+# ---------------------------------------------------------------------------
+# Bounded EventLog / StreamChannel — memory caps and overflow semantics
+# ---------------------------------------------------------------------------
+
+
+class TestBoundedEventLog:
+    def test_invalid_maxlen_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive int or None"):
+            EventLog(maxlen=0)
+        with pytest.raises(ValueError, match="positive int or None"):
+            EventLog(maxlen=-3)
+
+    def test_unbounded_default_preserves_replay(self) -> None:
+        """Default EventLog (maxlen=None) still replays from seq 0."""
+        log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
+        for i in range(100):
+            log.push(i)
+        log.close()
+        assert list(log) == list(range(100))
+
+    def test_bounded_drops_oldest_on_overflow(self) -> None:
+        """When bounded, pushing past maxlen evicts the oldest item."""
+        log: EventLog[int] = EventLog(maxlen=3)
+        log._bind(is_async=False)
+        for i in range(5):
+            log.push(i)
+        log.close()
+        # Only the last 3 survive; new cursors start at the current head.
+        assert list(log) == [2, 3, 4]
+
+    def test_new_cursor_starts_at_head_not_zero(self) -> None:
+        """New cursors see the retained window, not the evicted prefix."""
+        log: EventLog[int] = EventLog(maxlen=2)
+        log._bind(is_async=False)
+        log.push(1)
+        log.push(2)
+        log.push(3)  # evicts 1
+        log.close()
+        assert list(log) == [2, 3]
+
+    @pytest.mark.anyio
+    async def test_async_cursor_overflow_raises(self) -> None:
+        """An async cursor that falls behind the retention window raises."""
+        log: EventLog[int] = EventLog(maxlen=2)
+        log._bind(is_async=True)
+
+        log.push(1)
+        cursor = aiter(log)
+        # Advance cursor to seq 1, reading item 1.
+        first = await anext(cursor)
+        assert first == 1
+        # Now push enough to roll the cursor off the back.
+        log.push(2)  # buffer: [1, 2]  _first_seq=0, cursor at seq=1
+        log.push(3)  # buffer: [2, 3]  _first_seq=1, cursor at seq=1 still OK
+        log.push(4)  # buffer: [3, 4]  _first_seq=2, cursor at seq=1 — overflow
+        with pytest.raises(BufferOverflowError, match="fell"):
+            await anext(cursor)
+
+    def test_sync_cursor_sees_all_while_bounded_but_under_cap(self) -> None:
+        """Bounded mode with pushes under cap behaves identically to unbounded."""
+        log: EventLog[int] = EventLog(maxlen=100)
+        log._bind(is_async=False)
+        log.push(1)
+        log.push(2)
+        log.close()
+        assert list(log) == [1, 2]
+
+
+class TestStreamChannelMaxlen:
+    def test_maxlen_passes_through_to_inner_log(self) -> None:
+        ch: StreamChannel[int] = StreamChannel("ch", maxlen=2)
+        ch._bind(is_async=False)
+        ch.push(1)
+        ch.push(2)
+        ch.push(3)
+        ch._close()
+        assert list(ch) == [2, 3]
+
+
+class TestMuxMaxEventsDefault:
+    def test_mux_fills_in_default_when_log_has_none(self) -> None:
+        class Simple(StreamTransformer):
+            def __init__(self) -> None:
+                self.log: EventLog[int] = EventLog()
+
+            def init(self) -> dict[str, Any]:
+                return {"out": self.log}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                return True
+
+        t = Simple()
+        StreamMux([t], max_events=10)
+        assert t.log._maxlen == 10
+
+    def test_explicit_log_maxlen_wins_over_mux_default(self) -> None:
+        class Explicit(StreamTransformer):
+            def __init__(self) -> None:
+                self.log: EventLog[int] = EventLog(maxlen=3)
+
+            def init(self) -> dict[str, Any]:
+                return {"out": self.log}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                return True
+
+        t = Explicit()
+        StreamMux([t], max_events=1000)
+        assert t.log._maxlen == 3  # transformer author's setting stands
+
+    def test_main_event_log_respects_max_events(self) -> None:
+        mux = StreamMux([], max_events=5)
+        assert mux._events._maxlen == 5
+
+    def test_max_events_default_cascades_to_channels(self) -> None:
+        class WithChannel(StreamTransformer):
+            def __init__(self) -> None:
+                self.ch: StreamChannel[int] = StreamChannel("out")
+
+            def init(self) -> dict[str, Any]:
+                return {"out": self.ch}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                return True
+
+        t = WithChannel()
+        StreamMux([t], max_events=7)
+        assert t.ch._log._maxlen == 7
+
+    def test_handler_propagates_max_events(self) -> None:
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "x", "items": []}, max_events=50)
+        # Main log inherits the default.
+        assert run._mux._events._maxlen == 50
+        # Native projections (values log, messages log) inherit too.
+        for log in run._mux._logs:
+            assert log._maxlen == 50
+        _ = run.output

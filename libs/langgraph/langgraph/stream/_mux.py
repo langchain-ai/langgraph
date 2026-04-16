@@ -33,6 +33,7 @@ class StreamMux:
         transformers: list[StreamTransformer] | None = None,
         *,
         is_async: bool = False,
+        max_events: int | None = None,
     ) -> None:
         """Initialize the mux and register *transformers* in order.
 
@@ -42,11 +43,18 @@ class StreamMux:
         keys are recorded in ``self.native_keys``, and any ``EventLog``
         / ``StreamChannel`` instances are bound/wired.
 
+        *max_events* sets a default capacity for every ``EventLog`` /
+        ``StreamChannel`` the mux binds, including the main event log.
+        Logs that were constructed with an explicit ``maxlen`` keep
+        their own setting — the mux only fills in ``None`` defaults.
+        Unbounded when ``max_events`` is ``None``.
+
         Raises ``RuntimeError`` if any transformer requires an async run
         under sync mode, and ``ValueError`` on projection-key conflicts.
         """
         self._is_async = is_async
-        self._events: EventLog[ProtocolEvent] = EventLog()
+        self._default_maxlen = max_events
+        self._events: EventLog[ProtocolEvent] = EventLog(maxlen=max_events)
         self._events._bind(is_async=is_async)
         self._transformers: list[StreamTransformer] = []
         self._channels: list[StreamChannel[Any]] = []
@@ -275,6 +283,7 @@ class StreamMux:
         """Bind and wire EventLog / StreamChannel instances in *projection*."""
         for value in projection.values():
             if isinstance(value, StreamChannel):
+                self._apply_default_maxlen(value._log)
                 value._bind(is_async=self._is_async)
                 self._channels.append(value)
                 channel_name = value.name
@@ -287,8 +296,14 @@ class StreamMux:
 
                 value._wire(_make_forward(channel_name))
             elif isinstance(value, EventLog):
+                self._apply_default_maxlen(value)
                 value._bind(is_async=self._is_async)
                 self._logs.append(value)
+
+    def _apply_default_maxlen(self, log: EventLog[Any]) -> None:
+        """Fill in the mux's default maxlen if the log hasn't set its own."""
+        if log._maxlen is None and self._default_maxlen is not None:
+            log._maxlen = self._default_maxlen
 
     def _forward(self, channel_name: str, item: Any) -> None:
         """Inject a ProtocolEvent for a StreamChannel push.

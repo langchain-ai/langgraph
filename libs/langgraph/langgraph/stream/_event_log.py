@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Generic, TypeVar
 
 T = TypeVar("T")
+
+
+class BufferOverflowError(RuntimeError):
+    """Raised when an EventLog cursor falls off the back of a bounded buffer.
+
+    Mirrors the ``restored: false`` signal from the protocol's reconnection
+    story (§ 06): consumers that fall behind the retention window get an
+    explicit error and can decide to rebuild from a snapshot rather than
+    silently losing events.
+    """
 
 
 class EventLog(Generic[T]):
@@ -28,10 +39,26 @@ class EventLog(Generic[T]):
 
     Async iteration uses a shared ``asyncio.Event`` — cursors await
     the event when they catch up, and the producer sets it on each push.
+
+    Bounded mode
+    ------------
+    Pass ``maxlen=N`` to cap memory. When the buffer is full, ``push``
+    drops the oldest item to make room. Cursors track an absolute
+    sequence number; a cursor that falls off the back of the retention
+    window raises ``BufferOverflowError`` on its next read.
+
+    New cursors start at the current head of the buffer, not at seq 0
+    — they see whatever is still retained. This matches the protocol's
+    reconnection semantics (§ 06: "missed events can be replayed from
+    a bounded buffer").
     """
 
-    def __init__(self) -> None:
-        self._items: list[T] = []
+    def __init__(self, maxlen: int | None = None) -> None:
+        if maxlen is not None and maxlen <= 0:
+            raise ValueError("EventLog maxlen must be a positive int or None")
+        self._items: deque[T] = deque()
+        self._maxlen: int | None = maxlen
+        self._first_seq = 0  # absolute seq of _items[0]
         self._closed = False
         self._error: BaseException | None = None
 
@@ -65,9 +92,17 @@ class EventLog(Generic[T]):
     # ------------------------------------------------------------------
 
     def push(self, item: T) -> None:
-        """Append *item* and wake all waiting cursors."""
+        """Append *item* and wake all waiting cursors.
+
+        In bounded mode, evicts the oldest item first if the buffer
+        is full, advancing ``_first_seq`` so cursors can detect that
+        they've fallen off the back of the retention window.
+        """
         if self._closed:
             raise RuntimeError("Cannot push to a closed EventLog")
+        if self._maxlen is not None and len(self._items) >= self._maxlen:
+            self._items.popleft()
+            self._first_seq += 1
         self._items.append(item)
         self._notify()
 
@@ -112,11 +147,19 @@ class EventLog(Generic[T]):
         return self._sync_cursor()
 
     def _sync_cursor(self) -> Iterator[T]:
-        cursor = 0
+        # Start at the current head — if maxlen is None this is 0 (seen everything),
+        # if bounded this is wherever retention currently begins.
+        seq = self._first_seq
         while True:
-            if cursor < len(self._items):
-                item = self._items[cursor]
-                cursor += 1
+            if seq < self._first_seq:
+                raise BufferOverflowError(
+                    f"Cursor fell {self._first_seq - seq} items behind the "
+                    f"bounded EventLog's retention window (maxlen={self._maxlen})"
+                )
+            idx = seq - self._first_seq
+            if idx < len(self._items):
+                item = self._items[idx]
+                seq += 1
                 yield item
             elif self._closed:
                 if self._error is not None:
@@ -125,7 +168,7 @@ class EventLog(Generic[T]):
             elif self._request_more is not None:
                 # Pull from the producer until this log gets a new item
                 # or the graph is exhausted (which closes the log).
-                while cursor >= len(self._items) and not self._closed:
+                while (seq - self._first_seq) >= len(self._items) and not self._closed:
                     if not self._request_more():
                         break
             else:
@@ -149,16 +192,22 @@ class EventLog(Generic[T]):
 
     async def _async_cursor(self) -> AsyncIterator[T]:
         assert self._event is not None
-        cursor = 0
+        seq = self._first_seq
         while True:
-            if cursor < len(self._items):
-                yield self._items[cursor]
-                cursor += 1
+            if seq < self._first_seq:
+                raise BufferOverflowError(
+                    f"Cursor fell {self._first_seq - seq} items behind the "
+                    f"bounded EventLog's retention window (maxlen={self._maxlen})"
+                )
+            idx = seq - self._first_seq
+            if idx < len(self._items):
+                yield self._items[idx]
+                seq += 1
             elif self._closed:
                 if self._error is not None:
                     raise self._error
                 return
             else:
                 self._event.clear()
-                if cursor >= len(self._items) and not self._closed:
+                if (seq - self._first_seq) >= len(self._items) and not self._closed:
                     await self._event.wait()

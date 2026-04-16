@@ -29,9 +29,9 @@ class StreamChannel(Generic[T]):
     using only StreamChannels don't need ``finalize`` / ``fail`` hooks.
     """
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, *, maxlen: int | None = None) -> None:
         self.name = name
-        self._log: EventLog[T] = EventLog()
+        self._log: EventLog[T] = EventLog(maxlen=maxlen)
         self._wire_fn: Callable[[T], None] | None = None
 
     def _bind(self, *, is_async: bool) -> None:
