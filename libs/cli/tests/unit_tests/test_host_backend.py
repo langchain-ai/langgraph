@@ -121,7 +121,9 @@ def test_request_transport_error_raises():
 
 
 def test_create_deployment(client):
-    result = client.create_deployment({"name": "my-deploy"})
+    result = client.create_deployment(
+        name="my-deploy", deployment_type="dev", source="internal_docker"
+    )
     assert result == {"ok": True}
 
 

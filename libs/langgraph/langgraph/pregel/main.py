@@ -16,7 +16,7 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from dataclasses import is_dataclass
+from dataclasses import is_dataclass, replace
 from functools import partial
 from inspect import isclass
 from typing import (
@@ -96,6 +96,12 @@ from langgraph._internal._runnable import (
     coerce_to_runnable,
 )
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
+from langgraph.callbacks import (
+    GraphInterruptEvent,
+    GraphResumeEvent,
+    get_async_graph_callback_manager_for_config,
+    get_sync_graph_callback_manager_for_config,
+)
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
@@ -136,7 +142,12 @@ from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
-from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
+from langgraph.runtime import (
+    DEFAULT_RUNTIME,
+    BaseUser,
+    Runtime,
+    ServerInfo,
+)
 from langgraph.types import (
     All,
     CachePolicy,
@@ -2572,11 +2583,17 @@ class Pregel(
 
         config = ensure_config(self.config, config)
         callback_manager = get_callback_manager_for_config(config)
+        if "ls_integration" not in callback_manager.metadata:
+            callback_manager.add_metadata({"ls_integration": "langgraph"})
         run_manager = callback_manager.on_chain_start(
             None,
             input,
             name=config.get("run_name", self.get_name()),
             run_id=config.get("run_id"),
+        )
+        graph_callback_manager = get_sync_graph_callback_manager_for_config(
+            config,
+            run_id=run_manager.run_id,
         )
         try:
             # assign defaults
@@ -2643,20 +2660,35 @@ class Pregel(
             if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
+            # build server_info from metadata + parent runtime
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            server_info = _build_server_info(config, parent_runtime)
+
             runtime = Runtime(
                 context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
-                execution_info=ExecutionInfo(),
+                execution_info=None,
+                server_info=server_info,
             )
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
             # resolve mappers for v2 stream coercion
             _output_mapper = self._output_mapper if version == "v2" else None
             _state_mapper = self._state_mapper if version == "v2" else None
+
+            def emit_graph_lifecycle_events(loop: SyncPregelLoop) -> None:
+                while (event := loop._pop_lifecycle_event()) is not None:
+                    if isinstance(event, GraphResumeEvent):
+                        graph_callback_manager.on_resume(
+                            replace(event, run_id=graph_callback_manager.run_id)
+                        )
+                    else:
+                        graph_callback_manager.on_interrupt(
+                            replace(event, run_id=graph_callback_manager.run_id)
+                        )
 
             with SyncPregelLoop(
                 input,
@@ -2678,7 +2710,9 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
             ) as loop:
+                emit_graph_lifecycle_events(loop)
                 # create runner
                 runner = PregelRunner(
                     submit=config[CONF].get(
@@ -2740,9 +2774,11 @@ class Pregel(
                             _state_mapper,
                         )
                     loop.after_tick()
+                    emit_graph_lifecycle_events(loop)
                     # wait for checkpoint
                     if durability_ == "sync":
                         loop._put_checkpoint_fut.result()
+            emit_graph_lifecycle_events(loop)
             # emit output
             yield from _output(
                 stream_mode,
@@ -2909,11 +2945,17 @@ class Pregel(
 
         config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
+        if "ls_integration" not in callback_manager.metadata:
+            callback_manager.add_metadata({"ls_integration": "langgraph"})
         run_manager = await callback_manager.on_chain_start(
             None,
             input,
             name=config.get("run_name", self.get_name()),
             run_id=config.get("run_id"),
+        )
+        graph_callback_manager = get_async_graph_callback_manager_for_config(
+            config,
+            run_id=run_manager.run_id,
         )
         # if running from astream_log() run each proc with streaming
         do_stream = (
@@ -3010,20 +3052,46 @@ class Pregel(
             if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
+            # build server_info from metadata + parent runtime
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            server_info = _build_server_info(config, parent_runtime)
+
             runtime = Runtime(
                 context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
-                execution_info=ExecutionInfo(),
+                execution_info=None,
+                server_info=server_info,
             )
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
             # resolve mappers for v2 stream coercion
             _output_mapper = self._output_mapper if version == "v2" else None
             _state_mapper = self._state_mapper if version == "v2" else None
+
+            async def aemit_graph_lifecycle_events(loop: AsyncPregelLoop) -> None:
+                while (event := loop._pop_lifecycle_event()) is not None:
+                    if isinstance(event, GraphResumeEvent):
+                        await graph_callback_manager.on_resume(
+                            GraphResumeEvent(
+                                run_id=graph_callback_manager.run_id,
+                                status=event.status,
+                                checkpoint_id=event.checkpoint_id,
+                                checkpoint_ns=event.checkpoint_ns,
+                            )
+                        )
+                    else:
+                        await graph_callback_manager.on_interrupt(
+                            GraphInterruptEvent(
+                                run_id=graph_callback_manager.run_id,
+                                status=event.status,
+                                checkpoint_id=event.checkpoint_id,
+                                checkpoint_ns=event.checkpoint_ns,
+                                interrupts=event.interrupts,
+                            )
+                        )
 
             async with AsyncPregelLoop(
                 input,
@@ -3045,7 +3113,9 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
             ) as loop:
+                await aemit_graph_lifecycle_events(loop)
                 # create runner
                 runner = PregelRunner(
                     submit=config[CONF].get(
@@ -3127,6 +3197,7 @@ class Pregel(
                             ):
                                 yield o
                         loop.after_tick()
+                        await aemit_graph_lifecycle_events(loop)
                         # wait for checkpoint
                         if durability_ == "sync":
                             await cast(asyncio.Future, loop._put_checkpoint_fut)
@@ -3134,6 +3205,8 @@ class Pregel(
                     # ensure waiter doesn't remain pending on cancel/shutdown
                     if _cleanup_waiter is not None:
                         await _cleanup_waiter()
+
+            await aemit_graph_lifecycle_events(loop)
 
             # emit output
             for o in _output(
@@ -3637,6 +3710,37 @@ def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> Non
         and _START not in payload.get("next", ())
     ):
         payload["values"] = mapper(payload["values"])
+
+
+def _build_server_info(
+    config: RunnableConfig, parent_runtime: Runtime[Any]
+) -> ServerInfo | None:
+    """Build ServerInfo from config configurable.
+
+    The server puts assistant_id/graph_id in config configurable and the
+    authenticated user dict in configurable["langgraph_auth_user"].
+    """
+    configurable = config.get(CONF) or {}
+    assistant_id = configurable.get("assistant_id")
+    graph_id = configurable.get("graph_id")
+
+    # Read authenticated user from configurable (set by LangGraph Server).
+    # We prefer isinstance(BaseUser) but fall back to hasattr("identity")
+    # because the server's ProxyUser provides `permissions` via __getattr__,
+    # which Python's runtime_checkable Protocol check doesn't see.
+    auth_user_data = configurable.get("langgraph_auth_user")
+    user: BaseUser | None = None
+    if auth_user_data is not None:
+        if isinstance(auth_user_data, BaseUser) or hasattr(auth_user_data, "identity"):
+            user = cast(BaseUser, auth_user_data)
+
+    if assistant_id is not None or graph_id is not None or user is not None:
+        return ServerInfo(
+            assistant_id=str(assistant_id) if assistant_id else "",
+            graph_id=str(graph_id) if graph_id else "",
+            user=user,
+        )
+    return None
 
 
 def _coerce_context(

@@ -2,6 +2,11 @@
 
 Implementation of LangGraph CheckpointSaver that uses SQLite DB (both sync and async, via `aiosqlite`)
 
+## Security
+
+> [!IMPORTANT]
+> Set `LANGGRAPH_STRICT_MSGPACK=true` or pass an explicit `allowed_msgpack_modules` list when creating your checkpointer. This restricts checkpoint deserialization to known-safe types, preventing code execution if the database is compromised. See the [langgraph-checkpoint README](https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint#serde) for details.
+
 ## Usage
 
 ```python

@@ -1,4 +1,4 @@
-from langgraph_cli.helpers import format_log_entry, format_timestamp, level_fg
+from langgraph_cli.deploy import format_log_entry, format_timestamp, level_fg
 
 
 class TestFormatTimestamp:

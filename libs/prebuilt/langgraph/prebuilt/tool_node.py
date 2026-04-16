@@ -79,11 +79,13 @@ from langchain_core.tools.base import (
     TOOL_MESSAGE_BLOCK_TYPES,
     ToolException,
     _DirectlyInjectedToolArg,
+    _is_injected_arg_type,
     get_all_basemodel_annotations,
 )
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.runtime import ExecutionInfo, ServerInfo  # noqa: TC002
 from langgraph.store.base import BaseStore  # noqa: TC002
 from langgraph.types import Command, Send, StreamWriter
 from pydantic import BaseModel, ValidationError
@@ -611,6 +613,8 @@ class _InjectedArgs:
     state: dict[str, str | None]
     store: str | None
     runtime: str | None
+    all_injected_keys: set[str]
+    _optional_state_args: set[str]
 
 
 class ToolNode(RunnableCallable):
@@ -804,6 +808,8 @@ class ToolNode(RunnableCallable):
                 context=runtime.context,
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
+                execution_info=runtime.execution_info,
+                server_info=runtime.server_info,
             )
             tool_runtimes.append(tool_runtime)
 
@@ -836,6 +842,8 @@ class ToolNode(RunnableCallable):
                 context=runtime.context,
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
+                execution_info=runtime.execution_info,
+                server_info=runtime.server_info,
             )
             tool_runtimes.append(tool_runtime)
 
@@ -1326,7 +1334,7 @@ class ToolNode(RunnableCallable):
             return tool_call
 
         tool_call_copy: ToolCall = copy(tool_call)
-        injected_args = {}
+        injected_args: dict[str, Any] = {}
 
         # Inject state
         if injected.state:
@@ -1354,14 +1362,20 @@ class ToolNode(RunnableCallable):
             # Extract state values
             if isinstance(state, dict):
                 for tool_arg, state_field in injected.state.items():
-                    injected_args[tool_arg] = (
-                        state[state_field] if state_field else state
-                    )
+                    if not state_field:
+                        injected_args[tool_arg] = state
+                    elif state_field in state:
+                        injected_args[tool_arg] = state[state_field]
+                    elif tool_arg not in injected._optional_state_args:
+                        raise KeyError(state_field)
             else:
                 for tool_arg, state_field in injected.state.items():
-                    injected_args[tool_arg] = (
-                        getattr(state, state_field) if state_field else state
-                    )
+                    if not state_field:
+                        injected_args[tool_arg] = state
+                    elif hasattr(state, state_field):
+                        injected_args[tool_arg] = getattr(state, state_field)
+                    elif tool_arg not in injected._optional_state_args:
+                        raise AttributeError(state_field)
 
         # Inject store
         if injected.store:
@@ -1377,7 +1391,15 @@ class ToolNode(RunnableCallable):
         if injected.runtime:
             injected_args[injected.runtime] = tool_runtime
 
-        tool_call_copy["args"] = {**tool_call_copy["args"], **injected_args}
+        # Strip any caller-supplied values for injected args, then add
+        # back only trusted values. This prevents an LLM from forging
+        # hidden InjectedToolArg fields via ToolCall.args.
+        stripped_args = {
+            k: v
+            for k, v in tool_call_copy["args"].items()
+            if k not in injected.all_injected_keys
+        }
+        tool_call_copy["args"] = {**stripped_args, **injected_args}
         return tool_call_copy
 
     def _validate_tool_command(
@@ -1598,6 +1620,8 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     stream_writer: StreamWriter
     tool_call_id: str | None
     store: BaseStore | None
+    execution_info: ExecutionInfo | None = None
+    server_info: ServerInfo | None = None
 
 
 class InjectedState(InjectedToolArg):
@@ -1841,8 +1865,14 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
     state_args: dict[str, str | None] = {}
     store_arg: str | None = None
     runtime_arg: str | None = None
+    all_injected_keys: set[str] = set()
+    _optional_state_args: set[str] = set()
 
     for name, type_ in all_annotations.items():
+        # Track all InjectedToolArg-annotated params (including custom subclasses)
+        if _is_injected_arg_type(type_):
+            all_injected_keys.add(name)
+
         # Check for runtime (special case: parameter named "runtime")
         if name == "runtime":
             runtime_arg = name
@@ -1851,6 +1881,9 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
         if state_inj := _get_injection_from_type(type_, InjectedState):
             if isinstance(state_inj, InjectedState) and state_inj.field:
                 state_args[name] = state_inj.field
+                field_info = full_schema.model_fields.get(name)
+                if field_info and not field_info.is_required():
+                    _optional_state_args.add(name)
             else:
                 state_args[name] = None
 
@@ -1866,4 +1899,6 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
         state=state_args,
         store=store_arg,
         runtime=runtime_arg,
+        all_injected_keys=all_injected_keys,
+        _optional_state_args=_optional_state_args,
     )
