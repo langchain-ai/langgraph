@@ -26,8 +26,8 @@ class EventLog(Generic[T]):
     Sync iteration is pull-based: when a cursor catches up it calls
     ``_request_more`` to drive the graph forward.
 
-    Async iteration uses ``asyncio.Future`` objects — the producer
-    wakes cursors via direct ``set_result`` (same event loop thread).
+    Async iteration uses a shared ``asyncio.Event`` — cursors await
+    the event when they catch up, and the producer sets it on each push.
     """
 
     def __init__(self) -> None:
@@ -41,8 +41,8 @@ class EventLog(Generic[T]):
         # Sync pull callback (set by the run stream, not by bind).
         self._request_more: Callable[[], bool] | None = None
 
-        # Async waiters (allocated on bind).
-        self._async_waiters: list[asyncio.Future[None]] | None = None
+        # Async notification (allocated on bind).
+        self._event: asyncio.Event | None = None
 
     # ------------------------------------------------------------------
     # Binding
@@ -58,7 +58,7 @@ class EventLog(Generic[T]):
             raise RuntimeError("EventLog is already bound")
         self._is_async = is_async
         if is_async:
-            self._async_waiters = []
+            self._event = asyncio.Event()
 
     # ------------------------------------------------------------------
     # Producer API
@@ -87,20 +87,12 @@ class EventLog(Generic[T]):
     # ------------------------------------------------------------------
 
     def _notify(self) -> None:
-        """Wake async waiters.
+        """Wake async cursors waiting for data.
 
-        No-op when sync-bound (no waiters exist). In async mode the
-        producer (the mux pump task) always runs on the event loop
-        thread, so direct ``set_result`` is safe and avoids the
-        lock + syscall overhead of ``call_soon_threadsafe``.
+        No-op when sync-bound (no event exists).
         """
-        waiters = self._async_waiters
-        if not waiters:
-            return
-        self._async_waiters = []
-        for fut in waiters:
-            if not fut.done():
-                fut.set_result(None)
+        if self._event is not None:
+            self._event.set()
 
     # ------------------------------------------------------------------
     # Sync iteration (pull-based)
@@ -156,6 +148,7 @@ class EventLog(Generic[T]):
         return self._async_cursor()
 
     async def _async_cursor(self) -> AsyncIterator[T]:
+        assert self._event is not None
         cursor = 0
         while True:
             if cursor < len(self._items):
@@ -166,8 +159,6 @@ class EventLog(Generic[T]):
                     raise self._error
                 return
             else:
-                loop = asyncio.get_running_loop()
-                fut: asyncio.Future[None] = loop.create_future()
-                assert self._async_waiters is not None
-                self._async_waiters.append(fut)
-                await fut
+                self._event.clear()
+                if cursor >= len(self._items) and not self._closed:
+                    await self._event.wait()
