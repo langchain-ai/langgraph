@@ -15,7 +15,6 @@ from typing_extensions import TypedDict
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.stream import (
-    AsyncEventLog,
     EventLog,
     StreamChannel,
     StreamingHandler,
@@ -141,6 +140,7 @@ def _build_custom_stream_graph():
 class TestEventLog:
     def test_sync_iteration(self) -> None:
         log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
         log.push(1)
         log.push(2)
         log.push(3)
@@ -149,6 +149,7 @@ class TestEventLog:
 
     def test_multi_cursor(self) -> None:
         log: EventLog[str] = EventLog()
+        log._bind(is_async=False)
         log.push("a")
         log.push("b")
         log.close()
@@ -158,6 +159,7 @@ class TestEventLog:
 
     def test_fail_propagation(self) -> None:
         log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
         log.push(1)
         log.fail(ValueError("test error"))
         with pytest.raises(ValueError, match="test error"):
@@ -165,7 +167,8 @@ class TestEventLog:
 
     @pytest.mark.anyio
     async def test_async_iteration(self) -> None:
-        log: AsyncEventLog[int] = AsyncEventLog()
+        log: EventLog[int] = EventLog()
+        log._bind(is_async=True)
 
         async def producer():
             for i in range(3):
@@ -178,7 +181,8 @@ class TestEventLog:
 
     @pytest.mark.anyio
     async def test_async_multi_cursor(self) -> None:
-        log: AsyncEventLog[str] = AsyncEventLog()
+        log: EventLog[str] = EventLog()
+        log._bind(is_async=True)
         log.push("x")
         log.push("y")
         log.close()
@@ -189,7 +193,8 @@ class TestEventLog:
 
     @pytest.mark.anyio
     async def test_async_fail(self) -> None:
-        log: AsyncEventLog[int] = AsyncEventLog()
+        log: EventLog[int] = EventLog()
+        log._bind(is_async=True)
         log.push(1)
         log.fail(RuntimeError("async error"))
         with pytest.raises(RuntimeError, match="async error"):
@@ -199,6 +204,7 @@ class TestEventLog:
     def test_sync_cursor_yields_items_before_error(self) -> None:
         """Sync cursor should yield all buffered items before raising."""
         log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
         log.push(1)
         log.push(2)
         log.push(3)
@@ -212,7 +218,8 @@ class TestEventLog:
     @pytest.mark.anyio
     async def test_async_cursor_yields_items_before_error(self) -> None:
         """Async cursor should yield all buffered items before raising."""
-        log: AsyncEventLog[int] = AsyncEventLog()
+        log: EventLog[int] = EventLog()
+        log._bind(is_async=True)
         log.push(1)
         log.push(2)
         log.push(3)
@@ -241,19 +248,22 @@ class TestEventLog:
     def test_empty_log_sync(self) -> None:
         """Iterating a closed empty log should yield nothing."""
         log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
         log.close()
         assert list(log) == []
 
     @pytest.mark.anyio
     async def test_empty_log_async(self) -> None:
         """Async-iterating a closed empty log should yield nothing."""
-        log: AsyncEventLog[int] = AsyncEventLog()
+        log: EventLog[int] = EventLog()
+        log._bind(is_async=True)
         log.close()
         assert [item async for item in log] == []
 
     def test_empty_log_fail_sync(self) -> None:
         """Failing an empty log should raise immediately with no items."""
         log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
         log.fail(ValueError("empty fail"))
         with pytest.raises(ValueError, match="empty fail"):
             list(log)
@@ -261,24 +271,43 @@ class TestEventLog:
     @pytest.mark.anyio
     async def test_empty_log_fail_async(self) -> None:
         """Failing an empty log should raise immediately with no items (async)."""
-        log: AsyncEventLog[int] = AsyncEventLog()
+        log: EventLog[int] = EventLog()
+        log._bind(is_async=True)
         log.fail(ValueError("empty fail"))
         with pytest.raises(ValueError, match="empty fail"):
             async for _ in log:
                 pass
 
-    def test_sync_has_no_aiter(self) -> None:
-        """EventLog (sync) should not support async iteration."""
+    def test_unbound_iter_raises(self) -> None:
+        """Iterating an unbound EventLog should raise TypeError."""
         log: EventLog[int] = EventLog()
         log.close()
-        assert not hasattr(log, "__aiter__")
+        with pytest.raises(TypeError, match="has not been bound"):
+            list(log)
+
+    def test_sync_bound_aiter_raises(self) -> None:
+        """Sync-bound EventLog should reject async iteration."""
+        log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
+        log.close()
+        with pytest.raises(TypeError, match="bound to sync mode"):
+            log.__aiter__()
 
     @pytest.mark.anyio
-    async def test_async_has_no_iter(self) -> None:
-        """AsyncEventLog should not support sync iteration."""
-        log: AsyncEventLog[int] = AsyncEventLog()
+    async def test_async_bound_iter_raises(self) -> None:
+        """Async-bound EventLog should reject sync iteration."""
+        log: EventLog[int] = EventLog()
+        log._bind(is_async=True)
         log.close()
-        assert not hasattr(log, "__iter__")
+        with pytest.raises(TypeError, match="bound to async mode"):
+            iter(log)
+
+    def test_double_bind_raises(self) -> None:
+        """Binding an already-bound EventLog should raise."""
+        log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
+        with pytest.raises(RuntimeError, match="already bound"):
+            log._bind(is_async=True)
 
 
 # ---------------------------------------------------------------------------
@@ -289,6 +318,7 @@ class TestEventLog:
 class TestStreamChannel:
     def test_push_and_iterate(self) -> None:
         ch: StreamChannel[str] = StreamChannel("test")
+        ch._bind(is_async=False)
         ch.push("a")
         ch.push("b")
         ch._close()
@@ -297,6 +327,7 @@ class TestStreamChannel:
     def test_wire_callback(self) -> None:
         forwarded: list[str] = []
         ch: StreamChannel[str] = StreamChannel("test")
+        ch._bind(is_async=False)
         ch._wire(lambda item: forwarded.append(item))
         ch.push("x")
         ch.push("y")
@@ -307,6 +338,7 @@ class TestStreamChannel:
     def test_fail_propagation(self) -> None:
         """_fail() should propagate the error through the underlying log."""
         ch: StreamChannel[str] = StreamChannel("test")
+        ch._bind(is_async=False)
         ch.push("a")
         ch._fail(ValueError("channel error"))
         items: list[str] = []
@@ -317,8 +349,9 @@ class TestStreamChannel:
 
     @pytest.mark.anyio
     async def test_async_iteration(self) -> None:
-        """Async iteration should delegate to the inner AsyncEventLog."""
-        ch: StreamChannel[str] = StreamChannel("test", is_async=True)
+        """Async iteration should delegate to the inner event log."""
+        ch: StreamChannel[str] = StreamChannel("test")
+        ch._bind(is_async=True)
         ch.push("x")
         ch.push("y")
         ch._close()
@@ -328,6 +361,7 @@ class TestStreamChannel:
     def test_push_without_wire(self) -> None:
         """Push without a wire callback should still append to the log."""
         ch: StreamChannel[int] = StreamChannel("test")
+        ch._bind(is_async=False)
         assert ch._wire_fn is None
         ch.push(42)
         ch._close()
@@ -690,6 +724,7 @@ class TestValuesTransformer:
         """Values events from subgraphs (non-empty namespace) should be ignored."""
         t = ValuesTransformer()
         t.init()
+        t._log._bind(is_async=False)
 
         t.process(_event("values", {"val": "root"}))
         t.process(_event("values", {"val": "sub"}, namespace=["sub"]))
@@ -703,6 +738,7 @@ class TestValuesTransformer:
         """Non-values events should be passed through but not captured."""
         t = ValuesTransformer()
         t.init()
+        t._log._bind(is_async=False)
 
         result = t.process(_event("updates", {"x": 1}))
         assert result is True  # passed through
@@ -729,6 +765,7 @@ class TestMessagesTransformer:
     def test_captures_root_messages(self) -> None:
         t = MessagesTransformer()
         t.init()
+        t._log._bind(is_async=False)
 
         t.process(_event("messages", ("chunk", {"meta": True})))
         t.finalize()
@@ -739,6 +776,7 @@ class TestMessagesTransformer:
     def test_ignores_non_root_namespace(self) -> None:
         t = MessagesTransformer()
         t.init()
+        t._log._bind(is_async=False)
 
         t.process(_event("messages", ("chunk", {}), namespace=["sub"]))
         t.finalize()
@@ -747,6 +785,7 @@ class TestMessagesTransformer:
     def test_ignores_non_messages_methods(self) -> None:
         t = MessagesTransformer()
         t.init()
+        t._log._bind(is_async=False)
 
         result = t.process(_event("values", {"v": 1}))
         assert result is True
@@ -756,6 +795,7 @@ class TestMessagesTransformer:
     def test_fail_propagates(self) -> None:
         t = MessagesTransformer()
         t.init()
+        t._log._bind(is_async=False)
         t.fail(ValueError("msg error"))
         with pytest.raises(ValueError, match="msg error"):
             list(t._log)

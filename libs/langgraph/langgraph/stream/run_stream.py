@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from langgraph.stream._convert import convert_to_protocol_event
-from langgraph.stream._event_log import AsyncEventLog, EventLog
+from langgraph.stream._event_log import EventLog
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
 from langgraph.stream.stream_channel import StreamChannel
@@ -46,12 +46,11 @@ class GraphRunStream:
 
     def _wire_request_more(self, mux: StreamMux, extensions: dict[str, Any]) -> None:
         """Set _request_more on all sync EventLogs so iteration drives the graph."""
-        if isinstance(mux._events, EventLog):
-            mux._events._request_more = self._pump_next
+        mux._events._request_more = self._pump_next
         for value in extensions.values():
             if isinstance(value, EventLog):
                 value._request_more = self._pump_next
-            elif isinstance(value, StreamChannel) and isinstance(value._log, EventLog):
+            elif isinstance(value, StreamChannel):
                 value._log._request_more = self._pump_next
 
     def _pump_next(self) -> bool:
@@ -101,7 +100,6 @@ class GraphRunStream:
 
     def __iter__(self) -> Iterator[ProtocolEvent]:
         """Iterate all protocol events from the mux's main event log."""
-        assert isinstance(self._mux._events, EventLog)
         return iter(self._mux._events)
 
 
@@ -168,5 +166,4 @@ class AsyncGraphRunStream:
 
     def __aiter__(self) -> AsyncIterator[ProtocolEvent]:
         """Iterate all protocol events from the mux's main event log."""
-        assert isinstance(self._mux._events, AsyncEventLog)
         return self._mux._events.__aiter__()

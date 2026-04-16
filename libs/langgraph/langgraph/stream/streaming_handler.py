@@ -142,8 +142,8 @@ class StreamingHandler:
         """
         mux = StreamMux(is_async=is_async)
 
-        values_t = ValuesTransformer(is_async=is_async)
-        messages_t = MessagesTransformer(is_async=is_async)
+        values_t = ValuesTransformer()
+        messages_t = MessagesTransformer()
 
         all_transformers: list[StreamTransformer] = [values_t, messages_t]
         if user_transformers:

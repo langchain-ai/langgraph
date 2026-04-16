@@ -8,16 +8,24 @@ from typing import Generic, TypeVar
 T = TypeVar("T")
 
 
-class _EventLogBase(Generic[T]):
-    """Shared producer API for sync and async event logs.
+class EventLog(Generic[T]):
+    """Append-only buffer that supports multiple independent consumers.
 
-    Append-only buffer that supports multiple independent consumers.
-    Subclasses provide the iteration protocol (sync or async).
+    Starts unbound — neither ``__iter__`` nor ``__aiter__`` is available
+    until the ``StreamMux`` calls ``_bind(is_async)``.  After binding,
+    only the matching iteration protocol works; the other raises
+    ``TypeError``.
 
-    Producer API (thread-safe):
+    Producer API (thread-safe, works before and after binding):
         push(item)  — append an item, notify all waiting cursors
         close()     — mark the log as done
         fail(err)   — mark the log as errored
+
+    Sync iteration is pull-based: when a cursor catches up it calls
+    ``_request_more`` to drive the graph forward.
+
+    Async iteration uses ``asyncio.Future`` objects — the producer
+    wakes cursors via ``loop.call_soon_threadsafe``.
     """
 
     def __init__(self) -> None:
@@ -25,6 +33,35 @@ class _EventLogBase(Generic[T]):
         self._closed = False
         self._error: BaseException | None = None
         self._lock = threading.Lock()
+
+        # Binding state — None means unbound.
+        self._is_async: bool | None = None
+
+        # Sync pull callback (set by the run stream, not by bind).
+        self._request_more: Callable[[], bool] | None = None
+
+        # Async waiters (allocated on bind).
+        self._async_waiters: list[asyncio.Future[None]] | None = None
+
+    # ------------------------------------------------------------------
+    # Binding
+    # ------------------------------------------------------------------
+
+    def _bind(self, *, is_async: bool) -> None:
+        """Bind this log to sync or async mode.
+
+        Called by the ``StreamMux`` after transformer registration.
+        Must be called exactly once before any iteration.
+        """
+        if self._is_async is not None:
+            raise RuntimeError("EventLog is already bound")
+        self._is_async = is_async
+        if is_async:
+            self._async_waiters = []
+
+    # ------------------------------------------------------------------
+    # Producer API (thread-safe, mode-agnostic)
+    # ------------------------------------------------------------------
 
     def push(self, item: T) -> None:
         """Append *item* and wake all waiting cursors."""
@@ -47,31 +84,39 @@ class _EventLogBase(Generic[T]):
             self._closed = True
         self._notify()
 
+    # ------------------------------------------------------------------
+    # Notification
+    # ------------------------------------------------------------------
+
     def _notify(self) -> None:
-        """Wake waiting consumers. Overridden by subclasses."""
+        """Wake async waiters if bound to async mode."""
+        waiters = self._async_waiters
+        if not waiters:
+            return
+        self._async_waiters = []
+        for fut in waiters:
+            if not fut.done():
+                try:
+                    fut.get_loop().call_soon_threadsafe(fut.set_result, None)
+                except RuntimeError:
+                    # Event loop already closed — nothing to notify.
+                    pass
 
-
-class EventLog(_EventLogBase[T]):
-    """Sync event log with pull-based iteration.
-
-    Each call to ``__iter__`` creates a new cursor starting from the
-    beginning. When a cursor catches up to the buffer and the log is
-    not yet closed, it calls ``_request_more`` to pull more data from
-    the producer (typically the graph iterator via the run stream).
-
-    If no ``_request_more`` callback is set, the cursor returns
-    immediately when it reaches the end of the buffer — this is the
-    behavior used in unit tests where items are pushed before iteration.
-
-    Use ``AsyncEventLog`` for async consumers.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._request_more: Callable[[], bool] | None = None
+    # ------------------------------------------------------------------
+    # Sync iteration (pull-based)
+    # ------------------------------------------------------------------
 
     def __iter__(self) -> Iterator[T]:
         """Return a new independent sync cursor over the log."""
+        if self._is_async is None:
+            raise TypeError(
+                "EventLog has not been bound yet. "
+                "Register the transformer with a StreamMux first."
+            )
+        if self._is_async:
+            raise TypeError(
+                "This EventLog is bound to async mode — use 'async for' instead."
+            )
         return self._sync_cursor()
 
     def _sync_cursor(self) -> Iterator[T]:
@@ -95,40 +140,19 @@ class EventLog(_EventLogBase[T]):
                 # No producer callback and not closed — buffer is complete.
                 return
 
-
-class AsyncEventLog(_EventLogBase[T]):
-    """Async event log with multi-cursor iteration.
-
-    Each call to ``__aiter__`` creates a new cursor starting from the
-    beginning. Cursors await ``asyncio.Future`` objects when they
-    catch up to the producer.
-
-    The producer (``push``/``close``/``fail``) is safe to call from
-    any thread — async waiters are notified via
-    ``loop.call_soon_threadsafe``.
-
-    Use ``EventLog`` for sync consumers.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._async_waiters: list[asyncio.Future[None]] = []
-
-    def _notify(self) -> None:
-        waiters = self._async_waiters
-        if not waiters:
-            return
-        self._async_waiters = []
-        for fut in waiters:
-            if not fut.done():
-                try:
-                    fut.get_loop().call_soon_threadsafe(fut.set_result, None)
-                except RuntimeError:
-                    # Event loop already closed — nothing to notify.
-                    pass
+    # ------------------------------------------------------------------
+    # Async iteration
+    # ------------------------------------------------------------------
 
     def __aiter__(self) -> AsyncIterator[T]:
         """Return a new independent async cursor over the log."""
+        if self._is_async is None:
+            raise TypeError(
+                "EventLog has not been bound yet. "
+                "Register the transformer with a StreamMux first."
+            )
+        if not self._is_async:
+            raise TypeError("This EventLog is bound to sync mode — use 'for' instead.")
         return self._async_cursor()
 
     async def _async_cursor(self) -> AsyncIterator[T]:
@@ -144,5 +168,6 @@ class AsyncEventLog(_EventLogBase[T]):
             else:
                 loop = asyncio.get_running_loop()
                 fut: asyncio.Future[None] = loop.create_future()
+                assert self._async_waiters is not None
                 self._async_waiters.append(fut)
                 await fut

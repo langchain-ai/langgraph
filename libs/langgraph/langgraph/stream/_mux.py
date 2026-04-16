@@ -4,7 +4,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from langgraph.stream._event_log import AsyncEventLog, EventLog, _EventLogBase
+from langgraph.stream._event_log import EventLog
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from langgraph.stream.stream_channel import StreamChannel
 
@@ -18,15 +18,15 @@ class StreamMux:
     into the main log.
 
     Pass ``is_async=True`` when the mux will be consumed via async
-    iteration (``handler.astream()``). This creates ``AsyncEventLog``
-    instances instead of ``EventLog`` instances.
+    iteration (``handler.astream()``). All ``EventLog`` and
+    ``StreamChannel`` instances discovered during ``register()`` are
+    automatically bound to the matching mode.
     """
 
     def __init__(self, *, is_async: bool = False) -> None:
         self._is_async = is_async
-        self._events: _EventLogBase[ProtocolEvent] = (
-            AsyncEventLog() if is_async else EventLog()
-        )
+        self._events: EventLog[ProtocolEvent] = EventLog()
+        self._events._bind(is_async=is_async)
         self._transformers: list[StreamTransformer] = []
         self._channels: list[StreamChannel[Any]] = []
         self._seq = 0
@@ -35,8 +35,8 @@ class StreamMux:
         """Register a transformer and return its projection dict.
 
         Calls ``transformer.init()``, stores the transformer for event
-        processing, and returns the projection. StreamChannels in the
-        projection are auto-wired.
+        processing, binds any ``EventLog`` or ``StreamChannel`` instances
+        in the projection, and returns the projection.
         """
         projection = transformer.init()
         if not isinstance(projection, dict):
@@ -45,7 +45,7 @@ class StreamMux:
                 f"got {type(projection).__name__}"
             )
         self._transformers.append(transformer)
-        self._wire_channels(projection)
+        self._bind_and_wire(projection)
         return projection
 
     def push(self, event: ProtocolEvent) -> None:
@@ -107,17 +107,14 @@ class StreamMux:
         self._events.fail(err)
 
     # ------------------------------------------------------------------
-    # StreamChannel auto-wiring
+    # Binding and StreamChannel auto-wiring
     # ------------------------------------------------------------------
 
-    def _wire_channels(self, projection: dict[str, Any]) -> None:
-        """Find StreamChannel instances in *projection* and wire them."""
+    def _bind_and_wire(self, projection: dict[str, Any]) -> None:
+        """Bind and wire EventLog / StreamChannel instances in *projection*."""
         for value in projection.values():
             if isinstance(value, StreamChannel):
-                # Ensure the channel's log matches the mux's mode.
-                if value._is_async != self._is_async:
-                    value._is_async = self._is_async
-                    value._log = AsyncEventLog() if self._is_async else EventLog()
+                value._bind(is_async=self._is_async)
                 self._channels.append(value)
                 channel_name = value.name
 
@@ -128,6 +125,8 @@ class StreamMux:
                     return _forward
 
                 value._wire(_make_forward(channel_name))
+            elif isinstance(value, EventLog):
+                value._bind(is_async=self._is_async)
 
     def _forward(self, channel_name: str, item: Any) -> None:
         """Inject a ProtocolEvent for a StreamChannel push.
