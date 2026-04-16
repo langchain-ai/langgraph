@@ -39,12 +39,6 @@ class ValuesTransformer(StreamTransformer):
             self._interrupts.extend(interrupts)
         return True
 
-    def finalize(self) -> None:
-        self._log.close()
-
-    def fail(self, err: BaseException) -> None:
-        self._log.fail(err)
-
 
 class MessagesTransformer(StreamTransformer):
     """Captures messages events and passes through raw (chunk, metadata) tuples.
@@ -74,9 +68,3 @@ class MessagesTransformer(StreamTransformer):
             return True
         self._log.push(params["data"])
         return True
-
-    def finalize(self) -> None:
-        self._log.close()
-
-    def fail(self, err: BaseException) -> None:
-        self._log.fail(err)

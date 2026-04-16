@@ -151,17 +151,37 @@ class AsyncGraphRunStream:
         return self._values_transformer._latest
 
     @property
-    def interrupted(self) -> bool:
-        """Whether the run was interrupted.
+    def interrupted(self) -> Any:
+        """Return an awaitable that resolves to whether the run was interrupted.
 
-        Only meaningful after the run has completed (after consuming the
-        stream or awaiting ``output``).
+        Usage::
+
+            interrupted = await run.interrupted
         """
+        return self._get_interrupted()
+
+    async def _get_interrupted(self) -> bool:
+        try:
+            await self._pump_task
+        except BaseException:
+            pass
         return self._values_transformer._interrupted
 
     @property
-    def interrupts(self) -> list[Any]:
-        """Interrupt payloads, populated when interrupted is True."""
+    def interrupts(self) -> Any:
+        """Return an awaitable that resolves to interrupt payloads.
+
+        Usage::
+
+            interrupts = await run.interrupts
+        """
+        return self._get_interrupts()
+
+    async def _get_interrupts(self) -> list[Any]:
+        try:
+            await self._pump_task
+        except BaseException:
+            pass
         return self._values_transformer._interrupts
 
     def __aiter__(self) -> AsyncIterator[ProtocolEvent]:

@@ -41,7 +41,9 @@ class StreamTransformer(ABC):
 
     Subclasses must implement `init` and `process`. The `finalize` and
     `fail` hooks are optional — the default implementations are no-ops.
-    StreamChannel instances are auto-closed/failed by the mux regardless.
+    EventLog and StreamChannel instances in the projection dict are
+    auto-closed/failed by the mux, so most transformers don't need
+    ``finalize`` or ``fail`` at all.
     """
 
     @abstractmethod

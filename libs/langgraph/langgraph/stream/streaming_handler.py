@@ -154,6 +154,13 @@ class StreamingHandler:
 
         for t in all_transformers:
             projection = mux.register(t)
+            conflicts = set(projection) & set(extensions)
+            if conflicts:
+                name = type(t).__name__
+                raise ValueError(
+                    f"Transformer {name} returned projection keys that "
+                    f"conflict with already-registered keys: {conflicts}"
+                )
             extensions.update(projection)
             if getattr(t, "_native", False):
                 native_keys.update(projection.keys())

@@ -29,6 +29,7 @@ class StreamMux:
         self._events._bind(is_async=is_async)
         self._transformers: list[StreamTransformer] = []
         self._channels: list[StreamChannel[Any]] = []
+        self._logs: list[EventLog[Any]] = []
         self._seq = 0
 
     def register(self, transformer: StreamTransformer) -> dict[str, Any]:
@@ -72,11 +73,13 @@ class StreamMux:
             self._events.push(event)
 
     def close(self) -> None:
-        """Finalize all transformers, close all channels and the main log.
+        """Finalize all transformers, close all projections and the main log.
 
-        If any transformer's ``finalize()`` raises, the remaining
-        transformers, channels, and the main log are still closed.
-        The first error is re-raised after cleanup completes.
+        EventLogs and StreamChannels discovered in transformer projections
+        are auto-closed after ``finalize()`` runs — transformers don't need
+        to close them manually. If any transformer's ``finalize()`` raises,
+        the remaining transformers, projections, and the main log are still
+        closed. The first error is re-raised after cleanup completes.
         """
         first_error: BaseException | None = None
         for transformer in self._transformers:
@@ -85,25 +88,35 @@ class StreamMux:
             except BaseException as e:
                 if first_error is None:
                     first_error = e
+        for log in self._logs:
+            if not log._closed:
+                log.close()
         for ch in self._channels:
-            ch._close()
+            if not ch._log._closed:
+                ch._close()
         self._events.close()
         if first_error is not None:
             raise first_error
 
     def fail(self, err: BaseException) -> None:
-        """Fail all transformers, channels, and the main log.
+        """Fail all transformers, projections, and the main log.
 
-        If any transformer's ``fail()`` raises, the remaining
-        transformers, channels, and the main log are still failed.
+        EventLogs and StreamChannels discovered in transformer projections
+        are auto-failed — transformers don't need to fail them manually.
+        If any transformer's ``fail()`` raises, the remaining transformers,
+        projections, and the main log are still failed.
         """
         for transformer in self._transformers:
             try:
                 transformer.fail(err)
             except BaseException:
                 pass
+        for log in self._logs:
+            if not log._closed:
+                log.fail(err)
         for ch in self._channels:
-            ch._fail(err)
+            if not ch._log._closed:
+                ch._fail(err)
         self._events.fail(err)
 
     # ------------------------------------------------------------------
@@ -127,6 +140,7 @@ class StreamMux:
                 value._wire(_make_forward(channel_name))
             elif isinstance(value, EventLog):
                 value._bind(is_async=self._is_async)
+                self._logs.append(value)
 
     def _forward(self, channel_name: str, item: Any) -> None:
         """Inject a ProtocolEvent for a StreamChannel push.

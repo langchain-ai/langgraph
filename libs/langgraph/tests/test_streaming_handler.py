@@ -560,8 +560,8 @@ class TestStreamingHandlerAsyncInterrupt:
             {"configurable": {"thread_id": "t2"}},
         )
         _ = await run.output
-        assert run.interrupted is True
-        assert len(run.interrupts) > 0
+        assert await run.interrupted is True
+        assert len(await run.interrupts) > 0
 
 
 class TestStreamingHandlerAsyncCustom:
@@ -729,7 +729,7 @@ class TestValuesTransformer:
         t.process(_event("values", {"val": "root"}))
         t.process(_event("values", {"val": "sub"}, namespace=["sub"]))
 
-        t.finalize()
+        t._log.close()
         items = list(t._log)
         assert len(items) == 1
         assert items[0]["val"] == "root"
@@ -742,7 +742,7 @@ class TestValuesTransformer:
 
         result = t.process(_event("updates", {"x": 1}))
         assert result is True  # passed through
-        t.finalize()
+        t._log.close()
         assert list(t._log) == []  # but not captured
 
     def test_tracks_interrupts(self) -> None:
@@ -768,7 +768,7 @@ class TestMessagesTransformer:
         t._log._bind(is_async=False)
 
         t.process(_event("messages", ("chunk", {"meta": True})))
-        t.finalize()
+        t._log.close()
         items = list(t._log)
         assert len(items) == 1
         assert items[0] == ("chunk", {"meta": True})
@@ -779,7 +779,7 @@ class TestMessagesTransformer:
         t._log._bind(is_async=False)
 
         t.process(_event("messages", ("chunk", {}), namespace=["sub"]))
-        t.finalize()
+        t._log.close()
         assert list(t._log) == []
 
     def test_ignores_non_messages_methods(self) -> None:
@@ -789,14 +789,14 @@ class TestMessagesTransformer:
 
         result = t.process(_event("values", {"v": 1}))
         assert result is True
-        t.finalize()
+        t._log.close()
         assert list(t._log) == []
 
     def test_fail_propagates(self) -> None:
         t = MessagesTransformer()
         t.init()
         t._log._bind(is_async=False)
-        t.fail(ValueError("msg error"))
+        t._log.fail(ValueError("msg error"))
         with pytest.raises(ValueError, match="msg error"):
             list(t._log)
 
@@ -962,12 +962,6 @@ class TestCustomTransformer:
                     self._log.push("saw_values")
                 return True
 
-            def finalize(self) -> None:
-                self._log.close()
-
-            def fail(self, err: BaseException) -> None:
-                self._log.fail(err)
-
         graph = _build_simple_graph()
         handler = StreamingHandler(graph)
         foo_t = FooTransformer()
@@ -1040,3 +1034,125 @@ class TestCustomTransformer:
         # Seq numbers must be strictly increasing.
         for i in range(1, len(seqs)):
             assert seqs[i] > seqs[i - 1], f"Seq out of order at index {i}: {seqs}"
+
+    def test_projection_key_conflict_raises(self) -> None:
+        """User transformer that collides with a built-in key should raise."""
+
+        class ConflictTransformer(StreamTransformer):
+            def __init__(self) -> None:
+                super().__init__()
+                self._log: EventLog[str] = EventLog()
+
+            def init(self) -> dict[str, Any]:
+                return {"values": self._log}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                return True
+
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        with pytest.raises(ValueError, match="conflict.*{'values'}"):
+            handler.stream(
+                {"value": "x", "items": []},
+                transformers=[ConflictTransformer()],
+            )
+
+
+class TestEventLogAutoLifecycle:
+    def test_mux_auto_closes_event_logs(self) -> None:
+        """EventLogs in projections should be auto-closed by mux.close()."""
+
+        class SimpleTransformer(StreamTransformer):
+            def __init__(self) -> None:
+                super().__init__()
+                self._log: EventLog[str] = EventLog()
+
+            def init(self) -> dict[str, Any]:
+                return {"items": self._log}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                self._log.push("saw_event")
+                return True
+
+        mux = StreamMux()
+        mux.register(SimpleTransformer())
+
+        mux.push(_event("values"))
+        mux.close()
+
+        # The log should have been auto-closed — iteration should work.
+        items = list(mux._events)
+        assert len(items) == 1
+
+    def test_mux_auto_fails_event_logs(self) -> None:
+        """EventLogs in projections should be auto-failed by mux.fail()."""
+
+        class SimpleTransformer(StreamTransformer):
+            def __init__(self) -> None:
+                super().__init__()
+                self._log: EventLog[str] = EventLog()
+
+            def init(self) -> dict[str, Any]:
+                return {"items": self._log}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                self._log.push("saw_event")
+                return True
+
+        t = SimpleTransformer()
+        mux = StreamMux()
+        mux.register(t)
+
+        mux.push(_event("values"))
+        mux.fail(ValueError("boom"))
+
+        # The transformer's log should have been auto-failed.
+        with pytest.raises(ValueError, match="boom"):
+            list(t._log)
+
+    def test_no_double_close_if_transformer_closes_own_log(self) -> None:
+        """If a transformer closes its log in finalize(), mux should not error."""
+
+        class ManualCloseTransformer(StreamTransformer):
+            def __init__(self) -> None:
+                super().__init__()
+                self._log: EventLog[str] = EventLog()
+
+            def init(self) -> dict[str, Any]:
+                return {"items": self._log}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                return True
+
+            def finalize(self) -> None:
+                self._log.close()
+
+        mux = StreamMux()
+        mux.register(ManualCloseTransformer())
+        # Should not raise even though the log is closed by both
+        # the transformer and the mux.
+        mux.close()
+
+    def test_transformer_without_finalize_works(self) -> None:
+        """Transformer with only init+process should work end-to-end."""
+
+        class MinimalTransformer(StreamTransformer):
+            def __init__(self) -> None:
+                super().__init__()
+                self._log: EventLog[str] = EventLog()
+
+            def init(self) -> dict[str, Any]:
+                return {"minimal": self._log}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                if event["method"] == "values":
+                    self._log.push("got_it")
+                return True
+
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        t = MinimalTransformer()
+        run = handler.stream({"value": "x", "items": []}, transformers=[t])
+        _ = run.output
+        items = list(run.extensions["minimal"])
+        assert len(items) > 0
