@@ -5,6 +5,7 @@ import pathlib
 import re
 import sys
 import uuid
+import warnings
 from collections import deque
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
@@ -24,6 +25,7 @@ from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
 
 from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
+from langgraph.checkpoint.serde import jsonplus
 from langgraph.checkpoint.serde._msgpack import AllowedMsgpackModules
 from langgraph.checkpoint.serde.event_hooks import (
     SerdeEvent,
@@ -583,8 +585,11 @@ def test_msgpack_safe_types_no_warning(caplog: pytest.LogCaptureFixture) -> None
 def test_msgpack_pydantic_warns_by_default(caplog: pytest.LogCaptureFixture) -> None:
     """Pydantic models not in allowlist should log warning but still deserialize."""
     current = _lg_msgpack.STRICT_MSGPACK_ENABLED
+    current_warned = jsonplus._PERMISSIVE_DEFAULT_WARNED
     _lg_msgpack.STRICT_MSGPACK_ENABLED = False
-    serde = JsonPlusSerializer()
+    jsonplus._PERMISSIVE_DEFAULT_WARNED = False
+    with pytest.warns(FutureWarning, match="permissive msgpack deserialization"):
+        serde = JsonPlusSerializer()
 
     obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
 
@@ -596,6 +601,7 @@ def test_msgpack_pydantic_warns_by_default(caplog: pytest.LogCaptureFixture) -> 
     assert "allowed_msgpack_modules" in caplog.text
     assert result == obj
     _lg_msgpack.STRICT_MSGPACK_ENABLED = current
+    jsonplus._PERMISSIVE_DEFAULT_WARNED = current_warned
 
 
 def test_msgpack_env_strict_default(
@@ -615,6 +621,23 @@ def test_msgpack_env_strict_default(
     assert "blocked" in caplog.text.lower()
     assert result == obj.model_dump()
     _lg_msgpack.STRICT_MSGPACK_ENABLED = current
+
+
+def test_msgpack_explicit_permissive_opt_in_skips_default_warning() -> None:
+    current = _lg_msgpack.STRICT_MSGPACK_ENABLED
+    current_warned = jsonplus._PERMISSIVE_DEFAULT_WARNED
+    _lg_msgpack.STRICT_MSGPACK_ENABLED = False
+    jsonplus._PERMISSIVE_DEFAULT_WARNED = False
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        JsonPlusSerializer(allowed_msgpack_modules=True)
+
+    assert not any(
+        "permissive msgpack deserialization" in str(w.message) for w in caught
+    )
+    _lg_msgpack.STRICT_MSGPACK_ENABLED = current
+    jsonplus._PERMISSIVE_DEFAULT_WARNED = current_warned
 
 
 def test_msgpack_allowlist_silences_warning(caplog: pytest.LogCaptureFixture) -> None:

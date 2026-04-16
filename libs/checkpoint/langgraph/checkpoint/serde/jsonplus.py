@@ -10,6 +10,7 @@ import pathlib
 import pickle
 import re
 import sys
+import warnings
 from collections import deque
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime, time, timedelta, timezone
@@ -45,6 +46,13 @@ if TYPE_CHECKING:
 LC_REVIVER = Reviver()
 EMPTY_BYTES = b""
 logger = logging.getLogger(__name__)
+_PERMISSIVE_DEFAULT_WARNED = False
+_PERMISSIVE_DEFAULT_WARNING = (
+    "JsonPlusSerializer defaults to permissive msgpack deserialization when "
+    "`LANGGRAPH_STRICT_MSGPACK` is unset. This unsafe default is deprecated "
+    "and will change in a future release. Set `LANGGRAPH_STRICT_MSGPACK=true` "
+    "or pass `allowed_msgpack_modules` explicitly."
+)
 
 
 class JsonPlusSerializer(SerializerProtocol):
@@ -77,6 +85,14 @@ class JsonPlusSerializer(SerializerProtocol):
                 # Strict: only SAFE_MSGPACK_TYPES are allowed.
                 allowed_msgpack_modules = None
             else:
+                global _PERMISSIVE_DEFAULT_WARNED
+                if not _PERMISSIVE_DEFAULT_WARNED:
+                    warnings.warn(
+                        _PERMISSIVE_DEFAULT_WARNING,
+                        FutureWarning,
+                        stacklevel=2,
+                    )
+                    _PERMISSIVE_DEFAULT_WARNED = True
                 # Permissive (default): all types allowed with a warning.
                 # Set LANGGRAPH_STRICT_MSGPACK=true to lock this down.
                 allowed_msgpack_modules = True
