@@ -10,6 +10,7 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum
 from ipaddress import IPv4Address
+from typing import Annotated
 from zoneinfo import ZoneInfo
 
 import dataclasses_json
@@ -19,9 +20,16 @@ import pandas as pd
 import pytest
 from langchain_core.documents.base import Document
 from langchain_core.messages import HumanMessage
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic.json_schema import JsonSchemaValue
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
+from pydantic_core import core_schema
+
+try:
+    from bson import ObjectId as BsonObjectId
+except ImportError:
+    BsonObjectId = None
 
 from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
 from langgraph.checkpoint.serde._msgpack import AllowedMsgpackModules
@@ -97,6 +105,50 @@ class MyEnum(Enum):
 @dataclasses.dataclass
 class Person:
     name: str
+
+
+class PydanticObjectIdAnnotation:
+    @classmethod
+    def validate_object_id(cls, v: object, handler: object) -> object:
+        if BsonObjectId is None:
+            raise RuntimeError("bson is required for ObjectId tests")
+        if isinstance(v, BsonObjectId):
+            return v
+        s = handler(v)
+        if BsonObjectId.is_valid(s):
+            return BsonObjectId(s)
+        raise ValueError("Invalid ObjectId")
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: object, _handler: object
+    ) -> core_schema.CoreSchema:
+        if BsonObjectId is None:
+            raise RuntimeError("bson is required for ObjectId tests")
+        assert source_type is BsonObjectId
+        return core_schema.no_info_wrap_validator_function(
+            cls.validate_object_id,
+            core_schema.str_schema(),
+            serialization=core_schema.to_string_ser_schema(),
+        )
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, _core_schema: core_schema.CoreSchema, handler: object
+    ) -> JsonSchemaValue:
+        return handler(core_schema.str_schema())
+
+
+if BsonObjectId is not None:
+
+    class ObjectIdCarrier(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+
+        id: BsonObjectId
+
+
+    class AnnotatedObjectIdCarrier(BaseModel):
+        id: Annotated[BsonObjectId, PydanticObjectIdAnnotation]
 
 
 def test_serde_jsonplus() -> None:
@@ -983,3 +1035,148 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_msgpack_bson_objectid_roundtrip() -> None:
+    if BsonObjectId is None:
+        pytest.skip("bson is required for ObjectId msgpack coverage")
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    value = BsonObjectId()
+
+    dumped = serde.dumps_typed(value)
+    result = serde.loads_typed(dumped)
+
+    assert dumped[0] == "msgpack"
+    assert result == value
+    assert isinstance(result, BsonObjectId)
+
+
+def test_msgpack_pydantic_with_bson_objectid_roundtrip() -> None:
+    if BsonObjectId is None:
+        pytest.skip("bson is required for ObjectId msgpack coverage")
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    value = AnnotatedObjectIdCarrier(id=BsonObjectId())
+
+    dumped = serde.dumps_typed(value)
+    result = serde.loads_typed(dumped)
+
+    assert dumped[0] == "msgpack"
+    assert result == value
+    assert isinstance(result, AnnotatedObjectIdCarrier)
+    assert isinstance(result.id, BsonObjectId)
+
+
+def test_msgpack_pydantic_arbitrary_objectid_roundtrip() -> None:
+    if BsonObjectId is None:
+        pytest.skip("bson is required for ObjectId msgpack coverage")
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    value = ObjectIdCarrier(id=BsonObjectId())
+
+    dumped = serde.dumps_typed(value)
+    result = serde.loads_typed(dumped)
+
+    assert dumped[0] == "msgpack"
+    assert result == value
+    assert isinstance(result, ObjectIdCarrier)
+    assert isinstance(result.id, BsonObjectId)
+
+
+def test_msgpack_bson_objectid_json_hook_returns_string() -> None:
+    if BsonObjectId is None:
+        pytest.skip("bson is required for ObjectId msgpack coverage")
+
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    value = BsonObjectId()
+
+    dumped = serde.dumps_typed(value)
+    result = serde.loads_typed(dumped)
+
+    assert dumped[0] == "msgpack"
+    assert result == str(value)
+
+
+def test_msgpack_bson_objectid_strict_mode_blocks_without_allowlist(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    if BsonObjectId is None:
+        pytest.skip("bson is required for ObjectId msgpack coverage")
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    value = BsonObjectId()
+
+    caplog.clear()
+    dumped = serde.dumps_typed(value)
+    result = serde.loads_typed(dumped)
+
+    assert dumped[0] == "msgpack"
+    assert result == str(value)
+    assert "blocked" in caplog.text.lower()
+    assert "bson.objectid" in caplog.text.lower()
+
+
+def test_msgpack_bson_objectid_allowlist_reconstructs_without_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    if BsonObjectId is None:
+        pytest.skip("bson is required for ObjectId msgpack coverage")
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=[BsonObjectId])
+    value = BsonObjectId()
+
+    caplog.clear()
+    dumped = serde.dumps_typed(value)
+    result = serde.loads_typed(dumped)
+
+    assert dumped[0] == "msgpack"
+    assert result == value
+    assert isinstance(result, BsonObjectId)
+    assert "blocked" not in caplog.text.lower()
+    assert "unregistered type" not in caplog.text.lower()
+
+
+def test_msgpack_pydantic_with_bson_objectid_allowlist_roundtrip(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    if BsonObjectId is None:
+        pytest.skip("bson is required for ObjectId msgpack coverage")
+
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[AnnotatedObjectIdCarrier, BsonObjectId]
+    )
+    value = AnnotatedObjectIdCarrier(id=BsonObjectId())
+
+    caplog.clear()
+    dumped = serde.dumps_typed(value)
+    result = serde.loads_typed(dumped)
+
+    assert dumped[0] == "msgpack"
+    assert result == value
+    assert isinstance(result, AnnotatedObjectIdCarrier)
+    assert isinstance(result.id, BsonObjectId)
+    assert "blocked" not in caplog.text.lower()
+    assert "unregistered type" not in caplog.text.lower()
+
+
+def test_msgpack_nested_bson_objectid_payload_roundtrip() -> None:
+    if BsonObjectId is None:
+        pytest.skip("bson is required for ObjectId msgpack coverage")
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    object_id = BsonObjectId()
+    value = {
+        "doc": AnnotatedObjectIdCarrier(id=object_id),
+        "items": [object_id, {"nested": object_id}],
+    }
+
+    dumped = serde.dumps_typed(value)
+    result = serde.loads_typed(dumped)
+
+    assert dumped[0] == "msgpack"
+    assert result == value
+    assert isinstance(result["doc"], AnnotatedObjectIdCarrier)
+    assert isinstance(result["doc"].id, BsonObjectId)
+    assert isinstance(result["items"][0], BsonObjectId)
+    assert isinstance(result["items"][1]["nested"], BsonObjectId)

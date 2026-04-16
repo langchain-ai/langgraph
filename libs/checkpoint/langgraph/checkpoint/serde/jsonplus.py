@@ -36,6 +36,11 @@ from langgraph.checkpoint.serde.event_hooks import emit_serde_event
 from langgraph.checkpoint.serde.types import SendProtocol
 from langgraph.store.base import Item
 
+try:
+    from bson import ObjectId as BsonObjectId
+except ImportError:
+    BsonObjectId = None
+
 if TYPE_CHECKING:
     from langgraph.checkpoint.serde._msgpack import (
         AllowedMsgpackModules,
@@ -283,6 +288,11 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                     "model_validate_json",
                 ),
             ),
+        )
+    elif BsonObjectId is not None and isinstance(obj, BsonObjectId):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc((obj.__class__.__module__, obj.__class__.__name__, str(obj))),
         )
     elif hasattr(obj, "get_secret_value") and callable(obj.get_secret_value):
         return ormsgpack.Ext(
