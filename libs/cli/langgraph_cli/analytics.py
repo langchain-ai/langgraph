@@ -26,8 +26,16 @@ class LogData(TypedDict):
     params: dict[str, Any]
 
 
-def get_anonymized_params(kwargs: dict[str, Any]) -> dict[str, bool]:
-    params = {}
+def get_anonymized_params(
+    kwargs: dict[str, Any], *, cli_command: str
+) -> dict[str, bool | str]:
+    params: dict[str, bool | str] = {}
+
+    if (
+        cli_command == "deploy"
+        and (analytics_source := os.getenv("LANGGRAPH_CLI_ANALYTICS_SOURCE"))
+    ):
+        params["source"] = analytics_source
 
     # anonymize params with values
     if config := kwargs.get("config"):
@@ -88,7 +96,7 @@ def log_command(func):
             "python_version": platform.python_version(),
             "cli_version": __version__,
             "cli_command": func.__name__,
-            "params": get_anonymized_params(kwargs),
+            "params": get_anonymized_params(kwargs, cli_command=func.__name__),
         }
 
         background_thread = threading.Thread(target=log_data, args=(data,))
