@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import threading
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Generic, TypeVar
 
@@ -16,7 +15,10 @@ class EventLog(Generic[T]):
     only the matching iteration protocol works; the other raises
     ``TypeError``.
 
-    Producer API (thread-safe, works before and after binding):
+    All access is single-threaded: sync mode is caller-driven (no
+    background thread), async mode runs entirely on the event loop.
+
+    Producer API:
         push(item)  — append an item, notify all waiting cursors
         close()     — mark the log as done
         fail(err)   — mark the log as errored
@@ -25,14 +27,13 @@ class EventLog(Generic[T]):
     ``_request_more`` to drive the graph forward.
 
     Async iteration uses ``asyncio.Future`` objects — the producer
-    wakes cursors via ``loop.call_soon_threadsafe``.
+    wakes cursors via direct ``set_result`` (same event loop thread).
     """
 
     def __init__(self) -> None:
         self._items: list[T] = []
         self._closed = False
         self._error: BaseException | None = None
-        self._lock = threading.Lock()
 
         # Binding state — None means unbound.
         self._is_async: bool | None = None
@@ -60,28 +61,25 @@ class EventLog(Generic[T]):
             self._async_waiters = []
 
     # ------------------------------------------------------------------
-    # Producer API (thread-safe, mode-agnostic)
+    # Producer API
     # ------------------------------------------------------------------
 
     def push(self, item: T) -> None:
         """Append *item* and wake all waiting cursors."""
-        with self._lock:
-            if self._closed:
-                raise RuntimeError("Cannot push to a closed EventLog")
-            self._items.append(item)
+        if self._closed:
+            raise RuntimeError("Cannot push to a closed EventLog")
+        self._items.append(item)
         self._notify()
 
     def close(self) -> None:
         """Mark the log as complete — open cursors will finish cleanly."""
-        with self._lock:
-            self._closed = True
+        self._closed = True
         self._notify()
 
     def fail(self, err: BaseException) -> None:
         """Mark the log as errored — open cursors will raise *err*."""
-        with self._lock:
-            self._error = err
-            self._closed = True
+        self._error = err
+        self._closed = True
         self._notify()
 
     # ------------------------------------------------------------------
@@ -89,18 +87,20 @@ class EventLog(Generic[T]):
     # ------------------------------------------------------------------
 
     def _notify(self) -> None:
-        """Wake async waiters if bound to async mode."""
+        """Wake async waiters.
+
+        No-op when sync-bound (no waiters exist). In async mode the
+        producer (the mux pump task) always runs on the event loop
+        thread, so direct ``set_result`` is safe and avoids the
+        lock + syscall overhead of ``call_soon_threadsafe``.
+        """
         waiters = self._async_waiters
         if not waiters:
             return
         self._async_waiters = []
         for fut in waiters:
             if not fut.done():
-                try:
-                    fut.get_loop().call_soon_threadsafe(fut.set_result, None)
-                except RuntimeError:
-                    # Event loop already closed — nothing to notify.
-                    pass
+                fut.set_result(None)
 
     # ------------------------------------------------------------------
     # Sync iteration (pull-based)
