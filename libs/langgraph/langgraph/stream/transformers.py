@@ -11,6 +11,9 @@ class ValuesTransformer(StreamTransformer):
 
     Native transformer — projection keys are exposed as direct
     attributes on the run stream (e.g. `run.values`).
+
+    Only root-namespace values events are captured; subgraph state
+    snapshots are ignored.
     """
 
     _native = True
@@ -24,11 +27,18 @@ class ValuesTransformer(StreamTransformer):
     def init(self) -> dict[str, Any]:
         return {"values": self._log}
 
+    @property
+    def error(self) -> BaseException | None:
+        """The error that ended the run, or `None` if it succeeded.
+
+        Set by the mux when it auto-fails the projection log.
+        """
+        return self._log._error
+
     def process(self, event: ProtocolEvent) -> bool:
         if event["method"] != "values":
             return True
         params = event["params"]
-        # Only capture root namespace events
         if params["namespace"]:
             return True
         self._latest = params["data"]
@@ -47,6 +57,11 @@ class MessagesTransformer(StreamTransformer):
     A follow-on PR will replace this with a richer transformer that
     produces ChatModelStream objects using the protocol handler.
 
+    Only root-namespace messages events are captured; tokens emitted
+    from subgraphs are dropped from the `messages` projection. Consumers
+    that need subgraph tokens should iterate the raw event stream or
+    register a custom transformer.
+
     Native transformer — projection keys are exposed as direct
     attributes on the run stream (e.g. `run.messages`).
     """
@@ -63,7 +78,6 @@ class MessagesTransformer(StreamTransformer):
         if event["method"] != "messages":
             return True
         params = event["params"]
-        # Only capture root namespace events
         if params["namespace"]:
             return True
         self._log.push(params["data"])

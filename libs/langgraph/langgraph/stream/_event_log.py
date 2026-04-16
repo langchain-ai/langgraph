@@ -198,7 +198,10 @@ class EventLog(Generic[T]):
                 return
             elif self._request_more is not None:
                 # Pull from the producer until this log gets a new item
-                # or the graph is exhausted (which closes the log).
+                # or the graph is exhausted (which closes the log). A push
+                # may evict the item this cursor was about to read; in that
+                # case the inner loop breaks and the outer `seq < _first_seq`
+                # check catches the overflow on the next iteration.
                 while (seq - self._first_seq) >= len(self._items) and not self._closed:
                     if not self._request_more():
                         break

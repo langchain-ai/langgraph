@@ -78,6 +78,7 @@ class StreamMux:
 
         self.extensions: dict[str, Any] = {}
         self.native_keys: set[str] = set()
+        self._projection_owners: dict[str, str] = {}
 
         for transformer in transformers or ():
             self._register(transformer)
@@ -103,14 +104,21 @@ class StreamMux:
             )
         conflicts = set(projection) & set(self.extensions)
         if conflicts:
+            attributions = ", ".join(
+                f"{key!r} (owned by {self._projection_owners[key]})"
+                for key in sorted(conflicts)
+            )
             raise ValueError(
                 f"Transformer {type(transformer).__name__} returned "
                 f"projection keys that conflict with already-registered "
-                f"keys: {conflicts}"
+                f"keys: {attributions}"
             )
         self._transformers.append(transformer)
         self._bind_and_wire(projection)
         self.extensions.update(projection)
+        owner_name = type(transformer).__name__
+        for key in projection:
+            self._projection_owners[key] = owner_name
         if getattr(transformer, "_native", False):
             self.native_keys.update(projection.keys())
 

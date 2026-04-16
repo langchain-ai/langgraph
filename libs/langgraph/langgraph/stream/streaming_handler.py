@@ -6,6 +6,7 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
+from langgraph.pregel import Pregel
 from langgraph.stream._convert import convert_to_protocol_event
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import StreamTransformer
@@ -38,15 +39,16 @@ class StreamingHandler:
             print(state)
         output = run.output
 
-        # Async
+        # Async — terminal accessors are methods so a missing `await`
+        # fails loudly instead of silently yielding a coroutine.
         run = await handler.astream(input_data)
         async for state in run.values:
             print(state)
-        output = await run.output
+        output = await run.output()
         ```
     """
 
-    def __init__(self, graph: Any) -> None:
+    def __init__(self, graph: Pregel) -> None:
         """Initialize the handler.
 
         Args:

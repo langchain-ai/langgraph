@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, Mapping
+from types import MappingProxyType
 from typing import Any
 
 from langgraph.stream._convert import convert_to_protocol_event
@@ -44,7 +45,7 @@ class GraphRunStream:
         """
         self._graph_iter = graph_iter
         self._mux = mux
-        self.extensions = mux.extensions
+        self.extensions: Mapping[str, Any] = MappingProxyType(mux.extensions)
         self._values_transformer = values_transformer
         self._exhausted = False
         # Native-transformer projections also show up as direct attributes.
@@ -98,20 +99,35 @@ class GraphRunStream:
     def output(self) -> dict[str, Any] | None:
         """Block until the run completes and return the final state."""
         self._pump_all()
-        if self._values_transformer._log._error is not None:
-            raise self._values_transformer._log._error
+        err = self._values_transformer.error
+        if err is not None:
+            raise err
         return self._values_transformer._latest
 
     @property
     def interrupted(self) -> bool:
-        """Block until the run completes, then return whether it was interrupted."""
+        """Block until the run completes, then return whether it was interrupted.
+
+        Raises:
+            BaseException: If the run ended with an error.
+        """
         self._pump_all()
+        err = self._values_transformer.error
+        if err is not None:
+            raise err
         return self._values_transformer._interrupted
 
     @property
     def interrupts(self) -> list[Any]:
-        """Block until the run completes, then return interrupt payloads."""
+        """Block until the run completes, then return interrupt payloads.
+
+        Raises:
+            BaseException: If the run ended with an error.
+        """
         self._pump_all()
+        err = self._values_transformer.error
+        if err is not None:
+            raise err
         return self._values_transformer._interrupts
 
     def __iter__(self) -> Iterator[ProtocolEvent]:
@@ -150,67 +166,76 @@ class AsyncGraphRunStream:
             pump_task: Background task pumping graph events into the mux.
         """
         self._mux = mux
-        self.extensions = mux.extensions
+        self.extensions: Mapping[str, Any] = MappingProxyType(mux.extensions)
         self._values_transformer = values_transformer
         self._pump_task = pump_task
         # Native-transformer projections also show up as direct attributes.
         for key in mux.native_keys:
             setattr(self, key, mux.extensions[key])
 
-    @property
-    def output(self) -> Any:
-        """Return an awaitable that resolves to the final state.
+    async def output(self) -> dict[str, Any] | None:
+        """Wait for the run to complete and return the final state.
+
+        Methods (not properties) on the async lane so `run.output` without
+        `await` raises at type-check time instead of silently yielding a
+        coroutine object that's truthy, lenless, and never awaited.
+
+        The pump routes any Exception into `mux.afail`, which surfaces on
+        `ValuesTransformer.error`. CancelledError / KeyboardInterrupt
+        propagate so cancellation isn't silently dropped.
 
         Example:
             ```python
-            output = await run.output
+            output = await run.output()
             ```
-        """
-        return self._get_output()
 
-    async def _get_output(self) -> dict[str, Any] | None:
+        Raises:
+            BaseException: If the run ended with an error.
+        """
         try:
             await self._pump_task
-        except BaseException:
+        except Exception:
             pass
-        if self._values_transformer._log._error is not None:
-            raise self._values_transformer._log._error
+        if (err := self._values_transformer.error) is not None:
+            raise err
         return self._values_transformer._latest
 
-    @property
-    def interrupted(self) -> Any:
-        """Return an awaitable that resolves to whether the run was interrupted.
+    async def interrupted(self) -> bool:
+        """Wait for the run to complete and return whether it was interrupted.
 
         Example:
             ```python
-            interrupted = await run.interrupted
+            interrupted = await run.interrupted()
             ```
-        """
-        return self._get_interrupted()
 
-    async def _get_interrupted(self) -> bool:
+        Raises:
+            BaseException: If the run ended with an error.
+        """
         try:
             await self._pump_task
-        except BaseException:
+        except Exception:
             pass
+        if (err := self._values_transformer.error) is not None:
+            raise err
         return self._values_transformer._interrupted
 
-    @property
-    def interrupts(self) -> Any:
-        """Return an awaitable that resolves to interrupt payloads.
+    async def interrupts(self) -> list[Any]:
+        """Wait for the run to complete and return interrupt payloads.
 
         Example:
             ```python
-            interrupts = await run.interrupts
+            interrupts = await run.interrupts()
             ```
-        """
-        return self._get_interrupts()
 
-    async def _get_interrupts(self) -> list[Any]:
+        Raises:
+            BaseException: If the run ended with an error.
+        """
         try:
             await self._pump_task
-        except BaseException:
+        except Exception:
             pass
+        if (err := self._values_transformer.error) is not None:
+            raise err
         return self._values_transformer._interrupts
 
     def __aiter__(self) -> AsyncIterator[ProtocolEvent]:

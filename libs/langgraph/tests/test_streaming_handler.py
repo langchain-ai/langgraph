@@ -176,8 +176,9 @@ class TestEventLog:
                 log.push(i)
             log.close()
 
-        asyncio.get_event_loop().call_soon(lambda: asyncio.ensure_future(producer()))
+        producer_task = asyncio.create_task(producer())
         items = [item async for item in log]
+        await producer_task
         assert items == [0, 1, 2]
 
     @pytest.mark.anyio
@@ -420,6 +421,16 @@ class TestStreamingHandlerSync:
         assert run.values is run.extensions["values"]
         assert run.messages is run.extensions["messages"]
 
+    def test_extensions_is_read_only(self) -> None:
+        """`run.extensions` must reject mutations so users can't corrupt mux state."""
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "x", "items": []})
+        with pytest.raises(TypeError):
+            run.extensions["new_key"] = object()  # type: ignore[index]
+        with pytest.raises(TypeError):
+            del run.extensions["values"]  # type: ignore[attr-defined]
+
     def test_custom_stream_events(self) -> None:
         graph = _build_custom_stream_graph()
         handler = StreamingHandler(graph)
@@ -451,6 +462,22 @@ class TestStreamingHandlerSyncErrors:
         run = handler.stream({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
             list(run)
+
+    def test_error_propagation_interrupted(self) -> None:
+        """`run.interrupted` should raise on a failed run, not silently return False."""
+        graph = _build_error_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "x", "items": []})
+        with pytest.raises(ValueError, match="boom"):
+            _ = run.interrupted
+
+    def test_error_propagation_interrupts(self) -> None:
+        """`run.interrupts` should raise on a failed run."""
+        graph = _build_error_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "x", "items": []})
+        with pytest.raises(ValueError, match="boom"):
+            _ = run.interrupts
 
 
 class TestStreamingHandlerSyncInterrupt:
@@ -490,7 +517,7 @@ class TestStreamingHandlerAsync:
         graph = _build_simple_graph()
         handler = StreamingHandler(graph)
         run = await handler.astream({"value": "x", "items": []})
-        output = await run.output
+        output = await run.output()
         assert output is not None
         assert output["value"] == "xAB"
         assert output["items"] == ["a", "b"]
@@ -512,7 +539,7 @@ class TestStreamingHandlerAsync:
         graph = _build_simple_graph()
         handler = StreamingHandler(graph)
         run = await handler.astream({"value": "x", "items": []})
-        _ = await run.output
+        _ = await run.output()
         assert "values" in run.extensions
         assert "messages" in run.extensions
         assert run.values is run.extensions["values"]
@@ -527,7 +554,7 @@ class TestStreamingHandlerAsyncErrors:
         handler = StreamingHandler(graph)
         run = await handler.astream({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
-            await run.output
+            await run.output()
 
     @pytest.mark.anyio
     @NEEDS_CONTEXTVARS
@@ -549,6 +576,26 @@ class TestStreamingHandlerAsyncErrors:
             async for _ in run:
                 pass
 
+    @pytest.mark.anyio
+    @NEEDS_CONTEXTVARS
+    async def test_error_propagation_interrupted(self) -> None:
+        """`await run.interrupted()` should raise on a failed async run."""
+        graph = _build_error_graph()
+        handler = StreamingHandler(graph)
+        run = await handler.astream({"value": "x", "items": []})
+        with pytest.raises(ValueError, match="boom"):
+            await run.interrupted()
+
+    @pytest.mark.anyio
+    @NEEDS_CONTEXTVARS
+    async def test_error_propagation_interrupts(self) -> None:
+        """`await run.interrupts()` should raise on a failed async run."""
+        graph = _build_error_graph()
+        handler = StreamingHandler(graph)
+        run = await handler.astream({"value": "x", "items": []})
+        with pytest.raises(ValueError, match="boom"):
+            await run.interrupts()
+
 
 class TestStreamingHandlerAsyncInterrupt:
     @pytest.mark.anyio
@@ -560,9 +607,9 @@ class TestStreamingHandlerAsyncInterrupt:
             {"value": "x", "items": []},
             {"configurable": {"thread_id": "t2"}},
         )
-        _ = await run.output
-        assert await run.interrupted is True
-        assert len(await run.interrupts) > 0
+        _ = await run.output()
+        assert await run.interrupted() is True
+        assert len(await run.interrupts()) > 0
 
 
 class TestStreamingHandlerAsyncCustom:
@@ -1042,7 +1089,10 @@ class TestCustomTransformer:
 
         graph = _build_simple_graph()
         handler = StreamingHandler(graph)
-        with pytest.raises(ValueError, match="conflict.*{'values'}"):
+        with pytest.raises(
+            ValueError,
+            match=r"conflict.*'values'.*ValuesTransformer",
+        ):
             handler.stream(
                 {"value": "x", "items": []},
                 transformers=[ConflictTransformer()],
@@ -1442,7 +1492,7 @@ class TestAsyncTransformerLane:
             {"value": "x", "items": []},
             transformers=[Scorer()],
         )
-        _ = await run.output
+        _ = await run.output()
         scores = [x async for x in run.extensions["scores"]]
         assert scores and all(s == 42 for s in scores)
 

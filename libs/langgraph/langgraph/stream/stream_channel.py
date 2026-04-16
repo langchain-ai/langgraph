@@ -17,6 +17,14 @@ class StreamChannel(Generic[T]):
     `ProtocolEvent` into the main event stream using the channel's
     name as the method.
 
+    Auto-forwarded events bypass the transformer pipeline — other
+    transformers' `process()` / `aprocess()` methods do not see
+    `custom:<name>` events produced by a channel push. This prevents a
+    transformer that pushes to its own channel during `process()` from
+    re-triggering itself, but it also means filter- or tap-style
+    transformers cannot observe channel output from peer transformers.
+    Consumers that need that should iterate the main event stream.
+
     In-process consumers iterate the channel directly (`for item in ch`
     or `async for item in ch`). Remote SDK clients subscribe via
     `session.subscribe("custom:<channelName>")`.

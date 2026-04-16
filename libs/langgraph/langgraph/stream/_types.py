@@ -12,7 +12,12 @@ _logger = logging.getLogger(__name__)
 
 
 class _ProtocolEventParams(TypedDict):
-    """Parameters for a protocol event."""
+    """Parameters for a protocol event.
+
+    `timestamp` is wall-clock milliseconds since the epoch and can go
+    backwards across NTP adjustments — use `ProtocolEvent.seq` for
+    ordering.
+    """
 
     namespace: list[str]
     timestamp: int
@@ -25,6 +30,8 @@ class ProtocolEvent(TypedDict):
 
     Wraps a raw stream part (values, messages, custom, etc.) in a uniform
     envelope with a monotonic sequence number assigned by the StreamMux.
+    Consumers that need a total order across events should use `seq`, not
+    `params.timestamp` (which is wall-clock and not monotonic).
     """
 
     type: Literal["event"]
