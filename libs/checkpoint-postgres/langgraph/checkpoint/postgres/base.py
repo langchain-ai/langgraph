@@ -208,7 +208,9 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
         if diff_channel_payloads:
             result.update(
-                self._load_diff_chains(thread_id, checkpoint_ns, diff_channel_payloads, cur=cur)
+                self._load_diff_chains(
+                    thread_id, checkpoint_ns, diff_channel_payloads, cur=cur
+                )
             )
 
         return result
