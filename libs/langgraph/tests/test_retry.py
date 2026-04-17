@@ -1,11 +1,27 @@
+from collections import deque
 from unittest.mock import Mock, patch
 
 import pytest
+from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
+    CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_RUNTIME,
+    CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_THREAD_ID,
+)
 from langgraph.graph import START, StateGraph
-from langgraph.pregel._retry import _should_retry_on
-from langgraph.types import RetryPolicy
+from langgraph.pregel._retry import (
+    _checkpoint_ns_for_parent_command,
+    _ensure_execution_info,
+    _should_retry_on,
+    run_with_retry,
+)
+from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
+from langgraph.types import PregelExecutableTask, RetryPolicy
 
 
 def test_should_retry_on_single_exception():
@@ -76,6 +92,22 @@ def test_should_retry_on_empty_sequence():
 
     # Should not retry when sequence is empty
     assert _should_retry_on(policy, ValueError("test error")) is False
+
+
+def test_checkpoint_ns_for_parent_command() -> None:
+    assert _checkpoint_ns_for_parent_command("") == ""
+    assert _checkpoint_ns_for_parent_command("node:1") == ""
+    assert _checkpoint_ns_for_parent_command("node:1|child:2") == "node:1"
+    assert _checkpoint_ns_for_parent_command("node:1|1|child:2") == "node:1"
+    assert _checkpoint_ns_for_parent_command("node:1|1|child:2|1") == "node:1"
+    assert (
+        _checkpoint_ns_for_parent_command("parent:1|1|child:1|1|node:1|1")
+        == "parent:1|1|child:1"
+    )
+    assert (
+        _checkpoint_ns_for_parent_command("parent:1|1|child:1|1|node:1")
+        == "parent:1|1|child:1"
+    )
 
 
 def test_should_retry_default_retry_on():
@@ -152,10 +184,15 @@ def test_graph_with_single_retry_policy():
         foo: str
 
     attempt_count = 0
+    attempt_numbers: list[int] = []
+    first_attempt_times: list[float | None] = []
 
-    def failing_node(state: State):
+    def failing_node(state: State, runtime: Runtime):
         nonlocal attempt_count
         attempt_count += 1
+        assert runtime.execution_info.node_attempt == attempt_count
+        attempt_numbers.append(runtime.execution_info.node_attempt)
+        first_attempt_times.append(runtime.execution_info.node_first_attempt_time)
         if attempt_count < 3:  # Fail the first two attempts
             raise ValueError("Intentional failure")
         return {"foo": "success"}
@@ -187,11 +224,40 @@ def test_graph_with_single_retry_policy():
 
     # Verify retry behavior
     assert attempt_count == 3  # The node should have been tried 3 times
+    assert attempt_numbers == [1, 2, 3]
+    assert len(first_attempt_times) == 3
+    assert first_attempt_times[0] is not None
+    assert first_attempt_times[1] == first_attempt_times[0]
+    assert first_attempt_times[2] == first_attempt_times[0]
     assert result["foo"] == "other_node"  # Final result should be from other_node
 
     # Verify the sleep intervals
     call_args_list = [args[0][0] for args in mock_sleep.call_args_list]
     assert call_args_list == [0.01, 0.02]
+
+
+def test_runtime_execution_info_defaults_without_retry():
+    """Test execution_info defaults when no retry and no config are provided."""
+
+    class State(TypedDict):
+        foo: str
+
+    captured = {}
+
+    def node(state: State, runtime: Runtime):
+        captured["node_attempt"] = runtime.execution_info.node_attempt
+        captured["node_first_attempt_time"] = (
+            runtime.execution_info.node_first_attempt_time
+        )
+        return {"foo": "ok"}
+
+    graph = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
+
+    result = graph.invoke({"foo": ""})
+
+    assert result["foo"] == "ok"
+    assert captured["node_attempt"] == 1
+    assert isinstance(captured["node_first_attempt_time"], float)
 
 
 def test_graph_with_jitter_retry_policy():
@@ -342,3 +408,162 @@ def test_graph_with_max_attempts_exceeded():
         graph.invoke({"foo": ""})
 
     mock_sleep.assert_called_with(0.01)
+
+
+def test_execution_info_identity_fields_populated_on_retry():
+    """Test that thread_id, task_id, run_id, etc. are populated in execution_info during retries."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempt_count = 0
+    captured_infos: list[dict] = []
+
+    def failing_node(state: State, runtime: Runtime):
+        nonlocal attempt_count
+        attempt_count += 1
+        info = runtime.execution_info
+        captured_infos.append(
+            {
+                "thread_id": info.thread_id,
+                "run_id": info.run_id,
+                "node_attempt": info.node_attempt,
+                "node_first_attempt_time": info.node_first_attempt_time,
+                "checkpoint_ns": info.checkpoint_ns,
+            }
+        )
+        if attempt_count < 2:
+            raise ValueError("Intentional failure")
+        return {"foo": "success"}
+
+    retry_policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.01,
+        jitter=False,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, retry_policy=retry_policy)
+        .add_edge(START, "failing_node")
+        .compile(checkpointer=MemorySaver())
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke(
+            {"foo": ""},
+            config={"configurable": {"thread_id": "retry-thread"}},
+        )
+
+    assert result["foo"] == "success"
+    assert len(captured_infos) == 2
+
+    # Both attempts should have the same thread_id and first_attempt_time
+    assert captured_infos[0]["thread_id"] == "retry-thread"
+    assert captured_infos[1]["thread_id"] == "retry-thread"
+    assert (
+        captured_infos[0]["node_first_attempt_time"]
+        == captured_infos[1]["node_first_attempt_time"]
+    )
+
+    # node_attempt should increment
+    assert captured_infos[0]["node_attempt"] == 1
+    assert captured_infos[1]["node_attempt"] == 2
+
+
+def test_ensure_execution_info_noop_when_already_set():
+    """Test that _ensure_execution_info is a no-op when execution_info exists."""
+    existing_info = ExecutionInfo(
+        checkpoint_id="cp-1", checkpoint_ns="ns-1", task_id="task-1"
+    )
+    runtime = DEFAULT_RUNTIME.override(execution_info=existing_info)
+    config = {CONF: {CONFIG_KEY_THREAD_ID: "thread-1"}}
+    task = Mock(id="task-2")
+
+    result = _ensure_execution_info(runtime, config, task)
+    assert result is runtime
+    assert result.execution_info is existing_info
+
+
+def test_ensure_execution_info_creates_from_config():
+    """Test that _ensure_execution_info creates ExecutionInfo from config when missing."""
+    runtime = DEFAULT_RUNTIME.override(execution_info=None)
+    config = {
+        "run_id": "run-123",
+        CONF: {
+            CONFIG_KEY_CHECKPOINT_ID: "cp-42",
+            CONFIG_KEY_CHECKPOINT_NS: "ns-42",
+            CONFIG_KEY_TASK_ID: "task-42",
+            CONFIG_KEY_THREAD_ID: "thread-42",
+        },
+    }
+    task = Mock(id="fallback-task-id")
+
+    result = _ensure_execution_info(runtime, config, task)
+    assert result.execution_info is not None
+    assert result.execution_info.checkpoint_id == "cp-42"
+    assert result.execution_info.checkpoint_ns == "ns-42"
+    assert result.execution_info.task_id == "task-42"
+    assert result.execution_info.thread_id == "thread-42"
+    assert result.execution_info.run_id == "run-123"
+
+
+def test_ensure_execution_info_falls_back_to_task_id():
+    """Test that _ensure_execution_info uses task.id when CONFIG_KEY_TASK_ID is missing."""
+    runtime = DEFAULT_RUNTIME.override(execution_info=None)
+    config = {CONF: {}}
+    task = Mock(id="fallback-task-id")
+
+    result = _ensure_execution_info(runtime, config, task)
+    assert result.execution_info.task_id == "fallback-task-id"
+    assert result.execution_info.checkpoint_id == ""
+    assert result.execution_info.checkpoint_ns == ""
+
+
+def test_run_with_retry_creates_execution_info_when_missing():
+    """Test that run_with_retry works when runtime has no execution_info (distributed runtime scenario)."""
+    captured_infos: list[ExecutionInfo] = []
+
+    class FakeProc:
+        def invoke(self, input, config):
+            runtime = config[CONF][CONFIG_KEY_RUNTIME]
+            captured_infos.append(runtime.execution_info)
+            return input
+
+    runtime = DEFAULT_RUNTIME.override(execution_info=None)
+    config = {
+        "run_id": "run-abc",
+        CONF: {
+            CONFIG_KEY_RUNTIME: runtime,
+            CONFIG_KEY_CHECKPOINT_ID: "cp-99",
+            CONFIG_KEY_CHECKPOINT_NS: "__start__:task123",
+            CONFIG_KEY_TASK_ID: "task123",
+            CONFIG_KEY_THREAD_ID: "thread-xyz",
+        },
+    }
+
+    task = PregelExecutableTask(
+        name="__start__",
+        input={"messages": []},
+        proc=FakeProc(),
+        writes=deque(),
+        config=config,
+        triggers=["__start__"],
+        retry_policy=[],
+        cache_key=None,
+        id="task123",
+        path=("__pregel_pull", "__start__"),
+    )
+
+    run_with_retry(task, retry_policy=None)
+
+    assert len(captured_infos) == 1
+    info = captured_infos[0]
+    assert info.checkpoint_id == "cp-99"
+    assert info.checkpoint_ns == "__start__:task123"
+    assert info.task_id == "task123"
+    assert info.thread_id == "thread-xyz"
+    assert info.run_id == "run-abc"
+    assert info.node_attempt == 1
+    assert info.node_first_attempt_time is not None

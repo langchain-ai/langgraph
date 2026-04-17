@@ -103,6 +103,7 @@ class SSEDecoder:
             sse = StreamPart(
                 event=self._event,
                 data=orjson.loads(self._data) if self._data else None,  # type: ignore[invalid-argument-type]
+                id=self.last_event_id,
             )
 
             # NOTE: as per the SSE spec, do not reset last_event_id.

@@ -11,14 +11,14 @@ requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
-dependencies = ["httpx>=0.25.2", "orjson>=3.10.1"]
+dependencies = ["httpx>=0.25.2", "orjson>=3.11.5"]
 
 [tool.hatch.version]
 path = "langgraph_sdk/__init__.py"
 
 [project.urls]
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-py"
-Twitter = "https://x.com/LangChainAI"
+Twitter = "https://x.com/LangChain"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
@@ -29,10 +29,17 @@ test = [
     "pytest-mock",
     "pytest-watch",
 ]
-lint = ["ruff", "codespell", "mypy"]
+lint = [
+    "ruff==0.15.6",
+    "codespell",
+    "mypy==1.19.1",
+    "ty==0.0.23",
+    "starlette",
+]
 dev = [
   { include-group = "test" },
   { include-group = "lint" },
+  "langgraph",
   "pydantic>=2.12.4",
 ]
 
@@ -45,6 +52,9 @@ asyncio_mode = "auto"
 
 [tool.uv]
 default-groups = ['dev']
+
+[tool.uv.sources]
+langgraph = { path = "../langgraph", editable = true }
 
 [tool.ruff]
 exclude = ["venv", ".venv", "build", "dist"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from dataclasses import fields, is_dataclass
 from typing import (
     Any,
     TypeVar,
@@ -11,8 +12,9 @@ from uuid import UUID, uuid4
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
+from pydantic import BaseModel
 
-from langgraph._internal._constants import NS_SEP
+from langgraph._internal._constants import NS_END, NS_SEP
 from langgraph.constants import TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
 from langgraph.types import Command
@@ -24,6 +26,17 @@ except ImportError:
 
 T = TypeVar("T")
 Meta = tuple[tuple[str, ...], dict[str, Any]]
+
+
+def _state_values(obj: Any) -> Sequence[Any]:
+    """Extract top-level field values from a state object (dict, BaseModel, or dataclass)."""
+    if isinstance(obj, dict):
+        return list(obj.values())
+    elif isinstance(obj, BaseModel):
+        return [getattr(obj, k) for k in type(obj).model_fields]
+    elif is_dataclass(obj) and not isinstance(obj, type):
+        return [getattr(obj, f.name) for f in fields(obj)]
+    return ()
 
 
 class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
@@ -90,26 +103,14 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             for value in response:
                 if isinstance(value, BaseMessage):
                     self._emit(meta, value, dedupe=True)
-        elif isinstance(response, dict):
-            for value in response.values():
+        else:
+            for value in _state_values(response):
                 if isinstance(value, BaseMessage):
                     self._emit(meta, value, dedupe=True)
                 elif isinstance(value, Sequence):
                     for item in value:
                         if isinstance(item, BaseMessage):
                             self._emit(meta, item, dedupe=True)
-        elif hasattr(response, "__dir__") and callable(response.__dir__):
-            for key in dir(response):
-                try:
-                    value = getattr(response, key)
-                    if isinstance(value, BaseMessage):
-                        self._emit(meta, value, dedupe=True)
-                    elif isinstance(value, Sequence):
-                        for item in value:
-                            if isinstance(item, BaseMessage):
-                                self._emit(meta, item, dedupe=True)
-                except AttributeError:
-                    pass
 
     def tap_output_aiter(
         self, run_id: UUID, output: AsyncIterator[T]
@@ -131,15 +132,23 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         if metadata and (not tags or (TAG_NOSTREAM not in tags)):
-            ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
-                :-1
-            ]
+            task_checkpoint_ns = cast(str, metadata["langgraph_checkpoint_ns"])
+            checkpoint_ns = (
+                f"{task_checkpoint_ns.rsplit(NS_END, 1)[0]}{NS_END}"
+                if NS_END in task_checkpoint_ns
+                else task_checkpoint_ns
+            )
+            ns = tuple(task_checkpoint_ns.split(NS_SEP))[:-1]
             if not self.subgraphs and len(ns) > 0 and ns != self.parent_ns:
                 return
+            stream_metadata = dict(metadata)
+            stream_metadata["langgraph_checkpoint_ns"] = checkpoint_ns
+            # Preserve backwards-compatible streamed checkpoint metadata shape.
+            stream_metadata["checkpoint_ns"] = checkpoint_ns
             if tags:
                 if filtered_tags := [t for t in tags if not t.startswith("seq:step")]:
-                    metadata["tags"] = filtered_tags
-            self.metadata[run_id] = (ns, metadata)
+                    stream_metadata["tags"] = filtered_tags
+            self.metadata[run_id] = (ns, stream_metadata)
 
     def on_llm_new_token(
         self,
@@ -203,16 +212,15 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             if not self.subgraphs and len(ns) > 0:
                 return
             self.metadata[run_id] = (ns, metadata)
-            if isinstance(inputs, dict):
-                for key, value in inputs.items():
-                    if isinstance(value, BaseMessage):
-                        if value.id is not None:
-                            self.seen.add(value.id)
-                    elif isinstance(value, Sequence) and not isinstance(value, str):
-                        for item in value:
-                            if isinstance(item, BaseMessage):
-                                if item.id is not None:
-                                    self.seen.add(item.id)
+            for value in _state_values(inputs):
+                if isinstance(value, BaseMessage):
+                    if value.id is not None:
+                        self.seen.add(value.id)
+                elif isinstance(value, Sequence) and not isinstance(value, str):
+                    for item in value:
+                        if isinstance(item, BaseMessage):
+                            if item.id is not None:
+                                self.seen.add(item.id)
 
     def on_chain_end(
         self,

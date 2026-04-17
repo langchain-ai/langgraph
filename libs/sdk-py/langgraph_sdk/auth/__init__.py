@@ -46,34 +46,51 @@ class Auth:
 
         my_auth = Auth()
 
-        async def verify_token(token: str) -> str:
-            # Verify token and return user_id
-            # This would typically be a call to your auth server
-            return "user_id"
-
-        @auth.authenticate
-        async def authenticate(authorization: str) -> str:
-            # Verify token and return user_id
-            result = await verify_token(authorization)
-            if result != "user_id":
+        @my_auth.authenticate
+        async def authenticate(authorization: str) -> Auth.types.MinimalUserDict:
+            user = await verify_token(authorization)  # Your token verification logic
+            if not user:
                 raise Auth.exceptions.HTTPException(
                     status_code=401, detail="Unauthorized"
                 )
-            return result
+            return {
+                "identity": user["id"],
+                "permissions": user.get("permissions", []),
+            }
 
-        # Global fallback handler
-        @auth.on
-        async def authorize_default(params: Auth.on.value):
-            return False # Reject all requests (default behavior)
+        # Default deny: reject all requests that don't have a specific handler
+        @my_auth.on
+        async def deny_all(ctx: Auth.types.AuthContext, value: Any) -> False:
+            return False
 
-        @auth.on.threads.create
-        async def authorize_thread_create(params: Auth.on.threads.create.value):
-            # Allow the allowed user to create a thread
-            assert params.get("metadata", {}).get("owner") == "allowed_user"
+        # Allow users to create threads with their own identity as owner
+        @my_auth.on.threads.create
+        async def allow_thread_create(
+            ctx: Auth.types.AuthContext, value: Auth.types.on.threads.create.value
+        ):
+            metadata = value.setdefault("metadata", {})
+            metadata["owner"] = ctx.user.identity
 
-        @auth.on.store
-        async def authorize_store(ctx: Auth.types.AuthContext, value: Auth.types.on):
-            assert ctx.user.identity in value["namespace"], "Not authorized"
+        # Allow users to read and search their own threads
+        @my_auth.on.threads.read
+        async def allow_thread_read(
+            ctx: Auth.types.AuthContext, value: Auth.types.on.threads.read.value
+        ) -> Auth.types.FilterType:
+            return {"owner": ctx.user.identity}
+
+        @my_auth.on.threads.search
+        async def allow_thread_search(
+            ctx: Auth.types.AuthContext, value: Auth.types.on.threads.search.value
+        ) -> Auth.types.FilterType:
+            return {"owner": ctx.user.identity}
+
+        # Scope all store operations to the user's namespace
+        @my_auth.on.store
+        async def scope_store(ctx: Auth.types.AuthContext, value: Auth.types.on.store.value):
+            namespace = tuple(value["namespace"]) if value.get("namespace") else ()
+            if not namespace or namespace[0] != ctx.user.identity:
+                namespace = (ctx.user.identity, *namespace)
+            value["namespace"] = namespace
         ```
 
     ???+ note "Request Processing Flow"
@@ -132,30 +149,31 @@ class Auth:
         
         ???+ example "Examples"
 
-            Global handler for all requests:
+            Start by denying all requests by default, then add specific handlers
+            to allow access:
 
             ```python
+            # Default deny: reject all unhandled requests
             @auth.on
-            async def reject_unhandled_requests(ctx: AuthContext, value: Any) -> None:
-                print(f"Request to {ctx.path} by {ctx.user.identity}")
+            async def deny_all(ctx: AuthContext, value: Any) -> False:
                 return False
             ```
 
-            Resource-specific handler. This would take precedence over the global handler
+            Resource-specific handler. This takes precedence over the global handler
             for all actions on the `threads` resource:
-            
+
             ```python
             @auth.on.threads
-            async def check_thread_access(ctx: AuthContext, value: Any) -> bool:
-                # Allow access only to threads created by the user
-                return value.get("created_by") == ctx.user.identity
+            async def allow_thread_access(ctx: AuthContext, value: Any) -> Auth.types.FilterType:
+                # Only allow access to threads owned by the user
+                return {"owner": ctx.user.identity}
             ```
 
             Resource and action specific handler:
 
             ```python
             @auth.on.threads.delete
-            async def prevent_thread_deletion(ctx: AuthContext, value: Any) -> bool:
+            async def allow_admin_thread_deletion(ctx: AuthContext, value: Any) -> bool:
                 # Only admins can delete threads
                 return "admin" in ctx.user.permissions
             ```
@@ -163,20 +181,38 @@ class Auth:
             Multiple resources or actions:
 
             ```python
-            @auth.on(resources=["threads", "runs"], actions=["create", "update"])
-            async def rate_limit_writes(ctx: AuthContext, value: Any) -> bool:
-                # Implement rate limiting for write operations
-                return await check_rate_limit(ctx.user.identity)
+            @auth.on(resources=["threads", "assistants"], actions=["read", "search"])
+            async def allow_reads(ctx: AuthContext, value: Any) -> Auth.types.FilterType:
+                # Allow read/search access to resources owned by the user
+                return {"owner": ctx.user.identity}
             ```
 
             Auth for the `store` resource is a bit different since its structure is developer defined.
-            You typically want to enforce user creds in the namespace.
+            You typically want to scope store operations by rewriting the namespace to include the user's identity.
+            The `value` dict is mutable — changes to `value["namespace"]` are used by the server for the actual operation.
 
             ```python
             @auth.on.store
-            async def check_store_access(ctx: AuthContext, value: Auth.types.on) -> bool:
-                # Assuming you structure your store like (store.aput((user_id, application_context), key, value))
-                assert value["namespace"][0] == ctx.user.identity
+            async def scope_store(ctx: AuthContext, value: Auth.types.on.store.value):
+                # Allow store access but scope to user's namespace
+                namespace = tuple(value["namespace"]) if value.get("namespace") else ()
+                if not namespace or namespace[0] != ctx.user.identity:
+                    namespace = (ctx.user.identity, *namespace)
+                value["namespace"] = namespace
+            ```
+
+            You can also register handlers for specific store actions:
+
+            ```python
+            @auth.on.store.put
+            async def allow_put(ctx: AuthContext, value: Auth.types.on.store.put.value):
+                # Allow puts, scoped to user's namespace
+                value["namespace"] = (ctx.user.identity, *value["namespace"])
+
+            @auth.on.store.get
+            async def allow_get(ctx: AuthContext, value: Auth.types.on.store.get.value):
+                # Allow gets, scoped to user's namespace
+                value["namespace"] = (ctx.user.identity, *value["namespace"])
             ```
         """
         # These are accessed by the API. Changes to their names or types is
@@ -483,9 +519,100 @@ class _CronsOn(
     Search = types.CronsSearch
 
 
+class _StoreActionOn(typing.Generic[T]):
+    """Decorator for registering a handler for a specific store action."""
+
+    def __init__(
+        self,
+        auth: Auth,
+        action: typing.Literal["put", "get", "search", "delete", "list_namespaces"],
+        value: type[T],
+    ) -> None:
+        self.auth = auth
+        self.action = action
+        self.value = value
+
+    def __call__(self, fn: _ActionHandler[T]) -> _ActionHandler[T]:
+        _validate_handler(fn)
+        _register_handler(self.auth, "store", self.action, fn)
+        return fn
+
+
 class _StoreOn:
     def __init__(self, auth: Auth) -> None:
         self._auth = auth
+        self.put = _StoreActionOn(auth, "put", types.StorePut)
+        """Register a handler for store put operations.
+
+        ???+ example "Example"
+            If using `@auth.on` to deny by default, register this handler to allow
+            put operations (scoped to the user's namespace):
+
+            ```python
+            @auth.on.store.put
+            async def allow_store_put(ctx: Auth.types.AuthContext, value: Auth.types.on.store.put.value):
+                # Allow puts, scoped to user's namespace
+                value["namespace"] = (ctx.user.identity, *value["namespace"])
+            ```
+        """
+        self.get = _StoreActionOn(auth, "get", types.StoreGet)
+        """Register a handler for store get operations.
+
+        ???+ example "Example"
+            If using `@auth.on` to deny by default, register this handler to allow
+            get operations (scoped to the user's namespace):
+
+            ```python
+            @auth.on.store.get
+            async def allow_store_get(ctx: Auth.types.AuthContext, value: Auth.types.on.store.get.value):
+                # Allow gets, scoped to user's namespace
+                value["namespace"] = (ctx.user.identity, *value["namespace"])
+            ```
+        """
+        self.search = _StoreActionOn(auth, "search", types.StoreSearch)
+        """Register a handler for store search operations.
+
+        ???+ example "Example"
+            If using `@auth.on` to deny by default, register this handler to allow
+            search operations (scoped to the user's namespace):
+
+            ```python
+            @auth.on.store.search
+            async def allow_store_search(ctx: Auth.types.AuthContext, value: Auth.types.on.store.search.value):
+                # Allow searches, scoped to user's namespace
+                value["namespace"] = (ctx.user.identity, *value["namespace"])
+            ```
+        """
+        self.delete = _StoreActionOn(auth, "delete", types.StoreDelete)
+        """Register a handler for store delete operations.
+
+        ???+ example "Example"
+            If using `@auth.on` to deny by default, register this handler to allow
+            delete operations (scoped to the user's namespace):
+
+            ```python
+            @auth.on.store.delete
+            async def allow_store_delete(ctx: Auth.types.AuthContext, value: Auth.types.on.store.delete.value):
+                # Allow deletes, scoped to user's namespace
+                value["namespace"] = (ctx.user.identity, *value["namespace"])
+            ```
+        """
+        self.list_namespaces = _StoreActionOn(
+            auth, "list_namespaces", types.StoreListNamespaces
+        )
+        """Register a handler for store list_namespaces operations.
+
+        ???+ example "Example"
+            If using `@auth.on` to deny by default, register this handler to allow
+            namespace listing (scoped to the user's prefix):
+
+            ```python
+            @auth.on.store.list_namespaces
+            async def allow_list_ns(ctx: Auth.types.AuthContext, value: Auth.types.on.store.list_namespaces.value):
+                # Allow listing, scoped to user's namespace prefix
+                value["namespace"] = (ctx.user.identity,)
+            ```
+        """
 
     @typing.overload
     def __call__(
@@ -572,40 +699,42 @@ class _On:
 
     ???+ example "Examples"
 
-        Global handler for all requests:
+        Start by denying all requests by default with a global handler,
+        then add specific handlers to allow access:
 
         ```python
+        # Default deny: reject all requests without a specific handler
         @auth.on
-        async def log_all_requests(ctx: AuthContext, value: Any) -> None:
-            print(f"Request to {ctx.path} by {ctx.user.identity}")
-            return True
+        async def deny_all(ctx: AuthContext, value: Any) -> False:
+            return False
         ```
 
-        Resource-specific handler:
+        Resource-specific handler to allow access (takes precedence
+        over the global deny handler):
 
         ```python
         @auth.on.threads
-        async def check_thread_access(ctx: AuthContext, value: Any) -> bool:
-            # Allow access only to threads created by the user
-            return value.get("created_by") == ctx.user.identity
+        async def allow_thread_access(ctx: AuthContext, value: Any) -> Auth.types.FilterType:
+            # Allow access only to threads owned by the user
+            return {"owner": ctx.user.identity}
         ```
 
         Resource and action specific handler:
 
         ```python
-        @auth.on.threads.delete
-        async def prevent_thread_deletion(ctx: AuthContext, value: Any) -> bool:
-            # Only admins can delete threads
-            return "admin" in ctx.user.permissions
+        @auth.on.threads.create
+        async def allow_thread_create(ctx: AuthContext, value: Any) -> None:
+            # Allow thread creation, stamping the owner
+            value.setdefault("metadata", {})["owner"] = ctx.user.identity
         ```
 
         Multiple resources or actions:
 
         ```python
-        @auth.on(resources=["threads", "runs"], actions=["create", "update"])
-        async def rate_limit_writes(ctx: AuthContext, value: Any) -> bool:
-            # Implement rate limiting for write operations
-            return await check_rate_limit(ctx.user.identity)
+        @auth.on(resources=["threads", "assistants"], actions=["read", "search"])
+        async def allow_reads(ctx: AuthContext, value: Any) -> Auth.types.FilterType:
+            # Allow read/search, scoped to user's resources
+            return {"owner": ctx.user.identity}
         ```
     """
 

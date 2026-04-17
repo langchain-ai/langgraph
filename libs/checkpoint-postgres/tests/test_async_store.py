@@ -20,6 +20,7 @@ from langgraph.store.base import (
 )
 from psycopg import AsyncConnection
 
+from langgraph.checkpoint.postgres import _ainternal
 from langgraph.store.postgres import AsyncPostgresStore
 from tests.conftest import (
     DEFAULT_URI,
@@ -344,6 +345,59 @@ async def test_batch_list_namespaces_ops(store: AsyncPostgresStore) -> None:
     assert len(results[0]) == 2
     assert ("test", "namespace1") in results[0]
     assert ("test", "namespace2") in results[0]
+
+
+@asynccontextmanager
+async def _create_pool_store() -> AsyncIterator[AsyncPostgresStore]:
+    database = f"test_{uuid.uuid4().hex[:16]}"
+    uri_parts = DEFAULT_URI.split("/")
+    uri_base = "/".join(uri_parts[:-1])
+    query_params = ""
+    if "?" in uri_parts[-1]:
+        _, query_params = uri_parts[-1].split("?", 1)
+        query_params = "?" + query_params
+
+    conn_string = f"{uri_base}/{database}{query_params}"
+    admin_conn_string = DEFAULT_URI
+    async with await AsyncConnection.connect(
+        admin_conn_string, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresStore.from_conn_string(
+            conn_string, pool_config={"min_size": 1, "max_size": 1}
+        ) as store:
+            await store.setup()
+            yield store
+    finally:
+        async with await AsyncConnection.connect(
+            admin_conn_string, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+async def test_abatch_uses_single_pool_checkout(monkeypatch) -> None:
+    async with _create_pool_store() as store:
+        await store.aput(("test",), "key1", {"data": "value1"})
+
+        original_get_connection = _ainternal.get_connection
+        checkout_count = 0
+
+        @asynccontextmanager
+        async def counting_get_connection(conn):
+            nonlocal checkout_count
+            checkout_count += 1
+            async with original_get_connection(conn) as checked_out_conn:
+                yield checked_out_conn
+
+        monkeypatch.setattr(_ainternal, "get_connection", counting_get_connection)
+
+        results = await store.abatch([GetOp(namespace=("test",), key="key1")])
+
+        assert len(results) == 1
+        assert results[0] is not None
+        assert results[0].value == {"data": "value1"}
+        assert checkout_count == 1
 
 
 @asynccontextmanager

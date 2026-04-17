@@ -233,13 +233,20 @@ class StudioUser:
 
     ???+ example "Examples"
 
+        Use `@auth.on` to deny by default, but allow Studio users through:
+
         ```python
         @auth.on
-        async def allow_developers(ctx: Auth.types.AuthContext, value: Any) -> None:
+        async def deny_all_except_studio(ctx: Auth.types.AuthContext, value: Any) -> bool:
+            # Allow Studio users, deny everyone else by default
             if isinstance(ctx.user, Auth.types.StudioUser):
-                return None
-            ...
+                return True
             return False
+
+        # Then add specific handlers to allow access for non-Studio users
+        @auth.on.threads
+        async def allow_thread_access(ctx: Auth.types.AuthContext, value: Any) -> Auth.types.FilterType:
+            return {"owner": ctx.user.identity}
         ```
     """
 
@@ -402,7 +409,7 @@ class AuthContext(BaseAuthContext):
         "list_namespaces",
     ]
     """The action being performed on the resource.
-    
+
     Most resources support the following actions:
     - create: Create a new resource
     - read: Read information about a resource
@@ -411,8 +418,10 @@ class AuthContext(BaseAuthContext):
     - search: Search for resources
 
     The store supports the following actions:
-    - put: Add or update a document in the store
-    - get: Get a document from the store
+    - put: Add or update an item in the store
+    - get: Get an item from the store
+    - search: Search for items within a namespace prefix
+    - delete: Delete an item from the store
     - list_namespaces: List the namespaces in the store
     """
 
@@ -851,20 +860,34 @@ class CronsSearch(typing.TypedDict, total=False):
 
 
 class StoreGet(typing.TypedDict):
-    """Operation to retrieve a specific item by its namespace and key."""
+    """Operation to retrieve a specific item by its namespace and key.
+
+    This dict is mutable — auth handlers can modify `namespace` to enforce
+    access scoping (e.g., prepending the user's identity).
+    """
 
     namespace: tuple[str, ...]
-    """Hierarchical path that uniquely identifies the item's location."""
+    """Hierarchical path that uniquely identifies the item's location.
+
+    Auth handlers can modify this to enforce per-user scoping.
+    """
 
     key: str
     """Unique identifier for the item within its specific namespace."""
 
 
 class StoreSearch(typing.TypedDict):
-    """Operation to search for items within a specified namespace hierarchy."""
+    """Operation to search for items within a specified namespace hierarchy.
+
+    This dict is mutable — auth handlers can modify `namespace` to enforce
+    access scoping (e.g., prepending the user's identity).
+    """
 
     namespace: tuple[str, ...]
-    """Prefix filter for defining the search scope."""
+    """Prefix filter for defining the search scope.
+
+    Auth handlers can modify this to enforce per-user scoping.
+    """
 
     filter: dict[str, typing.Any] | None
     """Key-value pairs for filtering results based on exact matches or comparison operators."""
@@ -876,14 +899,22 @@ class StoreSearch(typing.TypedDict):
     """Number of matching items to skip for pagination."""
 
     query: str | None
-    """Naturalj language search query for semantic search capabilities."""
+    """Natural language search query for semantic search capabilities."""
 
 
 class StoreListNamespaces(typing.TypedDict):
-    """Operation to list and filter namespaces in the store."""
+    """Operation to list and filter namespaces in the store.
+
+    This dict is mutable — auth handlers can modify `namespace` (the prefix)
+    to enforce access scoping (e.g., prepending the user's identity).
+    """
 
     namespace: tuple[str, ...] | None
-    """Prefix filter namespaces."""
+    """Prefix filter for namespaces. Can be `None` if no prefix was provided.
+
+    Auth handlers can modify this to enforce per-user scoping. When `None`,
+    handlers should set it to `(user_id,)` to scope listing to the user's namespaces.
+    """
 
     suffix: tuple[str, ...] | None
     """Optional conditions for filtering namespaces."""
@@ -903,10 +934,17 @@ class StoreListNamespaces(typing.TypedDict):
 
 
 class StorePut(typing.TypedDict):
-    """Operation to store, update, or delete an item in the store."""
+    """Operation to store, update, or delete an item in the store.
+
+    This dict is mutable — auth handlers can modify `namespace` to enforce
+    access scoping (e.g., prepending the user's identity).
+    """
 
     namespace: tuple[str, ...]
-    """Hierarchical path that identifies the location of the item."""
+    """Hierarchical path that identifies the location of the item.
+
+    Auth handlers can modify this to enforce per-user scoping.
+    """
 
     key: str
     """Unique identifier for the item within its namespace."""
@@ -919,10 +957,17 @@ class StorePut(typing.TypedDict):
 
 
 class StoreDelete(typing.TypedDict):
-    """Operation to delete an item from the store."""
+    """Operation to delete an item from the store.
+
+    This dict is mutable — auth handlers can modify `namespace` to enforce
+    access scoping (e.g., prepending the user's identity).
+    """
 
     namespace: tuple[str, ...]
-    """Hierarchical path that uniquely identifies the item's location."""
+    """Hierarchical path that uniquely identifies the item's location.
+
+    Auth handlers can modify this to enforce per-user scoping.
+    """
 
     key: str
     """Unique identifier for the item within its specific namespace."""
@@ -935,24 +980,27 @@ class on:
     and search operations across different resources (threads, assistants, crons).
 
     ???+ note "Usage"
+        Start by denying all requests by default, then add handlers to allow access:
+
         ```python
         from langgraph_sdk import Auth
 
         auth = Auth()
 
+        # Default deny: reject all requests without a specific handler
         @auth.on
-        def handle_all(params: Auth.on.value):
-            raise Exception("Not authorized")
+        async def deny_all(ctx: Auth.types.AuthContext, value: Auth.on.value):
+            return False
 
+        # Allow thread creation, stamping the owner
         @auth.on.threads.create
-        def handle_thread_create(params: Auth.on.threads.create.value):
-            # Handle thread creation
-            pass
+        async def allow_thread_create(ctx: Auth.types.AuthContext, value: Auth.on.threads.create.value):
+            value.setdefault("metadata", {})["owner"] = ctx.user.identity
 
+        # Allow assistant search, scoped to user's resources
         @auth.on.assistants.search
-        def handle_assistant_search(params: Auth.on.assistants.search.value):
-            # Handle assistant search
-            pass
+        async def allow_assistant_search(ctx: Auth.types.AuthContext, value: Auth.on.assistants.search.value):
+            return {"owner": ctx.user.identity}
         ```
     """
 

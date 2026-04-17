@@ -42,6 +42,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_REPLAY_STATE,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SCRATCHPAD,
@@ -58,8 +59,14 @@ from langgraph._internal._constants import (
     RESUME,
     TASKS,
 )
+from langgraph._internal._replay import ReplayState
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
+from langgraph.callbacks import (
+    GraphInterruptEvent,
+    GraphLifecycleEvent,
+    GraphResumeEvent,
+)
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
@@ -115,6 +122,7 @@ from langgraph.types import (
     CachePolicy,
     Command,
     Durability,
+    Interrupt,
     PregelExecutableTask,
     RetryPolicy,
     Send,
@@ -152,7 +160,7 @@ class PregelLoop:
     input_keys: str | Sequence[str]
     output_keys: str | Sequence[str]
     stream_keys: str | Sequence[str]
-    skip_done_tasks: bool
+    is_replaying: bool
     is_nested: bool
     manager: None | AsyncParentRunManager | ParentRunManager
     interrupt_after: All | Sequence[str]
@@ -201,6 +209,8 @@ class PregelLoop:
     tasks: dict[str, PregelExecutableTask]
     output: None | dict[str, Any] | Any = None
     updated_channels: set[str] | None = None
+    _graph_lifecycle_events: deque[GraphLifecycleEvent]
+    _has_graph_lifecycle_callbacks: bool
 
     # public
 
@@ -226,6 +236,7 @@ class PregelLoop:
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         self.stream = stream
         self.config = config
@@ -244,12 +255,14 @@ class PregelLoop:
         self.interrupt_before = interrupt_before
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
-        self.skip_done_tasks = CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
+        self.is_replaying = CONFIG_KEY_CHECKPOINT_ID in config[CONF]
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
+        self._has_graph_lifecycle_callbacks = has_graph_lifecycle_callbacks
+        self._graph_lifecycle_events = deque()
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -300,6 +313,40 @@ class PregelLoop:
             else ()
         )
         self.prev_checkpoint_config = None
+
+    def _push_graph_lifecycle_event(
+        self,
+        kind: Literal["resume", "interrupt"],
+        *,
+        interrupts: tuple[Interrupt, ...] = (),
+    ) -> None:
+        if kind == "resume":
+            self._graph_lifecycle_events.append(
+                GraphResumeEvent(
+                    run_id=None,
+                    status=self.status,
+                    checkpoint_id=self.checkpoint["id"],
+                    checkpoint_ns=self.checkpoint_ns,
+                )
+            )
+        elif kind == "interrupt":
+            self._graph_lifecycle_events.append(
+                GraphInterruptEvent(
+                    run_id=None,
+                    status=self.status,
+                    checkpoint_id=self.checkpoint["id"],
+                    checkpoint_ns=self.checkpoint_ns,
+                    interrupts=interrupts,
+                )
+            )
+        else:
+            msg = f"Unknown graph lifecycle event type: {kind}"
+            raise AssertionError(msg)
+
+    def _pop_lifecycle_event(self) -> GraphLifecycleEvent | None:
+        if not self._graph_lifecycle_events:
+            return None
+        return self._graph_lifecycle_events.popleft()
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
@@ -451,7 +498,7 @@ class PregelLoop:
             # save the new task
             self.tasks[pushed.id] = pushed
             # match any pending writes to the new task
-            if self.skip_done_tasks:
+            if not self.is_replaying:
                 self._match_writes({pushed.id: pushed})
             # return the new task, to be started if not run before
             return pushed
@@ -515,7 +562,7 @@ class PregelLoop:
             return False
 
         # if there are pending writes from a previous loop, apply them
-        if self.skip_done_tasks and self.checkpoint_pending_writes:
+        if not self.is_replaying and self.checkpoint_pending_writes:
             self._match_writes(self.tasks)
 
         # before execution, check if we should interrupt
@@ -557,8 +604,8 @@ class PregelLoop:
             )
         # clear pending writes
         self.checkpoint_pending_writes.clear()
-        # "not skip_done_tasks" only applies to first tick after resuming
-        self.skip_done_tasks = True
+        # only replay (re-execute) done tasks on the first tick
+        self.is_replaying = False
         # save checkpoint
         self._put_checkpoint({"source": "loop"})
         # after execution, check if we should interrupt
@@ -618,15 +665,21 @@ class PregelLoop:
     def _first(
         self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
     ) -> set[str] | None:
-        # resuming from previous checkpoint requires
-        # - finding a previous checkpoint
-        # - receiving None input (outer graph) or RESUMING flag (subgraph)
+        # Resuming from a previous checkpoint requires two things:
+        # 1. A prior checkpoint exists (channel_versions is non-empty)
+        # 2. The input signals continuation (not a fresh run with new input)
+        # For subgraphs, the parent explicitly sets CONFIG_KEY_RESUMING.
+        # For the outer graph, we infer from the input:
+        #   - None input: resume after interrupt (invoke(None, config))
+        #   - Command input: any Command operates on existing state
+        #   - Same run_id: re-entry into an ongoing run (e.g. stream reconnect)
         configurable = self.config.get(CONF, {})
+        input_is_command = isinstance(self.input, Command)
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
             configurable.get(
                 CONFIG_KEY_RESUMING,
                 self.input is None
-                or isinstance(self.input, Command)
+                or input_is_command
                 or (
                     not self.is_nested
                     and self.config.get("metadata", {}).get("run_id")
@@ -635,10 +688,37 @@ class PregelLoop:
             )
         )
 
+        # When replaying from a specific checkpoint, drop cached RESUME
+        # writes so that interrupt() calls re-fire instead of returning
+        # stale values. But if we're actively resuming, keep them —
+        # multi-interrupt scenarios need previously resolved values preserved.
+        is_time_traveling = self.is_replaying and (
+            # Time-travel to a subgraph checkpoint: the parent sets
+            # RESUMING=True (it can't distinguish time-travel from resume),
+            # so we check if this subgraph's own ns is in checkpoint_map.
+            # Normally the map only has ancestor entries (_algo.py); the
+            # subgraph's own entry only appears via get_state(subgraphs=True).
+            (
+                self.is_nested
+                and configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
+                in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {})
+            )
+            or not (
+                # Outer graph: resume arrives as Command(resume=...)
+                (input_is_command and cast(Command, self.input).resume is not None)
+                # Subgraphs: resume arrives via config flag from parent
+                # (subgraph input is a Send arg, not a Command)
+                or configurable.get(CONFIG_KEY_RESUMING, False)
+            )
+        )
+        if is_time_traveling:
+            self.checkpoint_pending_writes = [
+                w for w in self.checkpoint_pending_writes if w[1] != RESUME
+            ]
+
         # map command to writes
-        if isinstance(self.input, Command):
-            resume_is_map = False
-            if (resume := self.input.resume) is not None:
+        if input_is_command:
+            if (resume := cast(Command, self.input).resume) is not None:
                 if not self.checkpointer:
                     raise RuntimeError(
                         "Cannot use Command(resume=...) without checkpointer"
@@ -658,7 +738,7 @@ class PregelLoop:
 
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
-            for tid, c, v in map_command(cmd=self.input):
+            for tid, c, v in map_command(cmd=cast(Command, self.input)):
                 if not (c == RESUME and resume_is_map):
                     writes[tid].append((c, v))
             if not writes and not resume_is_map:
@@ -686,6 +766,26 @@ class PregelLoop:
                 if k in self.checkpoint["channel_versions"]:
                     version = self.checkpoint["channel_versions"][k]
                     self.checkpoint["versions_seen"][INTERRUPT][k] = version
+            # When time-traveling (replaying from a specific checkpoint),
+            # save a fork checkpoint so the replayed execution creates a
+            # new branch. Without this, if the execution hits an interrupt
+            # before after_tick() runs, no new checkpoint is created —
+            # the parent's latest checkpoint remains the old one and
+            # subsequent resumes load the wrong state.
+            # Skip for update_state forks (source=update/fork) since they
+            # already have their own fork checkpoint.
+            if is_time_traveling and self.checkpoint_metadata.get("source") not in (
+                "update",
+                "fork",
+            ):
+                # Clear old INTERRUPT writes from the loaded checkpoint.
+                # The fork will have a new checkpoint_id which changes
+                # task IDs — stale interrupt writes would accumulate and
+                # confuse the multiple-interrupt check in future resumes.
+                self.checkpoint_pending_writes = [
+                    w for w in self.checkpoint_pending_writes if w[1] != INTERRUPT
+                ]
+                self._put_checkpoint({"source": "fork"})
             # produce values output
             self._emit(
                 "values", map_output_values, self.output_keys, True, self.channels
@@ -724,13 +824,39 @@ class PregelLoop:
             self._put_checkpoint({"source": "input"})
         elif CONFIG_KEY_RESUMING not in configurable:
             raise EmptyInputError(f"Received no input for {input_keys}")
-        # update config
+        # Propagate resuming and replaying flags to subgraphs.
         if not self.is_nested:
+            # Pass the resolved before-bound checkpoint ID so subgraphs can
+            # find their corresponding checkpoint without re-fetching the
+            # parent. For forks (source=update/fork), use the fork's parent
+            # checkpoint ID since the fork was created after the subgraph's
+            # checkpoints from the original execution.
+            replay_state: ReplayState | None = None
+            if self.is_replaying:
+                replay_checkpoint_id = self.checkpoint["id"]
+                if (
+                    self.checkpoint_metadata.get("source")
+                    in (
+                        "update",
+                        "fork",
+                    )
+                    and self.prev_checkpoint_config
+                ):
+                    replay_checkpoint_id = self.prev_checkpoint_config[CONF].get(
+                        CONFIG_KEY_CHECKPOINT_ID, replay_checkpoint_id
+                    )
+                replay_state = ReplayState(replay_checkpoint_id)
             self.config = patch_configurable(
-                self.config, {CONFIG_KEY_RESUMING: is_resuming}
+                self.config,
+                {
+                    CONFIG_KEY_RESUMING: is_resuming,
+                    CONFIG_KEY_REPLAY_STATE: replay_state,
+                },
             )
         # set flag
         self.status = "pending"
+        if is_resuming:
+            self._push_graph_lifecycle_event("resume")
         return updated_channels
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
@@ -831,8 +957,10 @@ class PregelLoop:
             self._put_checkpoint(self.checkpoint_metadata)
             self._put_pending_writes()
         # suppress interrupt
-        suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
-        if suppress:
+        if isinstance(exc_value, GraphInterrupt) and not self.is_nested:
+            interrupt = exc_value
+            interrupts = tuple(interrupt.args[0]) if interrupt.args else ()
+            self._push_graph_lifecycle_event("interrupt", interrupts=interrupts)
             # emit one last "values" event, with pending writes applied
             if (
                 hasattr(self, "tasks")
@@ -859,12 +987,11 @@ class PregelLoop:
                         self.channels,
                     )
             # emit INTERRUPT if exception is empty (otherwise emitted by put_writes)
-            if exc_value is not None and (not exc_value.args or not exc_value.args[0]):
+            if not interrupt.args or not interrupt.args[0]:
+                interrupt_payload = interrupt.args[0] if interrupt.args else ()
                 self._emit(
                     "updates",
-                    lambda: iter(
-                        [{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]
-                    ),
+                    lambda: iter([{INTERRUPT: interrupt_payload}]),
                 )
             # save final output
             self.output = read_channels(self.channels, self.output_keys)
@@ -986,6 +1113,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         super().__init__(
             input,
@@ -1007,6 +1135,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1082,10 +1211,32 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     # context manager
 
     def __enter__(self) -> Self:
-        if self.checkpointer:
-            saved = self.checkpointer.get_tuple(self.checkpoint_config)
-        else:
+        self._graph_lifecycle_events = deque()
+        if not self.checkpointer:
             saved = None
+        elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+            # Explicit checkpoint_id requested — fetch that exact checkpoint.
+            # This covers both normal replay and subgraphs resolved via
+            # checkpoint_map during time-travel.
+            saved = self.checkpointer.get_tuple(self.checkpoint_config)
+        elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
+            # Subgraph replay: the parent is replaying and passed us a
+            # replay_state with its checkpoint_id. Look up our checkpoint
+            # from the parent's checkpoint_map instead of fetching latest.
+            saved = replay_state.get_checkpoint(
+                self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
+                self.checkpointer,
+                self.checkpoint_config,
+            )
+            # Clear RESUMING so _first re-applies input instead of resuming.
+            # This recreates ephemeral routing channels so nodes trigger
+            # naturally via version comparison.
+            self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
+        else:
+            # Normal case: fetch the most recent checkpoint for this
+            # graph/thread. Returns None on first invocation.
+            saved = self.checkpointer.get_tuple(self.checkpoint_config)
+
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
@@ -1110,7 +1261,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if saved.pending_writes is not None
             else []
         )
-
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
@@ -1162,6 +1312,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         super().__init__(
             input,
@@ -1183,6 +1334,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
         )
         self.stack = AsyncExitStack()
         if checkpointer:
@@ -1261,10 +1413,32 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     # context manager
 
     async def __aenter__(self) -> Self:
-        if self.checkpointer:
-            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
-        else:
+        self._graph_lifecycle_events = deque()
+        if not self.checkpointer:
             saved = None
+        elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+            # Explicit checkpoint_id requested — fetch that exact checkpoint.
+            # This covers both normal replay and subgraphs resolved via
+            # checkpoint_map during time-travel.
+            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+        elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
+            # Subgraph replay: the parent is replaying and passed us a
+            # replay_state with its checkpoint_id. Look up our checkpoint
+            # from the parent's checkpoint_map instead of fetching latest.
+            saved = await replay_state.aget_checkpoint(
+                self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
+                self.checkpointer,
+                self.checkpoint_config,
+            )
+            # Clear RESUMING so _first re-applies input instead of resuming.
+            # This recreates ephemeral routing channels so nodes trigger
+            # naturally via version comparison.
+            self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
+        else:
+            # Normal case: fetch the most recent checkpoint for this
+            # graph/thread. Returns None on first invocation.
+            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
@@ -1289,7 +1463,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if saved.pending_writes is not None
             else []
         )
-
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )

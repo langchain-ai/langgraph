@@ -97,7 +97,8 @@ class InMemorySaver(
             self.stack.enter_context(self.blobs)  # type: ignore[arg-type]
 
     def __enter__(self) -> InMemorySaver:
-        return self.stack.__enter__()
+        self.stack.__enter__()
+        return self
 
     def __exit__(
         self,
@@ -108,7 +109,8 @@ class InMemorySaver(
         return self.stack.__exit__(exc_type, exc_value, traceback)
 
     async def __aenter__(self) -> InMemorySaver:
-        return self.stack.__enter__()
+        self.stack.__enter__()
+        return self
 
     async def __aexit__(
         self,
