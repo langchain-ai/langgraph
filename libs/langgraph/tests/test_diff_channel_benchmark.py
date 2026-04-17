@@ -17,6 +17,8 @@ from langgraph.channels.diff import DiffChannel
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 
+REHYDRATE_EVERY = 50
+
 
 # ---------------------------------------------------------------------------
 # State definitions
@@ -29,6 +31,10 @@ class BinaryState(TypedDict):
 
 class DiffState(TypedDict):
     messages: Annotated[list, DiffChannel(add_messages)]
+
+
+class DiffRehydrateState(TypedDict):
+    messages: Annotated[list, DiffChannel(add_messages, rehydrate_every=REHYDRATE_EVERY)]
 
 
 # ---------------------------------------------------------------------------
@@ -91,23 +97,33 @@ TURN_COUNTS = [10, 50, 100, 200, 500]
 def run_benchmark() -> None:
     print()
     print("DiffChannel vs BinaryOperatorAggregate — checkpoint storage & time benchmark")
-    print("=" * 76)
-    header = f"{'turns':>6}  {'binary_bytes':>14}  {'diff_bytes':>12}  {'ratio':>8}  {'binary_ms':>12}  {'diff_ms':>10}"
+    w = 100
+    print("=" * w)
+    header = (
+        f"{'turns':>6}  "
+        f"{'bin_bytes':>12}  {'diff_bytes':>12}  {'rehy_bytes':>12}  {'bytes_ratio':>12}  "
+        f"{'bin_ms':>9}  {'diff_ms':>9}  {'rehy_ms':>9}  {'time_ratio':>12}"
+    )
     print(header)
-    print("-" * 76)
+    print("-" * w)
 
     for turns in TURN_COUNTS:
         b_time, b_bytes = _run_turns(turns, BinaryState)
         d_time, d_bytes = _run_turns(turns, DiffState)
-        ratio = b_bytes / d_bytes if d_bytes else float("inf")
+        r_time, r_bytes = _run_turns(turns, DiffRehydrateState)
+        bytes_ratio = b_bytes / d_bytes if d_bytes else float("inf")
+        time_ratio = d_time / b_time if b_time else float("inf")
         print(
-            f"{turns:>6}  {b_bytes:>14,}  {d_bytes:>12,}  {ratio:>7.1f}x  "
-            f"{b_time * 1000:>11.1f}ms  {d_time * 1000:>9.1f}ms"
+            f"{turns:>6}  "
+            f"{b_bytes:>12,}  {d_bytes:>12,}  {r_bytes:>12,}  {bytes_ratio:>11.1f}x  "
+            f"{b_time * 1000:>8.1f}ms  {d_time * 1000:>8.1f}ms  {r_time * 1000:>8.1f}ms  {time_ratio:>11.1f}x"
         )
 
-    print("=" * 76)
+    print("=" * w)
     print()
-    print("ratio = binary_bytes / diff_bytes (higher = DiffChannel saves more space)")
+    print(f"bytes_ratio = bin_bytes / diff_bytes  (higher = more storage saved)")
+    print(f"time_ratio  = diff_ms / bin_ms        (higher = more overhead without rehydration)")
+    print(f"rehy        = DiffChannel(rehydrate_every={REHYDRATE_EVERY}) — caps chain depth")
     print()
 
 
@@ -125,9 +141,14 @@ def test_diff_channel_benchmark(capsys: Any) -> None:
     for turns in [100, 500]:
         _, b_bytes = _run_turns(turns, BinaryState)
         _, d_bytes = _run_turns(turns, DiffState)
+        _, r_bytes = _run_turns(turns, DiffRehydrateState)
         assert d_bytes < b_bytes, (
             f"Expected DiffChannel to use less storage at {turns} turns, "
             f"got diff={d_bytes} binary={b_bytes}"
+        )
+        assert r_bytes < b_bytes, (
+            f"Expected DiffChannel(rehydrate) to use less storage at {turns} turns, "
+            f"got rehydrate={r_bytes} binary={b_bytes}"
         )
 
 
