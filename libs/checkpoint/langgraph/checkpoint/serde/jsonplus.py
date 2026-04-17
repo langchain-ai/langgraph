@@ -46,6 +46,23 @@ LC_REVIVER = Reviver()
 EMPTY_BYTES = b""
 logger = logging.getLogger(__name__)
 
+# Dedup log warnings across process lifetime; cap bounds state if types are
+# dynamically generated (also acts as a circuit breaker on warning volume).
+# Dedup is best-effort: racing threads may each emit once for the same key,
+# and warnings are silently dropped once _MAX_WARNED_TYPES is reached.
+_MAX_WARNED_TYPES = 1000
+_warned_unregistered_types: set[tuple[str, str]] = set()
+_warned_blocked_types: set[tuple[str, str]] = set()
+
+
+def _warn_once(
+    seen: set[tuple[str, str]], key: tuple[str, str], msg: str, *args: object
+) -> None:
+    if key in seen or len(seen) >= _MAX_WARNED_TYPES:
+        return
+    seen.add(key)
+    logger.warning(msg, *args)
+
 
 class JsonPlusSerializer(SerializerProtocol):
     """Serializer that uses ormsgpack, with optional fallbacks.
@@ -56,6 +73,10 @@ class JsonPlusSerializer(SerializerProtocol):
         class and called within the Pregel loop. It should not be used on untrusted
         python objects. If an attacker can write directly to your checkpoint database,
         they may be able to trigger code execution when data is deserialized.
+
+        Set the environment variable ``LANGGRAPH_STRICT_MSGPACK=true`` to restrict
+        deserialization to a built-in allowlist of safe types.  You can also pass
+        an explicit ``allowed_msgpack_modules`` to the constructor.
     """
 
     def __init__(
@@ -70,8 +91,11 @@ class JsonPlusSerializer(SerializerProtocol):
     ) -> None:
         if allowed_msgpack_modules is _lg_msgpack._SENTINEL:
             if _lg_msgpack.STRICT_MSGPACK_ENABLED:
+                # Strict: only SAFE_MSGPACK_TYPES are allowed.
                 allowed_msgpack_modules = None
             else:
+                # Permissive (default): all types allowed with a warning.
+                # Set LANGGRAPH_STRICT_MSGPACK=true to lock this down.
                 allowed_msgpack_modules = True
         self.pickle_fallback = pickle_fallback
         self._allowed_json_modules: set[tuple[str, ...]] | Literal[True] | None = (
@@ -527,10 +551,13 @@ def _create_msgpack_ext_hook(
                     "name": name,
                 }
             )
-            logger.warning(
+            _warn_once(
+                _warned_unregistered_types,
+                key,
                 "Deserializing unregistered type %s.%s from checkpoint. "
                 "This will be blocked in a future version. "
-                "Add to allowed_msgpack_modules to silence: [(%r, %r)]",
+                "Set LANGGRAPH_STRICT_MSGPACK=true to block now, or add "
+                "to allowed_msgpack_modules to allow explicitly: [(%r, %r)]",
                 module,
                 name,
                 module,
@@ -548,7 +575,9 @@ def _create_msgpack_ext_hook(
                 "name": name,
             }
         )
-        logger.warning(
+        _warn_once(
+            _warned_blocked_types,
+            key,
             "Blocked deserialization of %s.%s - not in allowed_msgpack_modules. "
             "Add to allowed_msgpack_modules to allow: [(%r, %r)]",
             module,

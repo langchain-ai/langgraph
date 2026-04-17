@@ -275,3 +275,70 @@ def test_graph_callbacks_accept_base_callback_manager() -> None:
 
     assert "__interrupt__" in first
     assert len(graph_handler.interrupt_events) == 1
+
+
+def test_non_graph_handler_via_add_handler_does_not_crash() -> None:
+    """Non-GraphCallbackHandler added via add_handler should not raise.
+
+    Libraries like opentelemetry-instrumentation-langchain monkey-patch
+    BaseCallbackManager.__init__ and inject handlers via add_handler().
+    These handlers inherit from BaseCallbackHandler, not
+    GraphCallbackHandler. They must be silently accepted — graph lifecycle
+    events will simply not be dispatched to them.
+    """
+    from langgraph.callbacks import _GraphCallbackManager
+
+    manager = _GraphCallbackManager()
+    plain_handler = _LangChainCustomEventHandler()
+
+    manager.add_handler(plain_handler, inherit=True)
+    assert plain_handler in manager.handlers
+
+
+def test_non_graph_handler_does_not_receive_lifecycle_events() -> None:
+    """Non-GraphCallbackHandler added alongside a GraphCallbackHandler
+    should not interfere with lifecycle event dispatch."""
+    graph = _build_interrupt_graph()
+    graph_handler = _GraphEventHandler()
+    plain_handler = _LangChainCustomEventHandler()
+
+    config = {
+        "configurable": {"thread_id": "graph-callback-mixed-handlers"},
+        "callbacks": [plain_handler, graph_handler],
+    }
+
+    first = graph.invoke({"answer": None}, config)
+    assert "__interrupt__" in first
+
+    assert len(graph_handler.interrupt_events) == 1
+    assert plain_handler.events == []
+
+    resumed = graph.invoke(Command(resume="done"), config)
+    assert resumed == {"answer": "done"}
+    assert len(graph_handler.resume_events) == 1
+    assert plain_handler.events == []
+
+
+@pytest.mark.anyio
+@NEEDS_CONTEXTVARS
+async def test_non_graph_handler_does_not_receive_lifecycle_events_async() -> None:
+    """Async variant: non-GraphCallbackHandler should not interfere."""
+    graph = _build_interrupt_graph()
+    graph_handler = _GraphEventHandler()
+    plain_handler = _LangChainCustomEventHandler()
+
+    config = {
+        "configurable": {"thread_id": "graph-callback-mixed-handlers-async"},
+        "callbacks": [plain_handler, graph_handler],
+    }
+
+    first = await graph.ainvoke({"answer": None}, config)
+    assert "__interrupt__" in first
+
+    assert len(graph_handler.interrupt_events) == 1
+    assert plain_handler.events == []
+
+    resumed = await graph.ainvoke(Command(resume="done"), config)
+    assert resumed == {"answer": "done"}
+    assert len(graph_handler.resume_events) == 1
+    assert plain_handler.events == []
