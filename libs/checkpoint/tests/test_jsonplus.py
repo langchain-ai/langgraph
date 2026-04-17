@@ -997,3 +997,35 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_diff_delta_serde_round_trip() -> None:
+    from langgraph.checkpoint.base import DiffDelta
+
+    serde = JsonPlusSerializer()
+    prev = "00000000000000000000000000000001.1234567890123456"
+    delta = DiffDelta(
+        delta=[HumanMessage(content="hello", id="msg-1")],
+        prev_version=prev,
+    )
+    type_tag, blob = serde.dumps_typed(delta)
+    assert type_tag == "diff"
+
+    result = serde.loads_typed(("diff", blob))
+    assert isinstance(result, dict)
+    assert result["p"] == prev
+    assert len(result["d"]) == 1
+    assert result["d"][0].content == "hello"
+
+
+def test_diff_delta_serde_root_blob() -> None:
+    from langgraph.checkpoint.base import DiffDelta
+
+    serde = JsonPlusSerializer()
+    delta = DiffDelta(delta=[], prev_version=None)
+    type_tag, blob = serde.dumps_typed(delta)
+    assert type_tag == "diff"
+
+    result = serde.loads_typed(("diff", blob))
+    assert result["p"] is None
+    assert result["d"] == []
