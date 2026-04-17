@@ -808,7 +808,7 @@ class ToolNode(RunnableCallable):
                 context=runtime.context,
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
-                tools=self.tools,
+                tools=list(self.tools_by_name.values()),
                 execution_info=runtime.execution_info,
                 server_info=runtime.server_info,
             )
@@ -843,7 +843,7 @@ class ToolNode(RunnableCallable):
                 context=runtime.context,
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
-                tools=self.tools,
+                tools=list(self.tools_by_name.values()),
                 execution_info=runtime.execution_info,
                 server_info=runtime.server_info,
             )
