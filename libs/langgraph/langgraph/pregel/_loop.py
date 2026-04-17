@@ -881,6 +881,9 @@ class PregelLoop:
             id=self.checkpoint["id"] if exiting else None,
             updated_channels=self.updated_channels,
         )
+        if do_checkpoint and self.channels:
+            for k, ch in self.channels.items():
+                ch.after_checkpoint(self.checkpoint["channel_versions"].get(k))
         # sanitize TASK channel in the checkpoint before saving (durability=="exit")
         if TASKS in self.checkpoint["channel_values"] and any(
             isinstance(channel, UntrackedValue) for channel in self.channels.values()

@@ -67,13 +67,12 @@ def channels_from_checkpoint(
             channel_specs[k] = v
         else:
             managed_specs[k] = v
-    return (
-        {
-            k: v.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
-            for k, v in channel_specs.items()
-        },
-        managed_specs,
-    )
+    channels: dict[str, BaseChannel] = {}
+    for k, v in channel_specs.items():
+        ch = v.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
+        ch.after_checkpoint(checkpoint["channel_versions"].get(k))
+        channels[k] = ch
+    return channels, managed_specs
 
 
 def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
