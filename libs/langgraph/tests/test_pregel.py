@@ -9405,8 +9405,9 @@ def test_fork_does_not_apply_pending_writes(
 async def test_diff_channel_end_to_end_inmemory() -> None:
     """Full graph run: DiffChannel accumulates correctly across multiple turns."""
     from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.channels.diff import DiffChannel
     from langgraph.checkpoint.memory import InMemorySaver
+
+    from langgraph.channels.diff import DiffChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9446,8 +9447,9 @@ async def test_diff_channel_end_to_end_inmemory() -> None:
 async def test_diff_channel_time_travel() -> None:
     """Time-travel back to turn-1 checkpoint and resume; continuation must not include turn-2 deltas."""
     from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.channels.diff import DiffChannel
     from langgraph.checkpoint.memory import InMemorySaver
+
+    from langgraph.channels.diff import DiffChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9458,7 +9460,11 @@ async def test_diff_channel_time_travel() -> None:
 
     def respond(state: State) -> dict:
         counter["n"] += 1
-        return {"messages": [AIMessage(content=f"ai-{counter['n']}", id=f"ai-{counter['n']}")]}
+        return {
+            "messages": [
+                AIMessage(content=f"ai-{counter['n']}", id=f"ai-{counter['n']}")
+            ]
+        }
 
     builder = StateGraph(State)
     builder.add_node("respond", respond)
@@ -9488,7 +9494,9 @@ async def test_diff_channel_time_travel() -> None:
     )
     msgs = result["messages"]
     # Should be: h1, ai-1, h3, ai-N — 4 messages total
-    assert len(msgs) == 4, f"expected 4 messages after time-travel resume, got {len(msgs)}: {msgs}"
+    assert len(msgs) == 4, (
+        f"expected 4 messages after time-travel resume, got {len(msgs)}: {msgs}"
+    )
     assert msgs[0].content == "h1"
     assert msgs[1].content == "ai-1"
     assert msgs[2].content == "h3"
