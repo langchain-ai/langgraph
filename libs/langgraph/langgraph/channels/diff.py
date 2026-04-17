@@ -142,7 +142,7 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
         return self.value
 
     def is_available(self) -> bool:
-        return self.value is not MISSING and self.value is not None
+        return self.value is not MISSING
 
     def checkpoint(self) -> DiffDelta:
         return DiffDelta(
