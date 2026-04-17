@@ -2044,7 +2044,7 @@ def test_tool_runtime_forwards_execution_info_server_info_and_tools() -> None:
         captured["execution_info"] = runtime.execution_info
         captured["server_info"] = runtime.server_info
         captured["tools"] = runtime.tools
-        return ",".join(sorted(tool.name for tool in runtime.tools))
+        return "ok"
 
     @dec_tool
     def other_tool(y: int) -> str:
@@ -2062,7 +2062,7 @@ def test_tool_runtime_forwards_execution_info_server_info_and_tools() -> None:
     config: RunnableConfig = {"configurable": {"__pregel_runtime": mock_runtime}}
     result = node.invoke({"messages": [msg]}, config=config)
 
-    assert result["messages"][-1].content == "info_tool,other_tool"
+    assert result["messages"][-1].content == "ok"
     assert captured["execution_info"] is exec_info
     assert captured["execution_info"].thread_id == "t-1"
     assert captured["execution_info"].task_id == "tk-1"
@@ -2101,7 +2101,7 @@ async def test_tool_runtime_forwards_execution_info_server_info_and_tools_async(
         captured["execution_info"] = runtime.execution_info
         captured["server_info"] = runtime.server_info
         captured["tools"] = runtime.tools
-        return ",".join(sorted(tool.name for tool in runtime.tools))
+        return "ok"
 
     @dec_tool
     async def other_tool_async(y: int) -> str:
