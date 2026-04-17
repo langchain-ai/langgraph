@@ -501,6 +501,13 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
 
     elif isinstance(obj, BaseException):
         return repr(obj)
+    elif type(obj).__str__ is not object.__str__:
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc(
+                (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
+            ),
+        )
     else:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
 
