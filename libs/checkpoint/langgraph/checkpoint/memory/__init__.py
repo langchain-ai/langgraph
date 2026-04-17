@@ -123,13 +123,40 @@ class InMemorySaver(
     def _load_blobs(
         self, thread_id: str, checkpoint_ns: str, versions: ChannelVersions
     ) -> dict[str, Any]:
+        from langgraph.checkpoint.base import DiffChainValue
+
         channel_values: dict[str, Any] = {}
+        diff_channels: dict[str, Any] = {}
+
         for k, v in versions.items():
             kk = (thread_id, checkpoint_ns, k, v)
-            if kk in self.blobs:
+            if kk not in self.blobs:
+                continue
+            vv = self.blobs[kk]
+            if vv[0] == "diff":
+                diff_channels[k] = v
+            elif vv[0] != "empty":
+                channel_values[k] = self.serde.loads_typed(vv)
+
+        for k, current_version in diff_channels.items():
+            chain_deltas: list[list[Any]] = []
+            base: list[Any] | None = None
+            version: str | None = current_version
+            while version is not None:
+                kk = (thread_id, checkpoint_ns, k, version)
+                if kk not in self.blobs:
+                    break
                 vv = self.blobs[kk]
-                if vv[0] != "empty":
-                    channel_values[k] = self.serde.loads_typed(vv)
+                if vv[0] == "diff":
+                    payload = self.serde.loads_typed(vv)  # {"d": [...], "p": version|None}
+                    chain_deltas.append(payload["d"])
+                    version = payload["p"]
+                else:
+                    base = self.serde.loads_typed(vv)
+                    break
+            chain_deltas.reverse()
+            channel_values[k] = DiffChainValue(base=base, deltas=chain_deltas)
+
         return channel_values
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
