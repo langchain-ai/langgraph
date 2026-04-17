@@ -9400,3 +9400,79 @@ def test_fork_does_not_apply_pending_writes(
 
     # Should be: 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+async def test_diff_channel_end_to_end_inmemory() -> None:
+    """Full graph run: DiffChannel accumulates correctly across multiple turns."""
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
+
+    class State(TypedDict):
+        messages: Annotated[list, DiffChannel(add_messages)]
+
+    def respond(state: State) -> dict:
+        n = len(state["messages"])
+        return {"messages": [AIMessage(content=f"reply-{n}", id=f"ai-{n}")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    config = {"configurable": {"thread_id": "diff-test-1"}}
+
+    # Turn 1
+    graph.invoke({"messages": [HumanMessage(content="hello", id="h1")]}, config)
+    # Turn 2
+    graph.invoke({"messages": [HumanMessage(content="world", id="h2")]}, config)
+    # Turn 3
+    graph.invoke({"messages": [HumanMessage(content="bye", id="h3")]}, config)
+
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    # 3 human + 3 AI = 6 total
+    assert len(msgs) == 6, f"expected 6 messages, got {len(msgs)}: {msgs}"
+    assert msgs[0].content == "hello"
+    assert msgs[2].content == "world"
+    assert msgs[4].content == "bye"
+
+
+async def test_diff_channel_time_travel() -> None:
+    """Time-travel to an earlier checkpoint reconstructs the correct partial history."""
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
+
+    class State(TypedDict):
+        messages: Annotated[list, DiffChannel(add_messages)]
+
+    counter = {"n": 0}
+
+    def respond(state: State) -> dict:
+        counter["n"] += 1
+        return {"messages": [AIMessage(content=f"ai-{counter['n']}", id=f"ai-{counter['n']}")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    saver = InMemorySaver()
+    graph = builder.compile(checkpointer=saver)
+
+    config = {"configurable": {"thread_id": "diff-time-travel"}}
+
+    # Run 2 turns
+    graph.invoke({"messages": [HumanMessage(content="h1", id="h1")]}, config)
+    graph.invoke({"messages": [HumanMessage(content="h2", id="h2")]}, config)
+
+    # Collect checkpoint history
+    history = list(graph.get_state_history(config))
+    # Find the checkpoint after the first complete turn (should have 2 messages: h1 + ai-1)
+    after_turn1 = next(h for h in history if len(h.values.get("messages", [])) == 2)
+
+    assert len(after_turn1.values["messages"]) == 2
+    assert after_turn1.values["messages"][0].content == "h1"
