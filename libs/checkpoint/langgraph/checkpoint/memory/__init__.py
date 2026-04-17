@@ -126,7 +126,7 @@ class InMemorySaver(
         from langgraph.checkpoint.base import DiffChainValue
 
         channel_values: dict[str, Any] = {}
-        diff_channels: dict[str, Any] = {}
+        diff_channels: dict[str, str] = {}
 
         for k, v in versions.items():
             kk = (thread_id, checkpoint_ns, k, v)
@@ -142,9 +142,24 @@ class InMemorySaver(
             chain_deltas: list[list[Any]] = []
             base: list[Any] | None = None
             version: str | None = current_version
+            visited: set[str] = set()
             while version is not None:
+                if version in visited:
+                    logger.warning(
+                        "DiffChannel chain cycle detected at version %r for channel %r; breaking",
+                        version,
+                        k,
+                    )
+                    break
+                visited.add(version)
                 kk = (thread_id, checkpoint_ns, k, version)
                 if kk not in self.blobs:
+                    logger.warning(
+                        "DiffChannel chain is broken: blob for channel %r version %r not found; "
+                        "partial history will be returned",
+                        k,
+                        version,
+                    )
                     break
                 vv = self.blobs[kk]
                 if vv[0] == "diff":
