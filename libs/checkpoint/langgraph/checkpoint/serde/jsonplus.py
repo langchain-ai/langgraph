@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 
 def _is_diff_delta(obj: Any) -> bool:
     from langgraph.checkpoint.base import DiffDelta  # lazy import avoids circular dep
+
     return isinstance(obj, DiffDelta)
 
 
