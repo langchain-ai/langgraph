@@ -391,6 +391,45 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
+    async def _load_diff_chains_async(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        diff_channel_payloads: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        from langgraph.checkpoint.base import DiffChainValue
+
+        result: dict[str, Any] = {}
+        async with self._cursor() as cur:
+            for channel, current_payload in diff_channel_payloads.items():
+                payloads: list[dict[str, Any]] = [current_payload]
+                version_cursor: str | None = current_payload["p"]
+                base: list[Any] | None = None
+
+                while version_cursor is not None:
+                    await cur.execute(
+                        "SELECT type, blob FROM checkpoint_blobs "
+                        "WHERE thread_id = %s AND checkpoint_ns = %s "
+                        "AND channel = %s AND version = %s",
+                        (thread_id, checkpoint_ns, channel, version_cursor),
+                    )
+                    row = await cur.fetchone()
+                    if row is None:
+                        break
+                    if row["type"] == "diff":
+                        payload = self.serde.loads_typed(("diff", row["blob"]))
+                        payloads.append(payload)
+                        version_cursor = payload["p"]
+                    else:
+                        base = self.serde.loads_typed((row["type"], row["blob"]))
+                        break
+
+                payloads.reverse()
+                result[channel] = DiffChainValue(
+                    base=base, deltas=[p["d"] for p in payloads]
+                )
+        return result
+
     async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
         """
         Convert a database row into a CheckpointTuple object.
@@ -403,11 +442,32 @@ class AsyncPostgresSaver(BasePostgresSaver):
             including its configuration, metadata, parent checkpoint (if any),
             and pending writes.
         """
+        thread_id = value["thread_id"]
+        checkpoint_ns = value["checkpoint_ns"]
+        blob_values = value["channel_values"]
+
+        non_diff: dict[str, Any] = {}
+        diff_payloads: dict[str, dict[str, Any]] = {}
+        if blob_values:
+            for k, t, v in blob_values:
+                channel = k.decode()
+                type_tag = t.decode()
+                if type_tag == "diff":
+                    diff_payloads[channel] = self.serde.loads_typed((type_tag, v))
+                elif type_tag != "empty":
+                    non_diff[channel] = self.serde.loads_typed((type_tag, v))
+
+        diff_values = (
+            await self._load_diff_chains_async(thread_id, checkpoint_ns, diff_payloads)
+            if diff_payloads
+            else {}
+        )
+
         return CheckpointTuple(
             {
                 "configurable": {
-                    "thread_id": value["thread_id"],
-                    "checkpoint_ns": value["checkpoint_ns"],
+                    "thread_id": thread_id,
+                    "checkpoint_ns": checkpoint_ns,
                     "checkpoint_id": value["checkpoint_id"],
                 }
             },
@@ -415,15 +475,16 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 **value["checkpoint"],
                 "channel_values": {
                     **(value["checkpoint"].get("channel_values") or {}),
-                    **self._load_blobs(value["channel_values"]),
+                    **non_diff,
+                    **diff_values,
                 },
             },
             value["metadata"],
             (
                 {
                     "configurable": {
-                        "thread_id": value["thread_id"],
-                        "checkpoint_ns": value["checkpoint_ns"],
+                        "thread_id": thread_id,
+                        "checkpoint_ns": checkpoint_ns,
                         "checkpoint_id": value["parent_checkpoint_id"],
                     }
                 }

@@ -371,3 +371,47 @@ async def test_get_checkpoint_no_channel_values(
 
         checkpoint = await saver.aget_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+async def test_diff_channel_chain_reconstruction(saver_name: str) -> None:
+    """AsyncPostgresSaver reconstructs DiffChannel chain via point-lookup traversal."""
+    pytest.importorskip(
+        "langgraph.channels.diff", reason="langgraph core not installed"
+    )
+
+    from typing import Annotated
+
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
+    from typing_extensions import TypedDict
+
+    class State(TypedDict):
+        messages: Annotated[list, DiffChannel(add_messages)]
+
+    def respond(state: State) -> dict:
+        n = len(state["messages"])
+        return {"messages": [AIMessage(content=f"reply-{n}", id=f"ai-{n}")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+
+    async with _saver(saver_name) as saver:
+        graph = builder.compile(checkpointer=saver)
+        config = {"configurable": {"thread_id": "diff-channel-test-1"}}
+
+        await graph.ainvoke({"messages": [HumanMessage(content="hi", id="h1")]}, config)
+        await graph.ainvoke(
+            {"messages": [HumanMessage(content="there", id="h2")]}, config
+        )
+
+        state = await graph.aget_state(config)
+        msgs = state.values["messages"]
+        assert len(msgs) == 4, f"expected 4, got {len(msgs)}: {msgs}"
+        assert msgs[0].content == "hi"
+        assert msgs[1].content == "reply-1"
+        assert msgs[2].content == "there"
+        assert msgs[3].content == "reply-3"
