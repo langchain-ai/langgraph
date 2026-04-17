@@ -2124,7 +2124,10 @@ async def test_tool_runtime_forwards_execution_info_server_info_and_tools_async(
     assert captured["execution_info"].thread_id == "t-2"
     assert captured["server_info"] is server_info
     assert captured["server_info"].graph_id == "graph-2"
-    assert [tool.name for tool in captured["tools"]] == ["info_tool_async", "other_tool_async"]
+    assert [tool.name for tool in captured["tools"]] == [
+        "info_tool_async",
+        "other_tool_async",
+    ]
 
 
 # --- InjectedToolArg security tests ---
