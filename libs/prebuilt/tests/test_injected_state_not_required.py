@@ -69,6 +69,7 @@ def _create_config_with_runtime(store=None, state=None):
         context={},
         store=store,
         stream_writer=None,
+        tools=[],
         tool_call_id="test_id",
     )
     return {

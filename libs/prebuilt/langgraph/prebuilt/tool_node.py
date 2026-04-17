@@ -808,6 +808,7 @@ class ToolNode(RunnableCallable):
                 context=runtime.context,
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
+                tools=list(self.tools_by_name.values()),
                 execution_info=runtime.execution_info,
                 server_info=runtime.server_info,
             )
@@ -842,6 +843,7 @@ class ToolNode(RunnableCallable):
                 context=runtime.context,
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
+                tools=list(self.tools_by_name.values()),
                 execution_info=runtime.execution_info,
                 server_info=runtime.server_info,
             )
@@ -1576,6 +1578,7 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     - `context`: Runtime context (shared with `Runtime`)
     - `store`: `BaseStore` instance for persistent storage (shared with `Runtime`)
     - `stream_writer`: `StreamWriter` for streaming output (shared with `Runtime`)
+    - `tools`: List of all available `BaseTool` instances
 
     No `Annotated` wrapper is needed - just use `runtime: ToolRuntime`
     as a parameter.
@@ -1618,6 +1621,7 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     context: ContextT
     config: RunnableConfig
     stream_writer: StreamWriter
+    tools: list[BaseTool]
     tool_call_id: str | None
     store: BaseStore | None
     execution_info: ExecutionInfo | None = None

@@ -2016,8 +2016,8 @@ async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() 
     assert tool_message.tool_call_id == "call_dynamic_2"
 
 
-def test_tool_runtime_forwards_execution_info_and_server_info() -> None:
-    """Test that execution_info and server_info are forwarded from Runtime to ToolRuntime."""
+def test_tool_runtime_forwards_execution_info_server_info_and_tools() -> None:
+    """Test that execution_info, server_info, and tools are forwarded from Runtime to ToolRuntime."""
     from langgraph.runtime import ExecutionInfo, ServerInfo
 
     exec_info = ExecutionInfo(
@@ -2043,9 +2043,15 @@ def test_tool_runtime_forwards_execution_info_and_server_info() -> None:
         """Tool that captures runtime info."""
         captured["execution_info"] = runtime.execution_info
         captured["server_info"] = runtime.server_info
+        captured["tools"] = runtime.tools
         return "ok"
 
-    node = ToolNode([info_tool])
+    @dec_tool
+    def other_tool(y: int) -> str:
+        """Another tool available to the runtime."""
+        return str(y)
+
+    node = ToolNode([info_tool, other_tool])
     tool_call = {
         "name": "info_tool",
         "args": {"x": 1},
@@ -2054,17 +2060,21 @@ def test_tool_runtime_forwards_execution_info_and_server_info() -> None:
     }
     msg = AIMessage("", tool_calls=[tool_call])
     config: RunnableConfig = {"configurable": {"__pregel_runtime": mock_runtime}}
-    node.invoke({"messages": [msg]}, config=config)
+    result = node.invoke({"messages": [msg]}, config=config)
 
+    assert result["messages"][-1].content == "ok"
     assert captured["execution_info"] is exec_info
     assert captured["execution_info"].thread_id == "t-1"
     assert captured["execution_info"].task_id == "tk-1"
     assert captured["server_info"] is server_info
     assert captured["server_info"].assistant_id == "asst-1"
+    assert [tool.name for tool in captured["tools"]] == ["info_tool", "other_tool"]
 
 
-async def test_tool_runtime_forwards_execution_info_and_server_info_async() -> None:
-    """Test that execution_info and server_info are forwarded in async path."""
+async def test_tool_runtime_forwards_execution_info_server_info_and_tools_async() -> (
+    None
+):
+    """Test that execution_info, server_info, and tools are forwarded in async path."""
     from langgraph.runtime import ExecutionInfo, ServerInfo
 
     exec_info = ExecutionInfo(
@@ -2090,9 +2100,15 @@ async def test_tool_runtime_forwards_execution_info_and_server_info_async() -> N
         """Async tool that captures runtime info."""
         captured["execution_info"] = runtime.execution_info
         captured["server_info"] = runtime.server_info
+        captured["tools"] = runtime.tools
         return "ok"
 
-    node = ToolNode([info_tool_async])
+    @dec_tool
+    async def other_tool_async(y: int) -> str:
+        """Another async tool available to the runtime."""
+        return str(y)
+
+    node = ToolNode([info_tool_async, other_tool_async])
     tool_call = {
         "name": "info_tool_async",
         "args": {"x": 1},
@@ -2101,12 +2117,17 @@ async def test_tool_runtime_forwards_execution_info_and_server_info_async() -> N
     }
     msg = AIMessage("", tool_calls=[tool_call])
     config: RunnableConfig = {"configurable": {"__pregel_runtime": mock_runtime}}
-    await node.ainvoke({"messages": [msg]}, config=config)
+    result = await node.ainvoke({"messages": [msg]}, config=config)
 
+    assert result["messages"][-1].content == "ok"
     assert captured["execution_info"] is exec_info
     assert captured["execution_info"].thread_id == "t-2"
     assert captured["server_info"] is server_info
     assert captured["server_info"].graph_id == "graph-2"
+    assert [tool.name for tool in captured["tools"]] == [
+        "info_tool_async",
+        "other_tool_async",
+    ]
 
 
 # --- InjectedToolArg security tests ---
