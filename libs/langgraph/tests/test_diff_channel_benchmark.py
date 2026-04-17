@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import sys
 import time
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any
 
 from langchain_core.messages import AIMessage, HumanMessage
-
 from langgraph.checkpoint.memory import MemorySaver
+from typing_extensions import TypedDict
+
 from langgraph.channels.diff import DiffChannel
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
@@ -34,7 +35,9 @@ class DiffState(TypedDict):
 
 
 class DiffRehydrateState(TypedDict):
-    messages: Annotated[list, DiffChannel(add_messages, rehydrate_every=REHYDRATE_EVERY)]
+    messages: Annotated[
+        list, DiffChannel(add_messages, rehydrate_every=REHYDRATE_EVERY)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +83,9 @@ def _run_turns(n_turns: int, state_cls: type) -> tuple[float, int]:
 
     t0 = time.perf_counter()
     for i in range(n_turns):
-        graph.invoke({"messages": [HumanMessage(content=f"msg-{i}", id=f"h{i}")]}, config)
+        graph.invoke(
+            {"messages": [HumanMessage(content=f"msg-{i}", id=f"h{i}")]}, config
+        )
     elapsed = time.perf_counter() - t0
 
     blob_bytes = _total_blob_bytes(saver)
@@ -96,7 +101,9 @@ TURN_COUNTS = [10, 50, 100, 200, 500]
 
 def run_benchmark() -> None:
     print()
-    print("DiffChannel vs BinaryOperatorAggregate — checkpoint storage & time benchmark")
+    print(
+        "DiffChannel vs BinaryOperatorAggregate — checkpoint storage & time benchmark"
+    )
     w = 100
     print("=" * w)
     header = (
@@ -121,9 +128,13 @@ def run_benchmark() -> None:
 
     print("=" * w)
     print()
-    print(f"bytes_ratio = bin_bytes / diff_bytes  (higher = more storage saved)")
-    print(f"time_ratio  = diff_ms / bin_ms        (higher = more overhead without rehydration)")
-    print(f"rehy        = DiffChannel(rehydrate_every={REHYDRATE_EVERY}) — caps chain depth")
+    print("bytes_ratio = bin_bytes / diff_bytes  (higher = more storage saved)")
+    print(
+        "time_ratio  = diff_ms / bin_ms        (higher = more overhead without rehydration)"
+    )
+    print(
+        f"rehy        = DiffChannel(rehydrate_every={REHYDRATE_EVERY}) — caps chain depth"
+    )
     print()
 
 
