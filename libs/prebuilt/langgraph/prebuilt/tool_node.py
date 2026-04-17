@@ -1578,7 +1578,7 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     - `context`: Runtime context (shared with `Runtime`)
     - `store`: `BaseStore` instance for persistent storage (shared with `Runtime`)
     - `stream_writer`: `StreamWriter` for streaming output (shared with `Runtime`)
-    - `tools`: Mapping of all available tool names to `BaseTool` instances
+    - `tools`: List of all available `BaseTool` instances
 
     No `Annotated` wrapper is needed - just use `runtime: ToolRuntime`
     as a parameter.
