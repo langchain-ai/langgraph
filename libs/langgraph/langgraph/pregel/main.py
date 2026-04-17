@@ -73,6 +73,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_STREAM_MESSAGES_V2,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     ERROR,
@@ -133,7 +134,10 @@ from langgraph.pregel._loop import (
     AsyncPregelLoop,
     SyncPregelLoop,
 )
-from langgraph.pregel._messages import StreamMessagesHandler
+from langgraph.pregel._messages import (
+    StreamMessagesHandler,
+    StreamMessagesHandlerV2,
+)
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
@@ -2626,8 +2630,13 @@ class Pregel(
             # set up messages stream mode
             if "messages" in stream_modes:
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                messages_handler_cls = (
+                    StreamMessagesHandlerV2
+                    if config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
+                    else StreamMessagesHandler
+                )
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(
+                    messages_handler_cls(
                         stream.put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
@@ -3003,8 +3012,13 @@ class Pregel(
             if "messages" in stream_modes:
                 # namespace can be None in a root level graph?
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                messages_handler_cls = (
+                    StreamMessagesHandlerV2
+                    if config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
+                    else StreamMessagesHandler
+                )
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(
+                    messages_handler_cls(
                         stream_put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,

@@ -24,6 +24,11 @@ try:
 except ImportError:
     _StreamingCallbackHandler = object  # type: ignore
 
+try:
+    from langchain_core.tracers._streaming import _V2StreamingCallbackHandler
+except ImportError:
+    _V2StreamingCallbackHandler = object  # type: ignore
+
 T = TypeVar("T")
 Meta = tuple[tuple[str, ...], dict[str, Any]]
 
@@ -150,6 +155,37 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                     stream_metadata["tags"] = filtered_tags
             self.metadata[run_id] = (ns, stream_metadata)
 
+    def on_stream_event(
+        self,
+        event: dict[str, Any],
+        *,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Forward a protocol event from `stream_v2` as a messages stream part.
+
+        Fires once per `MessagesData` event (`message-start`, per-block
+        `content-block-*`, `message-finish`). The transformer layer
+        correlates events back to a single `ChatModelStream` via
+        `metadata["run_id"]` — attached here so the v1
+        `stream_mode="messages"` output (which emits
+        `(AIMessageChunk, metadata)` via `on_llm_new_token`) keeps its
+        original metadata shape.
+        """
+        if meta := self.metadata.get(run_id):
+            # Record message_id on message-start so on_chain_end's
+            # dedupe skips the finalized AIMessage the node returns
+            # (otherwise the messages projection double-counts: once
+            # from streaming, once from the chain output).
+            if event.get("event") == "message-start":
+                msg_id = event.get("message_id")
+                if msg_id:
+                    self.seen.add(msg_id)
+            v2_meta = {**meta[1], "run_id": str(run_id)}
+            self.stream((meta[0], "messages", (event, v2_meta)))
+
     def on_llm_new_token(
         self,
         token: str,
@@ -256,3 +292,41 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         self.metadata.pop(run_id, None)
+
+
+class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler):
+    """v2 variant of `StreamMessagesHandler`.
+
+    Declaring `_V2StreamingCallbackHandler` as a base flips
+    `BaseChatModel.invoke` to route through `_stream_chat_model_events`
+    (firing `on_stream_event`) instead of `_stream` (firing
+    `on_llm_new_token`). Inherits `on_stream_event` from the parent,
+    which forwards protocol events onto the messages stream channel.
+
+    Pregel attaches this class instead of the v1 handler only when
+    `StreamingHandler` opts in via the internal
+    `CONFIG_KEY_STREAM_MESSAGES_V2` config key; direct
+    `graph.stream(stream_mode="messages")` callers keep the v1
+    AIMessageChunk shape.
+    """
+
+    def on_llm_new_token(
+        self,
+        token: str,
+        *,
+        chunk: ChatGenerationChunk | None = None,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Suppress v1 chunk emission on the messages channel.
+
+        The v2 marker already steers `invoke` to the event generator,
+        so `on_llm_new_token` should not fire under normal routing.
+        This override guards against any caller (e.g. a node that
+        calls `model.stream()` directly, which still fires the v1
+        callback) leaking AIMessageChunks onto a v2-flagged messages
+        stream.
+        """
+        return None

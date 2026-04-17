@@ -6,6 +6,7 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
+from langgraph._internal._constants import CONF, CONFIG_KEY_STREAM_MESSAGES_V2
 from langgraph.pregel import Pregel
 from langgraph.stream._convert import convert_to_protocol_event
 from langgraph.stream._mux import StreamMux
@@ -13,6 +14,24 @@ from langgraph.stream._types import StreamTransformer
 from langgraph.stream.run_stream import AsyncGraphRunStream, GraphRunStream
 from langgraph.stream.transformers import MessagesTransformer, ValuesTransformer
 from langgraph.types import All, StreamMode
+
+
+def _merge_v2_messages_flag(
+    config: RunnableConfig | None,
+) -> RunnableConfig:
+    """Return a config with the v2 messages flag set in `configurable`.
+
+    Signals to pregel that `stream_mode="messages"` should attach
+    `StreamMessagesHandlerV2` for this call so invoke-time model runs
+    route through the v2 event generator and their protocol events
+    reach the messages channel.
+    """
+    merged: RunnableConfig = dict(config or {})  # type: ignore[assignment]
+    configurable = dict(merged.get(CONF) or {})
+    configurable[CONFIG_KEY_STREAM_MESSAGES_V2] = True
+    merged[CONF] = configurable
+    return merged
+
 
 # All stream modes to request from the graph.
 STREAM_V2_MODES: list[StreamMode] = [
@@ -100,7 +119,7 @@ class StreamingHandler:
         graph_iter = iter(
             self._graph.stream(
                 input,
-                config,
+                _merge_v2_messages_flag(config),
                 stream_mode=STREAM_V2_MODES,
                 subgraphs=True,
                 version="v2",
@@ -152,7 +171,7 @@ class StreamingHandler:
             try:
                 async for part in self._graph.astream(
                     input,
-                    config,
+                    _merge_v2_messages_flag(config),
                     stream_mode=STREAM_V2_MODES,
                     subgraphs=True,
                     version="v2",
