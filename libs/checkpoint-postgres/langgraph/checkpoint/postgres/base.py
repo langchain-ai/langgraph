@@ -185,15 +185,43 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         )
 
     def _load_blobs(
-        self, blob_values: list[tuple[bytes, bytes, bytes]]
+        self,
+        blob_values: list[tuple[bytes, bytes, bytes]],
+        *,
+        thread_id: str = "",
+        checkpoint_ns: str = "",
     ) -> dict[str, Any]:
         if not blob_values:
             return {}
-        return {
-            k.decode(): self.serde.loads_typed((t.decode(), v))
-            for k, t, v in blob_values
-            if t.decode() != "empty"
-        }
+
+        result: dict[str, Any] = {}
+        diff_channel_payloads: dict[str, dict[str, Any]] = {}
+
+        for k, t, v in blob_values:
+            channel = k.decode()
+            type_tag = t.decode()
+            if type_tag == "diff":
+                diff_channel_payloads[channel] = self.serde.loads_typed(
+                    (type_tag, v)
+                )
+            elif type_tag != "empty":
+                result[channel] = self.serde.loads_typed((type_tag, v))
+
+        if diff_channel_payloads:
+            result.update(
+                self._load_diff_chains(thread_id, checkpoint_ns, diff_channel_payloads)
+            )
+
+        return result
+
+    def _load_diff_chains(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        diff_channel_payloads: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Override in sync/async subclasses. Resolves diff-chain blobs to DiffChainValue."""
+        raise NotImplementedError
 
     def _dump_blobs(
         self,
