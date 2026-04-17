@@ -2044,7 +2044,7 @@ def test_tool_runtime_forwards_execution_info_server_info_and_tools() -> None:
         captured["execution_info"] = runtime.execution_info
         captured["server_info"] = runtime.server_info
         captured["tools"] = runtime.tools
-        return ",".join(sorted(runtime.tools))
+        return ",".join(sorted(tool.name for tool in runtime.tools))
 
     @dec_tool
     def other_tool(y: int) -> str:
@@ -2068,8 +2068,7 @@ def test_tool_runtime_forwards_execution_info_server_info_and_tools() -> None:
     assert captured["execution_info"].task_id == "tk-1"
     assert captured["server_info"] is server_info
     assert captured["server_info"].assistant_id == "asst-1"
-    assert captured["tools"] is node.tools_by_name
-    assert set(captured["tools"]) == {"info_tool", "other_tool"}
+    assert [tool.name for tool in captured["tools"]] == ["info_tool", "other_tool"]
 
 
 async def test_tool_runtime_forwards_execution_info_server_info_and_tools_async() -> (
@@ -2102,7 +2101,7 @@ async def test_tool_runtime_forwards_execution_info_server_info_and_tools_async(
         captured["execution_info"] = runtime.execution_info
         captured["server_info"] = runtime.server_info
         captured["tools"] = runtime.tools
-        return ",".join(sorted(runtime.tools))
+        return ",".join(sorted(tool.name for tool in runtime.tools))
 
     @dec_tool
     async def other_tool_async(y: int) -> str:
@@ -2125,8 +2124,7 @@ async def test_tool_runtime_forwards_execution_info_server_info_and_tools_async(
     assert captured["execution_info"].thread_id == "t-2"
     assert captured["server_info"] is server_info
     assert captured["server_info"].graph_id == "graph-2"
-    assert captured["tools"] is node.tools_by_name
-    assert set(captured["tools"]) == {"info_tool_async", "other_tool_async"}
+    assert [tool.name for tool in captured["tools"]] == ["info_tool_async", "other_tool_async"]
 
 
 # --- InjectedToolArg security tests ---

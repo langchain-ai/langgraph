@@ -42,7 +42,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable
 from copy import copy, deepcopy
 from dataclasses import dataclass, replace
 from types import UnionType
@@ -808,7 +808,7 @@ class ToolNode(RunnableCallable):
                 context=runtime.context,
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
-                tools=self.tools_by_name,
+                tools=self.tools,
                 execution_info=runtime.execution_info,
                 server_info=runtime.server_info,
             )
@@ -843,7 +843,7 @@ class ToolNode(RunnableCallable):
                 context=runtime.context,
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
-                tools=self.tools_by_name,
+                tools=self.tools,
                 execution_info=runtime.execution_info,
                 server_info=runtime.server_info,
             )
@@ -1621,7 +1621,7 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     context: ContextT
     config: RunnableConfig
     stream_writer: StreamWriter
-    tools: Mapping[str, BaseTool]
+    tools: list[BaseTool]
     tool_call_id: str | None
     store: BaseStore | None
     execution_info: ExecutionInfo | None = None
