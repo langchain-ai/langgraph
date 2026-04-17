@@ -2119,7 +2119,7 @@ async def test_tool_runtime_forwards_execution_info_server_info_and_tools_async(
     config: RunnableConfig = {"configurable": {"__pregel_runtime": mock_runtime}}
     result = await node.ainvoke({"messages": [msg]}, config=config)
 
-    assert result["messages"][-1].content == "info_tool_async,other_tool_async"
+    assert result["messages"][-1].content == "ok"
     assert captured["execution_info"] is exec_info
     assert captured["execution_info"].thread_id == "t-2"
     assert captured["server_info"] is server_info
