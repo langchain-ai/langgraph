@@ -64,6 +64,11 @@ def _warn_once(
     logger.warning(msg, *args)
 
 
+def _is_diff_delta(obj: Any) -> bool:
+    from langgraph.checkpoint.base import DiffDelta  # lazy import avoids circular dep
+    return isinstance(obj, DiffDelta)
+
+
 class JsonPlusSerializer(SerializerProtocol):
     """Serializer that uses ormsgpack, with optional fallbacks.
 
@@ -256,11 +261,7 @@ class JsonPlusSerializer(SerializerProtocol):
             return "bytes", obj
         elif isinstance(obj, bytearray):
             return "bytearray", obj
-        elif (
-            type(obj).__name__ == "DiffDelta"
-            and hasattr(obj, "delta")
-            and hasattr(obj, "prev_version")
-        ):
+        elif _is_diff_delta(obj):
             return "diff", _msgpack_enc({"d": obj.delta, "p": obj.prev_version})
         else:
             try:
