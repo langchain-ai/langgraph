@@ -9438,10 +9438,13 @@ async def test_diff_channel_end_to_end_inmemory() -> None:
     assert msgs[0].content == "hello"
     assert msgs[2].content == "world"
     assert msgs[4].content == "bye"
+    assert msgs[1].content == "reply-1"
+    assert msgs[3].content == "reply-3"
+    assert msgs[5].content == "reply-5"
 
 
 async def test_diff_channel_time_travel() -> None:
-    """Time-travel to an earlier checkpoint reconstructs the correct partial history."""
+    """Time-travel back to turn-1 checkpoint and resume; continuation must not include turn-2 deltas."""
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.channels.diff import DiffChannel
     from langgraph.checkpoint.memory import InMemorySaver
@@ -9465,14 +9468,27 @@ async def test_diff_channel_time_travel() -> None:
 
     config = {"configurable": {"thread_id": "diff-time-travel"}}
 
-    # Run 2 turns
+    # Run 2 turns: h1→ai-1, h2→ai-2
     graph.invoke({"messages": [HumanMessage(content="h1", id="h1")]}, config)
     graph.invoke({"messages": [HumanMessage(content="h2", id="h2")]}, config)
 
-    # Collect checkpoint history
+    # Find the checkpoint after turn 1 (2 messages: h1 + ai-1)
     history = list(graph.get_state_history(config))
-    # Find the checkpoint after the first complete turn (should have 2 messages: h1 + ai-1)
     after_turn1 = next(h for h in history if len(h.values.get("messages", [])) == 2)
 
     assert len(after_turn1.values["messages"]) == 2
     assert after_turn1.values["messages"][0].content == "h1"
+    assert after_turn1.values["messages"][1].content == "ai-1"
+
+    # Resume from turn-1 checkpoint: inject h3, expect 3 messages total (h1, ai-1, ai-N)
+    # NOT 5 messages (turn-2 deltas must not bleed into the resumed run)
+    result = graph.invoke(
+        {"messages": [HumanMessage(content="h3", id="h3")]},
+        after_turn1.config,
+    )
+    msgs = result["messages"]
+    # Should be: h1, ai-1, h3, ai-N — 4 messages total
+    assert len(msgs) == 4, f"expected 4 messages after time-travel resume, got {len(msgs)}: {msgs}"
+    assert msgs[0].content == "h1"
+    assert msgs[1].content == "ai-1"
+    assert msgs[2].content == "h3"
