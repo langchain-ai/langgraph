@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import logging
 from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
 from typing import (  # noqa: UP035
@@ -28,6 +29,24 @@ from langgraph.checkpoint.serde.types import (
 
 V = TypeVar("V", int, float, str)
 PendingWrite = tuple[str, str, Any]
+
+
+@dataclasses.dataclass
+class DiffDelta:
+    """Returned by DiffChannel.checkpoint(). Represents one step's writes."""
+
+    delta: list[Any]
+    prev_version: str | None  # version of previous diff blob; None = chain root
+
+
+@dataclasses.dataclass
+class DiffChainValue:
+    """Passed to DiffChannel.from_checkpoint(). Assembled by saver _load_blobs()."""
+
+    base: list[Any] | None  # starting accumulated value; None = start from empty
+    deltas: list[list[Any]]  # per-step write-sets, ordered oldest → newest
+
+
 logger = logging.getLogger(__name__)
 
 
