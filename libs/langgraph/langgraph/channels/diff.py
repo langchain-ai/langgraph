@@ -31,12 +31,22 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
             messages: Annotated[list[AnyMessage], DiffChannel(add_messages)]
     """
 
-    __slots__ = ("value", "operator", "_pending", "_base_version", "_overwritten")
+    __slots__ = (
+        "value",
+        "operator",
+        "rehydrate_every",
+        "_pending",
+        "_base_version",
+        "_overwritten",
+        "_steps_since_rehydrate",
+    )
 
     def __init__(
         self,
         operator: Callable[[list[Value], Any], list[Value]],
         typ: type = list,
+        *,
+        rehydrate_every: int | None = None,
     ) -> None:
         typ = _strip_extras(typ)
         if typ in (
@@ -46,6 +56,7 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
             typ = list
         super().__init__(typ)
         self.operator = operator
+        self.rehydrate_every = rehydrate_every
         try:
             self.value: list[Value] = typ()
         except Exception:
@@ -53,9 +64,12 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
         self._pending: list[Any] = []
         self._base_version: str | None = None
         self._overwritten: bool = False
+        self._steps_since_rehydrate: int = 0
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, DiffChannel):
+            return False
+        if self.rehydrate_every != other.rehydrate_every:
             return False
         if (
             self.operator.__name__ != "<lambda>"
@@ -73,16 +87,17 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
         return self.typ | list[self.typ]  # type: ignore[name-defined]
 
     def copy(self) -> Self:
-        new = DiffChannel(self.operator, self.typ)
+        new = DiffChannel(self.operator, self.typ, rehydrate_every=self.rehydrate_every)
         new.key = self.key
         new.value = self.value[:]
         new._pending = self._pending[:]
         new._base_version = self._base_version
         new._overwritten = self._overwritten
+        new._steps_since_rehydrate = self._steps_since_rehydrate
         return new
 
     def from_checkpoint(self, checkpoint: Any) -> Self:
-        new = DiffChannel(self.operator, self.typ)
+        new = DiffChannel(self.operator, self.typ, rehydrate_every=self.rehydrate_every)
         new.key = self.key
         if checkpoint is MISSING:
             new.value = []
@@ -92,6 +107,9 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
                 for write in step_writes:
                     accumulated = new.operator(accumulated, write)
             new.value = accumulated
+            # Seed the counter from actual chain depth so rehydration fires at
+            # the right time regardless of how many prior invocations there were.
+            new._steps_since_rehydrate = len(checkpoint.deltas)
         elif isinstance(checkpoint, DiffDelta):
             raise ValueError(
                 "DiffChannel received a raw DiffDelta from the checkpoint saver. "
@@ -144,7 +162,15 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
     def is_available(self) -> bool:
         return self.value is not MISSING
 
-    def checkpoint(self) -> DiffDelta:
+    def checkpoint(self) -> Any:
+        if (
+            self.rehydrate_every is not None
+            and self._steps_since_rehydrate >= self.rehydrate_every
+        ):
+            # Emit a full snapshot to cap chain depth at rehydrate_every.
+            # The saver stores this as a plain (non-diff) blob, so future
+            # deltas will chain back to it and traversal depth resets to 1.
+            return list(self.value)
         return DiffDelta(
             delta=self._pending[:],
             prev_version=None if self._overwritten else self._base_version,
@@ -152,6 +178,15 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
 
     def after_checkpoint(self, version: Any) -> None:
         if version != self._base_version:
+            if self._base_version is None:
+                # First call after from_checkpoint — anchor the base version
+                # without counting a step (the counter was seeded by from_checkpoint).
+                pass
+            elif self.rehydrate_every is not None:
+                if self._steps_since_rehydrate >= self.rehydrate_every:
+                    self._steps_since_rehydrate = 0
+                else:
+                    self._steps_since_rehydrate += 1
             self._base_version = version
             self._pending = []
             self._overwritten = False
