@@ -119,3 +119,12 @@ class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
         Returns `True` if the channel was updated, `False` otherwise.
         """
         return False
+
+    def after_checkpoint(self, version: Any) -> None:
+        """Called after checkpoint() with the assigned version, and after
+        from_checkpoint() with the current channel version.
+
+        No-op by default. Override in channels that track their own version
+        for incremental checkpointing (e.g. DiffChannel).
+        """
+        pass
