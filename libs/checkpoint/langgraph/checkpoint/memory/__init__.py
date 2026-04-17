@@ -134,7 +134,7 @@ class InMemorySaver(
                 continue
             vv = self.blobs[kk]
             if vv[0] == "diff":
-                diff_channels[k] = v
+                diff_channels[k] = str(v)
             elif vv[0] != "empty":
                 channel_values[k] = self.serde.loads_typed(vv)
 
@@ -163,7 +163,9 @@ class InMemorySaver(
                     break
                 vv = self.blobs[kk]
                 if vv[0] == "diff":
-                    payload = self.serde.loads_typed(vv)  # {"d": [...], "p": version|None}
+                    payload = self.serde.loads_typed(
+                        vv
+                    )  # {"d": [...], "p": version|None}
                     chain_deltas.append(payload["d"])
                     version = payload["p"]
                 else:

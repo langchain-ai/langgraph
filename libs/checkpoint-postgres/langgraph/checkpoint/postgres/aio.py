@@ -430,7 +430,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     break
 
             payloads.reverse()
-            result[channel] = DiffChainValue(base=base, deltas=[p["d"] for p in payloads])
+            result[channel] = DiffChainValue(
+                base=base, deltas=[p["d"] for p in payloads]
+            )
         return result
 
     async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
