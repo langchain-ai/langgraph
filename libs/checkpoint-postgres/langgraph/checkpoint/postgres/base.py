@@ -190,6 +190,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         *,
         thread_id: str = "",
         checkpoint_ns: str = "",
+        cur: Any = None,
     ) -> dict[str, Any]:
         if not blob_values:
             return {}
@@ -201,15 +202,13 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             channel = k.decode()
             type_tag = t.decode()
             if type_tag == "diff":
-                diff_channel_payloads[channel] = self.serde.loads_typed(
-                    (type_tag, v)
-                )
+                diff_channel_payloads[channel] = self.serde.loads_typed((type_tag, v))
             elif type_tag != "empty":
                 result[channel] = self.serde.loads_typed((type_tag, v))
 
         if diff_channel_payloads:
             result.update(
-                self._load_diff_chains(thread_id, checkpoint_ns, diff_channel_payloads)
+                self._load_diff_chains(thread_id, checkpoint_ns, diff_channel_payloads, cur=cur)
             )
 
         return result
@@ -219,6 +218,8 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         thread_id: str,
         checkpoint_ns: str,
         diff_channel_payloads: dict[str, dict[str, Any]],
+        *,
+        cur: Any = None,
     ) -> dict[str, Any]:
         """Override in sync/async subclasses. Resolves diff-chain blobs to DiffChainValue."""
         raise NotImplementedError
