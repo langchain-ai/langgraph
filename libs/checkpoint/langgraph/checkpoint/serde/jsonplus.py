@@ -256,6 +256,12 @@ class JsonPlusSerializer(SerializerProtocol):
             return "bytes", obj
         elif isinstance(obj, bytearray):
             return "bytearray", obj
+        elif (
+            type(obj).__name__ == "DiffDelta"
+            and hasattr(obj, "delta")
+            and hasattr(obj, "prev_version")
+        ):
+            return "diff", _msgpack_enc({"d": obj.delta, "p": obj.prev_version})
         else:
             try:
                 return "msgpack", _msgpack_enc(obj)
@@ -275,6 +281,10 @@ class JsonPlusSerializer(SerializerProtocol):
         elif type_ == "json":
             return json.loads(data_, object_hook=self._reviver)
         elif type_ == "msgpack":
+            return ormsgpack.unpackb(
+                data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+        elif type_ == "diff":
             return ormsgpack.unpackb(
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
