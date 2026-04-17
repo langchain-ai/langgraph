@@ -117,3 +117,123 @@ def test_untracked_value() -> None:
     new_channel = UntrackedValue(dict).from_checkpoint(checkpoint)
     with pytest.raises(EmptyChannelError):
         new_channel.get()
+
+
+def test_diff_channel_basic_two_steps() -> None:
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.base import DiffDelta
+
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.graph.message import add_messages
+
+    ch = DiffChannel(add_messages).from_checkpoint(MISSING)
+    ch.after_checkpoint(None)
+
+    # Step 1: one message added
+    ch.update([HumanMessage(content="hi", id="h1")])
+    d1 = ch.checkpoint()
+    assert isinstance(d1, DiffDelta)
+    assert len(d1.delta) == 1
+    assert d1.prev_version is None  # first ever step
+    ch.after_checkpoint("v1")
+
+    # Step 2: another message
+    ch.update([AIMessage(content="hello", id="a1")])
+    d2 = ch.checkpoint()
+    assert d2.prev_version == "v1"
+    assert len(d2.delta) == 1
+    ch.after_checkpoint("v2")
+
+    # Full accumulated value is preserved in memory
+    assert len(ch.get()) == 2
+    assert ch.get()[0].content == "hi"
+    assert ch.get()[1].content == "hello"
+
+
+def test_diff_channel_after_checkpoint_no_op_when_unchanged() -> None:
+    from langchain_core.messages import HumanMessage
+
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.graph.message import add_messages
+
+    ch = DiffChannel(add_messages).from_checkpoint(MISSING)
+    ch.after_checkpoint(None)
+    ch.update([HumanMessage(content="hi", id="h1")])
+    ch.after_checkpoint("v1")
+
+    # Same version: no-op
+    ch.after_checkpoint("v1")
+    assert ch._base_version == "v1"
+    assert ch._pending == []
+
+
+def test_diff_channel_from_checkpoint_chain() -> None:
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.base import DiffChainValue
+
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.graph.message import add_messages
+
+    spec = DiffChannel(add_messages)
+    chain = DiffChainValue(
+        base=None,
+        deltas=[
+            [HumanMessage(content="hi", id="h1")],
+            [AIMessage(content="hello", id="a1")],
+            [HumanMessage(content="bye", id="h2")],
+        ],
+    )
+    ch = spec.from_checkpoint(chain)
+    msgs = ch.get()
+    assert len(msgs) == 3
+    assert msgs[0].content == "hi"
+    assert msgs[1].content == "hello"
+    assert msgs[2].content == "bye"
+
+
+def test_diff_channel_from_checkpoint_backwards_compat() -> None:
+    from langchain_core.messages import HumanMessage
+
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.graph.message import add_messages
+
+    # Old BinaryOperatorAggregate checkpoint: plain list
+    spec = DiffChannel(add_messages)
+    old_value = [HumanMessage(content="old", id="h1")]
+    ch = spec.from_checkpoint(old_value)
+    assert ch.get() == old_value
+
+
+def test_diff_channel_overwrite_resets_chain() -> None:
+    from langchain_core.messages import HumanMessage
+    from langgraph.checkpoint.base import DiffDelta
+
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.graph.message import add_messages
+    from langgraph.types import Overwrite
+
+    ch = DiffChannel(add_messages).from_checkpoint(MISSING)
+    ch.after_checkpoint(None)
+    ch.update([HumanMessage(content="old", id="h1")])
+    ch.after_checkpoint("v1")
+
+    # Overwrite should create a root blob (prev_version=None)
+    ch.update([Overwrite([HumanMessage(content="new", id="h2")])])
+    d = ch.checkpoint()
+    assert isinstance(d, DiffDelta)
+    assert d.prev_version is None  # chain root
+    assert len(d.delta) == 1
+    assert d.delta[0].content == "new"
+
+
+def test_diff_channel_unsupported_saver_raises() -> None:
+    from langgraph.checkpoint.base import DiffDelta
+
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.graph.message import add_messages
+
+    # If a saver returns a raw DiffDelta (unsupported), from_checkpoint raises
+    spec = DiffChannel(add_messages)
+    raw_delta = DiffDelta(delta=[], prev_version=None)
+    with pytest.raises(ValueError, match="DiffChannel received a raw DiffDelta"):
+        spec.from_checkpoint(raw_delta)
