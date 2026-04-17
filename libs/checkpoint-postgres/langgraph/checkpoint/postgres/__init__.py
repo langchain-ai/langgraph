@@ -430,6 +430,46 @@ class PostgresSaver(BasePostgresSaver):
                 with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
+    def _load_diff_chains(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        diff_channel_payloads: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        from langgraph.checkpoint.base import DiffChainValue
+
+        result: dict[str, Any] = {}
+        with self._cursor() as cur:
+            for channel, current_payload in diff_channel_payloads.items():
+                payloads: list[dict[str, Any]] = [current_payload]
+                version_cursor: str | None = current_payload["p"]
+                base: list[Any] | None = None
+
+                while version_cursor is not None:
+                    cur.execute(
+                        "SELECT type, blob FROM checkpoint_blobs "
+                        "WHERE thread_id = %s AND checkpoint_ns = %s "
+                        "AND channel = %s AND version = %s",
+                        (thread_id, checkpoint_ns, channel, version_cursor),
+                    )
+                    row = cur.fetchone()
+                    if row is None:
+                        break
+                    # row is a dict (dict_row factory): {"type": str, "blob": bytes}
+                    if row["type"] == "diff":
+                        payload = self.serde.loads_typed(("diff", row["blob"]))
+                        payloads.append(payload)
+                        version_cursor = payload["p"]
+                    else:
+                        base = self.serde.loads_typed((row["type"], row["blob"]))
+                        break
+
+                payloads.reverse()
+                result[channel] = DiffChainValue(
+                    base=base, deltas=[p["d"] for p in payloads]
+                )
+        return result
+
     def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
         """
         Convert a database row into a CheckpointTuple object.
@@ -454,7 +494,11 @@ class PostgresSaver(BasePostgresSaver):
                 **value["checkpoint"],
                 "channel_values": {
                     **(value["checkpoint"].get("channel_values") or {}),
-                    **self._load_blobs(value["channel_values"]),
+                    **self._load_blobs(
+                        value["channel_values"],
+                        thread_id=value["thread_id"],
+                        checkpoint_ns=value["checkpoint_ns"],
+                    ),
                 },
             },
             value["metadata"],
