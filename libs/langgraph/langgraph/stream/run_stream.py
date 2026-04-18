@@ -64,14 +64,23 @@ class GraphRunStream:
         self._wire_request_more(mux)
 
     def _wire_request_more(self, mux: StreamMux) -> None:
-        """Install `_request_more` on every sync EventLog so cursors
-        can drive the pump when their buffer catches up."""
+        """Install `_request_more` on every sync EventLog so cursors can
+        drive the pump when their buffer catches up.
+
+        Also calls `_bind_pump` on any transformer that exposes it, so
+        transformers producing ChatModelStream objects (e.g.
+        MessagesTransformer) can wire the pull callback on each stream
+        as it's created.
+        """
         mux._events._request_more = self._pump_next
         for value in mux.extensions.values():
             if isinstance(value, EventLog):
                 value._request_more = self._pump_next
             elif isinstance(value, StreamChannel):
                 value._log._request_more = self._pump_next
+        for transformer in mux._transformers:
+            if hasattr(transformer, "_bind_pump"):
+                transformer._bind_pump(self._pump_next)
 
     def _pump_next(self) -> bool:
         """Pull one event from the graph and push it through the mux.
@@ -261,13 +270,23 @@ class AsyncGraphRunStream:
 
     def _wire_arequest_more(self, mux: StreamMux) -> None:
         """Install `_arequest_more` on every async EventLog so cursors
-        can drive the pump when their buffer catches up."""
+        can drive the pump when their buffer catches up.
+
+        Also calls `_bind_apump` on any transformer that exposes it,
+        so transformers producing `AsyncChatModelStream` objects (e.g.
+        `MessagesTransformer`) can fan the pull callback out to each
+        stream's projections. Mirrors the sync `_wire_request_more`
+        plumbing.
+        """
         mux._events._arequest_more = self._apump_next
         for value in mux.extensions.values():
             if isinstance(value, EventLog):
                 value._arequest_more = self._apump_next
             elif isinstance(value, StreamChannel):
                 value._log._arequest_more = self._apump_next
+        for transformer in mux._transformers:
+            if hasattr(transformer, "_bind_apump"):
+                transformer._bind_apump(self._apump_next)
 
     async def _apump_next(self) -> bool:
         """Pull one event from the graph and push it through the mux.

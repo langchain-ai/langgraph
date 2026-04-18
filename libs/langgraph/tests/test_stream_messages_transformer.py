@@ -103,6 +103,10 @@ def _make_sync_transformer() -> tuple[MessagesTransformer, EventLog[ChatModelStr
     proj = t.init()
     log: EventLog[ChatModelStream] = proj["messages"]
     log._bind(is_async=False)
+    # Production subscribes via `iter(log)` from the graph consumer — do that
+    # up front so `push` during `process` isn't a no-op. Tests read buffered
+    # items via `log._items` directly rather than re-iterating.
+    log._subscribed = True
     t._bind_pump(lambda: False)
     return t, log
 
@@ -112,6 +116,7 @@ def _make_async_transformer() -> tuple[MessagesTransformer, EventLog[ChatModelSt
     proj = t.init()
     log: EventLog[ChatModelStream] = proj["messages"]
     log._bind(is_async=True)
+    log._subscribed = True
     return t, log
 
 
@@ -167,7 +172,7 @@ class TestProtocolEventRouting:
         )
         # Stream is in the log immediately.
         log.close()
-        streams = list(log)
+        streams = list(log._items)
         assert len(streams) == 1
         assert isinstance(streams[0], ChatModelStream)
         assert streams[0].message_id == "run-1"
@@ -177,7 +182,7 @@ class TestProtocolEventRouting:
         for evt in _lifecycle(text="hello world"):
             t.process(_proto_event(evt, run_id="run-1"))
         log.close()
-        (stream,) = list(log)
+        (stream,) = list(log._items)
         assert stream.done
         assert stream.output.content == "hello world"
 
@@ -201,7 +206,7 @@ class TestProtocolEventRouting:
             )
         )
         log.close()
-        assert list(log) == []
+        assert list(log._items) == []
 
     def test_concurrent_streams_routed_by_run_id(self) -> None:
         """Two interleaved LLM calls each produce their own stream."""
@@ -213,7 +218,7 @@ class TestProtocolEventRouting:
             t.process(_proto_event(a, run_id="run-a"))
             t.process(_proto_event(b, run_id="run-b"))
         log.close()
-        streams = list(log)
+        streams = list(log._items)
         assert len(streams) == 2
         by_id = {s.message_id: s for s in streams}
         assert by_id["run-a"].output.content == "aaaa"
@@ -224,7 +229,7 @@ class TestProtocolEventRouting:
         for evt in _lifecycle(text="abcdef"):
             t.process(_proto_event(evt))
         log.close()
-        (stream,) = list(log)
+        (stream,) = list(log._items)
         deltas = list(stream._text_proj._deltas)
         assert "".join(deltas) == "abcdef"
 
@@ -264,7 +269,7 @@ class TestWholeMessageFallback:
         t, log = _make_sync_transformer()
         t.process(_whole_msg("the full answer"))
         log.close()
-        (stream,) = list(log)
+        (stream,) = list(log._items)
         assert stream.done
         assert stream.output.content == "the full answer"
 
@@ -272,7 +277,7 @@ class TestWholeMessageFallback:
         t, log = _make_sync_transformer()
         t.process(_whole_msg("full"))
         log.close()
-        (stream,) = list(log)
+        (stream,) = list(log._items)
         event_types = [e["event"] for e in stream._events]
         assert event_types == [
             "message-start",
@@ -294,7 +299,7 @@ class TestLegacyChunksIgnored:
         t.process(_v1_chunk("hello"))
         t.process(_v1_chunk(" world", finish=True))
         log.close()
-        assert list(log) == []
+        assert list(log._items) == []
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +334,7 @@ class TestFiltering:
             }
         )
         log.close()
-        assert list(log) == []
+        assert list(log._items) == []
 
 
 # ---------------------------------------------------------------------------
@@ -427,11 +432,12 @@ class TestWireRequestMore:
         mux = StreamMux([values_t, messages_t], is_async=False)
 
         GraphRunStream(iter([]), mux, values_t)
+        log: EventLog[ChatModelStream] = mux.extensions["messages"]
+        log._subscribed = True
 
         for evt in _lifecycle():
             messages_t.process(_proto_event(evt))
 
-        log: EventLog[ChatModelStream] = mux.extensions["messages"]
         (stream,) = list(log._items)
         # Pump was threaded through: the stream's _request_more points at
         # the same callable the transformer was bound with.
@@ -449,13 +455,15 @@ class TestViaMux:
         v = ValuesTransformer()
         mux = StreamMux([v, t], is_async=False)
         t._bind_pump(lambda: False)
+        log: EventLog[ChatModelStream] = mux.extensions["messages"]
+        # Simulate a consumer subscribing (as `run.messages` iteration would).
+        log._subscribed = True
 
         for evt in _lifecycle(text="mux stream"):
             mux.push(_proto_event(evt))
         mux.close()
 
-        log: EventLog[ChatModelStream] = mux.extensions["messages"]
-        (stream,) = list(log)
+        (stream,) = list(log._items)
         assert stream.output.content == "mux stream"
 
     def test_whole_message_via_mux(self) -> None:
@@ -463,12 +471,13 @@ class TestViaMux:
         v = ValuesTransformer()
         mux = StreamMux([v, t], is_async=False)
         t._bind_pump(lambda: False)
+        log: EventLog[ChatModelStream] = mux.extensions["messages"]
+        log._subscribed = True
 
         mux.push(_whole_msg("result"))
         mux.close()
 
-        log: EventLog[ChatModelStream] = mux.extensions["messages"]
-        (stream,) = list(log)
+        (stream,) = list(log._items)
         assert stream.output.content == "result"
 
     @pytest.mark.anyio
@@ -476,11 +485,12 @@ class TestViaMux:
         t = MessagesTransformer()
         v = ValuesTransformer()
         mux = StreamMux([v, t], is_async=True)
+        log: EventLog[ChatModelStream] = mux.extensions["messages"]
+        log._subscribed = True
 
         for evt in _lifecycle(text="async mux"):
             await mux.apush(_proto_event(evt))
 
-        log: EventLog[ChatModelStream] = mux.extensions["messages"]
         streams = list(log._items)
         assert len(streams) == 1
         msg = await streams[0].output
@@ -604,6 +614,45 @@ class TestEndToEnd:
         assert isinstance(streams[0], AsyncChatModelStream)
         msg = await streams[0].output
         assert msg.content == "async answer"
+
+    @pytest.mark.anyio
+    async def test_nested_async_iteration_yields_text_deltas(self) -> None:
+        """Iterate `stream.text` inside `async for stream in run.messages`.
+
+        The inner `stream.text` cursor drives the shared graph pump via
+        `AsyncProjection._arequest_more`, wired by
+        `MessagesTransformer._bind_apump` and
+        `AsyncGraphRunStream._wire_arequest_more`.
+        """
+        import asyncio
+
+        model = GenericFakeChatModel(messages=iter(["hello world"]))
+
+        async def call_model(state: MessagesState) -> dict[str, Any]:
+            stream = await model.astream_v2(state["messages"])
+            msg = await stream
+            return {"messages": msg}
+
+        graph = (
+            StateGraph(MessagesState)
+            .add_node("call_model", call_model)
+            .add_edge(START, "call_model")
+            .add_edge("call_model", END)
+            .compile()
+        )
+
+        handler = StreamingHandler(graph)
+        run = await handler.astream({"messages": "hi"})
+
+        async def consume_nested() -> list[str]:
+            collected: list[str] = []
+            async for stream in run.messages:
+                async for delta in stream.text:
+                    collected.append(delta)
+            return collected
+
+        deltas = await asyncio.wait_for(consume_nested(), timeout=2.0)
+        assert "".join(deltas) == "hello world"
 
 
 class TestEndToEndV2Invoke:
