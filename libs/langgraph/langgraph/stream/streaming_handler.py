@@ -19,31 +19,32 @@ from langgraph.types import All, StreamMode
 
 
 def _coerce_factories(
-    transformers: list[StreamTransformer | TransformerFactory] | None,
+    transformers: list[TransformerFactory] | None,
 ) -> list[TransformerFactory]:
-    """Normalize caller-supplied transformers into scope-taking factories.
+    """Validate caller-supplied factories.
 
-    Accepts already-built instances (wrapped as single-use factories,
-    with the caveat that they won't be re-instantiated in subgraph
-    mini-muxes) or proper factories (classes / callables taking a
-    scope). The built-in root transformers are always factories so
-    they propagate into every subgraph scope automatically.
+    Each factory must be callable — a transformer class (which accepts
+    a positional `scope` argument) or a callable that returns a fresh
+    instance per scope. Already-built instances are rejected because
+    they can't be re-instantiated in subgraph mini-muxes, which would
+    silently disable per-subagent scoping for that transformer.
     """
-
-    def _wrap_instance(t: StreamTransformer) -> TransformerFactory:
-        # Single-use: only wires at root scope. A user that wants
-        # subgraph propagation should pass the class (or a lambda).
-        def _factory(_scope: tuple[str, ...]) -> StreamTransformer:
-            return t
-
-        return _factory
-
     coerced: list[TransformerFactory] = []
     for item in transformers or ():
         if isinstance(item, StreamTransformer):
-            coerced.append(_wrap_instance(item))
-        else:
-            coerced.append(item)
+            raise TypeError(
+                "StreamingHandler.transformers takes factories, not "
+                "pre-built instances. Pass the transformer class "
+                "(e.g. `MyTransformer`) or a callable taking `scope` "
+                "(e.g. `lambda scope: MyTransformer(scope, foo=...)`), "
+                "so fresh instances can be built for each subgraph."
+            )
+        if not callable(item):
+            raise TypeError(
+                f"StreamingHandler.transformers entries must be callable; "
+                f"got {type(item).__name__}."
+            )
+        coerced.append(item)
     return coerced
 
 
@@ -121,7 +122,7 @@ class StreamingHandler:
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        transformers: list[StreamTransformer | TransformerFactory] | None = None,
+        transformers: list[TransformerFactory] | None = None,
     ) -> GraphRunStream:
         """Start a sync streaming run.
 
@@ -169,7 +170,7 @@ class StreamingHandler:
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        transformers: list[StreamTransformer | TransformerFactory] | None = None,
+        transformers: list[TransformerFactory] | None = None,
     ) -> AsyncGraphRunStream:
         """Start an async streaming run.
 

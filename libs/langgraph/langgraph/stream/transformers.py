@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from langchain_core.language_models._compat_bridge import message_to_events
@@ -19,6 +20,9 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from langgraph.stream._mux import StreamMux
+
+
+logger = logging.getLogger(__name__)
 
 
 SubgraphStatus = Literal["started", "running", "completed", "failed", "interrupted"]
@@ -256,14 +260,9 @@ class SubgraphRunStream(BaseRunStream):
     the same transformer factories as the root mux, so `.values`,
     `.messages`, `.subgraphs` are populated by the standard
     transformers scoped to this handle's namespace — no duplicated
-    routing logic.
-
-    Inherits `BaseRunStream`, so all shared shape works uniformly:
-    raw iteration (`for event in sub`), `.interleave(...)`, native
-    projection attributes, and the `extensions` mapping — identical
-    to the root `GraphRunStream`. The mini-mux borrows the root's
-    pump via `make_child`'s pump inheritance, so any cursor on a
-    subagent projection drives the whole run forward.
+    routing logic. The mini-mux borrows the root's pump via
+    `make_child`'s pump inheritance, so any cursor on a subagent
+    projection drives the whole run forward.
 
     Lifecycle fields update in place as events arrive:
 
@@ -368,8 +367,11 @@ class SubgraphTransformer(StreamTransformer):
             if data.get("event") == "started":
                 self._on_started(ns, data)
 
-        # 2. Forward the event to the matching direct-child mini-mux.
-        #    Prefix-match: ns must start with some child's path.
+        # 2. Forward the event to the matching direct-child mini-mux
+        #    before the status-change step below so that terminal events
+        #    reach the child's log and grandchild transformers *before*
+        #    the child's mini-mux is closed. Prefix-match: ns must start
+        #    with some child's path.
         direct_child_ns = ns[: depth + 1] if len(ns) > depth else None
         if direct_child_ns is not None and direct_child_ns in self._by_ns:
             self._by_ns[direct_child_ns]._mux.push(event)
@@ -394,9 +396,13 @@ class SubgraphTransformer(StreamTransformer):
         if ns in self._by_ns:
             # Duplicate started — ignore.
             return
-        if self._mux is None:
-            # Not registered yet; can't build a mini-mux.
-            return
+        # `_on_register` is called by the mux during registration, which
+        # happens before any event can be dispatched — so this should
+        # always be set by the time we process an event.
+        assert self._mux is not None, (
+            "SubgraphTransformer processed an event before _on_register; "
+            "transformer registration ordering is broken."
+        )
         child_mux = self._mux.make_child(ns)
         handle = SubgraphRunStream(
             path=ns,
@@ -432,7 +438,12 @@ class SubgraphTransformer(StreamTransformer):
             try:
                 handle._mux.close()
             except Exception:
-                pass
+                logger.warning(
+                    "Error closing subgraph mini-mux at %s; subscribers "
+                    "may not see a clean close.",
+                    handle.path,
+                    exc_info=True,
+                )
 
     def finalize(self) -> None:
         """Transition any still-open direct children to `completed`."""
@@ -455,4 +466,9 @@ class SubgraphTransformer(StreamTransformer):
                 try:
                     handle._mux.fail(err)
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Error failing subgraph mini-mux at %s; subscribers "
+                        "may not see the terminal error.",
+                        handle.path,
+                        exc_info=True,
+                    )

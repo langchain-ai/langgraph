@@ -28,21 +28,17 @@ async def _adrive_until_done(pump: Callable[[], Awaitable[bool]]) -> None:
 class BaseRunStream:
     """Shared shape for any object that wraps a `StreamMux`.
 
-    Both the root `GraphRunStream` / `AsyncGraphRunStream` and the
-    scoped `SubgraphRunStream` compose a `StreamMux` and expose its
-    projections (`values`, `messages`, `subgraphs`, user-registered
-    keys). The root additionally owns the graph iterator and drives
-    the pump; a subgraph's mini-mux borrows the root pump via
-    `make_child`'s pump inheritance.
+    Root (`GraphRunStream` / `AsyncGraphRunStream`) and scoped
+    (`SubgraphRunStream`) streams both compose a `StreamMux`. The mux
+    owns the projections — `values`, `messages`, `subgraphs`, and any
+    user-registered keys — all exposed via `extensions`. Native
+    projections (`_native = True`) are also bound as direct attributes
+    (`run.values`, `run.messages`, …) for ergonomics.
 
-    Projections registered on the mux show up in `extensions`, and
-    native ones (those with `_native = True`) are also bound directly
-    as attributes (`run.values`, `run.messages`, …).
-
-    Raw iteration (`for event in run:` / `async for event in run`)
-    yields every `ProtocolEvent` that reached this mux's main log —
-    for the root that's every event in the run, for a subgraph that's
-    every event forwarded into its subtree.
+    Raw iteration (`for event in run` / `async for event in run`) and
+    the `interleave(...)` helper both live here so every subclass
+    behaves consistently. Subclasses only add pump ownership, scope
+    metadata, or sync/async flavor.
     """
 
     def __init__(self, mux: StreamMux) -> None:

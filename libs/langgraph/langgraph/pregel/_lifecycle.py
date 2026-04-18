@@ -22,7 +22,12 @@ T = TypeVar("T")
 _LANGGRAPH_SENTINEL_NODES = frozenset({"__start__", "__end__"})
 
 
-def _is_nested_pregel_start(name: str | None, metadata: dict[str, Any] | None) -> bool:
+def _is_nested_pregel_start(
+    name: str | None,
+    metadata: dict[str, Any] | None,
+    parent_run_id: UUID | None,
+    task_run_ids: set[UUID],
+) -> bool:
     """Recognize a nested `Pregel` invocation from its `on_chain_start` metadata.
 
     When a compiled graph is added as a node, pregel fires two
@@ -31,12 +36,21 @@ def _is_nested_pregel_start(name: str | None, metadata: dict[str, Any] | None) -
     the inner `Pregel` chain (whose `name` is the graph's `name`, not
     the node name). Both share the same `langgraph_checkpoint_ns`.
 
-    A nested `Pregel` start is therefore identified by having a
-    `langgraph_checkpoint_ns` AND a `name` that does NOT match the
-    owning task's `langgraph_node`. Regular node chains are skipped;
-    the root `Pregel` (which has no `langgraph_node` metadata) isn't
-    observed by this handler because the root's start fires before the
-    handler is attached.
+    Primary signal: a `langgraph_checkpoint_ns` is set AND `name`
+    differs from the owning task's `langgraph_node`. This covers the
+    common case where the compiled subgraph's name differs from the
+    node name it was registered under.
+
+    Fallback for name collisions (subgraph compiled with
+    `name == node_name`): the inner `Pregel` start's `parent_run_id`
+    is the run_id of the node chain's start event, which the handler
+    records in `task_run_ids` on the first start. Matching
+    `parent_run_id` to that set identifies the second start as the
+    nested `Pregel` even when names coincide.
+
+    Regular node chains are skipped; the root `Pregel` (which has no
+    `langgraph_node` metadata) isn't observed by this handler because
+    the root's start fires before the handler is attached.
 
     Metadata-based detection is used because `on_chain_start`'s
     `serialized` argument is `None` for compiled graphs in this
@@ -48,6 +62,13 @@ def _is_nested_pregel_start(name: str | None, metadata: dict[str, Any] | None) -
     and the router function's name as `name`, which would otherwise
     match the discriminator without representing an actual nested
     `Pregel`.
+
+    Args:
+        name: The `name` kwarg from `on_chain_start`.
+        metadata: The `metadata` kwarg from `on_chain_start`.
+        parent_run_id: The `parent_run_id` kwarg from `on_chain_start`.
+        task_run_ids: The set of run_ids the handler has already seen
+            as node-chain starts (i.e. `name == langgraph_node`).
     """
     if not metadata:
         return False
@@ -56,7 +77,12 @@ def _is_nested_pregel_start(name: str | None, metadata: dict[str, Any] | None) -
     lg_node = metadata.get("langgraph_node")
     if lg_node is None or lg_node in _LANGGRAPH_SENTINEL_NODES:
         return False
-    return name != lg_node
+    if name != lg_node:
+        return True
+    # Name collision fallback: the inner Pregel's parent_run_id is
+    # the node chain's run_id, which we recorded when that node
+    # chain's start fired.
+    return parent_run_id is not None and parent_run_id in task_run_ids
 
 
 class StreamLifecycleHandler(BaseCallbackHandler, _StreamingCallbackHandler):
@@ -98,6 +124,10 @@ class StreamLifecycleHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         self._pending_running: set[tuple[str, ...]] = set()
         # run_id → subgraph namespace; populated only for Pregel chains.
         self._run_to_ns: dict[UUID, tuple[str, ...]] = {}
+        # run_ids of node-chain starts (name == langgraph_node); used
+        # as the parent_run_id fallback when a subgraph's name equals
+        # its node name. Cleared as each chain ends.
+        self._task_run_ids: set[UUID] = set()
 
         root_payload: dict[str, Any] = {"event": "started"}
         if root_graph_name is not None:
@@ -193,7 +223,21 @@ class StreamLifecycleHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         self._fire_running_if_pending(containing)
 
         name = cast(str | None, kwargs.get("name"))
-        if not _is_nested_pregel_start(name, metadata):
+        lg_node = (metadata or {}).get("langgraph_node")
+
+        # Record node-chain starts so the name-collision fallback in
+        # `_is_nested_pregel_start` can match the inner Pregel's
+        # parent_run_id to them.
+        if (
+            lg_node is not None
+            and lg_node not in _LANGGRAPH_SENTINEL_NODES
+            and name == lg_node
+        ):
+            self._task_run_ids.add(run_id)
+
+        if not _is_nested_pregel_start(
+            name, metadata, parent_run_id, self._task_run_ids
+        ):
             return
 
         ns = self._subgraph_ns_from_metadata(metadata)
@@ -218,6 +262,7 @@ class StreamLifecycleHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
+        self._task_run_ids.discard(run_id)
         ns = self._run_to_ns.pop(run_id, None)
         if ns is None:
             return
@@ -235,6 +280,7 @@ class StreamLifecycleHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
+        self._task_run_ids.discard(run_id)
         ns = self._run_to_ns.pop(run_id, None)
         if ns is None:
             return

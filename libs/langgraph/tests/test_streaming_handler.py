@@ -1107,7 +1107,10 @@ class TestCustomTransformer:
         graph = _build_simple_graph()
         handler = StreamingHandler(graph)
         counter_t = CounterTransformer()
-        run = handler.stream({"value": "x", "items": []}, transformers=[counter_t])
+        run = handler.stream(
+            {"value": "x", "items": []},
+            transformers=[lambda _scope: counter_t],
+        )
         assert "counter" in run.extensions
         # Subscribe before driving the run so channel pushes are retained.
         counter_iter = iter(run.extensions["counter"])
@@ -1138,7 +1141,10 @@ class TestCustomTransformer:
         graph = _build_simple_graph()
         handler = StreamingHandler(graph)
         foo_t = FooTransformer()
-        run = handler.stream({"value": "x", "items": []}, transformers=[foo_t])
+        run = handler.stream(
+            {"value": "x", "items": []},
+            transformers=[lambda _scope: foo_t],
+        )
         # Subscribe before driving the run.
         foo_iter = iter(run.foo)
         _ = run.output
@@ -1168,7 +1174,8 @@ class TestCustomTransformer:
         graph = _build_simple_graph()
         handler = StreamingHandler(graph)
         run = handler.stream(
-            {"value": "x", "items": []}, transformers=[EmitterTransformer()]
+            {"value": "x", "items": []},
+            transformers=[lambda _scope: EmitterTransformer()],
         )
         events = list(run)
         custom_events = [e for e in events if e["method"] == "custom:emitter"]
@@ -1232,7 +1239,7 @@ class TestCustomTransformer:
         ):
             handler.stream(
                 {"value": "x", "items": []},
-                transformers=[ConflictTransformer()],
+                transformers=[lambda _scope: ConflictTransformer()],
             )
 
 
@@ -1329,7 +1336,10 @@ class TestEventLogAutoLifecycle:
         graph = _build_simple_graph()
         handler = StreamingHandler(graph)
         t = MinimalTransformer()
-        run = handler.stream({"value": "x", "items": []}, transformers=[t])
+        run = handler.stream(
+            {"value": "x", "items": []},
+            transformers=[lambda _scope: t],
+        )
         minimal_iter = iter(run.extensions["minimal"])
         _ = run.output
         items = list(minimal_iter)
@@ -1629,9 +1639,10 @@ class TestAsyncTransformerLane:
 
         graph = _build_simple_graph()
         handler = StreamingHandler(graph)
+        scorer = Scorer()
         run = await handler.astream(
             {"value": "x", "items": []},
-            transformers=[Scorer()],
+            transformers=[lambda _scope: scorer],
         )
         # Subscribe before driving the run so scheduled pushes are retained.
         scores_cursor = aiter(run.extensions["scores"])

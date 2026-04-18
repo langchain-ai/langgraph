@@ -7,6 +7,7 @@ import time
 from typing import Annotated, Any
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
 from langgraph.constants import END, START
@@ -22,6 +23,7 @@ from langgraph.stream.transformers import (
     SubgraphTransformer,
     ValuesTransformer,
 )
+from langgraph.types import interrupt
 
 TS = int(time.time() * 1000)
 
@@ -364,4 +366,96 @@ class TestSubgraphTransformerAsyncEndToEnd:
 
         assert len(collected) == 1
         child = collected[0]
+        assert child.status == "completed"
+
+
+class TestSubgraphTriggerCallId:
+    """Confirm `trigger_call_id` flows from real pregel metadata."""
+
+    def test_trigger_call_id_populated_end_to_end(self) -> None:
+        graph = _build_nested_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "", "items": []})
+
+        collected: list[SubgraphRunStream] = list(run.subgraphs)
+        assert len(collected) == 1
+        child = collected[0]
+
+        # The child's single-segment path encodes `node_name:task_id`.
+        # Both the parsed task_id (`trigger_call_id`) and the segment
+        # should match the same task_id suffix.
+        assert ":" in child.path[0]
+        node_name, _, task_id = child.path[0].partition(":")
+        assert node_name == "sub"
+        assert task_id  # non-empty
+        assert child.trigger_call_id == task_id
+
+
+class TestSubgraphInterrupt:
+    """Interrupts raised inside a subgraph surface as status=interrupted."""
+
+    def _build_interrupt_subgraph(self):
+        def inner_node(state: SimpleState) -> dict:
+            interrupt("need approval")
+            return {"value": state["value"] + "X", "items": ["x"]}
+
+        inner_builder = StateGraph(SimpleState)
+        inner_builder.add_node("inner_node", inner_node)
+        inner_builder.add_edge(START, "inner_node")
+        inner_builder.add_edge("inner_node", END)
+        inner = inner_builder.compile()
+
+        outer_builder = StateGraph(SimpleState)
+        outer_builder.add_node("sub", inner)
+        outer_builder.add_edge(START, "sub")
+        outer_builder.add_edge("sub", END)
+        return outer_builder.compile(checkpointer=InMemorySaver())
+
+    def test_interrupt_in_subgraph_marks_handle_interrupted(self) -> None:
+        graph = self._build_interrupt_subgraph()
+        handler = StreamingHandler(graph)
+        run = handler.stream(
+            {"value": "", "items": []},
+            config={"configurable": {"thread_id": "t1"}},
+        )
+
+        collected: list[SubgraphRunStream] = list(run.subgraphs)
+
+        assert run.interrupted is True
+        assert len(collected) == 1
+        assert collected[0].status == "interrupted"
+
+
+class TestSubgraphNameCollision:
+    """The subgraph's compiled `name` equaling its node name is detected.
+
+    Primary detector `name != langgraph_node` fails here; the
+    parent_run_id fallback in `_is_nested_pregel_start` is what keeps
+    the subgraph visible.
+    """
+
+    def test_name_equals_node_name_still_detected(self) -> None:
+        def inner_node(state: SimpleState) -> dict:
+            return {"value": state["value"] + "X", "items": ["x"]}
+
+        inner_builder = StateGraph(SimpleState)
+        inner_builder.add_node("inner_node", inner_node)
+        inner_builder.add_edge(START, "inner_node")
+        inner_builder.add_edge("inner_node", END)
+        # Compile with the same name as the node it will be registered as.
+        inner = inner_builder.compile(name="sub")
+
+        outer_builder = StateGraph(SimpleState)
+        outer_builder.add_node("sub", inner)
+        outer_builder.add_edge(START, "sub")
+        outer_builder.add_edge("sub", END)
+        graph = outer_builder.compile()
+
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "", "items": []})
+
+        collected: list[SubgraphRunStream] = list(run.subgraphs)
+        assert len(collected) == 1
+        child = collected[0]
+        assert child.graph_name == "sub"
         assert child.status == "completed"
