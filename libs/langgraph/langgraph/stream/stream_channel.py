@@ -93,3 +93,17 @@ class StreamChannel(Generic[T]):
 
     def __aiter__(self) -> AsyncIterator[T]:
         return self._log.__aiter__()
+
+    def tee(self, n: int = 2) -> tuple[Iterator[T], ...]:
+        """Fan out the channel into `n` independent sync iterators.
+
+        Delegates to the underlying EventLog's `tee()`.
+        """
+        return self._log.tee(n)
+
+    def atee(self, n: int = 2) -> tuple[AsyncIterator[T], ...]:
+        """Fan out the channel into `n` independent async iterators.
+
+        Delegates to the underlying EventLog's `atee()`.
+        """
+        return self._log.atee(n)

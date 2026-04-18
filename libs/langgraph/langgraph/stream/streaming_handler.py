@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Sequence
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.pregel import Pregel
-from langgraph.stream._convert import convert_to_protocol_event
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import StreamTransformer
 from langgraph.stream.run_stream import AsyncGraphRunStream, GraphRunStream
@@ -64,7 +62,6 @@ class StreamingHandler:
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         transformers: list[StreamTransformer] | None = None,
-        max_events: int | None = None,
     ) -> GraphRunStream:
         """Start a sync streaming run.
 
@@ -80,12 +77,6 @@ class StreamingHandler:
             interrupt_after: Nodes to interrupt after, if any.
             transformers: User transformers appended after the built-in
                 `ValuesTransformer` and `MessagesTransformer`.
-            max_events: Caps the retention of every EventLog and
-                StreamChannel the mux binds (main event log plus each
-                transformer's projection logs), dropping the oldest
-                when full. Transformers that constructed their own
-                logs with an explicit `maxlen` keep their setting.
-                Unbounded when `None`.
 
         Returns:
             A GraphRunStream the caller can iterate to drive the run.
@@ -94,7 +85,6 @@ class StreamingHandler:
         mux = StreamMux(
             [values_t, MessagesTransformer(), *(transformers or ())],
             is_async=False,
-            max_events=max_events,
         )
 
         graph_iter = iter(
@@ -119,12 +109,13 @@ class StreamingHandler:
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         transformers: list[StreamTransformer] | None = None,
-        max_events: int | None = None,
     ) -> AsyncGraphRunStream:
         """Start an async streaming run.
 
-        Returns an AsyncGraphRunStream immediately. A background asyncio
-        task pumps events from the graph into the transformer pipeline.
+        Returns an AsyncGraphRunStream immediately. The caller's
+        iteration on any projection drives the graph forward — there
+        is no background task. Concurrent consumers share a
+        single-flight pump via an internal `asyncio.Lock`.
 
         Args:
             input: Graph input.
@@ -133,37 +124,26 @@ class StreamingHandler:
             interrupt_after: Nodes to interrupt after, if any.
             transformers: User transformers appended after the built-in
                 `ValuesTransformer` and `MessagesTransformer`.
-            max_events: Caps retention of every EventLog and
-                StreamChannel the mux binds — see `stream()` for the
-                full semantics.
 
         Returns:
             An AsyncGraphRunStream whose projections can be awaited
-            concurrently while the background pump runs.
+            concurrently; each subscribed cursor drives the pump when
+            its buffer is empty.
         """
         values_t = ValuesTransformer()
         mux = StreamMux(
             [values_t, MessagesTransformer(), *(transformers or ())],
             is_async=True,
-            max_events=max_events,
         )
 
-        async def pump() -> None:
-            try:
-                async for part in self._graph.astream(
-                    input,
-                    config,
-                    stream_mode=STREAM_V2_MODES,
-                    subgraphs=True,
-                    version="v2",
-                    interrupt_before=interrupt_before,
-                    interrupt_after=interrupt_after,
-                ):
-                    await mux.apush(convert_to_protocol_event(part))
-                await mux.aclose()
-            except BaseException as e:
-                await mux.afail(e)
+        graph_aiter = self._graph.astream(
+            input,
+            config,
+            stream_mode=STREAM_V2_MODES,
+            subgraphs=True,
+            version="v2",
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+        ).__aiter__()
 
-        task = asyncio.create_task(pump())
-
-        return AsyncGraphRunStream(mux, values_t, task)
+        return AsyncGraphRunStream(graph_aiter, mux, values_t)
