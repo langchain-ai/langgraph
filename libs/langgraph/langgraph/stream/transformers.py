@@ -14,7 +14,7 @@ from langgraph.stream._event_log import EventLog
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
 
 class ValuesTransformer(StreamTransformer):
@@ -111,6 +111,7 @@ class MessagesTransformer(StreamTransformer):
         # (attached to the event's metadata by StreamMessagesHandler).
         self._by_run: dict[str, ChatModelStream] = {}
         self._pump_fn: Callable[[], bool] | None = None
+        self._apump_fn: Callable[[], Awaitable[bool]] | None = None
 
     def init(self) -> dict[str, Any]:
         return {"messages": self._log}
@@ -119,6 +120,15 @@ class MessagesTransformer(StreamTransformer):
         """Wire the sync pull callback. Called by GraphRunStream._wire_request_more."""
         self._pump_fn = fn
 
+    def _bind_apump(self, fn: Callable[[], Awaitable[bool]]) -> None:
+        """Wire the async pull callback.
+
+        Called by `AsyncGraphRunStream._wire_arequest_more` so each
+        `AsyncChatModelStream` this transformer creates can drive the
+        shared graph pump from its projection cursors.
+        """
+        self._apump_fn = fn
+
     def _make_stream(
         self,
         *,
@@ -126,7 +136,21 @@ class MessagesTransformer(StreamTransformer):
         node: str | None,
         message_id: str | None,
     ) -> ChatModelStream:
-        """Create a ChatModelStream (sync) or AsyncChatModelStream (async)."""
+        """Create a ChatModelStream (sync) or AsyncChatModelStream (async).
+
+        Wires whichever pump is bound. Prefers the async pump so nested
+        iteration under `AsyncGraphRunStream` drives the graph forward
+        without a background task. The unwired fallback (no pump bound)
+        is used by unit tests that dispatch events manually.
+        """
+        if self._apump_fn is not None:
+            astream = AsyncChatModelStream(
+                namespace=namespace,
+                node=node,
+                message_id=message_id,
+            )
+            astream.set_arequest_more(self._apump_fn)
+            return astream
         if self._pump_fn is not None:
             stream: ChatModelStream = ChatModelStream(
                 namespace=namespace,
@@ -134,13 +158,12 @@ class MessagesTransformer(StreamTransformer):
                 message_id=message_id,
             )
             stream.set_request_more(self._pump_fn)
-        else:
-            stream = AsyncChatModelStream(
-                namespace=namespace,
-                node=node,
-                message_id=message_id,
-            )
-        return stream
+            return stream
+        return AsyncChatModelStream(
+            namespace=namespace,
+            node=node,
+            message_id=message_id,
+        )
 
     def process(self, event: ProtocolEvent) -> bool:
         if event["method"] != "messages":
