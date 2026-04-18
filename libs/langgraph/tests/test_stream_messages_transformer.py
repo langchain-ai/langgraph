@@ -318,8 +318,16 @@ class TestFiltering:
         assert t.process(values_event) is True
 
     def test_subgraph_namespace_dropped(self) -> None:
-        t, log = _make_sync_transformer()
-        t.process(
+        """Root MessagesTransformer (via the mux) ignores non-root events."""
+        from langgraph.stream._mux import StreamMux
+
+        mux = StreamMux([MessagesTransformer()], is_async=False)
+        t = mux.transformer_by_key("messages")
+        assert isinstance(t, MessagesTransformer)
+        t._log._subscribed = True
+        t._bind_pump(lambda: False)
+
+        mux.push(
             {
                 "type": "event",
                 "method": "messages",
@@ -333,8 +341,8 @@ class TestFiltering:
                 },
             }
         )
-        log.close()
-        assert list(log._items) == []
+        t._log.close()
+        assert list(t._log._items) == []
 
 
 # ---------------------------------------------------------------------------

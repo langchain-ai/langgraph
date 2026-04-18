@@ -7,11 +7,51 @@ from langchain_core.runnables import RunnableConfig
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_STREAM_MESSAGES_V2
 from langgraph.pregel import Pregel
-from langgraph.stream._mux import StreamMux
+from langgraph.stream._mux import StreamMux, TransformerFactory
 from langgraph.stream._types import StreamTransformer
 from langgraph.stream.run_stream import AsyncGraphRunStream, GraphRunStream
-from langgraph.stream.transformers import MessagesTransformer, ValuesTransformer
+from langgraph.stream.transformers import (
+    MessagesTransformer,
+    SubgraphTransformer,
+    ValuesTransformer,
+)
 from langgraph.types import All, StreamMode
+
+
+def _coerce_factories(
+    transformers: list[StreamTransformer | TransformerFactory] | None,
+) -> list[TransformerFactory]:
+    """Normalize caller-supplied transformers into scope-taking factories.
+
+    Accepts already-built instances (wrapped as single-use factories,
+    with the caveat that they won't be re-instantiated in subgraph
+    mini-muxes) or proper factories (classes / callables taking a
+    scope). The built-in root transformers are always factories so
+    they propagate into every subgraph scope automatically.
+    """
+
+    def _wrap_instance(t: StreamTransformer) -> TransformerFactory:
+        # Single-use: only wires at root scope. A user that wants
+        # subgraph propagation should pass the class (or a lambda).
+        def _factory(_scope: tuple[str, ...]) -> StreamTransformer:
+            return t
+
+        return _factory
+
+    coerced: list[TransformerFactory] = []
+    for item in transformers or ():
+        if isinstance(item, StreamTransformer):
+            coerced.append(_wrap_instance(item))
+        else:
+            coerced.append(item)
+    return coerced
+
+
+_BUILTIN_FACTORIES: list[TransformerFactory] = [
+    ValuesTransformer,
+    MessagesTransformer,
+    SubgraphTransformer,
+]
 
 
 def _merge_v2_messages_flag(
@@ -40,6 +80,7 @@ STREAM_V2_MODES: list[StreamMode] = [
     "checkpoints",
     "tasks",
     "debug",
+    "lifecycle",
 ]
 
 
@@ -80,7 +121,7 @@ class StreamingHandler:
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        transformers: list[StreamTransformer] | None = None,
+        transformers: list[StreamTransformer | TransformerFactory] | None = None,
     ) -> GraphRunStream:
         """Start a sync streaming run.
 
@@ -100,11 +141,12 @@ class StreamingHandler:
         Returns:
             A GraphRunStream the caller can iterate to drive the run.
         """
-        values_t = ValuesTransformer()
         mux = StreamMux(
-            [values_t, MessagesTransformer(), *(transformers or ())],
+            factories=_BUILTIN_FACTORIES + _coerce_factories(transformers),
             is_async=False,
         )
+        values_t = mux.transformer_by_key("values")
+        assert isinstance(values_t, ValuesTransformer)
 
         graph_iter = iter(
             self._graph.stream(
@@ -127,7 +169,7 @@ class StreamingHandler:
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        transformers: list[StreamTransformer] | None = None,
+        transformers: list[StreamTransformer | TransformerFactory] | None = None,
     ) -> AsyncGraphRunStream:
         """Start an async streaming run.
 
@@ -149,11 +191,12 @@ class StreamingHandler:
             concurrently; each subscribed cursor drives the pump when
             its buffer is empty.
         """
-        values_t = ValuesTransformer()
         mux = StreamMux(
-            [values_t, MessagesTransformer(), *(transformers or ())],
+            factories=_BUILTIN_FACTORIES + _coerce_factories(transformers),
             is_async=True,
         )
+        values_t = mux.transformer_by_key("values")
+        assert isinstance(values_t, ValuesTransformer)
 
         graph_aiter = self._graph.astream(
             input,

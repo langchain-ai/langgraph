@@ -130,6 +130,7 @@ from langgraph.pregel._checkpoint import (
 )
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
+from langgraph.pregel._lifecycle import StreamLifecycleHandler
 from langgraph.pregel._loop import (
     AsyncPregelLoop,
     SyncPregelLoop,
@@ -2643,6 +2644,15 @@ class Pregel(
                     )
                 )
 
+            # set up lifecycle stream mode
+            if "lifecycle" in stream_modes:
+                run_manager.inheritable_handlers.append(
+                    StreamLifecycleHandler(
+                        stream.put,
+                        root_graph_name=self.name,
+                    )
+                )
+
             # set up custom stream mode
             if "custom" in stream_modes:
 
@@ -3022,6 +3032,15 @@ class Pregel(
                         stream_put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
+                    )
+                )
+
+            # set up lifecycle stream mode
+            if "lifecycle" in stream_modes:
+                run_manager.inheritable_handlers.append(
+                    StreamLifecycleHandler(
+                        stream_put,
+                        root_graph_name=self.name,
                     )
                 )
 

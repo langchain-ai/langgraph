@@ -3,14 +3,14 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from types import MappingProxyType, TracebackType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from langgraph.stream._convert import convert_to_protocol_event
-from langgraph.stream._event_log import EventLog
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
-from langgraph.stream.stream_channel import StreamChannel
-from langgraph.stream.transformers import ValuesTransformer
+
+if TYPE_CHECKING:
+    from langgraph.stream.transformers import ValuesTransformer
 
 
 def _drive_until_done(pump: Callable[[], bool]) -> None:
@@ -25,7 +25,99 @@ async def _adrive_until_done(pump: Callable[[], Awaitable[bool]]) -> None:
         pass
 
 
-class GraphRunStream:
+class BaseRunStream:
+    """Shared shape for any object that wraps a `StreamMux`.
+
+    Both the root `GraphRunStream` / `AsyncGraphRunStream` and the
+    scoped `SubgraphRunStream` compose a `StreamMux` and expose its
+    projections (`values`, `messages`, `subgraphs`, user-registered
+    keys). The root additionally owns the graph iterator and drives
+    the pump; a subgraph's mini-mux borrows the root pump via
+    `make_child`'s pump inheritance.
+
+    Projections registered on the mux show up in `extensions`, and
+    native ones (those with `_native = True`) are also bound directly
+    as attributes (`run.values`, `run.messages`, …).
+
+    Raw iteration (`for event in run:` / `async for event in run`)
+    yields every `ProtocolEvent` that reached this mux's main log —
+    for the root that's every event in the run, for a subgraph that's
+    every event forwarded into its subtree.
+    """
+
+    def __init__(self, mux: StreamMux) -> None:
+        self._mux = mux
+        self.extensions: Mapping[str, Any] = MappingProxyType(mux.extensions)
+        for key in mux.native_keys:
+            setattr(self, key, mux.extensions[key])
+
+    def __iter__(self) -> Iterator[ProtocolEvent]:
+        """Sync iteration of protocol events on this mux's main log.
+
+        Raises at the EventLog level if the mux is async-bound.
+        """
+        return iter(self._mux._events)
+
+    def __aiter__(self) -> AsyncIterator[ProtocolEvent]:
+        """Async iteration of protocol events on this mux's main log.
+
+        Raises at the EventLog level if the mux is sync-bound.
+        """
+        return self._mux._events.__aiter__()
+
+    def interleave(self, *names: str) -> Iterator[tuple[str, Any]]:
+        """Iterate multiple projections round-robin, yielding ``(name, item)``.
+
+        Each turn advances one projection's cursor; when a cursor's
+        buffer is empty, pulling from it drives the pump once, which
+        fans out to every subscribed projection log. Projections whose
+        items aren't consumed on this turn sit in their own buffers
+        only until the next turn reaches them, bounding memory by the
+        skew between projection rates rather than letting any single
+        log grow to the full run length.
+
+        Projections are exhausted independently; a projection that
+        finishes early drops out of the rotation while others
+        continue. The overall iterator ends once all named projections
+        are done.
+
+        Args:
+            *names: Projection keys to interleave. Must match keys in
+                `extensions`.
+
+        Yields:
+            `(name, item)` tuples in round-robin order across the named
+            projections.
+
+        Raises:
+            KeyError: If a name doesn't match a registered projection.
+
+        Example:
+            ```python
+            for name, item in run.interleave("messages", "values"):
+                if name == "messages":
+                    print("msg:", item)
+                else:
+                    print("val:", item)
+            ```
+        """
+        cursors: dict[str, Iterator[Any]] = {
+            name: iter(self.extensions[name]) for name in names
+        }
+        done: set[str] = set()
+        while len(done) < len(cursors):
+            for name, cursor in cursors.items():
+                if name in done:
+                    continue
+                try:
+                    item = next(cursor)
+                except StopIteration:
+                    done.add(name)
+                    continue
+                yield (name, item)
+
+
+class GraphRunStream(BaseRunStream):
     """Sync run stream with caller-driven pumping.
 
     The caller's iteration on any projection (`values`, `messages`,
@@ -34,10 +126,6 @@ class GraphRunStream:
 
     Projections are single-consumer — iterating `run.values` twice
     raises. Use `projection.tee(n)` if you genuinely need fan-out.
-
-    All transformer projections live in `extensions`. Native transformer
-    projections (those with `_native = True`) are also set as direct
-    attributes on this instance (e.g. `run.values`, `run.messages`).
     """
 
     def __init__(
@@ -54,40 +142,18 @@ class GraphRunStream:
             values_transformer: The built-in values transformer
                 providing `output` / `interrupted` / `interrupts`.
         """
+        super().__init__(mux)
         self._graph_iter = graph_iter
-        self._mux = mux
-        self.extensions: Mapping[str, Any] = MappingProxyType(mux.extensions)
         self._values_transformer = values_transformer
         self._exhausted = False
-        for key in mux.native_keys:
-            setattr(self, key, mux.extensions[key])
-        self._wire_request_more(mux)
-
-    def _wire_request_more(self, mux: StreamMux) -> None:
-        """Install `_request_more` on every sync EventLog so cursors can
-        drive the pump when their buffer catches up.
-
-        Also calls `_bind_pump` on any transformer that exposes it, so
-        transformers producing ChatModelStream objects (e.g.
-        MessagesTransformer) can wire the pull callback on each stream
-        as it's created.
-        """
-        mux._events._request_more = self._pump_next
-        for value in mux.extensions.values():
-            if isinstance(value, EventLog):
-                value._request_more = self._pump_next
-            elif isinstance(value, StreamChannel):
-                value._log._request_more = self._pump_next
-        for transformer in mux._transformers:
-            if hasattr(transformer, "_bind_pump"):
-                transformer._bind_pump(self._pump_next)
+        mux.bind_pump(self._pump_next)
 
     def _pump_next(self) -> bool:
         """Pull one event from the graph and push it through the mux.
 
         Returns:
-            True if an event was pulled, False if the graph is exhausted
-            or has raised.
+            True if an event was pulled, False if the graph is
+            exhausted or has raised.
         """
         if self._exhausted:
             return False
@@ -141,8 +207,7 @@ class GraphRunStream:
 
     @property
     def interrupted(self) -> bool:
-        """Drive the run to completion, then return whether it was
-        interrupted.
+        """Drive the run to completion, then return whether it was interrupted.
 
         Raises:
             BaseException: If the run ended with an error.
@@ -166,70 +231,17 @@ class GraphRunStream:
             raise err
         return self._values_transformer._interrupts
 
-    def __iter__(self) -> Iterator[ProtocolEvent]:
-        """Subscribe to the main event log and iterate protocol events."""
-        return iter(self._mux._events)
 
-    def interleave(self, *names: str) -> Iterator[tuple[str, Any]]:
-        """Iterate multiple projections round-robin, yielding ``(name, item)``.
-
-        Each turn advances one projection's cursor; when a cursor's buffer
-        is empty, pulling from it drives the pump once, which fans out to
-        every subscribed projection log. Projections whose items aren't
-        consumed on this turn sit in their own buffers only until the next
-        turn reaches them, bounding memory by the skew between projection
-        rates rather than letting any single log grow to the full run
-        length.
-
-        Projections are exhausted independently; a projection that finishes
-        early drops out of the rotation while others continue. The overall
-        iterator ends once all named projections are done.
-
-        Args:
-            *names: Projection keys to interleave. Must match keys in
-                ``extensions``.
-
-        Yields:
-            ``(name, item)`` tuples in round-robin order across the named
-            projections.
-
-        Raises:
-            KeyError: If a name doesn't match a registered projection.
-
-        Example:
-            ```python
-            for name, item in run.interleave("messages", "values"):
-                if name == "messages":
-                    print("msg:", item)
-                else:
-                    print("val:", item)
-            ```
-        """
-        cursors: dict[str, Iterator[Any]] = {
-            name: iter(self.extensions[name]) for name in names
-        }
-        done: set[str] = set()
-        while len(done) < len(cursors):
-            for name, cursor in cursors.items():
-                if name in done:
-                    continue
-                try:
-                    item = next(cursor)
-                except StopIteration:
-                    done.add(name)
-                    continue
-                yield (name, item)
-
-
-class AsyncGraphRunStream:
+class AsyncGraphRunStream(BaseRunStream):
     """Async run stream with caller-driven pumping.
 
     Async iteration on any projection drives the graph forward — there
     is no background task. Concurrent consumers share a single-flight
-    pump via an `asyncio.Lock`, so each awaiting cursor contributes one
-    event per acquisition. Backpressure comes from the logs: when a
-    subscribed log's buffer reaches `maxlen`, `apush` awaits the
-    subscriber to drain, which holds back the pump and paces the graph.
+    pump via an `asyncio.Lock`, so each awaiting cursor contributes
+    one event per acquisition. Backpressure comes from the logs: when
+    a subscribed log's buffer reaches `maxlen`, `apush` awaits the
+    subscriber to drain, which holds back the pump and paces the
+    graph.
 
     Projections are single-consumer — a second `aiter(run.values)`
     raises. Use `projection.tee(n)` for fan-out.
@@ -258,35 +270,12 @@ class AsyncGraphRunStream:
             values_transformer: The built-in values transformer
                 providing `output` / `interrupted` / `interrupts`.
         """
+        super().__init__(mux)
         self._graph_aiter = graph_aiter
-        self._mux = mux
-        self.extensions: Mapping[str, Any] = MappingProxyType(mux.extensions)
         self._values_transformer = values_transformer
         self._exhausted = False
         self._pump_lock = asyncio.Lock()
-        for key in mux.native_keys:
-            setattr(self, key, mux.extensions[key])
-        self._wire_arequest_more(mux)
-
-    def _wire_arequest_more(self, mux: StreamMux) -> None:
-        """Install `_arequest_more` on every async EventLog so cursors
-        can drive the pump when their buffer catches up.
-
-        Also calls `_bind_apump` on any transformer that exposes it,
-        so transformers producing `AsyncChatModelStream` objects (e.g.
-        `MessagesTransformer`) can fan the pull callback out to each
-        stream's projections. Mirrors the sync `_wire_request_more`
-        plumbing.
-        """
-        mux._events._arequest_more = self._apump_next
-        for value in mux.extensions.values():
-            if isinstance(value, EventLog):
-                value._arequest_more = self._apump_next
-            elif isinstance(value, StreamChannel):
-                value._log._arequest_more = self._apump_next
-        for transformer in mux._transformers:
-            if hasattr(transformer, "_bind_apump"):
-                transformer._bind_apump(self._apump_next)
+        mux.bind_apump(self._apump_next)
 
     async def _apump_next(self) -> bool:
         """Pull one event from the graph and push it through the mux.
@@ -324,7 +313,8 @@ class AsyncGraphRunStream:
 
         Closes the mux and marks the stream exhausted. Any awaiting
         cursors wake up and see the closed state; any `apush` blocked
-        on backpressure wakes and returns without appending. Idempotent.
+        on backpressure wakes and returns without appending.
+        Idempotent.
         """
         async with self._pump_lock:
             if self._exhausted:
@@ -367,8 +357,7 @@ class AsyncGraphRunStream:
         return self._values_transformer._latest
 
     async def interrupted(self) -> bool:
-        """Drive the run to completion and return whether it was
-        interrupted.
+        """Drive the run to completion and return whether it was interrupted.
 
         Raises:
             BaseException: If the run ended with an error.
@@ -388,7 +377,3 @@ class AsyncGraphRunStream:
         if (err := self._values_transformer.error) is not None:
             raise err
         return self._values_transformer._interrupts
-
-    def __aiter__(self) -> AsyncIterator[ProtocolEvent]:
-        """Subscribe to the main event log and iterate protocol events."""
-        return self._mux._events.__aiter__()

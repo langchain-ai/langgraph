@@ -869,14 +869,18 @@ class TestStreamMux:
 
 class TestValuesTransformer:
     def test_ignores_non_root_namespace(self) -> None:
-        """Values events from subgraphs (non-empty namespace) should be ignored."""
-        t = ValuesTransformer()
-        t.init()
-        t._log._bind(is_async=False)
+        """The root mux only dispatches root-ns values events to its ValuesTransformer.
+
+        Namespace filtering is enforced by the mux via `scope_exact`
+        — the transformer itself no longer filters.
+        """
+        mux = StreamMux([ValuesTransformer()], is_async=False)
+        t = mux.transformer_by_key("values")
+        assert isinstance(t, ValuesTransformer)
         it = iter(t._log)
 
-        t.process(_event("values", {"val": "root"}))
-        t.process(_event("values", {"val": "sub"}, namespace=["sub"]))
+        mux.push(_event("values", {"val": "root"}))
+        mux.push(_event("values", {"val": "sub"}, namespace=["sub"]))
 
         t._log.close()
         items = list(it)
@@ -935,14 +939,15 @@ class TestMessagesTransformer:
         assert items[0].message_id == "run-1"
 
     def test_ignores_non_root_namespace(self) -> None:
-        t = MessagesTransformer()
-        t.init()
-        t._log._bind(is_async=False)
+        """Namespace filtering is enforced by the mux via `scope_exact`."""
+        mux = StreamMux([MessagesTransformer()], is_async=False)
+        t = mux.transformer_by_key("messages")
+        assert isinstance(t, MessagesTransformer)
         t._bind_pump(lambda: False)
         it = iter(t._log)
 
         meta = {"langgraph_node": "llm", "run_id": "run-1"}
-        t.process(
+        mux.push(
             _event(
                 "messages",
                 ({"event": "message-start", "message_id": "run-1"}, meta),

@@ -75,6 +75,20 @@ class StreamTransformer(ABC):
     scoring, cost lookup, external tracing).
 
     Attributes:
+        scope: Namespace the transformer operates within — `()` for the
+            root mux, a subgraph's namespace tuple inside a mini-mux.
+            Set at construction from the mux's scope (each factory is
+            called as `factory(scope)`). Transformers that only care
+            about events at their own namespace compare against
+            `self.scope`; subgraph-aware transformers can treat it as
+            a parent path.
+        scope_exact: If True (the default), the mux only calls
+            `process` / `aprocess` for events whose namespace equals
+            `self.scope` — user transformers get scope-scoped events
+            for free with no boilerplate. Set False for transformers
+            that need to see events across scopes (e.g.
+            `SubgraphTransformer` forwards deeper events into child
+            mini-muxes).
         requires_async: Explicit opt-in for transformers that need a
             running event loop but don't override any async method (for
             example, transformers that call `schedule()` from a sync
@@ -83,6 +97,18 @@ class StreamTransformer(ABC):
     """
 
     requires_async: ClassVar[bool] = False
+    scope_exact: ClassVar[bool] = True
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        """Initialize the transformer with its mux's scope.
+
+        Args:
+            scope: The namespace tuple the owning mux is scoped to.
+                `()` for the root, the subgraph's namespace inside a
+                mini-mux. Factories receive this at construction time
+                (`factory(scope)` in `StreamMux`).
+        """
+        self.scope: tuple[str, ...] = scope
 
     @abstractmethod
     def init(self) -> dict[str, Any]:

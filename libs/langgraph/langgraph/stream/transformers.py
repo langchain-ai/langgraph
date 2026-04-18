@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from langchain_core.language_models._compat_bridge import message_to_events
 from langchain_core.language_models.chat_model_stream import (
@@ -8,13 +8,23 @@ from langchain_core.language_models.chat_model_stream import (
     ChatModelStream,
 )
 from langchain_core.messages import AIMessageChunk, BaseMessage
-from langchain_protocol.protocol import MessagesData
+from langchain_protocol.protocol import CheckpointRef, LifecycleData, MessagesData
 
+from langgraph.errors import GraphInterrupt
 from langgraph.stream._event_log import EventLog
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
+from langgraph.stream.run_stream import BaseRunStream
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+    from langgraph.stream._mux import StreamMux
+
+
+SubgraphStatus = Literal["started", "running", "completed", "failed", "interrupted"]
+_TERMINAL_STATUSES: frozenset[SubgraphStatus] = frozenset(
+    {"completed", "failed", "interrupted"}
+)
 
 
 class ValuesTransformer(StreamTransformer):
@@ -28,13 +38,16 @@ class ValuesTransformer(StreamTransformer):
     Native transformer — projection keys are exposed as direct
     attributes on the run stream (e.g. `run.values`).
 
-    Only root-namespace values events are captured; subgraph state
-    snapshots are ignored.
+    `scope` (inherited from `StreamTransformer`) is the namespace the
+    transformer captures values for. `()` matches the root graph;
+    subgraph mini-muxes pass their subgraph's namespace, so each
+    instance sees only its own level.
     """
 
     _native = True
 
-    def __init__(self) -> None:
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
         self._log: EventLog[dict[str, Any]] = EventLog()
         self._latest: dict[str, Any] | None = None
         self._interrupted = False
@@ -52,11 +65,10 @@ class ValuesTransformer(StreamTransformer):
         return self._log._error
 
     def process(self, event: ProtocolEvent) -> bool:
+        # Namespace filtering is handled by the mux via `scope_exact`.
         if event["method"] != "values":
             return True
         params = event["params"]
-        if params["namespace"]:
-            return True
         self._latest = params["data"]
         interrupts = params.get("interrupts", ())
         if interrupts:
@@ -95,9 +107,10 @@ class MessagesTransformer(StreamTransformer):
     `stream()` method still surface their final `AIMessage` via
     `on_chain_end` when a node returns it as state.
 
-    Only root-namespace events are captured; tokens from subgraphs are
-    dropped. Consumers that need subgraph tokens should iterate the raw
-    event stream or register a custom transformer.
+    `scope` (inherited from `StreamTransformer`) is the namespace the
+    transformer captures messages for. `()` matches the root graph;
+    subgraph mini-muxes pass their subgraph's namespace, so each
+    instance sees only its own level.
 
     Native transformer — the `messages` projection is exposed as a
     direct attribute on the run stream.
@@ -105,7 +118,8 @@ class MessagesTransformer(StreamTransformer):
 
     _native = True
 
-    def __init__(self) -> None:
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
         self._log: EventLog[ChatModelStream] = EventLog()
         # Correlate protocol events back to a ChatModelStream by run_id
         # (attached to the event's metadata by StreamMessagesHandler).
@@ -166,11 +180,10 @@ class MessagesTransformer(StreamTransformer):
         )
 
     def process(self, event: ProtocolEvent) -> bool:
+        # Namespace filtering is handled by the mux via `scope_exact`.
         if event["method"] != "messages":
             return True
         params = event["params"]
-        if params["namespace"]:
-            return True
 
         payload, metadata = params["data"]
         node: str | None = metadata.get("langgraph_node")
@@ -201,7 +214,7 @@ class MessagesTransformer(StreamTransformer):
         if event_type == "message-start":
             message_id = event.get("message_id")
             stream = self._make_stream(
-                namespace=[],
+                namespace=list(self.scope),
                 node=node,
                 message_id=str(message_id) if message_id is not None else None,
             )
@@ -215,7 +228,11 @@ class MessagesTransformer(StreamTransformer):
                 del self._by_run[run_id]
 
     def _route_whole_message(self, message: BaseMessage, *, node: str | None) -> None:
-        stream = self._make_stream(namespace=[], node=node, message_id=message.id)
+        stream = self._make_stream(
+            namespace=list(self.scope),
+            node=node,
+            message_id=message.id,
+        )
         for evt in message_to_events(message, message_id=message.id):
             stream.dispatch(evt)
         self._log.push(stream)
@@ -229,3 +246,213 @@ class MessagesTransformer(StreamTransformer):
         for stream in list(self._by_run.values()):
             stream.fail(err)
         self._by_run.clear()
+
+
+class SubgraphRunStream(BaseRunStream):
+    """Scoped view of a single nested subgraph execution.
+
+    Yielded on `run.subgraphs` (or `parent.subgraphs` for grandchildren)
+    when a nested `Pregel` spawns. Wraps a mini-`StreamMux` built with
+    the same transformer factories as the root mux, so `.values`,
+    `.messages`, `.subgraphs` are populated by the standard
+    transformers scoped to this handle's namespace — no duplicated
+    routing logic.
+
+    Inherits `BaseRunStream`, so all shared shape works uniformly:
+    raw iteration (`for event in sub`), `.interleave(...)`, native
+    projection attributes, and the `extensions` mapping — identical
+    to the root `GraphRunStream`. The mini-mux borrows the root's
+    pump via `make_child`'s pump inheritance, so any cursor on a
+    subagent projection drives the whole run forward.
+
+    Lifecycle fields update in place as events arrive:
+
+    - `path`: the namespace tuple — stable for the life of the handle.
+    - `graph_name` / `trigger_call_id`: set once from the `started`
+      payload.
+    - `status`: advances `started` → `running` → `completed` /
+      `failed` / `interrupted`.
+    - `error` / `checkpoint`: set on the terminal event when present.
+
+    `.output` is a snapshot of the latest values seen at this
+    namespace — it doesn't drive the pump (unlike root's
+    `GraphRunStream.output`), because advancing a subgraph to
+    completion is only meaningful as part of advancing the whole run.
+    """
+
+    def __init__(
+        self,
+        path: tuple[str, ...],
+        mux: StreamMux,
+        *,
+        graph_name: str | None = None,
+        trigger_call_id: str | None = None,
+    ) -> None:
+        super().__init__(mux)
+        self.path: tuple[str, ...] = path
+        self.graph_name: str | None = graph_name
+        self.trigger_call_id: str | None = trigger_call_id
+        self.status: SubgraphStatus = "started"
+        self.error: str | None = None
+        self.checkpoint: CheckpointRef | None = None
+
+    @property
+    def output(self) -> dict[str, Any] | None:
+        """Latest values snapshot at this namespace, or `None`.
+
+        Snapshot-only — iterating other projections or the root's
+        `.output` is what drives the pump.
+        """
+        values_t = self._mux.transformer_by_key("values")
+        if isinstance(values_t, ValuesTransformer):
+            return values_t._latest
+        return None
+
+
+class SubgraphTransformer(StreamTransformer):
+    """Discover subgraphs and route events into per-subgraph mini-muxes.
+
+    Thin state-machine + dispatcher. At its own `scope` (inherited
+    from `StreamTransformer`, determined by the enclosing mux), it
+    watches for `lifecycle` events at exactly one level deeper to
+    discover direct children. Each discovered child gets its own
+    `SubgraphRunStream` backed by a mini-`StreamMux` — built via
+    `parent_mux.make_child(path)`, so the same factory list produces
+    fresh transformer instances at the child's scope.
+
+    Every incoming event that falls under one of the direct children
+    (ns starts with a child's `path`) is forwarded into that child's
+    mini-mux via `push`. The standard transformers in that mini-mux
+    (`ValuesTransformer`, `MessagesTransformer`, and another
+    `SubgraphTransformer` for grandchildren) handle the rest. No
+    duplicated routing or assembly logic.
+
+    Lifecycle state for each handle (running / completed / failed /
+    interrupted) is updated in place as events fire. On terminal
+    events, the handle's mini-mux is closed so any subscribed cursors
+    unblock. `finalize` / `fail` handle dangling handles left mid-run.
+
+    Native transformer — `subgraphs` exposes the direct-children log.
+
+    `scope_exact = False`: this transformer sees events at any
+    namespace, because it forwards out-of-scope events to the matching
+    direct-child mini-mux.
+    """
+
+    _native = True
+    scope_exact = False
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._root_log: EventLog[SubgraphRunStream] = EventLog()
+        # Direct children only (namespace = scope + one segment).
+        self._by_ns: dict[tuple[str, ...], SubgraphRunStream] = {}
+        self._mux: StreamMux | None = None
+
+    def init(self) -> dict[str, Any]:
+        return {"subgraphs": self._root_log}
+
+    def _on_register(self, mux: StreamMux) -> None:
+        """Capture the enclosing mux so we can build child mini-muxes."""
+        self._mux = mux
+
+    def process(self, event: ProtocolEvent) -> bool:
+        ns = tuple(event["params"]["namespace"])
+        method = event["method"]
+        depth = len(self.scope)
+
+        # 1. On `started` for a direct child (ns depth = mine + 1 and
+        #    ns prefix matches mine), register the handle.
+        if method == "lifecycle" and len(ns) == depth + 1 and ns[:-1] == self.scope:
+            data = cast(LifecycleData, event["params"]["data"])
+            if data.get("event") == "started":
+                self._on_started(ns, data)
+
+        # 2. Forward the event to the matching direct-child mini-mux.
+        #    Prefix-match: ns must start with some child's path.
+        direct_child_ns = ns[: depth + 1] if len(ns) > depth else None
+        if direct_child_ns is not None and direct_child_ns in self._by_ns:
+            self._by_ns[direct_child_ns]._mux.push(event)
+
+        # 3. Status change for a direct child (ns = child's path, method
+        #    = lifecycle). Update handle fields, close mini-mux on
+        #    terminal.
+        if (
+            method == "lifecycle"
+            and ns in self._by_ns
+            and len(ns) == depth + 1
+            and ns[:-1] == self.scope
+        ):
+            data = cast(LifecycleData, event["params"]["data"])
+            event_type = data.get("event")
+            if event_type in ("running", "completed", "failed", "interrupted"):
+                self._on_status_change(ns, event_type, data)
+
+        return True
+
+    def _on_started(self, ns: tuple[str, ...], data: LifecycleData) -> None:
+        if ns in self._by_ns:
+            # Duplicate started — ignore.
+            return
+        if self._mux is None:
+            # Not registered yet; can't build a mini-mux.
+            return
+        child_mux = self._mux.make_child(ns)
+        handle = SubgraphRunStream(
+            path=ns,
+            mux=child_mux,
+            graph_name=data.get("graph_name"),
+            trigger_call_id=data.get("trigger_call_id"),
+        )
+        self._by_ns[ns] = handle
+        self._root_log.push(handle)
+
+    def _on_status_change(
+        self,
+        ns: tuple[str, ...],
+        event_type: SubgraphStatus,
+        data: LifecycleData,
+    ) -> None:
+        handle = self._by_ns[ns]
+        handle.status = event_type
+        err = data.get("error")
+        if err is not None:
+            handle.error = err
+        checkpoint = data.get("checkpoint")
+        if checkpoint is not None:
+            handle.checkpoint = checkpoint
+        if event_type in _TERMINAL_STATUSES:
+            self._close_handle_mux(handle)
+
+    @staticmethod
+    def _close_handle_mux(handle: SubgraphRunStream) -> None:
+        # Idempotent close — mux.close() runs finalize on its transformers
+        # (which cascades through grandchildren) and closes projection logs.
+        if not handle._mux._events._closed:
+            try:
+                handle._mux.close()
+            except Exception:
+                pass
+
+    def finalize(self) -> None:
+        """Transition any still-open direct children to `completed`."""
+        for handle in self._by_ns.values():
+            if handle.status not in _TERMINAL_STATUSES:
+                handle.status = "completed"
+            self._close_handle_mux(handle)
+
+    def fail(self, err: BaseException) -> None:
+        """Transition any still-open direct children to `failed` / `interrupted`."""
+        is_interrupt = isinstance(err, GraphInterrupt)
+        terminal: SubgraphStatus = "interrupted" if is_interrupt else "failed"
+        error_str = None if is_interrupt else str(err)
+        for handle in self._by_ns.values():
+            if handle.status not in _TERMINAL_STATUSES:
+                handle.status = terminal
+                if error_str is not None and handle.error is None:
+                    handle.error = error_str
+            if not handle._mux._events._closed:
+                try:
+                    handle._mux.fail(err)
+                except Exception:
+                    pass
