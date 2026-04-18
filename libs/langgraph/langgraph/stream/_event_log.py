@@ -2,60 +2,50 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
 
-class BufferOverflowError(RuntimeError):
-    """Raised when an EventLog cursor falls off the back of a bounded buffer.
-
-    Mirrors the `restored: false` signal from the protocol's reconnection
-    story (§ 06): consumers that fall behind the retention window get an
-    explicit error and can decide to rebuild from a snapshot rather than
-    silently losing events.
-    """
-
-
 class EventLog(Generic[T]):
-    """Append-only buffer that supports multiple independent consumers.
+    """Single-consumer drainable queue for streaming events.
+
+    Items are popped off the front as the consumer advances — there is
+    no retention beyond what's currently queued. A log accepts exactly
+    one subscriber; a second `__iter__` / `__aiter__` call raises. Use
+    `tee(n)` / `atee(n)` for fan-out.
 
     Starts unbound — neither `__iter__` nor `__aiter__` is available
     until the StreamMux calls `_bind(is_async)`. After binding, only
     the matching iteration protocol works; the other raises `TypeError`.
 
-    All access is single-threaded: sync mode is caller-driven (no
-    background thread), async mode runs entirely on the event loop.
+    Pump wiring (set by the run stream, not by `_bind`):
+        - `_request_more`: sync pump callable, returns True if a new
+          event was produced.
+        - `_arequest_more`: async pump coroutine factory, same contract.
 
-    Producer API:
-        - `push(item)`: append an item, notify all waiting cursors.
-        - `close()`: mark the log as done.
-        - `fail(err)`: mark the log as errored.
+    Memory is bounded by caller pace: both sync and async use caller-
+    driven pumps, so each cursor advance produces at most one event.
+    The only shape where a log can accumulate meaningfully is
+    concurrent async consumers at unequal rates — a slow consumer's
+    log grows while fast consumers drive the shared pump. That's the
+    documented tradeoff for concurrent consumption; consume at similar
+    rates or use a single consumer if memory matters.
 
-    Sync iteration is pull-based: when a cursor catches up it calls
-    `_request_more` to drive the graph forward. Async iteration uses a
-    shared `asyncio.Event` — cursors await the event when they catch
-    up, and the producer sets it on each push.
-
-    Pass `maxlen=N` to cap memory. When the buffer is full, `push`
-    drops the oldest item to make room. Cursors track an absolute
-    sequence number; a cursor that falls off the back of the retention
-    window raises `BufferOverflowError` on its next read.
-
-    New cursors start at the current head of the buffer, not at seq 0
-    — they see whatever is still retained. This matches the protocol's
-    reconnection semantics (§ 06: "missed events can be replayed from
-    a bounded buffer").
+    Lazy-subscribe: `push` is a no-op when no subscriber has registered.
+    Transformers still execute `process()` (so scalar state like
+    `ValuesTransformer._latest` stays current); only the log append is
+    skipped.
     """
 
     def __init__(self, maxlen: int | None = None) -> None:
         """Initialize an empty, unbound log.
 
         Args:
-            maxlen: Optional cap on retained items. When reached, the
-                oldest item is dropped on each new push. `None` (the
-                default) leaves the log unbounded.
+            maxlen: Accepted for forward compatibility; currently unused.
+                The caller-driven pump bounds memory naturally for
+                single-consumer use.
 
         Raises:
             ValueError: If `maxlen` is not a positive integer or `None`.
@@ -64,18 +54,19 @@ class EventLog(Generic[T]):
             raise ValueError("EventLog maxlen must be a positive int or None")
         self._items: deque[T] = deque()
         self._maxlen: int | None = maxlen
-        self._first_seq = 0  # absolute seq of _items[0]
         self._closed = False
         self._error: BaseException | None = None
 
         # Binding state — None means unbound.
         self._is_async: bool | None = None
 
-        # Sync pull callback (set by the run stream, not by bind).
-        self._request_more: Callable[[], bool] | None = None
+        # Flipped on first __iter__ / __aiter__. Pre-subscription
+        # pushes are silent no-ops.
+        self._subscribed = False
 
-        # Async notification (allocated on bind).
-        self._event: asyncio.Event | None = None
+        # Pump wiring set by the run stream after bind.
+        self._request_more: Callable[[], bool] | None = None
+        self._arequest_more: Callable[[], Awaitable[bool]] | None = None
 
     # ------------------------------------------------------------------
     # Binding
@@ -96,75 +87,50 @@ class EventLog(Generic[T]):
         if self._is_async is not None:
             raise RuntimeError("EventLog is already bound")
         self._is_async = is_async
-        if is_async:
-            self._event = asyncio.Event()
 
     # ------------------------------------------------------------------
     # Producer API
     # ------------------------------------------------------------------
 
     def push(self, item: T) -> None:
-        """Append an item and wake all waiting cursors.
+        """Append an item. No-op when no subscriber is registered.
 
-        In bounded mode, evicts the oldest item first if the buffer is
-        full, advancing `_first_seq` so cursors can detect that they've
-        fallen off the back of the retention window.
-
-        Args:
-            item: The item to append.
+        Non-blocking in both sync and async — matches v1's
+        `put_nowait` producer shape. Memory is bounded by caller pace
+        via the caller-driven pump.
 
         Raises:
-            RuntimeError: If the log is closed.
+            RuntimeError: If the log is closed (and subscribed).
         """
+        if not self._subscribed:
+            return
         if self._closed:
             raise RuntimeError("Cannot push to a closed EventLog")
-        if self._maxlen is not None and len(self._items) >= self._maxlen:
-            self._items.popleft()
-            self._first_seq += 1
         self._items.append(item)
-        self._notify()
 
     def close(self) -> None:
-        """Mark the log as complete.
-
-        Open cursors will finish cleanly once they drain the buffer.
-        """
+        """Mark the log as complete."""
         self._closed = True
-        self._notify()
 
     def fail(self, err: BaseException) -> None:
         """Mark the log as errored.
 
-        Open cursors will raise `err` once they drain the buffer.
-
         Args:
-            err: The exception to surface to consumers.
+            err: The exception to surface to the subscriber.
         """
         self._error = err
         self._closed = True
-        self._notify()
 
     # ------------------------------------------------------------------
-    # Notification
-    # ------------------------------------------------------------------
-
-    def _notify(self) -> None:
-        """Wake async cursors waiting for data.
-
-        No-op when sync-bound (no event exists).
-        """
-        if self._event is not None:
-            self._event.set()
-
-    # ------------------------------------------------------------------
-    # Sync iteration (pull-based)
+    # Sync iteration (caller-driven pump)
     # ------------------------------------------------------------------
 
     def __iter__(self) -> Iterator[T]:
-        """Return a new independent sync cursor over the log.
+        """Subscribe and return a sync cursor. Can be called only once.
 
         Raises:
             TypeError: If the log is unbound or bound to async mode.
+            RuntimeError: If the log already has a subscriber.
         """
         if self._is_async is None:
             raise TypeError(
@@ -175,49 +141,38 @@ class EventLog(Generic[T]):
             raise TypeError(
                 "This EventLog is bound to async mode — use 'async for' instead."
             )
+        if self._subscribed:
+            raise RuntimeError(
+                "EventLog already has a subscriber; use .tee(n) for fan-out."
+            )
+        self._subscribed = True
         return self._sync_cursor()
 
     def _sync_cursor(self) -> Iterator[T]:
-        # Start at the current head — if maxlen is None this is 0 (seen everything),
-        # if bounded this is wherever retention currently begins.
-        seq = self._first_seq
         while True:
-            if seq < self._first_seq:
-                raise BufferOverflowError(
-                    f"Cursor fell {self._first_seq - seq} items behind the "
-                    f"bounded EventLog's retention window (maxlen={self._maxlen})"
-                )
-            idx = seq - self._first_seq
-            if idx < len(self._items):
-                item = self._items[idx]
-                seq += 1
-                yield item
+            if self._items:
+                yield self._items.popleft()
             elif self._closed:
                 if self._error is not None:
                     raise self._error
                 return
             elif self._request_more is not None:
-                # Pull from the producer until this log gets a new item
-                # or the graph is exhausted (which closes the log). A push
-                # may evict the item this cursor was about to read; in that
-                # case the inner loop breaks and the outer `seq < _first_seq`
-                # check catches the overflow on the next iteration.
-                while (seq - self._first_seq) >= len(self._items) and not self._closed:
-                    if not self._request_more():
-                        break
+                if not self._request_more():
+                    if not self._items and not self._closed:
+                        return
             else:
-                # No producer callback and not closed — buffer is complete.
                 return
 
     # ------------------------------------------------------------------
-    # Async iteration
+    # Async iteration (caller-driven pump)
     # ------------------------------------------------------------------
 
     def __aiter__(self) -> AsyncIterator[T]:
-        """Return a new independent async cursor over the log.
+        """Subscribe and return an async cursor. Can be called only once.
 
         Raises:
             TypeError: If the log is unbound or bound to sync mode.
+            RuntimeError: If the log already has a subscriber.
         """
         if self._is_async is None:
             raise TypeError(
@@ -226,26 +181,126 @@ class EventLog(Generic[T]):
             )
         if not self._is_async:
             raise TypeError("This EventLog is bound to sync mode — use 'for' instead.")
+        if self._subscribed:
+            raise RuntimeError(
+                "EventLog already has a subscriber; use .atee(n) for fan-out."
+            )
+        self._subscribed = True
         return self._async_cursor()
 
     async def _async_cursor(self) -> AsyncIterator[T]:
-        assert self._event is not None
-        seq = self._first_seq
         while True:
-            if seq < self._first_seq:
-                raise BufferOverflowError(
-                    f"Cursor fell {self._first_seq - seq} items behind the "
-                    f"bounded EventLog's retention window (maxlen={self._maxlen})"
-                )
-            idx = seq - self._first_seq
-            if idx < len(self._items):
-                yield self._items[idx]
-                seq += 1
+            if self._items:
+                yield self._items.popleft()
             elif self._closed:
                 if self._error is not None:
                     raise self._error
                 return
+            elif self._arequest_more is not None:
+                if not await self._arequest_more():
+                    if not self._items and not self._closed:
+                        return
             else:
-                self._event.clear()
-                if (seq - self._first_seq) >= len(self._items) and not self._closed:
-                    await self._event.wait()
+                return
+
+    # ------------------------------------------------------------------
+    # Fan-out via tee
+    # ------------------------------------------------------------------
+
+    def tee(self, n: int = 2) -> tuple[Iterator[T], ...]:
+        """Subscribe and return `n` independent sync iterators.
+
+        Each branch has its own buffer; items pulled from the
+        underlying cursor are copied into every branch. Branches are
+        naturally bounded by caller pace since the sync pump is
+        caller-driven.
+
+        Args:
+            n: Number of branches to create. Must be >= 1.
+
+        Returns:
+            A tuple of `n` iterators over the same underlying stream.
+
+        Raises:
+            TypeError: If the log is unbound or bound to async mode.
+            RuntimeError: If the log already has a subscriber.
+            ValueError: If `n` < 1.
+        """
+        if n < 1:
+            raise ValueError("tee() requires n >= 1")
+        source = self.__iter__()
+        buffers: list[deque[T]] = [deque() for _ in range(n)]
+        exhausted = [False]
+
+        def branch(i: int) -> Iterator[T]:
+            buf = buffers[i]
+            while True:
+                if buf:
+                    yield buf.popleft()
+                elif exhausted[0]:
+                    return
+                else:
+                    try:
+                        item = next(source)
+                    except StopIteration:
+                        exhausted[0] = True
+                        return
+                    for b in buffers:
+                        b.append(item)
+
+        return tuple(branch(i) for i in range(n))
+
+    def atee(self, n: int = 2) -> tuple[AsyncIterator[T], ...]:
+        """Subscribe and return `n` independent async iterators.
+
+        Caller-driven fan-out: each branch's `__anext__` either pops
+        from its own buffer or, under a shared `asyncio.Lock`, pulls
+        one item from the underlying cursor and distributes it to
+        every branch's buffer.
+
+        Args:
+            n: Number of branches to create. Must be >= 1.
+
+        Returns:
+            A tuple of `n` async iterators over the same underlying
+            stream.
+
+        Raises:
+            TypeError: If the log is unbound or bound to sync mode.
+            RuntimeError: If the log already has a subscriber.
+            ValueError: If `n` < 1.
+        """
+        if n < 1:
+            raise ValueError("atee() requires n >= 1")
+        source = self.__aiter__()
+        buffers: list[deque[T]] = [deque() for _ in range(n)]
+        exhausted = [False]
+        error: list[BaseException | None] = [None]
+        lock = asyncio.Lock()
+
+        async def branch(i: int) -> AsyncIterator[T]:
+            buf = buffers[i]
+            while True:
+                if buf:
+                    yield buf.popleft()
+                    continue
+                if exhausted[0]:
+                    if error[0] is not None:
+                        raise error[0]
+                    return
+                async with lock:
+                    if buf or exhausted[0]:
+                        continue
+                    try:
+                        item = await source.__anext__()
+                    except StopAsyncIteration:
+                        exhausted[0] = True
+                        continue
+                    except Exception as e:
+                        error[0] = e
+                        exhausted[0] = True
+                        continue
+                    for b in buffers:
+                        b.append(item)
+
+        return tuple(branch(i) for i in range(n))

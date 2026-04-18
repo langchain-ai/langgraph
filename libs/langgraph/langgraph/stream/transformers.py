@@ -18,7 +18,12 @@ if TYPE_CHECKING:
 
 
 class ValuesTransformer(StreamTransformer):
-    """Capture values events as an iterable of state snapshots.
+    """Capture values events as a drainable stream of state snapshots.
+
+    Keeps `_latest` / `_interrupted` / `_interrupts` as scalar state
+    regardless of whether the log has a subscriber — so `run.output()`
+    and `run.interrupted` work without forcing the caller to iterate
+    `run.values`. Log pushes are silent no-ops when unsubscribed.
 
     Native transformer — projection keys are exposed as direct
     attributes on the run stream (e.g. `run.values`).
@@ -53,11 +58,11 @@ class ValuesTransformer(StreamTransformer):
         if params["namespace"]:
             return True
         self._latest = params["data"]
-        self._log.push(params["data"])
         interrupts = params.get("interrupts", ())
         if interrupts:
             self._interrupted = True
             self._interrupts.extend(interrupts)
+        self._log.push(params["data"])
         return True
 
 
