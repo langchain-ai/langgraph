@@ -15,7 +15,6 @@ from typing_extensions import TypedDict
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.stream import (
-    BufferOverflowError,
     EventLog,
     StreamChannel,
     StreamingHandler,
@@ -142,78 +141,98 @@ class TestEventLog:
     def test_sync_iteration(self) -> None:
         log: EventLog[int] = EventLog()
         log._bind(is_async=False)
+        it = iter(log)  # subscribe before pushing
         log.push(1)
         log.push(2)
         log.push(3)
         log.close()
-        assert list(log) == [1, 2, 3]
+        assert list(it) == [1, 2, 3]
 
-    def test_multi_cursor(self) -> None:
+    def test_drain_on_consume(self) -> None:
+        """Items are popped as consumed — no retention across iterations."""
         log: EventLog[str] = EventLog()
         log._bind(is_async=False)
+        it = iter(log)
         log.push("a")
         log.push("b")
         log.close()
-        # Two independent cursors see all items.
-        assert list(log) == ["a", "b"]
-        assert list(log) == ["a", "b"]
+        assert list(it) == ["a", "b"]
+        # Buffer is drained.
+        assert list(log._items) == []
+
+    def test_second_subscribe_raises(self) -> None:
+        """Only one subscriber allowed; tee() is the fan-out escape hatch."""
+        log: EventLog[str] = EventLog()
+        log._bind(is_async=False)
+        log.close()
+        _ = iter(log)
+        with pytest.raises(RuntimeError, match="already has a subscriber"):
+            iter(log)
+
+    def test_pre_subscription_push_is_noop(self) -> None:
+        """Lazy-subscribe: pushes before subscription are dropped silently."""
+        log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
+        log.push(1)
+        log.push(2)
+        it = iter(log)
+        log.push(3)
+        log.close()
+        # Only the post-subscribe push survives.
+        assert list(it) == [3]
 
     def test_fail_propagation(self) -> None:
         log: EventLog[int] = EventLog()
         log._bind(is_async=False)
+        it = iter(log)
         log.push(1)
         log.fail(ValueError("test error"))
         with pytest.raises(ValueError, match="test error"):
-            list(log)
+            list(it)
 
     @pytest.mark.anyio
     async def test_async_iteration(self) -> None:
         log: EventLog[int] = EventLog()
         log._bind(is_async=True)
-
-        async def producer():
-            for i in range(3):
-                log.push(i)
-            log.close()
-
-        producer_task = asyncio.create_task(producer())
-        items = [item async for item in log]
-        await producer_task
+        cursor = aiter(log)
+        for i in range(3):
+            log.push(i)
+        log.close()
+        items = [item async for item in cursor]
         assert items == [0, 1, 2]
 
     @pytest.mark.anyio
-    async def test_async_multi_cursor(self) -> None:
+    async def test_async_second_subscribe_raises(self) -> None:
         log: EventLog[str] = EventLog()
         log._bind(is_async=True)
-        log.push("x")
-        log.push("y")
         log.close()
-        items1 = [item async for item in log]
-        items2 = [item async for item in log]
-        assert items1 == ["x", "y"]
-        assert items2 == ["x", "y"]
+        _ = log.__aiter__()
+        with pytest.raises(RuntimeError, match="already has a subscriber"):
+            log.__aiter__()
 
     @pytest.mark.anyio
     async def test_async_fail(self) -> None:
         log: EventLog[int] = EventLog()
         log._bind(is_async=True)
+        cursor = aiter(log)
         log.push(1)
         log.fail(RuntimeError("async error"))
         with pytest.raises(RuntimeError, match="async error"):
-            async for _ in log:
+            async for _ in cursor:
                 pass
 
     def test_sync_cursor_yields_items_before_error(self) -> None:
         """Sync cursor should yield all buffered items before raising."""
         log: EventLog[int] = EventLog()
         log._bind(is_async=False)
+        it = iter(log)
         log.push(1)
         log.push(2)
         log.push(3)
         log.fail(ValueError("late error"))
         items: list[int] = []
         with pytest.raises(ValueError, match="late error"):
-            for item in log:
+            for item in it:
                 items.append(item)
         assert items == [1, 2, 3]
 
@@ -222,30 +241,38 @@ class TestEventLog:
         """Async cursor should yield all buffered items before raising."""
         log: EventLog[int] = EventLog()
         log._bind(is_async=True)
+        cursor = aiter(log)
         log.push(1)
         log.push(2)
         log.push(3)
         log.fail(ValueError("late error"))
         items: list[int] = []
         with pytest.raises(ValueError, match="late error"):
-            async for item in log:
+            async for item in cursor:
                 items.append(item)
         assert items == [1, 2, 3]
 
     def test_push_after_close_raises(self) -> None:
-        """Push after close should raise RuntimeError."""
+        """Push after close should raise RuntimeError (when subscribed)."""
         log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
+        it = iter(log)
         log.push(1)
         log.close()
         with pytest.raises(RuntimeError, match="Cannot push to a closed EventLog"):
             log.push(2)
+        _ = list(it)
 
     def test_push_after_fail_raises(self) -> None:
-        """Fail closes the log, so push after fail should also raise."""
+        """Fail closes the log, so push after fail should also raise (when subscribed)."""
         log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
+        it = iter(log)
         log.fail(ValueError("err"))
         with pytest.raises(RuntimeError, match="Cannot push to a closed EventLog"):
             log.push(1)
+        with pytest.raises(ValueError, match="err"):
+            list(it)
 
     def test_empty_log_sync(self) -> None:
         """Iterating a closed empty log should yield nothing."""
@@ -321,31 +348,35 @@ class TestStreamChannel:
     def test_push_and_iterate(self) -> None:
         ch: StreamChannel[str] = StreamChannel("test")
         ch._bind(is_async=False)
+        it = iter(ch)
         ch.push("a")
         ch.push("b")
         ch._close()
-        assert list(ch) == ["a", "b"]
+        assert list(it) == ["a", "b"]
 
     def test_wire_callback(self) -> None:
         forwarded: list[str] = []
         ch: StreamChannel[str] = StreamChannel("test")
         ch._bind(is_async=False)
         ch._wire(lambda item: forwarded.append(item))
+        it = iter(ch)
         ch.push("x")
         ch.push("y")
         ch._close()
+        # Wire callback fires on every push, regardless of subscription.
         assert forwarded == ["x", "y"]
-        assert list(ch) == ["x", "y"]
+        assert list(it) == ["x", "y"]
 
     def test_fail_propagation(self) -> None:
         """_fail() should propagate the error through the underlying log."""
         ch: StreamChannel[str] = StreamChannel("test")
         ch._bind(is_async=False)
+        it = iter(ch)
         ch.push("a")
         ch._fail(ValueError("channel error"))
         items: list[str] = []
         with pytest.raises(ValueError, match="channel error"):
-            for item in ch:
+            for item in it:
                 items.append(item)
         assert items == ["a"]
 
@@ -354,10 +385,11 @@ class TestStreamChannel:
         """Async iteration should delegate to the inner event log."""
         ch: StreamChannel[str] = StreamChannel("test")
         ch._bind(is_async=True)
-        ch.push("x")
-        ch.push("y")
+        cursor = ch.__aiter__()
+        ch._log.push("x")
+        ch._log.push("y")
         ch._close()
-        items = [item async for item in ch]
+        items = [item async for item in cursor]
         assert items == ["x", "y"]
 
     def test_push_without_wire(self) -> None:
@@ -365,9 +397,10 @@ class TestStreamChannel:
         ch: StreamChannel[int] = StreamChannel("test")
         ch._bind(is_async=False)
         assert ch._wire_fn is None
+        it = iter(ch)
         ch.push(42)
         ch._close()
-        assert list(ch) == [42]
+        assert list(it) == [42]
 
 
 # ---------------------------------------------------------------------------
@@ -439,6 +472,49 @@ class TestStreamingHandlerSync:
         assert len(custom_events) == 2
         assert custom_events[0]["params"]["data"] == {"step": "start"}
         assert custom_events[1]["params"]["data"] == {"step": "end"}
+
+    def test_interleave_values_and_messages(self) -> None:
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "x", "items": []})
+
+        tagged = list(run.interleave("values", "messages"))
+        names = [name for name, _ in tagged]
+        assert set(names).issubset({"values", "messages"})
+        # Values projection must have fired at least once.
+        assert names.count("values") >= 1
+        # Values have been drained by the interleave cursor — re-subscribing raises.
+        with pytest.raises(RuntimeError, match="already has a subscriber"):
+            list(run.values)
+
+    def test_abort_marks_exhausted_and_closes_mux(self) -> None:
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "x", "items": []})
+        values_iter = iter(run.values)
+        # Consume one item so the pump advances.
+        _ = next(values_iter)
+        run.abort()
+        # Remaining iteration yields whatever was buffered, then stops.
+        list(values_iter)
+        assert run._exhausted is True
+        # Second abort is idempotent.
+        run.abort()
+
+    def test_context_manager_calls_abort_on_exit(self) -> None:
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        with handler.stream({"value": "x", "items": []}) as run:
+            values_iter = iter(run.values)
+            _ = next(values_iter)
+        assert run._exhausted is True
+
+    def test_interleave_unknown_projection(self) -> None:
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "x", "items": []})
+        with pytest.raises(KeyError):
+            list(run.interleave("values", "does_not_exist"))
 
 
 class TestStreamingHandlerSyncErrors:
@@ -532,6 +608,32 @@ class TestStreamingHandlerAsync:
         assert len(events) > 0
         for event in events:
             assert event["type"] == "event"
+
+    @pytest.mark.anyio
+    @NEEDS_CONTEXTVARS
+    async def test_abort_marks_exhausted_and_closes_mux(self) -> None:
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = await handler.astream({"value": "x", "items": []})
+        values_iter = aiter(run.values)
+        _ = await anext(values_iter)
+        await run.abort()
+        # Drain the rest; should terminate promptly now that mux is closed.
+        async for _item in values_iter:
+            pass
+        assert run._exhausted is True
+        await run.abort()  # idempotent
+
+    @pytest.mark.anyio
+    @NEEDS_CONTEXTVARS
+    async def test_async_context_manager_calls_abort_on_exit(self) -> None:
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = await handler.astream({"value": "x", "items": []})
+        async with run:
+            values_iter = aiter(run.values)
+            _ = await anext(values_iter)
+        assert run._exhausted is True
 
     @pytest.mark.anyio
     @NEEDS_CONTEXTVARS
@@ -699,13 +801,14 @@ class TestStreamMux:
                 return event["method"] != "updates"
 
         mux = StreamMux([FilterTransformer()])
+        it = iter(mux._events)
 
         mux.push(_event("values", {"a": 1}))
         mux.push(_event("updates", {"b": 2}))
         mux.push(_event("custom", {"c": 3}))
         mux.close()
 
-        events = list(mux._events)
+        events = list(it)
         methods = [e["method"] for e in events]
         assert "updates" not in methods
         assert methods == ["values", "custom"]
@@ -744,9 +847,10 @@ class TestStreamMux:
     def test_empty_mux(self) -> None:
         """Push/close/fail on a mux with no transformers should work."""
         mux = StreamMux()
+        it = iter(mux._events)
         mux.push(_event("values", {"x": 1}))
         mux.close()
-        events = list(mux._events)
+        events = list(it)
         assert len(events) == 1
         assert events[0]["method"] == "values"
 
@@ -769,12 +873,13 @@ class TestValuesTransformer:
         t = ValuesTransformer()
         t.init()
         t._log._bind(is_async=False)
+        it = iter(t._log)
 
         t.process(_event("values", {"val": "root"}))
         t.process(_event("values", {"val": "sub"}, namespace=["sub"]))
 
         t._log.close()
-        items = list(t._log)
+        items = list(it)
         assert len(items) == 1
         assert items[0]["val"] == "root"
 
@@ -783,11 +888,12 @@ class TestValuesTransformer:
         t = ValuesTransformer()
         t.init()
         t._log._bind(is_async=False)
+        it = iter(t._log)
 
         result = t.process(_event("updates", {"x": 1}))
         assert result is True  # passed through
         t._log.close()
-        assert list(t._log) == []  # but not captured
+        assert list(it) == []  # but not captured
 
     def test_tracks_interrupts(self) -> None:
         """Interrupts should be accumulated across events."""
@@ -810,10 +916,11 @@ class TestMessagesTransformer:
         t = MessagesTransformer()
         t.init()
         t._log._bind(is_async=False)
+        it = iter(t._log)
 
         t.process(_event("messages", ("chunk", {"meta": True})))
         t._log.close()
-        items = list(t._log)
+        items = list(it)
         assert len(items) == 1
         assert items[0] == ("chunk", {"meta": True})
 
@@ -821,28 +928,31 @@ class TestMessagesTransformer:
         t = MessagesTransformer()
         t.init()
         t._log._bind(is_async=False)
+        it = iter(t._log)
 
         t.process(_event("messages", ("chunk", {}), namespace=["sub"]))
         t._log.close()
-        assert list(t._log) == []
+        assert list(it) == []
 
     def test_ignores_non_messages_methods(self) -> None:
         t = MessagesTransformer()
         t.init()
         t._log._bind(is_async=False)
+        it = iter(t._log)
 
         result = t.process(_event("values", {"v": 1}))
         assert result is True
         t._log.close()
-        assert list(t._log) == []
+        assert list(it) == []
 
     def test_fail_propagates(self) -> None:
         t = MessagesTransformer()
         t.init()
         t._log._bind(is_async=False)
+        it = iter(t._log)
         t._log.fail(ValueError("msg error"))
         with pytest.raises(ValueError, match="msg error"):
-            list(t._log)
+            list(it)
 
 
 # ---------------------------------------------------------------------------
@@ -975,10 +1085,11 @@ class TestCustomTransformer:
         handler = StreamingHandler(graph)
         counter_t = CounterTransformer()
         run = handler.stream({"value": "x", "items": []}, transformers=[counter_t])
-        _ = run.output
         assert "counter" in run.extensions
-        # Counter channel should have been pushed to.
-        counts = list(run.extensions["counter"])
+        # Subscribe before driving the run so channel pushes are retained.
+        counter_iter = iter(run.extensions["counter"])
+        _ = run.output
+        counts = list(counter_iter)
         assert len(counts) > 0
         # Non-native transformer should not set direct attributes.
         assert not hasattr(run, "counter")
@@ -1005,12 +1116,14 @@ class TestCustomTransformer:
         handler = StreamingHandler(graph)
         foo_t = FooTransformer()
         run = handler.stream({"value": "x", "items": []}, transformers=[foo_t])
+        # Subscribe before driving the run.
+        foo_iter = iter(run.foo)
         _ = run.output
         # foo should be both in extensions and as a direct attribute.
         assert "foo" in run.extensions
         assert hasattr(run, "foo")
         assert run.foo is run.extensions["foo"]
-        items = list(run.foo)
+        items = list(foo_iter)
         assert "saw_values" in items
 
     def test_stream_channel_auto_forward(self) -> None:
@@ -1062,12 +1175,13 @@ class TestCustomTransformer:
                 return True
 
         mux = StreamMux([ChannelPusher()])
+        it = iter(mux._events)
 
         mux.push(_event("values"))
         mux.push(_event("updates"))
         mux.close()
 
-        events = list(mux._events)
+        events = list(it)
         seqs = [e["seq"] for e in events]
         # Seq numbers must be strictly increasing.
         for i in range(1, len(seqs)):
@@ -1116,12 +1230,13 @@ class TestEventLogAutoLifecycle:
                 return True
 
         mux = StreamMux([SimpleTransformer()])
+        it = iter(mux._events)
 
         mux.push(_event("values"))
         mux.close()
 
         # The log should have been auto-closed — iteration should work.
-        items = list(mux._events)
+        items = list(it)
         assert len(items) == 1
 
     def test_mux_auto_fails_event_logs(self) -> None:
@@ -1141,13 +1256,14 @@ class TestEventLogAutoLifecycle:
 
         t = SimpleTransformer()
         mux = StreamMux([t])
+        it = iter(t._log)
 
         mux.push(_event("values"))
         mux.fail(ValueError("boom"))
 
         # The transformer's log should have been auto-failed.
         with pytest.raises(ValueError, match="boom"):
-            list(t._log)
+            list(it)
 
     def test_no_double_close_if_transformer_closes_own_log(self) -> None:
         """If a transformer closes its log in finalize(), mux should not error."""
@@ -1191,8 +1307,9 @@ class TestEventLogAutoLifecycle:
         handler = StreamingHandler(graph)
         t = MinimalTransformer()
         run = handler.stream({"value": "x", "items": []}, transformers=[t])
+        minimal_iter = iter(run.extensions["minimal"])
         _ = run.output
-        items = list(run.extensions["minimal"])
+        items = list(minimal_iter)
         assert len(items) > 0
 
 
@@ -1451,13 +1568,14 @@ class TestAsyncTransformerLane:
 
         async_t = AsyncOne()
         mux = StreamMux([SyncOne(), async_t], is_async=True)
+        seen_cursor = aiter(async_t._log)
 
         await mux.apush(_event("values", {}))
         await mux.apush(_event("updates", {}))
         await mux.aclose()
 
         assert seen_sync == ["values", "updates"]
-        items = [x async for x in async_t._log]
+        items = [x async for x in seen_cursor]
         assert items == ["values", "updates"]
 
     @pytest.mark.anyio
@@ -1492,148 +1610,146 @@ class TestAsyncTransformerLane:
             {"value": "x", "items": []},
             transformers=[Scorer()],
         )
+        # Subscribe before driving the run so scheduled pushes are retained.
+        scores_cursor = aiter(run.extensions["scores"])
         _ = await run.output()
-        scores = [x async for x in run.extensions["scores"]]
+        scores = [x async for x in scores_cursor]
         assert scores and all(s == 42 for s in scores)
 
 
 # ---------------------------------------------------------------------------
-# Bounded EventLog / StreamChannel — memory caps and overflow semantics
+# Drain-on-consume semantics — bounded backpressure, single subscriber
 # ---------------------------------------------------------------------------
 
 
-class TestBoundedEventLog:
+class TestMemoryBounds:
+    """Drain-on-consume guarantees memory stays bounded for the common
+    access patterns. These tests lock in the property — if a change
+    re-introduces retention, they should fail."""
+
+    def test_sync_subscribed_buffer_stays_at_most_one_between_yields(self) -> None:
+        """With a single sync consumer, the pump produces exactly one event
+        per cursor advance, so the buffer never holds more than one."""
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "x", "items": []})
+        events_iter = iter(run)
+        max_buffered = 0
+        count = 0
+        for _ in events_iter:
+            max_buffered = max(max_buffered, len(run._mux._events._items))
+            count += 1
+        assert count > 0
+        assert max_buffered == 0, (
+            f"Subscribed buffer should hold 0 items after each yield "
+            f"(drain-on-consume), observed max {max_buffered}"
+        )
+
+    def test_unsubscribed_projections_never_accumulate(self) -> None:
+        """Projections without a subscriber drop pushes silently —
+        their buffers stay empty regardless of run length."""
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "x", "items": []})
+        # Subscribe to main events only; leave values and messages unsubscribed.
+        list(run)
+        values_log = run.extensions["values"]
+        messages_log = run.extensions["messages"]
+        assert len(values_log._items) == 0
+        assert len(messages_log._items) == 0
+        assert values_log._subscribed is False
+        assert messages_log._subscribed is False
+
+    def test_output_path_does_not_retain_values(self) -> None:
+        """`run.output` is a scalar accessor — it updates `_latest` from
+        process() without populating the log, so the values log buffer
+        stays empty even across a full run."""
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "x", "items": []})
+        _ = run.output
+        values_log = run.extensions["values"]
+        assert len(values_log._items) == 0
+        assert values_log._subscribed is False
+
+    def test_drained_subscriber_buffer_returns_to_empty(self) -> None:
+        """After fully draining a subscribed log, the internal deque is empty."""
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = handler.stream({"value": "x", "items": []})
+        values_log = run.extensions["values"]
+        list(run.values)
+        assert len(values_log._items) == 0
+
+    @pytest.mark.anyio
+    @NEEDS_CONTEXTVARS
+    async def test_async_single_consumer_buffer_stays_at_most_one(self) -> None:
+        """Same drain-on-consume guarantee for the async lane."""
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = await handler.astream({"value": "x", "items": []})
+        max_buffered = 0
+        count = 0
+        async for _ in run:
+            max_buffered = max(max_buffered, len(run._mux._events._items))
+            count += 1
+        assert count > 0
+        assert max_buffered == 0
+
+    @pytest.mark.anyio
+    @NEEDS_CONTEXTVARS
+    async def test_async_unsubscribed_projections_never_accumulate(self) -> None:
+        """Projections with no async subscriber stay empty under astream."""
+        graph = _build_simple_graph()
+        handler = StreamingHandler(graph)
+        run = await handler.astream({"value": "x", "items": []})
+        _ = await run.output()
+        values_log = run.extensions["values"]
+        messages_log = run.extensions["messages"]
+        assert len(values_log._items) == 0
+        assert len(messages_log._items) == 0
+        assert values_log._subscribed is False
+        assert messages_log._subscribed is False
+
+
+class TestDrainOnConsume:
     def test_invalid_maxlen_raises(self) -> None:
         with pytest.raises(ValueError, match="positive int or None"):
             EventLog(maxlen=0)
         with pytest.raises(ValueError, match="positive int or None"):
             EventLog(maxlen=-3)
 
-    def test_unbounded_default_preserves_replay(self) -> None:
-        """Default EventLog (maxlen=None) still replays from seq 0."""
+    def test_push_unbounded_by_design(self) -> None:
+        """Push is non-blocking and doesn't enforce capacity — the
+        caller-driven pump bounds memory via iteration pace."""
         log: EventLog[int] = EventLog()
         log._bind(is_async=False)
+        it = iter(log)
         for i in range(100):
             log.push(i)
         log.close()
-        assert list(log) == list(range(100))
-
-    def test_bounded_drops_oldest_on_overflow(self) -> None:
-        """When bounded, pushing past maxlen evicts the oldest item."""
-        log: EventLog[int] = EventLog(maxlen=3)
-        log._bind(is_async=False)
-        for i in range(5):
-            log.push(i)
-        log.close()
-        # Only the last 3 survive; new cursors start at the current head.
-        assert list(log) == [2, 3, 4]
-
-    def test_new_cursor_starts_at_head_not_zero(self) -> None:
-        """New cursors see the retained window, not the evicted prefix."""
-        log: EventLog[int] = EventLog(maxlen=2)
-        log._bind(is_async=False)
-        log.push(1)
-        log.push(2)
-        log.push(3)  # evicts 1
-        log.close()
-        assert list(log) == [2, 3]
+        assert list(it) == list(range(100))
 
     @pytest.mark.anyio
-    async def test_async_cursor_overflow_raises(self) -> None:
-        """An async cursor that falls behind the retention window raises."""
-        log: EventLog[int] = EventLog(maxlen=2)
+    async def test_atee_fans_out(self) -> None:
+        """atee provides the documented fan-out for concurrent consumers."""
+        log: EventLog[int] = EventLog()
         log._bind(is_async=True)
-
-        log.push(1)
-        cursor = aiter(log)
-        # Advance cursor to seq 1, reading item 1.
-        first = await anext(cursor)
-        assert first == 1
-        # Now push enough to roll the cursor off the back.
-        log.push(2)  # buffer: [1, 2]  _first_seq=0, cursor at seq=1
-        log.push(3)  # buffer: [2, 3]  _first_seq=1, cursor at seq=1 still OK
-        log.push(4)  # buffer: [3, 4]  _first_seq=2, cursor at seq=1 — overflow
-        with pytest.raises(BufferOverflowError, match="fell"):
-            await anext(cursor)
-
-    def test_sync_cursor_sees_all_while_bounded_but_under_cap(self) -> None:
-        """Bounded mode with pushes under cap behaves identically to unbounded."""
-        log: EventLog[int] = EventLog(maxlen=100)
-        log._bind(is_async=False)
-        log.push(1)
-        log.push(2)
+        a, b = log.atee(2)
+        for i in range(3):
+            log.push(i)
         log.close()
-        assert list(log) == [1, 2]
+        items_a = [x async for x in a]
+        items_b = [x async for x in b]
+        assert items_a == [0, 1, 2]
+        assert items_b == [0, 1, 2]
 
-
-class TestStreamChannelMaxlen:
-    def test_maxlen_passes_through_to_inner_log(self) -> None:
-        ch: StreamChannel[int] = StreamChannel("ch", maxlen=2)
-        ch._bind(is_async=False)
-        ch.push(1)
-        ch.push(2)
-        ch.push(3)
-        ch._close()
-        assert list(ch) == [2, 3]
-
-
-class TestMuxMaxEventsDefault:
-    def test_mux_fills_in_default_when_log_has_none(self) -> None:
-        class Simple(StreamTransformer):
-            def __init__(self) -> None:
-                self.log: EventLog[int] = EventLog()
-
-            def init(self) -> dict[str, Any]:
-                return {"out": self.log}
-
-            def process(self, event: ProtocolEvent) -> bool:
-                return True
-
-        t = Simple()
-        StreamMux([t], max_events=10)
-        assert t.log._maxlen == 10
-
-    def test_explicit_log_maxlen_wins_over_mux_default(self) -> None:
-        class Explicit(StreamTransformer):
-            def __init__(self) -> None:
-                self.log: EventLog[int] = EventLog(maxlen=3)
-
-            def init(self) -> dict[str, Any]:
-                return {"out": self.log}
-
-            def process(self, event: ProtocolEvent) -> bool:
-                return True
-
-        t = Explicit()
-        StreamMux([t], max_events=1000)
-        assert t.log._maxlen == 3  # transformer author's setting stands
-
-    def test_main_event_log_respects_max_events(self) -> None:
-        mux = StreamMux([], max_events=5)
-        assert mux._events._maxlen == 5
-
-    def test_max_events_default_cascades_to_channels(self) -> None:
-        class WithChannel(StreamTransformer):
-            def __init__(self) -> None:
-                self.ch: StreamChannel[int] = StreamChannel("out")
-
-            def init(self) -> dict[str, Any]:
-                return {"out": self.ch}
-
-            def process(self, event: ProtocolEvent) -> bool:
-                return True
-
-        t = WithChannel()
-        StreamMux([t], max_events=7)
-        assert t.ch._log._maxlen == 7
-
-    def test_handler_propagates_max_events(self) -> None:
-        graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []}, max_events=50)
-        # Main log inherits the default.
-        assert run._mux._events._maxlen == 50
-        # Native projections (values log, messages log) inherit too.
-        for log in run._mux._logs:
-            assert log._maxlen == 50
-        _ = run.output
+    def test_tee_fans_out_sync(self) -> None:
+        log: EventLog[int] = EventLog()
+        log._bind(is_async=False)
+        a, b = log.tee(2)
+        for i in range(3):
+            log.push(i)
+        log.close()
+        assert list(a) == [0, 1, 2]
+        assert list(b) == [0, 1, 2]

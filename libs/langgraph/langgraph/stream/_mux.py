@@ -40,7 +40,6 @@ class StreamMux:
         transformers: list[StreamTransformer] | None = None,
         *,
         is_async: bool = False,
-        max_events: int | None = None,
     ) -> None:
         """Initialize the mux and register transformers in order.
 
@@ -55,11 +54,6 @@ class StreamMux:
                 `None` or empty gives a mux with no projections.
             is_async: True for async dispatch (`apush` / `aclose` /
                 `afail`), False for the sync path.
-            max_events: Default capacity for every EventLog and
-                StreamChannel the mux binds, including the main event
-                log. Logs constructed with an explicit `maxlen` keep
-                their own setting — the mux only fills in unset
-                defaults. `None` leaves the logs unbounded.
 
         Raises:
             RuntimeError: If any transformer requires an async run but
@@ -68,8 +62,7 @@ class StreamMux:
             ValueError: If transformers' projection keys collide.
         """
         self._is_async = is_async
-        self._default_maxlen = max_events
-        self._events: EventLog[ProtocolEvent] = EventLog(maxlen=max_events)
+        self._events: EventLog[ProtocolEvent] = EventLog()
         self._events._bind(is_async=is_async)
         self._transformers: list[StreamTransformer] = []
         self._channels: list[StreamChannel[Any]] = []
@@ -218,6 +211,10 @@ class StreamMux:
         async work. For decoupled work, use `schedule()` from inside
         `process` / `aprocess` instead.
 
+        The main log append is a non-blocking `push` — matching v1's
+        `put_nowait` shape. Memory is bounded by caller pace via the
+        caller-driven pump; see `EventLog` for the full tradeoff story.
+
         Args:
             event: The protocol event to dispatch.
         """
@@ -324,7 +321,6 @@ class StreamMux:
         """Bind and wire EventLog / StreamChannel instances in a projection."""
         for value in projection.values():
             if isinstance(value, StreamChannel):
-                self._apply_default_maxlen(value._log)
                 value._bind(is_async=self._is_async)
                 self._channels.append(value)
                 channel_name = value.name
@@ -337,14 +333,8 @@ class StreamMux:
 
                 value._wire(_make_forward(channel_name))
             elif isinstance(value, EventLog):
-                self._apply_default_maxlen(value)
                 value._bind(is_async=self._is_async)
                 self._logs.append(value)
-
-    def _apply_default_maxlen(self, log: EventLog[Any]) -> None:
-        """Fill in the mux's default maxlen when the log hasn't set its own."""
-        if log._maxlen is None and self._default_maxlen is not None:
-            log._maxlen = self._default_maxlen
 
     def _forward(self, channel_name: str, item: Any) -> None:
         """Inject a ProtocolEvent for a StreamChannel push.

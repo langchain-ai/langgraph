@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Iterator, Mapping
-from types import MappingProxyType
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+from types import MappingProxyType, TracebackType
 from typing import Any
 
 from langgraph.stream._convert import convert_to_protocol_event
@@ -13,20 +13,31 @@ from langgraph.stream.stream_channel import StreamChannel
 from langgraph.stream.transformers import ValuesTransformer
 
 
+def _drive_until_done(pump: Callable[[], bool]) -> None:
+    """Call the sync pump until it returns False."""
+    while pump():
+        pass
+
+
+async def _adrive_until_done(pump: Callable[[], Awaitable[bool]]) -> None:
+    """Call the async pump until it returns False."""
+    while await pump():
+        pass
+
+
 class GraphRunStream:
     """Sync run stream with caller-driven pumping.
 
     The caller's iteration on any projection (`values`, `messages`,
     raw events, or `output`) drives the graph forward. No background
-    thread is used — this matches v1's model where the caller's `for`
-    loop is the pump.
+    thread is used — the caller's `for` loop is the pump.
+
+    Projections are single-consumer — iterating `run.values` twice
+    raises. Use `projection.tee(n)` if you genuinely need fan-out.
 
     All transformer projections live in `extensions`. Native transformer
     projections (those with `_native = True`) are also set as direct
     attributes on this instance (e.g. `run.values`, `run.messages`).
-
-    Iterating the run stream directly yields raw `ProtocolEvent` objects
-    from the mux's main event log.
     """
 
     def __init__(
@@ -48,19 +59,13 @@ class GraphRunStream:
         self.extensions: Mapping[str, Any] = MappingProxyType(mux.extensions)
         self._values_transformer = values_transformer
         self._exhausted = False
-        # Native-transformer projections also show up as direct attributes.
         for key in mux.native_keys:
             setattr(self, key, mux.extensions[key])
-        # Wire pull-based iteration: every sync EventLog calls _pump_next
-        # when its cursor catches up to the buffer.
         self._wire_request_more(mux)
 
     def _wire_request_more(self, mux: StreamMux) -> None:
-        """Install `_request_more` on every sync EventLog.
-
-        Sync iteration is caller-driven, so a cursor that catches up to
-        the buffer's tail needs a way to ask the graph for more events.
-        """
+        """Install `_request_more` on every sync EventLog so cursors
+        can drive the pump when their buffer catches up."""
         mux._events._request_more = self._pump_next
         for value in mux.extensions.values():
             if isinstance(value, EventLog):
@@ -83,22 +88,43 @@ class GraphRunStream:
             self._mux.close()
             self._exhausted = True
             return False
-        except BaseException as e:
+        except Exception as e:
             self._mux.fail(e)
             self._exhausted = True
             return False
         self._mux.push(convert_to_protocol_event(part))
         return True
 
-    def _pump_all(self) -> None:
-        """Drain the graph completely."""
-        while self._pump_next():
+    def abort(self) -> None:
+        """Stop the run early.
+
+        Closes the mux and marks the stream exhausted. The graph
+        iterator is dropped; any in-flight nodes see the closure on
+        their next yield point. Idempotent.
+        """
+        if self._exhausted:
+            return
+        self._exhausted = True
+        try:
+            self._mux.close()
+        except Exception:
             pass
+
+    def __enter__(self) -> GraphRunStream:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.abort()
 
     @property
     def output(self) -> dict[str, Any] | None:
-        """Block until the run completes and return the final state."""
-        self._pump_all()
+        """Drive the run to completion and return the final state."""
+        _drive_until_done(self._pump_next)
         err = self._values_transformer.error
         if err is not None:
             raise err
@@ -106,12 +132,13 @@ class GraphRunStream:
 
     @property
     def interrupted(self) -> bool:
-        """Block until the run completes, then return whether it was interrupted.
+        """Drive the run to completion, then return whether it was
+        interrupted.
 
         Raises:
             BaseException: If the run ended with an error.
         """
-        self._pump_all()
+        _drive_until_done(self._pump_next)
         err = self._values_transformer.error
         if err is not None:
             raise err
@@ -119,70 +146,193 @@ class GraphRunStream:
 
     @property
     def interrupts(self) -> list[Any]:
-        """Block until the run completes, then return interrupt payloads.
+        """Drive the run to completion, then return interrupt payloads.
 
         Raises:
             BaseException: If the run ended with an error.
         """
-        self._pump_all()
+        _drive_until_done(self._pump_next)
         err = self._values_transformer.error
         if err is not None:
             raise err
         return self._values_transformer._interrupts
 
     def __iter__(self) -> Iterator[ProtocolEvent]:
-        """Iterate all protocol events from the mux's main event log."""
+        """Subscribe to the main event log and iterate protocol events."""
         return iter(self._mux._events)
+
+    def interleave(self, *names: str) -> Iterator[tuple[str, Any]]:
+        """Iterate multiple projections round-robin, yielding ``(name, item)``.
+
+        Each turn advances one projection's cursor; when a cursor's buffer
+        is empty, pulling from it drives the pump once, which fans out to
+        every subscribed projection log. Projections whose items aren't
+        consumed on this turn sit in their own buffers only until the next
+        turn reaches them, bounding memory by the skew between projection
+        rates rather than letting any single log grow to the full run
+        length.
+
+        Projections are exhausted independently; a projection that finishes
+        early drops out of the rotation while others continue. The overall
+        iterator ends once all named projections are done.
+
+        Args:
+            *names: Projection keys to interleave. Must match keys in
+                ``extensions``.
+
+        Yields:
+            ``(name, item)`` tuples in round-robin order across the named
+            projections.
+
+        Raises:
+            KeyError: If a name doesn't match a registered projection.
+
+        Example:
+            ```python
+            for name, item in run.interleave("messages", "values"):
+                if name == "messages":
+                    print("msg:", item)
+                else:
+                    print("val:", item)
+            ```
+        """
+        cursors: dict[str, Iterator[Any]] = {
+            name: iter(self.extensions[name]) for name in names
+        }
+        done: set[str] = set()
+        while len(done) < len(cursors):
+            for name, cursor in cursors.items():
+                if name in done:
+                    continue
+                try:
+                    item = next(cursor)
+                except StopIteration:
+                    done.add(name)
+                    continue
+                yield (name, item)
 
 
 class AsyncGraphRunStream:
-    """Async run stream with transformer-driven projections.
+    """Async run stream with caller-driven pumping.
 
-    A background asyncio task pumps events from the graph into the
-    transformer pipeline. This is the standard async pattern — the task
-    runs on the same event loop and async consumers can iterate
-    multiple projections concurrently.
+    Async iteration on any projection drives the graph forward — there
+    is no background task. Concurrent consumers share a single-flight
+    pump via an `asyncio.Lock`, so each awaiting cursor contributes one
+    event per acquisition. Backpressure comes from the logs: when a
+    subscribed log's buffer reaches `maxlen`, `apush` awaits the
+    subscriber to drain, which holds back the pump and paces the graph.
 
-    All transformer projections live in `extensions`. Native transformer
-    projections (those with `_native = True`) are also set as direct
-    attributes on this instance (e.g. `run.values`, `run.messages`).
+    Projections are single-consumer — a second `aiter(run.values)`
+    raises. Use `projection.tee(n)` for fan-out.
 
-    Async-iterating the run stream yields raw `ProtocolEvent` objects
-    from the mux's main event log.
+    Use as an async context manager to guarantee clean shutdown on
+    early exit:
+
+    ```python
+    async with await handler.astream(input) as run:
+        async for msg in run.messages:
+            ...
+    ```
     """
 
     def __init__(
         self,
+        graph_aiter: AsyncIterator[Any],
         mux: StreamMux,
         values_transformer: ValuesTransformer,
-        pump_task: asyncio.Task[None],
     ) -> None:
         """Initialize the async run stream.
 
         Args:
+            graph_aiter: Async iterator over the graph's stream.
             mux: The StreamMux owning projections and the main log.
             values_transformer: The built-in values transformer
                 providing `output` / `interrupted` / `interrupts`.
-            pump_task: Background task pumping graph events into the mux.
         """
+        self._graph_aiter = graph_aiter
         self._mux = mux
         self.extensions: Mapping[str, Any] = MappingProxyType(mux.extensions)
         self._values_transformer = values_transformer
-        self._pump_task = pump_task
-        # Native-transformer projections also show up as direct attributes.
+        self._exhausted = False
+        self._pump_lock = asyncio.Lock()
         for key in mux.native_keys:
             setattr(self, key, mux.extensions[key])
+        self._wire_arequest_more(mux)
+
+    def _wire_arequest_more(self, mux: StreamMux) -> None:
+        """Install `_arequest_more` on every async EventLog so cursors
+        can drive the pump when their buffer catches up."""
+        mux._events._arequest_more = self._apump_next
+        for value in mux.extensions.values():
+            if isinstance(value, EventLog):
+                value._arequest_more = self._apump_next
+            elif isinstance(value, StreamChannel):
+                value._log._arequest_more = self._apump_next
+
+    async def _apump_next(self) -> bool:
+        """Pull one event from the graph and push it through the mux.
+
+        Serialized via `self._pump_lock` so concurrent cursors each
+        produce one event per acquisition rather than racing on the
+        graph iterator.
+
+        `except Exception` is intentional — `CancelledError` and other
+        `BaseException` subclasses propagate, matching asyncio's
+        cancellation contract.
+
+        Returns:
+            True if an event was pulled, False if the graph is
+            exhausted or has raised.
+        """
+        async with self._pump_lock:
+            if self._exhausted:
+                return False
+            try:
+                part = await self._graph_aiter.__anext__()
+            except StopAsyncIteration:
+                self._exhausted = True
+                await self._mux.aclose()
+                return False
+            except Exception as e:
+                self._exhausted = True
+                await self._mux.afail(e)
+                return False
+            await self._mux.apush(convert_to_protocol_event(part))
+            return True
+
+    async def abort(self) -> None:
+        """Stop the run early.
+
+        Closes the mux and marks the stream exhausted. Any awaiting
+        cursors wake up and see the closed state; any `apush` blocked
+        on backpressure wakes and returns without appending. Idempotent.
+        """
+        async with self._pump_lock:
+            if self._exhausted:
+                return
+            self._exhausted = True
+            try:
+                await self._mux.aclose()
+            except Exception:
+                pass
+
+    async def __aenter__(self) -> AsyncGraphRunStream:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        await self.abort()
 
     async def output(self) -> dict[str, Any] | None:
-        """Wait for the run to complete and return the final state.
+        """Drive the run to completion and return the final state.
 
-        Methods (not properties) on the async lane so `run.output` without
-        `await` raises at type-check time instead of silently yielding a
-        coroutine object that's truthy, lenless, and never awaited.
-
-        The pump routes any Exception into `mux.afail`, which surfaces on
-        `ValuesTransformer.error`. CancelledError / KeyboardInterrupt
-        propagate so cancellation isn't silently dropped.
+        Methods (not properties) on the async lane so `run.output`
+        without `await` raises at type-check time instead of silently
+        yielding a coroutine object.
 
         Example:
             ```python
@@ -192,52 +342,34 @@ class AsyncGraphRunStream:
         Raises:
             BaseException: If the run ended with an error.
         """
-        try:
-            await self._pump_task
-        except Exception:
-            pass
+        await _adrive_until_done(self._apump_next)
         if (err := self._values_transformer.error) is not None:
             raise err
         return self._values_transformer._latest
 
     async def interrupted(self) -> bool:
-        """Wait for the run to complete and return whether it was interrupted.
-
-        Example:
-            ```python
-            interrupted = await run.interrupted()
-            ```
+        """Drive the run to completion and return whether it was
+        interrupted.
 
         Raises:
             BaseException: If the run ended with an error.
         """
-        try:
-            await self._pump_task
-        except Exception:
-            pass
+        await _adrive_until_done(self._apump_next)
         if (err := self._values_transformer.error) is not None:
             raise err
         return self._values_transformer._interrupted
 
     async def interrupts(self) -> list[Any]:
-        """Wait for the run to complete and return interrupt payloads.
-
-        Example:
-            ```python
-            interrupts = await run.interrupts()
-            ```
+        """Drive the run to completion and return interrupt payloads.
 
         Raises:
             BaseException: If the run ended with an error.
         """
-        try:
-            await self._pump_task
-        except Exception:
-            pass
+        await _adrive_until_done(self._apump_next)
         if (err := self._values_transformer.error) is not None:
             raise err
         return self._values_transformer._interrupts
 
     def __aiter__(self) -> AsyncIterator[ProtocolEvent]:
-        """Iterate all protocol events from the mux's main event log."""
+        """Subscribe to the main event log and iterate protocol events."""
         return self._mux._events.__aiter__()
