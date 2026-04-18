@@ -60,6 +60,11 @@ class GraphRunStream:
 
         Sync iteration is caller-driven, so a cursor that catches up to
         the buffer's tail needs a way to ask the graph for more events.
+
+        Also calls `_bind_pump` on any transformer that exposes it, so
+        that transformers producing ChatModelStream objects (e.g.
+        MessagesTransformer) can wire the pull callback on each stream as
+        it's created.
         """
         mux._events._request_more = self._pump_next
         for value in mux.extensions.values():
@@ -67,6 +72,9 @@ class GraphRunStream:
                 value._request_more = self._pump_next
             elif isinstance(value, StreamChannel):
                 value._log._request_more = self._pump_next
+        for transformer in mux._transformers:
+            if hasattr(transformer, "_bind_pump"):
+                transformer._bind_pump(self._pump_next)
 
     def _pump_next(self) -> bool:
         """Pull one event from the graph and push it through the mux.

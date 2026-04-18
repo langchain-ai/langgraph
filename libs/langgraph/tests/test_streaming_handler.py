@@ -807,22 +807,40 @@ class TestValuesTransformer:
 
 class TestMessagesTransformer:
     def test_captures_root_messages(self) -> None:
+        """Protocol-event lifecycle produces a ChatModelStream in the log."""
         t = MessagesTransformer()
         t.init()
         t._log._bind(is_async=False)
+        t._bind_pump(lambda: False)
 
-        t.process(_event("messages", ("chunk", {"meta": True})))
+        meta = {"langgraph_node": "llm", "run_id": "run-1"}
+        for evt in (
+            {"event": "message-start", "role": "ai", "message_id": "run-1"},
+            {"event": "message-finish", "reason": "stop"},
+        ):
+            t.process(_event("messages", (evt, meta)))
         t._log.close()
         items = list(t._log)
         assert len(items) == 1
-        assert items[0] == ("chunk", {"meta": True})
+        # Items in the messages log are ChatModelStream objects, not raw
+        # tuples — the content-block-centric projection.
+        assert hasattr(items[0], "dispatch")
+        assert items[0].message_id == "run-1"
 
     def test_ignores_non_root_namespace(self) -> None:
         t = MessagesTransformer()
         t.init()
         t._log._bind(is_async=False)
+        t._bind_pump(lambda: False)
 
-        t.process(_event("messages", ("chunk", {}), namespace=["sub"]))
+        meta = {"langgraph_node": "llm", "run_id": "run-1"}
+        t.process(
+            _event(
+                "messages",
+                ({"event": "message-start", "message_id": "run-1"}, meta),
+                namespace=["sub"],
+            )
+        )
         t._log.close()
         assert list(t._log) == []
 
