@@ -427,3 +427,32 @@ def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
         "thread_id": "th-123",
         "user_id": "uid-1",
     }
+
+
+def test_ensure_config_merges_configurable_across_configs() -> None:
+    """`ensure_config(bound, invoke_time)` should merge `configurable` dicts.
+
+    Prior to the fix, a later config's `configurable` dict fully overwrote an
+    earlier one, causing values bound via `with_config({"configurable": {...}})`
+    (e.g. `ls_agent_type="root"` set by `create_agent`) to be dropped whenever
+    an invoke-time config supplied any other configurable key like `thread_id`.
+    """
+    bound: RunnableConfig = {
+        "configurable": {"ls_agent_type": "root", "custom_setting": "keep_me"},
+        "metadata": {"ls_integration": "langchain_create_agent"},
+    }
+    invoke_time: RunnableConfig = {
+        "configurable": {"thread_id": "t-1"},
+    }
+    merged = ensure_config(bound, invoke_time)
+    # Both the bound and invoke-time configurable keys are preserved.
+    assert merged["configurable"] == {
+        "ls_agent_type": "root",
+        "custom_setting": "keep_me",
+        "thread_id": "t-1",
+    }
+    # Invoke-time values still override bound values when they collide.
+    override: RunnableConfig = {"configurable": {"ls_agent_type": "subagent"}}
+    merged2 = ensure_config(bound, override)
+    assert merged2["configurable"]["ls_agent_type"] == "subagent"
+    assert merged2["configurable"]["custom_setting"] == "keep_me"

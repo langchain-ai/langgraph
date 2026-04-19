@@ -306,7 +306,12 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         for k, v in config.items():
             if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
-                    empty[k] = cast(dict, v).copy()
+                    # Merge configurable dicts across configs so that values
+                    # bound via `with_config(...)` (e.g. `ls_agent_type`) are
+                    # preserved when later configs (e.g. invoke-time) only
+                    # specify a subset of keys like `thread_id`.
+                    existing = cast(dict, empty.get(k) or {})
+                    empty[k] = {**existing, **cast(dict, v)}
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
