@@ -1,4 +1,4 @@
-"""Tests for the StreamingHandler and its supporting infrastructure."""
+"""Tests for `Pregel.stream_v2` / `astream_v2` and the transformer pipeline."""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from langgraph.graph import StateGraph
 from langgraph.stream import (
     EventLog,
     StreamChannel,
-    StreamingHandler,
     StreamTransformer,
 )
 from langgraph.stream._convert import convert_to_protocol_event
@@ -404,15 +403,15 @@ class TestStreamChannel:
 
 
 # ---------------------------------------------------------------------------
-# StreamingHandler sync tests
+# stream_v2 sync tests
 # ---------------------------------------------------------------------------
 
 
-class TestStreamingHandlerSync:
+class TestStreamV2Sync:
     def test_values_projection(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         snapshots = list(run.values)
         # Should have at least the initial + per-node snapshots.
         assert len(snapshots) >= 1
@@ -423,8 +422,8 @@ class TestStreamingHandlerSync:
 
     def test_output(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         output = run.output
         assert output is not None
         assert output["value"] == "xAB"
@@ -432,8 +431,8 @@ class TestStreamingHandlerSync:
 
     def test_raw_event_iteration(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         events = list(run)
         assert len(events) > 0
         for event in events:
@@ -444,8 +443,8 @@ class TestStreamingHandlerSync:
 
     def test_extensions_has_native_keys(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         # Drain events so the run completes.
         _ = run.output
         assert "values" in run.extensions
@@ -457,8 +456,8 @@ class TestStreamingHandlerSync:
     def test_extensions_is_read_only(self) -> None:
         """`run.extensions` must reject mutations so users can't corrupt mux state."""
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         with pytest.raises(TypeError):
             run.extensions["new_key"] = object()  # type: ignore[index]
         with pytest.raises(TypeError):
@@ -466,8 +465,8 @@ class TestStreamingHandlerSync:
 
     def test_custom_stream_events(self) -> None:
         graph = _build_custom_stream_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         custom_events = [e for e in run if e["method"] == "custom"]
         assert len(custom_events) == 2
         assert custom_events[0]["params"]["data"] == {"step": "start"}
@@ -475,8 +474,8 @@ class TestStreamingHandlerSync:
 
     def test_interleave_values_and_messages(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
 
         tagged = list(run.interleave("values", "messages"))
         names = [name for name, _ in tagged]
@@ -489,8 +488,8 @@ class TestStreamingHandlerSync:
 
     def test_abort_marks_exhausted_and_closes_mux(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         values_iter = iter(run.values)
         # Consume one item so the pump advances.
         _ = next(values_iter)
@@ -503,64 +502,64 @@ class TestStreamingHandlerSync:
 
     def test_context_manager_calls_abort_on_exit(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        with handler.stream({"value": "x", "items": []}) as run:
+        handler = graph
+        with handler.stream_v2({"value": "x", "items": []}) as run:
             values_iter = iter(run.values)
             _ = next(values_iter)
         assert run._exhausted is True
 
     def test_interleave_unknown_projection(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         with pytest.raises(KeyError):
             list(run.interleave("values", "does_not_exist"))
 
 
-class TestStreamingHandlerSyncErrors:
+class TestStreamV2SyncErrors:
     def test_error_propagation_output(self) -> None:
         graph = _build_error_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
             _ = run.output
 
     def test_error_propagation_values(self) -> None:
         graph = _build_error_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
             list(run.values)
 
     def test_error_propagation_raw_events(self) -> None:
         graph = _build_error_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
             list(run)
 
     def test_error_propagation_interrupted(self) -> None:
         """`run.interrupted` should raise on a failed run, not silently return False."""
         graph = _build_error_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
             _ = run.interrupted
 
     def test_error_propagation_interrupts(self) -> None:
         """`run.interrupts` should raise on a failed run."""
         graph = _build_error_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
             _ = run.interrupts
 
 
-class TestStreamingHandlerSyncInterrupt:
+class TestStreamV2SyncInterrupt:
     def test_interrupted(self) -> None:
         graph = _build_interrupt_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream(
+        handler = graph
+        run = handler.stream_v2(
             {"value": "x", "items": []},
             {"configurable": {"thread_id": "t1"}},
         )
@@ -570,17 +569,17 @@ class TestStreamingHandlerSyncInterrupt:
 
 
 # ---------------------------------------------------------------------------
-# StreamingHandler async tests
+# astream_v2 async tests
 # ---------------------------------------------------------------------------
 
 
-class TestStreamingHandlerAsync:
+class TestStreamV2Async:
     @pytest.mark.anyio
     @NEEDS_CONTEXTVARS
     async def test_values_projection(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         snapshots = [s async for s in run.values]
         assert len(snapshots) >= 1
         last = snapshots[-1]
@@ -591,8 +590,8 @@ class TestStreamingHandlerAsync:
     @NEEDS_CONTEXTVARS
     async def test_output(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         output = await run.output()
         assert output is not None
         assert output["value"] == "xAB"
@@ -602,8 +601,8 @@ class TestStreamingHandlerAsync:
     @NEEDS_CONTEXTVARS
     async def test_raw_event_iteration(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         events = [e async for e in run]
         assert len(events) > 0
         for event in events:
@@ -613,8 +612,8 @@ class TestStreamingHandlerAsync:
     @NEEDS_CONTEXTVARS
     async def test_abort_marks_exhausted_and_closes_mux(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         values_iter = aiter(run.values)
         _ = await anext(values_iter)
         await run.abort()
@@ -628,8 +627,8 @@ class TestStreamingHandlerAsync:
     @NEEDS_CONTEXTVARS
     async def test_async_context_manager_calls_abort_on_exit(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         async with run:
             values_iter = aiter(run.values)
             _ = await anext(values_iter)
@@ -639,8 +638,8 @@ class TestStreamingHandlerAsync:
     @NEEDS_CONTEXTVARS
     async def test_extensions_has_native_keys(self) -> None:
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         _ = await run.output()
         assert "values" in run.extensions
         assert "messages" in run.extensions
@@ -648,13 +647,13 @@ class TestStreamingHandlerAsync:
         assert run.messages is run.extensions["messages"]
 
 
-class TestStreamingHandlerAsyncErrors:
+class TestStreamV2AsyncErrors:
     @pytest.mark.anyio
     @NEEDS_CONTEXTVARS
     async def test_error_propagation_output(self) -> None:
         graph = _build_error_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
             await run.output()
 
@@ -662,8 +661,8 @@ class TestStreamingHandlerAsyncErrors:
     @NEEDS_CONTEXTVARS
     async def test_error_propagation_values(self) -> None:
         graph = _build_error_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
             async for _ in run.values:
                 pass
@@ -672,8 +671,8 @@ class TestStreamingHandlerAsyncErrors:
     @NEEDS_CONTEXTVARS
     async def test_error_propagation_raw_events(self) -> None:
         graph = _build_error_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
             async for _ in run:
                 pass
@@ -683,8 +682,8 @@ class TestStreamingHandlerAsyncErrors:
     async def test_error_propagation_interrupted(self) -> None:
         """`await run.interrupted()` should raise on a failed async run."""
         graph = _build_error_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
             await run.interrupted()
 
@@ -693,19 +692,19 @@ class TestStreamingHandlerAsyncErrors:
     async def test_error_propagation_interrupts(self) -> None:
         """`await run.interrupts()` should raise on a failed async run."""
         graph = _build_error_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         with pytest.raises(ValueError, match="boom"):
             await run.interrupts()
 
 
-class TestStreamingHandlerAsyncInterrupt:
+class TestStreamV2AsyncInterrupt:
     @pytest.mark.anyio
     @NEEDS_CONTEXTVARS
     async def test_interrupted(self) -> None:
         graph = _build_interrupt_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream(
+        handler = graph
+        run = await handler.astream_v2(
             {"value": "x", "items": []},
             {"configurable": {"thread_id": "t2"}},
         )
@@ -714,13 +713,13 @@ class TestStreamingHandlerAsyncInterrupt:
         assert len(await run.interrupts()) > 0
 
 
-class TestStreamingHandlerAsyncCustom:
+class TestStreamV2AsyncCustom:
     @pytest.mark.anyio
     @NEEDS_CONTEXTVARS
     async def test_custom_stream_events(self) -> None:
         graph = _build_custom_stream_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         events = [e async for e in run]
         custom_events = [e for e in events if e["method"] == "custom"]
         assert len(custom_events) == 2
@@ -1105,9 +1104,9 @@ class TestCustomTransformer:
                 return True
 
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
+        handler = graph
         counter_t = CounterTransformer()
-        run = handler.stream(
+        run = handler.stream_v2(
             {"value": "x", "items": []},
             transformers=[lambda _scope: counter_t],
         )
@@ -1139,9 +1138,9 @@ class TestCustomTransformer:
                 return True
 
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
+        handler = graph
         foo_t = FooTransformer()
-        run = handler.stream(
+        run = handler.stream_v2(
             {"value": "x", "items": []},
             transformers=[lambda _scope: foo_t],
         )
@@ -1172,8 +1171,8 @@ class TestCustomTransformer:
                 return True
 
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream(
+        handler = graph
+        run = handler.stream_v2(
             {"value": "x", "items": []},
             transformers=[lambda _scope: EmitterTransformer()],
         )
@@ -1232,12 +1231,12 @@ class TestCustomTransformer:
                 return True
 
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
+        handler = graph
         with pytest.raises(
             ValueError,
             match=r"conflict.*'values'.*ValuesTransformer",
         ):
-            handler.stream(
+            handler.stream_v2(
                 {"value": "x", "items": []},
                 transformers=[lambda _scope: ConflictTransformer()],
             )
@@ -1334,9 +1333,9 @@ class TestEventLogAutoLifecycle:
                 return True
 
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
+        handler = graph
         t = MinimalTransformer()
-        run = handler.stream(
+        run = handler.stream_v2(
             {"value": "x", "items": []},
             transformers=[lambda _scope: t],
         )
@@ -1638,9 +1637,9 @@ class TestAsyncTransformerLane:
                 self._log.close()
 
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
+        handler = graph
         scorer = Scorer()
-        run = await handler.astream(
+        run = await handler.astream_v2(
             {"value": "x", "items": []},
             transformers=[lambda _scope: scorer],
         )
@@ -1665,8 +1664,8 @@ class TestMemoryBounds:
         """With a single sync consumer, the pump produces exactly one event
         per cursor advance, so the buffer never holds more than one."""
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         events_iter = iter(run)
         max_buffered = 0
         count = 0
@@ -1683,8 +1682,8 @@ class TestMemoryBounds:
         """Projections without a subscriber drop pushes silently —
         their buffers stay empty regardless of run length."""
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         # Subscribe to main events only; leave values and messages unsubscribed.
         list(run)
         values_log = run.extensions["values"]
@@ -1699,8 +1698,8 @@ class TestMemoryBounds:
         process() without populating the log, so the values log buffer
         stays empty even across a full run."""
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         _ = run.output
         values_log = run.extensions["values"]
         assert len(values_log._items) == 0
@@ -1709,8 +1708,8 @@ class TestMemoryBounds:
     def test_drained_subscriber_buffer_returns_to_empty(self) -> None:
         """After fully draining a subscribed log, the internal deque is empty."""
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = handler.stream({"value": "x", "items": []})
+        handler = graph
+        run = handler.stream_v2({"value": "x", "items": []})
         values_log = run.extensions["values"]
         list(run.values)
         assert len(values_log._items) == 0
@@ -1720,8 +1719,8 @@ class TestMemoryBounds:
     async def test_async_single_consumer_buffer_stays_at_most_one(self) -> None:
         """Same drain-on-consume guarantee for the async lane."""
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         max_buffered = 0
         count = 0
         async for _ in run:
@@ -1735,8 +1734,8 @@ class TestMemoryBounds:
     async def test_async_unsubscribed_projections_never_accumulate(self) -> None:
         """Projections with no async subscriber stay empty under astream."""
         graph = _build_simple_graph()
-        handler = StreamingHandler(graph)
-        run = await handler.astream({"value": "x", "items": []})
+        handler = graph
+        run = await handler.astream_v2({"value": "x", "items": []})
         _ = await run.output()
         values_log = run.extensions["values"]
         messages_log = run.extensions["messages"]

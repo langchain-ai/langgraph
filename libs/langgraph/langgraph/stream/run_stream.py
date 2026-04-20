@@ -47,6 +47,26 @@ class BaseRunStream:
         for key in mux.native_keys:
             setattr(self, key, mux.extensions[key])
 
+    @property
+    def _values_transformer(self) -> ValuesTransformer:
+        """Look up the `ValuesTransformer` registered on this mux.
+
+        `output` / `interrupted` / `interrupts` need scalar state from
+        the `ValuesTransformer` without threading it through the
+        constructor. Raises if none is registered — `stream_v2` /
+        `astream_v2` always register one, so hitting this path means
+        the caller assembled the mux themselves and forgot.
+        """
+        from langgraph.stream.transformers import ValuesTransformer
+
+        for t in self._mux._transformers:
+            if isinstance(t, ValuesTransformer):
+                return t
+        raise RuntimeError(
+            "No ValuesTransformer is registered on this mux — "
+            "`output` / `interrupted` / `interrupts` are unavailable."
+        )
+
     def __iter__(self) -> Iterator[ProtocolEvent]:
         """Sync iteration of protocol events on this mux's main log.
 
@@ -128,19 +148,17 @@ class GraphRunStream(BaseRunStream):
         self,
         graph_iter: Iterator[Any],
         mux: StreamMux,
-        values_transformer: ValuesTransformer,
     ) -> None:
         """Initialize the run stream.
 
         Args:
             graph_iter: Pull-based iterator over the graph's stream.
             mux: The StreamMux owning projections and the main log.
-            values_transformer: The built-in values transformer
-                providing `output` / `interrupted` / `interrupts`.
+                Must have a `ValuesTransformer` registered for
+                `output` / `interrupted` / `interrupts` to work.
         """
         super().__init__(mux)
         self._graph_iter = graph_iter
-        self._values_transformer = values_transformer
         self._exhausted = False
         mux.bind_pump(self._pump_next)
 
@@ -256,35 +274,21 @@ class AsyncGraphRunStream(BaseRunStream):
         self,
         graph_aiter: AsyncIterator[Any],
         mux: StreamMux,
-        values_transformer: ValuesTransformer,
     ) -> None:
         """Initialize the async run stream.
 
         Args:
             graph_aiter: Async iterator over the graph's stream.
             mux: The StreamMux owning projections and the main log.
-            values_transformer: The built-in values transformer
-                providing `output` / `interrupted` / `interrupts`.
+                Must have a `ValuesTransformer` registered for
+                `output` / `interrupted` / `interrupts` to work.
         """
         super().__init__(mux)
         self._graph_aiter = graph_aiter
-        self._values_transformer = values_transformer
         self._exhausted = False
         self._pump_cond = asyncio.Condition()
         self._pumping = False
-        for key in mux.native_keys:
-            setattr(self, key, mux.extensions[key])
-        self._wire_arequest_more(mux)
-
-    def _wire_arequest_more(self, mux: StreamMux) -> None:
-        """Install `_arequest_more` on every async EventLog so cursors
-        can drive the pump when their buffer catches up."""
-        mux._events._arequest_more = self._apump_next
-        for value in mux.extensions.values():
-            if isinstance(value, EventLog):
-                value._arequest_more = self._apump_next
-            elif isinstance(value, StreamChannel):
-                value._log._arequest_more = self._apump_next
+        mux.bind_apump(self._apump_next)
 
     async def _apump_next(self) -> bool:
         """Drive one pump step, or wait for the active pumper to drive one.
