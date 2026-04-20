@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import ChainMap
 from collections.abc import Sequence
 from os import getenv
-from typing import Any, cast
+from typing import Any
 
 from langchain_core.callbacks import (
     AsyncCallbackManager,
@@ -305,8 +305,12 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
             continue
         for k, v in config.items():
             if _is_not_empty(v) and k in CONFIG_KEYS:
-                if k == CONF:
-                    empty[k] = cast(dict, v).copy()
+                if k in COPIABLE_KEYS:
+                    # Copy copiable keys (tags/metadata/callbacks/configurable)
+                    # so later mutations — e.g. propagating `thread_id` from
+                    # `configurable` into `metadata` below — don't leak back
+                    # into the caller's shared dicts. See langgraph#7441.
+                    empty[k] = v.copy()  # type: ignore[literal-required,attr-defined]
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():

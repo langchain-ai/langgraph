@@ -344,6 +344,35 @@ def test_configurable_metadata() -> None:
     assert metadata["nooverride"] == 18
 
 
+def test_ensure_config_does_not_mutate_shared_metadata() -> None:
+    """Regression test for https://github.com/langchain-ai/langgraph/issues/7441.
+
+    `ensure_config` must not propagate `configurable` values into the
+    caller's `metadata` dict. Otherwise a compiled graph's base config
+    (which holds a shared `metadata` dict) gets polluted with per-call
+    `thread_id` values, leaking state across invocations.
+    """
+    shared_metadata = {"ls_integration": "langchain_create_agent"}
+    base_config: RunnableConfig = {"metadata": shared_metadata}
+    call_config: RunnableConfig = {"configurable": {"thread_id": "thread-1"}}
+
+    merged = ensure_config(base_config, call_config)
+
+    # Merged config should have thread_id propagated to its metadata.
+    assert merged["metadata"]["thread_id"] == "thread-1"
+    assert merged["metadata"]["ls_integration"] == "langchain_create_agent"
+
+    # But the caller's dicts must not be mutated.
+    assert shared_metadata == {"ls_integration": "langchain_create_agent"}
+    assert base_config == {"metadata": {"ls_integration": "langchain_create_agent"}}
+
+    # A second call with a different thread_id must not see thread-1 leaking
+    # from the shared base_config.
+    second_merged = ensure_config(base_config, {"configurable": {"thread_id": "thread-2"}})
+    assert second_merged["metadata"]["thread_id"] == "thread-2"
+    assert "thread_id" not in shared_metadata
+
+
 def test_callback_manager_copies_whitelisted_configurable_ids_to_metadata() -> None:
     config = {
         "configurable": {
