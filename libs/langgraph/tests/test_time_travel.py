@@ -1113,6 +1113,72 @@ def test_subgraph_interrupt_replay_from_parent_then_resume(
     ]
 
 
+def test_subgraph_interrupt_resume_with_explicit_head_checkpoint_id(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Resume with Command(resume=...) plus the current head checkpoint_id
+    in config. The subgraph must continue from the interrupted node, not
+    restart from scratch. Explicit checkpoint_id triggers is_replaying but
+    this is a resume, not a time-travel, so ReplayState should not apply."""
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["sub_a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Provide input:")
+        return {"value": [f"human:{answer}"]}
+
+    def step_b(state: State) -> State:
+        called.append("step_b")
+        return {"value": ["sub_b"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_human", ask_human)
+        .add_node("step_b", step_b)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_human")
+        .add_edge("ask_human", "step_b")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("subgraph_node", subgraph)
+        .add_edge(START, "subgraph_node")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until interrupt fires in subgraph
+    graph.invoke({"value": []}, config)
+    assert called == ["step_a", "ask_human"]
+
+    # Resume with explicit head checkpoint_id in config
+    head_checkpoint_id = graph.get_state(config).config["configurable"][
+        "checkpoint_id"
+    ]
+    called.clear()
+    resume_config = {
+        "configurable": {
+            "thread_id": "1",
+            "checkpoint_id": head_checkpoint_id,
+            "checkpoint_ns": "",
+        }
+    }
+    result = graph.invoke(Command(resume="answer"), resume_config)
+
+    assert called == ["ask_human", "step_b"]
+    assert "__interrupt__" not in result
+    assert result["value"] == ["sub_a", "human:answer", "sub_b"]
+
+
 def test_subgraph_replay_loads_accumulated_state_then_resume(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
