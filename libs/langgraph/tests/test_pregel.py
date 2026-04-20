@@ -9500,3 +9500,90 @@ async def test_diff_channel_time_travel() -> None:
     assert msgs[0].content == "h1"
     assert msgs[1].content == "ai-1"
     assert msgs[2].content == "h3"
+
+
+async def test_diff_channel_remove_message_end_to_end() -> None:
+    """RemoveMessage inside a DiffChannel graph must persist and reload correctly."""
+    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
+
+    class State(TypedDict):
+        messages: Annotated[list, DiffChannel(add_messages)]
+
+    def respond(state: State) -> dict:
+        return {"messages": [AIMessage(content="reply", id="ai-1")]}
+
+    def delete_first(state: State) -> dict:
+        # removes the first message
+        return {"messages": [RemoveMessage(id=state["messages"][0].id)]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_node("delete_first", delete_first)
+    builder.add_edge(START, "respond")
+    builder.add_edge("respond", "delete_first")
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    config = {"configurable": {"thread_id": "diff-remove-test"}}
+    graph.invoke({"messages": [HumanMessage(content="hello", id="h1")]}, config)
+
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    # h1 was removed, only ai-1 should remain
+    assert len(msgs) == 1, f"expected 1 message, got {len(msgs)}: {msgs}"
+    assert msgs[0].id == "ai-1"
+
+    # A subsequent turn must reconstruct from the checkpoint correctly
+    graph.invoke({"messages": [HumanMessage(content="again", id="h2")]}, config)
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    # ai-1 + h2 + ai-1(second reply, same id overwrites) + h2 removed
+    # more simply: after second run we expect ai-1 updated + h2 remaining minus deleted h2
+    # just assert h1 is still gone
+    assert all(m.id != "h1" for m in msgs), (
+        "h1 should still be absent after second turn"
+    )
+
+
+async def test_diff_channel_update_by_id_end_to_end() -> None:
+    """Updating a message by ID via DiffChannel must persist and reload correctly."""
+    from langchain_core.messages import HumanMessage
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
+
+    class State(TypedDict):
+        messages: Annotated[list, DiffChannel(add_messages)]
+
+    def update_msg(state: State) -> dict:
+        # re-send h1 with updated content
+        return {"messages": [HumanMessage(content="updated", id="h1")]}
+
+    builder = StateGraph(State)
+    builder.add_node("update_msg", update_msg)
+    builder.add_edge(START, "update_msg")
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    config = {"configurable": {"thread_id": "diff-update-id-test"}}
+    graph.invoke({"messages": [HumanMessage(content="original", id="h1")]}, config)
+
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    assert len(msgs) == 1, f"expected 1 message, got {len(msgs)}: {msgs}"
+    assert msgs[0].content == "updated"
+    assert msgs[0].id == "h1"
+
+    # Second turn: verify the updated state is the base for further accumulation
+    graph.invoke({"messages": [HumanMessage(content="new", id="h2")]}, config)
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    ids = [m.id for m in msgs]
+    assert "h1" in ids  # h1 persists (updated, not duplicated)
+    assert "h2" in ids
+    assert ids.count("h1") == 1, "h1 must not be duplicated"
