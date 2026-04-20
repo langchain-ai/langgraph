@@ -142,6 +142,7 @@ from langgraph.pregel._messages import (
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
+from langgraph.pregel._tools import StreamToolCallHandler
 from langgraph.pregel._utils import get_new_channel_versions
 from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
@@ -345,16 +346,18 @@ class NodeBuilder:
         )
 
 
-_STREAM_V2_MODES: list[StreamMode] = [
-    "values",
-    "updates",
-    "messages",
-    "custom",
-    "checkpoints",
-    "tasks",
-    "debug",
-    "lifecycle",
-]
+def _collect_stream_modes(mux: Any) -> list[StreamMode]:
+    """Return the union of `required_stream_modes` across registered transformers.
+
+    Transformers declare the stream modes they need to function, and
+    `stream_v2` asks the graph for exactly that union — no hardcoded
+    default set. If zero transformers are registered (or none declares
+    a given mode), the graph does not stream events for that mode.
+    """
+    modes: set[str] = set()
+    for transformer in mux._transformers:
+        modes.update(transformer.required_stream_modes)
+    return cast("list[StreamMode]", list(modes))
 
 
 def _build_stream_factories(
@@ -2712,6 +2715,12 @@ class Pregel(
                     )
                 )
 
+            # set up tools stream mode
+            if "tools" in stream_modes:
+                run_manager.inheritable_handlers.append(
+                    StreamToolCallHandler(stream.put)
+                )
+
             # set up custom stream mode
             if "custom" in stream_modes:
 
@@ -3103,6 +3112,12 @@ class Pregel(
                     )
                 )
 
+            # set up tools stream mode
+            if "tools" in stream_modes:
+                run_manager.inheritable_handlers.append(
+                    StreamToolCallHandler(stream_put)
+                )
+
             # set up custom stream mode
             def stream_writer(c: Any) -> None:
                 aioloop.call_soon_threadsafe(
@@ -3363,11 +3378,12 @@ class Pregel(
 
         factories = _build_stream_factories(self._stream_transformers, transformers)
         mux = StreamMux(factories=factories, is_async=False)
+        stream_modes = _collect_stream_modes(mux)
         graph_iter = iter(
             self.stream(
                 input,
                 _merge_v2_messages_flag(config),
-                stream_mode=_STREAM_V2_MODES,
+                stream_mode=stream_modes,
                 subgraphs=True,
                 version="v2",
                 interrupt_before=interrupt_before,
@@ -3404,10 +3420,11 @@ class Pregel(
 
         factories = _build_stream_factories(self._stream_transformers, transformers)
         mux = StreamMux(factories=factories, is_async=True)
+        stream_modes = _collect_stream_modes(mux)
         graph_aiter = self.astream(
             input,
             _merge_v2_messages_flag(config),
-            stream_mode=_STREAM_V2_MODES,
+            stream_mode=stream_modes,
             subgraphs=True,
             version="v2",
             interrupt_before=interrupt_before,

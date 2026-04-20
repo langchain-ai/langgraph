@@ -131,6 +131,24 @@ def _build_custom_stream_graph():
     return builder.compile()
 
 
+class _CustomPassthroughTransformer(StreamTransformer):
+    """Opts a run into the `custom` stream mode without building a projection.
+
+    `stream_v2` requests only the modes that registered
+    transformers declare via `required_stream_modes`. Custom events are
+    raw user emissions from `StreamWriter`, so tests that want them
+    visible on the main event log register this pass-through transformer.
+    """
+
+    required_stream_modes = ("custom",)
+
+    def init(self) -> dict[str, Any]:
+        return {}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        return True
+
+
 # ---------------------------------------------------------------------------
 # EventLog unit tests
 # ---------------------------------------------------------------------------
@@ -465,12 +483,28 @@ class TestStreamV2Sync:
 
     def test_custom_stream_events(self) -> None:
         graph = _build_custom_stream_graph()
-        handler = graph
-        run = handler.stream_v2({"value": "x", "items": []})
+        run = graph.stream_v2(
+            {"value": "x", "items": []},
+            transformers=[_CustomPassthroughTransformer],
+        )
         custom_events = [e for e in run if e["method"] == "custom"]
         assert len(custom_events) == 2
         assert custom_events[0]["params"]["data"] == {"step": "start"}
         assert custom_events[1]["params"]["data"] == {"step": "end"}
+
+    def test_custom_events_suppressed_without_transformer(self) -> None:
+        """Without a transformer declaring `"custom"`, no custom events flow.
+
+        `stream_v2` asks the graph only for the modes that
+        registered transformers require. Built-ins cover
+        `values` / `messages` / `lifecycle`; consumers that want raw
+        custom events surface them by registering a transformer whose
+        `required_stream_modes` includes `"custom"`.
+        """
+        graph = _build_custom_stream_graph()
+        run = graph.stream_v2({"value": "x", "items": []})
+        custom_events = [e for e in run if e["method"] == "custom"]
+        assert custom_events == []
 
     def test_interleave_values_and_messages(self) -> None:
         graph = _build_simple_graph()
@@ -718,8 +752,10 @@ class TestStreamV2AsyncCustom:
     @NEEDS_CONTEXTVARS
     async def test_custom_stream_events(self) -> None:
         graph = _build_custom_stream_graph()
-        handler = graph
-        run = await handler.astream_v2({"value": "x", "items": []})
+        run = await graph.astream_v2(
+            {"value": "x", "items": []},
+            transformers=[_CustomPassthroughTransformer],
+        )
         events = [e async for e in run]
         custom_events = [e for e in events if e["method"] == "custom"]
         assert len(custom_events) == 2
@@ -1786,3 +1822,92 @@ class TestDrainOnConsume:
         log.close()
         assert list(a) == [0, 1, 2]
         assert list(b) == [0, 1, 2]
+
+
+# ---------------------------------------------------------------------------
+# compile(transformers=...) registration
+# ---------------------------------------------------------------------------
+
+
+class _CountingTransformer(StreamTransformer):
+    """Record how many events the transformer saw — nothing more."""
+
+    required_stream_modes = ("values",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._log: EventLog[int] = EventLog()
+        self.count = 0
+
+    def init(self) -> dict[str, Any]:
+        return {"counts": self._log}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] == "values":
+            self.count += 1
+        return True
+
+
+def _build_counting_graph():
+    """Two-node graph compiled with `_CountingTransformer` pre-registered."""
+
+    def node_a(state: SimpleState) -> dict:
+        return {"value": state["value"] + "A", "items": ["a"]}
+
+    def node_b(state: SimpleState) -> dict:
+        return {"value": state["value"] + "B", "items": ["b"]}
+
+    builder = StateGraph(SimpleState)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_b", END)
+    return builder.compile(transformers=[_CountingTransformer])
+
+
+class TestCompileTimeTransformerRegistration:
+    def test_compile_time_transformer_runs_without_caller_opt_in(self) -> None:
+        graph = _build_counting_graph()
+        run = graph.stream_v2({"value": "", "items": []})
+
+        # Registered at compile time — no call-site `transformers=` needed.
+        counting = run._mux.transformer_by_key("counts")
+        assert isinstance(counting, _CountingTransformer)
+        run.output  # drive to completion
+        assert counting.count >= 1
+
+    @pytest.mark.anyio
+    async def test_compile_time_transformer_runs_on_astream_v2(self) -> None:
+        graph = _build_counting_graph()
+        run = await graph.astream_v2({"value": "", "items": []})
+
+        counting = run._mux.transformer_by_key("counts")
+        assert isinstance(counting, _CountingTransformer)
+        await run.output()
+        assert counting.count >= 1
+
+    def test_call_site_transformers_appended_after_compile_time(self) -> None:
+        """Call-site `transformers=` run after compile-time factories."""
+
+        class _UserTransformer(StreamTransformer):
+            required_stream_modes = ()
+
+            def __init__(self, scope: tuple[str, ...] = ()) -> None:
+                super().__init__(scope)
+
+            def init(self) -> dict[str, Any]:
+                return {"user_flag": EventLog()}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                return True
+
+        graph = _build_counting_graph()
+        run = graph.stream_v2(
+            {"value": "", "items": []}, transformers=[_UserTransformer]
+        )
+
+        # Both compile-time and call-site projections are available.
+        assert "counts" in run.extensions
+        assert "user_flag" in run.extensions
+        run.output  # drain

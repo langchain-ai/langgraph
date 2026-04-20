@@ -124,6 +124,7 @@ StreamMode = Literal[
     "messages",
     "custom",
     "lifecycle",
+    "tools",
 ]
 """How the stream method should emit outputs.
 
@@ -137,6 +138,7 @@ StreamMode = Literal[
 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
 - `"debug"`: Emit `"checkpoints"` and `"tasks"` events for debugging purposes.
 - `"lifecycle"`: Emit subgraph lifecycle events (`started`, `running`, `completed`, `failed`, `interrupted`) with payloads matching `LifecycleData`.
+- `"tools"`: Emit tool-call lifecycle events (`tool-started`, `tool-output-delta`, `tool-finished`, `tool-error`) keyed by `tool_call_id`.
 """
 
 StreamWriter = Callable[[Any], None]
