@@ -13,8 +13,10 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import (
     BaseModel,
     ByteSize,
+    ConfigDict,
     Field,
     SecretStr,
+    alias_generators,
     confloat,
     conint,
     conlist,
@@ -561,3 +563,37 @@ async def test_pydantic_aliased_fields_async():
     result = await graph.ainvoke({"q": "hello"})
     assert result["query"] == "hello"
     assert result["result"] == "processed: hello"
+
+
+def test_pydantic_alias_generator_to_camel():
+    """alias_generator=to_camel is the canonical pattern for JSON APIs.
+
+    Without the fix for #2555, Pydantic rejects the camelCase input because
+    the state schema has snake_case field names. This confirms the most
+    common real-world use case works end-to-end.
+    """
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+        )
+        user_id: str
+        display_name: str
+        retry_count: int = 0
+
+    def node_fn(state: State) -> dict:
+        assert state.user_id == "u-1"
+        assert state.display_name == "Alice"
+        return {"retry_count": state.retry_count + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("n", node_fn)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    result = graph.invoke({"userId": "u-1", "displayName": "Alice"})
+    assert result["user_id"] == "u-1"
+    assert result["display_name"] == "Alice"
+    assert result["retry_count"] == 1
