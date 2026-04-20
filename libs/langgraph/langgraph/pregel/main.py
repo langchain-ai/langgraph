@@ -344,6 +344,23 @@ class NodeBuilder:
         )
 
 
+def _merge_v2_messages_flag(
+    config: RunnableConfig | None,
+) -> RunnableConfig:
+    """Return a config with the v2 messages flag set in `configurable`.
+
+    Signals to pregel that `stream_mode="messages"` should attach
+    `StreamMessagesHandlerV2` for this call so invoke-time model runs
+    route through the v2 event generator and their protocol events
+    reach the messages channel.
+    """
+    merged: RunnableConfig = dict(config or {})  # type: ignore[assignment]
+    configurable = dict(merged.get(CONF) or {})
+    configurable[CONFIG_KEY_STREAM_MESSAGES_V2] = True
+    merged[CONF] = configurable
+    return merged
+
+
 class Pregel(
     PregelProtocol[StateT, ContextT, InputT, OutputT],
     Generic[StateT, ContextT, InputT, OutputT],
@@ -675,6 +692,7 @@ class Pregel(
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         name: str = "LangGraph",
+        stream_transformers: Sequence[Callable[[], Any]] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         if (
@@ -721,6 +739,9 @@ class Pregel(
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.name = name
+        self._stream_transformers: tuple[Callable[[], Any], ...] = tuple(
+            stream_transformers or ()
+        )
         self._serde_allowlist: set[tuple[str, ...]] | None = None
         if auto_validate:
             self.validate()
@@ -3250,6 +3271,134 @@ class Pregel(
         except BaseException as e:
             await asyncio.shield(run_manager.on_chain_error(e))
             raise
+
+    def stream_v2(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        transformers: Sequence[Any] | None = None,
+    ) -> Any:
+        """Start a sync v2 streaming run driven by transformer projections.
+
+        Builds a `StreamMux` from the built-in `ValuesTransformer` /
+        `MessagesTransformer`, this graph's compile-time
+        `stream_transformers`, and any additional `transformers=`
+        supplied at the call site. Returns a `GraphRunStream` that the
+        caller drives by iterating any projection — no background
+        thread.
+
+        Args:
+            input: Graph input.
+            config: Optional runnable config forwarded to the graph.
+            interrupt_before: Nodes to interrupt before, if any.
+            interrupt_after: Nodes to interrupt after, if any.
+            transformers: Extra transformer instances appended after
+                compile-time `stream_transformers`.
+
+        Returns:
+            A `GraphRunStream` the caller iterates to drive the run.
+        """
+        from langgraph.stream._mux import StreamMux
+        from langgraph.stream.run_stream import GraphRunStream
+        from langgraph.stream.transformers import (
+            MessagesTransformer,
+            ValuesTransformer,
+        )
+
+        values_t = ValuesTransformer()
+        compiled_instances = [f() for f in self._stream_transformers]
+        mux = StreamMux(
+            [
+                values_t,
+                MessagesTransformer(),
+                *compiled_instances,
+                *(transformers or ()),
+            ],
+            is_async=False,
+        )
+        graph_iter = iter(
+            self.stream(
+                input,
+                _merge_v2_messages_flag(config),
+                stream_mode=[
+                    "values",
+                    "updates",
+                    "messages",
+                    "custom",
+                    "checkpoints",
+                    "tasks",
+                    "debug",
+                ],
+                subgraphs=True,
+                version="v2",
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+            )
+        )
+        return GraphRunStream(graph_iter, mux, values_t)
+
+    async def astream_v2(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        transformers: Sequence[Any] | None = None,
+    ) -> Any:
+        """Async counterpart to `stream_v2`.
+
+        Returns an `AsyncGraphRunStream` whose projections can be awaited
+        concurrently; each subscribed cursor drives the pump when its
+        buffer is empty.
+
+        Args:
+            input: Graph input.
+            config: Optional runnable config forwarded to the graph.
+            interrupt_before: Nodes to interrupt before, if any.
+            interrupt_after: Nodes to interrupt after, if any.
+            transformers: Extra transformer instances appended after
+                compile-time `stream_transformers`.
+        """
+        from langgraph.stream._mux import StreamMux
+        from langgraph.stream.run_stream import AsyncGraphRunStream
+        from langgraph.stream.transformers import (
+            MessagesTransformer,
+            ValuesTransformer,
+        )
+
+        values_t = ValuesTransformer()
+        compiled_instances = [f() for f in self._stream_transformers]
+        mux = StreamMux(
+            [
+                values_t,
+                MessagesTransformer(),
+                *compiled_instances,
+                *(transformers or ()),
+            ],
+            is_async=True,
+        )
+        graph_aiter = self.astream(
+            input,
+            _merge_v2_messages_flag(config),
+            stream_mode=[
+                "values",
+                "updates",
+                "messages",
+                "custom",
+                "checkpoints",
+                "tasks",
+                "debug",
+            ],
+            subgraphs=True,
+            version="v2",
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+        ).__aiter__()
+        return AsyncGraphRunStream(graph_aiter, mux, values_t)
 
     @overload
     def invoke(
