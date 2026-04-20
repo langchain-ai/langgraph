@@ -146,9 +146,7 @@ class _Emitter:
     def warn(self, message: str, **extra: object) -> None:
         """Warning nested under a step. Text mode indents; JSON mode strips leading whitespace."""
         if self._json:
-            self._write(
-                {"event": "warn", "message": message.lstrip(), **extra}
-            )
+            self._write({"event": "warn", "message": message.lstrip(), **extra})
         else:
             click.secho(f"   {message}", fg="yellow")
 
