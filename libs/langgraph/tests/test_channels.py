@@ -237,3 +237,74 @@ def test_diff_channel_unsupported_saver_raises() -> None:
     raw_delta = DiffDelta(delta=[], prev_version=None)
     with pytest.raises(ValueError, match="DiffChannel received a raw DiffDelta"):
         spec.from_checkpoint(raw_delta)
+
+
+def test_diff_channel_remove_message_delta_and_replay() -> None:
+    """RemoveMessage stored in a delta must round-trip correctly through the chain."""
+    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
+    from langgraph.checkpoint.base import DiffChainValue, DiffDelta
+
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.graph.message import add_messages
+
+    spec = DiffChannel(add_messages)
+    ch = spec.from_checkpoint(MISSING)
+    ch.after_checkpoint(None)
+
+    # Step 1: add two messages
+    ch.update([HumanMessage(content="hi", id="h1")])
+    ch.update([AIMessage(content="hello", id="a1")])
+    d1 = ch.checkpoint()
+    assert isinstance(d1, DiffDelta)
+    ch.after_checkpoint("v1")
+    assert ch.get() == [
+        HumanMessage(content="hi", id="h1"),
+        AIMessage(content="hello", id="a1"),
+    ]
+
+    # Step 2: remove the AI message
+    ch.update([RemoveMessage(id="a1")])
+    d2 = ch.checkpoint()
+    assert isinstance(d2, DiffDelta)
+    assert d2.prev_version == "v1"
+    assert any(isinstance(w, RemoveMessage) for w in d2.delta)
+    ch.after_checkpoint("v2")
+    assert ch.get() == [HumanMessage(content="hi", id="h1")]
+
+    # Replay the full chain from scratch — must reproduce the post-remove state
+    chain = DiffChainValue(base=None, deltas=[d1.delta, d2.delta])
+    ch2 = spec.from_checkpoint(chain)
+    assert ch2.get() == [HumanMessage(content="hi", id="h1")]
+
+
+def test_diff_channel_update_by_id_delta_and_replay() -> None:
+    """Updating a message by ID stored in a delta must round-trip correctly."""
+    from langchain_core.messages import HumanMessage
+    from langgraph.checkpoint.base import DiffChainValue, DiffDelta
+
+    from langgraph.channels.diff import DiffChannel
+    from langgraph.graph.message import add_messages
+
+    spec = DiffChannel(add_messages)
+    ch = spec.from_checkpoint(MISSING)
+    ch.after_checkpoint(None)
+
+    # Step 1: add a message
+    ch.update([HumanMessage(content="original", id="h1")])
+    d1 = ch.checkpoint()
+    assert isinstance(d1, DiffDelta)
+    ch.after_checkpoint("v1")
+
+    # Step 2: update the same message by ID
+    ch.update([HumanMessage(content="updated", id="h1")])
+    d2 = ch.checkpoint()
+    assert isinstance(d2, DiffDelta)
+    assert d2.prev_version == "v1"
+    ch.after_checkpoint("v2")
+    assert ch.get() == [HumanMessage(content="updated", id="h1")]
+
+    # Replay the full chain — must produce the updated message, not the original
+    chain = DiffChainValue(base=None, deltas=[d1.delta, d2.delta])
+    ch2 = spec.from_checkpoint(chain)
+    assert len(ch2.get()) == 1
+    assert ch2.get()[0].content == "updated"
