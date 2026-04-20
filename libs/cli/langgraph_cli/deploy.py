@@ -144,8 +144,18 @@ class _Emitter:
             click.secho(f"   {message}", fg="green")
 
     def warn(self, message: str, **extra: object) -> None:
+        """Warning nested under a step. Text mode indents; JSON mode strips leading whitespace."""
         if self._json:
-            self._write({"event": "warn", "message": message, **extra})
+            self._write(
+                {"event": "warn", "message": message.lstrip(), **extra}
+            )
+        else:
+            click.secho(f"   {message}", fg="yellow")
+
+    def note(self, message: str, **extra: object) -> None:
+        """Top-level banner (pre-step). Text mode does not indent."""
+        if self._json:
+            self._write({"event": "note", "message": message, **extra})
         else:
             click.secho(message, fg="yellow")
 
@@ -194,6 +204,7 @@ class _Emitter:
         deployment_id: str,
         url: str | None = None,
         status_url: str | None = None,
+        fallback_status_message: str | None = None,
     ) -> None:
         if self._json:
             if status == "succeeded":
@@ -218,12 +229,18 @@ class _Emitter:
                 click.secho("   Deployment successful!", fg="green")
                 if url:
                     click.secho(f"   URL: {url}", fg="green")
+                if status_url:
+                    click.secho(f"   View status: {status_url}", fg="green")
             elif status == "failed":
                 click.secho("   Deployment failed", fg="red")
+                if status_url:
+                    click.secho(f"   View status: {status_url}", fg="red")
             elif status == "timed_out":
                 click.secho("   Timed out waiting for deployment.", fg="yellow")
-                if url:
-                    click.secho(f"   Check status at: {url}", fg="yellow")
+                if status_url:
+                    click.secho(f"   Check status at: {status_url}", fg="yellow")
+                elif fallback_status_message:
+                    click.secho(f"   {fallback_status_message}", fg="yellow")
 
     def heartbeat(self, status: str, elapsed_seconds: float) -> None:
         if self._json:
@@ -455,9 +472,8 @@ def _resolve_env_path(
     if isinstance(env_field, str):
         env_path = (config_path.parent / env_field).resolve()
         if not env_path.exists():
-            click.secho(
-                f"Warning: env file '{env_field}' specified in langgraph.json not found.",
-                fg="yellow",
+            _get_emitter().note(
+                f"Warning: env file '{env_field}' specified in langgraph.json not found."
             )
             return None
         return env_path
@@ -491,7 +507,7 @@ def _secrets_from_env(
     secrets: list[dict[str, str]] = []
     for name, value in env_vars.items():
         if name in RESERVED_ENV_VARS:
-            click.secho(f"   Skipping reserved env var: {name}", fg="yellow")
+            _get_emitter().note(f"Skipping reserved env var: {name}")
             continue
         if not value:
             continue
@@ -737,17 +753,11 @@ def _print_deployment_result(
         em.result(
             "timed_out",
             deployment_id=deployment_id,
-            url=custom_url,
             status_url=status_url,
+            fallback_status_message=(
+                f"Check status in the LangSmith {dashboard_label}."
+            ),
         )
-        if not em._json:
-            if custom_url:
-                click.secho(f"   Check status at: {custom_url}", fg="yellow")
-            else:
-                click.secho(
-                    f"   Check status in the LangSmith {dashboard_label}.",
-                    fg="yellow",
-                )
 
 
 # ---------------------------------------------------------------------------
@@ -776,6 +786,7 @@ def _docker_config_for_token(registry_host: str, token: str):
 # ---------------------------------------------------------------------------
 
 _UPLOAD_TIMEOUT_SECONDS = 300
+_BYTES_PER_MIB = 1_048_576
 
 
 class _ProgressReader:
@@ -794,7 +805,7 @@ class _ProgressReader:
                 int(self._uploaded * 100 / self._file_size) if self._file_size else 100
             )
             click.echo(
-                f"\r   Uploading ({self._file_size / 1_048_576:.1f} MB)... {pct}%",
+                f"\r   Uploading ({self._file_size / _BYTES_PER_MIB:.1f} MB)... {pct}%",
                 nl=False,
             )
         return data
@@ -809,7 +820,7 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
     import urllib.request
 
     em = _get_emitter()
-    size_mb = file_size / 1_048_576
+    size_mb = file_size / _BYTES_PER_MIB
 
     with open(file_path, "rb") as f:
         reader = _ProgressReader(f, file_size)
@@ -1048,7 +1059,7 @@ def _run_remote_build(
     em = _get_emitter()
     _log_deploy_step(step, "Creating source archive")
     with create_archive(config, config_json) as (archive_path, file_size, config_rel):
-        em.info(f"Archive created ({file_size / 1_048_576:.1f} MB)")
+        em.info(f"Archive created ({file_size / _BYTES_PER_MIB:.1f} MB)")
         step += 1
 
         _log_deploy_step(step, "Requesting upload URL")
@@ -1096,7 +1107,7 @@ def _run_remote_build(
                 if has_output:
                     set_progress("")
                     if not logs_header_printed:
-                        click.echo(f"   {status} (build logs):")
+                        em.info(f"{status} (build logs):")
                         logs_header_printed = True
                 for entry in entries:
                     msg = entry.get("message", "")
@@ -1110,9 +1121,9 @@ def _run_remote_build(
 
     def _handle_interrupt(revision_id: str) -> None:
         em.warn(
-            f"\n   Interrupted. Deployment ID: {deployment_id}, Revision ID: {revision_id}"
+            f"\nInterrupted. Deployment ID: {deployment_id}, Revision ID: {revision_id}"
         )
-        em.warn("   The build will continue remotely.")
+        em.warn("The build will continue remotely.")
 
     return BuildResult(
         updated=updated if isinstance(updated, dict) else {},
@@ -1489,11 +1500,10 @@ def _deploy_cmd(
     _no_input = no_input
     em = _emitter
 
+    em.note(
+        "Note: 'langgraph deploy' is in beta. Expect frequent updates and improvements."
+    )
     if not json_output:
-        click.secho(
-            "Note: 'langgraph deploy' is in beta. Expect frequent updates and improvements.",
-            fg="yellow",
-        )
         click.echo()
 
     # -- 1. Preflight --
@@ -1522,7 +1532,7 @@ def _deploy_cmd(
 
     use_remote_build, local_build_error = _resolve_build_mode(remote_build_flag)
     if use_remote_build and remote_build_flag is None and local_build_error:
-        em.warn(f"{local_build_error}\nUsing remote build instead.")
+        em.note(f"{local_build_error}\nUsing remote build instead.")
         if not json_output:
             click.echo()
 
@@ -1536,9 +1546,9 @@ def _deploy_cmd(
         deployment_id,
         name,
         not_found_message=(
-            "   No deployment found. Will create."
+            "No deployment found. Will create."
             if use_remote_build
-            else "   No deployment found. Will create after build."
+            else "No deployment found. Will create after build."
         ),
     )
 
@@ -1633,7 +1643,7 @@ def _deploy_cmd(
                         em.log(msg)
         except Exception:
             em.error("(failed to fetch build logs)")
-        em.warn("   Re-run with --verbose to see full build output.")
+        em.warn("Re-run with --verbose to see full build output.")
 
     _print_deployment_result(
         client,
