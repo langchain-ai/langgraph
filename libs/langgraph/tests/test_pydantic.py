@@ -6,7 +6,7 @@ import re
 import sys
 import uuid
 from enum import Enum
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -597,3 +597,328 @@ def test_pydantic_alias_generator_to_camel():
     assert result["user_id"] == "u-1"
     assert result["display_name"] == "Alice"
     assert result["retry_count"] == 1
+
+
+def test_channel_naming_alias_invoke_output():
+    """channel_naming='alias' rekeys invoke() output from field names to aliases."""
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+        )
+        user_id: str
+        display_name: str
+
+    def node_fn(state: State) -> dict:
+        return {"display_name": "Alice"}
+
+    builder = StateGraph(State)
+    builder.add_node("n", node_fn)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+
+    # default (channel_naming="field") keeps existing behaviour
+    default_graph = builder.compile()
+    default_result = default_graph.invoke({"userId": "u-1", "displayName": "x"})
+    assert "user_id" in default_result
+    assert "display_name" in default_result
+    assert "userId" not in default_result
+
+    # opt-in rekeys output to aliases
+    alias_graph = builder.compile(channel_naming="alias")
+    alias_result = alias_graph.invoke({"userId": "u-1", "displayName": "x"})
+    assert alias_result == {"userId": "u-1", "displayName": "Alice"}
+
+
+def test_channel_naming_alias_stream_values_and_updates():
+    """stream() values/updates chunks are rekeyed when channel_naming='alias'."""
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+        )
+        step_count: int = 0
+        last_actor: str = ""
+
+    def node_a(state: State) -> dict:
+        return {"step_count": 1, "last_actor": "a"}
+
+    def node_b(state: State) -> dict:
+        return {"step_count": 2, "last_actor": "b"}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_b", END)
+    graph = builder.compile(channel_naming="alias")
+
+    # values mode: every chunk with any aliased key uses the alias form, and
+    # no chunk leaks a snake_case channel name
+    values_chunks = list(graph.stream({}, stream_mode="values"))
+    for chunk in values_chunks:
+        assert "step_count" not in chunk
+        assert "last_actor" not in chunk
+    assert values_chunks[-1] == {"stepCount": 2, "lastActor": "b"}
+
+    # updates mode: per-node updates, inner dict keys aliased (outer = node name)
+    updates_chunks = list(graph.stream({}, stream_mode="updates"))
+    assert updates_chunks[0]["node_a"] == {"stepCount": 1, "lastActor": "a"}
+    assert updates_chunks[1]["node_b"] == {"stepCount": 2, "lastActor": "b"}
+
+
+def test_channel_naming_alias_get_state_and_checkpoint_roundtrip():
+    """get_state().values is aliased; checkpoints still use field names internally
+    (so existing checkpoints remain readable)."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+        )
+        user_id: str
+        retry_count: int = 0
+
+    def n(state: State) -> dict:
+        return {"retry_count": state.retry_count + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("n", n)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+
+    checkpointer = InMemorySaver()
+    graph = builder.compile(checkpointer=checkpointer, channel_naming="alias")
+
+    cfg = {"configurable": {"thread_id": "t1"}}
+    graph.invoke({"userId": "u-1"}, cfg)
+
+    # get_state returns alias-keyed values
+    snap = graph.get_state(cfg)
+    assert snap.values == {"userId": "u-1", "retryCount": 1}
+
+    # The checkpoint itself still uses field names (backward compat)
+    tup = checkpointer.get_tuple(cfg)
+    cv_keys = set(tup.checkpoint["channel_values"].keys())
+    assert "user_id" in cv_keys
+    assert "retry_count" in cv_keys
+    assert "userId" not in cv_keys
+
+    # A second graph compiled with default naming reads the same checkpoint fine
+    default_graph = builder.compile(checkpointer=checkpointer)
+    default_snap = default_graph.get_state(cfg)
+    assert default_snap.values == {"user_id": "u-1", "retry_count": 1}
+
+
+def test_channel_naming_alias_mixed_and_non_aliased_fields():
+    """Fields without aliases keep their names; only aliased fields are rewritten."""
+
+    class State(BaseModel):
+        user_id: str = Field(alias="userId")
+        plain_field: str = ""
+
+    def n(state: State) -> dict:
+        return {"plain_field": "done"}
+
+    builder = StateGraph(State)
+    builder.add_node("n", n)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile(channel_naming="alias")
+
+    result = graph.invoke({"userId": "u-1", "plain_field": "start"})
+    assert result == {"userId": "u-1", "plain_field": "done"}
+
+
+def test_channel_naming_alias_integration_camelcase_api_simulation():
+    """End-to-end: simulate a real camelCase JSON API boundary.
+
+    A user receives camelCase JSON (external API), feeds it into a multi-node
+    graph with a checkpointer and interrupt/resume, then re-serializes the
+    final state to camelCase for the response. The full wire format must be
+    consistent (no mixed snake_case/camelCase).
+    """
+    import json
+
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    class CamelBase(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+            serialize_by_alias=True,
+        )
+
+    class ToolCall(CamelBase):
+        tool_name: str
+        tool_args: dict[str, Any]
+
+    class AgentState(CamelBase):
+        user_query: str
+        tool_calls: Annotated[list[ToolCall], lambda a, b: a + b] = Field(
+            default_factory=list
+        )
+        step_count: int = 0
+        final_answer: str = ""
+
+    def planner(state: AgentState) -> dict:
+        assert state.user_query == "find weather"
+        return {
+            "tool_calls": [
+                ToolCall(tool_name="search", tool_args={"q": state.user_query})
+            ],
+            "step_count": state.step_count + 1,
+        }
+
+    def executor(state: AgentState) -> dict:
+        assert state.step_count == 1
+        assert state.tool_calls[0].tool_name == "search"
+        return {
+            "tool_calls": [
+                ToolCall(tool_name="fetch", tool_args={"url": "example.com"})
+            ],
+            "step_count": state.step_count + 1,
+        }
+
+    def responder(state: AgentState) -> dict:
+        assert state.step_count == 2
+        return {"final_answer": "sunny", "step_count": state.step_count + 1}
+
+    builder = StateGraph(AgentState)
+    builder.add_node("planner", planner)
+    builder.add_node("executor", executor)
+    builder.add_node("responder", responder)
+    builder.add_edge(START, "planner")
+    builder.add_edge("planner", "executor")
+    builder.add_edge("executor", "responder")
+    builder.add_edge("responder", END)
+
+    checkpointer = InMemorySaver()
+    graph = builder.compile(
+        checkpointer=checkpointer,
+        interrupt_after=["executor"],
+        channel_naming="alias",
+    )
+    cfg = {"configurable": {"thread_id": "agent-1"}}
+
+    # Incoming request from an external camelCase JSON API
+    incoming_json = '{"userQuery": "find weather"}'
+    partial = graph.invoke(json.loads(incoming_json), cfg)
+
+    # Paused output is fully camelCase (no field-name leaks)
+    assert "user_query" not in partial
+    assert "tool_calls" not in partial
+    assert "step_count" not in partial
+    assert partial["userQuery"] == "find weather"
+    assert partial["stepCount"] == 2
+
+    # Mid-run inspection via get_state: also fully camelCase
+    mid_state = graph.get_state(cfg)
+    assert mid_state.next == ("responder",)
+    assert "user_query" not in mid_state.values
+    assert mid_state.values["stepCount"] == 2
+
+    # Resume
+    final = graph.invoke(None, cfg)
+    assert final["stepCount"] == 3
+    assert final["finalAnswer"] == "sunny"
+
+    # Serialisation path: dumping the final state produces a uniformly camelCase
+    # payload for the outgoing JSON response. This is the whole reason for the
+    # feature: no mixed casing anywhere on the wire.
+
+    def _default(o: Any) -> Any:
+        if isinstance(o, BaseModel):
+            return o.model_dump(by_alias=True)
+        raise TypeError
+
+    outgoing_json = json.dumps(final, default=_default)
+    outgoing = json.loads(outgoing_json)
+    all_keys = (
+        {k for k in outgoing}
+        | {k for v in outgoing.values() if isinstance(v, dict) for k in v}
+        | {
+            k
+            for v in outgoing.values()
+            if isinstance(v, list)
+            for item in v
+            if isinstance(item, dict)
+            for k in item
+        }
+    )
+    assert not any("_" in k for k in all_keys), f"snake_case leaked: {all_keys}"
+
+
+@pytest.mark.anyio
+async def test_channel_naming_alias_integration_async():
+    """Integration: async graph with checkpointing, history, and multi-turn resume."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+        )
+        session_id: str
+        message_count: int = 0
+        history: Annotated[list[str], lambda a, b: a + b] = Field(default_factory=list)
+
+    async def chat(state: State) -> dict:
+        return {
+            "message_count": state.message_count + 1,
+            "history": [f"turn-{state.message_count + 1}"],
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("chat", chat)
+    builder.add_edge(START, "chat")
+    builder.add_edge("chat", END)
+
+    checkpointer = InMemorySaver()
+    graph = builder.compile(checkpointer=checkpointer, channel_naming="alias")
+    cfg = {"configurable": {"thread_id": "session-A"}}
+
+    # Three sequential turns — aliased input, aliased output every turn
+    r1 = await graph.ainvoke({"sessionId": "s-A"}, cfg)
+    assert r1 == {"sessionId": "s-A", "messageCount": 1, "history": ["turn-1"]}
+
+    r2 = await graph.ainvoke({"sessionId": "s-A"}, cfg)
+    assert r2["messageCount"] == 2
+    assert r2["history"] == ["turn-1", "turn-2"]
+
+    r3 = await graph.ainvoke({"sessionId": "s-A"}, cfg)
+    assert r3["messageCount"] == 3
+
+    # History traversal — every snapshot in the stored run history is aliased
+    snapshots = []
+    async for snap in graph.aget_state_history(cfg):
+        snapshots.append(snap)
+    assert len(snapshots) > 0
+    for snap in snapshots:
+        for k in snap.values:
+            assert "_" not in k, f"field name leaked in history snapshot: {k}"
+
+
+def test_channel_naming_alias_noop_on_non_pydantic_state():
+    """channel_naming='alias' is harmless on a TypedDict state (nothing to rewrite)."""
+    from typing_extensions import TypedDict
+
+    class State(TypedDict):
+        foo: str
+        bar: int
+
+    def n(state: State) -> dict:
+        return {"bar": state["bar"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("n", n)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+
+    graph = builder.compile(channel_naming="alias")
+    result = graph.invoke({"foo": "hi", "bar": 1})
+    assert result == {"foo": "hi", "bar": 2}

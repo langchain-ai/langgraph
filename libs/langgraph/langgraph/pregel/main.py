@@ -617,6 +617,12 @@ class Pregel(
     input_alias_map: dict[str, str] | None = None
     """Mapping of alias -> field_name for Pydantic models with aliased fields."""
 
+    output_alias_map: dict[str, str] | None = None
+    """Mapping of field_name -> alias applied at output boundaries when a graph is
+    compiled with ``channel_naming="alias"``. Keys of dicts returned by
+    ``invoke()``, stream(values|updates) chunks, and ``get_state().values`` are
+    rewritten using this map. ``None`` preserves the default field-name keying."""
+
     step_timeout: float | None = None
     """Maximum time to wait for a step to complete, in seconds."""
 
@@ -661,6 +667,7 @@ class Pregel(
         interrupt_before_nodes: All | Sequence[str] = (),
         input_channels: str | Sequence[str],
         input_alias_map: dict[str, str] | None = None,
+        output_alias_map: dict[str, str] | None = None,
         step_timeout: float | None = None,
         debug: bool | None = None,
         checkpointer: Checkpointer = None,
@@ -706,6 +713,7 @@ class Pregel(
         self.interrupt_before_nodes = interrupt_before_nodes
         self.input_channels = input_channels
         self.input_alias_map = input_alias_map
+        self.output_alias_map = output_alias_map
         self.step_timeout = step_timeout
         self.debug = debug if debug is not None else get_debug()
         self.checkpointer = checkpointer
@@ -1136,7 +1144,9 @@ class Pregel(
         )
         # assemble the state snapshot
         return StateSnapshot(
-            read_channels(channels, self.stream_channels_asis),
+            read_channels(
+                channels, self.stream_channels_asis, alias_map=self.output_alias_map
+            ),
             tuple(t.name for t in next_tasks.values() if not t.writes),
             patch_checkpoint_map(saved.config, saved.metadata),
             saved.metadata,
@@ -1256,7 +1266,9 @@ class Pregel(
         )
         # assemble the state snapshot
         return StateSnapshot(
-            read_channels(channels, self.stream_channels_asis),
+            read_channels(
+                channels, self.stream_channels_asis, alias_map=self.output_alias_map
+            ),
             tuple(t.name for t in next_tasks.values() if not t.writes),
             patch_checkpoint_map(saved.config, saved.metadata),
             saved.metadata,
@@ -2712,6 +2724,7 @@ class Pregel(
                 output_keys=output_keys,
                 input_keys=self.input_channels,
                 input_alias_map=self.input_alias_map,
+                output_alias_map=self.output_alias_map,
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
@@ -3116,6 +3129,7 @@ class Pregel(
                 output_keys=output_keys,
                 input_keys=self.input_channels,
                 input_alias_map=self.input_alias_map,
+                output_alias_map=self.output_alias_map,
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,

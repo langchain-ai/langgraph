@@ -1045,6 +1045,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
+        channel_naming: Literal["field", "alias"] = "field",
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1077,6 +1078,16 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
+            channel_naming: Controls the keys of dicts emitted at output
+                boundaries for Pydantic schemas with aliased fields.
+
+                - `"field"` (default): dicts are keyed by field name. Preserves
+                  existing behaviour, including the on-disk checkpoint format.
+                - `"alias"`: dicts returned by `invoke()`, `stream(values|updates)`,
+                  and `get_state().values` are rekeyed from field names to aliases
+                  (e.g. `"user_id"` → `"userId"` for `alias_generator=to_camel`).
+                  Channels and checkpoints still use field names internally,
+                  so existing checkpoints remain readable.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
@@ -1139,6 +1150,13 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         # Compute alias map for input schema (Pydantic models with aliased fields)
         input_alias_map = _get_pydantic_alias_map(self.input_schema) or None
+        # Compute output alias map only when opted in. Uses the output schema so
+        # rewritten keys match what a user serialising the model sees.
+        output_alias_map: dict[str, str] | None = None
+        if channel_naming == "alias":
+            output_alias_map = (
+                _get_pydantic_output_alias_map(self.output_schema) or None
+            )
 
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
@@ -1152,6 +1170,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             },
             input_channels=START,
             input_alias_map=input_alias_map,
+            output_alias_map=output_alias_map,
             stream_mode="updates",
             output_channels=output_channels,
             stream_channels=stream_channels,
@@ -1648,6 +1667,15 @@ def _get_pydantic_alias_map(schema: type[Any]) -> dict[str, str]:
             alias_map[alias] = field_name
 
     return alias_map
+
+
+def _get_pydantic_output_alias_map(schema: type[Any]) -> dict[str, str]:
+    """Inverse of _get_pydantic_alias_map: field_name -> alias.
+
+    Used when a graph is compiled with ``channel_naming="alias"`` to rewrite
+    output dict keys from field names (channel names) to aliases.
+    """
+    return {v: k for k, v in _get_pydantic_alias_map(schema).items()}
 
 
 def _get_channels(
