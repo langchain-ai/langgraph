@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any
+from collections.abc import AsyncIterator, Iterator, Sequence
+from typing import Any, ClassVar, cast
 
 from langchain_core.runnables import RunnableConfig
 
@@ -33,7 +33,7 @@ def _coerce_factories(
     for item in transformers or ():
         if isinstance(item, StreamTransformer):
             raise TypeError(
-                "StreamingHandler.transformers takes factories, not "
+                "GraphStreamer.transformers takes factories, not "
                 "pre-built instances. Pass the transformer class "
                 "(e.g. `MyTransformer`) or a callable taking `scope` "
                 "(e.g. `lambda scope: MyTransformer(scope, foo=...)`), "
@@ -41,18 +41,11 @@ def _coerce_factories(
             )
         if not callable(item):
             raise TypeError(
-                f"StreamingHandler.transformers entries must be callable; "
+                f"GraphStreamer.transformers entries must be callable; "
                 f"got {type(item).__name__}."
             )
         coerced.append(item)
     return coerced
-
-
-_BUILTIN_FACTORIES: list[TransformerFactory] = [
-    ValuesTransformer,
-    MessagesTransformer,
-    SubgraphTransformer,
-]
 
 
 def _merge_v2_messages_flag(
@@ -72,48 +65,116 @@ def _merge_v2_messages_flag(
     return merged
 
 
-# All stream modes to request from the graph.
-STREAM_V2_MODES: list[StreamMode] = [
-    "values",
-    "updates",
-    "messages",
-    "custom",
-    "checkpoints",
-    "tasks",
-    "debug",
-    "lifecycle",
-]
+def _collect_stream_modes(mux: StreamMux) -> list[StreamMode]:
+    """Return the union of `required_stream_modes` across registered transformers.
+
+    Transformers declare the stream modes they need to function, and
+    `GraphStreamer` asks the graph for exactly that union — no
+    hardcoded default set. If zero transformers are registered (or none
+    declares a given mode), the graph does not stream events for that
+    mode; consumers that want raw `custom` / `updates` / `checkpoints`
+    / `tasks` / `debug` visibility must register a transformer that
+    declares those modes as required.
+    """
+    modes: set[str] = set()
+    for transformer in mux._transformers:
+        modes.update(transformer.required_stream_modes)
+    return cast("list[StreamMode]", list(modes))
 
 
-class StreamingHandler:
+class GraphStreamer:
     """Wrap a compiled graph with ergonomic streaming projections.
 
     Example:
         ```python
-        handler = StreamingHandler(graph)
+        streamer = GraphStreamer(graph)
 
         # Sync
-        run = handler.stream(input_data)
+        run = streamer.stream(input_data)
         for state in run.values:
             print(state)
         output = run.output
 
         # Async — terminal accessors are methods so a missing `await`
         # fails loudly instead of silently yielding a coroutine.
-        run = await handler.astream(input_data)
+        run = await streamer.astream(input_data)
         async for state in run.values:
             print(state)
         output = await run.output()
         ```
+
+    Subclassing hooks:
+
+    - `builtin_factories`: tuple of transformer factories registered on
+      every run. Override to append domain-specific transformers
+      without the caller threading them through `transformers=`. An
+      `AgentStreamer` subclass, for example, can append
+      `ToolCallTransformer` so every agent run exposes `run.tool_calls`
+      by default.
+    - `_make_run_stream(...)` / `_make_async_run_stream(...)`: factory
+      hooks that return the run stream instance. Override to return a
+      subclass of `GraphRunStream` / `AsyncGraphRunStream` with typed
+      accessors over the projections contributed by the extra
+      transformers.
+
+    See the end of this module for a minimal subclassing sketch.
+    """
+
+    builtin_factories: ClassVar[tuple[TransformerFactory, ...]] = (
+        ValuesTransformer,
+        MessagesTransformer,
+        SubgraphTransformer,
+    )
+    """Factories registered on every run before caller-supplied transformers.
+
+    Subclasses append to this tuple to bundle domain-specific
+    transformers — for example, an `AgentStreamer` appends
+    `ToolCallTransformer` so every agent run exposes `run.tool_calls`
+    without the caller opting in.
     """
 
     def __init__(self, graph: Pregel) -> None:
-        """Initialize the handler.
+        """Initialize the streamer.
 
         Args:
             graph: A compiled LangGraph graph to stream from.
         """
         self._graph = graph
+
+    def _build_factories(
+        self,
+        transformers: list[TransformerFactory] | None,
+    ) -> list[TransformerFactory]:
+        """Return `builtin_factories` plus the caller's transformers.
+
+        Subclasses rarely override this directly — extend
+        `builtin_factories` instead. Override only when you need to
+        inspect or re-order the caller's transformers (e.g. to inject
+        a transformer *after* user-supplied ones).
+        """
+        return [*self.builtin_factories, *_coerce_factories(transformers)]
+
+    def _make_run_stream(
+        self,
+        graph_iter: Iterator[Any],
+        mux: StreamMux,
+    ) -> GraphRunStream:
+        """Construct the sync run stream returned from `stream()`.
+
+        Override in a subclass to return a `GraphRunStream` subclass
+        with typed accessors over the extra projections contributed by
+        the subclass's `builtin_factories` (e.g. `AgentRunStream` with
+        a typed `.tool_calls`).
+        """
+        return GraphRunStream(graph_iter, mux)
+
+    def _make_async_run_stream(
+        self,
+        graph_aiter: AsyncIterator[Any],
+        mux: StreamMux,
+    ) -> AsyncGraphRunStream:
+        """Async counterpart to `_make_run_stream`."""
+        return AsyncGraphRunStream(graph_aiter, mux)
 
     def stream(
         self,
@@ -136,24 +197,25 @@ class StreamingHandler:
             config: Optional runnable config forwarded to the graph.
             interrupt_before: Nodes to interrupt before, if any.
             interrupt_after: Nodes to interrupt after, if any.
-            transformers: User transformers appended after the built-in
-                `ValuesTransformer` and `MessagesTransformer`.
+            transformers: User transformers appended after
+                `self.builtin_factories`.
 
         Returns:
-            A GraphRunStream the caller can iterate to drive the run.
+            A `GraphRunStream` the caller can iterate to drive the run.
+            Subclasses may narrow this to a `GraphRunStream` subtype via
+            `_make_run_stream`.
         """
         mux = StreamMux(
-            factories=_BUILTIN_FACTORIES + _coerce_factories(transformers),
+            factories=self._build_factories(transformers),
             is_async=False,
         )
-        values_t = mux.transformer_by_key("values")
-        assert isinstance(values_t, ValuesTransformer)
+        stream_modes = _collect_stream_modes(mux)
 
         graph_iter = iter(
             self._graph.stream(
                 input,
                 _merge_v2_messages_flag(config),
-                stream_mode=STREAM_V2_MODES,
+                stream_mode=stream_modes,
                 subgraphs=True,
                 version="v2",
                 interrupt_before=interrupt_before,
@@ -161,7 +223,7 @@ class StreamingHandler:
             )
         )
 
-        return GraphRunStream(graph_iter, mux, values_t)
+        return self._make_run_stream(graph_iter, mux)
 
     async def astream(
         self,
@@ -184,29 +246,28 @@ class StreamingHandler:
             config: Optional runnable config forwarded to the graph.
             interrupt_before: Nodes to interrupt before, if any.
             interrupt_after: Nodes to interrupt after, if any.
-            transformers: User transformers appended after the built-in
-                `ValuesTransformer` and `MessagesTransformer`.
+            transformers: User transformers appended after
+                `self.builtin_factories`.
 
         Returns:
-            An AsyncGraphRunStream whose projections can be awaited
-            concurrently; each subscribed cursor drives the pump when
-            its buffer is empty.
+            An `AsyncGraphRunStream` whose projections can be awaited
+            concurrently; subclasses may narrow this via
+            `_make_async_run_stream`.
         """
         mux = StreamMux(
-            factories=_BUILTIN_FACTORIES + _coerce_factories(transformers),
+            factories=self._build_factories(transformers),
             is_async=True,
         )
-        values_t = mux.transformer_by_key("values")
-        assert isinstance(values_t, ValuesTransformer)
+        stream_modes = _collect_stream_modes(mux)
 
         graph_aiter = self._graph.astream(
             input,
             _merge_v2_messages_flag(config),
-            stream_mode=STREAM_V2_MODES,
+            stream_mode=stream_modes,
             subgraphs=True,
             version="v2",
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
         ).__aiter__()
 
-        return AsyncGraphRunStream(graph_aiter, mux, values_t)
+        return self._make_async_run_stream(graph_aiter, mux)

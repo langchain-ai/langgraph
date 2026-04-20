@@ -68,7 +68,7 @@ CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 # holds a mapping of task ns -> resume value for resuming tasks
 CONFIG_KEY_STREAM_MESSAGES_V2 = sys.intern("__pregel_stream_messages_v2")
 # when True, attach StreamMessagesHandlerV2 so content-block (v2) events
-# flow through stream_mode="messages"; set by StreamingHandler only.
+# flow through stream_mode="messages"; set by GraphStreamer only.
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")

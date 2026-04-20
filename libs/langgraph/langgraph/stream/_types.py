@@ -94,10 +94,17 @@ class StreamTransformer(ABC):
             example, transformers that call `schedule()` from a sync
             `process`). The mux also auto-detects the async lane when
             `aprocess`, `afinalize`, or `afail` is overridden.
+        required_stream_modes: Stream modes the graph must emit for
+            this transformer to have anything to process. Computed as
+            the union across all registered transformers to determine
+            which modes a `GraphStreamer` run requests from the
+            graph. Empty tuple means the transformer consumes only
+            synthetic events (or is purely passive).
     """
 
     requires_async: ClassVar[bool] = False
     scope_exact: ClassVar[bool] = True
+    required_stream_modes: ClassVar[tuple[str, ...]] = ()
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         """Initialize the transformer with its mux's scope.

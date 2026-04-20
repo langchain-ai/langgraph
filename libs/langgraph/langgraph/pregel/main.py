@@ -142,6 +142,7 @@ from langgraph.pregel._messages import (
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
+from langgraph.pregel._tools import StreamToolCallHandler
 from langgraph.pregel._utils import get_new_channel_versions
 from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
@@ -2653,6 +2654,12 @@ class Pregel(
                     )
                 )
 
+            # set up tools stream mode
+            if "tools" in stream_modes:
+                run_manager.inheritable_handlers.append(
+                    StreamToolCallHandler(stream.put)
+                )
+
             # set up custom stream mode
             if "custom" in stream_modes:
 
@@ -3042,6 +3049,12 @@ class Pregel(
                         stream_put,
                         root_graph_name=self.name,
                     )
+                )
+
+            # set up tools stream mode
+            if "tools" in stream_modes:
+                run_manager.inheritable_handlers.append(
+                    StreamToolCallHandler(stream_put)
                 )
 
             # set up custom stream mode

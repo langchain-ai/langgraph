@@ -47,6 +47,28 @@ class BaseRunStream:
         for key in mux.native_keys:
             setattr(self, key, mux.extensions[key])
 
+    @property
+    def _values_transformer(self) -> ValuesTransformer:
+        """Look up the `ValuesTransformer` backing `output` / `interrupted`.
+
+        Resolved lazily off the mux so subclasses don't have to thread
+        it through their constructors. Raises if no `ValuesTransformer`
+        is registered — `output` / `interrupted` / `interrupts` have
+        nothing to return in that case, so failing loudly is better
+        than returning `None` silently.
+        """
+        from langgraph.stream.transformers import ValuesTransformer
+
+        vt = self._mux.transformer_by_key("values")
+        if not isinstance(vt, ValuesTransformer):
+            raise RuntimeError(
+                "No ValuesTransformer is registered on this mux — "
+                "`output`, `interrupted`, and `interrupts` require one. "
+                "Add it to your GraphStreamer subclass's "
+                "`builtin_factories` or pass it via `transformers=`."
+            )
+        return vt
+
     def __iter__(self) -> Iterator[ProtocolEvent]:
         """Sync iteration of protocol events on this mux's main log.
 
@@ -128,19 +150,18 @@ class GraphRunStream(BaseRunStream):
         self,
         graph_iter: Iterator[Any],
         mux: StreamMux,
-        values_transformer: ValuesTransformer,
     ) -> None:
         """Initialize the run stream.
 
         Args:
             graph_iter: Pull-based iterator over the graph's stream.
             mux: The StreamMux owning projections and the main log.
-            values_transformer: The built-in values transformer
-                providing `output` / `interrupted` / `interrupts`.
+                Must have a `ValuesTransformer` registered under the
+                `"values"` key — `output` / `interrupted` / `interrupts`
+                read from it lazily.
         """
         super().__init__(mux)
         self._graph_iter = graph_iter
-        self._values_transformer = values_transformer
         self._exhausted = False
         mux.bind_pump(self._pump_next)
 
@@ -196,10 +217,10 @@ class GraphRunStream(BaseRunStream):
     def output(self) -> dict[str, Any] | None:
         """Drive the run to completion and return the final state."""
         _drive_until_done(self._pump_next)
-        err = self._values_transformer.error
-        if err is not None:
-            raise err
-        return self._values_transformer._latest
+        vt = self._values_transformer
+        if vt.error is not None:
+            raise vt.error
+        return vt._latest
 
     @property
     def interrupted(self) -> bool:
@@ -209,10 +230,10 @@ class GraphRunStream(BaseRunStream):
             BaseException: If the run ended with an error.
         """
         _drive_until_done(self._pump_next)
-        err = self._values_transformer.error
-        if err is not None:
-            raise err
-        return self._values_transformer._interrupted
+        vt = self._values_transformer
+        if vt.error is not None:
+            raise vt.error
+        return vt._interrupted
 
     @property
     def interrupts(self) -> list[Any]:
@@ -222,10 +243,10 @@ class GraphRunStream(BaseRunStream):
             BaseException: If the run ended with an error.
         """
         _drive_until_done(self._pump_next)
-        err = self._values_transformer.error
-        if err is not None:
-            raise err
-        return self._values_transformer._interrupts
+        vt = self._values_transformer
+        if vt.error is not None:
+            raise vt.error
+        return vt._interrupts
 
 
 class AsyncGraphRunStream(BaseRunStream):
@@ -256,19 +277,18 @@ class AsyncGraphRunStream(BaseRunStream):
         self,
         graph_aiter: AsyncIterator[Any],
         mux: StreamMux,
-        values_transformer: ValuesTransformer,
     ) -> None:
         """Initialize the async run stream.
 
         Args:
             graph_aiter: Async iterator over the graph's stream.
             mux: The StreamMux owning projections and the main log.
-            values_transformer: The built-in values transformer
-                providing `output` / `interrupted` / `interrupts`.
+                Must have a `ValuesTransformer` registered under the
+                `"values"` key — `output` / `interrupted` / `interrupts`
+                read from it lazily.
         """
         super().__init__(mux)
         self._graph_aiter = graph_aiter
-        self._values_transformer = values_transformer
         self._exhausted = False
         self._pump_lock = asyncio.Lock()
         mux.bind_apump(self._apump_next)

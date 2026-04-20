@@ -273,7 +273,7 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
     which forwards protocol events onto the messages stream channel.
 
     Pregel attaches this class instead of the v1 handler only when
-    `StreamingHandler` opts in via the internal
+    `GraphStreamer` opts in via the internal
     `CONFIG_KEY_STREAM_MESSAGES_V2` config key; direct
     `graph.stream(stream_mode="messages")` callers keep the v1
     AIMessageChunk shape.

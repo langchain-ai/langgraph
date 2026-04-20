@@ -49,6 +49,7 @@ class ValuesTransformer(StreamTransformer):
     """
 
     _native = True
+    required_stream_modes = ("values",)
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
@@ -121,6 +122,7 @@ class MessagesTransformer(StreamTransformer):
     """
 
     _native = True
+    required_stream_modes = ("messages",)
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
@@ -340,6 +342,7 @@ class SubgraphTransformer(StreamTransformer):
 
     _native = True
     scope_exact = False
+    required_stream_modes = ("lifecycle",)
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)

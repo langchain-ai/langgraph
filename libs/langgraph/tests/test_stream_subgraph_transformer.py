@@ -13,7 +13,7 @@ from typing_extensions import TypedDict
 from langgraph.constants import END, START
 from langgraph.errors import GraphInterrupt
 from langgraph.graph import StateGraph
-from langgraph.stream import StreamingHandler
+from langgraph.stream import GraphStreamer
 from langgraph.stream._event_log import EventLog
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
@@ -245,7 +245,7 @@ class TestSubgraphTransformerUnit:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end tests via StreamingHandler on real graphs
+# End-to-end tests via GraphStreamer on real graphs
 # ---------------------------------------------------------------------------
 
 
@@ -286,7 +286,7 @@ class TestSubgraphTransformerEndToEnd:
         builder.add_edge("n", END)
         graph = builder.compile()
 
-        handler = StreamingHandler(graph)
+        handler = GraphStreamer(graph)
         run = handler.stream({"value": "", "items": []})
 
         collected: list[SubgraphRunStream] = []
@@ -298,7 +298,7 @@ class TestSubgraphTransformerEndToEnd:
 
     def test_nested_graph_yields_one_child(self) -> None:
         graph = _build_nested_graph()
-        handler = StreamingHandler(graph)
+        handler = GraphStreamer(graph)
         run = handler.stream({"value": "", "items": []})
 
         collected: list[SubgraphRunStream] = []
@@ -327,7 +327,7 @@ class TestSubgraphTransformerEndToEnd:
         outer_builder.add_edge("sub", END)
         graph = outer_builder.compile()
 
-        handler = StreamingHandler(graph)
+        handler = GraphStreamer(graph)
         run = handler.stream({"value": "", "items": []})
 
         collected: list[SubgraphRunStream] = []
@@ -357,7 +357,7 @@ class TestSubgraphTransformerAsyncEndToEnd:
         outer_builder.add_edge("sub", END)
         graph = outer_builder.compile()
 
-        handler = StreamingHandler(graph)
+        handler = GraphStreamer(graph)
         run = await handler.astream({"value": "", "items": []})
 
         collected: list[SubgraphRunStream] = []
@@ -374,7 +374,7 @@ class TestSubgraphTriggerCallId:
 
     def test_trigger_call_id_populated_end_to_end(self) -> None:
         graph = _build_nested_graph()
-        handler = StreamingHandler(graph)
+        handler = GraphStreamer(graph)
         run = handler.stream({"value": "", "items": []})
 
         collected: list[SubgraphRunStream] = list(run.subgraphs)
@@ -413,7 +413,7 @@ class TestSubgraphInterrupt:
 
     def test_interrupt_in_subgraph_marks_handle_interrupted(self) -> None:
         graph = self._build_interrupt_subgraph()
-        handler = StreamingHandler(graph)
+        handler = GraphStreamer(graph)
         run = handler.stream(
             {"value": "", "items": []},
             config={"configurable": {"thread_id": "t1"}},
@@ -451,7 +451,7 @@ class TestSubgraphNameCollision:
         outer_builder.add_edge("sub", END)
         graph = outer_builder.compile()
 
-        handler = StreamingHandler(graph)
+        handler = GraphStreamer(graph)
         run = handler.stream({"value": "", "items": []})
 
         collected: list[SubgraphRunStream] = list(run.subgraphs)
