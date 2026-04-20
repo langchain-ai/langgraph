@@ -155,6 +155,49 @@ def test_graph_validation_with_command() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": "bar", "bar": "baz"}
 
 
+# StrEnum is 3.11+; resolve once at module scope so the class below is
+# module-addressable (the serde reconstructs by importing the module and
+# looking up the class by __name__ — a function-local class would be unreachable).
+_StrEnum = getattr(enum, "StrEnum", None)
+
+if _StrEnum is not None:
+
+    class _StrEnumStatus(_StrEnum):  # type: ignore[misc,valid-type]
+        PENDING = "pending"
+        COMPLETED = "completed"
+
+
+@pytest.mark.skipif(_StrEnum is None, reason="StrEnum requires Python 3.11+")
+def test_strenum_state_round_trip_through_checkpointer() -> None:
+    """End-to-end regression for langchain-ai/langgraph#6598.
+
+    A ``StrEnum`` (3.11+) field in graph state must survive the
+    checkpoint serialize/deserialize round trip with its concrete
+    enum type intact.
+    """
+
+    class State(TypedDict):
+        status: _StrEnumStatus
+
+    def advance(state: State) -> State:
+        return {"status": _StrEnumStatus.COMPLETED}
+
+    graph = (
+        StateGraph(State)
+        .add_node("advance", advance)
+        .add_edge(START, "advance")
+        .add_edge("advance", END)
+        .compile(checkpointer=InMemorySaver())
+    )
+
+    config: RunnableConfig = {"configurable": {"thread_id": "t"}}
+    graph.invoke({"status": _StrEnumStatus.PENDING}, config=config)
+
+    loaded = graph.get_state(config=config).values["status"]
+    assert type(loaded) is _StrEnumStatus
+    assert loaded is _StrEnumStatus.COMPLETED
+
+
 def test_checkpoint_errors() -> None:
     class FaultyGetCheckpointer(InMemorySaver):
         def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:

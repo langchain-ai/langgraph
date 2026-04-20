@@ -1,4 +1,5 @@
 import dataclasses
+import enum
 import json
 import logging
 import pathlib
@@ -8,7 +9,7 @@ import uuid
 from collections import deque
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, IntEnum
 from ipaddress import IPv4Address
 from zoneinfo import ZoneInfo
 
@@ -39,6 +40,10 @@ from langgraph.checkpoint.serde.jsonplus import (
     _warned_unregistered_types,
 )
 from langgraph.store.base import Item
+
+# StrEnum is only available on Python 3.11+. Resolve it at import time so
+# this module stays collectable on 3.10 (the checkpoint package's min version).
+StrEnum: type[Enum] | None = getattr(enum, "StrEnum", None)
 
 
 class InnerPydantic(BaseModel):
@@ -91,6 +96,23 @@ class MyDataclassWSlots:
 
 
 class MyEnum(Enum):
+    FOO = "foo"
+    BAR = "bar"
+
+
+if StrEnum is not None:
+
+    class MyStrEnum(StrEnum):  # type: ignore[misc,valid-type]
+        FOO = "foo"
+        BAR = "bar"
+
+
+class MyIntEnum(IntEnum):
+    ONE = 1
+    TWO = 2
+
+
+class MyLegacyStrEnum(str, Enum):
     FOO = "foo"
     BAR = "bar"
 
@@ -997,3 +1019,53 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+@pytest.mark.skipif(StrEnum is None, reason="StrEnum requires Python 3.11+")
+def test_strenum_round_trip() -> None:
+    """Regression for #6598 — StrEnum must preserve its concrete type."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=[MyStrEnum])
+
+    loaded = serde.loads_typed(serde.dumps_typed(MyStrEnum.FOO))
+
+    assert type(loaded) is MyStrEnum
+    assert loaded is MyStrEnum.FOO
+
+
+def test_intenum_round_trip() -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=[MyIntEnum])
+
+    loaded = serde.loads_typed(serde.dumps_typed(MyIntEnum.ONE))
+
+    assert type(loaded) is MyIntEnum
+    assert loaded is MyIntEnum.ONE
+
+
+def test_legacy_str_enum_round_trip() -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=[MyLegacyStrEnum])
+
+    loaded = serde.loads_typed(serde.dumps_typed(MyLegacyStrEnum.FOO))
+
+    assert type(loaded) is MyLegacyStrEnum
+    assert loaded is MyLegacyStrEnum.FOO
+
+
+@pytest.mark.skipif(StrEnum is None, reason="StrEnum requires Python 3.11+")
+def test_typed_enums_inside_container() -> None:
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[MyStrEnum, MyIntEnum, MyLegacyStrEnum]
+    )
+
+    payload = {
+        "str": MyStrEnum.FOO,
+        "int": MyIntEnum.TWO,
+        "legacy": MyLegacyStrEnum.BAR,
+        "list": [MyStrEnum.BAR, MyIntEnum.ONE],
+    }
+    loaded = serde.loads_typed(serde.dumps_typed(payload))
+
+    assert type(loaded["str"]) is MyStrEnum
+    assert type(loaded["int"]) is MyIntEnum
+    assert type(loaded["legacy"]) is MyLegacyStrEnum
+    assert type(loaded["list"][0]) is MyStrEnum
+    assert type(loaded["list"][1]) is MyIntEnum
