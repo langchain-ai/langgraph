@@ -307,6 +307,68 @@ def test_graph_with_jitter_retry_policy():
     mock_sleep.assert_called_with(0.01 + 0.05)  # Sleep should include jitter
 
 
+def test_jitter_does_not_exceed_max_interval():
+    """Regression test: jitter must never cause sleep to exceed max_interval.
+
+    Before the fix, jitter was added AFTER the max_interval cap, so the actual
+    sleep could be up to max_interval + 1 second, violating the documented
+    'maximum amount of time that may elapse between retries' semantics.
+
+    After the fix, sleep_time = min(max_interval, interval + jitter), so it is
+    always bounded by max_interval regardless of the jitter value.
+    """
+
+    class State(TypedDict):
+        foo: str
+
+    attempt_count = 0
+
+    def failing_node(state):
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count < 2:
+            raise ValueError("Intentional failure")
+        return {"foo": "success"}
+
+    # max_interval is intentionally small so that large jitter would exceed it
+    # without the fix. random.uniform is mocked to return a value (0.9) that is
+    # larger than max_interval (0.1), which would have caused the bug.
+    retry_policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.05,
+        max_interval=0.1,
+        jitter=True,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, retry_policy=retry_policy)
+        .add_edge(START, "failing_node")
+        .compile()
+    )
+
+    # Mock random.uniform to return a large jitter value (0.9) that would
+    # push sleep_time well above max_interval (0.1) without the fix.
+    with (
+        patch("random.uniform", return_value=0.9) as mock_random,
+        patch("time.sleep") as mock_sleep,
+    ):
+        result = graph.invoke({"foo": ""})
+
+    assert attempt_count == 2
+    assert result["foo"] == "success"
+    mock_random.assert_called_with(0, 1)
+
+    # The sleep must be capped at max_interval (0.1), not interval + jitter (0.05 + 0.9 = 0.95).
+    actual_sleep = mock_sleep.call_args[0][0]
+    assert actual_sleep <= retry_policy.max_interval, (
+        f"sleep_time {actual_sleep} exceeded max_interval {retry_policy.max_interval}. "
+        "Jitter was not bounded by max_interval."
+    )
+    assert actual_sleep == retry_policy.max_interval  # capped exactly at max_interval
+
+
 def test_graph_with_multiple_retry_policies():
     """Test a graph with multiple retry policies for a node."""
 
