@@ -27,9 +27,9 @@ class ToolCallTransformer(StreamTransformer):
     channel instead, where the raw protocol events flow through
     untouched by this transformer (`process` returns `True`).
 
-    Registered explicitly by users via
-    `GraphStreamer(graph).stream(transformers=[ToolCallTransformer])`
-    — not a default built-in, so the `tools` channel is user-opt-in.
+    Registered explicitly by users at compile time via
+    `builder.compile(transformers=[ToolCallTransformer])` — not a
+    default built-in, so the `tools` channel is user-opt-in.
     """
 
     _native = True

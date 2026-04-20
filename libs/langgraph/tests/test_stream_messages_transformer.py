@@ -23,7 +23,6 @@ from langgraph.constants import END, START
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.stream._event_log import EventLog
 from langgraph.stream._mux import StreamMux
-from langgraph.stream.graph_streamer import GraphStreamer
 from langgraph.stream.run_stream import GraphRunStream
 from langgraph.stream.transformers import MessagesTransformer, ValuesTransformer
 
@@ -507,7 +506,7 @@ class TestViaMux:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end: full graph → GraphStreamer → run.messages
+# End-to-end: full graph → stream_v2 → run.messages
 # ---------------------------------------------------------------------------
 
 
@@ -541,8 +540,7 @@ class TestEndToEnd:
             .compile()
         )
 
-        handler = GraphStreamer(graph)
-        run = handler.stream({"messages": "hi"})
+        run = graph.stream_v2({"messages": "hi"})
         streams = list(run.messages)
 
         assert len(streams) == 1
@@ -565,8 +563,7 @@ class TestEndToEnd:
             .compile()
         )
 
-        handler = GraphStreamer(graph)
-        run = handler.stream({"messages": "go"})
+        run = graph.stream_v2({"messages": "go"})
 
         # Pull the stream handle out, then iterate its text deltas.
         (stream,) = list(run.messages)
@@ -587,8 +584,7 @@ class TestEndToEnd:
             .compile()
         )
 
-        handler = GraphStreamer(graph)
-        run = handler.stream({"messages": "hi"})
+        run = graph.stream_v2({"messages": "hi"})
         streams = list(run.messages)
 
         assert len(streams) == 1
@@ -611,8 +607,7 @@ class TestEndToEnd:
             .compile()
         )
 
-        handler = GraphStreamer(graph)
-        run = await handler.astream({"messages": "hi"})
+        run = await graph.astream_v2({"messages": "hi"})
 
         streams = []
         async for stream in run.messages:
@@ -649,8 +644,7 @@ class TestEndToEnd:
             .compile()
         )
 
-        handler = GraphStreamer(graph)
-        run = await handler.astream({"messages": "hi"})
+        run = await graph.astream_v2({"messages": "hi"})
 
         async def consume_nested() -> list[str]:
             collected: list[str] = []
@@ -664,11 +658,11 @@ class TestEndToEnd:
 
 
 class TestEndToEndV2Invoke:
-    """Nodes call `model.invoke()`; `GraphStreamer` routes through v2.
+    """Nodes call `model.invoke()`; `stream_v2` routes through v2.
 
     Exercises the auto-routing path added in
     `feat(core): route invoke through v2 event path for
-    _V2StreamingCallbackHandler`: `GraphStreamer` injects
+    _V2StreamingCallbackHandler`: `stream_v2` injects
     `CONFIG_KEY_STREAM_MESSAGES_V2` into the config, pregel attaches
     `StreamMessagesHandlerV2`, `BaseChatModel._should_stream_v2` sees the
     v2 marker and drives the protocol event generator, and
@@ -690,8 +684,7 @@ class TestEndToEndV2Invoke:
             .compile()
         )
 
-        handler = GraphStreamer(graph)
-        run = handler.stream({"messages": "hi"})
+        run = graph.stream_v2({"messages": "hi"})
         streams = list(run.messages)
 
         assert len(streams) == 1, (
@@ -717,8 +710,7 @@ class TestEndToEndV2Invoke:
             .compile()
         )
 
-        handler = GraphStreamer(graph)
-        run = handler.stream({"messages": "go"})
+        run = graph.stream_v2({"messages": "go"})
         (stream,) = list(run.messages)
 
         events = list(stream)
@@ -751,8 +743,7 @@ class TestEndToEndV2Invoke:
             .compile()
         )
 
-        handler = GraphStreamer(graph)
-        run = handler.stream({"messages": "hi"})
+        run = graph.stream_v2({"messages": "hi"})
         (stream,) = list(run.messages)
 
         assembled = "".join(stream.text)
@@ -779,8 +770,7 @@ class TestEndToEndV2Invoke:
             .compile()
         )
 
-        handler = GraphStreamer(graph)
-        run = handler.stream({"messages": "hi"})
+        run = graph.stream_v2({"messages": "hi"})
         streams = list(run.messages)
 
         assert len(streams) == 2
@@ -810,8 +800,7 @@ class TestEndToEndV2Invoke:
             .compile()
         )
 
-        handler = GraphStreamer(graph)
-        run = handler.stream({"messages": "hi"})
+        run = graph.stream_v2({"messages": "hi"})
         streams = list(run.messages)
 
         assert len(streams) == 2
@@ -823,7 +812,7 @@ class TestEndToEndV2Invoke:
 
     @pytest.mark.anyio
     async def test_ainvoke_with_v2_marker_populates_messages(self) -> None:
-        """Async mirror: `model.ainvoke()` + `GraphStreamer.astream()`."""
+        """Async mirror: `model.ainvoke()` + `astream_v2`."""
         model = GenericFakeChatModel(messages=iter(["async invoke"]))
 
         async def call_model(state: MessagesState) -> dict[str, Any]:
@@ -837,8 +826,7 @@ class TestEndToEndV2Invoke:
             .compile()
         )
 
-        handler = GraphStreamer(graph)
-        run = await handler.astream({"messages": "hi"})
+        run = await graph.astream_v2({"messages": "hi"})
 
         streams = []
         async for stream in run.messages:
@@ -852,8 +840,8 @@ class TestEndToEndV2Invoke:
 
 class TestDirectMessagesModeStaysV1:
     """Regression guard: direct `graph.stream(stream_mode="messages")`
-    (no `GraphStreamer`) must keep the v1 `(AIMessageChunk, metadata)`
-    tuple shape. The v2 flag is only injected by `GraphStreamer`.
+    (no `stream_v2`) must keep the v1 `(AIMessageChunk, metadata)`
+    tuple shape. The v2 flag is only injected by `stream_v2` / `astream_v2`.
     """
 
     def test_direct_graph_stream_messages_yields_ai_message_chunks(self) -> None:
@@ -878,7 +866,7 @@ class TestDirectMessagesModeStaysV1:
             payload, _metadata = part
             assert isinstance(payload, AIMessageChunk), (
                 "direct graph.stream(stream_mode='messages') leaked v2 "
-                "event dicts — GraphStreamer flag bled through."
+                "event dicts — stream_v2 flag bled through."
             )
         assembled = "".join(
             p[0].content for p in parts if isinstance(p[0].content, str)

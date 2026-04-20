@@ -12,7 +12,6 @@ from langgraph.config import emit_tool_output_delta
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.stream import GraphStreamer
 from langgraph.stream._event_log import EventLog
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
@@ -194,8 +193,7 @@ class TestToolCallTransformerEndToEnd:
             }
 
         graph = _build_graph(caller, [streamer])
-        handler = GraphStreamer(graph)
-        run = handler.stream({"messages": []}, transformers=[ToolCallTransformer])
+        run = graph.stream_v2({"messages": []}, transformers=[ToolCallTransformer])
 
         tool_calls: list[ToolCallStream] = []
         for tc in run.tool_calls:
@@ -228,15 +226,14 @@ class TestToolCallTransformerEndToEnd:
             }
 
         graph = _build_graph(caller, [echo])
-        handler = GraphStreamer(graph)
         # Without ToolCallTransformer, no tool_calls projection is
         # exposed and no `tools` events flow through (required_stream_modes
         # omits it).
-        run_no_tc = handler.stream({"messages": []})
+        run_no_tc = graph.stream_v2({"messages": []})
         assert "tool_calls" not in run_no_tc._mux.extensions  # type: ignore[attr-defined]
 
         # With ToolCallTransformer, the projection is present.
-        run = handler.stream({"messages": []}, transformers=[ToolCallTransformer])
+        run = graph.stream_v2({"messages": []}, transformers=[ToolCallTransformer])
         assert "tool_calls" in run._mux.extensions  # type: ignore[attr-defined]
         # Drain so the run closes cleanly.
         list(run.tool_calls)
@@ -263,8 +260,7 @@ class TestToolCallTransformerEndToEnd:
             }
 
         graph = _build_graph(caller, [astreamer])
-        handler = GraphStreamer(graph)
-        run = await handler.astream(
+        run = await graph.astream_v2(
             {"messages": []}, transformers=[ToolCallTransformer]
         )
 
@@ -294,8 +290,7 @@ class TestToolCallTransformerEndToEnd:
             }
 
         graph = _build_graph(caller, [boom])
-        handler = GraphStreamer(graph)
-        run = handler.stream({"messages": []}, transformers=[ToolCallTransformer])
+        run = graph.stream_v2({"messages": []}, transformers=[ToolCallTransformer])
 
         collected: list[ToolCallStream] = []
         with pytest.raises(ValueError, match="nope"):
