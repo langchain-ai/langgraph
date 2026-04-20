@@ -290,27 +290,40 @@ class AsyncGraphRunStream(BaseRunStream):
         super().__init__(mux)
         self._graph_aiter = graph_aiter
         self._exhausted = False
-        self._pump_lock = asyncio.Lock()
+        self._pump_cond = asyncio.Condition()
+        self._pumping = False
         mux.bind_apump(self._apump_next)
 
     async def _apump_next(self) -> bool:
-        """Pull one event from the graph and push it through the mux.
+        """Drive one pump step, or wait for the active pumper to drive one.
 
-        Serialized via `self._pump_lock` so concurrent cursors each
-        produce one event per acquisition rather than racing on the
-        graph iterator.
+        "Take-a-number" semantics: at most one task at a time calls
+        `graph_aiter.__anext__()` (asyncio iterators can't be advanced
+        concurrently). Other callers wait on a Condition that the
+        active pumper notifies after each step. This lets a "passive"
+        consumer — one whose projection's buffer is being filled by the
+        active pumper's push — wake up as soon as its data lands,
+        instead of queueing on the pump and only observing its data one
+        graph event late.
 
         `except Exception` is intentional — `CancelledError` and other
         `BaseException` subclasses propagate, matching asyncio's
         cancellation contract.
 
         Returns:
-            True if an event was pulled, False if the graph is
-            exhausted or has raised.
+            True if a pump step completed (by this task or another),
+            False if the graph is exhausted.
         """
-        async with self._pump_lock:
+        async with self._pump_cond:
             if self._exhausted:
                 return False
+            if self._pumping:
+                # Another task is pumping; wait for its progress signal.
+                await self._pump_cond.wait()
+                return not self._exhausted
+            self._pumping = True
+
+        try:
             try:
                 part = await self._graph_aiter.__anext__()
             except StopAsyncIteration:
@@ -323,23 +336,27 @@ class AsyncGraphRunStream(BaseRunStream):
                 return False
             await self._mux.apush(convert_to_protocol_event(part))
             return True
+        finally:
+            async with self._pump_cond:
+                self._pumping = False
+                self._pump_cond.notify_all()
 
     async def abort(self) -> None:
         """Stop the run early.
 
-        Closes the mux and marks the stream exhausted. Any awaiting
-        cursors wake up and see the closed state; any `apush` blocked
-        on backpressure wakes and returns without appending.
-        Idempotent.
+        Marks the stream exhausted, wakes any pump-waiters, and closes
+        the mux. Any `apush` blocked on backpressure wakes and returns
+        without appending. Idempotent.
         """
-        async with self._pump_lock:
+        async with self._pump_cond:
             if self._exhausted:
                 return
             self._exhausted = True
-            try:
-                await self._mux.aclose()
-            except Exception:
-                pass
+            self._pump_cond.notify_all()
+        try:
+            await self._mux.aclose()
+        except Exception:
+            pass
 
     async def __aenter__(self) -> AsyncGraphRunStream:
         return self
