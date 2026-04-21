@@ -141,11 +141,11 @@ class InMemorySaver(
         channel: str,
     ) -> Any:
         """Fast-path blob lookup: checkpoint → channel version → blob."""
-        ns_storage = self.storage.get((thread_id, checkpoint_ns), {})
+        ns_storage = self.storage.get(thread_id, {}).get(checkpoint_ns, {})
         entry = ns_storage.get(checkpoint_id)
         if entry is None:
             return NotImplemented
-        checkpoint = entry[1]
+        checkpoint = self.serde.loads_typed(entry[0])
         version = checkpoint["channel_versions"].get(channel)
         if version is None:
             return NotImplemented

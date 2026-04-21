@@ -23,12 +23,17 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
     (e.g. `add_messages`) on long-running threads to reduce checkpoint
     storage from O(N²) to O(N).
 
-    Requires InMemorySaver or PostgresSaver; SqliteSaver is not supported.
+    Works with all checkpointers. Savers with a dedicated blob store
+    (InMemorySaver, PostgresSaver) use an O(1) fast-path per chain step;
+    all others (SQLite, MongoDB, etc.) fall back to get_tuple traversal
+    bounded by `snapshot_every`.
 
     Usage::
 
         class State(TypedDict):
             messages: Annotated[list[AnyMessage], DeltaChannel(add_messages)]
+            # Cap reconstruction depth for non-Postgres savers:
+            messages: Annotated[list[AnyMessage], DeltaChannel(add_messages, snapshot_every=50)]
     """
 
     __slots__ = (

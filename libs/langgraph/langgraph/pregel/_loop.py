@@ -1278,7 +1278,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if assembled:
                 self.checkpoint = {
                     **self.checkpoint,
-                    "channel_values": {**self.checkpoint["channel_values"], **assembled},
+                    "channel_values": {
+                        **self.checkpoint["channel_values"],
+                        **assembled,
+                    },
                 }
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
@@ -1491,7 +1494,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if assembled:
                 self.checkpoint = {
                     **self.checkpoint,
-                    "channel_values": {**self.checkpoint["channel_values"], **assembled},
+                    "channel_values": {
+                        **self.checkpoint["channel_values"],
+                        **assembled,
+                    },
                 }
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
