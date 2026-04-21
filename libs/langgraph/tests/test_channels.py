@@ -1,10 +1,12 @@
 import operator
 from collections.abc import Sequence
+from typing import Annotated
 
 import pytest
+from typing_extensions import Required
 
 from langgraph._internal._typing import MISSING
-from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.binop import BinaryOperatorAggregate, _strip_extras
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
@@ -88,6 +90,10 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_strip_extras_unwraps_required_annotated() -> None:
+    assert _strip_extras(Required[Annotated[int, "meta"]]) is int
 
 
 def test_untracked_value() -> None:
