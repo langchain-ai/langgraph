@@ -17,7 +17,7 @@ from collections.abc import (
     Sequence,
 )
 from dataclasses import is_dataclass, replace
-from functools import partial
+from functools import cached_property, partial
 from inspect import isclass
 from typing import (
     Any,
@@ -730,6 +730,7 @@ class Pregel(
             return checkpointer
         return _serde.apply_checkpointer_allowlist(checkpointer, self._serde_allowlist)
 
+    @cached_property
     def _checkpoint_hydration_plan(self) -> CheckpointHydrationPlan | None:
         return checkpoint_hydration_plan(self.channels)
 
@@ -741,7 +742,7 @@ class Pregel(
         if saved is None or checkpointer is None:
             return saved
         return checkpointer.materialize_checkpoint_tuple(
-            saved, self._checkpoint_hydration_plan()
+            saved, self._checkpoint_hydration_plan
         )
 
     async def _amaterialize_saved_checkpoint(
@@ -752,7 +753,7 @@ class Pregel(
         if saved is None or checkpointer is None:
             return saved
         return await checkpointer.amaterialize_checkpoint_tuple(
-            saved, self._checkpoint_hydration_plan()
+            saved, self._checkpoint_hydration_plan
         )
 
     def _materialize_saved_checkpoints(
@@ -763,7 +764,7 @@ class Pregel(
         if checkpointer is None or not saved:
             return list(saved)
         return checkpointer.materialize_checkpoint_tuples(
-            saved, self._checkpoint_hydration_plan()
+            saved, self._checkpoint_hydration_plan
         )
 
     async def _amaterialize_saved_checkpoints(
@@ -774,7 +775,7 @@ class Pregel(
         if checkpointer is None or not saved:
             return list(saved)
         return await checkpointer.amaterialize_checkpoint_tuples(
-            saved, self._checkpoint_hydration_plan()
+            saved, self._checkpoint_hydration_plan
         )
 
     def get_graph(

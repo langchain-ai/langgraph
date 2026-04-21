@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import dataclasses
 import logging
@@ -567,22 +568,34 @@ class BaseCheckpointSaver(Generic[V]):
         thread_id = str(config["configurable"]["thread_id"])
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         current_checkpoint_id = checkpoint.get("id")
-        assembled: dict[str, Any] = {}
 
-        for spec in plan.channels:
-            value = checkpoint["channel_values"].get(spec.name)
-            if spec.kind != "delta" or not isinstance(value, DeltaValue):
-                continue
+        targets = [
+            (spec, checkpoint["channel_values"][spec.name])
+            for spec in plan.channels
+            if spec.kind == "delta"
+            and isinstance(checkpoint["channel_values"].get(spec.name), DeltaValue)
+        ]
+        if not targets:
+            return checkpoint
 
-            assembled_value = await self._amaterialize_delta_channel(
-                thread_id=thread_id,
-                checkpoint_ns=checkpoint_ns,
-                current_checkpoint_id=current_checkpoint_id,
-                channel=spec.name,
-                value=value,
+        # Walks for independent channels can run concurrently — each has its own chain.
+        results = await asyncio.gather(
+            *(
+                self._amaterialize_delta_channel(
+                    thread_id=thread_id,
+                    checkpoint_ns=checkpoint_ns,
+                    current_checkpoint_id=current_checkpoint_id,
+                    channel=spec.name,
+                    value=value,
+                )
+                for spec, value in targets
             )
-            if assembled_value is not None:
-                assembled[spec.name] = assembled_value
+        )
+        assembled = {
+            spec.name: result
+            for (spec, _), result in zip(targets, results, strict=True)
+            if result is not None
+        }
 
         if not assembled:
             return checkpoint
@@ -683,18 +696,6 @@ class BaseCheckpointSaver(Generic[V]):
         clone.serde = maybe_add_typed_methods(serde)
         return clone
 
-    def _get_checkpoint_tuple_for_materialization(
-        self, config: RunnableConfig
-    ) -> CheckpointTuple | None:
-        """Internal raw checkpoint lookup used by fallback materialization."""
-        return self.get_tuple(config)
-
-    async def _aget_checkpoint_tuple_for_materialization(
-        self, config: RunnableConfig
-    ) -> CheckpointTuple | None:
-        """Async internal raw checkpoint lookup used by fallback materialization."""
-        return await self.aget_tuple(config)
-
     def _materialize_delta_channel(
         self,
         *,
@@ -738,7 +739,7 @@ class BaseCheckpointSaver(Generic[V]):
                     "checkpoint_id": prev_id,
                 }
             }
-            parent_tuple = self._get_checkpoint_tuple_for_materialization(parent_config)
+            parent_tuple = self.get_tuple(parent_config)
             if parent_tuple is None:
                 logger.warning(
                     "DeltaChannel chain broken: checkpoint %r not found for channel %r",
@@ -805,9 +806,7 @@ class BaseCheckpointSaver(Generic[V]):
                     "checkpoint_id": prev_id,
                 }
             }
-            parent_tuple = await self._aget_checkpoint_tuple_for_materialization(
-                parent_config
-            )
+            parent_tuple = await self.aget_tuple(parent_config)
             if parent_tuple is None:
                 logger.warning(
                     "DeltaChannel chain broken: checkpoint %r not found for channel %r",

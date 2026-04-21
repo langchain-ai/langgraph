@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import collections.abc
 from collections.abc import Callable, Sequence
-from typing import Any, Generic
+from typing import Any, Generic, Literal
 
 from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
 from typing_extensions import Self
@@ -99,7 +99,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         return self.typ | list[self.typ]  # type: ignore[name-defined]
 
     @property
-    def checkpoint_hydration_kind(self) -> str:
+    def checkpoint_hydration_kind(self) -> Literal["delta"]:
         return "delta"
 
     def copy(self) -> Self:

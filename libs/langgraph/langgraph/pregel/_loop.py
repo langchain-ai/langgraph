@@ -12,6 +12,7 @@ from contextlib import (
     ExitStack,
 )
 from datetime import datetime, timezone
+from functools import cached_property
 from inspect import signature
 from types import TracebackType
 from typing import (
@@ -316,6 +317,7 @@ class PregelLoop:
         )
         self.prev_checkpoint_config = None
 
+    @cached_property
     def _checkpoint_hydration_plan(self) -> CheckpointHydrationPlan | None:
         """Build the saver hydration plan from this loop's channel specs."""
         return checkpoint_hydration_plan(self.specs)
@@ -326,7 +328,7 @@ class PregelLoop:
         if saved is None or self.checkpointer is None:
             return saved
         return self.checkpointer.materialize_checkpoint_tuple(
-            saved, self._checkpoint_hydration_plan()
+            saved, self._checkpoint_hydration_plan
         )
 
     async def _amaterialize_saved_checkpoint(
@@ -335,7 +337,7 @@ class PregelLoop:
         if saved is None or self.checkpointer is None:
             return saved
         return await self.checkpointer.amaterialize_checkpoint_tuple(
-            saved, self._checkpoint_hydration_plan()
+            saved, self._checkpoint_hydration_plan
         )
 
     def _push_graph_lifecycle_event(
