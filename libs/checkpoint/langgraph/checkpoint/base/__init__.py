@@ -501,7 +501,15 @@ class BaseCheckpointSaver(Generic[V]):
         checkpoint_id: str,
         channel: str,
     ) -> Any:
-        """Async version of get_channel_blob."""
+        """Look up a single channel blob by checkpoint ID + channel name (async).
+
+        Returns NotImplemented if this saver does not support efficient
+        per-channel-version blob lookup. The pregel layer will fall back to
+        aget_tuple() traversal in that case.
+
+        Savers with a dedicated blob store (InMemorySaver, PostgresSaver)
+        should override this for O(1) performance.
+        """
         return NotImplemented
 
     def get_next_version(self, current: V | None, channel: None) -> V:
