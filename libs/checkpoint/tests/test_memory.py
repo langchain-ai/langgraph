@@ -338,7 +338,9 @@ class TestInMemorySaverDeltaChannel:
         cp = empty_checkpoint()
         cp["id"] = "cp1"
         cp["channel_versions"][channel] = version
-        saver.storage[(thread_id, ns)] = {"cp1": ({}, cp, {})}
+        saver.storage[thread_id][ns] = {
+            "cp1": (serde.dumps_typed(cp), serde.dumps_typed({}), None)
+        }
 
         result = saver.get_channel_blob(thread_id, ns, "cp1", channel)
         assert isinstance(result, DeltaValue)
@@ -348,4 +350,6 @@ class TestInMemorySaverDeltaChannel:
     def test_get_channel_blob_missing(self) -> None:
         """get_channel_blob returns NotImplemented when checkpoint or channel not found."""
         saver = InMemorySaver()
-        assert saver.get_channel_blob("t1", "", "no-such-cp", "messages") is NotImplemented
+        assert (
+            saver.get_channel_blob("t1", "", "no-such-cp", "messages") is NotImplemented
+        )

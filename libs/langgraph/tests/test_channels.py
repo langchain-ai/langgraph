@@ -236,6 +236,7 @@ def test_delta_channel_assembly_fallback_via_get_tuple() -> None:
         DeltaValue,
         empty_checkpoint,
     )
+
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
     from langgraph.pregel._checkpoint import _assemble_delta_channels
@@ -249,12 +250,20 @@ def test_delta_channel_assembly_fallback_via_get_tuple() -> None:
 
     cp2 = empty_checkpoint()
     cp2["id"] = "cp2"
-    cp2["channel_values"]["messages"] = DeltaValue(delta=[msg2], prev_checkpoint_id="cp1")
+    cp2["channel_values"]["messages"] = DeltaValue(
+        delta=[msg2], prev_checkpoint_id="cp1"
+    )
 
     saver = MagicMock()
     saver.get_channel_blob.return_value = NotImplemented
     saver.get_tuple.return_value = CheckpointTuple(
-        config={"configurable": {"thread_id": "t1", "checkpoint_ns": "", "checkpoint_id": "cp1"}},
+        config={
+            "configurable": {
+                "thread_id": "t1",
+                "checkpoint_ns": "",
+                "checkpoint_id": "cp1",
+            }
+        },
         checkpoint=cp1,
         metadata={},
         parent_config=None,
