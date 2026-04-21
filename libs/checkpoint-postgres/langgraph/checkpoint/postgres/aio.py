@@ -391,49 +391,37 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    async def _load_diff_chains_async(
+    async def aget_channel_blob(
         self,
         thread_id: str,
         checkpoint_ns: str,
-        diff_channel_payloads: dict[str, dict[str, Any]],
-        *,
-        cur: Any,
-    ) -> dict[str, Any]:
-        from langgraph.checkpoint.base import DeltaChainValue
-
-        result: dict[str, Any] = {}
-        for channel, current_payload in diff_channel_payloads.items():
-            payloads: list[dict[str, Any]] = [current_payload]
-            version_cursor: str | None = current_payload["p"]
-            base: list[Any] | None = None
-            visited: set[str] = set()
-
-            while version_cursor is not None:
-                if version_cursor in visited:
-                    break
-                visited.add(version_cursor)
-                await cur.execute(
-                    "SELECT type, blob FROM checkpoint_blobs "
-                    "WHERE thread_id = %s AND checkpoint_ns = %s "
-                    "AND channel = %s AND version = %s",
-                    (thread_id, checkpoint_ns, channel, version_cursor),
-                )
-                row = await cur.fetchone()
-                if row is None:
-                    break
-                if row["type"] == "diff":
-                    payload = self.serde.loads_typed(("diff", row["blob"]))
-                    payloads.append(payload)
-                    version_cursor = payload["p"]
-                else:
-                    base = self.serde.loads_typed((row["type"], row["blob"]))
-                    break
-
-            payloads.reverse()
-            result[channel] = DeltaChainValue(
-                base=base, deltas=[p["d"] for p in payloads]
+        checkpoint_id: str,
+        channel: str,
+    ) -> Any:
+        """Async look up of a channel blob by checkpoint ID + channel name."""
+        async with self._cursor() as cur:
+            await cur.execute(
+                """
+                SELECT cb.type, cb.blob
+                FROM checkpoint_blobs cb
+                WHERE cb.thread_id = %s
+                  AND cb.checkpoint_ns = %s
+                  AND cb.channel = %s
+                  AND cb.version = (
+                      SELECT checkpoint->'channel_versions'->>%s
+                      FROM checkpoints
+                      WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s
+                  )
+                """,
+                (
+                    thread_id, checkpoint_ns, channel, channel,
+                    thread_id, checkpoint_ns, checkpoint_id,
+                ),
             )
-        return result
+            row = await cur.fetchone()
+        if row is None:
+            return NotImplemented
+        return self.serde.loads_typed((row["type"], row["blob"]))
 
     async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
         """
@@ -451,24 +439,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
         checkpoint_ns = value["checkpoint_ns"]
         blob_values = value["channel_values"]
 
-        non_diff: dict[str, Any] = {}
-        diff_payloads: dict[str, dict[str, Any]] = {}
+        channel_values: dict[str, Any] = {}
         if blob_values:
-            for k, t, v in blob_values:
-                channel = k.decode()
-                type_tag = t.decode()
-                if type_tag == "diff":
-                    diff_payloads[channel] = self.serde.loads_typed((type_tag, v))
-                elif type_tag != "empty":
-                    non_diff[channel] = self.serde.loads_typed((type_tag, v))
-
-        if diff_payloads:
-            async with self._cursor() as cur:
-                diff_values = await self._load_diff_chains_async(
-                    thread_id, checkpoint_ns, diff_payloads, cur=cur
-                )
-        else:
-            diff_values = {}
+            channel_values = self._load_blobs(blob_values)
 
         return CheckpointTuple(
             {
@@ -482,8 +455,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 **value["checkpoint"],
                 "channel_values": {
                     **(value["checkpoint"].get("channel_values") or {}),
-                    **non_diff,
-                    **diff_values,
+                    **channel_values,
                 },
             },
             value["metadata"],
