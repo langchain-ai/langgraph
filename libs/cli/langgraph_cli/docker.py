@@ -3,6 +3,8 @@ import json
 import pathlib
 import platform
 import shutil
+import secrets
+import string
 from collections.abc import Callable, Sequence
 from typing import Literal, NamedTuple
 
@@ -12,6 +14,12 @@ import langgraph_cli.config
 from langgraph_cli.exec import subp_exec
 
 ROOT = pathlib.Path(__file__).parent.resolve()
+
+def _generate_postgres_password() -> str:
+    """Generate a cryptographically secure random password for Postgres."""
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(24))
+
 DEFAULT_POSTGRES_URI = (
     "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
 )

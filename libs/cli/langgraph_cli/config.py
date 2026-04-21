@@ -3,6 +3,8 @@ import json
 import os
 import pathlib
 import re
+import secrets
+import string
 import shlex
 import textwrap
 from collections import Counter
@@ -12,6 +14,11 @@ import click
 
 from langgraph_cli.schemas import Config, Distros
 from langgraph_cli.uv_lock import python_config_to_docker_uv_lock
+
+def _generate_postgres_password() -> str:
+    """Generate a cryptographically secure random password for Postgres."""
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(24))
 
 MIN_NODE_VERSION = "20"
 DEFAULT_NODE_VERSION = "20"
@@ -1140,7 +1147,7 @@ def python_config_to_docker(
         f"RUN {local_reqs_pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
     )
     if local_deps.pip_reqs:
-        pip_reqs_str = os.linesep.join(
+        pip_reqs_str = "\n".join(
             (
                 f"COPY --from=outer-{reqpath.name} requirements.txt {destpath}"
                 if reqpath.parent in local_deps.additional_contexts
@@ -1148,7 +1155,7 @@ def python_config_to_docker(
             )
             for reqpath, destpath in local_deps.pip_reqs
         )
-        pip_reqs_str += f"{os.linesep}RUN {local_reqs_pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}"
+        pip_reqs_str += f"{"\n"}RUN {local_reqs_pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}"
         pip_reqs_str = f"""# -- Installing local requirements --
 {pip_reqs_str}
 # -- End of local requirements install --"""
@@ -1158,7 +1165,7 @@ def python_config_to_docker(
 
     # https://setuptools.pypa.io/en/latest/userguide/datafiles.html#package-data
     # https://til.simonwillison.net/python/pyproject
-    faux_pkgs_str = f"{os.linesep}{os.linesep}".join(
+    faux_pkgs_str = f"{"\n"}{"\n"}".join(
         (
             f"""# -- Adding non-package dependency {fullpath.name} --
 COPY --from=outer-{fullpath.name} . {destpath}"""
@@ -1182,7 +1189,7 @@ RUN set -ex && \\
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
     )
 
-    local_pkgs_str = os.linesep.join(
+    local_pkgs_str = "\n".join(
         (
             f"""# -- Adding local package {relpath} --
 COPY --from={name} . /deps/{name}
@@ -1231,7 +1238,7 @@ ADD {relpath} /deps/{name}
 
     install_steps = [install_node_str, pip_config_file_str, pip_pkgs_str, pip_reqs_str]
     install_steps.extend([local_pkgs_str, faux_pkgs_str])
-    installs = f"{os.linesep}{os.linesep}".join(
+    installs = f"{"\n"}{"\n"}".join(
         filter(
             None,
             install_steps,
@@ -1242,7 +1249,7 @@ ADD {relpath} /deps/{name}
 
     js_inst_str: str = ""
     if (config.get("ui") or config.get("node_version")) and local_deps.working_dir:
-        js_inst_str = os.linesep.join(
+        js_inst_str = "\n".join(
             [
                 "# -- Installing JS dependencies --",
                 f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
@@ -1278,14 +1285,14 @@ ADD {relpath} /deps/{name}
         [
             f"FROM {image_str}",
             "",
-            os.linesep.join(config["dockerfile_lines"]),
+            "\n".join(config["dockerfile_lines"]),
             "",
             installs,
             "",
             "# -- Installing all local dependencies --",
             local_deps_install_str,
             "# -- End of local dependencies install --",
-            os.linesep.join(env_vars),
+            "\n".join(env_vars),
             "",
             js_inst_str,
             "",
@@ -1300,7 +1307,7 @@ ADD {relpath} /deps/{name}
         ]
     )
 
-    return os.linesep.join(docker_file_contents), additional_contexts
+    return "\n".join(docker_file_contents), additional_contexts
 
 
 def node_config_to_docker(
@@ -1357,7 +1364,7 @@ def node_config_to_docker(
     docker_file_contents = [
         f"FROM {image_str}",
         "",
-        os.linesep.join(config["dockerfile_lines"]),
+        "\n".join(config["dockerfile_lines"]),
         "",
         f"ADD . {faux_path if not build_context else container_root}",
         "",
@@ -1365,14 +1372,14 @@ def node_config_to_docker(
         "",
         install_step,
         "",
-        os.linesep.join(env_vars),
+        "\n".join(env_vars),
         "",
         f"WORKDIR {build_workdir}",
         "",
         build_step,
     ]
 
-    return os.linesep.join(docker_file_contents), {}
+    return "\n".join(docker_file_contents), {}
 
 
 def default_base_image(
@@ -1564,7 +1571,7 @@ def config_to_compose(
                 additional_contexts:
 {executor_additional_contexts_str}"""
 
-            postgres_uri = "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
+            postgres_uri = f"postgres://postgres:{_generate_postgres_password()}@langgraph-postgres:5432/postgres?sslmode=disable"
             result += f"""    langgraph-orchestrator:
         image: langchain/langgraph-orchestrator-licensed:latest
         depends_on:
