@@ -122,6 +122,8 @@ from langgraph.pregel._algo import (
 )
 from langgraph.pregel._call import identifier
 from langgraph.pregel._checkpoint import (
+    _aassemble_delta_channels,
+    _assemble_delta_channels,
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
@@ -1049,13 +1051,23 @@ class Pregel(
 
         step = saved.metadata.get("step", -1) + 1
         stop = step + 2
+        checkpoint = saved.checkpoint
+        if isinstance(self.checkpointer, BaseCheckpointSaver):
+            assembled = _assemble_delta_channels(
+                checkpoint, saved.config, self.checkpointer
+            )
+            if assembled:
+                checkpoint = {
+                    **checkpoint,
+                    "channel_values": {**checkpoint["channel_values"], **assembled},
+                }
         channels, managed = channels_from_checkpoint(
             self.channels,
-            saved.checkpoint,
+            checkpoint,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
-            saved.checkpoint,
+            checkpoint,
             saved.pending_writes or [],
             self.nodes,
             channels,
@@ -1168,13 +1180,23 @@ class Pregel(
 
         step = saved.metadata.get("step", -1) + 1
         stop = step + 2
+        checkpoint = saved.checkpoint
+        if isinstance(self.checkpointer, BaseCheckpointSaver):
+            assembled = await _aassemble_delta_channels(
+                checkpoint, saved.config, self.checkpointer
+            )
+            if assembled:
+                checkpoint = {
+                    **checkpoint,
+                    "channel_values": {**checkpoint["channel_values"], **assembled},
+                }
         channels, managed = channels_from_checkpoint(
             self.channels,
-            saved.checkpoint,
+            checkpoint,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
-            saved.checkpoint,
+            checkpoint,
             saved.pending_writes or [],
             self.nodes,
             channels,
@@ -1520,9 +1542,20 @@ class Pregel(
             saved = checkpointer.get_tuple(config)
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
-            checkpoint = (
-                copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
-            )
+            base_checkpoint = saved.checkpoint if saved else empty_checkpoint()
+            if saved:
+                assembled = _assemble_delta_channels(
+                    base_checkpoint, saved.config, checkpointer
+                )
+                if assembled:
+                    base_checkpoint = {
+                        **base_checkpoint,
+                        "channel_values": {
+                            **base_checkpoint["channel_values"],
+                            **assembled,
+                        },
+                    }
+            checkpoint = copy_checkpoint(base_checkpoint) if saved else base_checkpoint
             checkpoint_previous_versions = (
                 saved.checkpoint["channel_versions"].copy() if saved else {}
             )
@@ -1966,9 +1999,20 @@ class Pregel(
             saved = await checkpointer.aget_tuple(config)
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
-            checkpoint = (
-                copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
-            )
+            base_checkpoint = saved.checkpoint if saved else empty_checkpoint()
+            if saved:
+                assembled = await _aassemble_delta_channels(
+                    base_checkpoint, saved.config, checkpointer
+                )
+                if assembled:
+                    base_checkpoint = {
+                        **base_checkpoint,
+                        "channel_values": {
+                            **base_checkpoint["channel_values"],
+                            **assembled,
+                        },
+                    }
+            checkpoint = copy_checkpoint(base_checkpoint) if saved else base_checkpoint
             checkpoint_previous_versions = (
                 saved.checkpoint["channel_versions"].copy() if saved else {}
             )

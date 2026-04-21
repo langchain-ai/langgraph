@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
-
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -27,7 +26,7 @@ _MISSING_SENTINEL = object()
 
 
 def _assemble_delta_channels(
-    checkpoint: "Checkpoint",
+    checkpoint: Checkpoint,
     config: RunnableConfig,
     checkpointer: BaseCheckpointSaver,
 ) -> dict[str, Any]:
@@ -64,7 +63,9 @@ def _assemble_delta_channels(
             visited.add(prev_id)
 
             # Fast path: saver has a dedicated blob store.
-            blob = checkpointer.get_channel_blob(thread_id, checkpoint_ns, prev_id, channel)
+            blob = checkpointer.get_channel_blob(
+                thread_id, checkpoint_ns, prev_id, channel
+            )
             if blob is not NotImplemented:
                 if isinstance(blob, DeltaValue):
                     cursor = blob
@@ -89,7 +90,9 @@ def _assemble_delta_channels(
                     channel,
                 )
                 break
-            prev_val = parent_tuple.checkpoint["channel_values"].get(channel, _MISSING_SENTINEL)
+            prev_val = parent_tuple.checkpoint["channel_values"].get(
+                channel, _MISSING_SENTINEL
+            )
             if prev_val is _MISSING_SENTINEL:
                 break
             elif isinstance(prev_val, DeltaValue):
@@ -105,7 +108,7 @@ def _assemble_delta_channels(
 
 
 async def _aassemble_delta_channels(
-    checkpoint: "Checkpoint",
+    checkpoint: Checkpoint,
     config: RunnableConfig,
     checkpointer: BaseCheckpointSaver,
 ) -> dict[str, Any]:
@@ -163,7 +166,9 @@ async def _aassemble_delta_channels(
                     channel,
                 )
                 break
-            prev_val = parent_tuple.checkpoint["channel_values"].get(channel, _MISSING_SENTINEL)
+            prev_val = parent_tuple.checkpoint["channel_values"].get(
+                channel, _MISSING_SENTINEL
+            )
             if prev_val is _MISSING_SENTINEL:
                 break
             elif isinstance(prev_val, DeltaValue):
@@ -235,7 +240,7 @@ def channels_from_checkpoint(
     channels: dict[str, BaseChannel] = {}
     for k, v in channel_specs.items():
         ch = v.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
-        ch.after_checkpoint(checkpoint["channel_versions"].get(k))
+        ch.after_checkpoint(checkpoint["channel_versions"].get(k), checkpoint.get("id"))
         channels[k] = ch
     return channels, managed_specs
 
