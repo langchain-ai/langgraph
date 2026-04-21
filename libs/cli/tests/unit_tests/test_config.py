@@ -1855,6 +1855,79 @@ def test_config_to_docker_uv_lock_supports_single_uv_project_root():
         assert additional_contexts == {}
 
 
+def test_config_to_docker_uv_lock_skips_dockerignore_entries():
+    """Entries filtered by .dockerignore / .gitignore / built-in excludes must
+    not appear as ADD lines — Docker fails to compute the cache key for paths
+    that the build context has stripped."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root = tmpdir_path / "single"
+        project_root.mkdir()
+        (project_root / "uv.lock").write_text("# uv lock file\n")
+        (project_root / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "single-app"
+                version = "0.1.0"
+                dependencies = ["httpx>=0.28"]
+
+                [build-system]
+                requires = ["setuptools>=61"]
+                build-backend = "setuptools.build_meta"
+                """
+            ).strip()
+            + "\n"
+        )
+        (project_root / "langgraph.json").write_text("{}\n")
+        (project_root / "src").mkdir()
+        (project_root / "src" / "agent.py").write_text("graph = object()\n")
+        (project_root / "README.md").write_text("# hi\n")
+
+        # Built-in exclusions — must never appear as ADD lines.
+        (project_root / ".git").mkdir()
+        (project_root / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+        (project_root / ".venv").mkdir()
+        (project_root / ".venv" / "pyvenv.cfg").write_text("home = /usr\n")
+        (project_root / "__pycache__").mkdir()
+        (project_root / "__pycache__" / "x.cpython-311.pyc").write_bytes(b"\x00")
+
+        # .dockerignore excludes .gitignore and a custom path.
+        (project_root / ".dockerignore").write_text(".gitignore\nsecrets.env\n")
+        (project_root / ".gitignore").write_text("*.pyc\n")
+        (project_root / "secrets.env").write_text("TOKEN=abc\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./src/agent.py:graph"},
+                "source": {"kind": "uv"},
+            }
+        )
+        docker, _ = config_to_docker(
+            project_root / "langgraph.json",
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+        for excluded in (
+            "ADD .git ",
+            "ADD .gitignore ",
+            "ADD .venv ",
+            "ADD __pycache__ ",
+            "ADD secrets.env ",
+        ):
+            assert excluded not in docker, (
+                f"{excluded!r} should be filtered out of Dockerfile:\n{docker}"
+            )
+
+        # The .dockerignore itself is still part of the context and should be
+        # ADDed (Docker needs it at build time, and archive.py includes it).
+        assert "ADD .dockerignore /deps/workspace/.dockerignore" in docker
+        assert "ADD src /deps/workspace/src" in docker
+        assert "ADD README.md /deps/workspace/README.md" in docker
+
+
 def test_config_to_docker_uv_lock_rejects_invalid_source_package_type():
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = pathlib.Path(tmpdir)

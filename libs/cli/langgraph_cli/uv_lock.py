@@ -450,6 +450,13 @@ def _uv_lock_package_copy_items(
 
     root_container = plan.container_roots[package.root]
     workspace_member_roots = plan.all_workspace_roots - {plan.project_root}
+    # Skip entries that .dockerignore / .gitignore / built-in exclusions would
+    # strip from the build context.  Emitting `ADD <path>` for a file that
+    # Docker has filtered out causes the build to fail with
+    # "failed to compute cache key: <path> not found".
+    from langgraph_cli.archive import _build_ignore_spec
+
+    ignore_spec = _build_ignore_spec(plan.project_root)
 
     def iter_entries(
         current_dir: pathlib.Path,
@@ -461,18 +468,25 @@ def _uv_lock_package_copy_items(
                 # and excluded entirely otherwise.
                 continue
 
+            relative_child = pathlib.PurePosixPath(
+                *child.relative_to(plan.project_root).parts
+            )
+            is_dir = child.is_dir()
+            match_path = (
+                f"{relative_child.as_posix()}/" if is_dir else relative_child.as_posix()
+            )
+            if ignore_spec.match_file(match_path):
+                continue
+
             descendant_member_roots = [
                 ws_root
                 for ws_root in workspace_member_roots
                 if child in ws_root.parents
             ]
-            if child.is_dir() and descendant_member_roots:
+            if is_dir and descendant_member_roots:
                 entries.extend(iter_entries(child))
                 continue
 
-            relative_child = pathlib.PurePosixPath(
-                *child.relative_to(plan.project_root).parts
-            )
             entries.append(
                 (relative_child, root_container.joinpath(*relative_child.parts))
             )
