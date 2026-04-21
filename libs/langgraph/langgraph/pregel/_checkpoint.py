@@ -37,6 +37,7 @@ def _assemble_delta_channels(
     """
     thread_id = str(config["configurable"]["thread_id"])
     checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+    current_checkpoint_id = checkpoint.get("id")
     assembled: dict[str, Any] = {}
 
     for channel, value in checkpoint["channel_values"].items():
@@ -46,7 +47,8 @@ def _assemble_delta_channels(
         chain_deltas: list[list[Any]] = []
         base: list[Any] | None = None
         cursor: DeltaValue = value
-        visited: set[str] = set()
+        # Pre-seed with current checkpoint ID to guard against self-referential chains.
+        visited: set[str] = {current_checkpoint_id} if current_checkpoint_id else set()
 
         while True:
             chain_deltas.append(cursor.delta)
@@ -115,6 +117,7 @@ async def _aassemble_delta_channels(
     """Async version of _assemble_delta_channels."""
     thread_id = str(config["configurable"]["thread_id"])
     checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+    current_checkpoint_id = checkpoint.get("id")
     assembled: dict[str, Any] = {}
 
     for channel, value in checkpoint["channel_values"].items():
@@ -124,7 +127,7 @@ async def _aassemble_delta_channels(
         chain_deltas: list[list[Any]] = []
         base: list[Any] | None = None
         cursor: DeltaValue = value
-        visited: set[str] = set()
+        visited: set[str] = {current_checkpoint_id} if current_checkpoint_id else set()
 
         while True:
             chain_deltas.append(cursor.delta)

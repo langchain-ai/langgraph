@@ -358,3 +358,167 @@ def test_delta_channel_update_by_id_delta_and_replay() -> None:
     ch2 = spec.from_checkpoint(chain)
     assert len(ch2.get()) == 1
     assert ch2.get()[0].content == "updated"
+
+
+def test_delta_channel_snapshot_every_emits_plain_list() -> None:
+    """snapshot_every=N causes a plain-list snapshot after N steps; next deltas chain to it."""
+    from langchain_core.messages import HumanMessage
+    from langgraph.checkpoint.base import DeltaValue
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph.message import add_messages
+
+    SNAP = 3
+    spec = DeltaChannel(add_messages, snapshot_every=SNAP)
+    ch = spec.from_checkpoint(MISSING)
+    # First after_checkpoint anchors _base_version without counting a step.
+    ch.after_checkpoint("v0", checkpoint_id="cid0")
+
+    # Steps 1..SNAP: each should stay as DeltaValue; counter increments each step.
+    for i in range(1, SNAP + 1):
+        ch.update([HumanMessage(content=f"m{i}", id=f"h{i}")])
+        ckpt = ch.checkpoint()
+        assert isinstance(ckpt, DeltaValue), f"expected DeltaValue at step {i}"
+        ch.after_checkpoint(f"v{i}", checkpoint_id=f"cid{i}")
+
+    # Step SNAP+1: _steps_since_snapshot == SNAP → snapshot fires
+    ch.update([HumanMessage(content="snap", id="hsnap")])
+    snap = ch.checkpoint()
+    assert isinstance(snap, list), "expected plain-list snapshot at snapshot_every step"
+    assert len(snap) == SNAP + 1
+
+    # After snapshot, counter resets — next step is DeltaValue again
+    ch.after_checkpoint("vsnap", checkpoint_id="cidsnap")
+    ch.update([HumanMessage(content="post", id="hpost")])
+    post = ch.checkpoint()
+    assert isinstance(post, DeltaValue)
+    assert post.prev_checkpoint_id == "cidsnap"
+
+
+def test_delta_channel_snapshot_every_end_to_end() -> None:
+    """Graph with snapshot_every: get_state returns correct accumulated value after snapshot."""
+    from typing import Annotated
+
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.memory import InMemorySaver
+    from typing_extensions import TypedDict
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(add_messages, snapshot_every=2)]
+
+    counter = {"n": 0}
+
+    def respond(state: State) -> dict:
+        counter["n"] += 1
+        return {
+            "messages": [
+                AIMessage(content=f"ai-{counter['n']}", id=f"ai-{counter['n']}")
+            ]
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    graph = builder.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "snap-test"}}
+
+    # Run 5 turns — snapshot fires after 2 steps, then again after 2 more
+    for i in range(5):
+        graph.invoke({"messages": [HumanMessage(content=f"h{i}", id=f"h{i}")]}, config)
+
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    # 5 human + 5 AI = 10 total
+    assert len(msgs) == 10, f"expected 10 messages, got {len(msgs)}: {msgs}"
+
+
+def test_delta_channel_assembly_fast_path_returns_delta_value() -> None:
+    """get_channel_blob returning a DeltaValue continues chain traversal (fast-path)."""
+    from unittest.mock import MagicMock
+
+    from langgraph.checkpoint.base import (
+        DeltaChainValue,
+        DeltaValue,
+        empty_checkpoint,
+    )
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph.message import add_messages
+    from langgraph.pregel._checkpoint import _assemble_delta_channels
+
+    msg1 = {"type": "human", "content": "one"}
+    msg2 = {"type": "ai", "content": "two"}
+    msg3 = {"type": "human", "content": "three"}
+
+    # cp3 → cp2 (DeltaValue) → cp1 (base list)
+    dv_cp2 = DeltaValue(delta=[msg2], prev_checkpoint_id="cp1")
+    cp3 = empty_checkpoint()
+    cp3["id"] = "cp3"
+    cp3["channel_values"]["messages"] = DeltaValue(
+        delta=[msg3], prev_checkpoint_id="cp2"
+    )
+
+    saver = MagicMock()
+
+    def _get_blob(thread_id, ns, checkpoint_id, channel):
+        if checkpoint_id == "cp2":
+            return dv_cp2  # DeltaValue — chain continues
+        if checkpoint_id == "cp1":
+            return [msg1]  # plain list — chain root
+        return NotImplemented
+
+    saver.get_channel_blob.side_effect = _get_blob
+
+    config = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
+    assembled = _assemble_delta_channels(cp3, config, saver)
+
+    chain = assembled["messages"]
+    assert isinstance(chain, DeltaChainValue)
+    assert chain.base == [msg1]
+    assert chain.deltas == [[msg2], [msg3]]
+
+    spec = DeltaChannel(add_messages)
+    ch = spec.from_checkpoint(chain)
+    # add_messages converts dicts to message objects; check by type and content
+
+    result = ch.get()
+    assert len(result) == 3
+    assert result[0].content == "one"
+    assert result[1].content == "two"
+    assert result[2].content == "three"
+
+
+def test_delta_channel_assembly_broken_chain_logs_warning() -> None:
+    """If a prev_checkpoint_id points to a missing checkpoint, log a warning and use partial chain."""
+    from unittest.mock import MagicMock
+
+    from langgraph.checkpoint.base import DeltaValue, empty_checkpoint
+
+    from langgraph.pregel._checkpoint import _assemble_delta_channels
+
+    cp = empty_checkpoint()
+    cp["id"] = "cp2"
+    cp["channel_values"]["messages"] = DeltaValue(
+        delta=["msg2"], prev_checkpoint_id="cp-missing"
+    )
+
+    saver = MagicMock()
+    saver.get_channel_blob.return_value = NotImplemented
+    saver.get_tuple.return_value = None  # checkpoint not found
+
+    config = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
+
+    assembled = _assemble_delta_channels(cp, config, saver)
+
+    # Should still assemble — with partial chain (just the current delta, base=None)
+    assert "messages" in assembled
+    from langgraph.checkpoint.base import DeltaChainValue
+
+    chain = assembled["messages"]
+    assert isinstance(chain, DeltaChainValue)
+    assert chain.base is None
+    assert chain.deltas == [["msg2"]]
