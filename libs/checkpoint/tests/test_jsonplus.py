@@ -994,7 +994,7 @@ def test_delta_value_serde_round_trip() -> None:
         delta=[{"type": "human", "content": "hi"}], prev_checkpoint_id="abc-123"
     )
     type_tag, blob = serde.dumps_typed(original)
-    assert type_tag == "diff"
+    assert type_tag == "delta"
     loaded = serde.loads_typed((type_tag, blob))
     assert isinstance(loaded, DeltaValue)
     assert loaded.delta == original.delta
