@@ -9402,17 +9402,17 @@ def test_fork_does_not_apply_pending_writes(
     assert result == {"value": 121}
 
 
-async def test_diff_channel_end_to_end_inmemory() -> None:
-    """Full graph run: DiffChannel accumulates correctly across multiple turns."""
+async def test_delta_channel_end_to_end_inmemory() -> None:
+    """Full graph run: DeltaChannel accumulates correctly across multiple turns."""
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
     class State(TypedDict):
-        messages: Annotated[list, DiffChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(add_messages)]
 
     def respond(state: State) -> dict:
         n = len(state["messages"])
@@ -9444,17 +9444,17 @@ async def test_diff_channel_end_to_end_inmemory() -> None:
     assert msgs[5].content == "reply-5"
 
 
-async def test_diff_channel_time_travel() -> None:
+async def test_delta_channel_time_travel() -> None:
     """Time-travel back to turn-1 checkpoint and resume; continuation must not include turn-2 deltas."""
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
     class State(TypedDict):
-        messages: Annotated[list, DiffChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(add_messages)]
 
     counter = {"n": 0}
 
@@ -9502,17 +9502,17 @@ async def test_diff_channel_time_travel() -> None:
     assert msgs[2].content == "h3"
 
 
-async def test_diff_channel_remove_message_end_to_end() -> None:
-    """RemoveMessage inside a DiffChannel graph must persist and reload correctly."""
+async def test_delta_channel_remove_message_end_to_end() -> None:
+    """RemoveMessage inside a DeltaChannel graph must persist and reload correctly."""
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
     class State(TypedDict):
-        messages: Annotated[list, DiffChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(add_messages)]
 
     def respond(state: State) -> dict:
         return {"messages": [AIMessage(content="reply", id="ai-1")]}
@@ -9549,17 +9549,17 @@ async def test_diff_channel_remove_message_end_to_end() -> None:
     )
 
 
-async def test_diff_channel_update_by_id_end_to_end() -> None:
-    """Updating a message by ID via DiffChannel must persist and reload correctly."""
+async def test_delta_channel_update_by_id_end_to_end() -> None:
+    """Updating a message by ID via DeltaChannel must persist and reload correctly."""
     from langchain_core.messages import HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
     class State(TypedDict):
-        messages: Annotated[list, DiffChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(add_messages)]
 
     def update_msg(state: State) -> dict:
         # re-send h1 with updated content

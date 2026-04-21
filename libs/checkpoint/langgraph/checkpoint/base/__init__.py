@@ -32,16 +32,16 @@ PendingWrite = tuple[str, str, Any]
 
 
 @dataclasses.dataclass
-class DiffDelta:
-    """Returned by DiffChannel.checkpoint(). Represents one step's writes."""
+class DeltaValue:
+    """Returned by DeltaChannel.checkpoint(). Represents one step's writes."""
 
     delta: list[Any]
     prev_version: str | None  # version of previous diff blob; None = chain root
 
 
 @dataclasses.dataclass
-class DiffChainValue:
-    """Passed to DiffChannel.from_checkpoint(). Assembled by saver _load_blobs()."""
+class DeltaChainValue:
+    """Passed to DeltaChannel.from_checkpoint(). Assembled by saver _load_blobs()."""
 
     base: list[Any] | None  # starting accumulated value; None = start from empty
     deltas: list[list[Any]]  # per-step write-sets, ordered oldest → newest

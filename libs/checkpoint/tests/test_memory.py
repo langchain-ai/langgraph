@@ -310,10 +310,10 @@ def test_memory_saver_with_allowlist_proxy_isolated() -> None:
     assert direct.checkpoint["channel_values"]["foo"] == expected
 
 
-class TestInMemorySaverDiffChannel:
-    def test_diff_channel_chain_reconstruction(self) -> None:
-        """_load_blobs follows the diff chain and returns DiffChainValue."""
-        from langgraph.checkpoint.base import DiffChainValue, DiffDelta
+class TestInMemorySaverDeltaChannel:
+    def test_delta_channel_chain_reconstruction(self) -> None:
+        """_load_blobs follows the diff chain and returns DeltaChainValue."""
+        from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
 
         saver = InMemorySaver()
         serde = JsonPlusSerializer()
@@ -325,8 +325,8 @@ class TestInMemorySaverDiffChannel:
         v1 = "00000000000000000000000000000001.1234567890000000"
         v2 = "00000000000000000000000000000002.1234567890000000"
 
-        delta1 = DiffDelta(delta=["msg1"], prev_version=None)
-        delta2 = DiffDelta(delta=["msg2"], prev_version=v1)
+        delta1 = DeltaValue(delta=["msg1"], prev_version=None)
+        delta2 = DeltaValue(delta=["msg2"], prev_version=v1)
 
         saver.blobs[(thread_id, ns, "messages", v1)] = serde.dumps_typed(delta1)
         saver.blobs[(thread_id, ns, "messages", v2)] = serde.dumps_typed(delta2)
@@ -335,13 +335,13 @@ class TestInMemorySaverDiffChannel:
 
         assert "messages" in channel_values
         result = channel_values["messages"]
-        assert isinstance(result, DiffChainValue)
+        assert isinstance(result, DeltaChainValue)
         assert result.base is None
         assert result.deltas == [["msg1"], ["msg2"]]
 
-    def test_diff_channel_mixed_old_and_new_blobs(self) -> None:
+    def test_delta_channel_mixed_old_and_new_blobs(self) -> None:
         """When chain hits an old non-diff blob, it becomes base."""
-        from langgraph.checkpoint.base import DiffChainValue, DiffDelta
+        from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
 
         saver = InMemorySaver()
         serde = JsonPlusSerializer()
@@ -355,11 +355,11 @@ class TestInMemorySaverDiffChannel:
         # Old-style full-list blob
         saver.blobs[(thread_id, ns, "messages", v_old)] = serde.dumps_typed(["old_msg"])
         # New diff blob chained to old
-        delta = DiffDelta(delta=["new_msg"], prev_version=v_old)
+        delta = DeltaValue(delta=["new_msg"], prev_version=v_old)
         saver.blobs[(thread_id, ns, "messages", v_new)] = serde.dumps_typed(delta)
 
         channel_values = saver._load_blobs(thread_id, ns, {"messages": v_new})
         result = channel_values["messages"]
-        assert isinstance(result, DiffChainValue)
+        assert isinstance(result, DeltaChainValue)
         assert result.base == ["old_msg"]
         assert result.deltas == [["new_msg"]]
