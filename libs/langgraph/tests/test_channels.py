@@ -492,6 +492,107 @@ def test_delta_channel_assembly_fast_path_returns_delta_value() -> None:
     assert result[2].content == "three"
 
 
+def test_delta_channel_dict_reducer_fresh_channel() -> None:
+    """DeltaChannel with a dict reducer starts as empty dict on MISSING checkpoint."""
+    from langgraph.channels.delta import DeltaChannel
+
+    def merge_dicts(left: dict, right: dict) -> dict:
+        return {**left, **right}
+
+    ch = DeltaChannel(merge_dicts, dict).from_checkpoint(MISSING)
+    # Should be available (not raise EmptyChannelError) and start empty
+    assert ch.is_available()
+    assert ch.get() == {}
+
+
+def test_delta_channel_dict_reducer_basic_updates() -> None:
+    """DeltaChannel with a dict reducer accumulates key/value pairs across steps."""
+    from langgraph.checkpoint.base import DeltaValue
+
+    from langgraph.channels.delta import DeltaChannel
+
+    def merge_dicts(left: dict, right: dict) -> dict:
+        return {**left, **right}
+
+    ch = DeltaChannel(merge_dicts, dict).from_checkpoint(MISSING)
+    ch.after_checkpoint(None)
+
+    ch.update([{"a": 1}])
+    d1 = ch.checkpoint()
+    assert isinstance(d1, DeltaValue)
+    assert d1.delta == [{"a": 1}]
+    ch.after_checkpoint("v1", checkpoint_id="cid1")
+
+    ch.update([{"b": 2}])
+    d2 = ch.checkpoint()
+    assert d2.delta == [{"b": 2}]
+    assert d2.prev_checkpoint_id == "cid1"
+    ch.after_checkpoint("v2")
+
+    assert ch.get() == {"a": 1, "b": 2}
+
+
+def test_delta_channel_dict_reducer_chain_reconstruction() -> None:
+    """DeltaChainValue replays correctly through a dict merge reducer."""
+    from langgraph.checkpoint.base import DeltaChainValue
+
+    from langgraph.channels.delta import DeltaChannel
+
+    def merge_dicts(left: dict, right: dict) -> dict:
+        return {**left, **right}
+
+    spec = DeltaChannel(merge_dicts, dict)
+    chain = DeltaChainValue(
+        base={"a": 1},
+        deltas=[[{"b": 2}], [{"c": 3}]],
+    )
+    ch = spec.from_checkpoint(chain)
+    assert ch.get() == {"a": 1, "b": 2, "c": 3}
+    assert ch._steps_since_snapshot == 2
+
+
+def test_delta_channel_dict_reducer_with_deletions() -> None:
+    """Dict reducer that treats None values as deletions works end-to-end (deepagents pattern)."""
+    from langgraph.checkpoint.base import DeltaChainValue
+
+    from langgraph.channels.delta import DeltaChannel
+
+    def merge_files(left: dict | None, right: dict) -> dict:
+        if left is None:
+            return {k: v for k, v in right.items() if v is not None}
+        result = {**left}
+        for k, v in right.items():
+            if v is None:
+                result.pop(k, None)
+            else:
+                result[k] = v
+        return result
+
+    ch = DeltaChannel(merge_files, dict).from_checkpoint(MISSING)
+    ch.after_checkpoint(None)
+
+    ch.update([{"file1.py": "content1", "file2.py": "content2"}])
+    ch.after_checkpoint("v1", checkpoint_id="cid1")
+
+    # Delete file1, add file3
+    ch.update([{"file1.py": None, "file3.py": "content3"}])
+    ch.after_checkpoint("v2", checkpoint_id="cid2")
+
+    assert ch.get() == {"file2.py": "content2", "file3.py": "content3"}
+
+    # Confirm chain reconstruction produces the same result
+    chain = DeltaChainValue(
+        base={},
+        deltas=[
+            [{"file1.py": "content1", "file2.py": "content2"}],
+            [{"file1.py": None, "file3.py": "content3"}],
+        ],
+    )
+    spec = DeltaChannel(merge_files, dict)
+    ch2 = spec.from_checkpoint(chain)
+    assert ch2.get() == {"file2.py": "content2", "file3.py": "content3"}
+
+
 def test_delta_channel_assembly_broken_chain_logs_warning() -> None:
     """If a prev_checkpoint_id points to a missing checkpoint, log a warning and use partial chain."""
     from unittest.mock import MagicMock
