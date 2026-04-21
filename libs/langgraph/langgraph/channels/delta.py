@@ -37,6 +37,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         "snapshot_every",
         "_pending",
         "_base_version",
+        "_last_checkpoint_id",
         "_overwritten",
         "_steps_since_rehydrate",
     )
@@ -63,6 +64,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
             self.value = []
         self._pending: list[Any] = []
         self._base_version: str | None = None
+        self._last_checkpoint_id: str | None = None
         self._overwritten: bool = False
         self._steps_since_rehydrate: int = 0
 
@@ -92,6 +94,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         new.value = self.value[:]
         new._pending = self._pending[:]
         new._base_version = self._base_version
+        new._last_checkpoint_id = self._last_checkpoint_id
         new._overwritten = self._overwritten
         new._steps_since_rehydrate = self._steps_since_rehydrate
         return new
@@ -111,10 +114,12 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
             # the right time regardless of how many prior invocations there were.
             new._steps_since_rehydrate = len(checkpoint.deltas)
         elif isinstance(checkpoint, DeltaValue):
-            raise ValueError(
-                "DeltaChannel received a raw DeltaValue from the checkpoint saver. "
-                "Your saver does not support incremental channel storage. "
-                "Use InMemorySaver or PostgresSaver."
+            # Should never reach here — the pregel layer assembles DeltaValues
+            # into DeltaChainValue before calling from_checkpoint.
+            raise AssertionError(
+                "DeltaChannel.from_checkpoint received a raw DeltaValue. "
+                "This is a bug in the pregel layer — chain assembly should have "
+                "occurred before from_checkpoint was called."
             )
         else:
             # Backwards compat: plain list from old BinaryOperatorAggregate checkpoint.
@@ -173,20 +178,19 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
             return list(self.value)
         return DeltaValue(
             delta=self._pending[:],
-            prev_version=None if self._overwritten else self._base_version,
+            prev_checkpoint_id=None if self._overwritten else self._last_checkpoint_id,
         )
 
-    def after_checkpoint(self, version: Any) -> None:
+    def after_checkpoint(self, version: Any, checkpoint_id: str | None = None) -> None:
         if version != self._base_version:
             if self._base_version is None:
-                # First call after from_checkpoint — anchor the base version
-                # without counting a step (the counter was seeded by from_checkpoint).
-                pass
+                pass  # First call after from_checkpoint — anchor without counting a step.
             elif self.snapshot_every is not None:
                 if self._steps_since_rehydrate >= self.snapshot_every:
                     self._steps_since_rehydrate = 0
                 else:
                     self._steps_since_rehydrate += 1
             self._base_version = version
+            self._last_checkpoint_id = checkpoint_id
             self._pending = []
             self._overwritten = False
