@@ -36,12 +36,12 @@ class DeltaValue:
     """Returned by DeltaChannel.checkpoint(). Represents one step's writes."""
 
     delta: list[Any]
-    prev_version: str | None  # version of previous diff blob; None = chain root
+    prev_checkpoint_id: str | None  # ID of checkpoint containing previous blob; None = chain root
 
 
 @dataclasses.dataclass
 class DeltaChainValue:
-    """Passed to DeltaChannel.from_checkpoint(). Assembled by saver _load_blobs()."""
+    """Passed to DeltaChannel.from_checkpoint(). Assembled by the pregel layer."""
 
     base: list[Any] | None  # starting accumulated value; None = start from empty
     deltas: list[list[Any]]  # per-step write-sets, ordered oldest → newest
@@ -475,6 +475,34 @@ class BaseCheckpointSaver(Generic[V]):
                 recent checkpoint per namespace. `"delete"` removes all checkpoints.
         """
         raise NotImplementedError
+
+    def get_channel_blob(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        checkpoint_id: str,
+        channel: str,
+    ) -> Any:
+        """Look up a single channel blob by checkpoint ID + channel name.
+
+        Returns NotImplemented if this saver does not support efficient
+        per-channel-version blob lookup. The pregel layer will fall back to
+        get_tuple() traversal in that case.
+
+        Savers with a dedicated blob store (InMemorySaver, PostgresSaver)
+        should override this for O(1) performance.
+        """
+        return NotImplemented
+
+    async def aget_channel_blob(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        checkpoint_id: str,
+        channel: str,
+    ) -> Any:
+        """Async version of get_channel_blob."""
+        return NotImplemented
 
     def get_next_version(self, current: V | None, channel: None) -> V:
         """Generate the next version ID for a channel.
