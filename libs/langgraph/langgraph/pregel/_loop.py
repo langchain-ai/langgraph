@@ -831,8 +831,18 @@ class PregelLoop:
             # parent. For forks (source=update/fork), use the fork's parent
             # checkpoint ID since the fork was created after the subgraph's
             # checkpoints from the original execution.
+            #
+            # Only gate on is_time_traveling (not is_replaying). When the
+            # client resumes with an explicit checkpoint_id that happens to
+            # point at the current head (e.g. LangGraph Studio sending
+            # `checkpoint: {checkpoint_id}` alongside Command(resume=...)),
+            # is_replaying is True but is_time_traveling is False. In that
+            # case subgraphs should load their latest checkpoint normally,
+            # not go through ReplayState's before-bound lookup which would
+            # miss subgraph checkpoints created during processing of the
+            # current parent step.
             replay_state: ReplayState | None = None
-            if self.is_replaying:
+            if is_time_traveling:
                 replay_checkpoint_id = self.checkpoint["id"]
                 if (
                     self.checkpoint_metadata.get("source")
