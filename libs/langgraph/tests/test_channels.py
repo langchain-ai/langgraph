@@ -134,13 +134,13 @@ def test_delta_channel_basic_two_steps() -> None:
     d1 = ch.checkpoint()
     assert isinstance(d1, DeltaValue)
     assert len(d1.delta) == 1
-    assert d1.prev_version is None  # first ever step
-    ch.after_checkpoint("v1")
+    assert d1.prev_checkpoint_id is None  # first ever step
+    ch.after_checkpoint("v1", checkpoint_id="cid1")
 
     # Step 2: another message
     ch.update([AIMessage(content="hello", id="a1")])
     d2 = ch.checkpoint()
-    assert d2.prev_version == "v1"
+    assert d2.prev_checkpoint_id == "cid1"
     assert len(d2.delta) == 1
     ch.after_checkpoint("v2")
 
@@ -217,11 +217,11 @@ def test_delta_channel_overwrite_resets_chain() -> None:
     ch.update([HumanMessage(content="old", id="h1")])
     ch.after_checkpoint("v1")
 
-    # Overwrite should create a root blob (prev_version=None)
+    # Overwrite should create a root blob (prev_checkpoint_id=None)
     ch.update([Overwrite([HumanMessage(content="new", id="h2")])])
     d = ch.checkpoint()
     assert isinstance(d, DeltaValue)
-    assert d.prev_version is None  # chain root
+    assert d.prev_checkpoint_id is None  # chain root
     assert len(d.delta) == 1
     assert d.delta[0].content == "new"
 
@@ -232,10 +232,10 @@ def test_delta_channel_unsupported_saver_raises() -> None:
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
-    # If a saver returns a raw DeltaValue (unsupported), from_checkpoint raises
+    # If a saver returns a raw DeltaValue, from_checkpoint raises AssertionError
     spec = DeltaChannel(add_messages)
-    raw_delta = DeltaValue(delta=[], prev_version=None)
-    with pytest.raises(ValueError, match="DeltaChannel received a raw DeltaValue"):
+    raw_delta = DeltaValue(delta=[], prev_checkpoint_id=None)
+    with pytest.raises(AssertionError, match="DeltaChannel.from_checkpoint received a raw DeltaValue"):
         spec.from_checkpoint(raw_delta)
 
 
@@ -256,7 +256,7 @@ def test_delta_channel_remove_message_delta_and_replay() -> None:
     ch.update([AIMessage(content="hello", id="a1")])
     d1 = ch.checkpoint()
     assert isinstance(d1, DeltaValue)
-    ch.after_checkpoint("v1")
+    ch.after_checkpoint("v1", checkpoint_id="cid1")
     assert ch.get() == [
         HumanMessage(content="hi", id="h1"),
         AIMessage(content="hello", id="a1"),
@@ -266,9 +266,9 @@ def test_delta_channel_remove_message_delta_and_replay() -> None:
     ch.update([RemoveMessage(id="a1")])
     d2 = ch.checkpoint()
     assert isinstance(d2, DeltaValue)
-    assert d2.prev_version == "v1"
+    assert d2.prev_checkpoint_id == "cid1"
     assert any(isinstance(w, RemoveMessage) for w in d2.delta)
-    ch.after_checkpoint("v2")
+    ch.after_checkpoint("v2", checkpoint_id="cid2")
     assert ch.get() == [HumanMessage(content="hi", id="h1")]
 
     # Replay the full chain from scratch — must reproduce the post-remove state
@@ -293,14 +293,14 @@ def test_delta_channel_update_by_id_delta_and_replay() -> None:
     ch.update([HumanMessage(content="original", id="h1")])
     d1 = ch.checkpoint()
     assert isinstance(d1, DeltaValue)
-    ch.after_checkpoint("v1")
+    ch.after_checkpoint("v1", checkpoint_id="cid1")
 
     # Step 2: update the same message by ID
     ch.update([HumanMessage(content="updated", id="h1")])
     d2 = ch.checkpoint()
     assert isinstance(d2, DeltaValue)
-    assert d2.prev_version == "v1"
-    ch.after_checkpoint("v2")
+    assert d2.prev_checkpoint_id == "cid1"
+    ch.after_checkpoint("v2", checkpoint_id="cid2")
     assert ch.get() == [HumanMessage(content="updated", id="h1")]
 
     # Replay the full chain — must produce the updated message, not the original
