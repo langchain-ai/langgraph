@@ -9,34 +9,19 @@ from contextlib import contextmanager
 import click
 import pathspec
 
+from langgraph_cli._ignore import _ALWAYS_EXCLUDE, _build_ignore_spec
 from langgraph_cli.config import Config, _assemble_local_deps
+
+__all__ = [
+    "_ALWAYS_EXCLUDE",
+    "_build_ignore_spec",
+    "_tar_filter",
+    "_add_directory",
+    "create_archive",
+]
 
 _WARN_SIZE = 50 * 1024 * 1024  # 50 MB
 _MAX_SIZE = 200 * 1024 * 1024  # 200 MB
-
-_ALWAYS_EXCLUDE = [
-    "__pycache__/",
-    ".git/",
-    ".venv/",
-    "venv/",
-    "node_modules/",
-    ".tox/",
-    ".mypy_cache/",
-]
-
-
-def _build_ignore_spec(directory: pathlib.Path) -> pathspec.PathSpec:
-    """Build a PathSpec combining built-in exclusions with .dockerignore and .gitignore.
-
-    Always excludes common non-source directories (_ALWAYS_EXCLUDE).  On top of
-    that, patterns from .dockerignore and .gitignore (if present) are merged in.
-    """
-    lines: list[str] = list(_ALWAYS_EXCLUDE)
-    for name in (".dockerignore", ".gitignore"):
-        ignore_file = directory / name
-        if ignore_file.is_file():
-            lines.extend(ignore_file.read_text(encoding="utf-8").splitlines())
-    return pathspec.PathSpec.from_lines("gitwildmatch", lines)
 
 
 def _tar_filter(tarinfo: tarfile.TarInfo) -> tarfile.TarInfo | None:

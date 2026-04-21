@@ -1928,6 +1928,91 @@ def test_config_to_docker_uv_lock_skips_dockerignore_entries():
         assert "ADD README.md /deps/workspace/README.md" in docker
 
 
+def test_config_to_docker_uv_lock_skips_dockerignore_entries_in_workspace():
+    """Multi-member workspace: ignore patterns must filter root-level entries
+    AND entries encountered while recursing into directories that contain
+    workspace members (the `descendant_member_roots` branch)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            agent_dependencies=["workspace-root", "shared", "httpx>=0.28"],
+            root_sources="[tool.uv.sources]\nshared = { workspace = true }\nworkspace-root = { workspace = true }",
+            agent_sources="[tool.uv.sources]\nshared = { workspace = true }\nworkspace-root = { workspace = true }",
+        )
+        root_src = project_root / "src" / "workspace_root"
+        root_src.mkdir(parents=True)
+        (root_src / "__init__.py").write_text("__all__ = []\n")
+        (project_root / "README.md").write_text("workspace root package\n")
+
+        # A non-member sibling of the `apps/agent` member that should be
+        # filtered out via .dockerignore. This exercises the recursion into
+        # `apps/` where `apps/agent` is kept (it's a member) but its sibling is
+        # filtered.
+        (project_root / "apps" / "scratch.txt").write_text("scratch\n")
+        # A root-level path that .dockerignore excludes.
+        (project_root / "secrets.env").write_text("TOKEN=abc\n")
+        (project_root / ".dockerignore").write_text("secrets.env\napps/scratch.txt\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    "agent": "../../apps/agent/src/agent/graph.py:graph",
+                },
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert "COPY --from=uv-workspace-root src /deps/workspace/src" in docker
+        assert (
+            "COPY --from=uv-workspace-root README.md /deps/workspace/README.md"
+            in docker
+        )
+        assert (
+            "COPY --from=uv-workspace-root .dockerignore /deps/workspace/.dockerignore"
+            in docker
+        )
+        assert "secrets.env" not in docker
+        assert "apps/scratch.txt" not in docker
+        # Workspace members themselves are still copied via their own per-member
+        # COPY line — the sibling filter must not disturb this.
+        assert (
+            "COPY --from=uv-workspace-root apps/agent /deps/workspace/apps/agent"
+            in docker
+        )
+
+
+def test_config_to_docker_uv_lock_rejects_ignored_workspace_member():
+    """A workspace member matched by .dockerignore cannot be copied into the
+    build context — uv.lock requires it, so fail loudly with a clear message."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            agent_sources="[tool.uv.sources]\nshared = { workspace = true }",
+        )
+        (project_root / ".dockerignore").write_text("libs/shared\n")
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "../../apps/agent/src/agent/graph.py:graph"},
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+                "auth": {"path": "../../libs/shared/src/shared/auth.py:create_auth"},
+            }
+        )
+        with pytest.raises(
+            click.UsageError, match=r"Workspace member 'shared' at libs/shared"
+        ):
+            config_to_docker(
+                config_path, config, base_image="langchain/langgraph-api:0.2.47"
+            )
+
+
 def test_config_to_docker_uv_lock_rejects_invalid_source_package_type():
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = pathlib.Path(tmpdir)
