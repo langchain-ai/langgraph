@@ -123,58 +123,48 @@ class InMemorySaver(
     def _load_blobs(
         self, thread_id: str, checkpoint_ns: str, versions: ChannelVersions
     ) -> dict[str, Any]:
-        from langgraph.checkpoint.base import DeltaChainValue
-
         channel_values: dict[str, Any] = {}
-        diff_channels: dict[str, str] = {}
-
         for k, v in versions.items():
             kk = (thread_id, checkpoint_ns, k, v)
             if kk not in self.blobs:
                 continue
             vv = self.blobs[kk]
-            if vv[0] == "diff":
-                diff_channels[k] = str(v)
-            elif vv[0] != "empty":
+            if vv[0] != "empty":
                 channel_values[k] = self.serde.loads_typed(vv)
-
-        for k, current_version in diff_channels.items():
-            chain_deltas: list[list[Any]] = []
-            base: list[Any] | None = None
-            version: str | None = current_version
-            visited: set[str] = set()
-            while version is not None:
-                if version in visited:
-                    logger.warning(
-                        "DeltaChannel chain cycle detected at version %r for channel %r; breaking",
-                        version,
-                        k,
-                    )
-                    break
-                visited.add(version)
-                kk = (thread_id, checkpoint_ns, k, version)
-                if kk not in self.blobs:
-                    logger.warning(
-                        "DeltaChannel chain is broken: blob for channel %r version %r not found; "
-                        "partial history will be returned",
-                        k,
-                        version,
-                    )
-                    break
-                vv = self.blobs[kk]
-                if vv[0] == "diff":
-                    payload = self.serde.loads_typed(
-                        vv
-                    )  # {"d": [...], "p": version|None}
-                    chain_deltas.append(payload["d"])
-                    version = payload["p"]
-                else:
-                    base = self.serde.loads_typed(vv)
-                    break
-            chain_deltas.reverse()
-            channel_values[k] = DeltaChainValue(base=base, deltas=chain_deltas)
-
         return channel_values
+
+    def get_channel_blob(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        checkpoint_id: str,
+        channel: str,
+    ) -> Any:
+        """Fast-path blob lookup: checkpoint → channel version → blob."""
+        ns_storage = self.storage.get((thread_id, checkpoint_ns), {})
+        entry = ns_storage.get(checkpoint_id)
+        if entry is None:
+            return NotImplemented
+        checkpoint = entry[1]
+        version = checkpoint["channel_versions"].get(channel)
+        if version is None:
+            return NotImplemented
+        kk = (thread_id, checkpoint_ns, channel, version)
+        if kk not in self.blobs:
+            return NotImplemented
+        vv = self.blobs[kk]
+        if vv[0] == "empty":
+            return NotImplemented
+        return self.serde.loads_typed(vv)
+
+    async def aget_channel_blob(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        checkpoint_id: str,
+        channel: str,
+    ) -> Any:
+        return self.get_channel_blob(thread_id, checkpoint_ns, checkpoint_id, channel)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.
