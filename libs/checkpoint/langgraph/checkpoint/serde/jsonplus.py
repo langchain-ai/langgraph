@@ -47,7 +47,7 @@ EMPTY_BYTES = b""
 logger = logging.getLogger(__name__)
 
 
-def _is_diff_delta(obj: Any) -> bool:
+def _is_delta_value(obj: Any) -> bool:
     from langgraph.checkpoint.base import DeltaValue  # lazy import avoids circular dep
 
     return isinstance(obj, DeltaValue)
@@ -245,7 +245,7 @@ class JsonPlusSerializer(SerializerProtocol):
             return "bytes", obj
         elif isinstance(obj, bytearray):
             return "bytearray", obj
-        elif _is_diff_delta(obj):
+        elif _is_delta_value(obj):
             return "diff", _msgpack_enc({"d": obj.delta, "c": obj.prev_checkpoint_id})
         else:
             try:
@@ -271,6 +271,7 @@ class JsonPlusSerializer(SerializerProtocol):
             )
         elif type_ == "diff":
             from langgraph.checkpoint.base import DeltaValue  # lazy import
+
             raw = ormsgpack.unpackb(
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )

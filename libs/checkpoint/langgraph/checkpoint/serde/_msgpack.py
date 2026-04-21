@@ -80,6 +80,8 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
         ("langgraph.types", "Overwrite"),
         ("langgraph.store.base", "Item"),
         ("langgraph.store.base", "GetOp"),
+        # DeltaChannel checkpoint value type
+        ("langgraph.checkpoint.base", "DeltaValue"),
     }
 )
 

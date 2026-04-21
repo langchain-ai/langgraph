@@ -24,6 +24,13 @@ from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 
+try:
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    _SQLITE_AVAILABLE = True
+except ImportError:
+    _SQLITE_AVAILABLE = False
+
 SNAPSHOT_EVERY = 50
 
 # ---------------------------------------------------------------------------
@@ -112,7 +119,7 @@ class DeltaSnapshotState(TypedDict):
 # ---------------------------------------------------------------------------
 
 
-def _make_graph(state_cls: type) -> Any:
+def _make_graph(state_cls: type, checkpointer: Any = None) -> Any:
     def human_node(state: Any) -> dict:
         return {}
 
@@ -126,7 +133,7 @@ def _make_graph(state_cls: type) -> Any:
     g.add_edge("human", "ai")
     g.add_edge("ai", END)
     g.set_entry_point("human")
-    return g.compile(checkpointer=MemorySaver())
+    return g.compile(checkpointer=checkpointer or MemorySaver())
 
 
 # ---------------------------------------------------------------------------
@@ -142,15 +149,19 @@ def _total_blob_bytes(saver: MemorySaver) -> int:
     return total
 
 
-def _run_turns(n_turns: int, state_cls: type) -> tuple[float, float, int]:
+def _run_turns(
+    n_turns: int,
+    state_cls: type,
+    checkpointer: Any = None,
+) -> tuple[float, float, int]:
     """Run n_turns conversation turns.
 
     Returns (write_elapsed_s, read_elapsed_s, total_blob_bytes).
+    blob_bytes is -1 for savers without in-memory blob stores (e.g. SQLite).
     Read latency is measured as the time to invoke the graph with no new
     messages after the full history is built — this forces state rehydration.
     """
-    graph = _make_graph(state_cls)
-    saver: MemorySaver = graph.checkpointer  # type: ignore[assignment]
+    graph = _make_graph(state_cls, checkpointer)
     config = {"configurable": {"thread_id": "bench"}}
 
     t0 = time.perf_counter()
@@ -167,7 +178,10 @@ def _run_turns(n_turns: int, state_cls: type) -> tuple[float, float, int]:
         graph.get_state(config)
     read_elapsed = (time.perf_counter() - t1) / 5
 
-    blob_bytes = _total_blob_bytes(saver)
+    if isinstance(graph.checkpointer, MemorySaver):
+        blob_bytes = _total_blob_bytes(graph.checkpointer)
+    else:
+        blob_bytes = -1
     return write_elapsed, read_elapsed, blob_bytes
 
 
@@ -199,6 +213,16 @@ def _approx_tokens(n_turns: int) -> str:
 TURN_COUNTS = [50, 100, 200, 500]
 
 
+def _checkpointer_factories() -> list[tuple[str, Any]]:
+    """Return (label, context_manager_or_none) pairs for available checkpointers."""
+    factories: list[tuple[str, Any]] = [("InMemory", None)]
+    if _SQLITE_AVAILABLE:
+        import tempfile
+
+        factories.append(("SQLite", tempfile.NamedTemporaryFile(suffix=".db")))
+    return factories
+
+
 def run_benchmark() -> None:
     print()
     print(
@@ -207,6 +231,28 @@ def run_benchmark() -> None:
     print("Simulating realistic multi-turn conversations up to ~1M-token histories")
     print("(5,000 turns × ~200 tokens/turn ≈ 1M tokens — Claude's full context window)")
     print()
+
+    checkpointers: list[tuple[str, Any]] = [("InMemory (fast-path)", None)]
+    if _SQLITE_AVAILABLE:
+        checkpointers.append(("SQLite (get_tuple fallback)", "sqlite"))
+
+    for cp_label, cp_hint in checkpointers:
+        print(f"--- Checkpointer: {cp_label} ---")
+        _run_benchmark_for_checkpointer(cp_hint)
+
+
+def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
+    import contextlib
+    import tempfile
+
+    @contextlib.contextmanager
+    def _make_saver():
+        if cp_hint is None:
+            yield None
+        else:
+            with tempfile.NamedTemporaryFile(suffix=".db") as f:
+                with SqliteSaver.from_conn_string(f.name) as saver:
+                    yield saver
 
     W = 120
     print("=" * W)
@@ -221,35 +267,48 @@ def run_benchmark() -> None:
 
     results = []
     for turns in TURN_COUNTS:
-        b_wt, b_rt, b_bytes = _run_turns(turns, BinaryState)
-        d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState)
-        s_wt, s_rt, s_bytes = _run_turns(turns, DeltaSnapshotState)
-        storage_ratio = b_bytes / s_bytes if s_bytes else float("inf")
-        results.append(
-            (turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt, storage_ratio)
-        )
+        with _make_saver() as saver:
+            b_wt, b_rt, b_bytes = _run_turns(turns, BinaryState, saver)
+        with _make_saver() as saver:
+            d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
+        with _make_saver() as saver:
+            s_wt, s_rt, s_bytes = _run_turns(turns, DeltaSnapshotState, saver)
+
+        # For non-InMemory savers, blob_bytes are unavailable (-1); use read times only
+        if b_bytes < 0 or s_bytes < 0:
+            b_bytes_str = "n/a"
+            d_bytes_str = "n/a"
+            s_bytes_str = "n/a"
+            storage_ratio_str = "n/a"
+        else:
+            storage_ratio = b_bytes / s_bytes if s_bytes else float("inf")
+            b_bytes_str = _fmt_bytes(b_bytes)
+            d_bytes_str = _fmt_bytes(d_bytes)
+            s_bytes_str = _fmt_bytes(s_bytes)
+            storage_ratio_str = f"{storage_ratio:.1f}x"
+            results.append((turns, b_bytes, s_bytes, b_rt, s_rt, storage_ratio))
 
         print(
             f"{turns:>6}  {_approx_tokens(turns):>10}  "
-            f"{_fmt_bytes(b_bytes):>18}  {_fmt_bytes(d_bytes):>15}  {_fmt_bytes(s_bytes):>18}  "
-            f"{storage_ratio:>13.1f}x  "
+            f"{b_bytes_str:>18}  {d_bytes_str:>15}  {s_bytes_str:>18}  "
+            f"{storage_ratio_str:>14}  "
             f"{b_rt * 1000:>12.1f}ms  {s_rt * 1000:>14.1f}ms"
         )
 
     print("=" * W)
     print()
 
-    # Summary callouts
-    best = results[-1]  # 5000 turns
-    turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt, ratio = best
-    print("Key findings at max scale (5,000 turns ≈ 1M tokens):")
-    print(
-        f"  Storage:  {_fmt_bytes(b_bytes)} (add_messages)  →  {_fmt_bytes(s_bytes)} (DeltaChannel+snapshot) — {ratio:.0f}x reduction"
-    )
-    print(
-        f"  Read latency: {b_rt * 1000:.1f}ms (add_messages)  vs  {s_rt * 1000:.1f}ms (DeltaChannel+snapshot)"
-    )
-    print()
+    if results:
+        best = results[-1]
+        turns, b_bytes, s_bytes, b_rt, s_rt, ratio = best
+        print(f"Key findings at max scale ({turns} turns):")
+        print(
+            f"  Storage:  {_fmt_bytes(b_bytes)} (add_messages)  →  {_fmt_bytes(s_bytes)} (DeltaChannel+snapshot) — {ratio:.0f}x reduction"
+        )
+        print(
+            f"  Read latency: {b_rt * 1000:.1f}ms (add_messages)  vs  {s_rt * 1000:.1f}ms (DeltaChannel+snapshot)"
+        )
+        print()
     print("Legend:")
     print(
         "  add_msgs      = Annotated[list, add_messages]  — current default, O(N²) storage"
