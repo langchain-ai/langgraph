@@ -120,7 +120,7 @@ class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
         """
         return False
 
-    def after_checkpoint(self, version: Any) -> None:
+    def after_checkpoint(self, version: Any, checkpoint_id: str | None = None) -> None:
         """Called after checkpoint() with the assigned version, and after
         from_checkpoint() with the current channel version.
 
