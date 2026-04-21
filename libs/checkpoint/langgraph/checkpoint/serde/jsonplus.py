@@ -263,7 +263,7 @@ class JsonPlusSerializer(SerializerProtocol):
         elif isinstance(obj, bytearray):
             return "bytearray", obj
         elif _is_delta_value(obj):
-            return "diff", _msgpack_enc({"d": obj.delta, "c": obj.prev_checkpoint_id})
+            return "delta", _msgpack_enc({"d": obj.delta, "c": obj.prev_checkpoint_id})
         else:
             try:
                 return "msgpack", _msgpack_enc(obj)
@@ -286,7 +286,7 @@ class JsonPlusSerializer(SerializerProtocol):
             return ormsgpack.unpackb(
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
-        elif type_ == "diff":
+        elif type_ == "delta":
             from langgraph.checkpoint.base import DeltaValue  # lazy import
 
             raw = ormsgpack.unpackb(
