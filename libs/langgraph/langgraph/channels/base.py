@@ -125,6 +125,6 @@ class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
         from_checkpoint() with the current channel version.
 
         No-op by default. Override in channels that track their own version
-        for incremental checkpointing (e.g. DiffChannel).
+        for incremental checkpointing (e.g. DeltaChannel).
         """
         pass

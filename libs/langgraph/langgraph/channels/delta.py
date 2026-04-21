@@ -4,7 +4,7 @@ import collections.abc
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
-from langgraph.checkpoint.base import DiffChainValue, DiffDelta
+from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
 from typing_extensions import Self
 
 from langgraph._internal._typing import MISSING
@@ -12,10 +12,10 @@ from langgraph.channels.base import BaseChannel, Value
 from langgraph.channels.binop import _get_overwrite, _strip_extras
 from langgraph.errors import EmptyChannelError
 
-__all__ = ("DiffChannel",)
+__all__ = ("DeltaChannel",)
 
 
-class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
+class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
     """A channel that stores only per-step write deltas in checkpoints.
 
     Reconstructs the full accumulated list at load time by replaying the
@@ -28,13 +28,13 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
     Usage::
 
         class State(TypedDict):
-            messages: Annotated[list[AnyMessage], DiffChannel(add_messages)]
+            messages: Annotated[list[AnyMessage], DeltaChannel(add_messages)]
     """
 
     __slots__ = (
         "value",
         "operator",
-        "rehydrate_every",
+        "snapshot_every",
         "_pending",
         "_base_version",
         "_overwritten",
@@ -46,7 +46,7 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
         operator: Callable[[list[Value], Any], list[Value]],
         typ: type = list,
         *,
-        rehydrate_every: int | None = None,
+        snapshot_every: int | None = None,
     ) -> None:
         typ = _strip_extras(typ)
         if typ in (
@@ -56,7 +56,7 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
             typ = list
         super().__init__(typ)
         self.operator = operator
-        self.rehydrate_every = rehydrate_every
+        self.snapshot_every = snapshot_every
         try:
             self.value: list[Value] = typ()
         except Exception:
@@ -67,9 +67,9 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
         self._steps_since_rehydrate: int = 0
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, DiffChannel):
+        if not isinstance(other, DeltaChannel):
             return False
-        if self.rehydrate_every != other.rehydrate_every:
+        if self.snapshot_every != other.snapshot_every:
             return False
         if (
             self.operator.__name__ != "<lambda>"
@@ -87,7 +87,7 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
         return self.typ | list[self.typ]  # type: ignore[name-defined]
 
     def copy(self) -> Self:
-        new = DiffChannel(self.operator, self.typ, rehydrate_every=self.rehydrate_every)
+        new = DeltaChannel(self.operator, self.typ, snapshot_every=self.snapshot_every)
         new.key = self.key
         new.value = self.value[:]
         new._pending = self._pending[:]
@@ -97,11 +97,11 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
         return new
 
     def from_checkpoint(self, checkpoint: Any) -> Self:
-        new = DiffChannel(self.operator, self.typ, rehydrate_every=self.rehydrate_every)
+        new = DeltaChannel(self.operator, self.typ, snapshot_every=self.snapshot_every)
         new.key = self.key
         if checkpoint is MISSING:
             new.value = []
-        elif isinstance(checkpoint, DiffChainValue):
+        elif isinstance(checkpoint, DeltaChainValue):
             accumulated: list[Value] = list(checkpoint.base) if checkpoint.base else []
             for step_writes in checkpoint.deltas:
                 for write in step_writes:
@@ -110,9 +110,9 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
             # Seed the counter from actual chain depth so rehydration fires at
             # the right time regardless of how many prior invocations there were.
             new._steps_since_rehydrate = len(checkpoint.deltas)
-        elif isinstance(checkpoint, DiffDelta):
+        elif isinstance(checkpoint, DeltaValue):
             raise ValueError(
-                "DiffChannel received a raw DiffDelta from the checkpoint saver. "
+                "DeltaChannel received a raw DeltaValue from the checkpoint saver. "
                 "Your saver does not support incremental channel storage. "
                 "Use InMemorySaver or PostgresSaver."
             )
@@ -164,14 +164,14 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
 
     def checkpoint(self) -> Any:
         if (
-            self.rehydrate_every is not None
-            and self._steps_since_rehydrate >= self.rehydrate_every
+            self.snapshot_every is not None
+            and self._steps_since_rehydrate >= self.snapshot_every
         ):
-            # Emit a full snapshot to cap chain depth at rehydrate_every.
+            # Emit a full snapshot to cap chain depth at snapshot_every.
             # The saver stores this as a plain (non-diff) blob, so future
             # deltas will chain back to it and traversal depth resets to 1.
             return list(self.value)
-        return DiffDelta(
+        return DeltaValue(
             delta=self._pending[:],
             prev_version=None if self._overwritten else self._base_version,
         )
@@ -182,8 +182,8 @@ class DiffChannel(Generic[Value], BaseChannel[list[Value], Value, DiffDelta]):
                 # First call after from_checkpoint — anchor the base version
                 # without counting a step (the counter was seeded by from_checkpoint).
                 pass
-            elif self.rehydrate_every is not None:
-                if self._steps_since_rehydrate >= self.rehydrate_every:
+            elif self.snapshot_every is not None:
+                if self._steps_since_rehydrate >= self.snapshot_every:
                     self._steps_since_rehydrate = 0
                 else:
                     self._steps_since_rehydrate += 1

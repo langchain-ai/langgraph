@@ -1000,11 +1000,11 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
 
 
 def test_diff_delta_serde_round_trip() -> None:
-    from langgraph.checkpoint.base import DiffDelta
+    from langgraph.checkpoint.base import DeltaValue
 
     serde = JsonPlusSerializer()
     prev = "00000000000000000000000000000001.1234567890123456"
-    delta = DiffDelta(
+    delta = DeltaValue(
         delta=[HumanMessage(content="hello", id="msg-1")],
         prev_version=prev,
     )
@@ -1019,10 +1019,10 @@ def test_diff_delta_serde_round_trip() -> None:
 
 
 def test_diff_delta_serde_root_blob() -> None:
-    from langgraph.checkpoint.base import DiffDelta
+    from langgraph.checkpoint.base import DeltaValue
 
     serde = JsonPlusSerializer()
-    delta = DiffDelta(delta=[], prev_version=None)
+    delta = DeltaValue(delta=[], prev_version=None)
     type_tag, blob = serde.dumps_typed(delta)
     assert type_tag == "diff"
 

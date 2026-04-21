@@ -65,9 +65,9 @@ def _warn_once(
 
 
 def _is_diff_delta(obj: Any) -> bool:
-    from langgraph.checkpoint.base import DiffDelta  # lazy import avoids circular dep
+    from langgraph.checkpoint.base import DeltaValue  # lazy import avoids circular dep
 
-    return isinstance(obj, DiffDelta)
+    return isinstance(obj, DeltaValue)
 
 
 class JsonPlusSerializer(SerializerProtocol):

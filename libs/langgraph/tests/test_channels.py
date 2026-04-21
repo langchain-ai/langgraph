@@ -119,20 +119,20 @@ def test_untracked_value() -> None:
         new_channel.get()
 
 
-def test_diff_channel_basic_two_steps() -> None:
+def test_delta_channel_basic_two_steps() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.checkpoint.base import DiffDelta
+    from langgraph.checkpoint.base import DeltaValue
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
-    ch = DiffChannel(add_messages).from_checkpoint(MISSING)
+    ch = DeltaChannel(add_messages).from_checkpoint(MISSING)
     ch.after_checkpoint(None)
 
     # Step 1: one message added
     ch.update([HumanMessage(content="hi", id="h1")])
     d1 = ch.checkpoint()
-    assert isinstance(d1, DiffDelta)
+    assert isinstance(d1, DeltaValue)
     assert len(d1.delta) == 1
     assert d1.prev_version is None  # first ever step
     ch.after_checkpoint("v1")
@@ -150,13 +150,13 @@ def test_diff_channel_basic_two_steps() -> None:
     assert ch.get()[1].content == "hello"
 
 
-def test_diff_channel_after_checkpoint_no_op_when_unchanged() -> None:
+def test_delta_channel_after_checkpoint_no_op_when_unchanged() -> None:
     from langchain_core.messages import HumanMessage
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
-    ch = DiffChannel(add_messages).from_checkpoint(MISSING)
+    ch = DeltaChannel(add_messages).from_checkpoint(MISSING)
     ch.after_checkpoint(None)
     ch.update([HumanMessage(content="hi", id="h1")])
     ch.after_checkpoint("v1")
@@ -167,15 +167,15 @@ def test_diff_channel_after_checkpoint_no_op_when_unchanged() -> None:
     assert ch._pending == []
 
 
-def test_diff_channel_from_checkpoint_chain() -> None:
+def test_delta_channel_from_checkpoint_chain() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.checkpoint.base import DiffChainValue
+    from langgraph.checkpoint.base import DeltaChainValue
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
-    spec = DiffChannel(add_messages)
-    chain = DiffChainValue(
+    spec = DeltaChannel(add_messages)
+    chain = DeltaChainValue(
         base=None,
         deltas=[
             [HumanMessage(content="hi", id="h1")],
@@ -191,28 +191,28 @@ def test_diff_channel_from_checkpoint_chain() -> None:
     assert msgs[2].content == "bye"
 
 
-def test_diff_channel_from_checkpoint_backwards_compat() -> None:
+def test_delta_channel_from_checkpoint_backwards_compat() -> None:
     from langchain_core.messages import HumanMessage
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
     # Old BinaryOperatorAggregate checkpoint: plain list
-    spec = DiffChannel(add_messages)
+    spec = DeltaChannel(add_messages)
     old_value = [HumanMessage(content="old", id="h1")]
     ch = spec.from_checkpoint(old_value)
     assert ch.get() == old_value
 
 
-def test_diff_channel_overwrite_resets_chain() -> None:
+def test_delta_channel_overwrite_resets_chain() -> None:
     from langchain_core.messages import HumanMessage
-    from langgraph.checkpoint.base import DiffDelta
+    from langgraph.checkpoint.base import DeltaValue
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
     from langgraph.types import Overwrite
 
-    ch = DiffChannel(add_messages).from_checkpoint(MISSING)
+    ch = DeltaChannel(add_messages).from_checkpoint(MISSING)
     ch.after_checkpoint(None)
     ch.update([HumanMessage(content="old", id="h1")])
     ch.after_checkpoint("v1")
@@ -220,34 +220,34 @@ def test_diff_channel_overwrite_resets_chain() -> None:
     # Overwrite should create a root blob (prev_version=None)
     ch.update([Overwrite([HumanMessage(content="new", id="h2")])])
     d = ch.checkpoint()
-    assert isinstance(d, DiffDelta)
+    assert isinstance(d, DeltaValue)
     assert d.prev_version is None  # chain root
     assert len(d.delta) == 1
     assert d.delta[0].content == "new"
 
 
-def test_diff_channel_unsupported_saver_raises() -> None:
-    from langgraph.checkpoint.base import DiffDelta
+def test_delta_channel_unsupported_saver_raises() -> None:
+    from langgraph.checkpoint.base import DeltaValue
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
-    # If a saver returns a raw DiffDelta (unsupported), from_checkpoint raises
-    spec = DiffChannel(add_messages)
-    raw_delta = DiffDelta(delta=[], prev_version=None)
-    with pytest.raises(ValueError, match="DiffChannel received a raw DiffDelta"):
+    # If a saver returns a raw DeltaValue (unsupported), from_checkpoint raises
+    spec = DeltaChannel(add_messages)
+    raw_delta = DeltaValue(delta=[], prev_version=None)
+    with pytest.raises(ValueError, match="DeltaChannel received a raw DeltaValue"):
         spec.from_checkpoint(raw_delta)
 
 
-def test_diff_channel_remove_message_delta_and_replay() -> None:
+def test_delta_channel_remove_message_delta_and_replay() -> None:
     """RemoveMessage stored in a delta must round-trip correctly through the chain."""
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
-    from langgraph.checkpoint.base import DiffChainValue, DiffDelta
+    from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
-    spec = DiffChannel(add_messages)
+    spec = DeltaChannel(add_messages)
     ch = spec.from_checkpoint(MISSING)
     ch.after_checkpoint(None)
 
@@ -255,7 +255,7 @@ def test_diff_channel_remove_message_delta_and_replay() -> None:
     ch.update([HumanMessage(content="hi", id="h1")])
     ch.update([AIMessage(content="hello", id="a1")])
     d1 = ch.checkpoint()
-    assert isinstance(d1, DiffDelta)
+    assert isinstance(d1, DeltaValue)
     ch.after_checkpoint("v1")
     assert ch.get() == [
         HumanMessage(content="hi", id="h1"),
@@ -265,46 +265,46 @@ def test_diff_channel_remove_message_delta_and_replay() -> None:
     # Step 2: remove the AI message
     ch.update([RemoveMessage(id="a1")])
     d2 = ch.checkpoint()
-    assert isinstance(d2, DiffDelta)
+    assert isinstance(d2, DeltaValue)
     assert d2.prev_version == "v1"
     assert any(isinstance(w, RemoveMessage) for w in d2.delta)
     ch.after_checkpoint("v2")
     assert ch.get() == [HumanMessage(content="hi", id="h1")]
 
     # Replay the full chain from scratch — must reproduce the post-remove state
-    chain = DiffChainValue(base=None, deltas=[d1.delta, d2.delta])
+    chain = DeltaChainValue(base=None, deltas=[d1.delta, d2.delta])
     ch2 = spec.from_checkpoint(chain)
     assert ch2.get() == [HumanMessage(content="hi", id="h1")]
 
 
-def test_diff_channel_update_by_id_delta_and_replay() -> None:
+def test_delta_channel_update_by_id_delta_and_replay() -> None:
     """Updating a message by ID stored in a delta must round-trip correctly."""
     from langchain_core.messages import HumanMessage
-    from langgraph.checkpoint.base import DiffChainValue, DiffDelta
+    from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
 
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
-    spec = DiffChannel(add_messages)
+    spec = DeltaChannel(add_messages)
     ch = spec.from_checkpoint(MISSING)
     ch.after_checkpoint(None)
 
     # Step 1: add a message
     ch.update([HumanMessage(content="original", id="h1")])
     d1 = ch.checkpoint()
-    assert isinstance(d1, DiffDelta)
+    assert isinstance(d1, DeltaValue)
     ch.after_checkpoint("v1")
 
     # Step 2: update the same message by ID
     ch.update([HumanMessage(content="updated", id="h1")])
     d2 = ch.checkpoint()
-    assert isinstance(d2, DiffDelta)
+    assert isinstance(d2, DeltaValue)
     assert d2.prev_version == "v1"
     ch.after_checkpoint("v2")
     assert ch.get() == [HumanMessage(content="updated", id="h1")]
 
     # Replay the full chain — must produce the updated message, not the original
-    chain = DiffChainValue(base=None, deltas=[d1.delta, d2.delta])
+    chain = DeltaChainValue(base=None, deltas=[d1.delta, d2.delta])
     ch2 = spec.from_checkpoint(chain)
     assert len(ch2.get()) == 1
     assert ch2.get()[0].content == "updated"

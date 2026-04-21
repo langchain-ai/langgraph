@@ -123,7 +123,7 @@ class InMemorySaver(
     def _load_blobs(
         self, thread_id: str, checkpoint_ns: str, versions: ChannelVersions
     ) -> dict[str, Any]:
-        from langgraph.checkpoint.base import DiffChainValue
+        from langgraph.checkpoint.base import DeltaChainValue
 
         channel_values: dict[str, Any] = {}
         diff_channels: dict[str, str] = {}
@@ -146,7 +146,7 @@ class InMemorySaver(
             while version is not None:
                 if version in visited:
                     logger.warning(
-                        "DiffChannel chain cycle detected at version %r for channel %r; breaking",
+                        "DeltaChannel chain cycle detected at version %r for channel %r; breaking",
                         version,
                         k,
                     )
@@ -155,7 +155,7 @@ class InMemorySaver(
                 kk = (thread_id, checkpoint_ns, k, version)
                 if kk not in self.blobs:
                     logger.warning(
-                        "DiffChannel chain is broken: blob for channel %r version %r not found; "
+                        "DeltaChannel chain is broken: blob for channel %r version %r not found; "
                         "partial history will be returned",
                         k,
                         version,
@@ -172,7 +172,7 @@ class InMemorySaver(
                     base = self.serde.loads_typed(vv)
                     break
             chain_deltas.reverse()
-            channel_values[k] = DiffChainValue(base=base, deltas=chain_deltas)
+            channel_values[k] = DeltaChainValue(base=base, deltas=chain_deltas)
 
         return channel_values
 
