@@ -4,7 +4,7 @@ This tests the fix for https://github.com/langchain-ai/langchain/issues/35585
 
 When using InjectedState(<field>) on a tool parameter, and the referenced field is
 declared as NotRequired in the custom state schema, the ToolNode should gracefully
-handle missing fields by injecting None instead of raising KeyError.
+handle missing fields without raising KeyError so the tool's default can apply.
 """
 
 import sys
@@ -42,6 +42,14 @@ def get_weather(city: Annotated[str | None, InjectedState("city")] = None) -> st
     """Get weather for a given city."""
     if city is None:
         return "No city provided"
+    return f"It's always sunny in {city}!"
+
+
+@tool
+def get_weather_with_default(
+    city: Annotated[str, InjectedState("city")] = "Boston",
+) -> str:
+    """Get weather for a given city, defaulting when state omits the field."""
     return f"It's always sunny in {city}!"
 
 
@@ -84,7 +92,7 @@ def _create_config_with_runtime(store=None, state=None):
     reason="InjectedState field extraction from Optional[Annotated[...]] not supported on Python <3.11",
 )
 def test_injected_state_not_required_field_missing_injects_none():
-    """Test that InjectedState with NotRequired field injects None when field is missing.
+    """Test that missing optional InjectedState leaves the tool default in place.
 
     This verifies the fix for https://github.com/langchain-ai/langchain/issues/35585
     """
@@ -112,6 +120,37 @@ def test_injected_state_not_required_field_missing_injects_none():
     tool_msg = result["messages"][0]
     assert isinstance(tool_msg, ToolMessage)
     assert "No city provided" in tool_msg.content
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="InjectedState field extraction from Optional[Annotated[...]] not supported on Python <3.11",
+)
+def test_injected_state_not_required_field_missing_preserves_tool_default():
+    """Test that missing optional InjectedState preserves a non-None tool default."""
+    tool_node = ToolNode([get_weather_with_default])
+
+    tool_call = {
+        "name": "get_weather_with_default",
+        "args": {},
+        "id": "call_1",
+        "type": "tool_call",
+    }
+    ai_msg = AIMessage("Let me check the weather", tool_calls=[tool_call])
+
+    state_without_city: CustomAgentStateWithNotRequired = {
+        "messages": [HumanMessage("What's the weather?"), ai_msg],
+    }
+
+    result = tool_node.invoke(
+        state_without_city,
+        config=_create_config_with_runtime(state=state_without_city),
+    )
+
+    assert len(result["messages"]) == 1
+    tool_msg = result["messages"][0]
+    assert isinstance(tool_msg, ToolMessage)
+    assert "Boston" in tool_msg.content
 
 
 @pytest.mark.skipif(

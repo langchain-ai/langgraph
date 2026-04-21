@@ -206,7 +206,7 @@ def test_delta_channel_from_checkpoint_backwards_compat() -> None:
 
 def test_delta_channel_overwrite_resets_chain() -> None:
     from langchain_core.messages import HumanMessage
-    from langgraph.checkpoint.base import DeltaValue
+    from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
 
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
@@ -223,7 +223,12 @@ def test_delta_channel_overwrite_resets_chain() -> None:
     assert isinstance(d, DeltaValue)
     assert d.prev_checkpoint_id is None  # chain root
     assert len(d.delta) == 1
-    assert d.delta[0].content == "new"
+    assert len(d.delta[0]) == 1
+    assert d.delta[0][0].content == "new"
+
+    spec = DeltaChannel(add_messages)
+    replayed = spec.from_checkpoint(DeltaChainValue(base=None, deltas=[d.delta]))
+    assert replayed.get()[0].content == "new"
 
 
 def test_delta_channel_assembly_fallback_via_get_tuple() -> None:
@@ -447,6 +452,59 @@ def test_delta_channel_snapshot_every_end_to_end() -> None:
     msgs = state.values["messages"]
     # 5 human + 5 AI = 10 total
     assert len(msgs) == 10, f"expected 10 messages, got {len(msgs)}: {msgs}"
+
+
+def test_delta_channel_dict_reducer_overwrite_preserves_mapping() -> None:
+    """Overwrite should preserve dict values instead of coercing them to keys."""
+    from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.types import Overwrite
+
+    def merge_dicts(left: dict, right: dict) -> dict:
+        return {**left, **right}
+
+    ch = DeltaChannel(merge_dicts, dict).from_checkpoint(MISSING)
+    ch.after_checkpoint(None)
+    ch.update([{"a": 1}])
+    ch.after_checkpoint("v1", checkpoint_id="cid1")
+
+    ch.update([Overwrite({"b": 2})])
+    d = ch.checkpoint()
+    assert isinstance(d, DeltaValue)
+    assert d.prev_checkpoint_id is None
+    assert d.delta == [{"b": 2}]
+    assert ch.get() == {"b": 2}
+
+    spec = DeltaChannel(merge_dicts, dict)
+    replayed = spec.from_checkpoint(DeltaChainValue(base=None, deltas=[d.delta]))
+    assert replayed.get() == {"b": 2}
+
+
+def test_delta_channel_dict_snapshot_every_round_trip() -> None:
+    """Full snapshots should preserve non-list reducers across reload."""
+    from langgraph.checkpoint.base import DeltaValue
+
+    from langgraph.channels.delta import DeltaChannel
+
+    def merge_dicts(left: dict, right: dict) -> dict:
+        return {**left, **right}
+
+    ch = DeltaChannel(merge_dicts, dict, snapshot_every=1).from_checkpoint(MISSING)
+    ch.after_checkpoint("v0", checkpoint_id="cid0")
+
+    ch.update([{"a": 1}])
+    first = ch.checkpoint()
+    assert isinstance(first, DeltaValue)
+    ch.after_checkpoint("v1", checkpoint_id="cid1")
+
+    ch.update([{"b": 2}])
+    snap = ch.checkpoint()
+    assert isinstance(snap, dict)
+    assert snap == {"a": 1, "b": 2}
+
+    rehydrated = DeltaChannel(merge_dicts, dict, snapshot_every=1).from_checkpoint(snap)
+    assert rehydrated.get() == {"a": 1, "b": 2}
 
 
 def test_delta_channel_assembly_fast_path_returns_delta_value() -> None:

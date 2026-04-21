@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import collections.abc
 from collections.abc import Callable, Sequence
+from copy import copy
 from typing import Any, Generic, Literal
 
 from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
@@ -13,6 +14,15 @@ from langgraph.channels.binop import _get_overwrite, _strip_extras
 from langgraph.errors import EmptyChannelError
 
 __all__ = ("DeltaChannel",)
+
+
+def _copy_value(value: Any) -> Any:
+    if value is MISSING:
+        return value
+    try:
+        return value.copy()
+    except AttributeError:
+        return copy(value)
 
 
 class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
@@ -105,7 +115,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
     def copy(self) -> Self:
         new = DeltaChannel(self.operator, self.typ, snapshot_every=self.snapshot_every)
         new.key = self.key
-        new.value = self.value if self.value is MISSING else self.value.copy()
+        new.value = _copy_value(self.value)
         new._pending = self._pending[:]
         new._base_version = self._base_version
         new._last_checkpoint_id = self._last_checkpoint_id
@@ -138,8 +148,9 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
                 "have occurred before from_checkpoint was called."
             )
         else:
-            # Backwards compat: plain list from old BinaryOperatorAggregate checkpoint.
-            new.value = list(checkpoint)
+            # Backwards compat: plain value from old BinaryOperatorAggregate checkpoint
+            # or a full snapshot emitted by DeltaChannel.
+            new.value = _copy_value(checkpoint)
         new._pending = []
         new._base_version = None  # set by the subsequent after_checkpoint() call
         new._overwritten = False
@@ -165,9 +176,13 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
                     )
                     raise InvalidUpdateError(msg)
                 self.value = (
-                    list(overwrite_value) if overwrite_value is not None else self.typ()
+                    _copy_value(overwrite_value)
+                    if overwrite_value is not None
+                    else self.typ()
                 )
-                self._pending = list(self.value)
+                self._pending = (
+                    [] if overwrite_value is None else [_copy_value(self.value)]
+                )
                 self._overwritten = True
                 seen_overwrite = True
             elif not seen_overwrite:
@@ -192,7 +207,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
             # Emit a full snapshot to cap chain depth at snapshot_every.
             # The saver stores this as a plain (non-diff) blob, so future
             # deltas will chain back to it and traversal depth resets to 1.
-            return list(self.value)
+            return _copy_value(self.value)
         return DeltaValue(
             delta=self._pending[:],
             prev_checkpoint_id=None if self._overwritten else self._last_checkpoint_id,
