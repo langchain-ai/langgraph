@@ -323,55 +323,29 @@ def test_memory_saver_with_allowlist_proxy_isolated() -> None:
 
 
 class TestInMemorySaverDeltaChannel:
-    def test_delta_channel_chain_reconstruction(self) -> None:
-        """_load_blobs follows the diff chain and returns DeltaChainValue."""
-        from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
+    def test_get_channel_blob(self) -> None:
+        """get_channel_blob returns the deserialized blob for a checkpoint+channel."""
+        from langgraph.checkpoint.base import DeltaValue, empty_checkpoint
 
         saver = InMemorySaver()
         serde = JsonPlusSerializer()
 
-        thread_id = "t1"
-        ns = ""
+        thread_id, ns, channel = "t1", "", "messages"
+        version = "00000000000000000000000000000001.0000000000000000"
+        delta = DeltaValue(delta=[{"content": "hi"}], prev_checkpoint_id=None)
+        saver.blobs[(thread_id, ns, channel, version)] = serde.dumps_typed(delta)
 
-        # Simulate two steps: v1 (root) and v2 (chained to v1)
-        v1 = "00000000000000000000000000000001.1234567890000000"
-        v2 = "00000000000000000000000000000002.1234567890000000"
+        cp = empty_checkpoint()
+        cp["id"] = "cp1"
+        cp["channel_versions"][channel] = version
+        saver.storage[(thread_id, ns)] = {"cp1": ({}, cp, {})}
 
-        delta1 = DeltaValue(delta=["msg1"], prev_version=None)
-        delta2 = DeltaValue(delta=["msg2"], prev_version=v1)
+        result = saver.get_channel_blob(thread_id, ns, "cp1", channel)
+        assert isinstance(result, DeltaValue)
+        assert result.delta == [{"content": "hi"}]
+        assert result.prev_checkpoint_id is None
 
-        saver.blobs[(thread_id, ns, "messages", v1)] = serde.dumps_typed(delta1)
-        saver.blobs[(thread_id, ns, "messages", v2)] = serde.dumps_typed(delta2)
-
-        channel_values = saver._load_blobs(thread_id, ns, {"messages": v2})
-
-        assert "messages" in channel_values
-        result = channel_values["messages"]
-        assert isinstance(result, DeltaChainValue)
-        assert result.base is None
-        assert result.deltas == [["msg1"], ["msg2"]]
-
-    def test_delta_channel_mixed_old_and_new_blobs(self) -> None:
-        """When chain hits an old non-diff blob, it becomes base."""
-        from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
-
+    def test_get_channel_blob_missing(self) -> None:
+        """get_channel_blob returns NotImplemented when checkpoint or channel not found."""
         saver = InMemorySaver()
-        serde = JsonPlusSerializer()
-
-        thread_id = "t2"
-        ns = ""
-
-        v_old = "00000000000000000000000000000001.0000000000000000"
-        v_new = "00000000000000000000000000000002.0000000000000000"
-
-        # Old-style full-list blob
-        saver.blobs[(thread_id, ns, "messages", v_old)] = serde.dumps_typed(["old_msg"])
-        # New diff blob chained to old
-        delta = DeltaValue(delta=["new_msg"], prev_version=v_old)
-        saver.blobs[(thread_id, ns, "messages", v_new)] = serde.dumps_typed(delta)
-
-        channel_values = saver._load_blobs(thread_id, ns, {"messages": v_new})
-        result = channel_values["messages"]
-        assert isinstance(result, DeltaChainValue)
-        assert result.base == ["old_msg"]
-        assert result.deltas == [["new_msg"]]
+        assert saver.get_channel_blob("t1", "", "no-such-cp", "messages") is NotImplemented
