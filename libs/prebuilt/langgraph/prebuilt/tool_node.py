@@ -40,7 +40,6 @@ Typical Usage:
 from __future__ import annotations
 
 import asyncio
-import functools
 import inspect
 import json
 from collections.abc import Awaitable, Callable
@@ -1845,7 +1844,7 @@ def _get_injection_from_type(
 
 # Cache keyed by tool object identity. Stores (tool, result) to keep a strong
 # reference that prevents GC from reusing the id for a different object.
-_INJECTED_ARGS_CACHE: dict[int, tuple[BaseTool, "_InjectedArgs"]] = {}
+_INJECTED_ARGS_CACHE: dict[int, tuple[BaseTool, _InjectedArgs]] = {}
 
 
 def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
