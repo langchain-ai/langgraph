@@ -101,7 +101,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
     def copy(self) -> Self:
         new = DeltaChannel(self.operator, self.typ, snapshot_every=self.snapshot_every)
         new.key = self.key
-        new.value = self.value[:]
+        new.value = self.value if self.value is MISSING else self.value.copy()
         new._pending = self._pending[:]
         new._base_version = self._base_version
         new._last_checkpoint_id = self._last_checkpoint_id
@@ -113,9 +113,11 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         new = DeltaChannel(self.operator, self.typ, snapshot_every=self.snapshot_every)
         new.key = self.key
         if checkpoint is MISSING:
-            new.value = []
+            pass
         elif isinstance(checkpoint, DeltaChainValue):
-            accumulated: list[Value] = list(checkpoint.base) if checkpoint.base else []
+            accumulated: list[Value] = (
+                checkpoint.base if checkpoint.base is not None else new.typ()
+            )
             for step_writes in checkpoint.deltas:
                 for write in step_writes:
                     accumulated = new.operator(accumulated, write)
@@ -159,13 +161,14 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
                     )
                     raise InvalidUpdateError(msg)
                 self.value = (
-                    list(overwrite_value) if overwrite_value is not None else []
+                    list(overwrite_value) if overwrite_value is not None else self.typ()
                 )
                 self._pending = list(self.value)
                 self._overwritten = True
                 seen_overwrite = True
             elif not seen_overwrite:
-                self.value = self.operator(self.value, value)
+                base = self.typ() if self.value is MISSING else self.value
+                self.value = self.operator(base, value)
                 self._pending.append(value)
         return True
 
