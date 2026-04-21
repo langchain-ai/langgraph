@@ -36,7 +36,9 @@ class DeltaValue:
     """Returned by DeltaChannel.checkpoint(). Represents one step's writes."""
 
     delta: list[Any]
-    prev_checkpoint_id: str | None  # ID of checkpoint containing previous blob; None = chain root
+    prev_checkpoint_id: (
+        str | None
+    )  # ID of checkpoint containing previous blob; None = chain root
 
 
 @dataclasses.dataclass

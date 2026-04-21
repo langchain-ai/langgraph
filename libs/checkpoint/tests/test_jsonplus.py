@@ -1004,7 +1004,9 @@ def test_delta_value_serde_round_trip() -> None:
     from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
     serde = JsonPlusSerializer()
-    original = DeltaValue(delta=[{"type": "human", "content": "hi"}], prev_checkpoint_id="abc-123")
+    original = DeltaValue(
+        delta=[{"type": "human", "content": "hi"}], prev_checkpoint_id="abc-123"
+    )
     type_tag, blob = serde.dumps_typed(original)
     assert type_tag == "diff"
     loaded = serde.loads_typed((type_tag, blob))
