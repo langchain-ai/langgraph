@@ -25,14 +25,19 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
 
     Works with all checkpointers. Savers with a dedicated blob store
     (InMemorySaver, PostgresSaver) use an O(1) fast-path per chain step;
-    all others (SQLite, MongoDB, etc.) fall back to get_tuple traversal
-    bounded by `snapshot_every`.
+    all others (SQLite, MongoDB, etc.) fall back to get_tuple traversal.
+
+    Use `snapshot_every=N` to cap chain traversal depth at N steps. Every N
+    steps a full snapshot is written as the chain root; subsequent deltas
+    chain back to it, so `get_state` / reload never traverses more than N
+    checkpoints regardless of thread length. Recommended for savers without
+    a dedicated blob store.
 
     Usage::
 
         class State(TypedDict):
             messages: Annotated[list[AnyMessage], DeltaChannel(add_messages)]
-            # Cap reconstruction depth for non-Postgres savers:
+            # Cap reconstruction depth (recommended for SQLite / MongoDB savers):
             messages: Annotated[list[AnyMessage], DeltaChannel(add_messages, snapshot_every=50)]
     """
 
@@ -44,7 +49,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         "_base_version",
         "_last_checkpoint_id",
         "_overwritten",
-        "_steps_since_rehydrate",
+        "_steps_since_snapshot",
     )
 
     def __init__(
@@ -71,7 +76,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         self._base_version: str | None = None
         self._last_checkpoint_id: str | None = None
         self._overwritten: bool = False
-        self._steps_since_rehydrate: int = 0
+        self._steps_since_snapshot: int = 0
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, DeltaChannel):
@@ -101,7 +106,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         new._base_version = self._base_version
         new._last_checkpoint_id = self._last_checkpoint_id
         new._overwritten = self._overwritten
-        new._steps_since_rehydrate = self._steps_since_rehydrate
+        new._steps_since_snapshot = self._steps_since_snapshot
         return new
 
     def from_checkpoint(self, checkpoint: Any) -> Self:
@@ -117,7 +122,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
             new.value = accumulated
             # Seed the counter from actual chain depth so rehydration fires at
             # the right time regardless of how many prior invocations there were.
-            new._steps_since_rehydrate = len(checkpoint.deltas)
+            new._steps_since_snapshot = len(checkpoint.deltas)
         elif isinstance(checkpoint, DeltaValue):
             # Should never reach here — the pregel layer assembles DeltaValues
             # into DeltaChainValue before calling from_checkpoint.
@@ -175,7 +180,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
     def checkpoint(self) -> Any:
         if (
             self.snapshot_every is not None
-            and self._steps_since_rehydrate >= self.snapshot_every
+            and self._steps_since_snapshot >= self.snapshot_every
         ):
             # Emit a full snapshot to cap chain depth at snapshot_every.
             # The saver stores this as a plain (non-diff) blob, so future
@@ -191,10 +196,10 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
             if self._base_version is None:
                 pass  # First call after from_checkpoint — anchor without counting a step.
             elif self.snapshot_every is not None:
-                if self._steps_since_rehydrate >= self.snapshot_every:
-                    self._steps_since_rehydrate = 0
+                if self._steps_since_snapshot >= self.snapshot_every:
+                    self._steps_since_snapshot = 0
                 else:
-                    self._steps_since_rehydrate += 1
+                    self._steps_since_snapshot += 1
             self._base_version = version
             self._last_checkpoint_id = checkpoint_id
             self._pending = []
