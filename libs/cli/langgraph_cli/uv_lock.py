@@ -10,6 +10,7 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10.
     import tomli as tomllib
 
 import click
+import pathspec
 
 from langgraph_cli._ignore import _build_ignore_spec
 from langgraph_cli.schemas import Config
@@ -441,14 +442,14 @@ def _container_root_for_uv_lock_package(
 
 
 def _uv_lock_package_copy_items(
-    package: UvLockPackage, plan: UvLockPlan
+    package: UvLockPackage,
+    plan: UvLockPlan,
+    ignore_spec: pathspec.PathSpec,
 ) -> tuple[tuple[pathlib.PurePosixPath, pathlib.PurePosixPath], ...]:
-    # Skip entries that .dockerignore / .gitignore / built-in exclusions would
-    # strip from the build context.  Emitting `ADD <path>` for a file that
-    # Docker has filtered out causes the build to fail with
+    # Skip entries that .dockerignore / built-in exclusions would strip from
+    # the build context. Emitting `ADD <path>` for a file that Docker has
+    # filtered out causes the build to fail with
     # "failed to compute cache key: <path> not found".
-    ignore_spec = _build_ignore_spec(plan.project_root)
-
     if package.root != plan.project_root:
         relative_root = pathlib.PurePosixPath(
             *package.root.relative_to(plan.project_root).parts
@@ -456,7 +457,7 @@ def _uv_lock_package_copy_items(
         if ignore_spec.match_file(f"{relative_root.as_posix()}/"):
             raise click.UsageError(
                 f"Workspace member '{package.name}' at {relative_root} is "
-                "matched by .dockerignore / .gitignore, but uv.lock requires "
+                "matched by .dockerignore, but uv.lock requires "
                 "it to be copied into the build context. Remove the matching "
                 "pattern or drop the member from [tool.uv.workspace].members."
             )
@@ -475,25 +476,30 @@ def _uv_lock_package_copy_items(
                 # and excluded entirely otherwise.
                 continue
 
-            relative_posix = child.relative_to(plan.project_root).as_posix()
-            is_dir = child.is_dir()
-            if ignore_spec.match_file(
-                f"{relative_posix}/" if is_dir else relative_posix
-            ):
-                continue
-
-            descendant_member_roots = [
-                ws_root
-                for ws_root in workspace_member_roots
-                if child in ws_root.parents
-            ]
-            if is_dir and descendant_member_roots:
-                entries.extend(iter_entries(child))
-                continue
-
             relative_child = pathlib.PurePosixPath(
                 *child.relative_to(plan.project_root).parts
             )
+            is_dir = child.is_dir()
+            relative_posix = relative_child.as_posix()
+            ignored = ignore_spec.match_file(
+                f"{relative_posix}/" if is_dir else relative_posix
+            )
+
+            if is_dir and any(
+                child in ws_root.parents for ws_root in workspace_member_roots
+            ):
+                entries.extend(iter_entries(child))
+                continue
+
+            if is_dir and ignored:
+                # Docker can re-include descendants of an ignored directory
+                # via a later `!` pattern, so keep walking the subtree.
+                entries.extend(iter_entries(child))
+                continue
+
+            if ignored:
+                continue
+
             entries.append(
                 (relative_child, root_container.joinpath(*relative_child.parts))
             )
@@ -977,10 +983,13 @@ def python_config_to_docker_uv_lock(
     docker_plan.add_raw("# -- End of uv.lock dependencies install --")
     docker_plan.add_blank()
 
+    ignore_spec = _build_ignore_spec(plan.project_root, include_gitignore=False)
     for package in plan.install_order:
         package_label = package.root.relative_to(plan.project_root).as_posix() or "."
         docker_plan.add_raw(f"# -- Adding workspace package {package_label} --")
-        for source, destination in _uv_lock_package_copy_items(package, plan):
+        for source, destination in _uv_lock_package_copy_items(
+            package, plan, ignore_spec
+        ):
             docker_plan.add_raw(copy_from_project_root(source, destination.as_posix()))
         docker_plan.add_instruction(
             "WORKDIR", plan.container_roots[package.root].as_posix()

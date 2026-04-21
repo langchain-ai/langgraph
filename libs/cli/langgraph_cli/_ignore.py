@@ -1,4 +1,4 @@
-"""Shared `.dockerignore` / `.gitignore` handling for build-context filtering."""
+"""Shared ignore-file handling for local source filtering."""
 
 import pathlib
 
@@ -15,15 +15,21 @@ _ALWAYS_EXCLUDE = [
 ]
 
 
-def _build_ignore_spec(directory: pathlib.Path) -> pathspec.PathSpec:
-    """Build a PathSpec combining built-in exclusions with .dockerignore and .gitignore.
+def _build_ignore_spec(
+    directory: pathlib.Path, *, include_gitignore: bool = True
+) -> pathspec.PathSpec:
+    """Build a PathSpec combining built-in exclusions with ignore files.
 
-    Always excludes common non-source directories (`_ALWAYS_EXCLUDE`).  On top
-    of that, patterns from .dockerignore and .gitignore (if present) are merged
-    in.
+    Always excludes common non-source directories (`_ALWAYS_EXCLUDE`). On top
+    of that, patterns from `.dockerignore` are merged in. `.gitignore` patterns
+    are optional because some callers need Docker build-context semantics,
+    while archive creation wants both files.
     """
     lines: list[str] = list(_ALWAYS_EXCLUDE)
-    for name in (".dockerignore", ".gitignore"):
+    ignore_files = [".dockerignore"]
+    if include_gitignore:
+        ignore_files.append(".gitignore")
+    for name in ignore_files:
         ignore_file = directory / name
         if ignore_file.is_file():
             lines.extend(ignore_file.read_text(encoding="utf-8").splitlines())
