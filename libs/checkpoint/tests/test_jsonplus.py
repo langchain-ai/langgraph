@@ -985,33 +985,27 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     assert result == obj
 
 
-def test_diff_delta_serde_round_trip() -> None:
+def test_delta_value_serde_round_trip() -> None:
     from langgraph.checkpoint.base import DeltaValue
+    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
     serde = JsonPlusSerializer()
-    prev = "00000000000000000000000000000001.1234567890123456"
-    delta = DeltaValue(
-        delta=[HumanMessage(content="hello", id="msg-1")],
-        prev_version=prev,
-    )
-    type_tag, blob = serde.dumps_typed(delta)
+    original = DeltaValue(delta=[{"type": "human", "content": "hi"}], prev_checkpoint_id="abc-123")
+    type_tag, blob = serde.dumps_typed(original)
     assert type_tag == "diff"
-
-    result = serde.loads_typed(("diff", blob))
-    assert isinstance(result, dict)
-    assert result["p"] == prev
-    assert len(result["d"]) == 1
-    assert result["d"][0].content == "hello"
+    loaded = serde.loads_typed((type_tag, blob))
+    assert isinstance(loaded, DeltaValue)
+    assert loaded.delta == original.delta
+    assert loaded.prev_checkpoint_id == "abc-123"
 
 
-def test_diff_delta_serde_root_blob() -> None:
+def test_delta_value_serde_chain_root() -> None:
     from langgraph.checkpoint.base import DeltaValue
+    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
     serde = JsonPlusSerializer()
-    delta = DeltaValue(delta=[], prev_version=None)
-    type_tag, blob = serde.dumps_typed(delta)
-    assert type_tag == "diff"
-
-    result = serde.loads_typed(("diff", blob))
-    assert result["p"] is None
-    assert result["d"] == []
+    original = DeltaValue(delta=[], prev_checkpoint_id=None)
+    type_tag, blob = serde.dumps_typed(original)
+    loaded = serde.loads_typed((type_tag, blob))
+    assert isinstance(loaded, DeltaValue)
+    assert loaded.prev_checkpoint_id is None

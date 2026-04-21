@@ -246,7 +246,7 @@ class JsonPlusSerializer(SerializerProtocol):
         elif isinstance(obj, bytearray):
             return "bytearray", obj
         elif _is_diff_delta(obj):
-            return "diff", _msgpack_enc({"d": obj.delta, "p": obj.prev_version})
+            return "diff", _msgpack_enc({"d": obj.delta, "c": obj.prev_checkpoint_id})
         else:
             try:
                 return "msgpack", _msgpack_enc(obj)
@@ -270,9 +270,11 @@ class JsonPlusSerializer(SerializerProtocol):
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
         elif type_ == "diff":
-            return ormsgpack.unpackb(
+            from langgraph.checkpoint.base import DeltaValue  # lazy import
+            raw = ormsgpack.unpackb(
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
+            return DeltaValue(delta=raw["d"], prev_checkpoint_id=raw.get("c"))
         elif self.pickle_fallback and type_ == "pickle":
             return pickle.loads(data_)
         else:
