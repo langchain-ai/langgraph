@@ -98,6 +98,10 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
     def UpdateType(self) -> Any:
         return self.typ | list[self.typ]  # type: ignore[name-defined]
 
+    @property
+    def checkpoint_hydration_kind(self) -> str:
+        return "delta"
+
     def copy(self) -> Self:
         new = DeltaChannel(self.operator, self.typ, snapshot_every=self.snapshot_every)
         new.key = self.key
@@ -126,12 +130,12 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
             # the right time regardless of how many prior invocations there were.
             new._steps_since_snapshot = len(checkpoint.deltas)
         elif isinstance(checkpoint, DeltaValue):
-            # Should never reach here — the pregel layer assembles DeltaValues
-            # into DeltaChainValue before calling from_checkpoint.
+            # Should never reach here — checkpoint hydration should assemble
+            # DeltaValues into DeltaChainValue before calling from_checkpoint.
             raise AssertionError(
                 "DeltaChannel.from_checkpoint received a raw DeltaValue. "
-                "This is a bug in the pregel layer — chain assembly should have "
-                "occurred before from_checkpoint was called."
+                "This is a bug in checkpoint hydration — chain assembly should "
+                "have occurred before from_checkpoint was called."
             )
         else:
             # Backwards compat: plain list from old BinaryOperatorAggregate checkpoint.

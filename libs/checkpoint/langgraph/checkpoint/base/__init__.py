@@ -43,13 +43,32 @@ class DeltaValue:
 
 @dataclasses.dataclass
 class DeltaChainValue:
-    """Passed to DeltaChannel.from_checkpoint(). Assembled by the pregel layer."""
+    """Passed to DeltaChannel.from_checkpoint(). Assembled during checkpoint hydration."""
 
     base: list[Any] | None  # starting accumulated value; None = start from empty
     deltas: list[list[Any]]  # per-step write-sets, ordered oldest → newest
 
 
+CheckpointHydrationKind = Literal["delta"]
+
+
+@dataclasses.dataclass(frozen=True)
+class IncrementalChannelSpec:
+    """Describes a checkpoint field that needs saver-side materialization."""
+
+    name: str
+    kind: CheckpointHydrationKind
+
+
+@dataclasses.dataclass(frozen=True)
+class CheckpointHydrationPlan:
+    """Lists the checkpoint fields eligible for saver-side materialization."""
+
+    channels: tuple[IncrementalChannelSpec, ...]
+
+
 logger = logging.getLogger(__name__)
+_MISSING_SENTINEL = object()
 
 
 # Marked as total=False to allow for future expansion.
@@ -478,6 +497,124 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
+    def materialize_checkpoint(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        plan: CheckpointHydrationPlan | None = None,
+    ) -> Checkpoint:
+        """Materialize any saver-managed incremental values in a checkpoint."""
+        if plan is None or not plan.channels:
+            return checkpoint
+
+        thread_id = str(config["configurable"]["thread_id"])
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        current_checkpoint_id = checkpoint.get("id")
+        assembled: dict[str, Any] = {}
+
+        for spec in plan.channels:
+            value = checkpoint["channel_values"].get(spec.name)
+            if spec.kind != "delta" or not isinstance(value, DeltaValue):
+                continue
+
+            assembled_value = self._materialize_delta_channel(
+                thread_id=thread_id,
+                checkpoint_ns=checkpoint_ns,
+                current_checkpoint_id=current_checkpoint_id,
+                channel=spec.name,
+                value=value,
+            )
+            if assembled_value is not None:
+                assembled[spec.name] = assembled_value
+
+        if not assembled:
+            return checkpoint
+
+        return {
+            **checkpoint,
+            "channel_values": {**checkpoint["channel_values"], **assembled},
+        }
+
+    def materialize_checkpoint_tuple(
+        self,
+        value: CheckpointTuple,
+        plan: CheckpointHydrationPlan | None = None,
+    ) -> CheckpointTuple:
+        """Materialize incremental values for a single checkpoint tuple."""
+        checkpoint = self.materialize_checkpoint(value.config, value.checkpoint, plan)
+        if checkpoint is value.checkpoint:
+            return value
+        return value._replace(checkpoint=checkpoint)
+
+    def materialize_checkpoint_tuples(
+        self,
+        values: Sequence[CheckpointTuple],
+        plan: CheckpointHydrationPlan | None = None,
+    ) -> Sequence[CheckpointTuple]:
+        """Materialize incremental values for a batch of checkpoint tuples."""
+        return [self.materialize_checkpoint_tuple(value, plan) for value in values]
+
+    async def amaterialize_checkpoint(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        plan: CheckpointHydrationPlan | None = None,
+    ) -> Checkpoint:
+        """Async materialization hook for saver-managed incremental values."""
+        if plan is None or not plan.channels:
+            return checkpoint
+
+        thread_id = str(config["configurable"]["thread_id"])
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        current_checkpoint_id = checkpoint.get("id")
+        assembled: dict[str, Any] = {}
+
+        for spec in plan.channels:
+            value = checkpoint["channel_values"].get(spec.name)
+            if spec.kind != "delta" or not isinstance(value, DeltaValue):
+                continue
+
+            assembled_value = await self._amaterialize_delta_channel(
+                thread_id=thread_id,
+                checkpoint_ns=checkpoint_ns,
+                current_checkpoint_id=current_checkpoint_id,
+                channel=spec.name,
+                value=value,
+            )
+            if assembled_value is not None:
+                assembled[spec.name] = assembled_value
+
+        if not assembled:
+            return checkpoint
+
+        return {
+            **checkpoint,
+            "channel_values": {**checkpoint["channel_values"], **assembled},
+        }
+
+    async def amaterialize_checkpoint_tuple(
+        self,
+        value: CheckpointTuple,
+        plan: CheckpointHydrationPlan | None = None,
+    ) -> CheckpointTuple:
+        """Async materialization hook for a single checkpoint tuple."""
+        checkpoint = await self.amaterialize_checkpoint(
+            value.config, value.checkpoint, plan
+        )
+        if checkpoint is value.checkpoint:
+            return value
+        return value._replace(checkpoint=checkpoint)
+
+    async def amaterialize_checkpoint_tuples(
+        self,
+        values: Sequence[CheckpointTuple],
+        plan: CheckpointHydrationPlan | None = None,
+    ) -> Sequence[CheckpointTuple]:
+        """Async materialization hook for a batch of checkpoint tuples."""
+        return [
+            await self.amaterialize_checkpoint_tuple(value, plan) for value in values
+        ]
+
     def get_channel_blob(
         self,
         thread_id: str,
@@ -545,6 +682,152 @@ class BaseCheckpointSaver(Generic[V]):
         clone = copy.copy(self)
         clone.serde = maybe_add_typed_methods(serde)
         return clone
+
+    def _get_checkpoint_tuple_for_materialization(
+        self, config: RunnableConfig
+    ) -> CheckpointTuple | None:
+        """Internal raw checkpoint lookup used by fallback materialization."""
+        return self.get_tuple(config)
+
+    async def _aget_checkpoint_tuple_for_materialization(
+        self, config: RunnableConfig
+    ) -> CheckpointTuple | None:
+        """Async internal raw checkpoint lookup used by fallback materialization."""
+        return await self.aget_tuple(config)
+
+    def _materialize_delta_channel(
+        self,
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+        current_checkpoint_id: str | None,
+        channel: str,
+        value: DeltaValue,
+    ) -> DeltaChainValue | None:
+        chain_deltas: list[list[Any]] = []
+        base: list[Any] | None = None
+        cursor: DeltaValue = value
+        visited: set[str] = {current_checkpoint_id} if current_checkpoint_id else set()
+
+        while True:
+            chain_deltas.append(cursor.delta)
+            prev_id = cursor.prev_checkpoint_id
+            if prev_id is None:
+                break
+            if prev_id in visited:
+                logger.warning(
+                    "DeltaChannel chain cycle at checkpoint %r for channel %r; breaking",
+                    prev_id,
+                    channel,
+                )
+                break
+            visited.add(prev_id)
+
+            blob = self.get_channel_blob(thread_id, checkpoint_ns, prev_id, channel)
+            if blob is not NotImplemented:
+                if isinstance(blob, DeltaValue):
+                    cursor = blob
+                    continue
+                base = blob
+                break
+
+            parent_config: RunnableConfig = {
+                "configurable": {
+                    "thread_id": thread_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "checkpoint_id": prev_id,
+                }
+            }
+            parent_tuple = self._get_checkpoint_tuple_for_materialization(parent_config)
+            if parent_tuple is None:
+                logger.warning(
+                    "DeltaChannel chain broken: checkpoint %r not found for channel %r",
+                    prev_id,
+                    channel,
+                )
+                break
+            prev_val = parent_tuple.checkpoint["channel_values"].get(
+                channel, _MISSING_SENTINEL
+            )
+            if prev_val is _MISSING_SENTINEL:
+                break
+            if isinstance(prev_val, DeltaValue):
+                cursor = prev_val
+            else:
+                base = prev_val
+                break
+
+        chain_deltas.reverse()
+        return DeltaChainValue(base=base, deltas=chain_deltas)
+
+    async def _amaterialize_delta_channel(
+        self,
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+        current_checkpoint_id: str | None,
+        channel: str,
+        value: DeltaValue,
+    ) -> DeltaChainValue | None:
+        chain_deltas: list[list[Any]] = []
+        base: list[Any] | None = None
+        cursor: DeltaValue = value
+        visited: set[str] = {current_checkpoint_id} if current_checkpoint_id else set()
+
+        while True:
+            chain_deltas.append(cursor.delta)
+            prev_id = cursor.prev_checkpoint_id
+            if prev_id is None:
+                break
+            if prev_id in visited:
+                logger.warning(
+                    "DeltaChannel chain cycle at checkpoint %r for channel %r; breaking",
+                    prev_id,
+                    channel,
+                )
+                break
+            visited.add(prev_id)
+
+            blob = await self.aget_channel_blob(
+                thread_id, checkpoint_ns, prev_id, channel
+            )
+            if blob is not NotImplemented:
+                if isinstance(blob, DeltaValue):
+                    cursor = blob
+                    continue
+                base = blob
+                break
+
+            parent_config: RunnableConfig = {
+                "configurable": {
+                    "thread_id": thread_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "checkpoint_id": prev_id,
+                }
+            }
+            parent_tuple = await self._aget_checkpoint_tuple_for_materialization(
+                parent_config
+            )
+            if parent_tuple is None:
+                logger.warning(
+                    "DeltaChannel chain broken: checkpoint %r not found for channel %r",
+                    prev_id,
+                    channel,
+                )
+                break
+            prev_val = parent_tuple.checkpoint["channel_values"].get(
+                channel, _MISSING_SENTINEL
+            )
+            if prev_val is _MISSING_SENTINEL:
+                break
+            if isinstance(prev_val, DeltaValue):
+                cursor = prev_val
+            else:
+                base = prev_val
+                break
+
+        chain_deltas.reverse()
+        return DeltaChainValue(base=base, deltas=chain_deltas)
 
 
 def _with_msgpack_allowlist(

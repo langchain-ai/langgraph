@@ -227,19 +227,19 @@ def test_delta_channel_overwrite_resets_chain() -> None:
 
 
 def test_delta_channel_assembly_fallback_via_get_tuple() -> None:
-    """Assembly falls back to get_tuple for savers without get_channel_blob."""
-    from unittest.mock import MagicMock
-
+    """Materialization falls back to get_tuple for savers without get_channel_blob."""
     from langgraph.checkpoint.base import (
+        BaseCheckpointSaver,
+        CheckpointHydrationPlan,
         CheckpointTuple,
         DeltaChainValue,
         DeltaValue,
+        IncrementalChannelSpec,
         empty_checkpoint,
     )
 
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
-    from langgraph.pregel._checkpoint import _assemble_delta_channels
 
     msg1 = {"type": "human", "content": "hello"}
     msg2 = {"type": "ai", "content": "world"}
@@ -254,27 +254,40 @@ def test_delta_channel_assembly_fallback_via_get_tuple() -> None:
         delta=[msg2], prev_checkpoint_id="cp1"
     )
 
-    saver = MagicMock()
-    saver.get_channel_blob.return_value = NotImplemented
-    saver.get_tuple.return_value = CheckpointTuple(
-        config={
-            "configurable": {
-                "thread_id": "t1",
-                "checkpoint_ns": "",
-                "checkpoint_id": "cp1",
-            }
-        },
-        checkpoint=cp1,
-        metadata={},
-        parent_config=None,
-        pending_writes=[],
-    )
+    class TestSaver(BaseCheckpointSaver[str]):
+        def get_tuple(self, config):
+            return CheckpointTuple(
+                config={
+                    "configurable": {
+                        "thread_id": "t1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": "cp1",
+                    }
+                },
+                checkpoint=cp1,
+                metadata={},
+                parent_config=None,
+                pending_writes=[],
+            )
+
+        def list(self, config, *, filter=None, before=None, limit=None):
+            raise NotImplementedError
+
+        def put(self, config, checkpoint, metadata, new_versions):
+            raise NotImplementedError
+
+    saver = TestSaver()
 
     config = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
-    assembled = _assemble_delta_channels(cp2, config, saver)
+    materialized = saver.materialize_checkpoint(
+        config,
+        cp2,
+        CheckpointHydrationPlan(
+            channels=(IncrementalChannelSpec(name="messages", kind="delta"),)
+        ),
+    )
 
-    assert "messages" in assembled
-    chain = assembled["messages"]
+    chain = materialized["channel_values"]["messages"]
     assert isinstance(chain, DeltaChainValue)
     assert chain.base == [msg1]
     assert chain.deltas == [[msg2]]
@@ -438,17 +451,17 @@ def test_delta_channel_snapshot_every_end_to_end() -> None:
 
 def test_delta_channel_assembly_fast_path_returns_delta_value() -> None:
     """get_channel_blob returning a DeltaValue continues chain traversal (fast-path)."""
-    from unittest.mock import MagicMock
-
     from langgraph.checkpoint.base import (
+        BaseCheckpointSaver,
+        CheckpointHydrationPlan,
         DeltaChainValue,
         DeltaValue,
+        IncrementalChannelSpec,
         empty_checkpoint,
     )
 
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
-    from langgraph.pregel._checkpoint import _assemble_delta_channels
 
     msg1 = {"type": "human", "content": "one"}
     msg2 = {"type": "ai", "content": "two"}
@@ -462,21 +475,35 @@ def test_delta_channel_assembly_fast_path_returns_delta_value() -> None:
         delta=[msg3], prev_checkpoint_id="cp2"
     )
 
-    saver = MagicMock()
+    class TestSaver(BaseCheckpointSaver[str]):
+        def get_tuple(self, config):
+            raise NotImplementedError
 
-    def _get_blob(thread_id, ns, checkpoint_id, channel):
-        if checkpoint_id == "cp2":
-            return dv_cp2  # DeltaValue — chain continues
-        if checkpoint_id == "cp1":
-            return [msg1]  # plain list — chain root
-        return NotImplemented
+        def list(self, config, *, filter=None, before=None, limit=None):
+            raise NotImplementedError
 
-    saver.get_channel_blob.side_effect = _get_blob
+        def put(self, config, checkpoint, metadata, new_versions):
+            raise NotImplementedError
+
+        def get_channel_blob(self, thread_id, checkpoint_ns, checkpoint_id, channel):
+            if checkpoint_id == "cp2":
+                return dv_cp2
+            if checkpoint_id == "cp1":
+                return [msg1]
+            return NotImplemented
+
+    saver = TestSaver()
 
     config = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
-    assembled = _assemble_delta_channels(cp3, config, saver)
+    materialized = saver.materialize_checkpoint(
+        config,
+        cp3,
+        CheckpointHydrationPlan(
+            channels=(IncrementalChannelSpec(name="messages", kind="delta"),)
+        ),
+    )
 
-    chain = assembled["messages"]
+    chain = materialized["channel_values"]["messages"]
     assert isinstance(chain, DeltaChainValue)
     assert chain.base == [msg1]
     assert chain.deltas == [[msg2], [msg3]]
@@ -595,11 +622,13 @@ def test_delta_channel_dict_reducer_with_deletions() -> None:
 
 def test_delta_channel_assembly_broken_chain_logs_warning() -> None:
     """If a prev_checkpoint_id points to a missing checkpoint, log a warning and use partial chain."""
-    from unittest.mock import MagicMock
-
-    from langgraph.checkpoint.base import DeltaValue, empty_checkpoint
-
-    from langgraph.pregel._checkpoint import _assemble_delta_channels
+    from langgraph.checkpoint.base import (
+        BaseCheckpointSaver,
+        CheckpointHydrationPlan,
+        DeltaValue,
+        IncrementalChannelSpec,
+        empty_checkpoint,
+    )
 
     cp = empty_checkpoint()
     cp["id"] = "cp2"
@@ -607,19 +636,32 @@ def test_delta_channel_assembly_broken_chain_logs_warning() -> None:
         delta=["msg2"], prev_checkpoint_id="cp-missing"
     )
 
-    saver = MagicMock()
-    saver.get_channel_blob.return_value = NotImplemented
-    saver.get_tuple.return_value = None  # checkpoint not found
+    class TestSaver(BaseCheckpointSaver[str]):
+        def get_tuple(self, config):
+            return None
+
+        def list(self, config, *, filter=None, before=None, limit=None):
+            raise NotImplementedError
+
+        def put(self, config, checkpoint, metadata, new_versions):
+            raise NotImplementedError
+
+    saver = TestSaver()
 
     config = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
 
-    assembled = _assemble_delta_channels(cp, config, saver)
+    materialized = saver.materialize_checkpoint(
+        config,
+        cp,
+        CheckpointHydrationPlan(
+            channels=(IncrementalChannelSpec(name="messages", kind="delta"),)
+        ),
+    )
 
     # Should still assemble — with partial chain (just the current delta, base=None)
-    assert "messages" in assembled
     from langgraph.checkpoint.base import DeltaChainValue
 
-    chain = assembled["messages"]
+    chain = materialized["channel_values"]["messages"]
     assert isinstance(chain, DeltaChainValue)
     assert chain.base is None
     assert chain.deltas == [["msg2"]]

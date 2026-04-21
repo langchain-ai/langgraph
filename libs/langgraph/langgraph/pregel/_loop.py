@@ -29,6 +29,7 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
+    CheckpointHydrationPlan,
     CheckpointMetadata,
     CheckpointTuple,
     PendingWrite,
@@ -92,9 +93,8 @@ from langgraph.pregel._algo import (
     task_path_str,
 )
 from langgraph.pregel._checkpoint import (
-    _aassemble_delta_channels,
-    _assemble_delta_channels,
     channels_from_checkpoint,
+    checkpoint_hydration_plan,
     copy_checkpoint,
     create_checkpoint,
     empty_checkpoint,
@@ -315,6 +315,28 @@ class PregelLoop:
             else ()
         )
         self.prev_checkpoint_config = None
+
+    def _checkpoint_hydration_plan(self) -> CheckpointHydrationPlan | None:
+        """Build the saver hydration plan from this loop's channel specs."""
+        return checkpoint_hydration_plan(self.specs)
+
+    def _materialize_saved_checkpoint(
+        self, saved: CheckpointTuple | None
+    ) -> CheckpointTuple | None:
+        if saved is None or self.checkpointer is None:
+            return saved
+        return self.checkpointer.materialize_checkpoint_tuple(
+            saved, self._checkpoint_hydration_plan()
+        )
+
+    async def _amaterialize_saved_checkpoint(
+        self, saved: CheckpointTuple | None
+    ) -> CheckpointTuple | None:
+        if saved is None or self.checkpointer is None:
+            return saved
+        return await self.checkpointer.amaterialize_checkpoint_tuple(
+            saved, self._checkpoint_hydration_plan()
+        )
 
     def _push_graph_lifecycle_event(
         self,
@@ -1245,6 +1267,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             # graph/thread. Returns None on first invocation.
             saved = self.checkpointer.get_tuple(self.checkpoint_config)
 
+        saved = self._materialize_saved_checkpoint(saved)
+
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
@@ -1270,19 +1294,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             else []
         )
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
-        # Assemble any DeltaChannel chains before constructing channel objects.
-        if self.checkpointer is not None:
-            assembled = _assemble_delta_channels(
-                self.checkpoint, self.checkpoint_config, self.checkpointer
-            )
-            if assembled:
-                self.checkpoint = {
-                    **self.checkpoint,
-                    "channel_values": {
-                        **self.checkpoint["channel_values"],
-                        **assembled,
-                    },
-                }
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
         )
@@ -1460,6 +1471,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             # graph/thread. Returns None on first invocation.
             saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
 
+        saved = await self._amaterialize_saved_checkpoint(saved)
+
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
@@ -1487,18 +1500,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )
-        if self.checkpointer is not None:
-            assembled = await _aassemble_delta_channels(
-                self.checkpoint, self.checkpoint_config, self.checkpointer
-            )
-            if assembled:
-                self.checkpoint = {
-                    **self.checkpoint,
-                    "channel_values": {
-                        **self.checkpoint["channel_values"],
-                        **assembled,
-                    },
-                }
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
         )

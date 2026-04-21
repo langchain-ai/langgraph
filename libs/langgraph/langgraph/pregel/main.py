@@ -44,6 +44,7 @@ from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
+    CheckpointHydrationPlan,
     CheckpointTuple,
 )
 from langgraph.store.base import BaseStore
@@ -122,9 +123,8 @@ from langgraph.pregel._algo import (
 )
 from langgraph.pregel._call import identifier
 from langgraph.pregel._checkpoint import (
-    _aassemble_delta_channels,
-    _assemble_delta_channels,
     channels_from_checkpoint,
+    checkpoint_hydration_plan,
     copy_checkpoint,
     create_checkpoint,
     empty_checkpoint,
@@ -730,6 +730,53 @@ class Pregel(
             return checkpointer
         return _serde.apply_checkpointer_allowlist(checkpointer, self._serde_allowlist)
 
+    def _checkpoint_hydration_plan(self) -> CheckpointHydrationPlan | None:
+        return checkpoint_hydration_plan(self.channels)
+
+    def _materialize_saved_checkpoint(
+        self,
+        checkpointer: BaseCheckpointSaver | None,
+        saved: CheckpointTuple | None,
+    ) -> CheckpointTuple | None:
+        if saved is None or checkpointer is None:
+            return saved
+        return checkpointer.materialize_checkpoint_tuple(
+            saved, self._checkpoint_hydration_plan()
+        )
+
+    async def _amaterialize_saved_checkpoint(
+        self,
+        checkpointer: BaseCheckpointSaver | None,
+        saved: CheckpointTuple | None,
+    ) -> CheckpointTuple | None:
+        if saved is None or checkpointer is None:
+            return saved
+        return await checkpointer.amaterialize_checkpoint_tuple(
+            saved, self._checkpoint_hydration_plan()
+        )
+
+    def _materialize_saved_checkpoints(
+        self,
+        checkpointer: BaseCheckpointSaver | None,
+        saved: Sequence[CheckpointTuple],
+    ) -> list[CheckpointTuple]:
+        if checkpointer is None or not saved:
+            return list(saved)
+        return checkpointer.materialize_checkpoint_tuples(
+            saved, self._checkpoint_hydration_plan()
+        )
+
+    async def _amaterialize_saved_checkpoints(
+        self,
+        checkpointer: BaseCheckpointSaver | None,
+        saved: Sequence[CheckpointTuple],
+    ) -> list[CheckpointTuple]:
+        if checkpointer is None or not saved:
+            return list(saved)
+        return await checkpointer.amaterialize_checkpoint_tuples(
+            saved, self._checkpoint_hydration_plan()
+        )
+
     def get_graph(
         self, config: RunnableConfig | None = None, *, xray: int | bool = False
     ) -> Graph:
@@ -1052,15 +1099,6 @@ class Pregel(
         step = saved.metadata.get("step", -1) + 1
         stop = step + 2
         checkpoint = saved.checkpoint
-        if isinstance(self.checkpointer, BaseCheckpointSaver):
-            assembled = _assemble_delta_channels(
-                checkpoint, saved.config, self.checkpointer
-            )
-            if assembled:
-                checkpoint = {
-                    **checkpoint,
-                    "channel_values": {**checkpoint["channel_values"], **assembled},
-                }
         channels, managed = channels_from_checkpoint(
             self.channels,
             checkpoint,
@@ -1181,15 +1219,6 @@ class Pregel(
         step = saved.metadata.get("step", -1) + 1
         stop = step + 2
         checkpoint = saved.checkpoint
-        if isinstance(self.checkpointer, BaseCheckpointSaver):
-            assembled = await _aassemble_delta_channels(
-                checkpoint, saved.config, self.checkpointer
-            )
-            if assembled:
-                checkpoint = {
-                    **checkpoint,
-                    "channel_values": {**checkpoint["channel_values"], **assembled},
-                }
         channels, managed = channels_from_checkpoint(
             self.channels,
             checkpoint,
@@ -1322,7 +1351,9 @@ class Pregel(
         if not isinstance(thread_id, str):
             config[CONF][CONFIG_KEY_THREAD_ID] = str(thread_id)
 
-        saved = checkpointer.get_tuple(config)
+        saved = self._materialize_saved_checkpoint(
+            checkpointer, checkpointer.get_tuple(config)
+        )
         return self._prepare_state_snapshot(
             config,
             saved,
@@ -1366,7 +1397,9 @@ class Pregel(
         if not isinstance(thread_id, str):
             config[CONF][CONFIG_KEY_THREAD_ID] = str(thread_id)
 
-        saved = await checkpointer.aget_tuple(config)
+        saved = await self._amaterialize_saved_checkpoint(
+            checkpointer, await checkpointer.aget_tuple(config)
+        )
         return await self._aprepare_state_snapshot(
             config,
             saved,
@@ -1420,9 +1453,11 @@ class Pregel(
             },
         )
         # eagerly consume list() to avoid holding up the db cursor
-        for checkpoint_tuple in list(
-            checkpointer.list(config, before=before, limit=limit, filter=filter)
-        ):
+        checkpoint_tuples = self._materialize_saved_checkpoints(
+            checkpointer,
+            list(checkpointer.list(config, before=before, limit=limit, filter=filter)),
+        )
+        for checkpoint_tuple in checkpoint_tuples:
             yield self._prepare_state_snapshot(
                 checkpoint_tuple.config, checkpoint_tuple
             )
@@ -1474,12 +1509,16 @@ class Pregel(
             },
         )
         # eagerly consume list() to avoid holding up the db cursor
-        for checkpoint_tuple in [
-            c
-            async for c in checkpointer.alist(
-                config, before=before, limit=limit, filter=filter
-            )
-        ]:
+        checkpoint_tuples = await self._amaterialize_saved_checkpoints(
+            checkpointer,
+            [
+                c
+                async for c in checkpointer.alist(
+                    config, before=before, limit=limit, filter=filter
+                )
+            ],
+        )
+        for checkpoint_tuple in checkpoint_tuples:
             yield await self._aprepare_state_snapshot(
                 checkpoint_tuple.config, checkpoint_tuple
             )
@@ -1539,22 +1578,12 @@ class Pregel(
         ) -> RunnableConfig:
             # get last checkpoint
             config = ensure_config(self.config, input_config)
-            saved = checkpointer.get_tuple(config)
+            saved = self._materialize_saved_checkpoint(
+                checkpointer, checkpointer.get_tuple(config)
+            )
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
             base_checkpoint = saved.checkpoint if saved else empty_checkpoint()
-            if saved:
-                assembled = _assemble_delta_channels(
-                    base_checkpoint, saved.config, checkpointer
-                )
-                if assembled:
-                    base_checkpoint = {
-                        **base_checkpoint,
-                        "channel_values": {
-                            **base_checkpoint["channel_values"],
-                            **assembled,
-                        },
-                    }
             checkpoint = copy_checkpoint(base_checkpoint) if saved else base_checkpoint
             checkpoint_previous_versions = (
                 saved.checkpoint["channel_versions"].copy() if saved else {}
@@ -1996,22 +2025,12 @@ class Pregel(
         ) -> RunnableConfig:
             # get last checkpoint
             config = ensure_config(self.config, input_config)
-            saved = await checkpointer.aget_tuple(config)
+            saved = await self._amaterialize_saved_checkpoint(
+                checkpointer, await checkpointer.aget_tuple(config)
+            )
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
             base_checkpoint = saved.checkpoint if saved else empty_checkpoint()
-            if saved:
-                assembled = await _aassemble_delta_channels(
-                    base_checkpoint, saved.config, checkpointer
-                )
-                if assembled:
-                    base_checkpoint = {
-                        **base_checkpoint,
-                        "channel_values": {
-                            **base_checkpoint["channel_values"],
-                            **assembled,
-                        },
-                    }
             checkpoint = copy_checkpoint(base_checkpoint) if saved else base_checkpoint
             checkpoint_previous_versions = (
                 saved.checkpoint["channel_versions"].copy() if saved else {}

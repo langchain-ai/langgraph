@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from typing_extensions import Self
 
@@ -128,3 +128,8 @@ class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
         for incremental checkpointing (e.g. DeltaChannel).
         """
         pass
+
+    @property
+    def checkpoint_hydration_kind(self) -> Literal["delta"] | None:
+        """Return the saver hydration kind for this channel, if any."""
+        return None
