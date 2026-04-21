@@ -1,7 +1,7 @@
-"""Benchmark: DiffChannel vs BinaryOperatorAggregate storage and time.
+"""Benchmark: DeltaChannel vs BinaryOperatorAggregate storage and time.
 
-Run directly:  python tests/test_diff_channel_benchmark.py
-Run via pytest: pytest tests/test_diff_channel_benchmark.py -s
+Run directly:  python tests/test_delta_channel_benchmark.py
+Run via pytest: pytest tests/test_delta_channel_benchmark.py -s
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 
-from langgraph.channels.diff import DiffChannel
+from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 
@@ -31,12 +31,12 @@ class BinaryState(TypedDict):
 
 
 class DiffState(TypedDict):
-    messages: Annotated[list, DiffChannel(add_messages)]
+    messages: Annotated[list, DeltaChannel(add_messages)]
 
 
 class DiffRehydrateState(TypedDict):
     messages: Annotated[
-        list, DiffChannel(add_messages, rehydrate_every=REHYDRATE_EVERY)
+        list, DeltaChannel(add_messages, snapshot_every=REHYDRATE_EVERY)
     ]
 
 
@@ -102,7 +102,7 @@ TURN_COUNTS = [10, 50, 100, 200, 500]
 def run_benchmark() -> None:
     print()
     print(
-        "DiffChannel vs BinaryOperatorAggregate — checkpoint storage & time benchmark"
+        "DeltaChannel vs BinaryOperatorAggregate — checkpoint storage & time benchmark"
     )
     w = 100
     print("=" * w)
@@ -133,7 +133,7 @@ def run_benchmark() -> None:
         "time_ratio  = diff_ms / bin_ms        (higher = more overhead without rehydration)"
     )
     print(
-        f"rehy        = DiffChannel(rehydrate_every={REHYDRATE_EVERY}) — caps chain depth"
+        f"rehy        = DeltaChannel(snapshot_every={REHYDRATE_EVERY}) — caps chain depth"
     )
     print()
 
@@ -143,22 +143,22 @@ def run_benchmark() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_diff_channel_benchmark(capsys: Any) -> None:
-    """Storage grows O(N²) for BinaryOperatorAggregate, O(N) for DiffChannel."""
+def test_delta_channel_benchmark(capsys: Any) -> None:
+    """Storage grows O(N²) for BinaryOperatorAggregate, O(N) for DeltaChannel."""
     with capsys.disabled():
         run_benchmark()
 
-    # Verify DiffChannel uses strictly less storage for 100+ turns.
+    # Verify DeltaChannel uses strictly less storage for 100+ turns.
     for turns in [100, 500]:
         _, b_bytes = _run_turns(turns, BinaryState)
         _, d_bytes = _run_turns(turns, DiffState)
         _, r_bytes = _run_turns(turns, DiffRehydrateState)
         assert d_bytes < b_bytes, (
-            f"Expected DiffChannel to use less storage at {turns} turns, "
+            f"Expected DeltaChannel to use less storage at {turns} turns, "
             f"got diff={d_bytes} binary={b_bytes}"
         )
         assert r_bytes < b_bytes, (
-            f"Expected DiffChannel(rehydrate) to use less storage at {turns} turns, "
+            f"Expected DeltaChannel(rehydrate) to use less storage at {turns} turns, "
             f"got rehydrate={r_bytes} binary={b_bytes}"
         )
 

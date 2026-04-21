@@ -374,22 +374,22 @@ async def test_get_checkpoint_no_channel_values(
 
 
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
-async def test_diff_channel_chain_reconstruction(saver_name: str) -> None:
-    """AsyncPostgresSaver reconstructs DiffChannel chain via point-lookup traversal."""
+async def test_delta_channel_chain_reconstruction(saver_name: str) -> None:
+    """AsyncPostgresSaver reconstructs DeltaChannel chain via point-lookup traversal."""
     pytest.importorskip(
-        "langgraph.channels.diff", reason="langgraph core not installed"
+        "langgraph.channels.delta", reason="langgraph core not installed"
     )
 
     from typing import Annotated
 
     from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.channels.diff import DiffChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
     from typing_extensions import TypedDict
 
     class State(TypedDict):
-        messages: Annotated[list, DiffChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(add_messages)]
 
     def respond(state: State) -> dict:
         n = len(state["messages"])

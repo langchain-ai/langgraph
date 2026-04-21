@@ -399,7 +399,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         *,
         cur: Any,
     ) -> dict[str, Any]:
-        from langgraph.checkpoint.base import DiffChainValue
+        from langgraph.checkpoint.base import DeltaChainValue
 
         result: dict[str, Any] = {}
         for channel, current_payload in diff_channel_payloads.items():
@@ -430,7 +430,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     break
 
             payloads.reverse()
-            result[channel] = DiffChainValue(
+            result[channel] = DeltaChainValue(
                 base=base, deltas=[p["d"] for p in payloads]
             )
         return result

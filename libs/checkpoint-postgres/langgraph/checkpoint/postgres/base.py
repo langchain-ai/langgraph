@@ -223,7 +223,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         *,
         cur: Any = None,
     ) -> dict[str, Any]:
-        """Override in sync/async subclasses. Resolves diff-chain blobs to DiffChainValue."""
+        """Override in sync/async subclasses. Resolves diff-chain blobs to DeltaChainValue."""
         raise NotImplementedError
 
     def _dump_blobs(
