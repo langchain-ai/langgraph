@@ -430,49 +430,37 @@ class PostgresSaver(BasePostgresSaver):
                 with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    def _load_diff_chains(
+    def get_channel_blob(
         self,
         thread_id: str,
         checkpoint_ns: str,
-        diff_channel_payloads: dict[str, dict[str, Any]],
-        *,
-        cur: Any = None,
-    ) -> dict[str, Any]:
-        from langgraph.checkpoint.base import DeltaChainValue
-
-        result: dict[str, Any] = {}
-        for channel, current_payload in diff_channel_payloads.items():
-            payloads: list[dict[str, Any]] = [current_payload]
-            version_cursor: str | None = current_payload["p"]
-            base: list[Any] | None = None
-            visited: set[str] = set()
-
-            while version_cursor is not None:
-                if version_cursor in visited:
-                    break
-                visited.add(version_cursor)
-                cur.execute(
-                    "SELECT type, blob FROM checkpoint_blobs "
-                    "WHERE thread_id = %s AND checkpoint_ns = %s "
-                    "AND channel = %s AND version = %s",
-                    (thread_id, checkpoint_ns, channel, version_cursor),
-                )
-                row = cur.fetchone()
-                if row is None:
-                    break
-                if row["type"] == "diff":
-                    payload = self.serde.loads_typed(("diff", row["blob"]))
-                    payloads.append(payload)
-                    version_cursor = payload["p"]
-                else:
-                    base = self.serde.loads_typed((row["type"], row["blob"]))
-                    break
-
-            payloads.reverse()
-            result[channel] = DeltaChainValue(
-                base=base, deltas=[p["d"] for p in payloads]
+        checkpoint_id: str,
+        channel: str,
+    ) -> Any:
+        """Look up a channel blob by checkpoint ID + channel via checkpoint_blobs."""
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                SELECT cb.type, cb.blob
+                FROM checkpoint_blobs cb
+                WHERE cb.thread_id = %s
+                  AND cb.checkpoint_ns = %s
+                  AND cb.channel = %s
+                  AND cb.version = (
+                      SELECT checkpoint->'channel_versions'->>%s
+                      FROM checkpoints
+                      WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s
+                  )
+                """,
+                (
+                    thread_id, checkpoint_ns, channel, channel,
+                    thread_id, checkpoint_ns, checkpoint_id,
+                ),
             )
-        return result
+            row = cur.fetchone()
+        if row is None:
+            return NotImplemented
+        return self.serde.loads_typed((row["type"], row["blob"]))
 
     def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
         """
