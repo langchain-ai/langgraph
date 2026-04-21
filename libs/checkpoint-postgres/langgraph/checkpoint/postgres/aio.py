@@ -414,8 +414,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
                   )
                 """,
                 (
-                    thread_id, checkpoint_ns, channel, channel,
-                    thread_id, checkpoint_ns, checkpoint_id,
+                    thread_id,
+                    checkpoint_ns,
+                    channel,
+                    channel,
+                    thread_id,
+                    checkpoint_ns,
+                    checkpoint_id,
                 ),
             )
             row = await cur.fetchone()
