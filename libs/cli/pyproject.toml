@@ -17,6 +17,7 @@ dependencies = [
     "langgraph-sdk>=0.1.0 ; python_version >= '3.11'",
     "pathspec>=0.11.0",
     "python-dotenv>=0.8.0",
+    "typing_extensions>=4.0.0",
     "tomli>=2.0.1 ; python_version < '3.11'",
 ]
 [tool.hatch.version]
