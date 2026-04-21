@@ -226,17 +226,58 @@ def test_delta_channel_overwrite_resets_chain() -> None:
     assert d.delta[0].content == "new"
 
 
-def test_delta_channel_unsupported_saver_raises() -> None:
-    from langgraph.checkpoint.base import DeltaValue
+def test_delta_channel_assembly_fallback_via_get_tuple() -> None:
+    """Assembly falls back to get_tuple for savers without get_channel_blob."""
+    from unittest.mock import MagicMock
 
+    from langgraph.checkpoint.base import (
+        CheckpointTuple,
+        DeltaChainValue,
+        DeltaValue,
+        empty_checkpoint,
+    )
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
+    from langgraph.pregel._checkpoint import _assemble_delta_channels
 
-    # If a saver returns a raw DeltaValue, from_checkpoint raises AssertionError
+    msg1 = {"type": "human", "content": "hello"}
+    msg2 = {"type": "ai", "content": "world"}
+
+    cp1 = empty_checkpoint()
+    cp1["id"] = "cp1"
+    cp1["channel_values"]["messages"] = [msg1]
+
+    cp2 = empty_checkpoint()
+    cp2["id"] = "cp2"
+    cp2["channel_values"]["messages"] = DeltaValue(delta=[msg2], prev_checkpoint_id="cp1")
+
+    saver = MagicMock()
+    saver.get_channel_blob.return_value = NotImplemented
+    saver.get_tuple.return_value = CheckpointTuple(
+        config={"configurable": {"thread_id": "t1", "checkpoint_ns": "", "checkpoint_id": "cp1"}},
+        checkpoint=cp1,
+        metadata={},
+        parent_config=None,
+        pending_writes=[],
+    )
+
+    config = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
+    assembled = _assemble_delta_channels(cp2, config, saver)
+
+    assert "messages" in assembled
+    chain = assembled["messages"]
+    assert isinstance(chain, DeltaChainValue)
+    assert chain.base == [msg1]
+    assert chain.deltas == [[msg2]]
+
+    from langchain_core.messages import AIMessage, HumanMessage
+
     spec = DeltaChannel(add_messages)
-    raw_delta = DeltaValue(delta=[], prev_checkpoint_id=None)
-    with pytest.raises(AssertionError, match="DeltaChannel.from_checkpoint received a raw DeltaValue"):
-        spec.from_checkpoint(raw_delta)
+    ch = spec.from_checkpoint(chain)
+    result = ch.get()
+    assert len(result) == 2
+    assert isinstance(result[0], HumanMessage) and result[0].content == "hello"
+    assert isinstance(result[1], AIMessage) and result[1].content == "world"
 
 
 def test_delta_channel_remove_message_delta_and_replay() -> None:
