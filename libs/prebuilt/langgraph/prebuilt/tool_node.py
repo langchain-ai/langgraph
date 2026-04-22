@@ -1040,7 +1040,8 @@ class ToolNode(RunnableCallable):
 
         # Call wrapper with request and execute callable
         try:
-            return self._wrap_tool_call(tool_request, execute)
+            response = self._wrap_tool_call(tool_request, execute)
+            return self._validate_wrapper_response(call, response)
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
@@ -1198,10 +1199,12 @@ class ToolNode(RunnableCallable):
         # Call wrapper with request and execute callable
         try:
             if self._awrap_tool_call is not None:
-                return await self._awrap_tool_call(tool_request, execute)
+                response = await self._awrap_tool_call(tool_request, execute)
+                return self._validate_wrapper_response(call, response)
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
-            return self._wrap_tool_call(tool_request, _sync_execute)
+            response = self._wrap_tool_call(tool_request, _sync_execute)
+            return self._validate_wrapper_response(call, response)
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
@@ -1214,6 +1217,24 @@ class ToolNode(RunnableCallable):
                 tool_call_id=tool_request.tool_call["id"],
                 status="error",
             )
+
+    def _validate_wrapper_response(
+        self,
+        call: ToolCall,
+        response: ToolMessage | Command | object,
+    ) -> ToolMessage | Command:
+        """Validate wrap_tool_call / awrap_tool_call return values."""
+        if isinstance(response, Command):
+            return response
+        if isinstance(response, ToolMessage):
+            response.content = cast("str | list", msg_content_output(response.content))
+            return response
+
+        msg = (
+            f"wrap_tool_call for tool {call['name']} returned unexpected type: "
+            f"{type(response)}"
+        )
+        raise TypeError(msg)
 
     def _parse_input(
         self,

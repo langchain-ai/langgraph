@@ -466,6 +466,80 @@ async def test_async_interceptor_exception_with_unregistered_tool() -> None:
         )
 
 
+def test_wrap_tool_call_bad_return_type_raises_type_error() -> None:
+    """Test that invalid sync wrapper return values fail explicitly."""
+
+    def invalid_interceptor(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        del request, execute
+        return None  # type: ignore[return-value]
+
+    node = ToolNode(
+        [registered_tool], wrap_tool_call=invalid_interceptor, handle_tool_errors=False
+    )
+
+    with pytest.raises(
+        TypeError,
+        match="wrap_tool_call for tool registered_tool returned unexpected type",
+    ):
+        node.invoke(
+            [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "registered_tool",
+                            "args": {"x": 42},
+                            "id": "1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ],
+            config=_create_config_with_runtime(),
+        )
+
+
+async def test_awrap_tool_call_bad_return_type_raises_type_error() -> None:
+    """Test that invalid async wrapper return values fail explicitly."""
+
+    async def invalid_async_interceptor(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> ToolMessage | Command:
+        del request, execute
+        return None  # type: ignore[return-value]
+
+    node = ToolNode(
+        [registered_tool],
+        awrap_tool_call=invalid_async_interceptor,
+        handle_tool_errors=False,
+    )
+
+    with pytest.raises(
+        TypeError,
+        match="wrap_tool_call for tool registered_tool returned unexpected type",
+    ):
+        await node.ainvoke(
+            [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "registered_tool",
+                            "args": {"x": 42},
+                            "id": "1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ],
+            config=_create_config_with_runtime(),
+        )
+
+
 def test_interceptor_with_dict_input_format() -> None:
     """Test that interceptor works with dict input format."""
 
