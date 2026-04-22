@@ -32,7 +32,6 @@ Conn = _internal.Conn  # For backward compatibility
 class PostgresSaver(BasePostgresSaver):
     """Checkpointer that stores checkpoints in a Postgres database."""
 
-    supports_delta_channels: bool = True
     lock: threading.RLock
 
     def __init__(

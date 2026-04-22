@@ -122,8 +122,6 @@ class InMemorySaver(
     ) -> bool | None:
         return self.stack.__exit__(__exc_type, __exc_value, __traceback)
 
-    supports_delta_channels: bool = True
-
     def _load_blobs(
         self,
         thread_id: str,

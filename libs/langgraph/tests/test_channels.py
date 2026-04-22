@@ -233,7 +233,9 @@ def test_delta_channel_unsupported_saver_raises() -> None:
 
     spec = DeltaChannel(add_messages)
     raw = DeltaValue(delta=[{"type": "human", "content": "hello"}])
-    with pytest.raises(ValueError, match="supports_delta_channels"):
+    with pytest.raises(
+        ValueError, match="does not support incremental channel storage"
+    ):
         spec.from_checkpoint(raw)
 
 
@@ -523,45 +525,3 @@ def test_delta_channel_dict_reducer_with_deletions() -> None:
     spec = DeltaChannel(merge_files, dict)
     ch2 = spec.from_checkpoint(chain)
     assert ch2.get() == {"file2.py": "content2", "file3.py": "content3"}
-
-
-def test_delta_channel_compile_warns_on_incompatible_saver() -> None:
-    """compile() warns when DeltaChannel is used with a saver that lacks supports_delta_channels."""
-    import warnings
-    from typing import Annotated
-
-    from langgraph.checkpoint.base import BaseCheckpointSaver
-    from typing_extensions import TypedDict
-
-    from langgraph.channels.delta import DeltaChannel
-    from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import add_messages
-
-    class FakeSaver(BaseCheckpointSaver):
-        # Third-party saver that has not opted into delta channel support.
-        supports_delta_channels = False
-
-        def get_tuple(self, config):
-            return None
-
-        def put(self, config, checkpoint, metadata, new_versions):
-            return config
-
-        def put_writes(self, config, writes, task_id, task_path=""):
-            pass
-
-        def list(self, config, *, filter=None, before=None, limit=None):
-            return iter([])
-
-    class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(add_messages)]
-
-    builder = StateGraph(State)
-    builder.add_node("echo", lambda s: {})
-    builder.add_edge(START, "echo")
-
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        builder.compile(checkpointer=FakeSaver())  # type: ignore[arg-type]
-
-    assert any("supports_delta_channels" in str(warning.message) for warning in w)
