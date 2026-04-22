@@ -20,6 +20,8 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    DeltaChainValue,
+    DeltaValue,
     SerializerProtocol,
     get_checkpoint_id,
     get_checkpoint_metadata,
@@ -120,51 +122,75 @@ class InMemorySaver(
     ) -> bool | None:
         return self.stack.__exit__(__exc_type, __exc_value, __traceback)
 
+    supports_delta_channels: bool = True
+
     def _load_blobs(
-        self, thread_id: str, checkpoint_ns: str, versions: ChannelVersions
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        versions: ChannelVersions,
+        checkpoint_id: str = "",
     ) -> dict[str, Any]:
         channel_values: dict[str, Any] = {}
+        delta_channels: list[str] = []
         for k, v in versions.items():
             kk = (thread_id, checkpoint_ns, k, v)
             if kk not in self.blobs:
                 continue
             vv = self.blobs[kk]
-            if vv[0] != "empty":
+            if vv[0] == "delta":
+                delta_channels.append(k)
+            elif vv[0] != "empty":
                 channel_values[k] = self.serde.loads_typed(vv)
+        for channel in delta_channels:
+            channel_values[channel] = self._assemble_delta_chain(
+                thread_id, checkpoint_ns, checkpoint_id, channel
+            )
         return channel_values
 
-    def get_channel_blob(
+    def _assemble_delta_chain(
         self,
         thread_id: str,
         checkpoint_ns: str,
         checkpoint_id: str,
         channel: str,
-    ) -> Any:
-        """Fast-path blob lookup: checkpoint → channel version → blob."""
+    ) -> DeltaChainValue:
+        """Walk the checkpoint parent tree to collect all delta blobs for a channel."""
         ns_storage = self.storage.get(thread_id, {}).get(checkpoint_ns, {})
-        entry = ns_storage.get(checkpoint_id)
-        if entry is None:
-            return NotImplemented
-        checkpoint = self.serde.loads_typed(entry[0])
-        version = checkpoint["channel_versions"].get(channel)
-        if version is None:
-            return NotImplemented
-        kk = (thread_id, checkpoint_ns, channel, version)
-        if kk not in self.blobs:
-            return NotImplemented
-        vv = self.blobs[kk]
-        if vv[0] == "empty":
-            return NotImplemented
-        return self.serde.loads_typed(vv)
-
-    async def aget_channel_blob(
-        self,
-        thread_id: str,
-        checkpoint_ns: str,
-        checkpoint_id: str,
-        channel: str,
-    ) -> Any:
-        return self.get_channel_blob(thread_id, checkpoint_ns, checkpoint_id, channel)
+        blobs: list[Any] = []
+        current_id: str | None = checkpoint_id
+        seen_versions: set[str] = set()
+        while current_id is not None:
+            entry = ns_storage.get(current_id)
+            if entry is None:
+                break
+            checkpoint = self.serde.loads_typed(entry[0])
+            version = checkpoint["channel_versions"].get(channel)
+            if version is None:
+                break  # channel not yet in this checkpoint
+            _, _, current_id = entry  # advance to parent before the continue/break
+            if version in seen_versions:
+                continue  # same blob already collected; keep walking to older checkpoints
+            seen_versions.add(version)
+            kk = (thread_id, checkpoint_ns, channel, version)
+            if kk not in self.blobs:
+                break
+            vv = self.blobs[kk]
+            if vv[0] == "empty":
+                break
+            blob = self.serde.loads_typed(vv)
+            blobs.append(blob)
+            if not isinstance(blob, DeltaValue):
+                break  # hit a snapshot (plain list) — chain root found
+        blobs.reverse()
+        base = None
+        deltas: list[list[Any]] = []
+        for blob in blobs:
+            if isinstance(blob, DeltaValue):
+                deltas.append(blob.delta)
+            else:
+                base = blob
+        return DeltaChainValue(base=base, deltas=deltas)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.
@@ -192,7 +218,10 @@ class InMemorySaver(
                     checkpoint={
                         **checkpoint_,
                         "channel_values": self._load_blobs(
-                            thread_id, checkpoint_ns, checkpoint_["channel_versions"]
+                            thread_id,
+                            checkpoint_ns,
+                            checkpoint_["channel_versions"],
+                            checkpoint_id,
                         ),
                     },
                     metadata=self.serde.loads_typed(metadata),
@@ -228,7 +257,10 @@ class InMemorySaver(
                     checkpoint={
                         **checkpoint_,
                         "channel_values": self._load_blobs(
-                            thread_id, checkpoint_ns, checkpoint_["channel_versions"]
+                            thread_id,
+                            checkpoint_ns,
+                            checkpoint_["channel_versions"],
+                            checkpoint_id,
                         ),
                     },
                     metadata=self.serde.loads_typed(metadata),
@@ -338,6 +370,7 @@ class InMemorySaver(
                                 thread_id,
                                 checkpoint_ns,
                                 checkpoint_["channel_versions"],
+                                checkpoint_id,
                             ),
                         },
                         metadata=metadata,

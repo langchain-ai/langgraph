@@ -263,7 +263,7 @@ class JsonPlusSerializer(SerializerProtocol):
         elif isinstance(obj, bytearray):
             return "bytearray", obj
         elif _is_delta_value(obj):
-            return "delta", _msgpack_enc({"d": obj.delta, "c": obj.prev_checkpoint_id})
+            return "delta", _msgpack_enc({"d": obj.delta})
         else:
             try:
                 return "msgpack", _msgpack_enc(obj)
@@ -292,7 +292,7 @@ class JsonPlusSerializer(SerializerProtocol):
             raw = ormsgpack.unpackb(
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
-            return DeltaValue(delta=raw["d"], prev_checkpoint_id=raw.get("c"))
+            return DeltaValue(delta=raw["d"])
         elif self.pickle_fallback and type_ == "pickle":
             return pickle.loads(data_)
         else:

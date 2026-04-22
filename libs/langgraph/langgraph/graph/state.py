@@ -1082,6 +1082,27 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             CompiledStateGraph: The compiled `StateGraph`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
+
+        # Warn early if DeltaChannel channels are paired with an incompatible checkpointer.
+        if checkpointer is not None and checkpointer is not False:
+            from langgraph.channels.delta import DeltaChannel
+
+            delta_keys = [
+                k for k, v in self.channels.items() if isinstance(v, DeltaChannel)
+            ]
+            if delta_keys and not getattr(
+                checkpointer, "supports_delta_channels", False
+            ):
+                warnings.warn(
+                    f"Channel(s) {delta_keys} use DeltaChannel but "
+                    f"{type(checkpointer).__name__} does not support incremental "
+                    "channel storage (supports_delta_channels=False). "
+                    "Loading the graph will raise a ValueError. "
+                    "Use InMemorySaver or PostgresSaver.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
         serde_allowlist: set[tuple[str, ...]] | None = None
         if _serde.STRICT_MSGPACK_ENABLED:
             schema_types: list[type[Any]] = [

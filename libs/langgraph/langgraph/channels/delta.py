@@ -47,7 +47,6 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         "snapshot_every",
         "_pending",
         "_base_version",
-        "_last_checkpoint_id",
         "_overwritten",
         "_steps_since_snapshot",
     )
@@ -74,7 +73,6 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
             self.value = []
         self._pending: list[Any] = []
         self._base_version: str | None = None
-        self._last_checkpoint_id: str | None = None
         self._overwritten: bool = False
         self._steps_since_snapshot: int = 0
 
@@ -104,7 +102,6 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         new.value = self.value if self.value is MISSING else self.value.copy()
         new._pending = self._pending[:]
         new._base_version = self._base_version
-        new._last_checkpoint_id = self._last_checkpoint_id
         new._overwritten = self._overwritten
         new._steps_since_snapshot = self._steps_since_snapshot
         return new
@@ -126,12 +123,10 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
             # the right time regardless of how many prior invocations there were.
             new._steps_since_snapshot = len(checkpoint.deltas)
         elif isinstance(checkpoint, DeltaValue):
-            # Should never reach here — the pregel layer assembles DeltaValues
-            # into DeltaChainValue before calling from_checkpoint.
-            raise AssertionError(
-                "DeltaChannel.from_checkpoint received a raw DeltaValue. "
-                "This is a bug in the pregel layer — chain assembly should have "
-                "occurred before from_checkpoint was called."
+            raise ValueError(
+                f"Channel '{self.key}' uses DeltaChannel but the checkpointer "
+                "does not support incremental storage (supports_delta_channels=False). "
+                "Use InMemorySaver or PostgresSaver, or remove DeltaChannel from your schema."
             )
         else:
             # Backwards compat: plain list from old BinaryOperatorAggregate checkpoint.
@@ -189,10 +184,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
             # The saver stores this as a plain (non-diff) blob, so future
             # deltas will chain back to it and traversal depth resets to 1.
             return list(self.value)
-        return DeltaValue(
-            delta=self._pending[:],
-            prev_checkpoint_id=None if self._overwritten else self._last_checkpoint_id,
-        )
+        return DeltaValue(delta=self._pending[:])
 
     def after_checkpoint(self, version: Any, checkpoint_id: str | None = None) -> None:
         if version != self._base_version:
@@ -204,6 +196,5 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
                 else:
                     self._steps_since_snapshot += 1
             self._base_version = version
-            self._last_checkpoint_id = checkpoint_id
             self._pending = []
             self._overwritten = False

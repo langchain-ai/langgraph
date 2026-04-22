@@ -1004,24 +1004,9 @@ def test_delta_value_serde_round_trip() -> None:
     from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
     serde = JsonPlusSerializer()
-    original = DeltaValue(
-        delta=[{"type": "human", "content": "hi"}], prev_checkpoint_id="abc-123"
-    )
+    original = DeltaValue(delta=[{"type": "human", "content": "hi"}])
     type_tag, blob = serde.dumps_typed(original)
     assert type_tag == "delta"
     loaded = serde.loads_typed((type_tag, blob))
     assert isinstance(loaded, DeltaValue)
     assert loaded.delta == original.delta
-    assert loaded.prev_checkpoint_id == "abc-123"
-
-
-def test_delta_value_serde_chain_root() -> None:
-    from langgraph.checkpoint.base import DeltaValue
-    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-
-    serde = JsonPlusSerializer()
-    original = DeltaValue(delta=[], prev_checkpoint_id=None)
-    type_tag, blob = serde.dumps_typed(original)
-    loaded = serde.loads_typed((type_tag, blob))
-    assert isinstance(loaded, DeltaValue)
-    assert loaded.prev_checkpoint_id is None
