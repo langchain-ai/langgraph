@@ -56,9 +56,10 @@ def _build_ignore_spec(
     return pathspec.PathSpec.from_lines("gitwildmatch", lines)
 
 
-def _is_always_excluded(path: pathlib.PurePosixPath) -> bool:
+def _is_always_excluded(path: pathlib.PurePosixPath, *, is_dir: bool) -> bool:
     """Whether `path` lives inside a built-in excluded directory."""
-    return any(part in _ALWAYS_EXCLUDE_NAMES for part in path.parts)
+    parent_parts = path.parts if is_dir else path.parts[:-1]
+    return any(part in _ALWAYS_EXCLUDE_NAMES for part in parent_parts)
 
 
 def _build_dockerignore_negation_hints(

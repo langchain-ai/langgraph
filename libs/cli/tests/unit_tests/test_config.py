@@ -2124,7 +2124,9 @@ def test_config_to_docker_uv_lock_prunes_unrelated_ignored_subtrees():
                 raise AssertionError("should not walk unrelated ignored subtree")
             return original_iterdir(self)
 
-        with patch.object(pathlib.Path, "iterdir", autospec=True, side_effect=guarded_iterdir):
+        with patch.object(
+            pathlib.Path, "iterdir", autospec=True, side_effect=guarded_iterdir
+        ):
             docker, _ = config_to_docker(
                 project_root / "langgraph.json",
                 config,

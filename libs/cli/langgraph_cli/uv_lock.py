@@ -458,10 +458,12 @@ def _uv_lock_package_copy_items(
         relative_root = pathlib.PurePosixPath(
             *package.root.relative_to(plan.project_root).parts
         )
-        if ignore_spec.match_file(f"{relative_root.as_posix()}/"):
+        if _is_always_excluded(relative_root, is_dir=True) or ignore_spec.match_file(
+            f"{relative_root.as_posix()}/"
+        ):
             raise click.UsageError(
                 f"Workspace member '{package.name}' at {relative_root} is "
-                "matched by .dockerignore, but uv.lock requires "
+                "excluded from the Docker build context, but uv.lock requires "
                 "it to be copied into the build context. Remove the matching "
                 "pattern or drop the member from [tool.uv.workspace].members."
             )
@@ -484,10 +486,9 @@ def _uv_lock_package_copy_items(
             relative_child = pathlib.PurePosixPath(
                 *child.relative_to(plan.project_root).parts
             )
-            if _is_always_excluded(relative_child):
-                continue
-
             is_dir = child.is_dir()
+            if _is_always_excluded(relative_child, is_dir=is_dir):
+                continue
             ignored = ignore_spec.match_file(
                 f"{relative_child.as_posix()}/" if is_dir else relative_child.as_posix()
             )
