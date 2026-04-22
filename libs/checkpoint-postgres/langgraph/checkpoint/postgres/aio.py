@@ -400,36 +400,42 @@ class AsyncPostgresSaver(BasePostgresSaver):
         channel: str,
         cur: Any,
     ) -> list[Any]:
-        """Fetch writes for `channel` across the checkpoint ancestor chain, oldest→newest (async)."""
+        """Fetch writes for `channel` across the checkpoint ancestor chain, oldest→newest (async).
+
+        Two queries instead of a recursive CTE — see sync version for rationale.
+        """
         await cur.execute(
-            """
-            WITH RECURSIVE chain(cid, depth) AS (
-                SELECT parent_checkpoint_id, 0
-                FROM checkpoints
-                WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s
-                UNION ALL
-                SELECT c.parent_checkpoint_id, ch.depth + 1
-                FROM checkpoints c
-                JOIN chain ch ON c.checkpoint_id = ch.cid
-                WHERE ch.cid IS NOT NULL
-            )
-            SELECT cw.type, cw.blob
-            FROM checkpoint_writes cw
-            JOIN chain ON cw.checkpoint_id = chain.cid
-            WHERE cw.thread_id = %s AND cw.checkpoint_ns = %s AND cw.channel = %s
-            ORDER BY chain.depth DESC, cw.task_id, cw.idx
-            """,
-            (
-                thread_id,
-                checkpoint_ns,
-                checkpoint_id,
-                thread_id,
-                checkpoint_ns,
-                channel,
-            ),
+            "SELECT checkpoint_id, parent_checkpoint_id FROM checkpoints "
+            "WHERE thread_id = %s AND checkpoint_ns = %s",
+            (thread_id, checkpoint_ns),
+        )
+        parent_map: dict[str, str | None] = {
+            row["checkpoint_id"]: row["parent_checkpoint_id"]
+            for row in await cur.fetchall()
+        }
+        ancestor_ids: list[str] = []
+        cid: str | None = parent_map.get(checkpoint_id)
+        while cid is not None:
+            ancestor_ids.append(cid)
+            cid = parent_map.get(cid)
+        if not ancestor_ids:
+            return []
+        await cur.execute(
+            "SELECT checkpoint_id, type, blob FROM checkpoint_writes "
+            "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
+            "  AND checkpoint_id = ANY(%s) "
+            "ORDER BY task_id, idx",
+            (thread_id, checkpoint_ns, channel, ancestor_ids),
         )
         rows = await cur.fetchall()
-        return [self.serde.loads_typed((row["type"], row["blob"])) for row in rows]
+        writes_by_cp: dict[str, list[tuple[str, bytes]]] = defaultdict(list)
+        for row in rows:
+            writes_by_cp[row["checkpoint_id"]].append((row["type"], row["blob"]))
+        result = []
+        for cid in reversed(ancestor_ids):
+            for type_tag, blob in writes_by_cp.get(cid, []):
+                result.append(self.serde.loads_typed((type_tag, blob)))
+        return result
 
     async def aget_channel_writes(
         self, config: RunnableConfig, channel: str

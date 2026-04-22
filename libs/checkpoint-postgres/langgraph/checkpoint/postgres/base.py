@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 import warnings
+from collections import defaultdict
 from collections.abc import Sequence
 from importlib.metadata import version as get_version
 from typing import Any, cast
@@ -222,37 +223,46 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         channel: str,
         cur: Any,
     ) -> list[Any]:
-        """Fetch writes for `channel` across the checkpoint ancestor chain, oldest→newest."""
+        """Fetch writes for `channel` across the checkpoint ancestor chain, oldest→newest.
+
+        Two queries instead of a recursive CTE:
+        1. Fetch all (checkpoint_id, parent_checkpoint_id) for the thread — cheap, just IDs.
+        2. Walk the ancestor chain in Python, then fetch writes with a plain ANY() filter.
+        """
         cur.execute(
-            """
-            WITH RECURSIVE chain(cid, depth) AS (
-                SELECT parent_checkpoint_id, 0
-                FROM checkpoints
-                WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s
-                UNION ALL
-                SELECT c.parent_checkpoint_id, ch.depth + 1
-                FROM checkpoints c
-                JOIN chain ch ON c.checkpoint_id = ch.cid
-                WHERE ch.cid IS NOT NULL
-            )
-            SELECT cw.type, cw.blob
-            FROM checkpoint_writes cw
-            JOIN chain ON cw.checkpoint_id = chain.cid
-            WHERE cw.thread_id = %s AND cw.checkpoint_ns = %s AND cw.channel = %s
-            ORDER BY chain.depth DESC, cw.task_id, cw.idx
-            """,
-            (
-                thread_id,
-                checkpoint_ns,
-                checkpoint_id,
-                thread_id,
-                checkpoint_ns,
-                channel,
-            ),
+            "SELECT checkpoint_id, parent_checkpoint_id FROM checkpoints "
+            "WHERE thread_id = %s AND checkpoint_ns = %s",
+            (thread_id, checkpoint_ns),
         )
-        return [
-            self.serde.loads_typed((row["type"], row["blob"])) for row in cur.fetchall()
-        ]
+        parent_map: dict[str, str | None] = {
+            row["checkpoint_id"]: row["parent_checkpoint_id"] for row in cur.fetchall()
+        }
+        # Walk newest→oldest starting from the current checkpoint's parent.
+        # Writes stored under checkpoint C produced the state *after* C, so we
+        # want ancestors of the current checkpoint (not the checkpoint itself).
+        ancestor_ids: list[str] = []
+        cid: str | None = parent_map.get(checkpoint_id)
+        while cid is not None:
+            ancestor_ids.append(cid)
+            cid = parent_map.get(cid)
+        if not ancestor_ids:
+            return []
+        cur.execute(
+            "SELECT checkpoint_id, type, blob FROM checkpoint_writes "
+            "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
+            "  AND checkpoint_id = ANY(%s) "
+            "ORDER BY task_id, idx",
+            (thread_id, checkpoint_ns, channel, ancestor_ids),
+        )
+        writes_by_cp: dict[str, list[tuple[str, bytes]]] = defaultdict(list)
+        for row in cur.fetchall():
+            writes_by_cp[row["checkpoint_id"]].append((row["type"], row["blob"]))
+        # ancestor_ids is newest→oldest; replay oldest→newest
+        result = []
+        for cid in reversed(ancestor_ids):
+            for type_tag, blob in writes_by_cp.get(cid, []):
+                result.append(self.serde.loads_typed((type_tag, blob)))
+        return result
 
     def _dump_blobs(
         self,
