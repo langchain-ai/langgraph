@@ -41,8 +41,6 @@ class DeltaChannel(
     def __init__(
         self,
         operator: Callable[[list[Value], Any], list[Value]],
-        *,
-        snapshot_every: int | None = None,  # reserved for future use
     ) -> None:
         super().__init__(list)
         self.operator = operator
@@ -83,8 +81,11 @@ class DeltaChannel(
             except Exception:
                 new.value = []
         elif isinstance(checkpoint, list):
-            # Flat list of individual write values (oldest→newest) from get_channel_writes.
-            value: Any = new.typ()
+            # Flat list of write values (oldest→newest) from get_channel_writes.
+            try:
+                value: Any = new.typ()
+            except Exception:
+                value = []
             for write in checkpoint:
                 value = new.operator(value, write)
             new.value = value

@@ -153,7 +153,7 @@ class InMemorySaver(
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = config["configurable"].get("checkpoint_id", "")
         ns_storage = self.storage.get(thread_id, {}).get(checkpoint_ns, {})
-        # Walk the parent chain, collecting checkpoint IDs oldest→newest.
+        # Walk the parent chain newest→oldest collecting checkpoint IDs.
         chain: list[str] = []
         current: str | None = checkpoint_id
         while current is not None:
@@ -163,7 +163,7 @@ class InMemorySaver(
             chain.append(current)
             _, _, parent = entry
             current = parent
-        # Collect writes for `channel` from each checkpoint in oldest→newest order.
+        # Collect writes oldest→newest.
         result: list[Any] = []
         for cp_id in reversed(chain):
             step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
