@@ -17,7 +17,6 @@ import time
 from typing import Annotated, Any
 
 import pytest
-
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
@@ -348,7 +347,9 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="slow benchmark — run manually with: python tests/test_delta_channel_benchmark.py")
+@pytest.mark.skip(
+    reason="slow benchmark — run manually with: python tests/test_delta_channel_benchmark.py"
+)
 def test_delta_channel_benchmark(capsys: Any) -> None:
     """Storage grows O(N²) for add_messages, O(N) for DeltaChannel."""
     with capsys.disabled():
