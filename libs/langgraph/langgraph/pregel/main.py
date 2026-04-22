@@ -3639,11 +3639,7 @@ def _get_pending_interrupt_task_ids(saved: CheckpointTuple) -> set[str]:
     Returns:
         Set of task IDs that have INTERRUPT in their pending writes
     """
-    return {
-        pw[0]
-        for pw in saved.pending_writes or []
-        if pw[1] == INTERRUPT
-    }
+    return {pw[0] for pw in saved.pending_writes or [] if pw[1] == INTERRUPT}
 
 
 def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str]]:
