@@ -126,6 +126,15 @@ class DeltaState(TypedDict):
     messages: Annotated[list, DeltaChannel(add_messages)]
 
 
+_SNAPSHOT_EVERY = 25
+
+
+class DeltaSnapshotState(TypedDict):
+    messages: Annotated[
+        list, DeltaChannel(add_messages, snapshot_every=_SNAPSHOT_EVERY)
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Graph factory
 # ---------------------------------------------------------------------------
@@ -223,6 +232,10 @@ def _approx_tokens(n_turns: int) -> str:
 # Extrapolation: 5,000 turns × ~200 tokens/turn ≈ 1M tokens (Claude's full context window).
 TURN_COUNTS = [10, 25, 50, 100, 500]
 
+# Snapshot-only counts: pure delta replay becomes painful past 500 turns and
+# add_messages storage balloons past 1 GB, so only the snapshot variant runs here.
+SNAPSHOT_ONLY_TURN_COUNTS = [1000]
+
 
 def _checkpointer_factories() -> list[tuple[str, Any]]:
     """Return (label, context_manager_or_none) pairs for available checkpointers."""
@@ -278,52 +291,78 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
                 with SqliteSaver.from_conn_string(f.name) as saver:
                     yield saver
 
-    rows = []
+    rows: list[tuple[int, Any, Any, Any, Any, Any, Any]] = []
     for turns in TURN_COUNTS:
         with _make_saver() as saver:
-            b_wt, b_rt, b_bytes = _run_turns(turns, BinaryState, saver)
+            _, b_rt, b_bytes = _run_turns(turns, BinaryState, saver)
         with _make_saver() as saver:
-            d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
-        rows.append((turns, b_bytes, d_bytes, b_rt, d_rt))
+            _, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
+        with _make_saver() as saver:
+            _, s_rt, s_bytes = _run_turns(turns, DeltaSnapshotState, saver)
+        rows.append((turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt))
+    for turns in SNAPSHOT_ONLY_TURN_COUNTS:
+        with _make_saver() as saver:
+            _, s_rt, s_bytes = _run_turns(turns, DeltaSnapshotState, saver)
+        rows.append((turns, None, None, s_bytes, None, None, s_rt))
 
     # ── Table 1: Storage ─────────────────────────────────────────────────────
-    W = 60
+    W = 78
     print("Storage (checkpoint blob bytes)")
     print("=" * W)
     print(
-        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}  {'savings':>8}"
+        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}  "
+        f"{'delta+snap':>12}  {'savings':>8}"
     )
     print("-" * W)
-    for turns, b_bytes, d_bytes, b_rt, d_rt in rows:
-        if b_bytes < 0:
-            print(
-                f"{turns:>6}  {_approx_tokens(turns):>10}  {'n/a':>12}  {'n/a':>12}  {'n/a':>8}"
-            )
+
+    def _bytes_or_na(v: Any) -> str:
+        if v is None:
+            return "n/a"
+        if v < 0:
+            return "n/a"
+        return _fmt_bytes(v)
+
+    def _ms_or_na(v: Any) -> str:
+        return "n/a" if v is None else f"{v * 1000:.1f}ms"
+
+    for turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt in rows:
+        if b_bytes is None or b_bytes < 0 or d_bytes is None or d_bytes < 0:
+            ratio_str = "n/a"
         else:
             ratio = b_bytes / d_bytes if d_bytes else float("inf")
-            print(
-                f"{turns:>6}  {_approx_tokens(turns):>10}  "
-                f"{_fmt_bytes(b_bytes):>12}  {_fmt_bytes(d_bytes):>12}  {ratio:>7.0f}x"
-            )
+            ratio_str = f"{ratio:.0f}x"
+        print(
+            f"{turns:>6}  {_approx_tokens(turns):>10}  "
+            f"{_bytes_or_na(b_bytes):>12}  {_bytes_or_na(d_bytes):>12}  "
+            f"{_bytes_or_na(s_bytes):>12}  {ratio_str:>8}"
+        )
     print("=" * W)
     print()
 
     # ── Table 2: Read latency ─────────────────────────────────────────────────
     print("Read latency (avg of 5 get_state calls = cost per invoke)")
     print("=" * W)
-    print(f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}")
+    print(
+        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}  "
+        f"{'delta+snap':>12}"
+    )
     print("-" * W)
-    for turns, b_bytes, d_bytes, b_rt, d_rt in rows:
+    for turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt in rows:
         print(
             f"{turns:>6}  {_approx_tokens(turns):>10}  "
-            f"{b_rt * 1000:>10.1f}ms  {d_rt * 1000:>10.1f}ms"
+            f"{_ms_or_na(b_rt):>12}  {_ms_or_na(d_rt):>12}  "
+            f"{_ms_or_na(s_rt):>12}"
         )
     print("=" * W)
     print()
 
     print("Legend:")
-    print("  add_msgs = Annotated[list, add_messages]  — O(N²) storage")
-    print("  delta    = DeltaChannel(add_messages)     — O(N) storage")
+    print("  add_msgs   = Annotated[list, add_messages]  — O(N²) storage")
+    print("  delta      = DeltaChannel(add_messages)     — O(N) storage")
+    print(
+        f"  delta+snap = DeltaChannel(add_messages, snapshot_every={_SNAPSHOT_EVERY})"
+        "  — O(N) storage, bounded read"
+    )
     print()
 
 

@@ -235,13 +235,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         1. Fetch all (checkpoint_id, parent_checkpoint_id) for the thread.
         2. Walk ancestry in Python, then fetch writes with a plain ANY() filter.
         """
-        # Lazy import: mirrors the Send pattern in the serializer.
-        try:
-            from langgraph.types import (
-                Overwrite,  # type: ignore[import-untyped,import-not-found]
-            )
-        except ImportError:
-            Overwrite = None  # type: ignore[assignment]
+        from langgraph.types import Overwrite  # type: ignore[import-untyped]
 
         cur.execute(
             "SELECT checkpoint_id, parent_checkpoint_id FROM checkpoints "
@@ -274,7 +268,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             for type_tag, blob in writes_by_cp.get(cid, []):
                 val = self.serde.loads_typed((type_tag, blob))
                 collected.append(val)
-                if Overwrite is not None and isinstance(val, Overwrite):
+                if isinstance(val, Overwrite):
                     collected.reverse()
                     return collected
         collected.reverse()

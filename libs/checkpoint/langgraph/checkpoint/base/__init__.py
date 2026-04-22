@@ -4,9 +4,10 @@ import copy
 import logging
 import threading
 from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
-from typing import (
+from typing import (  # noqa: UP035
     Any,
     Generic,
+    List,
     Literal,
     NamedTuple,
     TypedDict,
@@ -20,19 +21,24 @@ from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
-    DELTA_SENTINEL,
+    DELTA_SENTINEL as DELTA_SENTINEL,
+)
+from langgraph.checkpoint.serde.types import (
     ERROR,
     INTERRUPT,
     RESUME,
     SCHEDULED,
     ChannelProtocol,
-    DeltaChannelWrites,
+)
+from langgraph.checkpoint.serde.types import (
+    DeltaChannelWrites as DeltaChannelWrites,
 )
 
 V = TypeVar("V", int, float, str)
 PendingWrite = tuple[str, str, Any]
 
 _DELTA_RECONSTRUCTION: threading.local = threading.local()
+
 
 logger = logging.getLogger(__name__)
 
@@ -463,7 +469,7 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
-    def get_channel_writes(self, config: RunnableConfig, channel: str) -> list[Any]:
+    def get_channel_writes(self, config: RunnableConfig, channel: str) -> List[Any]:  # noqa: UP006
         """Collect writes for `channel` across this checkpoint's ancestry, oldest→newest.
 
         Scans newest→oldest and stops at the first `Overwrite` (either from
@@ -471,18 +477,18 @@ class BaseCheckpointSaver(Generic[V]):
         Default implementation walks the full thread history via `list()`; savers
         can override with a more efficient query (InMemorySaver and PostgresSaver
         do this).
-        """
-        try:
-            from langgraph.types import Overwrite  # type: ignore[import-not-found]
-        except ImportError:
-            Overwrite = None  # type: ignore[assignment]
 
+        `List` is used instead of `list` to avoid mypy confusing it with the
+        saver's own `list` method.
+        """
         # Guard against re-entrant calls: when list() triggers reconstruction
         # which calls list() again, the inner call returns tuples with
         # DELTA_SENTINEL in channel_values (which get_channel_writes ignores —
         # it only reads pending_writes). This breaks the recursion safely.
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
             return []
+        from langgraph.types import Overwrite  # type: ignore[import-untyped]
+
         _DELTA_RECONSTRUCTION.active = True
         try:
             collected: list[Any] = []  # newest first
@@ -498,7 +504,7 @@ class BaseCheckpointSaver(Generic[V]):
                     if ch != channel:
                         continue
                     collected.append(value)
-                    if Overwrite is not None and isinstance(value, Overwrite):
+                    if isinstance(value, Overwrite):
                         collected.reverse()
                         return collected
             collected.reverse()
@@ -508,12 +514,9 @@ class BaseCheckpointSaver(Generic[V]):
 
     async def aget_channel_writes(
         self, config: RunnableConfig, channel: str
-    ) -> list[Any]:
+    ) -> List[Any]:  # noqa: UP006
         """Async version of get_channel_writes."""
-        try:
-            from langgraph.types import Overwrite  # type: ignore[import-not-found]
-        except ImportError:
-            Overwrite = None  # type: ignore[assignment]
+        from langgraph.types import Overwrite  # type: ignore[import-untyped]
 
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
             return []
@@ -530,7 +533,7 @@ class BaseCheckpointSaver(Generic[V]):
                     if ch != channel:
                         continue
                     collected.append(value)
-                    if Overwrite is not None and isinstance(value, Overwrite):
+                    if isinstance(value, Overwrite):
                         collected.reverse()
                         return collected
             collected.reverse()
