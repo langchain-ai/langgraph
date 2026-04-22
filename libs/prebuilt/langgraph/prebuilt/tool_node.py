@@ -1201,7 +1201,11 @@ class ToolNode(RunnableCallable):
                 return await self._awrap_tool_call(tool_request, execute)
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
-            return self._wrap_tool_call(tool_request, _sync_execute)
+            # Run sync wrapper in executor to avoid blocking the event loop
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                None, self._wrap_tool_call, tool_request, _sync_execute
+            )
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
