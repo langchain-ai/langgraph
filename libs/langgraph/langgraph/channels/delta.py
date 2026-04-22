@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import collections.abc
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
@@ -9,7 +8,7 @@ from typing_extensions import Self
 
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.channels.binop import _get_overwrite, _strip_extras
+from langgraph.channels.binop import _get_overwrite
 from langgraph.errors import EmptyChannelError
 
 __all__ = ("DeltaChannel",)
@@ -39,6 +38,8 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
             messages: Annotated[list[AnyMessage], DeltaChannel(add_messages)]
             # Cap reconstruction depth (recommended for SQLite / MongoDB savers):
             messages: Annotated[list[AnyMessage], DeltaChannel(add_messages, snapshot_every=50)]
+            # Dict-type reducer (type inferred from the Annotated outer type):
+            files: Annotated[dict, DeltaChannel(merge_files)]
     """
 
     __slots__ = (
@@ -54,23 +55,13 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
     def __init__(
         self,
         operator: Callable[[list[Value], Any], list[Value]],
-        typ: type = list,
         *,
         snapshot_every: int | None = None,
     ) -> None:
-        typ = _strip_extras(typ)
-        if typ in (
-            collections.abc.Sequence,
-            collections.abc.MutableSequence,
-        ):
-            typ = list
-        super().__init__(typ)
+        super().__init__(list)
         self.operator = operator
         self.snapshot_every = snapshot_every
-        try:
-            self.value: list[Value] = typ()
-        except Exception:
-            self.value = []
+        self.value: list[Value] = []
         self._pending: list[Any] = []
         self._base_version: str | None = None
         self._overwritten: bool = False
@@ -97,7 +88,8 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         return self.typ | list[self.typ]  # type: ignore[name-defined]
 
     def copy(self) -> Self:
-        new = DeltaChannel(self.operator, self.typ, snapshot_every=self.snapshot_every)
+        new = DeltaChannel(self.operator, snapshot_every=self.snapshot_every)
+        new.typ = self.typ
         new.key = self.key
         new.value = self.value if self.value is MISSING else self.value.copy()
         new._pending = self._pending[:]
@@ -107,10 +99,14 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         return new
 
     def from_checkpoint(self, checkpoint: Any) -> Self:
-        new = DeltaChannel(self.operator, self.typ, snapshot_every=self.snapshot_every)
+        new = DeltaChannel(self.operator, snapshot_every=self.snapshot_every)
+        new.typ = self.typ
         new.key = self.key
         if checkpoint is MISSING:
-            pass
+            try:
+                new.value = new.typ()
+            except Exception:
+                new.value = []
         elif isinstance(checkpoint, DeltaChainValue):
             accumulated: list[Value] = (
                 checkpoint.base if checkpoint.base is not None else new.typ()

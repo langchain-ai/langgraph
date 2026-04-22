@@ -427,14 +427,23 @@ def test_delta_channel_inmemory_saver_assembles_chain() -> None:
     assert len(state.values["messages"]) == 4  # 2 human + 2 AI
 
 
+def _delta_channel_with_type(operator, typ):
+    """Build a DeltaChannel with an explicit type via the Annotated injection path."""
+    from typing import Annotated
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph.state import _get_channel
+
+    return _get_channel("_test", Annotated[typ, DeltaChannel(operator)])
+
+
 def test_delta_channel_dict_reducer_fresh_channel() -> None:
     """DeltaChannel with a dict reducer starts as empty dict on MISSING checkpoint."""
-    from langgraph.channels.delta import DeltaChannel
 
     def merge_dicts(left: dict, right: dict) -> dict:
         return {**left, **right}
 
-    ch = DeltaChannel(merge_dicts, dict).from_checkpoint(MISSING)
+    ch = _delta_channel_with_type(merge_dicts, dict).from_checkpoint(MISSING)
     # Should be available (not raise EmptyChannelError) and start empty
     assert ch.is_available()
     assert ch.get() == {}
@@ -444,12 +453,10 @@ def test_delta_channel_dict_reducer_basic_updates() -> None:
     """DeltaChannel with a dict reducer accumulates key/value pairs across steps."""
     from langgraph.checkpoint.base import DeltaValue
 
-    from langgraph.channels.delta import DeltaChannel
-
     def merge_dicts(left: dict, right: dict) -> dict:
         return {**left, **right}
 
-    ch = DeltaChannel(merge_dicts, dict).from_checkpoint(MISSING)
+    ch = _delta_channel_with_type(merge_dicts, dict).from_checkpoint(MISSING)
     ch.after_checkpoint(None)
 
     ch.update([{"a": 1}])
@@ -470,12 +477,10 @@ def test_delta_channel_dict_reducer_chain_reconstruction() -> None:
     """DeltaChainValue replays correctly through a dict merge reducer."""
     from langgraph.checkpoint.base import DeltaChainValue
 
-    from langgraph.channels.delta import DeltaChannel
-
     def merge_dicts(left: dict, right: dict) -> dict:
         return {**left, **right}
 
-    spec = DeltaChannel(merge_dicts, dict)
+    spec = _delta_channel_with_type(merge_dicts, dict)
     chain = DeltaChainValue(
         base={"a": 1},
         deltas=[[{"b": 2}], [{"c": 3}]],
@@ -489,8 +494,6 @@ def test_delta_channel_dict_reducer_with_deletions() -> None:
     """Dict reducer that treats None values as deletions works end-to-end (deepagents pattern)."""
     from langgraph.checkpoint.base import DeltaChainValue
 
-    from langgraph.channels.delta import DeltaChannel
-
     def merge_files(left: dict | None, right: dict) -> dict:
         if left is None:
             return {k: v for k, v in right.items() if v is not None}
@@ -502,7 +505,7 @@ def test_delta_channel_dict_reducer_with_deletions() -> None:
                 result[k] = v
         return result
 
-    ch = DeltaChannel(merge_files, dict).from_checkpoint(MISSING)
+    ch = _delta_channel_with_type(merge_files, dict).from_checkpoint(MISSING)
     ch.after_checkpoint(None)
 
     ch.update([{"file1.py": "content1", "file2.py": "content2"}])
@@ -522,6 +525,6 @@ def test_delta_channel_dict_reducer_with_deletions() -> None:
             [{"file1.py": None, "file3.py": "content3"}],
         ],
     )
-    spec = DeltaChannel(merge_files, dict)
+    spec = _delta_channel_with_type(merge_files, dict)
     ch2 = spec.from_checkpoint(chain)
     assert ch2.get() == {"file2.py": "content2", "file3.py": "content3"}
