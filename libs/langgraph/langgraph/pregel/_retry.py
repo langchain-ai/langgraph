@@ -4,9 +4,11 @@ import asyncio
 import logging
 import random
 import sys
+import threading
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -19,15 +21,171 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_TASK_TIMEOUT_FINISHED,
+    CONFIG_KEY_TASK_TIMEOUT_STARTED,
     CONFIG_KEY_THREAD_ID,
     NS_SEP,
 )
-from langgraph.errors import GraphBubbleUp, ParentCommand
+from langgraph.errors import GraphBubbleUp, NodeTimeoutError, ParentCommand
 from langgraph.runtime import ExecutionInfo, Runtime
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 
 logger = logging.getLogger(__name__)
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
+
+
+def _timeout_seconds(value: float | timedelta | None) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, timedelta):
+        return value.total_seconds()
+    return float(value)
+
+
+def _task_timeout_payload(
+    task: PregelExecutableTask, config: RunnableConfig, timeout_s: float
+) -> dict[str, Any]:
+    runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+    execution_info = runtime.execution_info if isinstance(runtime, Runtime) else None
+    started_at = datetime.now(UTC)
+    return {
+        "execution_id": ":".join(
+            part
+            for part in (
+                execution_info.run_id if execution_info is not None else None,
+                task.id,
+                str(execution_info.node_attempt if execution_info is not None else 1),
+            )
+            if part is not None
+        ),
+        "task_id": task.id,
+        "task_name": task.name,
+        "attempt": execution_info.node_attempt if execution_info is not None else 1,
+        "run_id": execution_info.run_id if execution_info is not None else None,
+        "thread_id": (
+            execution_info.thread_id
+            if execution_info is not None
+            else config.get(CONF, {}).get(CONFIG_KEY_THREAD_ID)
+        ),
+        "checkpoint_ns": (
+            execution_info.checkpoint_ns
+            if execution_info is not None
+            else config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS)
+        ),
+        "started_at": started_at.isoformat(),
+        "deadline_at": (started_at + timedelta(seconds=timeout_s)).isoformat(),
+        "timeout_secs": timeout_s,
+    }
+
+
+def _notify_task_timeout_started(
+    config: RunnableConfig, payload: dict[str, Any] | None
+) -> None:
+    if payload is None:
+        return
+    callback = config.get(CONF, {}).get(CONFIG_KEY_TASK_TIMEOUT_STARTED)
+    if callback is None:
+        return
+    try:
+        callback(payload)
+    except Exception:
+        logger.warning("Timed task start callback failed", exc_info=True)
+
+
+def _notify_task_timeout_finished(
+    config: RunnableConfig,
+    payload: dict[str, Any] | None,
+    *,
+    error: BaseException | None,
+) -> None:
+    if payload is None:
+        return
+    callback = config.get(CONF, {}).get(CONFIG_KEY_TASK_TIMEOUT_FINISHED)
+    if callback is None:
+        return
+    try:
+        callback(
+            {
+                **payload,
+                "finished_at": datetime.now(UTC).isoformat(),
+                "status": "error" if error is not None else "success",
+                "error_type": type(error).__name__ if error is not None else None,
+                "error_message": str(error) if error is not None else None,
+            }
+        )
+    except Exception:
+        logger.warning("Timed task finish callback failed", exc_info=True)
+
+
+def _invoke_with_timeout(
+    task: PregelExecutableTask, config: RunnableConfig, timeout_s: float | None
+) -> Any:
+    """Run the sync invocation under a wall-clock timeout.
+
+    Python cannot safely cancel a running thread, so if the worker exceeds
+    `timeout_s` we raise `NodeTimeoutError` and leave the thread to finish
+    on its own (daemonized, so it will not block process exit).
+    """
+    if timeout_s is None:
+        return task.proc.invoke(task.input, config)
+    result: list[Any] = []
+    exc: list[BaseException] = []
+    done = threading.Event()
+
+    def target() -> None:
+        try:
+            result.append(task.proc.invoke(task.input, config))
+        except BaseException as e:
+            exc.append(e)
+        finally:
+            done.set()
+
+    start = time.monotonic()
+    worker = threading.Thread(
+        target=target, name=f"node:{task.name}:{task.id}", daemon=True
+    )
+    worker.start()
+    if not done.wait(timeout_s):
+        elapsed = time.monotonic() - start
+        raise NodeTimeoutError(task.name, timeout_s, elapsed)
+    if exc:
+        raise exc[0]
+    return result[0]
+
+
+async def _ainvoke_with_timeout(
+    task: PregelExecutableTask, config: RunnableConfig, timeout_s: float | None
+) -> Any:
+    if timeout_s is None:
+        return await task.proc.ainvoke(task.input, config)
+    start = time.monotonic()
+    try:
+        return await asyncio.wait_for(
+            task.proc.ainvoke(task.input, config), timeout=timeout_s
+        )
+    except asyncio.TimeoutError:
+        elapsed = time.monotonic() - start
+        raise NodeTimeoutError(task.name, timeout_s, elapsed) from None
+
+
+async def _astream_with_timeout(
+    task: PregelExecutableTask, config: RunnableConfig, timeout_s: float | None
+) -> None:
+    if timeout_s is None:
+        async for _ in task.proc.astream(task.input, config):
+            pass
+        return
+    start = time.monotonic()
+
+    async def _drain() -> None:
+        async for _ in task.proc.astream(task.input, config):
+            pass
+
+    try:
+        await asyncio.wait_for(_drain(), timeout=timeout_s)
+    except asyncio.TimeoutError:
+        elapsed = time.monotonic() - start
+        raise NodeTimeoutError(task.name, timeout_s, elapsed) from None
 
 
 def _ensure_execution_info(
@@ -90,6 +248,7 @@ def run_with_retry(
 ) -> None:
     """Run a task with retries."""
     retry_policy = task.retry_policy or retry_policy
+    timeout_s = _timeout_seconds(task.timeout)
     attempts = 0
     node_first_attempt_time = time.time()
     config = task.config
@@ -123,7 +282,19 @@ def run_with_retry(
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            return task.proc.invoke(task.input, config)
+            timeout_payload = (
+                _task_timeout_payload(task, config, timeout_s)
+                if timeout_s is not None
+                else None
+            )
+            _notify_task_timeout_started(config, timeout_payload)
+            try:
+                result = _invoke_with_timeout(task, config, timeout_s)
+            except BaseException as exc:
+                _notify_task_timeout_finished(config, timeout_payload, error=exc)
+                raise
+            _notify_task_timeout_finished(config, timeout_payload, error=None)
+            return result
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
@@ -195,6 +366,7 @@ async def arun_with_retry(
 ) -> None:
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
+    timeout_s = _timeout_seconds(task.timeout)
     attempts = 0
     node_first_attempt_time = time.time()
     config = task.config
@@ -233,13 +405,30 @@ async def arun_with_retry(
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
+            timeout_payload = (
+                _task_timeout_payload(task, config, timeout_s)
+                if timeout_s is not None
+                else None
+            )
+            _notify_task_timeout_started(config, timeout_payload)
             if stream:
-                async for _ in task.proc.astream(task.input, config):
-                    pass
-                # if successful, end
-                break
+                try:
+                    await _astream_with_timeout(task, config, timeout_s)
+                except BaseException as exc:
+                    _notify_task_timeout_finished(config, timeout_payload, error=exc)
+                    raise
+                else:
+                    _notify_task_timeout_finished(config, timeout_payload, error=None)
+                    # if successful, end
+                    break
             else:
-                return await task.proc.ainvoke(task.input, config)
+                try:
+                    result = await _ainvoke_with_timeout(task, config, timeout_s)
+                except BaseException as exc:
+                    _notify_task_timeout_finished(config, timeout_payload, error=exc)
+                    raise
+                _notify_task_timeout_finished(config, timeout_payload, error=None)
+                return result
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]

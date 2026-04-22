@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from datetime import timedelta
 from functools import cached_property
 from typing import (
     Any,
@@ -123,6 +124,11 @@ class PregelNode:
     cache_policy: CachePolicy | None
     """The cache policy to use when invoking the node."""
 
+    timeout: float | timedelta | None
+    """Maximum time in seconds (or a timedelta) allowed for a single invocation
+    of this node. If exceeded, `NodeTimeoutError` is raised and the retry policy
+    (if any) decides whether to retry."""
+
     tags: Sequence[str] | None
     """Tags to attach to the node for tracing."""
 
@@ -145,6 +151,7 @@ class PregelNode:
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         subgraphs: Sequence[PregelProtocol] | None = None,
+        timeout: float | timedelta | None = None,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -156,6 +163,7 @@ class PregelNode:
             self.retry_policy = (retry_policy,)
         else:
             self.retry_policy = retry_policy
+        self.timeout = timeout
         self.tags = tags
         self.metadata = metadata
         if subgraphs is not None:

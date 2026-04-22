@@ -20,6 +20,7 @@ __all__ = (
     "GraphBubbleUp",
     "GraphInterrupt",
     "NodeInterrupt",
+    "NodeTimeoutError",
     "ParentCommand",
     "EmptyInputError",
     "TaskNotFound",
@@ -125,3 +126,23 @@ class TaskNotFound(Exception):
     """Raised when the executor is unable to find a task (for distributed mode)."""
 
     pass
+
+
+class NodeTimeoutError(TimeoutError):
+    """Raised when a node invocation exceeds its configured `timeout`.
+
+    Subclasses the built-in `TimeoutError`, so existing `except TimeoutError`
+    handlers keep working. If the node has a `retry_policy` whose `retry_on`
+    permits `TimeoutError`, the attempt will be retried.
+    """
+
+    node: str
+    elapsed: float
+
+    def __init__(self, node: str, timeout: float, elapsed: float) -> None:
+        super().__init__(
+            f"Node '{node}' exceeded its timeout of {timeout:.3f}s "
+            f"(elapsed: {elapsed:.3f}s)."
+        )
+        self.node = node
+        self.elapsed = elapsed

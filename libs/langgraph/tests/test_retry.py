@@ -1,4 +1,7 @@
+import asyncio
+import time
 from collections import deque
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import pytest
@@ -11,13 +14,18 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_TASK_TIMEOUT_FINISHED,
+    CONFIG_KEY_TASK_TIMEOUT_STARTED,
     CONFIG_KEY_THREAD_ID,
 )
-from langgraph.graph import START, StateGraph
+from langgraph.errors import NodeTimeoutError
+from langgraph.graph import END, START, StateGraph
 from langgraph.pregel._retry import (
     _checkpoint_ns_for_parent_command,
     _ensure_execution_info,
     _should_retry_on,
+    _timeout_seconds,
+    arun_with_retry,
     run_with_retry,
 )
 from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
@@ -567,3 +575,197 @@ def test_run_with_retry_creates_execution_info_when_missing():
     assert info.run_id == "run-abc"
     assert info.node_attempt == 1
     assert info.node_first_attempt_time is not None
+
+
+def _make_task(proc, *, timeout=None, retry_policy=(), name="timed", task_id="tid"):
+    runtime = DEFAULT_RUNTIME.override(execution_info=None)
+    config = {
+        "run_id": "run-x",
+        CONF: {
+            CONFIG_KEY_RUNTIME: runtime,
+            CONFIG_KEY_CHECKPOINT_ID: "cp",
+            CONFIG_KEY_CHECKPOINT_NS: f"{name}:{task_id}",
+            CONFIG_KEY_TASK_ID: task_id,
+            CONFIG_KEY_THREAD_ID: "thr",
+        },
+    }
+    return PregelExecutableTask(
+        name=name,
+        input=None,
+        proc=proc,
+        writes=deque(),
+        config=config,
+        triggers=[name],
+        retry_policy=retry_policy,
+        cache_key=None,
+        id=task_id,
+        path=("__pregel_pull", name),
+        timeout=timeout,
+    )
+
+
+def test_timeout_seconds_coercion():
+    assert _timeout_seconds(None) is None
+    assert _timeout_seconds(1.5) == 1.5
+    assert _timeout_seconds(2) == 2.0
+    assert _timeout_seconds(timedelta(milliseconds=250)) == 0.25
+
+
+def test_run_with_retry_timeout_fires_sync():
+    """Sync node that runs too long raises NodeTimeoutError with node name."""
+
+    class SlowProc:
+        def invoke(self, input, config):
+            time.sleep(1.0)
+            return input
+
+    task = _make_task(SlowProc(), timeout=0.05, name="slow")
+    with pytest.raises(NodeTimeoutError) as excinfo:
+        run_with_retry(task, retry_policy=None)
+    assert excinfo.value.node == "slow"
+    assert excinfo.value.elapsed >= 0.05
+
+
+def test_run_with_retry_timeout_ok_when_fast():
+    """Node that finishes under the timeout succeeds normally."""
+
+    class FastProc:
+        def invoke(self, input, config):
+            return "ok"
+
+    task = _make_task(FastProc(), timeout=1.0)
+    assert run_with_retry(task, retry_policy=None) == "ok"
+
+
+def test_run_with_retry_timeout_retries_when_retry_on_timeout():
+    """With retry_policy.retry_on=NodeTimeoutError, a timed-out attempt is retried."""
+    calls: list[float] = []
+
+    class FlakyProc:
+        def invoke(self, input, config):
+            calls.append(time.monotonic())
+            if len(calls) < 2:
+                time.sleep(0.5)
+                return "late"
+            return "ok"
+
+    policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.0,
+        jitter=False,
+        retry_on=NodeTimeoutError,
+    )
+    task = _make_task(FlakyProc(), timeout=0.05, retry_policy=(policy,))
+    assert run_with_retry(task, retry_policy=None) == "ok"
+    assert len(calls) == 2
+
+
+def test_run_with_retry_timeout_accepts_timedelta():
+    class SlowProc:
+        def invoke(self, input, config):
+            time.sleep(0.5)
+            return input
+
+    task = _make_task(SlowProc(), timeout=timedelta(milliseconds=50))
+    with pytest.raises(NodeTimeoutError):
+        run_with_retry(task, retry_policy=None)
+
+
+def test_arun_with_retry_timeout_fires_async():
+    class SlowProc:
+        async def ainvoke(self, input, config):
+            await asyncio.sleep(1.0)
+            return input
+
+    task = _make_task(SlowProc(), timeout=0.05, name="aslow")
+
+    async def _run():
+        with pytest.raises(NodeTimeoutError) as excinfo:
+            await arun_with_retry(task, retry_policy=None)
+        assert excinfo.value.node == "aslow"
+
+    asyncio.run(_run())
+
+
+class _TimeoutState(TypedDict):
+    x: int
+
+
+def test_state_graph_add_node_timeout_e2e():
+    """End-to-end: add_node(..., timeout=...) raises NodeTimeoutError on invoke."""
+
+    def slow(state: _TimeoutState) -> _TimeoutState:
+        time.sleep(1.0)
+        return {"x": state["x"] + 1}
+
+    builder = StateGraph(_TimeoutState)
+    builder.add_node("slow", slow, timeout=0.05)
+    builder.add_edge(START, "slow")
+    builder.add_edge("slow", END)
+    graph = builder.compile()
+
+    with pytest.raises(NodeTimeoutError):
+        graph.invoke({"x": 1})
+
+
+def test_state_graph_add_node_timeout_composes_with_retry():
+    """add_node(..., timeout=...) + retry_policy retries then succeeds."""
+
+    attempts: list[int] = []
+
+    def flaky(state: _TimeoutState) -> _TimeoutState:
+        attempts.append(len(attempts))
+        if len(attempts) < 2:
+            time.sleep(0.5)
+        return {"x": state["x"] + 1}
+
+    builder = StateGraph(_TimeoutState)
+    builder.add_node(
+        "flaky",
+        flaky,
+        timeout=0.1,
+        retry_policy=RetryPolicy(
+            max_attempts=3,
+            initial_interval=0.0,
+            jitter=False,
+            retry_on=NodeTimeoutError,
+        ),
+    )
+    builder.add_edge(START, "flaky")
+    builder.add_edge("flaky", END)
+    graph = builder.compile()
+
+    result = graph.invoke({"x": 0})
+    assert result == {"x": 1}
+    assert len(attempts) == 2
+
+
+def test_run_with_retry_timeout_callbacks_track_attempts():
+    starts: list[dict] = []
+    finishes: list[dict] = []
+
+    class FlakyProc:
+        def invoke(self, input, config):
+            runtime = config[CONF][CONFIG_KEY_RUNTIME]
+            if runtime.execution_info.node_attempt == 1:
+                time.sleep(0.2)
+            return "ok"
+
+    policy = RetryPolicy(
+        max_attempts=2,
+        initial_interval=0.0,
+        jitter=False,
+        retry_on=NodeTimeoutError,
+    )
+    task = _make_task(FlakyProc(), timeout=0.05, retry_policy=(policy,), name="flaky")
+    task.config[CONF][CONFIG_KEY_TASK_TIMEOUT_STARTED] = starts.append
+    task.config[CONF][CONFIG_KEY_TASK_TIMEOUT_FINISHED] = finishes.append
+
+    assert run_with_retry(task, retry_policy=None) == "ok"
+
+    assert [payload["attempt"] for payload in starts] == [1, 2]
+    assert [payload["attempt"] for payload in finishes] == [1, 2]
+    assert [payload["status"] for payload in finishes] == ["error", "success"]
+    assert starts[0]["execution_id"] != starts[1]["execution_id"]
+    assert starts[0]["timeout_secs"] == 0.05
+    assert starts[0]["task_name"] == "flaky"

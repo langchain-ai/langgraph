@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any, Generic, Protocol, TypeAlias
 
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -90,3 +91,4 @@ class StateNodeSpec(Generic[NodeInputT, ContextT]):
     cache_policy: CachePolicy | None
     ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
     defer: bool = False
+    timeout: float | timedelta | None = None
