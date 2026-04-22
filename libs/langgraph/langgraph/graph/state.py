@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc
 import inspect
 import logging
 import typing
@@ -47,7 +48,8 @@ from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
 from langgraph.channels.base import BaseChannel
-from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.binop import BinaryOperatorAggregate, _strip_extras
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.named_barrier_value import (
@@ -1668,6 +1670,18 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
         # Search through all annotated medata to find channel annotations
         for item in meta:
             if isinstance(item, BaseChannel):
+                if isinstance(item, DeltaChannel) and hasattr(typ, "__origin__"):
+                    outer = _strip_extras(typ.__origin__)
+                    if outer in (
+                        collections.abc.Sequence,
+                        collections.abc.MutableSequence,
+                    ):
+                        outer = list
+                    item.typ = outer
+                    try:
+                        item.value = outer()
+                    except Exception:
+                        item.value = []
                 return item
             elif isclass(item) and issubclass(item, BaseChannel):
                 # ex, Annotated[int, EphemeralValue, SomeOtherAnnotation]
