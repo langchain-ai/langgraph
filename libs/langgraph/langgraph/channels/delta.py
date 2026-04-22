@@ -86,19 +86,19 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         return self.typ
 
     def copy(self) -> Self:
-        new = DeltaChannel(self.operator, snapshot_every=self.snapshot_every)
+        new: DeltaChannel[Value] = DeltaChannel(
+            self.operator, snapshot_every=self.snapshot_every
+        )
         new.typ = self.typ
         new.key = self.key
-        new.value = (
-            self.value
-            if self.value is MISSING
-            else _copy.copy(self.value)
-        )
+        new.value = self.value if self.value is MISSING else _copy.copy(self.value)
         new._writes_since_snapshot = self._writes_since_snapshot
         return new
 
     def from_checkpoint(self, checkpoint: Any) -> Self:
-        new = DeltaChannel(self.operator, snapshot_every=self.snapshot_every)
+        new: DeltaChannel[Value] = DeltaChannel(
+            self.operator, snapshot_every=self.snapshot_every
+        )
         new.typ = self.typ
         new.key = self.key
         if checkpoint is MISSING:

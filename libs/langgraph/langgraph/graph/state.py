@@ -1671,7 +1671,15 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
         for item in meta:
             if isinstance(item, BaseChannel):
                 if isinstance(item, DeltaChannel) and hasattr(typ, "__origin__"):
-                    outer = _strip_extras(typ.__origin__)
+                    origin = typ.__origin__
+                    # Unwrap parameterized Required[X]/NotRequired[X] to X
+                    # (e.g. Annotated[NotRequired[dict[...]], ...]).
+                    if hasattr(origin, "__origin__") and origin.__origin__ in (
+                        Required,
+                        NotRequired,
+                    ):
+                        origin = origin.__args__[0]
+                    outer = _strip_extras(origin)
                     if outer in (
                         collections.abc.Sequence,
                         collections.abc.MutableSequence,
