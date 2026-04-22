@@ -475,16 +475,6 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
-    supports_delta_channels: bool = False
-    """True if this saver assembles DeltaChannel chains inside get_tuple.
-
-    Savers that set this to True (InMemorySaver, PostgresSaver) assemble the
-    full DeltaChainValue before returning from get_tuple, so the channel's
-    from_checkpoint method always receives a DeltaChainValue.  Savers that
-    leave this False will return a raw DeltaValue in channel_values, which
-    causes DeltaChannel.from_checkpoint to raise a clear error.
-    """
-
     def get_next_version(self, current: V | None, channel: None) -> V:
         """Generate the next version ID for a channel.
 

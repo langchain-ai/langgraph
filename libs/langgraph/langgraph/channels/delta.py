@@ -125,7 +125,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, DeltaValue]):
         elif isinstance(checkpoint, DeltaValue):
             raise ValueError(
                 f"Channel '{self.key}' uses DeltaChannel but the checkpointer "
-                "does not support incremental storage (supports_delta_channels=False). "
+                "does not support incremental channel storage. "
                 "Use InMemorySaver or PostgresSaver, or remove DeltaChannel from your schema."
             )
         else:
