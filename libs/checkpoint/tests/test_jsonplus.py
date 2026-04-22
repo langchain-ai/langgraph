@@ -999,14 +999,13 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     assert result == obj
 
 
-def test_delta_value_serde_round_trip() -> None:
-    from langgraph.checkpoint.base import DeltaValue
+def test_delta_channel_sentinel_serde_round_trip() -> None:
+    from langgraph.checkpoint.base import DeltaChannelSentinel
     from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
     serde = JsonPlusSerializer()
-    original = DeltaValue(delta=[{"type": "human", "content": "hi"}])
+    original = DeltaChannelSentinel()
     type_tag, blob = serde.dumps_typed(original)
     assert type_tag == "delta"
     loaded = serde.loads_typed((type_tag, blob))
-    assert isinstance(loaded, DeltaValue)
-    assert loaded.delta == original.delta
+    assert isinstance(loaded, DeltaChannelSentinel)

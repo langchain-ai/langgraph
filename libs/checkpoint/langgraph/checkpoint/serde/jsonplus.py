@@ -64,10 +64,12 @@ def _warn_once(
     logger.warning(msg, *args)
 
 
-def _is_delta_value(obj: Any) -> bool:
-    from langgraph.checkpoint.base import DeltaValue  # lazy import avoids circular dep
+def _get_delta_sentinel_cls() -> type:
+    from langgraph.checkpoint.base import (
+        DeltaChannelSentinel,
+    )  # lazy import avoids circular dep
 
-    return isinstance(obj, DeltaValue)
+    return DeltaChannelSentinel
 
 
 class JsonPlusSerializer(SerializerProtocol):
@@ -262,8 +264,8 @@ class JsonPlusSerializer(SerializerProtocol):
             return "bytes", obj
         elif isinstance(obj, bytearray):
             return "bytearray", obj
-        elif _is_delta_value(obj):
-            return "delta", _msgpack_enc({"d": obj.delta})
+        elif isinstance(obj, _get_delta_sentinel_cls()):
+            return "delta", b""
         else:
             try:
                 return "msgpack", _msgpack_enc(obj)
@@ -287,12 +289,9 @@ class JsonPlusSerializer(SerializerProtocol):
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
         elif type_ == "delta":
-            from langgraph.checkpoint.base import DeltaValue  # lazy import
+            from langgraph.checkpoint.base import DeltaChannelSentinel
 
-            raw = ormsgpack.unpackb(
-                data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            return DeltaValue(delta=raw["d"])
+            return DeltaChannelSentinel()
         elif self.pickle_fallback and type_ == "pickle":
             return pickle.loads(data_)
         else:

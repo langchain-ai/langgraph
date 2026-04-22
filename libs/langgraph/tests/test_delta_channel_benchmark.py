@@ -8,6 +8,11 @@ Simulates realistic multi-turn conversations with paragraph-length messages
 
 Token estimates: 1 token ≈ 4 chars; each turn ≈ 200 tokens (human + AI).
 A 1M-token conversation ≈ 5,000 turns of realistic messages.
+
+DeltaChannel stores only a zero-byte sentinel in checkpoint_blobs; the actual
+write data lives in checkpoint_writes (already stored there). Reconstruction
+walks the parent chain and replays writes through the operator — O(N) total
+storage vs O(N²) for plain add_messages.
 """
 
 from __future__ import annotations
@@ -41,8 +46,6 @@ try:
     )
 except ImportError:
     _POSTGRES_AVAILABLE = False
-
-SNAPSHOT_EVERY = 50
 
 # ---------------------------------------------------------------------------
 # Realistic message payload (~100 tokens / ~400 chars each)
@@ -119,10 +122,6 @@ class BinaryState(TypedDict):
 
 class DeltaState(TypedDict):
     messages: Annotated[list, DeltaChannel(add_messages)]
-
-
-class DeltaSnapshotState(TypedDict):
-    messages: Annotated[list, DeltaChannel(add_messages, snapshot_every=SNAPSHOT_EVERY)]
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +238,12 @@ def run_benchmark() -> None:
 
     checkpointers: list[tuple[str, Any]] = [("InMemory", None)]
     if _POSTGRES_AVAILABLE:
-        checkpointers.append(("Postgres (recursive CTE)", "postgres"))
+        try:
+            import psycopg
+            psycopg.connect(_POSTGRES_URI).close()
+            checkpointers.append(("Postgres (recursive CTE)", "postgres"))
+        except Exception:
+            pass
 
     for cp_label, cp_hint in checkpointers:
         print(f"--- Checkpointer: {cp_label} ---")
@@ -277,30 +281,28 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
             b_wt, b_rt, b_bytes = _run_turns(turns, BinaryState, saver)
         with _make_saver() as saver:
             d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
-        with _make_saver() as saver:
-            s_wt, s_rt, s_bytes = _run_turns(turns, DeltaSnapshotState, saver)
-        rows.append((turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt))
+        rows.append((turns, b_bytes, d_bytes, b_rt, d_rt))
 
     # ── Table 1: Storage ─────────────────────────────────────────────────────
-    W = 80
+    W = 70
     print("Storage (checkpoint blob bytes)")
     print("=" * W)
     print(
-        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}  {'delta+snap':>12}  {'savings':>8}"
+        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}  {'savings':>8}"
     )
     print("-" * W)
     storage_results = []
-    for turns, b_bytes, d_bytes, s_bytes, *_ in rows:
+    for turns, b_bytes, d_bytes, *_ in rows:
         if b_bytes < 0:
             print(
-                f"{turns:>6}  {_approx_tokens(turns):>10}  {'n/a':>12}  {'n/a':>12}  {'n/a':>12}  {'n/a':>8}"
+                f"{turns:>6}  {_approx_tokens(turns):>10}  {'n/a':>12}  {'n/a':>12}  {'n/a':>8}"
             )
         else:
-            ratio = b_bytes / s_bytes if s_bytes else float("inf")
-            storage_results.append((turns, b_bytes, s_bytes, ratio))
+            ratio = b_bytes / d_bytes if d_bytes else float("inf")
+            storage_results.append((turns, b_bytes, d_bytes, ratio))
             print(
                 f"{turns:>6}  {_approx_tokens(turns):>10}  "
-                f"{_fmt_bytes(b_bytes):>12}  {_fmt_bytes(d_bytes):>12}  {_fmt_bytes(s_bytes):>12}  "
+                f"{_fmt_bytes(b_bytes):>12}  {_fmt_bytes(d_bytes):>12}  "
                 f"{ratio:>7.0f}x"
             )
     print("=" * W)
@@ -310,35 +312,30 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
     print("Read latency (avg of 5 get_state calls)")
     print("=" * W)
     print(
-        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}  {'delta+snap':>12}"
+        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}"
     )
     print("-" * W)
-    for turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt in rows:
+    for turns, b_bytes, d_bytes, b_rt, d_rt in rows:
         print(
             f"{turns:>6}  {_approx_tokens(turns):>10}  "
-            f"{b_rt * 1000:>10.1f}ms  {d_rt * 1000:>10.1f}ms  {s_rt * 1000:>10.1f}ms"
+            f"{b_rt * 1000:>10.1f}ms  {d_rt * 1000:>10.1f}ms"
         )
     print("=" * W)
     print()
 
     if storage_results:
         best = storage_results[-1]
-        turns, b_bytes, s_bytes, ratio = best
-        _, _, _, _, b_rt, _, s_rt = rows[-1]
+        turns, b_bytes, d_bytes, ratio = best
+        _, _, _, b_rt, d_rt = rows[-1]
         print(
-            f"At {turns} turns: {_fmt_bytes(b_bytes)} → {_fmt_bytes(s_bytes)} ({ratio:.0f}x less storage); "
-            f"read {b_rt * 1000:.1f}ms → {s_rt * 1000:.1f}ms"
+            f"At {turns} turns: {_fmt_bytes(b_bytes)} → {_fmt_bytes(d_bytes)} ({ratio:.0f}x less storage); "
+            f"read {b_rt * 1000:.1f}ms → {d_rt * 1000:.1f}ms"
         )
         print()
 
     print("Legend:")
-    print("  add_msgs    = Annotated[list, add_messages]              — O(N²) storage")
-    print(
-        "  delta       = DeltaChannel(add_messages)                 — O(N) storage, unbounded chain"
-    )
-    print(
-        f"  delta+snap  = DeltaChannel(add_messages, snapshot_every={SNAPSHOT_EVERY})  — O(N) storage, bounded read depth"
-    )
+    print("  add_msgs = Annotated[list, add_messages]  — O(N²) storage")
+    print("  delta    = DeltaChannel(add_messages)     — O(N) storage, reconstructed from writes")
     print()
 
 
@@ -359,14 +356,9 @@ def test_delta_channel_benchmark(capsys: Any) -> None:
     for turns in [25, 50]:
         _, _, b_bytes = _run_turns(turns, BinaryState)
         _, _, d_bytes = _run_turns(turns, DeltaState)
-        _, _, s_bytes = _run_turns(turns, DeltaSnapshotState)
         assert d_bytes < b_bytes, (
             f"DeltaChannel should use less storage at {turns} turns, "
             f"got delta={d_bytes} binary={b_bytes}"
-        )
-        assert s_bytes < b_bytes, (
-            f"DeltaChannel+snapshot should use less storage at {turns} turns, "
-            f"got snapshot={s_bytes} binary={b_bytes}"
         )
 
 
