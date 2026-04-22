@@ -400,10 +400,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         channel: str,
         cur: Any,
     ) -> list[Any]:
-        """Fetch writes for `channel` across the checkpoint ancestor chain, oldest→newest (async).
-
-        Two queries instead of a recursive CTE — see sync version for rationale.
-        """
+        """Async version of _get_channel_writes_cur — see sync version for rationale."""
         await cur.execute(
             "SELECT checkpoint_id, parent_checkpoint_id FROM checkpoints "
             "WHERE thread_id = %s AND checkpoint_ns = %s",
@@ -427,9 +424,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
             "ORDER BY task_id, idx",
             (thread_id, checkpoint_ns, channel, ancestor_ids),
         )
-        rows = await cur.fetchall()
         writes_by_cp: dict[str, list[tuple[str, bytes]]] = defaultdict(list)
-        for row in rows:
+        for row in await cur.fetchall():
             writes_by_cp[row["checkpoint_id"]].append((row["type"], row["blob"]))
         result = []
         for cid in reversed(ancestor_ids):

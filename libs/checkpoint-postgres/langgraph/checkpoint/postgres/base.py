@@ -225,8 +225,8 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
     ) -> list[Any]:
         """Fetch writes for `channel` across the checkpoint ancestor chain, oldest→newest.
 
-        Two queries instead of a recursive CTE:
-        1. Fetch all (checkpoint_id, parent_checkpoint_id) for the thread — cheap, just IDs.
+        Two queries:
+        1. Fetch all (checkpoint_id, parent_checkpoint_id) for the thread — cheap, IDs only.
         2. Walk the ancestor chain in Python, then fetch writes with a plain ANY() filter.
         """
         cur.execute(
@@ -237,9 +237,6 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         parent_map: dict[str, str | None] = {
             row["checkpoint_id"]: row["parent_checkpoint_id"] for row in cur.fetchall()
         }
-        # Walk newest→oldest starting from the current checkpoint's parent.
-        # Writes stored under checkpoint C produced the state *after* C, so we
-        # want ancestors of the current checkpoint (not the checkpoint itself).
         ancestor_ids: list[str] = []
         cid: str | None = parent_map.get(checkpoint_id)
         while cid is not None:
@@ -257,7 +254,6 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         writes_by_cp: dict[str, list[tuple[str, bytes]]] = defaultdict(list)
         for row in cur.fetchall():
             writes_by_cp[row["checkpoint_id"]].append((row["type"], row["blob"]))
-        # ancestor_ids is newest→oldest; replay oldest→newest
         result = []
         for cid in reversed(ancestor_ids):
             for type_tag, blob in writes_by_cp.get(cid, []):

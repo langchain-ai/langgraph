@@ -219,7 +219,7 @@ def _approx_tokens(n_turns: int) -> str:
 
 # Turn counts chosen to demonstrate O(N²) vs O(N) storage growth without running too long.
 # Extrapolation: 5,000 turns × ~200 tokens/turn ≈ 1M tokens (Claude's full context window).
-TURN_COUNTS = [10, 25, 50, 100]
+TURN_COUNTS = [10, 25, 50, 100, 500]
 
 
 def _checkpointer_factories() -> list[tuple[str, Any]]:
@@ -240,6 +240,7 @@ def run_benchmark() -> None:
     if _POSTGRES_AVAILABLE:
         try:
             import psycopg
+
             psycopg.connect(_POSTGRES_URI).close()
             checkpointers.append(("Postgres (recursive CTE)", "postgres"))
         except Exception:
@@ -292,7 +293,7 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
     )
     print("-" * W)
     storage_results = []
-    for turns, b_bytes, d_bytes, *_ in rows:
+    for turns, b_bytes, d_bytes, b_rt, d_rt in rows:
         if b_bytes < 0:
             print(
                 f"{turns:>6}  {_approx_tokens(turns):>10}  {'n/a':>12}  {'n/a':>12}  {'n/a':>8}"
@@ -311,9 +312,7 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
     # ── Table 2: Read latency ─────────────────────────────────────────────────
     print("Read latency (avg of 5 get_state calls)")
     print("=" * W)
-    print(
-        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}"
-    )
+    print(f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}")
     print("-" * W)
     for turns, b_bytes, d_bytes, b_rt, d_rt in rows:
         print(
@@ -324,9 +323,9 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
     print()
 
     if storage_results:
-        best = storage_results[-1]
-        turns, b_bytes, d_bytes, ratio = best
-        _, _, _, b_rt, d_rt = rows[-1]
+        turns, b_bytes, d_bytes, ratio = storage_results[-1]
+        b_rt = rows[-1][-2]
+        d_rt = rows[-1][-1]
         print(
             f"At {turns} turns: {_fmt_bytes(b_bytes)} → {_fmt_bytes(d_bytes)} ({ratio:.0f}x less storage); "
             f"read {b_rt * 1000:.1f}ms → {d_rt * 1000:.1f}ms"
@@ -335,7 +334,9 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
 
     print("Legend:")
     print("  add_msgs = Annotated[list, add_messages]  — O(N²) storage")
-    print("  delta    = DeltaChannel(add_messages)     — O(N) storage, reconstructed from writes")
+    print(
+        "  delta    = DeltaChannel(add_messages)     — O(N) storage, full chain replay"
+    )
     print()
 
 
