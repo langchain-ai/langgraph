@@ -80,6 +80,8 @@ CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
 NULL_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000000")
 # the task_id to use for writes that are not associated with a task
+SNAPSHOT_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000001")
+# the task_id to use for framework-injected DeltaChannel snapshot writes
 OVERWRITE = sys.intern("__overwrite__")
 # dict key for the overwrite value, used as `{'__overwrite__': value}`
 

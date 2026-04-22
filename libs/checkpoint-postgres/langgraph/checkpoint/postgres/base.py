@@ -228,10 +228,21 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
     ) -> list[Any]:
         """Fetch writes for `channel` across the checkpoint ancestor chain, oldest→newest.
 
-        Two queries:
-        1. Fetch all (checkpoint_id, parent_checkpoint_id) for the thread — cheap, IDs only.
-        2. Walk the ancestor chain in Python, then fetch writes with a plain ANY() filter.
+        Scans newest→oldest and stops at the first `Overwrite` — a snapshot
+        marker (either from `snapshot_every` or user code) dominates all older
+        writes. Two queries:
+
+        1. Fetch all (checkpoint_id, parent_checkpoint_id) for the thread.
+        2. Walk ancestry in Python, then fetch writes with a plain ANY() filter.
         """
+        # Lazy import: mirrors the Send pattern in the serializer.
+        try:
+            from langgraph.types import (
+                Overwrite,  # type: ignore[import-untyped,import-not-found]
+            )
+        except ImportError:
+            Overwrite = None  # type: ignore[assignment]
+
         cur.execute(
             "SELECT checkpoint_id, parent_checkpoint_id FROM checkpoints "
             "WHERE thread_id = %s AND checkpoint_ns = %s",
@@ -247,21 +258,27 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             cid = parent_map.get(cid)
         if not ancestor_ids:
             return []
+        # Order newest→oldest so we can stop at the first Overwrite.
         cur.execute(
             "SELECT checkpoint_id, type, blob FROM checkpoint_writes "
             "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
             "  AND checkpoint_id = ANY(%s) "
-            "ORDER BY task_id, idx",
+            "ORDER BY task_id DESC, idx DESC",
             (thread_id, checkpoint_ns, channel, ancestor_ids),
         )
         writes_by_cp: dict[str, list[tuple[str, bytes]]] = defaultdict(list)
         for row in cur.fetchall():
             writes_by_cp[row["checkpoint_id"]].append((row["type"], row["blob"]))
-        result = []
-        for cid in reversed(ancestor_ids):
+        collected: list[Any] = []  # newest first
+        for cid in ancestor_ids:  # newest → oldest
             for type_tag, blob in writes_by_cp.get(cid, []):
-                result.append(self.serde.loads_typed((type_tag, blob)))
-        return result
+                val = self.serde.loads_typed((type_tag, blob))
+                collected.append(val)
+                if Overwrite is not None and isinstance(val, Overwrite):
+                    collected.reverse()
+                    return collected
+        collected.reverse()
+        return collected
 
     def _dump_blobs(
         self,

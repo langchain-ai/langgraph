@@ -154,6 +154,13 @@ class InMemorySaver(
                 )
 
     def get_channel_writes(self, config: RunnableConfig, channel: str) -> list[Any]:
+        # Lazy import: avoids a hard dep on `langgraph` at module load time
+        # (mirrors the Send import pattern in the serializer).
+        try:
+            from langgraph.types import Overwrite  # type: ignore[import-not-found]
+        except ImportError:
+            Overwrite = None  # type: ignore[assignment]
+
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = config["configurable"].get("checkpoint_id", "")
@@ -168,14 +175,26 @@ class InMemorySaver(
             chain.append(current)
             _, _, parent = entry
             current = parent
-        # Collect writes oldest→newest.
-        result: list[Any] = []
-        for cp_id in reversed(chain):
+        # Scan writes newest→oldest. Stop at the first `Overwrite` — it
+        # dominates all older history. Either from `snapshot_every` or from
+        # user code: the bound applies the same way.
+        collected: list[Any] = []  # newest first
+        for cp_id in chain:  # newest → oldest
             step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
-            for (_task_id, _idx), (_, ch, serialized, _) in sorted(step_writes.items()):
-                if ch == channel:
-                    result.append(self.serde.loads_typed(serialized))
-        return result
+            # within a superstep, sorted by (task_id, idx) = oldest → newest,
+            # so reverse to get newest-first scan.
+            for (_task_id, _idx), (_, ch, serialized, _) in sorted(
+                step_writes.items(), reverse=True
+            ):
+                if ch != channel:
+                    continue
+                val = self.serde.loads_typed(serialized)
+                collected.append(val)
+                if Overwrite is not None and isinstance(val, Overwrite):
+                    collected.reverse()
+                    return collected
+        collected.reverse()
+        return collected
 
     async def aget_channel_writes(
         self, config: RunnableConfig, channel: str
