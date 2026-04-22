@@ -4,7 +4,7 @@ import threading
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -442,14 +442,22 @@ class PostgresSaver(BasePostgresSaver):
             including its configuration, metadata, parent checkpoint (if any),
             and pending writes.
         """
-        with self._cursor() as cur:
-            channel_values = self._load_blobs(
-                value["channel_values"],
-                thread_id=value["thread_id"],
-                checkpoint_ns=value["checkpoint_ns"],
-                checkpoint_id=value["checkpoint_id"],
-                cur=cur,
+        from langgraph.checkpoint.base import DeltaChannelSentinel
+
+        channel_values = self._load_blobs(value["channel_values"])
+        if any(isinstance(v, DeltaChannelSentinel) for v in channel_values.values()):
+            cp_config = cast(
+                RunnableConfig,
+                {
+                    "configurable": {
+                        "thread_id": value["thread_id"],
+                        "checkpoint_ns": value["checkpoint_ns"],
+                        "checkpoint_id": value["checkpoint_id"],
+                    }
+                },
             )
+            with self._cursor() as cur:
+                self._resolve_delta_channels(cp_config, channel_values, cur)
         return CheckpointTuple(
             {
                 "configurable": {

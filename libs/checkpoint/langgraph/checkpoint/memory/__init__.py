@@ -9,7 +9,7 @@ from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from types import TracebackType
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 
@@ -20,8 +20,7 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    DeltaChainValue,
-    DeltaValue,
+    DeltaChannelSentinel,
     SerializerProtocol,
     get_checkpoint_id,
     get_checkpoint_metadata,
@@ -127,68 +126,56 @@ class InMemorySaver(
         thread_id: str,
         checkpoint_ns: str,
         versions: ChannelVersions,
-        checkpoint_id: str = "",
     ) -> dict[str, Any]:
-        channel_values: dict[str, Any] = {}
-        delta_channels: list[str] = []
-        for k, v in versions.items():
-            kk = (thread_id, checkpoint_ns, k, v)
+        result: dict[str, Any] = {}
+        for k, ver in versions.items():
+            kk = (thread_id, checkpoint_ns, k, ver)
             if kk not in self.blobs:
                 continue
             vv = self.blobs[kk]
-            if vv[0] == "delta":
-                delta_channels.append(k)
-            elif vv[0] != "empty":
-                channel_values[k] = self.serde.loads_typed(vv)
-        for channel in delta_channels:
-            channel_values[channel] = self._assemble_delta_chain(
-                thread_id, checkpoint_ns, checkpoint_id, channel
-            )
-        return channel_values
+            if vv[0] == "empty":
+                continue
+            result[k] = self.serde.loads_typed(vv)
+        return result
 
-    def _assemble_delta_chain(
+    def _resolve_delta_channels(
         self,
-        thread_id: str,
-        checkpoint_ns: str,
-        checkpoint_id: str,
-        channel: str,
-    ) -> DeltaChainValue:
-        """Walk the checkpoint parent tree to collect all delta blobs for a channel."""
+        config: RunnableConfig,
+        channel_values: dict[str, Any],
+    ) -> None:
+        """Replace DeltaChannelSentinel entries with reconstructed write lists."""
+        for channel, value in list(channel_values.items()):
+            if isinstance(value, DeltaChannelSentinel):
+                channel_values[channel] = self.get_channel_writes(config, channel)
+
+    def get_channel_writes(self, config: RunnableConfig, channel: str) -> list[Any]:
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = config["configurable"].get("checkpoint_id", "")
         ns_storage = self.storage.get(thread_id, {}).get(checkpoint_ns, {})
-        blobs: list[Any] = []
-        current_id: str | None = checkpoint_id
-        seen_versions: set[str] = set()
-        while current_id is not None:
-            entry = ns_storage.get(current_id)
+        # Walk the parent chain, collecting checkpoint IDs oldest→newest.
+        chain: list[str] = []
+        current: str | None = checkpoint_id
+        while current is not None:
+            entry = ns_storage.get(current)
             if entry is None:
                 break
-            checkpoint = self.serde.loads_typed(entry[0])
-            version = checkpoint["channel_versions"].get(channel)
-            if version is None:
-                break  # channel not yet in this checkpoint
-            _, _, current_id = entry  # advance to parent before the continue/break
-            if version in seen_versions:
-                continue  # same blob already collected; keep walking to older checkpoints
-            seen_versions.add(version)
-            kk = (thread_id, checkpoint_ns, channel, version)
-            if kk not in self.blobs:
-                break
-            vv = self.blobs[kk]
-            if vv[0] == "empty":
-                break
-            blob = self.serde.loads_typed(vv)
-            blobs.append(blob)
-            if not isinstance(blob, DeltaValue):
-                break  # hit a snapshot (plain list) — chain root found
-        blobs.reverse()
-        base = None
-        deltas: list[list[Any]] = []
-        for blob in blobs:
-            if isinstance(blob, DeltaValue):
-                deltas.append(blob.delta)
-            else:
-                base = blob
-        return DeltaChainValue(base=base, deltas=deltas)
+            chain.append(current)
+            _, _, parent = entry
+            current = parent
+        # Collect writes for `channel` from each checkpoint in oldest→newest order.
+        result: list[Any] = []
+        for cp_id in reversed(chain):
+            step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
+            for (_task_id, _idx), (_, ch, serialized, _) in sorted(step_writes.items()):
+                if ch == channel:
+                    result.append(self.serde.loads_typed(serialized))
+        return result
+
+    async def aget_channel_writes(
+        self, config: RunnableConfig, channel: str
+    ) -> list[Any]:
+        return self.get_channel_writes(config, channel)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.
@@ -211,16 +198,17 @@ class InMemorySaver(
                 checkpoint, metadata, parent_checkpoint_id = saved
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
+                channel_values = self._load_blobs(
+                    thread_id,
+                    checkpoint_ns,
+                    checkpoint_["channel_versions"],
+                )
+                self._resolve_delta_channels(config, channel_values)
                 return CheckpointTuple(
                     config=config,
                     checkpoint={
                         **checkpoint_,
-                        "channel_values": self._load_blobs(
-                            thread_id,
-                            checkpoint_ns,
-                            checkpoint_["channel_versions"],
-                            checkpoint_id,
-                        ),
+                        "channel_values": channel_values,
                     },
                     metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
@@ -244,22 +232,27 @@ class InMemorySaver(
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 checkpoint_ = self.serde.loads_typed(checkpoint)
-                return CheckpointTuple(
-                    config={
+                resolved_config = cast(
+                    RunnableConfig,
+                    {
                         "configurable": {
                             "thread_id": thread_id,
                             "checkpoint_ns": checkpoint_ns,
                             "checkpoint_id": checkpoint_id,
                         }
                     },
+                )
+                channel_values = self._load_blobs(
+                    thread_id,
+                    checkpoint_ns,
+                    checkpoint_["channel_versions"],
+                )
+                self._resolve_delta_channels(resolved_config, channel_values)
+                return CheckpointTuple(
+                    config=resolved_config,
                     checkpoint={
                         **checkpoint_,
-                        "channel_values": self._load_blobs(
-                            thread_id,
-                            checkpoint_ns,
-                            checkpoint_["channel_versions"],
-                            checkpoint_id,
-                        ),
+                        "channel_values": channel_values,
                     },
                     metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
@@ -354,22 +347,28 @@ class InMemorySaver(
 
                     checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
 
-                    yield CheckpointTuple(
-                        config={
+                    list_config = cast(
+                        RunnableConfig,
+                        {
                             "configurable": {
                                 "thread_id": thread_id,
                                 "checkpoint_ns": checkpoint_ns,
                                 "checkpoint_id": checkpoint_id,
                             }
                         },
+                    )
+                    channel_values = self._load_blobs(
+                        thread_id,
+                        checkpoint_ns,
+                        checkpoint_["channel_versions"],
+                    )
+                    self._resolve_delta_channels(list_config, channel_values)
+
+                    yield CheckpointTuple(
+                        config=list_config,
                         checkpoint={
                             **checkpoint_,
-                            "channel_values": self._load_blobs(
-                                thread_id,
-                                checkpoint_ns,
-                                checkpoint_["channel_versions"],
-                                checkpoint_id,
-                            ),
+                            "channel_values": channel_values,
                         },
                         metadata=metadata,
                         parent_config=(

@@ -323,11 +323,10 @@ def test_memory_saver_with_allowlist_proxy_isolated() -> None:
 
 
 class TestInMemorySaverDeltaChannel:
-    def test_load_blobs_assembles_delta_chain(self) -> None:
-        """_load_blobs returns DeltaChainValue for delta channels, not raw DeltaValue."""
+    def test_load_blobs_returns_sentinel_for_delta_channel(self) -> None:
+        """_load_blobs returns DeltaChannelSentinel for delta channels (reconstruction deferred)."""
         from langgraph.checkpoint.base import (
-            DeltaChainValue,
-            DeltaValue,
+            DeltaChannelSentinel,
             empty_checkpoint,
         )
 
@@ -336,55 +335,59 @@ class TestInMemorySaverDeltaChannel:
 
         thread_id, ns, channel = "t1", "", "messages"
         v1 = "00000000000000000000000000000001.0000000000000000"
-        v2 = "00000000000000000000000000000002.0000000000000000"
 
-        delta1 = DeltaValue(delta=[{"content": "hi"}])
-        delta2 = DeltaValue(delta=[{"content": "bye"}])
-        saver.blobs[(thread_id, ns, channel, v1)] = serde.dumps_typed(delta1)
-        saver.blobs[(thread_id, ns, channel, v2)] = serde.dumps_typed(delta2)
+        sentinel = DeltaChannelSentinel()
+        saver.blobs[(thread_id, ns, channel, v1)] = serde.dumps_typed(sentinel)
 
         cp1 = empty_checkpoint()
         cp1["id"] = "cp1"
         cp1["channel_versions"][channel] = v1
+        saver.storage[thread_id][ns] = {
+            "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), None),
+        }
+
+        result = saver._load_blobs(thread_id, ns, {channel: v1})
+        assert channel in result
+        assert isinstance(result[channel], DeltaChannelSentinel)
+
+    def test_get_channel_writes_collects_writes(self) -> None:
+        """get_channel_writes collects per-step writes oldest→newest."""
+        from langgraph.checkpoint.base import empty_checkpoint
+
+        saver = InMemorySaver()
+        serde = JsonPlusSerializer()
+
+        thread_id, ns, channel = "t1", "", "messages"
+
+        cp1 = empty_checkpoint()
+        cp1["id"] = "cp1"
         cp2 = empty_checkpoint()
         cp2["id"] = "cp2"
-        cp2["channel_versions"][channel] = v2
         saver.storage[thread_id][ns] = {
             "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), None),
             "cp2": (serde.dumps_typed(cp2), serde.dumps_typed({}), "cp1"),
         }
-
-        result = saver._load_blobs(thread_id, ns, {channel: v2}, "cp2")
-        assert channel in result
-        chain = result[channel]
-        assert isinstance(chain, DeltaChainValue)
-        assert chain.deltas == [[{"content": "hi"}], [{"content": "bye"}]]
-
-    def test_load_blobs_single_delta_no_parent(self) -> None:
-        """Single delta with no parent checkpoint produces a chain with one delta."""
-        from langgraph.checkpoint.base import (
-            DeltaChainValue,
-            DeltaValue,
-            empty_checkpoint,
+        # cp1 has a write for channel
+        saver.writes[(thread_id, ns, "cp1")][("task1", 0)] = (
+            "task1",
+            channel,
+            serde.dumps_typed({"content": "hi"}),
+            "",
+        )
+        # cp2 has a write for channel
+        saver.writes[(thread_id, ns, "cp2")][("task2", 0)] = (
+            "task2",
+            channel,
+            serde.dumps_typed({"content": "bye"}),
+            "",
         )
 
-        saver = InMemorySaver()
-        serde = JsonPlusSerializer()
-
-        thread_id, ns, channel = "t1", "", "messages"
-        v1 = "00000000000000000000000000000001.0000000000000000"
-        delta = DeltaValue(delta=[{"content": "only"}])
-        saver.blobs[(thread_id, ns, channel, v1)] = serde.dumps_typed(delta)
-
-        cp1 = empty_checkpoint()
-        cp1["id"] = "cp1"
-        cp1["channel_versions"][channel] = v1
-        saver.storage[thread_id][ns] = {
-            "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), None)
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": ns,
+                "checkpoint_id": "cp2",
+            }
         }
-
-        result = saver._load_blobs(thread_id, ns, {channel: v1}, "cp1")
-        chain = result[channel]
-        assert isinstance(chain, DeltaChainValue)
-        assert chain.base is None
-        assert chain.deltas == [[{"content": "only"}]]
+        result = saver.get_channel_writes(config, channel)
+        assert result == [{"content": "hi"}, {"content": "bye"}]

@@ -3,10 +3,12 @@ from __future__ import annotations
 import copy
 import dataclasses
 import logging
+import threading
 from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
 from typing import (  # noqa: UP035
     Any,
     Generic,
+    List,
     Literal,
     NamedTuple,
     TypedDict,
@@ -32,19 +34,17 @@ PendingWrite = tuple[str, str, Any]
 
 
 @dataclasses.dataclass
-class DeltaValue:
-    """Returned by DeltaChannel.checkpoint(). Represents one step's writes."""
+class DeltaChannelSentinel:
+    """Marker stored in checkpoint_blobs for a DeltaChannel field.
 
-    delta: list[Any]
+    No data is stored here — the actual per-step writes live in checkpoint_writes
+    and are replayed through the reducer at load time.
+    """
+
+    pass
 
 
-@dataclasses.dataclass
-class DeltaChainValue:
-    """Passed to DeltaChannel.from_checkpoint(). Assembled by the pregel layer."""
-
-    base: list[Any] | None  # starting accumulated value; None = start from empty
-    deltas: list[list[Any]]  # per-step write-sets, ordered oldest → newest
-
+_DELTA_RECONSTRUCTION: threading.local = threading.local()
 
 logger = logging.getLogger(__name__)
 
@@ -474,6 +474,56 @@ class BaseCheckpointSaver(Generic[V]):
                 recent checkpoint per namespace. `"delete"` removes all checkpoints.
         """
         raise NotImplementedError
+
+    def get_channel_writes(self, config: RunnableConfig, channel: str) -> List[Any]:  # noqa: UP006
+        """Collect all writes for `channel` across this checkpoint's ancestry, oldest→newest.
+
+        Default implementation walks the full thread history via `list()`. Savers can
+        override with a more efficient query (InMemorySaver and PostgresSaver do this).
+        """
+        # Guard against re-entrant calls: when list() triggers reconstruction which
+        # calls list() again, the inner call returns tuples with DeltaChannelSentinel
+        # in channel_values (which get_channel_writes ignores — it only reads
+        # pending_writes). This breaks the recursion safely.
+        if getattr(_DELTA_RECONSTRUCTION, "active", False):
+            return []
+        _DELTA_RECONSTRUCTION.active = True
+        try:
+            result: list[Any] = []
+            target_id = config["configurable"].get("checkpoint_id")
+            for tup in self.list(config):
+                if tup.config["configurable"].get("checkpoint_id") == target_id:
+                    continue  # skip the checkpoint itself; we want its ancestors' writes
+                if tup.pending_writes:
+                    for _, ch, value in tup.pending_writes:
+                        if ch == channel:
+                            result.append(value)
+            result.reverse()  # list() yields newest→oldest; we want oldest→newest
+            return result
+        finally:
+            _DELTA_RECONSTRUCTION.active = False
+
+    async def aget_channel_writes(
+        self, config: RunnableConfig, channel: str
+    ) -> List[Any]:  # noqa: UP006
+        """Async version of get_channel_writes."""
+        if getattr(_DELTA_RECONSTRUCTION, "active", False):
+            return []
+        _DELTA_RECONSTRUCTION.active = True
+        try:
+            result: list[Any] = []
+            target_id = config["configurable"].get("checkpoint_id")
+            async for tup in self.alist(config):
+                if tup.config["configurable"].get("checkpoint_id") == target_id:
+                    continue
+                if tup.pending_writes:
+                    for _, ch, value in tup.pending_writes:
+                        if ch == channel:
+                            result.append(value)
+            result.reverse()
+            return result
+        finally:
+            _DELTA_RECONSTRUCTION.active = False
 
     def get_next_version(self, current: V | None, channel: None) -> V:
         """Generate the next version ID for a channel.
