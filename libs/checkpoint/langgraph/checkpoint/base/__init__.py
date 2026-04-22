@@ -516,7 +516,7 @@ class BaseCheckpointSaver(Generic[V]):
         self, config: RunnableConfig, channel: str
     ) -> List[Any]:  # noqa: UP006
         """Async version of get_channel_writes."""
-        from langgraph.types import Overwrite  # type: ignore[import-untyped]
+        from langgraph.types import Overwrite
 
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
             return []
