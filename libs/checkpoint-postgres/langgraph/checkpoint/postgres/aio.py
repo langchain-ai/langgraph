@@ -402,6 +402,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
         cur: Any,
     ) -> list[Any]:
         """Async version of _get_channel_writes_cur — see sync version for rationale."""
+        try:
+            from langgraph.types import (
+                Overwrite,  # type: ignore[import-untyped,import-not-found]
+            )
+        except ImportError:
+            Overwrite = None  # type: ignore[assignment]
+
         await cur.execute(
             "SELECT checkpoint_id, parent_checkpoint_id FROM checkpoints "
             "WHERE thread_id = %s AND checkpoint_ns = %s",
@@ -422,17 +429,22 @@ class AsyncPostgresSaver(BasePostgresSaver):
             "SELECT checkpoint_id, type, blob FROM checkpoint_writes "
             "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
             "  AND checkpoint_id = ANY(%s) "
-            "ORDER BY task_id, idx",
+            "ORDER BY task_id DESC, idx DESC",
             (thread_id, checkpoint_ns, channel, ancestor_ids),
         )
         writes_by_cp: dict[str, list[tuple[str, bytes]]] = defaultdict(list)
         for row in await cur.fetchall():
             writes_by_cp[row["checkpoint_id"]].append((row["type"], row["blob"]))
-        result = []
-        for cid in reversed(ancestor_ids):
+        collected: list[Any] = []
+        for cid in ancestor_ids:
             for type_tag, blob in writes_by_cp.get(cid, []):
-                result.append(self.serde.loads_typed((type_tag, blob)))
-        return result
+                val = self.serde.loads_typed((type_tag, blob))
+                collected.append(val)
+                if Overwrite is not None and isinstance(val, Overwrite):
+                    collected.reverse()
+                    return collected
+        collected.reverse()
+        return collected
 
     async def aget_channel_writes(
         self, config: RunnableConfig, channel: str

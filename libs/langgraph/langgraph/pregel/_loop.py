@@ -57,6 +57,7 @@ from langgraph._internal._constants import (
     NULL_TASK_ID,
     PUSH,
     RESUME,
+    SNAPSHOT_TASK_ID,
     TASKS,
 )
 from langgraph._internal._replay import ReplayState
@@ -68,6 +69,7 @@ from langgraph.callbacks import (
     GraphResumeEvent,
 )
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
@@ -945,6 +947,32 @@ class PregelLoop:
                     CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
                 },
             }
+            # DeltaChannel snapshot injection: after the checkpoint save is
+            # queued, any DeltaChannel that has crossed its `snapshot_every`
+            # threshold emits an Overwrite write stored at the just-saved
+            # checkpoint_id. On any descendant load, the saver's ancestor walk
+            # encounters this Overwrite and stops, bounding replay cost.
+            if self.checkpointer_put_writes is not None and self.channels:
+                snapshot_writes: list[tuple[str, Any]] = []
+                for ch_name, channel in self.channels.items():
+                    if isinstance(channel, DeltaChannel) and channel.should_snapshot():
+                        snapshot_writes.append((ch_name, channel.snapshot_write()))
+                if snapshot_writes:
+                    if self.checkpointer_put_writes_accepts_task_path:
+                        self.submit(
+                            self.checkpointer_put_writes,
+                            self.checkpoint_config,
+                            snapshot_writes,
+                            SNAPSHOT_TASK_ID,
+                            "",
+                        )
+                    else:
+                        self.submit(
+                            self.checkpointer_put_writes,
+                            self.checkpoint_config,
+                            snapshot_writes,
+                            SNAPSHOT_TASK_ID,
+                        )
         if not exiting:
             # increment step
             self.step += 1

@@ -464,30 +464,45 @@ class BaseCheckpointSaver(Generic[V]):
         raise NotImplementedError
 
     def get_channel_writes(self, config: RunnableConfig, channel: str) -> list[Any]:
-        """Collect all writes for `channel` across this checkpoint's ancestry, oldest→newest.
+        """Collect writes for `channel` across this checkpoint's ancestry, oldest→newest.
 
-        Default implementation walks the full thread history via `list()`. Savers can
-        override with a more efficient query (InMemorySaver and PostgresSaver do this).
+        Scans newest→oldest and stops at the first `Overwrite` (either from
+        `snapshot_every` or user code), so reconstruction cost is bounded.
+        Default implementation walks the full thread history via `list()`; savers
+        can override with a more efficient query (InMemorySaver and PostgresSaver
+        do this).
         """
-        # Guard against re-entrant calls: when list() triggers reconstruction which
-        # calls list() again, the inner call returns tuples with DELTA_SENTINEL
-        # in channel_values (which get_channel_writes ignores — it only reads
-        # pending_writes). This breaks the recursion safely.
+        try:
+            from langgraph.types import Overwrite  # type: ignore[import-not-found]
+        except ImportError:
+            Overwrite = None  # type: ignore[assignment]
+
+        # Guard against re-entrant calls: when list() triggers reconstruction
+        # which calls list() again, the inner call returns tuples with
+        # DELTA_SENTINEL in channel_values (which get_channel_writes ignores —
+        # it only reads pending_writes). This breaks the recursion safely.
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
             return []
         _DELTA_RECONSTRUCTION.active = True
         try:
-            result: list[Any] = []
+            collected: list[Any] = []  # newest first
             target_id = config["configurable"].get("checkpoint_id")
-            for tup in self.list(config):
+            for tup in self.list(config):  # newest → oldest
                 if tup.config["configurable"].get("checkpoint_id") == target_id:
-                    continue  # skip the checkpoint itself; we want its ancestors' writes
-                if tup.pending_writes:
-                    for _, ch, value in tup.pending_writes:
-                        if ch == channel:
-                            result.append(value)
-            result.reverse()  # list() yields newest→oldest; we want oldest→newest
-            return result
+                    continue
+                if not tup.pending_writes:
+                    continue
+                # Within a superstep, pending_writes are oldest→newest; reverse
+                # to scan newest-first.
+                for _, ch, value in reversed(tup.pending_writes):
+                    if ch != channel:
+                        continue
+                    collected.append(value)
+                    if Overwrite is not None and isinstance(value, Overwrite):
+                        collected.reverse()
+                        return collected
+            collected.reverse()
+            return collected
         finally:
             _DELTA_RECONSTRUCTION.active = False
 
@@ -495,21 +510,31 @@ class BaseCheckpointSaver(Generic[V]):
         self, config: RunnableConfig, channel: str
     ) -> list[Any]:
         """Async version of get_channel_writes."""
+        try:
+            from langgraph.types import Overwrite  # type: ignore[import-not-found]
+        except ImportError:
+            Overwrite = None  # type: ignore[assignment]
+
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
             return []
         _DELTA_RECONSTRUCTION.active = True
         try:
-            result: list[Any] = []
+            collected: list[Any] = []
             target_id = config["configurable"].get("checkpoint_id")
             async for tup in self.alist(config):
                 if tup.config["configurable"].get("checkpoint_id") == target_id:
                     continue
-                if tup.pending_writes:
-                    for _, ch, value in tup.pending_writes:
-                        if ch == channel:
-                            result.append(value)
-            result.reverse()
-            return result
+                if not tup.pending_writes:
+                    continue
+                for _, ch, value in reversed(tup.pending_writes):
+                    if ch != channel:
+                        continue
+                    collected.append(value)
+                    if Overwrite is not None and isinstance(value, Overwrite):
+                        collected.reverse()
+                        return collected
+            collected.reverse()
+            return collected
         finally:
             _DELTA_RECONSTRUCTION.active = False
 

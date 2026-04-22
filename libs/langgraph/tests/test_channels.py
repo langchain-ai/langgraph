@@ -419,3 +419,183 @@ def test_delta_channel_dict_reducer_with_deletions() -> None:
     spec = _delta_channel_with_type(merge_files, dict)
     ch2 = spec.from_checkpoint(writes)
     assert ch2.get() == {"file2.py": "content2", "file3.py": "content3"}
+
+
+# ---------------------------------------------------------------------------
+# snapshot_every
+# ---------------------------------------------------------------------------
+
+
+def test_delta_channel_snapshot_counter_triggers() -> None:
+    """Counter hits threshold → should_snapshot() true; snapshot_write() resets it."""
+    from langchain_core.messages import HumanMessage
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph.message import add_messages
+    from langgraph.types import Overwrite
+
+    ch = DeltaChannel(add_messages, snapshot_every=3).from_checkpoint(MISSING)
+    assert not ch.should_snapshot()
+
+    ch.update([HumanMessage(content="a", id="1")])
+    assert not ch.should_snapshot()
+    ch.update([HumanMessage(content="b", id="2")])
+    assert not ch.should_snapshot()
+    ch.update([HumanMessage(content="c", id="3")])
+    assert ch.should_snapshot()
+
+    w = ch.snapshot_write()
+    assert isinstance(w, Overwrite)
+    assert len(w.value) == 3
+    # counter reset
+    assert not ch.should_snapshot()
+
+
+def test_delta_channel_snapshot_default_disabled() -> None:
+    """No snapshot_every → should_snapshot() is never true."""
+    from langchain_core.messages import HumanMessage
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph.message import add_messages
+
+    ch = DeltaChannel(add_messages).from_checkpoint(MISSING)
+    for i in range(50):
+        ch.update([HumanMessage(content=str(i), id=str(i))])
+    assert not ch.should_snapshot()
+
+
+def test_delta_channel_user_overwrite_resets_counter() -> None:
+    """An Overwrite (user or framework) resets the snapshot counter."""
+    from langchain_core.messages import HumanMessage
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph.message import add_messages
+    from langgraph.types import Overwrite
+
+    ch = DeltaChannel(add_messages, snapshot_every=3).from_checkpoint(MISSING)
+    ch.update([HumanMessage(content="a", id="1")])
+    ch.update([HumanMessage(content="b", id="2")])
+    # Right before threshold — user Overwrite should reset.
+    ch.update([Overwrite([HumanMessage(content="new", id="new")])])
+    assert not ch.should_snapshot()
+    # Need 3 more writes to trigger.
+    ch.update([HumanMessage(content="c", id="c")])
+    ch.update([HumanMessage(content="d", id="d")])
+    ch.update([HumanMessage(content="e", id="e")])
+    assert ch.should_snapshot()
+
+
+def test_delta_channel_replay_tracks_counter_across_overwrite() -> None:
+    """Counter reloaded from writes reflects writes-since-last-Overwrite."""
+    from langchain_core.messages import HumanMessage
+    from langgraph.checkpoint.base import DeltaChannelWrites
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph.message import add_messages
+    from langgraph.types import Overwrite
+
+    spec = DeltaChannel(add_messages, snapshot_every=3)
+    writes = DeltaChannelWrites(
+        [
+            HumanMessage(content="a", id="1"),
+            HumanMessage(content="b", id="2"),
+            HumanMessage(content="c", id="3"),
+            Overwrite([HumanMessage(content="reset", id="r")]),
+            HumanMessage(content="d", id="4"),
+        ]
+    )
+    ch = spec.from_checkpoint(writes)
+    # Post-snapshot: one write since reset.
+    assert ch._writes_since_snapshot == 1
+    assert not ch.should_snapshot()
+    assert len(ch.get()) == 2  # reset → [r], +d → [r, d]
+
+
+def test_delta_channel_snapshot_end_to_end_inmemory() -> None:
+    """Full graph: snapshot is injected, descendants short-circuit at it."""
+    from typing import Annotated
+
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.memory import InMemorySaver
+    from typing_extensions import TypedDict
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
+    from langgraph.types import Overwrite
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(add_messages, snapshot_every=2)]
+
+    n = {"v": 0}
+
+    def respond(state: State) -> dict:
+        n["v"] += 1
+        return {"messages": [AIMessage(content=f"r{n['v']}", id=f"ai{n['v']}")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    saver = InMemorySaver()
+    graph = builder.compile(checkpointer=saver)
+    config = {"configurable": {"thread_id": "snap"}}
+
+    # 3 turns × (HumanMessage input + AIMessage reply) — plenty to trigger
+    # multiple snapshots at snapshot_every=2.
+    for i in range(3):
+        graph.invoke({"messages": [HumanMessage(content=f"q{i}", id=f"h{i}")]}, config)
+
+    # Final state has 6 messages (3 H + 3 AI) regardless of snapshots.
+    state = graph.get_state(config)
+    assert len(state.values["messages"]) == 6
+
+    # At least one Overwrite snapshot write was injected into checkpoint_writes.
+    all_writes = [
+        v
+        for wdict in saver.writes.values()
+        for (_task, _idx), (_, ch, serialized, _) in wdict.items()
+        if ch == "messages"
+        for v in [saver.serde.loads_typed(serialized)]
+    ]
+    overwrites = [w for w in all_writes if isinstance(w, Overwrite)]
+    assert len(overwrites) >= 1, (
+        f"expected at least one snapshot Overwrite, got writes: {all_writes}"
+    )
+
+
+def test_delta_channel_snapshot_preserves_time_travel() -> None:
+    """Time-travel to a checkpoint created before a snapshot still replays correctly."""
+    from typing import Annotated
+
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.memory import InMemorySaver
+    from typing_extensions import TypedDict
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(add_messages, snapshot_every=2)]
+
+    def respond(state: State) -> dict:
+        n = len(state["messages"])
+        return {"messages": [AIMessage(content=f"r{n}", id=f"ai{n}")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    saver = InMemorySaver()
+    graph = builder.compile(checkpointer=saver)
+    config = {"configurable": {"thread_id": "snap-tt"}}
+
+    for i in range(4):
+        graph.invoke({"messages": [HumanMessage(content=f"q{i}", id=f"h{i}")]}, config)
+
+    # Walk history; each snapshot has the expected message count at that point.
+    history = list(graph.get_state_history(config))
+    # Reverse to chronological order.
+    history = list(reversed(history))
+    # At each point the visible message count should monotonically grow.
+    counts = [len(h.values.get("messages", [])) for h in history]
+    assert counts == sorted(counts), f"message counts not monotonic: {counts}"
