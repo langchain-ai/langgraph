@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy as _copy
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
@@ -22,7 +23,7 @@ def _empty(typ: Any) -> Any:
         return []
 
 
-class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, Any]):
+class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     """A channel that stores only a sentinel in checkpoints; per-step writes are
     stored in checkpoint_writes and replayed through the operator at load time.
 
@@ -56,13 +57,13 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, Any]):
 
     def __init__(
         self,
-        operator: Callable[[list[Value], Any], list[Value]],
+        operator: Callable[[Any, Any], Any],
         *,
         snapshot_every: int | None = None,
     ) -> None:
         super().__init__(list)
         self.operator = operator
-        self.value: list[Value] = []
+        self.value: Any = []
         self.snapshot_every = snapshot_every
         self._writes_since_snapshot = 0
 
@@ -78,17 +79,21 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, Any]):
 
     @property
     def ValueType(self) -> Any:
-        return list[self.typ]  # type: ignore[name-defined]
+        return self.typ
 
     @property
     def UpdateType(self) -> Any:
-        return self.typ | list[self.typ]  # type: ignore[name-defined]
+        return self.typ
 
     def copy(self) -> Self:
         new = DeltaChannel(self.operator, snapshot_every=self.snapshot_every)
         new.typ = self.typ
         new.key = self.key
-        new.value = self.value if self.value is MISSING else self.value.copy()
+        new.value = (
+            self.value
+            if self.value is MISSING
+            else _copy.copy(self.value)
+        )
         new._writes_since_snapshot = self._writes_since_snapshot
         return new
 
@@ -109,7 +114,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, Any]):
                 is_overwrite, overwrite_value = _get_overwrite(write)
                 if is_overwrite:
                     value = (
-                        list(overwrite_value)
+                        _copy.copy(overwrite_value)
                         if overwrite_value is not None
                         else _empty(new.typ)
                     )
@@ -122,10 +127,7 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, Any]):
         else:
             # Backward compat: a pre-DeltaChannel thread stored the accumulated
             # value directly. Trust it as-is.
-            try:
-                new.value = list(checkpoint)
-            except Exception:
-                new.value = _empty(new.typ)
+            new.value = checkpoint
             new._writes_since_snapshot = 0
         return new
 
@@ -150,19 +152,21 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, Any]):
                     )
                     raise InvalidUpdateError(msg)
                 self.value = (
-                    list(overwrite_value) if overwrite_value is not None else self.typ()
+                    _copy.copy(overwrite_value)
+                    if overwrite_value is not None
+                    else _empty(self.typ)
                 )
                 seen_overwrite = True
                 self._writes_since_snapshot = 0
             elif not seen_overwrite:
-                base = self.typ() if self.value is MISSING else self.value
+                base = _empty(self.typ) if self.value is MISSING else self.value
                 self.value = self.operator(base, value)
                 applied += 1
         if not seen_overwrite:
             self._writes_since_snapshot += applied
         return True
 
-    def get(self) -> list[Value]:
+    def get(self) -> Any:
         if self.value is MISSING:
             raise EmptyChannelError()
         return self.value
@@ -192,4 +196,4 @@ class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, Any]):
         ancestor walk can stop here.
         """
         self._writes_since_snapshot = 0
-        return Overwrite(list(self.value))
+        return Overwrite(_copy.copy(self.value))

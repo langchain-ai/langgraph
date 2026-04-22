@@ -1677,6 +1677,16 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
                         collections.abc.MutableSequence,
                     ):
                         outer = list
+                    elif outer in (
+                        collections.abc.Mapping,
+                        collections.abc.MutableMapping,
+                    ):
+                        outer = dict
+                    elif outer in (
+                        collections.abc.Set,
+                        collections.abc.MutableSet,
+                    ):
+                        outer = set
                     item.typ = outer
                     try:
                         item.value = outer()
