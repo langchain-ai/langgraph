@@ -40,6 +40,21 @@ PendingWrite = tuple[str, str, Any]
 _DELTA_RECONSTRUCTION: threading.local = threading.local()
 
 
+def _overwrite_types() -> tuple[type, ...]:
+    """Return `(Overwrite,)` if `langgraph` is installed, else `()`.
+
+    `Overwrite` lives in `langgraph.types`, which this library does not depend
+    on; importing eagerly would also be circular. An empty tuple makes
+    `isinstance(x, overwrite_types)` safely return `False` when `langgraph` is
+    not installed — no `Overwrite` values can exist in that environment.
+    """
+    try:
+        from langgraph.types import Overwrite  # type: ignore[import-untyped]
+    except ImportError:
+        return ()
+    return (Overwrite,)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -487,7 +502,7 @@ class BaseCheckpointSaver(Generic[V]):
         # it only reads pending_writes). This breaks the recursion safely.
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
             return []
-        from langgraph.types import Overwrite  # type: ignore[import-untyped]
+        overwrite_types = _overwrite_types()
 
         _DELTA_RECONSTRUCTION.active = True
         try:
@@ -504,7 +519,7 @@ class BaseCheckpointSaver(Generic[V]):
                     if ch != channel:
                         continue
                     collected.append(value)
-                    if isinstance(value, Overwrite):
+                    if isinstance(value, overwrite_types):
                         collected.reverse()
                         return collected
             collected.reverse()
@@ -516,7 +531,7 @@ class BaseCheckpointSaver(Generic[V]):
         self, config: RunnableConfig, channel: str
     ) -> List[Any]:  # noqa: UP006
         """Async version of get_channel_writes."""
-        from langgraph.types import Overwrite
+        overwrite_types = _overwrite_types()
 
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
             return []
@@ -533,7 +548,7 @@ class BaseCheckpointSaver(Generic[V]):
                     if ch != channel:
                         continue
                     collected.append(value)
-                    if isinstance(value, Overwrite):
+                    if isinstance(value, overwrite_types):
                         collected.reverse()
                         return collected
             collected.reverse()

@@ -23,6 +23,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     DeltaChannelWrites,
     SerializerProtocol,
+    _overwrite_types,
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
@@ -168,7 +169,7 @@ class InMemorySaver(
             chain.append(current)
             _, _, parent = entry
             current = parent
-        from langgraph.types import Overwrite  # type: ignore[import-untyped]
+        overwrite_types = _overwrite_types()
 
         # Scan writes newest→oldest. Stop at the first `Overwrite` — it
         # dominates all older history. Either from `snapshot_every` or from
@@ -185,7 +186,7 @@ class InMemorySaver(
                     continue
                 val = self.serde.loads_typed(serialized)
                 collected.append(val)
-                if isinstance(val, Overwrite):
+                if isinstance(val, overwrite_types):
                     collected.reverse()
                     return collected
         collected.reverse()
