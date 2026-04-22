@@ -307,6 +307,56 @@ def test_graph_with_jitter_retry_policy():
     mock_sleep.assert_called_with(0.01 + 0.05)  # Sleep should include jitter
 
 
+def test_jitter_does_not_exceed_max_interval():
+    """Test that jitter does not cause sleep time to exceed max_interval."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempt_count = 0
+
+    def failing_node(state):
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count < 3:
+            raise ValueError("Intentional failure")
+        return {"foo": "success"}
+
+    # Use a small max_interval so the backoff hits the cap quickly
+    retry_policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=4.0,
+        backoff_factor=2.0,
+        max_interval=5.0,
+        jitter=True,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, retry_policy=retry_policy)
+        .add_edge(START, "failing_node")
+        .compile()
+    )
+
+    # Mock random.uniform to return 0.9 so interval + jitter would be 4.9 (1st)
+    # and 5.0 + 0.9 = 5.9 (2nd) which must be clamped to 5.0
+    with (
+        patch("random.uniform", return_value=0.9),
+        patch("time.sleep") as mock_sleep,
+    ):
+        result = graph.invoke({"foo": ""})
+
+    assert attempt_count == 3
+    assert result["foo"] == "success"
+
+    sleep_values = [call[0][0] for call in mock_sleep.call_args_list]
+    for sleep_time in sleep_values:
+        assert sleep_time <= 5.0, (
+            f"sleep time {sleep_time} exceeds max_interval 5.0"
+        )
+
+
 def test_graph_with_multiple_retry_policies():
     """Test a graph with multiple retry policies for a node."""
 
