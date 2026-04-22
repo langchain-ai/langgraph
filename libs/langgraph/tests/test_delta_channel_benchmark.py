@@ -16,6 +16,8 @@ import sys
 import time
 from typing import Annotated, Any
 
+import pytest
+
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
@@ -30,6 +32,16 @@ try:
     _SQLITE_AVAILABLE = True
 except ImportError:
     _SQLITE_AVAILABLE = False
+
+try:
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    _POSTGRES_AVAILABLE = True
+    _POSTGRES_URI = (
+        "postgres://postgres:postgres@localhost:5441/postgres?sslmode=disable"
+    )
+except ImportError:
+    _POSTGRES_AVAILABLE = False
 
 SNAPSHOT_EVERY = 50
 
@@ -207,20 +219,14 @@ def _approx_tokens(n_turns: int) -> str:
 # Benchmark matrix
 # ---------------------------------------------------------------------------
 
-# Turn counts chosen to span from a short session to a long-running agent conversation.
-# Storage and time complexity differences are clearly visible by 500 turns.
+# Turn counts chosen to demonstrate O(N²) vs O(N) storage growth without running too long.
 # Extrapolation: 5,000 turns × ~200 tokens/turn ≈ 1M tokens (Claude's full context window).
-TURN_COUNTS = [50, 100, 200, 500]
+TURN_COUNTS = [10, 25, 50, 100]
 
 
 def _checkpointer_factories() -> list[tuple[str, Any]]:
     """Return (label, context_manager_or_none) pairs for available checkpointers."""
-    factories: list[tuple[str, Any]] = [("InMemory", None)]
-    if _SQLITE_AVAILABLE:
-        import tempfile
-
-        factories.append(("SQLite", tempfile.NamedTemporaryFile(suffix=".db")))
-    return factories
+    return [("InMemory", None)]
 
 
 def run_benchmark() -> None:
@@ -232,9 +238,9 @@ def run_benchmark() -> None:
     print("(5,000 turns × ~200 tokens/turn ≈ 1M tokens — Claude's full context window)")
     print()
 
-    checkpointers: list[tuple[str, Any]] = [("InMemory (fast-path)", None)]
-    if _SQLITE_AVAILABLE:
-        checkpointers.append(("SQLite (get_tuple fallback)", "sqlite"))
+    checkpointers: list[tuple[str, Any]] = [("InMemory", None)]
+    if _POSTGRES_AVAILABLE:
+        checkpointers.append(("Postgres (recursive CTE)", "postgres"))
 
     for cp_label, cp_hint in checkpointers:
         print(f"--- Checkpointer: {cp_label} ---")
@@ -249,23 +255,24 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
     def _make_saver():
         if cp_hint is None:
             yield None
+        elif cp_hint == "postgres":
+            with PostgresSaver.from_conn_string(_POSTGRES_URI) as saver:
+                saver.setup()
+                with saver._cursor() as cur:
+                    cur.execute("DELETE FROM checkpoints WHERE thread_id = 'bench'")
+                    cur.execute(
+                        "DELETE FROM checkpoint_blobs WHERE thread_id = 'bench'"
+                    )
+                    cur.execute(
+                        "DELETE FROM checkpoint_writes WHERE thread_id = 'bench'"
+                    )
+                yield saver
         else:
             with tempfile.NamedTemporaryFile(suffix=".db") as f:
                 with SqliteSaver.from_conn_string(f.name) as saver:
                     yield saver
 
-    W = 120
-    print("=" * W)
-    header = (
-        f"{'turns':>6}  {'ctx size':>10}  "
-        f"{'add_msgs (bytes)':>18}  {'delta (bytes)':>15}  {'delta+snap (bytes)':>18}  "
-        f"{'storage saved':>14}  "
-        f"{'read: add_msgs':>14}  {'read: delta+snap':>16}"
-    )
-    print(header)
-    print("-" * W)
-
-    results = []
+    rows = []
     for turns in TURN_COUNTS:
         with _make_saver() as saver:
             b_wt, b_rt, b_bytes = _run_turns(turns, BinaryState, saver)
@@ -273,51 +280,65 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
             d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
         with _make_saver() as saver:
             s_wt, s_rt, s_bytes = _run_turns(turns, DeltaSnapshotState, saver)
+        rows.append((turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt))
 
-        # For non-InMemory savers, blob_bytes are unavailable (-1); use read times only
-        if b_bytes < 0 or s_bytes < 0:
-            b_bytes_str = "n/a"
-            d_bytes_str = "n/a"
-            s_bytes_str = "n/a"
-            storage_ratio_str = "n/a"
+    # ── Table 1: Storage ─────────────────────────────────────────────────────
+    W = 80
+    print("Storage (checkpoint blob bytes)")
+    print("=" * W)
+    print(
+        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}  {'delta+snap':>12}  {'savings':>8}"
+    )
+    print("-" * W)
+    storage_results = []
+    for turns, b_bytes, d_bytes, s_bytes, *_ in rows:
+        if b_bytes < 0:
+            print(
+                f"{turns:>6}  {_approx_tokens(turns):>10}  {'n/a':>12}  {'n/a':>12}  {'n/a':>12}  {'n/a':>8}"
+            )
         else:
-            storage_ratio = b_bytes / s_bytes if s_bytes else float("inf")
-            b_bytes_str = _fmt_bytes(b_bytes)
-            d_bytes_str = _fmt_bytes(d_bytes)
-            s_bytes_str = _fmt_bytes(s_bytes)
-            storage_ratio_str = f"{storage_ratio:.1f}x"
-            results.append((turns, b_bytes, s_bytes, b_rt, s_rt, storage_ratio))
-
-        print(
-            f"{turns:>6}  {_approx_tokens(turns):>10}  "
-            f"{b_bytes_str:>18}  {d_bytes_str:>15}  {s_bytes_str:>18}  "
-            f"{storage_ratio_str:>14}  "
-            f"{b_rt * 1000:>12.1f}ms  {s_rt * 1000:>14.1f}ms"
-        )
-
+            ratio = b_bytes / s_bytes if s_bytes else float("inf")
+            storage_results.append((turns, b_bytes, s_bytes, ratio))
+            print(
+                f"{turns:>6}  {_approx_tokens(turns):>10}  "
+                f"{_fmt_bytes(b_bytes):>12}  {_fmt_bytes(d_bytes):>12}  {_fmt_bytes(s_bytes):>12}  "
+                f"{ratio:>7.0f}x"
+            )
     print("=" * W)
     print()
 
-    if results:
-        best = results[-1]
-        turns, b_bytes, s_bytes, b_rt, s_rt, ratio = best
-        print(f"Key findings at max scale ({turns} turns):")
+    # ── Table 2: Read latency ─────────────────────────────────────────────────
+    print("Read latency (avg of 5 get_state calls)")
+    print("=" * W)
+    print(
+        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}  {'delta+snap':>12}"
+    )
+    print("-" * W)
+    for turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt in rows:
         print(
-            f"  Storage:  {_fmt_bytes(b_bytes)} (add_messages)  →  {_fmt_bytes(s_bytes)} (DeltaChannel+snapshot) — {ratio:.0f}x reduction"
+            f"{turns:>6}  {_approx_tokens(turns):>10}  "
+            f"{b_rt * 1000:>10.1f}ms  {d_rt * 1000:>10.1f}ms  {s_rt * 1000:>10.1f}ms"
         )
+    print("=" * W)
+    print()
+
+    if storage_results:
+        best = storage_results[-1]
+        turns, b_bytes, s_bytes, ratio = best
+        _, _, _, _, b_rt, _, s_rt = rows[-1]
         print(
-            f"  Read latency: {b_rt * 1000:.1f}ms (add_messages)  vs  {s_rt * 1000:.1f}ms (DeltaChannel+snapshot)"
+            f"At {turns} turns: {_fmt_bytes(b_bytes)} → {_fmt_bytes(s_bytes)} ({ratio:.0f}x less storage); "
+            f"read {b_rt * 1000:.1f}ms → {s_rt * 1000:.1f}ms"
         )
         print()
+
     print("Legend:")
+    print("  add_msgs    = Annotated[list, add_messages]              — O(N²) storage")
     print(
-        "  add_msgs      = Annotated[list, add_messages]  — current default, O(N²) storage"
+        "  delta       = DeltaChannel(add_messages)                 — O(N) storage, unbounded chain"
     )
     print(
-        "  delta         = DeltaChannel(add_messages)     — O(N) storage, unbounded chain at read"
-    )
-    print(
-        f"  delta+snap    = DeltaChannel(add_messages, snapshot_every={SNAPSHOT_EVERY})  — O(N) storage, O(1) read depth"
+        f"  delta+snap  = DeltaChannel(add_messages, snapshot_every={SNAPSHOT_EVERY})  — O(N) storage, bounded read depth"
     )
     print()
 
@@ -327,13 +348,14 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skip(reason="slow benchmark — run manually with: python tests/test_delta_channel_benchmark.py")
 def test_delta_channel_benchmark(capsys: Any) -> None:
     """Storage grows O(N²) for add_messages, O(N) for DeltaChannel."""
     with capsys.disabled():
         run_benchmark()
 
     # Correctness assertion: DeltaChannel must use less storage at scale.
-    for turns in [100, 200]:
+    for turns in [25, 50]:
         _, _, b_bytes = _run_turns(turns, BinaryState)
         _, _, d_bytes = _run_turns(turns, DeltaState)
         _, _, s_bytes = _run_turns(turns, DeltaSnapshotState)

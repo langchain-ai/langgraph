@@ -134,13 +134,11 @@ def test_delta_channel_basic_two_steps() -> None:
     d1 = ch.checkpoint()
     assert isinstance(d1, DeltaValue)
     assert len(d1.delta) == 1
-    assert d1.prev_checkpoint_id is None  # first ever step
     ch.after_checkpoint("v1", checkpoint_id="cid1")
 
     # Step 2: another message
     ch.update([AIMessage(content="hello", id="a1")])
     d2 = ch.checkpoint()
-    assert d2.prev_checkpoint_id == "cid1"
     assert len(d2.delta) == 1
     ch.after_checkpoint("v2")
 
@@ -217,76 +215,26 @@ def test_delta_channel_overwrite_resets_chain() -> None:
     ch.update([HumanMessage(content="old", id="h1")])
     ch.after_checkpoint("v1")
 
-    # Overwrite should create a root blob (prev_checkpoint_id=None)
     ch.update([Overwrite([HumanMessage(content="new", id="h2")])])
     d = ch.checkpoint()
     assert isinstance(d, DeltaValue)
-    assert d.prev_checkpoint_id is None  # chain root
     assert len(d.delta) == 1
     assert d.delta[0].content == "new"
+    # _overwritten flag must be set so next checkpoint acts as a chain root
+    assert ch._overwritten is True
 
 
-def test_delta_channel_assembly_fallback_via_get_tuple() -> None:
-    """Assembly falls back to get_tuple for savers without get_channel_blob."""
-    from unittest.mock import MagicMock
-
-    from langgraph.checkpoint.base import (
-        CheckpointTuple,
-        DeltaChainValue,
-        DeltaValue,
-        empty_checkpoint,
-    )
+def test_delta_channel_unsupported_saver_raises() -> None:
+    """from_checkpoint raises ValueError when the saver returns a raw DeltaValue."""
+    from langgraph.checkpoint.base import DeltaValue
 
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
-    from langgraph.pregel._checkpoint import _assemble_delta_channels
-
-    msg1 = {"type": "human", "content": "hello"}
-    msg2 = {"type": "ai", "content": "world"}
-
-    cp1 = empty_checkpoint()
-    cp1["id"] = "cp1"
-    cp1["channel_values"]["messages"] = [msg1]
-
-    cp2 = empty_checkpoint()
-    cp2["id"] = "cp2"
-    cp2["channel_values"]["messages"] = DeltaValue(
-        delta=[msg2], prev_checkpoint_id="cp1"
-    )
-
-    saver = MagicMock()
-    saver.get_channel_blob.return_value = NotImplemented
-    saver.get_tuple.return_value = CheckpointTuple(
-        config={
-            "configurable": {
-                "thread_id": "t1",
-                "checkpoint_ns": "",
-                "checkpoint_id": "cp1",
-            }
-        },
-        checkpoint=cp1,
-        metadata={},
-        parent_config=None,
-        pending_writes=[],
-    )
-
-    config = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
-    assembled = _assemble_delta_channels(cp2, config, saver)
-
-    assert "messages" in assembled
-    chain = assembled["messages"]
-    assert isinstance(chain, DeltaChainValue)
-    assert chain.base == [msg1]
-    assert chain.deltas == [[msg2]]
-
-    from langchain_core.messages import AIMessage, HumanMessage
 
     spec = DeltaChannel(add_messages)
-    ch = spec.from_checkpoint(chain)
-    result = ch.get()
-    assert len(result) == 2
-    assert isinstance(result[0], HumanMessage) and result[0].content == "hello"
-    assert isinstance(result[1], AIMessage) and result[1].content == "world"
+    raw = DeltaValue(delta=[{"type": "human", "content": "hello"}])
+    with pytest.raises(ValueError, match="supports_delta_channels"):
+        spec.from_checkpoint(raw)
 
 
 def test_delta_channel_remove_message_delta_and_replay() -> None:
@@ -316,7 +264,6 @@ def test_delta_channel_remove_message_delta_and_replay() -> None:
     ch.update([RemoveMessage(id="a1")])
     d2 = ch.checkpoint()
     assert isinstance(d2, DeltaValue)
-    assert d2.prev_checkpoint_id == "cid1"
     assert any(isinstance(w, RemoveMessage) for w in d2.delta)
     ch.after_checkpoint("v2", checkpoint_id="cid2")
     assert ch.get() == [HumanMessage(content="hi", id="h1")]
@@ -349,7 +296,6 @@ def test_delta_channel_update_by_id_delta_and_replay() -> None:
     ch.update([HumanMessage(content="updated", id="h1")])
     d2 = ch.checkpoint()
     assert isinstance(d2, DeltaValue)
-    assert d2.prev_checkpoint_id == "cid1"
     ch.after_checkpoint("v2", checkpoint_id="cid2")
     assert ch.get() == [HumanMessage(content="updated", id="h1")]
 
@@ -392,7 +338,6 @@ def test_delta_channel_snapshot_every_emits_plain_list() -> None:
     ch.update([HumanMessage(content="post", id="hpost")])
     post = ch.checkpoint()
     assert isinstance(post, DeltaValue)
-    assert post.prev_checkpoint_id == "cidsnap"
 
 
 def test_delta_channel_snapshot_every_end_to_end() -> None:
@@ -436,60 +381,48 @@ def test_delta_channel_snapshot_every_end_to_end() -> None:
     assert len(msgs) == 10, f"expected 10 messages, got {len(msgs)}: {msgs}"
 
 
-def test_delta_channel_assembly_fast_path_returns_delta_value() -> None:
-    """get_channel_blob returning a DeltaValue continues chain traversal (fast-path)."""
-    from unittest.mock import MagicMock
+def test_delta_channel_inmemory_saver_assembles_chain() -> None:
+    """InMemorySaver assembles the delta chain inside get_tuple (no pregel involvement)."""
+    from typing import Annotated
 
-    from langgraph.checkpoint.base import (
-        DeltaChainValue,
-        DeltaValue,
-        empty_checkpoint,
-    )
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.memory import InMemorySaver
+    from typing_extensions import TypedDict
 
     from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
-    from langgraph.pregel._checkpoint import _assemble_delta_channels
 
-    msg1 = {"type": "human", "content": "one"}
-    msg2 = {"type": "ai", "content": "two"}
-    msg3 = {"type": "human", "content": "three"}
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(add_messages)]
 
-    # cp3 → cp2 (DeltaValue) → cp1 (base list)
-    dv_cp2 = DeltaValue(delta=[msg2], prev_checkpoint_id="cp1")
-    cp3 = empty_checkpoint()
-    cp3["id"] = "cp3"
-    cp3["channel_values"]["messages"] = DeltaValue(
-        delta=[msg3], prev_checkpoint_id="cp2"
-    )
+    n = {"v": 0}
 
-    saver = MagicMock()
+    def respond(state: State) -> dict:
+        n["v"] += 1
+        return {"messages": [AIMessage(content=f"ok{n['v']}", id=f"ai{n['v']}")]}
 
-    def _get_blob(thread_id, ns, checkpoint_id, channel):
-        if checkpoint_id == "cp2":
-            return dv_cp2  # DeltaValue — chain continues
-        if checkpoint_id == "cp1":
-            return [msg1]  # plain list — chain root
-        return NotImplemented
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    saver = InMemorySaver()
+    graph = builder.compile(checkpointer=saver)
+    config = {"configurable": {"thread_id": "t1"}}
 
-    saver.get_channel_blob.side_effect = _get_blob
+    graph.invoke({"messages": [HumanMessage(content="hi", id="h1")]}, config)
+    graph.invoke({"messages": [HumanMessage(content="bye", id="h2")]}, config)
 
-    config = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
-    assembled = _assemble_delta_channels(cp3, config, saver)
+    # get_tuple must return a fully assembled DeltaChainValue, not raw DeltaValue
+    from langgraph.checkpoint.base import DeltaChainValue, DeltaValue
 
-    chain = assembled["messages"]
-    assert isinstance(chain, DeltaChainValue)
-    assert chain.base == [msg1]
-    assert chain.deltas == [[msg2], [msg3]]
+    saved = saver.get_tuple(config)
+    assert saved is not None
+    assert "messages" in saved.checkpoint["channel_values"]
+    assert not isinstance(saved.checkpoint["channel_values"]["messages"], DeltaValue)
+    assert isinstance(saved.checkpoint["channel_values"]["messages"], DeltaChainValue)
 
-    spec = DeltaChannel(add_messages)
-    ch = spec.from_checkpoint(chain)
-    # add_messages converts dicts to message objects; check by type and content
-
-    result = ch.get()
-    assert len(result) == 3
-    assert result[0].content == "one"
-    assert result[1].content == "two"
-    assert result[2].content == "three"
+    state = graph.get_state(config)
+    assert len(state.values["messages"]) == 4  # 2 human + 2 AI
 
 
 def test_delta_channel_dict_reducer_fresh_channel() -> None:
@@ -526,7 +459,6 @@ def test_delta_channel_dict_reducer_basic_updates() -> None:
     ch.update([{"b": 2}])
     d2 = ch.checkpoint()
     assert d2.delta == [{"b": 2}]
-    assert d2.prev_checkpoint_id == "cid1"
     ch.after_checkpoint("v2")
 
     assert ch.get() == {"a": 1, "b": 2}
@@ -593,33 +525,43 @@ def test_delta_channel_dict_reducer_with_deletions() -> None:
     assert ch2.get() == {"file2.py": "content2", "file3.py": "content3"}
 
 
-def test_delta_channel_assembly_broken_chain_logs_warning() -> None:
-    """If a prev_checkpoint_id points to a missing checkpoint, log a warning and use partial chain."""
-    from unittest.mock import MagicMock
+def test_delta_channel_compile_warns_on_incompatible_saver() -> None:
+    """compile() warns when DeltaChannel is used with a saver that lacks supports_delta_channels."""
+    import warnings
+    from typing import Annotated
 
-    from langgraph.checkpoint.base import DeltaValue, empty_checkpoint
+    from langgraph.checkpoint.base import BaseCheckpointSaver
+    from typing_extensions import TypedDict
 
-    from langgraph.pregel._checkpoint import _assemble_delta_channels
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
 
-    cp = empty_checkpoint()
-    cp["id"] = "cp2"
-    cp["channel_values"]["messages"] = DeltaValue(
-        delta=["msg2"], prev_checkpoint_id="cp-missing"
-    )
+    class FakeSaver(BaseCheckpointSaver):
+        # Third-party saver that has not opted into delta channel support.
+        supports_delta_channels = False
 
-    saver = MagicMock()
-    saver.get_channel_blob.return_value = NotImplemented
-    saver.get_tuple.return_value = None  # checkpoint not found
+        def get_tuple(self, config):
+            return None
 
-    config = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
+        def put(self, config, checkpoint, metadata, new_versions):
+            return config
 
-    assembled = _assemble_delta_channels(cp, config, saver)
+        def put_writes(self, config, writes, task_id, task_path=""):
+            pass
 
-    # Should still assemble — with partial chain (just the current delta, base=None)
-    assert "messages" in assembled
-    from langgraph.checkpoint.base import DeltaChainValue
+        def list(self, config, *, filter=None, before=None, limit=None):
+            return iter([])
 
-    chain = assembled["messages"]
-    assert isinstance(chain, DeltaChainValue)
-    assert chain.base is None
-    assert chain.deltas == [["msg2"]]
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(add_messages)]
+
+    builder = StateGraph(State)
+    builder.add_node("echo", lambda s: {})
+    builder.add_edge(START, "echo")
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        builder.compile(checkpointer=FakeSaver())  # type: ignore[arg-type]
+
+    assert any("supports_delta_channels" in str(warning.message) for warning in w)

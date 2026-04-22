@@ -92,8 +92,6 @@ from langgraph.pregel._algo import (
     task_path_str,
 )
 from langgraph.pregel._checkpoint import (
-    _aassemble_delta_channels,
-    _assemble_delta_channels,
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
@@ -1280,19 +1278,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             else []
         )
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
-        # Assemble any DeltaChannel chains before constructing channel objects.
-        if self.checkpointer is not None:
-            assembled = _assemble_delta_channels(
-                self.checkpoint, self.checkpoint_config, self.checkpointer
-            )
-            if assembled:
-                self.checkpoint = {
-                    **self.checkpoint,
-                    "channel_values": {
-                        **self.checkpoint["channel_values"],
-                        **assembled,
-                    },
-                }
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
         )
@@ -1497,18 +1482,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )
-        if self.checkpointer is not None:
-            assembled = await _aassemble_delta_channels(
-                self.checkpoint, self.checkpoint_config, self.checkpointer
-            )
-            if assembled:
-                self.checkpoint = {
-                    **self.checkpoint,
-                    "channel_values": {
-                        **self.checkpoint["channel_values"],
-                        **assembled,
-                    },
-                }
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
         )

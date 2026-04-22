@@ -122,8 +122,6 @@ from langgraph.pregel._algo import (
 )
 from langgraph.pregel._call import identifier
 from langgraph.pregel._checkpoint import (
-    _aassemble_delta_channels,
-    _assemble_delta_channels,
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
@@ -1052,15 +1050,6 @@ class Pregel(
         step = saved.metadata.get("step", -1) + 1
         stop = step + 2
         checkpoint = saved.checkpoint
-        if isinstance(self.checkpointer, BaseCheckpointSaver):
-            assembled = _assemble_delta_channels(
-                checkpoint, saved.config, self.checkpointer
-            )
-            if assembled:
-                checkpoint = {
-                    **checkpoint,
-                    "channel_values": {**checkpoint["channel_values"], **assembled},
-                }
         channels, managed = channels_from_checkpoint(
             self.channels,
             checkpoint,
@@ -1181,15 +1170,6 @@ class Pregel(
         step = saved.metadata.get("step", -1) + 1
         stop = step + 2
         checkpoint = saved.checkpoint
-        if isinstance(self.checkpointer, BaseCheckpointSaver):
-            assembled = await _aassemble_delta_channels(
-                checkpoint, saved.config, self.checkpointer
-            )
-            if assembled:
-                checkpoint = {
-                    **checkpoint,
-                    "channel_values": {**checkpoint["channel_values"], **assembled},
-                }
         channels, managed = channels_from_checkpoint(
             self.channels,
             checkpoint,
@@ -1543,18 +1523,6 @@ class Pregel(
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
             base_checkpoint = saved.checkpoint if saved else empty_checkpoint()
-            if saved:
-                assembled = _assemble_delta_channels(
-                    base_checkpoint, saved.config, checkpointer
-                )
-                if assembled:
-                    base_checkpoint = {
-                        **base_checkpoint,
-                        "channel_values": {
-                            **base_checkpoint["channel_values"],
-                            **assembled,
-                        },
-                    }
             checkpoint = copy_checkpoint(base_checkpoint) if saved else base_checkpoint
             checkpoint_previous_versions = (
                 saved.checkpoint["channel_versions"].copy() if saved else {}
@@ -2000,18 +1968,6 @@ class Pregel(
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
             base_checkpoint = saved.checkpoint if saved else empty_checkpoint()
-            if saved:
-                assembled = await _aassemble_delta_channels(
-                    base_checkpoint, saved.config, checkpointer
-                )
-                if assembled:
-                    base_checkpoint = {
-                        **base_checkpoint,
-                        "channel_values": {
-                            **base_checkpoint["channel_values"],
-                            **assembled,
-                        },
-                    }
             checkpoint = copy_checkpoint(base_checkpoint) if saved else base_checkpoint
             checkpoint_previous_versions = (
                 saved.checkpoint["channel_versions"].copy() if saved else {}

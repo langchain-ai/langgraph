@@ -32,7 +32,8 @@ Conn = _internal.Conn  # For backward compatibility
 class PostgresSaver(BasePostgresSaver):
     """Checkpointer that stores checkpoints in a Postgres database."""
 
-    lock: threading.Lock
+    supports_delta_channels: bool = True
+    lock: threading.RLock
 
     def __init__(
         self,
@@ -48,7 +49,7 @@ class PostgresSaver(BasePostgresSaver):
 
         self.conn = conn
         self.pipe = pipe
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.supports_pipeline = Capabilities().has_pipeline()
 
     @classmethod
@@ -430,43 +431,6 @@ class PostgresSaver(BasePostgresSaver):
                 with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    def get_channel_blob(
-        self,
-        thread_id: str,
-        checkpoint_ns: str,
-        checkpoint_id: str,
-        channel: str,
-    ) -> Any:
-        """Look up a channel blob by checkpoint ID + channel via checkpoint_blobs."""
-        with self._cursor() as cur:
-            cur.execute(
-                """
-                SELECT cb.type, cb.blob
-                FROM checkpoint_blobs cb
-                WHERE cb.thread_id = %s
-                  AND cb.checkpoint_ns = %s
-                  AND cb.channel = %s
-                  AND cb.version = (
-                      SELECT checkpoint->'channel_versions'->>%s
-                      FROM checkpoints
-                      WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s
-                  )
-                """,
-                (
-                    thread_id,
-                    checkpoint_ns,
-                    channel,
-                    channel,
-                    thread_id,
-                    checkpoint_ns,
-                    checkpoint_id,
-                ),
-            )
-            row = cur.fetchone()
-        if row is None:
-            return NotImplemented
-        return self.serde.loads_typed((row["type"], row["blob"]))
-
     def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
         """
         Convert a database row into a CheckpointTuple object.
@@ -484,6 +448,7 @@ class PostgresSaver(BasePostgresSaver):
                 value["channel_values"],
                 thread_id=value["thread_id"],
                 checkpoint_ns=value["checkpoint_ns"],
+                checkpoint_id=value["checkpoint_id"],
                 cur=cur,
             )
         return CheckpointTuple(

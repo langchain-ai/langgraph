@@ -11,6 +11,8 @@ from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
+    DeltaChainValue,
+    DeltaValue,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS
@@ -190,17 +192,101 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         *,
         thread_id: str = "",
         checkpoint_ns: str = "",
+        checkpoint_id: str = "",
         cur: Any = None,
     ) -> dict[str, Any]:
         if not blob_values:
             return {}
         result: dict[str, Any] = {}
+        delta_channels: list[str] = []
         for k, t, v in blob_values:
             channel = k.decode()
             type_tag = t.decode()
-            if type_tag != "empty":
+            if type_tag == "delta":
+                delta_channels.append(channel)
+            elif type_tag != "empty":
                 result[channel] = self.serde.loads_typed((type_tag, v))
+        if delta_channels and cur is not None and checkpoint_id:
+            for channel in delta_channels:
+                result[channel] = self._load_delta_chain(
+                    thread_id, checkpoint_ns, checkpoint_id, channel, cur
+                )
         return result
+
+    def _load_delta_chain(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        checkpoint_id: str,
+        channel: str,
+        cur: Any,
+    ) -> DeltaChainValue:
+        """Fetch the full delta chain for a channel in one recursive CTE query."""
+        cur.execute(
+            """
+            WITH RECURSIVE chain AS (
+                SELECT
+                    c.checkpoint_id,
+                    c.parent_checkpoint_id,
+                    cb.version,
+                    cb.type,
+                    cb.blob
+                FROM checkpoints c
+                JOIN checkpoint_blobs cb
+                    ON  cb.thread_id     = %s
+                    AND cb.checkpoint_ns = %s
+                    AND cb.channel       = %s
+                    AND cb.version       = (c.checkpoint->'channel_versions'->>%s)::text
+                WHERE c.thread_id     = %s
+                  AND c.checkpoint_ns = %s
+                  AND c.checkpoint_id = %s
+
+                UNION ALL
+
+                SELECT
+                    c.checkpoint_id,
+                    c.parent_checkpoint_id,
+                    cb.version,
+                    cb.type,
+                    cb.blob
+                FROM chain prev
+                JOIN checkpoints c ON c.checkpoint_id = prev.parent_checkpoint_id
+                JOIN checkpoint_blobs cb
+                    ON  cb.thread_id     = %s
+                    AND cb.checkpoint_ns = %s
+                    AND cb.channel       = %s
+                    AND cb.version       = (c.checkpoint->'channel_versions'->>%s)::text
+                WHERE prev.parent_checkpoint_id IS NOT NULL
+                  AND prev.type = 'delta'
+            )
+            SELECT DISTINCT ON (version) type, blob
+            FROM chain
+            ORDER BY version ASC
+            """,
+            (
+                thread_id,
+                checkpoint_ns,
+                channel,
+                channel,
+                thread_id,
+                checkpoint_ns,
+                checkpoint_id,
+                thread_id,
+                checkpoint_ns,
+                channel,
+                channel,
+            ),
+        )
+        rows = cur.fetchall()
+        base = None
+        deltas: list[list[Any]] = []
+        for row in rows:
+            blob = self.serde.loads_typed((row["type"], row["blob"]))
+            if isinstance(blob, DeltaValue):
+                deltas.append(blob.delta)
+            else:
+                base = blob
+        return DeltaChainValue(base=base, deltas=deltas)
 
     def _dump_blobs(
         self,

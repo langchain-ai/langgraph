@@ -13,6 +13,8 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    DeltaChainValue,
+    DeltaValue,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
@@ -32,6 +34,7 @@ Conn = _ainternal.Conn  # For backward compatibility
 class AsyncPostgresSaver(BasePostgresSaver):
     """Asynchronous checkpointer that stores checkpoints in a Postgres database."""
 
+    supports_delta_channels: bool = True
     lock: asyncio.Lock
 
     def __init__(
@@ -391,42 +394,80 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    async def aget_channel_blob(
+    async def _aload_delta_chain(
         self,
         thread_id: str,
         checkpoint_ns: str,
         checkpoint_id: str,
         channel: str,
-    ) -> Any:
-        """Async look up of a channel blob by checkpoint ID + channel name."""
-        async with self._cursor() as cur:
-            await cur.execute(
-                """
-                SELECT cb.type, cb.blob
-                FROM checkpoint_blobs cb
-                WHERE cb.thread_id = %s
-                  AND cb.checkpoint_ns = %s
-                  AND cb.channel = %s
-                  AND cb.version = (
-                      SELECT checkpoint->'channel_versions'->>%s
-                      FROM checkpoints
-                      WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s
-                  )
-                """,
-                (
-                    thread_id,
-                    checkpoint_ns,
-                    channel,
-                    channel,
-                    thread_id,
-                    checkpoint_ns,
-                    checkpoint_id,
-                ),
+        cur: Any,
+    ) -> DeltaChainValue:
+        """Fetch the full delta chain for a channel in one recursive CTE query (async)."""
+        await cur.execute(
+            """
+            WITH RECURSIVE chain AS (
+                SELECT
+                    c.checkpoint_id,
+                    c.parent_checkpoint_id,
+                    cb.version,
+                    cb.type,
+                    cb.blob
+                FROM checkpoints c
+                JOIN checkpoint_blobs cb
+                    ON  cb.thread_id     = %s
+                    AND cb.checkpoint_ns = %s
+                    AND cb.channel       = %s
+                    AND cb.version       = (c.checkpoint->'channel_versions'->>%s)::text
+                WHERE c.thread_id     = %s
+                  AND c.checkpoint_ns = %s
+                  AND c.checkpoint_id = %s
+
+                UNION ALL
+
+                SELECT
+                    c.checkpoint_id,
+                    c.parent_checkpoint_id,
+                    cb.version,
+                    cb.type,
+                    cb.blob
+                FROM chain prev
+                JOIN checkpoints c ON c.checkpoint_id = prev.parent_checkpoint_id
+                JOIN checkpoint_blobs cb
+                    ON  cb.thread_id     = %s
+                    AND cb.checkpoint_ns = %s
+                    AND cb.channel       = %s
+                    AND cb.version       = (c.checkpoint->'channel_versions'->>%s)::text
+                WHERE prev.parent_checkpoint_id IS NOT NULL
+                  AND prev.type = 'delta'
             )
-            row = await cur.fetchone()
-        if row is None:
-            return NotImplemented
-        return self.serde.loads_typed((row["type"], row["blob"]))
+            SELECT DISTINCT ON (version) type, blob
+            FROM chain
+            ORDER BY version ASC
+            """,
+            (
+                thread_id,
+                checkpoint_ns,
+                channel,
+                channel,
+                thread_id,
+                checkpoint_ns,
+                checkpoint_id,
+                thread_id,
+                checkpoint_ns,
+                channel,
+                channel,
+            ),
+        )
+        rows = await cur.fetchall()
+        base = None
+        deltas: list[list[Any]] = []
+        for row in rows:
+            blob = self.serde.loads_typed((row["type"], row["blob"]))
+            if isinstance(blob, DeltaValue):
+                deltas.append(blob.delta)
+            else:
+                base = blob
+        return DeltaChainValue(base=base, deltas=deltas)
 
     async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
         """
@@ -442,11 +483,21 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """
         thread_id = value["thread_id"]
         checkpoint_ns = value["checkpoint_ns"]
+        checkpoint_id = value["checkpoint_id"]
         blob_values = value["channel_values"]
 
         channel_values: dict[str, Any] = {}
         if blob_values:
             channel_values = self._load_blobs(blob_values)
+            delta_channels = [
+                k.decode() for k, t, _ in blob_values if t.decode() == "delta"
+            ]
+            if delta_channels:
+                async with self._cursor() as cur:
+                    for channel in delta_channels:
+                        channel_values[channel] = await self._aload_delta_chain(
+                            thread_id, checkpoint_ns, checkpoint_id, channel, cur
+                        )
 
         return CheckpointTuple(
             {
