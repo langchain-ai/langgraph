@@ -324,9 +324,9 @@ def test_memory_saver_with_allowlist_proxy_isolated() -> None:
 
 class TestInMemorySaverDeltaChannel:
     def test_load_blobs_returns_sentinel_for_delta_channel(self) -> None:
-        """_load_blobs returns DeltaChannelSentinel for delta channels (reconstruction deferred)."""
+        """_load_blobs returns DELTA_SENTINEL for delta channels (reconstruction deferred)."""
         from langgraph.checkpoint.base import (
-            DeltaChannelSentinel,
+            DELTA_SENTINEL,
             empty_checkpoint,
         )
 
@@ -336,8 +336,7 @@ class TestInMemorySaverDeltaChannel:
         thread_id, ns, channel = "t1", "", "messages"
         v1 = "00000000000000000000000000000001.0000000000000000"
 
-        sentinel = DeltaChannelSentinel()
-        saver.blobs[(thread_id, ns, channel, v1)] = serde.dumps_typed(sentinel)
+        saver.blobs[(thread_id, ns, channel, v1)] = serde.dumps_typed(DELTA_SENTINEL)
 
         cp1 = empty_checkpoint()
         cp1["id"] = "cp1"
@@ -348,7 +347,7 @@ class TestInMemorySaverDeltaChannel:
 
         result = saver._load_blobs(thread_id, ns, {channel: v1})
         assert channel in result
-        assert isinstance(result[channel], DeltaChannelSentinel)
+        assert result[channel] is DELTA_SENTINEL
 
     def test_get_channel_writes_collects_writes(self) -> None:
         """get_channel_writes collects per-step writes oldest→newest."""

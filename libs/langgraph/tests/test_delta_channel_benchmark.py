@@ -54,7 +54,9 @@ except ImportError:
 _HUMAN_TEMPLATE = (
     "I need help understanding the implications of {topic} on our system architecture. "
     "Specifically, I'm concerned about how this interacts with our existing {concern} "
-    "and whether we need to refactor the {component} layer before proceeding."
+    "and whether we need to refactor the {component} layer before proceeding. "
+    "We've had prior incidents in this area and want to be deliberate. "
+    "What should we prioritize first, and are there known failure modes we should design around from the start?"
 )
 
 _AI_TEMPLATE = (
@@ -285,14 +287,13 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
         rows.append((turns, b_bytes, d_bytes, b_rt, d_rt))
 
     # ── Table 1: Storage ─────────────────────────────────────────────────────
-    W = 70
+    W = 60
     print("Storage (checkpoint blob bytes)")
     print("=" * W)
     print(
         f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}  {'savings':>8}"
     )
     print("-" * W)
-    storage_results = []
     for turns, b_bytes, d_bytes, b_rt, d_rt in rows:
         if b_bytes < 0:
             print(
@@ -300,17 +301,15 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
             )
         else:
             ratio = b_bytes / d_bytes if d_bytes else float("inf")
-            storage_results.append((turns, b_bytes, d_bytes, ratio))
             print(
                 f"{turns:>6}  {_approx_tokens(turns):>10}  "
-                f"{_fmt_bytes(b_bytes):>12}  {_fmt_bytes(d_bytes):>12}  "
-                f"{ratio:>7.0f}x"
+                f"{_fmt_bytes(b_bytes):>12}  {_fmt_bytes(d_bytes):>12}  {ratio:>7.0f}x"
             )
     print("=" * W)
     print()
 
     # ── Table 2: Read latency ─────────────────────────────────────────────────
-    print("Read latency (avg of 5 get_state calls)")
+    print("Read latency (avg of 5 get_state calls = cost per invoke)")
     print("=" * W)
     print(f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}")
     print("-" * W)
@@ -322,21 +321,9 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
     print("=" * W)
     print()
 
-    if storage_results:
-        turns, b_bytes, d_bytes, ratio = storage_results[-1]
-        b_rt = rows[-1][-2]
-        d_rt = rows[-1][-1]
-        print(
-            f"At {turns} turns: {_fmt_bytes(b_bytes)} → {_fmt_bytes(d_bytes)} ({ratio:.0f}x less storage); "
-            f"read {b_rt * 1000:.1f}ms → {d_rt * 1000:.1f}ms"
-        )
-        print()
-
     print("Legend:")
     print("  add_msgs = Annotated[list, add_messages]  — O(N²) storage")
-    print(
-        "  delta    = DeltaChannel(add_messages)     — O(N) storage, full chain replay"
-    )
+    print("  delta    = DeltaChannel(add_messages)     — O(N) storage")
     print()
 
 

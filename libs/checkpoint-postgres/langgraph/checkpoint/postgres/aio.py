@@ -8,12 +8,13 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
+    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    DeltaChannelSentinel,
+    DeltaChannelWrites,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
@@ -169,7 +170,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                             value["channel_values"],
                         )
             for value in values:
-                yield await self._load_checkpoint_tuple(value)
+                yield await self._load_checkpoint_tuple(value, cur)
 
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database asynchronously.
@@ -220,7 +221,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                         value["channel_values"],
                     )
 
-            return await self._load_checkpoint_tuple(value)
+            return await self._load_checkpoint_tuple(value, cur)
 
     async def aput(
         self,
@@ -444,12 +445,17 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 thread_id, checkpoint_ns, checkpoint_id, channel, cur
             )
 
-    async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
+    async def _load_checkpoint_tuple(
+        self, value: DictRow, cur: AsyncCursor[DictRow]
+    ) -> CheckpointTuple:
         """
         Convert a database row into a CheckpointTuple object.
 
         Args:
             value: A row from the database containing checkpoint data.
+            cur: The cursor used by the caller; reused for DeltaChannel
+                 reconstruction to avoid re-entering `self.lock`, which is
+                 `asyncio.Lock` and would deadlock.
 
         Returns:
             CheckpointTuple: A structured representation of the checkpoint,
@@ -464,17 +470,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
         channel_values: dict[str, Any] = {}
         if blob_values:
             channel_values = self._load_blobs(blob_values)
-            delta_channels = [
-                ch
-                for ch, v in channel_values.items()
-                if isinstance(v, DeltaChannelSentinel)
-            ]
-            if delta_channels:
-                async with self._cursor() as cur:
-                    for channel in delta_channels:
-                        channel_values[channel] = await self._aget_channel_writes_cur(
+            for channel, v in channel_values.items():
+                if v is DELTA_SENTINEL:
+                    channel_values[channel] = DeltaChannelWrites(
+                        await self._aget_channel_writes_cur(
                             thread_id, checkpoint_ns, checkpoint_id, channel, cur
                         )
+                    )
 
         return CheckpointTuple(
             {

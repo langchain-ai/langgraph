@@ -33,14 +33,13 @@ from langchain_core.load.load import Reviver
 from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.event_hooks import emit_serde_event
-from langgraph.checkpoint.serde.types import SendProtocol
+from langgraph.checkpoint.serde.types import DELTA_SENTINEL, SendProtocol
 from langgraph.store.base import Item
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.serde._msgpack import (
         AllowedMsgpackModules,
     )
-    from langgraph.checkpoint.serde.types import SendProtocol
 
 LC_REVIVER = Reviver()
 EMPTY_BYTES = b""
@@ -62,14 +61,6 @@ def _warn_once(
         return
     seen.add(key)
     logger.warning(msg, *args)
-
-
-def _get_delta_sentinel_cls() -> type:
-    from langgraph.checkpoint.base import (
-        DeltaChannelSentinel,
-    )  # lazy import avoids circular dep
-
-    return DeltaChannelSentinel
 
 
 class JsonPlusSerializer(SerializerProtocol):
@@ -260,12 +251,12 @@ class JsonPlusSerializer(SerializerProtocol):
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         if obj is None:
             return "null", EMPTY_BYTES
+        elif obj is DELTA_SENTINEL:
+            return "delta", EMPTY_BYTES
         elif isinstance(obj, bytes):
             return "bytes", obj
         elif isinstance(obj, bytearray):
             return "bytearray", obj
-        elif isinstance(obj, _get_delta_sentinel_cls()):
-            return "delta", b""
         else:
             try:
                 return "msgpack", _msgpack_enc(obj)
@@ -289,9 +280,7 @@ class JsonPlusSerializer(SerializerProtocol):
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
         elif type_ == "delta":
-            from langgraph.checkpoint.base import DeltaChannelSentinel
-
-            return DeltaChannelSentinel()
+            return DELTA_SENTINEL
         elif self.pickle_fallback and type_ == "pickle":
             return pickle.loads(data_)
         else:
