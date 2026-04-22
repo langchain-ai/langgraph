@@ -118,8 +118,13 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
                 self.value = overwrite_value
                 seen_overwrite = True
                 continue
-            if not seen_overwrite:
-                self.value = self.operator(self.value, value)
+            if seen_overwrite:
+                msg = create_error_message(
+                    message=f"At key '{self.key}': Cannot apply operator after an Overwrite in the same super-step. Move regular updates before the Overwrite, or use separate super-steps.",
+                    error_code=ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE,
+                )
+                raise InvalidUpdateError(msg)
+            self.value = self.operator(self.value, value)
         return True
 
     def get(self) -> Value:
