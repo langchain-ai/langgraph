@@ -12,7 +12,11 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10.
 import click
 import pathspec
 
-from langgraph_cli._ignore import _build_ignore_spec, _has_negation_patterns
+from langgraph_cli._ignore import (
+    _build_dockerignore_negation_hints,
+    _build_ignore_spec,
+    _is_always_excluded,
+)
 from langgraph_cli.schemas import Config
 
 
@@ -465,10 +469,7 @@ def _uv_lock_package_copy_items(
 
     root_container = plan.container_roots[package.root]
     workspace_member_roots = plan.all_workspace_roots - {plan.project_root}
-    # Ignored subtrees can hold re-included descendants (a later `!` pattern),
-    # so we only walk into them when the spec actually has negations. Without
-    # this guard, a stray `.venv/` inside project_root would be fully walked.
-    has_negations = _has_negation_patterns(ignore_spec)
+    negated_dockerignore_hints = _build_dockerignore_negation_hints(plan.project_root)
 
     def iter_entries(
         current_dir: pathlib.Path,
@@ -483,6 +484,9 @@ def _uv_lock_package_copy_items(
             relative_child = pathlib.PurePosixPath(
                 *child.relative_to(plan.project_root).parts
             )
+            if _is_always_excluded(relative_child):
+                continue
+
             is_dir = child.is_dir()
             ignored = ignore_spec.match_file(
                 f"{relative_child.as_posix()}/" if is_dir else relative_child.as_posix()
@@ -491,7 +495,14 @@ def _uv_lock_package_copy_items(
                 child in ws_root.parents for ws_root in workspace_member_roots
             )
 
-            if is_workspace_parent or (is_dir and ignored and has_negations):
+            if is_workspace_parent:
+                entries.extend(iter_entries(child))
+                continue
+            if (
+                is_dir
+                and ignored
+                and negated_dockerignore_hints.requires_dir_walk(relative_child)
+            ):
                 entries.extend(iter_entries(child))
                 continue
             if ignored:

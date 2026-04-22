@@ -4,6 +4,7 @@ import os
 import pathlib
 import tempfile
 import textwrap
+from unittest.mock import patch
 
 import click
 import pytest
@@ -2074,6 +2075,114 @@ def test_config_to_docker_uv_lock_preserves_negated_dockerignore_descendants():
         assert "ADD assets /deps/workspace/assets" not in docker
         assert "ADD assets/keep.txt /deps/workspace/assets/keep.txt" in docker
         assert "assets/drop.txt" not in docker
+
+
+def test_config_to_docker_uv_lock_prunes_unrelated_ignored_subtrees():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root = tmpdir_path / "single"
+        project_root.mkdir()
+        (project_root / "uv.lock").write_text("# uv lock file\n")
+        (project_root / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "single-app"
+                version = "0.1.0"
+                dependencies = ["httpx>=0.28"]
+
+                [build-system]
+                requires = ["setuptools>=61"]
+                build-backend = "setuptools.build_meta"
+                """
+            ).strip()
+            + "\n"
+        )
+        (project_root / "langgraph.json").write_text("{}\n")
+        (project_root / "src").mkdir()
+        (project_root / "src" / "agent.py").write_text("graph = object()\n")
+        (project_root / "assets").mkdir()
+        (project_root / "assets" / "keep.txt").write_text("keep\n")
+        (project_root / "vendor").mkdir()
+        (project_root / "vendor" / "huge.txt").write_text("large\n")
+        (project_root / ".dockerignore").write_text(
+            "vendor/\nassets/\n!assets/keep.txt\n"
+        )
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./src/agent.py:graph"},
+                "source": {"kind": "uv"},
+            }
+        )
+
+        original_iterdir = pathlib.Path.iterdir
+
+        def guarded_iterdir(self):
+            if self == project_root / "vendor":
+                raise AssertionError("should not walk unrelated ignored subtree")
+            return original_iterdir(self)
+
+        with patch.object(pathlib.Path, "iterdir", autospec=True, side_effect=guarded_iterdir):
+            docker, _ = config_to_docker(
+                project_root / "langgraph.json",
+                config,
+                base_image="langchain/langgraph-api:0.2.47",
+            )
+
+        assert "ADD assets/keep.txt /deps/workspace/assets/keep.txt" in docker
+        assert "vendor/huge.txt" not in docker
+
+
+def test_config_to_docker_uv_lock_never_reincludes_always_excluded_subtrees():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root = tmpdir_path / "single"
+        project_root.mkdir()
+        (project_root / "uv.lock").write_text("# uv lock file\n")
+        (project_root / "pyproject.toml").write_text(
+            textwrap.dedent(
+                """
+                [project]
+                name = "single-app"
+                version = "0.1.0"
+                dependencies = ["httpx>=0.28"]
+
+                [build-system]
+                requires = ["setuptools>=61"]
+                build-backend = "setuptools.build_meta"
+                """
+            ).strip()
+            + "\n"
+        )
+        (project_root / "langgraph.json").write_text("{}\n")
+        (project_root / "src").mkdir()
+        (project_root / "src" / "agent.py").write_text("graph = object()\n")
+        (project_root / ".venv" / "pkg").mkdir(parents=True)
+        (project_root / ".venv" / "pkg" / "keep.txt").write_text("keep\n")
+        (project_root / "node_modules" / "pkg").mkdir(parents=True)
+        (project_root / "node_modules" / "pkg" / "package.json").write_text("{}\n")
+        (project_root / ".dockerignore").write_text(
+            "!.venv/pkg/keep.txt\n!node_modules/pkg/package.json\n"
+        )
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {"agent": "./src/agent.py:graph"},
+                "source": {"kind": "uv"},
+            }
+        )
+        docker, _ = config_to_docker(
+            project_root / "langgraph.json",
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+        assert ".venv/pkg/keep.txt" not in docker
+        assert "node_modules/pkg/package.json" not in docker
+        assert "ADD src /deps/workspace/src" in docker
 
 
 def test_config_to_docker_uv_lock_rejects_ignored_workspace_member():
