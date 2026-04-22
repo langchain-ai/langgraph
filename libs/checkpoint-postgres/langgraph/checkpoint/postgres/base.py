@@ -9,10 +9,11 @@ from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
+    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
-    DeltaChannelSentinel,
+    DeltaChannelWrites,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS
@@ -205,14 +206,16 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         channel_values: dict[str, Any],
         cur: Any,
     ) -> None:
-        for channel, value in list(channel_values.items()):
-            if isinstance(value, DeltaChannelSentinel):
-                channel_values[channel] = self._get_channel_writes_cur(
-                    config["configurable"]["thread_id"],
-                    config["configurable"].get("checkpoint_ns", ""),
-                    config["configurable"]["checkpoint_id"],
-                    channel,
-                    cur,
+        for channel, value in channel_values.items():
+            if value is DELTA_SENTINEL:
+                channel_values[channel] = DeltaChannelWrites(
+                    self._get_channel_writes_cur(
+                        config["configurable"]["thread_id"],
+                        config["configurable"].get("checkpoint_ns", ""),
+                        config["configurable"]["checkpoint_id"],
+                        channel,
+                        cur,
+                    )
                 )
 
     def _get_channel_writes_cur(

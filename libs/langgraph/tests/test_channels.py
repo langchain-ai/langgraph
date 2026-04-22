@@ -121,7 +121,7 @@ def test_untracked_value() -> None:
 
 def test_delta_channel_basic_two_steps() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.checkpoint.base import DeltaChannelSentinel
+    from langgraph.checkpoint.base import DELTA_SENTINEL
 
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
@@ -131,12 +131,12 @@ def test_delta_channel_basic_two_steps() -> None:
     # Step 1: one message added
     ch.update([HumanMessage(content="hi", id="h1")])
     d1 = ch.checkpoint()
-    assert isinstance(d1, DeltaChannelSentinel)
+    assert d1 is DELTA_SENTINEL
 
     # Step 2: another message
     ch.update([AIMessage(content="hello", id="a1")])
     d2 = ch.checkpoint()
-    assert isinstance(d2, DeltaChannelSentinel)
+    assert d2 is DELTA_SENTINEL
 
     # Full accumulated value is preserved in memory
     assert len(ch.get()) == 2
@@ -145,19 +145,21 @@ def test_delta_channel_basic_two_steps() -> None:
 
 
 def test_delta_channel_from_checkpoint_writes_list() -> None:
-    """from_checkpoint with a flat list of individual writes replays them through the operator."""
+    """from_checkpoint given DeltaChannelWrites replays through the operator."""
     from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.base import DeltaChannelWrites
 
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
     spec = DeltaChannel(add_messages)
-    # Each element is one write value (as stored in checkpoint_writes)
-    writes = [
-        HumanMessage(content="hi", id="h1"),
-        AIMessage(content="hello", id="a1"),
-        HumanMessage(content="bye", id="h2"),
-    ]
+    writes = DeltaChannelWrites(
+        [
+            HumanMessage(content="hi", id="h1"),
+            AIMessage(content="hello", id="a1"),
+            HumanMessage(content="bye", id="h2"),
+        ]
+    )
     ch = spec.from_checkpoint(writes)
     msgs = ch.get()
     assert len(msgs) == 3
@@ -181,7 +183,7 @@ def test_delta_channel_from_checkpoint_backwards_compat() -> None:
 
 def test_delta_channel_overwrite() -> None:
     from langchain_core.messages import HumanMessage
-    from langgraph.checkpoint.base import DeltaChannelSentinel
+    from langgraph.checkpoint.base import DELTA_SENTINEL
 
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
@@ -192,7 +194,7 @@ def test_delta_channel_overwrite() -> None:
 
     ch.update([Overwrite([HumanMessage(content="new", id="h2")])])
     d = ch.checkpoint()
-    assert isinstance(d, DeltaChannelSentinel)
+    assert d is DELTA_SENTINEL
     # After overwrite, value is reset to only the new message
     assert len(ch.get()) == 1
     assert ch.get()[0].content == "new"
@@ -221,11 +223,15 @@ def test_delta_channel_remove_message_and_replay() -> None:
     assert ch.get() == [HumanMessage(content="hi", id="h1")]
 
     # Replay the writes list from scratch — must reproduce the post-remove state
-    writes = [
-        HumanMessage(content="hi", id="h1"),
-        AIMessage(content="hello", id="a1"),
-        RemoveMessage(id="a1"),
-    ]
+    from langgraph.checkpoint.base import DeltaChannelWrites
+
+    writes = DeltaChannelWrites(
+        [
+            HumanMessage(content="hi", id="h1"),
+            AIMessage(content="hello", id="a1"),
+            RemoveMessage(id="a1"),
+        ]
+    )
     ch2 = spec.from_checkpoint(writes)
     assert ch2.get() == [HumanMessage(content="hi", id="h1")]
 
@@ -248,29 +254,33 @@ def test_delta_channel_update_by_id_and_replay() -> None:
     assert ch.get() == [HumanMessage(content="updated", id="h1")]
 
     # Replay writes — must produce the updated message, not the original
-    writes = [
-        HumanMessage(content="original", id="h1"),
-        HumanMessage(content="updated", id="h1"),
-    ]
+    from langgraph.checkpoint.base import DeltaChannelWrites
+
+    writes = DeltaChannelWrites(
+        [
+            HumanMessage(content="original", id="h1"),
+            HumanMessage(content="updated", id="h1"),
+        ]
+    )
     ch2 = spec.from_checkpoint(writes)
     assert len(ch2.get()) == 1
     assert ch2.get()[0].content == "updated"
 
 
 def test_delta_channel_checkpoint_returns_sentinel() -> None:
-    """checkpoint() always returns DeltaChannelSentinel regardless of state."""
-    from langgraph.checkpoint.base import DeltaChannelSentinel
+    """checkpoint() always returns DELTA_SENTINEL regardless of state."""
+    from langgraph.checkpoint.base import DELTA_SENTINEL
 
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
     ch = DeltaChannel(add_messages).from_checkpoint(MISSING)
-    assert isinstance(ch.checkpoint(), DeltaChannelSentinel)
+    assert ch.checkpoint() is DELTA_SENTINEL
 
     from langchain_core.messages import HumanMessage
 
     ch.update([HumanMessage(content="hi", id="h1")])
-    assert isinstance(ch.checkpoint(), DeltaChannelSentinel)
+    assert ch.checkpoint() is DELTA_SENTINEL
 
 
 def test_delta_channel_inmemory_saver_assembles_writes() -> None:
@@ -304,16 +314,16 @@ def test_delta_channel_inmemory_saver_assembles_writes() -> None:
     graph.invoke({"messages": [HumanMessage(content="hi", id="h1")]}, config)
     graph.invoke({"messages": [HumanMessage(content="bye", id="h2")]}, config)
 
-    # get_tuple must return a resolved list (not DeltaChannelSentinel)
-    from langgraph.checkpoint.base import DeltaChannelSentinel
+    # get_tuple must return a DeltaChannelWrites wrapper (not the raw sentinel)
+    from langgraph.checkpoint.base import DELTA_SENTINEL, DeltaChannelWrites
 
     saved = saver.get_tuple(config)
     assert saved is not None
     assert "messages" in saved.checkpoint["channel_values"]
-    assert not isinstance(
-        saved.checkpoint["channel_values"]["messages"], DeltaChannelSentinel
+    assert saved.checkpoint["channel_values"]["messages"] is not DELTA_SENTINEL
+    assert isinstance(
+        saved.checkpoint["channel_values"]["messages"], DeltaChannelWrites
     )
-    assert isinstance(saved.checkpoint["channel_values"]["messages"], list)
 
     state = graph.get_state(config)
     assert len(state.values["messages"]) == 4  # 2 human + 2 AI
@@ -343,7 +353,7 @@ def test_delta_channel_dict_reducer_fresh_channel() -> None:
 
 def test_delta_channel_dict_reducer_basic_updates() -> None:
     """DeltaChannel with a dict reducer accumulates key/value pairs across steps."""
-    from langgraph.checkpoint.base import DeltaChannelSentinel
+    from langgraph.checkpoint.base import DELTA_SENTINEL
 
     def merge_dicts(left: dict, right: dict) -> dict:
         return {**left, **right}
@@ -352,24 +362,24 @@ def test_delta_channel_dict_reducer_basic_updates() -> None:
 
     ch.update([{"a": 1}])
     d1 = ch.checkpoint()
-    assert isinstance(d1, DeltaChannelSentinel)
+    assert d1 is DELTA_SENTINEL
 
     ch.update([{"b": 2}])
     d2 = ch.checkpoint()
-    assert isinstance(d2, DeltaChannelSentinel)
+    assert d2 is DELTA_SENTINEL
 
     assert ch.get() == {"a": 1, "b": 2}
 
 
 def test_delta_channel_dict_reducer_writes_reconstruction() -> None:
-    """from_checkpoint with a writes list replays correctly through a dict merge reducer."""
+    """from_checkpoint given DeltaChannelWrites replays through a dict merge reducer."""
+    from langgraph.checkpoint.base import DeltaChannelWrites
 
     def merge_dicts(left: dict, right: dict) -> dict:
         return {**left, **right}
 
     spec = _delta_channel_with_type(merge_dicts, dict)
-    # Each element is one write value (oldest→newest)
-    writes = [{"a": 1}, {"b": 2}, {"c": 3}]
+    writes = DeltaChannelWrites([{"a": 1}, {"b": 2}, {"c": 3}])
     ch = spec.from_checkpoint(writes)
     assert ch.get() == {"a": 1, "b": 2, "c": 3}
 
@@ -398,10 +408,14 @@ def test_delta_channel_dict_reducer_with_deletions() -> None:
     assert ch.get() == {"file2.py": "content2", "file3.py": "content3"}
 
     # Confirm writes reconstruction produces the same result
-    writes = [
-        {"file1.py": "content1", "file2.py": "content2"},
-        {"file1.py": None, "file3.py": "content3"},
-    ]
+    from langgraph.checkpoint.base import DeltaChannelWrites
+
+    writes = DeltaChannelWrites(
+        [
+            {"file1.py": "content1", "file2.py": "content2"},
+            {"file1.py": None, "file3.py": "content3"},
+        ]
+    )
     spec = _delta_channel_with_type(merge_files, dict)
     ch2 = spec.from_checkpoint(writes)
     assert ch2.get() == {"file2.py": "content2", "file3.py": "content3"}

@@ -32,7 +32,7 @@ Conn = _internal.Conn  # For backward compatibility
 class PostgresSaver(BasePostgresSaver):
     """Checkpointer that stores checkpoints in a Postgres database."""
 
-    lock: threading.RLock
+    lock: threading.Lock
 
     def __init__(
         self,
@@ -48,7 +48,7 @@ class PostgresSaver(BasePostgresSaver):
 
         self.conn = conn
         self.pipe = pipe
-        self.lock = threading.RLock()
+        self.lock = threading.Lock()
         self.supports_pipeline = Capabilities().has_pipeline()
 
     @classmethod
@@ -179,7 +179,7 @@ class PostgresSaver(BasePostgresSaver):
                             value["channel_values"],
                         )
             for value in values:
-                yield self._load_checkpoint_tuple(value)
+                yield self._load_checkpoint_tuple(value, cur)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database.
@@ -250,7 +250,7 @@ class PostgresSaver(BasePostgresSaver):
                         value["channel_values"],
                     )
 
-            return self._load_checkpoint_tuple(value)
+            return self._load_checkpoint_tuple(value, cur)
 
     def put(
         self,
@@ -430,22 +430,26 @@ class PostgresSaver(BasePostgresSaver):
                 with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
+    def _load_checkpoint_tuple(
+        self, value: DictRow, cur: Cursor[DictRow]
+    ) -> CheckpointTuple:
         """
         Convert a database row into a CheckpointTuple object.
 
         Args:
             value: A row from the database containing checkpoint data.
+            cur: The cursor used by the caller; reused for DeltaChannel
+                 reconstruction to avoid acquiring `self.lock` a second time.
 
         Returns:
             CheckpointTuple: A structured representation of the checkpoint,
             including its configuration, metadata, parent checkpoint (if any),
             and pending writes.
         """
-        from langgraph.checkpoint.base import DeltaChannelSentinel
+        from langgraph.checkpoint.base import DELTA_SENTINEL
 
         channel_values = self._load_blobs(value["channel_values"])
-        if any(isinstance(v, DeltaChannelSentinel) for v in channel_values.values()):
+        if any(v is DELTA_SENTINEL for v in channel_values.values()):
             cp_config = cast(
                 RunnableConfig,
                 {
@@ -456,8 +460,7 @@ class PostgresSaver(BasePostgresSaver):
                     }
                 },
             )
-            with self._cursor() as cur:
-                self._resolve_delta_channels(cp_config, channel_values, cur)
+            self._resolve_delta_channels(cp_config, channel_values, cur)
         return CheckpointTuple(
             {
                 "configurable": {

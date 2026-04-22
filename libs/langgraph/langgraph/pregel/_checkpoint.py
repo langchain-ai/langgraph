@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
 from datetime import datetime, timezone
 
@@ -12,8 +11,6 @@ from langgraph.channels.base import BaseChannel
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
 LATEST_VERSION = 4
-
-logger = logging.getLogger(__name__)
 
 
 def empty_checkpoint() -> Checkpoint:
@@ -70,12 +67,13 @@ def channels_from_checkpoint(
             channel_specs[k] = v
         else:
             managed_specs[k] = v
-    channels: dict[str, BaseChannel] = {}
-    for k, v in channel_specs.items():
-        ch = v.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
-        ch.after_checkpoint(checkpoint["channel_versions"].get(k), checkpoint.get("id"))
-        channels[k] = ch
-    return channels, managed_specs
+    return (
+        {
+            k: v.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
+            for k, v in channel_specs.items()
+        },
+        managed_specs,
+    )
 
 
 def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:

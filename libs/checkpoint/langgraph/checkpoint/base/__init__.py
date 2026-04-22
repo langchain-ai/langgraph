@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import copy
-import dataclasses
 import logging
 import threading
 from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
-from typing import (  # noqa: UP035
+from typing import (
     Any,
     Generic,
-    List,
     Literal,
     NamedTuple,
     TypedDict,
@@ -22,27 +20,17 @@ from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
+    DELTA_SENTINEL,
     ERROR,
     INTERRUPT,
     RESUME,
     SCHEDULED,
     ChannelProtocol,
+    DeltaChannelWrites,
 )
 
 V = TypeVar("V", int, float, str)
 PendingWrite = tuple[str, str, Any]
-
-
-@dataclasses.dataclass
-class DeltaChannelSentinel:
-    """Marker stored in checkpoint_blobs for a DeltaChannel field.
-
-    No data is stored here — the actual per-step writes live in checkpoint_writes
-    and are replayed through the reducer at load time.
-    """
-
-    pass
-
 
 _DELTA_RECONSTRUCTION: threading.local = threading.local()
 
@@ -475,14 +463,14 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
-    def get_channel_writes(self, config: RunnableConfig, channel: str) -> List[Any]:  # noqa: UP006
+    def get_channel_writes(self, config: RunnableConfig, channel: str) -> list[Any]:
         """Collect all writes for `channel` across this checkpoint's ancestry, oldest→newest.
 
         Default implementation walks the full thread history via `list()`. Savers can
         override with a more efficient query (InMemorySaver and PostgresSaver do this).
         """
         # Guard against re-entrant calls: when list() triggers reconstruction which
-        # calls list() again, the inner call returns tuples with DeltaChannelSentinel
+        # calls list() again, the inner call returns tuples with DELTA_SENTINEL
         # in channel_values (which get_channel_writes ignores — it only reads
         # pending_writes). This breaks the recursion safely.
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
@@ -505,7 +493,7 @@ class BaseCheckpointSaver(Generic[V]):
 
     async def aget_channel_writes(
         self, config: RunnableConfig, channel: str
-    ) -> List[Any]:  # noqa: UP006
+    ) -> list[Any]:
         """Async version of get_channel_writes."""
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
             return []

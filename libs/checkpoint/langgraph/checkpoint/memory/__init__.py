@@ -20,7 +20,8 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    DeltaChannelSentinel,
+    DELTA_SENTINEL,
+    DeltaChannelWrites,
     SerializerProtocol,
     get_checkpoint_id,
     get_checkpoint_metadata,
@@ -143,10 +144,14 @@ class InMemorySaver(
         config: RunnableConfig,
         channel_values: dict[str, Any],
     ) -> None:
-        """Replace DeltaChannelSentinel entries with reconstructed write lists."""
-        for channel, value in list(channel_values.items()):
-            if isinstance(value, DeltaChannelSentinel):
-                channel_values[channel] = self.get_channel_writes(config, channel)
+        """Replace DELTA_SENTINEL entries with DeltaChannelWrites so
+        DeltaChannel.from_checkpoint can distinguish reconstructed writes from
+        a pre-DeltaChannel accumulated list."""
+        for channel, value in channel_values.items():
+            if value is DELTA_SENTINEL:
+                channel_values[channel] = DeltaChannelWrites(
+                    self.get_channel_writes(config, channel)
+                )
 
     def get_channel_writes(self, config: RunnableConfig, channel: str) -> list[Any]:
         thread_id = config["configurable"]["thread_id"]

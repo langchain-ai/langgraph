@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
-from langgraph.checkpoint.base import DeltaChannelSentinel
+from langgraph.checkpoint.base import DELTA_SENTINEL, DeltaChannelWrites
 from typing_extensions import Self
 
 from langgraph._internal._typing import MISSING
@@ -14,9 +14,14 @@ from langgraph.errors import EmptyChannelError
 __all__ = ("DeltaChannel",)
 
 
-class DeltaChannel(
-    Generic[Value], BaseChannel[list[Value], Value, DeltaChannelSentinel]
-):
+def _empty(typ: Any) -> Any:
+    try:
+        return typ()
+    except Exception:
+        return []
+
+
+class DeltaChannel(Generic[Value], BaseChannel[list[Value], Value, Any]):
     """A channel that stores only a sentinel in checkpoints; per-step writes are
     stored in checkpoint_writes and replayed through the operator at load time.
 
@@ -76,25 +81,20 @@ class DeltaChannel(
         new.typ = self.typ
         new.key = self.key
         if checkpoint is MISSING:
-            try:
-                new.value = new.typ()
-            except Exception:
-                new.value = []
-        elif isinstance(checkpoint, list):
-            # Flat list of write values (oldest→newest) from get_channel_writes.
-            try:
-                value: Any = new.typ()
-            except Exception:
-                value = []
-            for write in checkpoint:
+            new.value = _empty(new.typ)
+        elif isinstance(checkpoint, DeltaChannelWrites):
+            # Saver reconstructed per-step writes; replay through the operator.
+            value: Any = _empty(new.typ)
+            for write in checkpoint.writes:
                 value = new.operator(value, write)
             new.value = value
         else:
-            # Backward compat: plain accumulated value (e.g. from a migrated thread).
+            # Backward compat: a pre-DeltaChannel thread stored the accumulated
+            # value directly. Trust it as-is.
             try:
                 new.value = list(checkpoint)
             except Exception:
-                new.value = []
+                new.value = _empty(new.typ)
         return new
 
     def update(self, values: Sequence[Any]) -> bool:
@@ -133,5 +133,5 @@ class DeltaChannel(
     def is_available(self) -> bool:
         return self.value is not MISSING
 
-    def checkpoint(self) -> DeltaChannelSentinel:
-        return DeltaChannelSentinel()
+    def checkpoint(self) -> Any:
+        return DELTA_SENTINEL
