@@ -198,6 +198,7 @@ def add_messages(
     if (
         left_seq
         and isinstance(left_seq[0], BaseMessage)
+        and left_seq[0].id is not None
         and not isinstance(left_seq[0], BaseMessageChunk)
     ):
         left_msgs = left_seq
@@ -228,11 +229,12 @@ def add_messages(
     if remove_all_idx is not None:
         return right_msgs[remove_all_idx + 1 :]
 
-    # Optimization 2: pure-append fast path — no removals and no ID overlaps.
-    # Builds one set over left instead of copying left + building a full dict.
+    # Optimization 2: pure-append fast path — no removals, no ID overlaps with
+    # left, and no duplicate IDs within right (all imply a dedup/update is needed).
     if not has_remove:
         left_ids = {m.id for m in left_msgs}
-        if not any(m.id in left_ids for m in right_msgs):
+        right_id_set = {m.id for m in right_msgs}
+        if len(right_id_set) == len(right_msgs) and not (right_id_set & left_ids):
             result = left_msgs + right_msgs
             if format == "langchain-openai":
                 return _format_messages(result)
