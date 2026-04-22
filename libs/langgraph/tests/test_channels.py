@@ -438,6 +438,7 @@ def test_delta_channel_dict_reducer_overwrite_in_update() -> None:
 def test_delta_channel_dict_reducer_overwrite_in_writes_replay() -> None:
     """Overwrite(dict) embedded in DeltaChannelWrites must reconstruct as dict."""
     from langgraph.checkpoint.base import DeltaChannelWrites
+
     from langgraph.types import Overwrite
 
     def merge_dicts(left: dict, right: dict) -> dict:
@@ -479,6 +480,36 @@ def test_delta_channel_dict_reducer_snapshot_write_preserves_shape() -> None:
     assert isinstance(w.value, dict)
 
 
+def test_delta_channel_dict_reducer_with_notrequired_annotation() -> None:
+    """DeltaChannel infers dict type through `Annotated[NotRequired[dict[...]], ch]`.
+
+    This is the shape the deepagents filesystem middleware uses for its
+    `files` field; without unwrapping NotRequired we'd fall through to `list`
+    and blow up on the first dict operator call.
+    """
+    from typing import Annotated
+
+    from typing_extensions import NotRequired
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph.state import _get_channel
+
+    def merge_dicts(left: dict | None, right: dict) -> dict:
+        if left is None:
+            return dict(right)
+        return {**left, **right}
+
+    annotation = Annotated[
+        NotRequired[dict[str, int]],
+        DeltaChannel(merge_dicts),
+    ]
+    ch = _get_channel("files", annotation).from_checkpoint(MISSING)
+    assert ch.get() == {}
+    ch.update([{"a": 1}])
+    ch.update([{"b": 2}])
+    assert ch.get() == {"a": 1, "b": 2}
+
+
 def test_delta_channel_dict_reducer_end_to_end_filesystem() -> None:
     """End-to-end: graph with dict-reducer (filesystem-style) channel wrapped in DeltaChannel.
 
@@ -487,11 +518,12 @@ def test_delta_channel_dict_reducer_end_to_end_filesystem() -> None:
     """
     from typing import Annotated
 
-    from langgraph.channels.delta import DeltaChannel
     from langgraph.checkpoint.base import DELTA_SENTINEL, DeltaChannelWrites
     from langgraph.checkpoint.memory import InMemorySaver
-    from langgraph.graph import START, StateGraph
     from typing_extensions import TypedDict
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph import START, StateGraph
 
     def merge_files(left: dict | None, right: dict) -> dict:
         if left is None:
