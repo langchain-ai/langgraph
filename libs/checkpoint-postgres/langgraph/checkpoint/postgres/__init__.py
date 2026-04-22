@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
+    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
@@ -446,8 +447,6 @@ class PostgresSaver(BasePostgresSaver):
             including its configuration, metadata, parent checkpoint (if any),
             and pending writes.
         """
-        from langgraph.checkpoint.base import DELTA_SENTINEL
-
         channel_values = self._load_blobs(value["channel_values"])
         if any(v is DELTA_SENTINEL for v in channel_values.values()):
             cp_config = cast(

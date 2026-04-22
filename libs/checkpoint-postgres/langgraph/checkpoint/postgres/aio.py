@@ -402,12 +402,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         cur: Any,
     ) -> list[Any]:
         """Async version of _get_channel_writes_cur — see sync version for rationale."""
-        try:
-            from langgraph.types import (
-                Overwrite,  # type: ignore[import-untyped,import-not-found]
-            )
-        except ImportError:
-            Overwrite = None  # type: ignore[assignment]
+        from langgraph.types import Overwrite  # type: ignore[import-untyped]
 
         await cur.execute(
             "SELECT checkpoint_id, parent_checkpoint_id FROM checkpoints "
@@ -440,7 +435,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             for type_tag, blob in writes_by_cp.get(cid, []):
                 val = self.serde.loads_typed((type_tag, blob))
                 collected.append(val)
-                if Overwrite is not None and isinstance(val, Overwrite):
+                if isinstance(val, Overwrite):
                     collected.reverse()
                     return collected
         collected.reverse()

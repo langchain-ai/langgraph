@@ -43,6 +43,7 @@ class DeltaChannelWrites:
 
     writes: list[Any]
 
+
 Value = TypeVar("Value", covariant=True)
 Update = TypeVar("Update", contravariant=True)
 C = TypeVar("C")

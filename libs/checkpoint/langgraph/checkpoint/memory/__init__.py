@@ -14,13 +14,13 @@ from typing import Any, cast
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
+    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    DELTA_SENTINEL,
     DeltaChannelWrites,
     SerializerProtocol,
     get_checkpoint_id,
@@ -154,13 +154,6 @@ class InMemorySaver(
                 )
 
     def get_channel_writes(self, config: RunnableConfig, channel: str) -> list[Any]:
-        # Lazy import: avoids a hard dep on `langgraph` at module load time
-        # (mirrors the Send import pattern in the serializer).
-        try:
-            from langgraph.types import Overwrite  # type: ignore[import-not-found]
-        except ImportError:
-            Overwrite = None  # type: ignore[assignment]
-
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = config["configurable"].get("checkpoint_id", "")
@@ -175,6 +168,8 @@ class InMemorySaver(
             chain.append(current)
             _, _, parent = entry
             current = parent
+        from langgraph.types import Overwrite  # type: ignore[import-untyped]
+
         # Scan writes newest→oldest. Stop at the first `Overwrite` — it
         # dominates all older history. Either from `snapshot_every` or from
         # user code: the bound applies the same way.
@@ -190,7 +185,7 @@ class InMemorySaver(
                     continue
                 val = self.serde.loads_typed(serialized)
                 collected.append(val)
-                if Overwrite is not None and isinstance(val, Overwrite):
+                if isinstance(val, Overwrite):
                     collected.reverse()
                     return collected
         collected.reverse()
