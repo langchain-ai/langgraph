@@ -34,3 +34,8 @@ def _build_ignore_spec(
         if ignore_file.is_file():
             lines.extend(ignore_file.read_text(encoding="utf-8").splitlines())
     return pathspec.PathSpec.from_lines("gitwildmatch", lines)
+
+
+def _has_negation_patterns(spec: pathspec.PathSpec) -> bool:
+    """Whether `spec` has any `!`-negated (re-include) pattern."""
+    return any(getattr(p, "include", None) is False for p in spec.patterns)
