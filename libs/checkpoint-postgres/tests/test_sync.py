@@ -348,9 +348,9 @@ def test_get_checkpoint_no_channel_values(
 
         load_checkpoint_tuple = saver._load_checkpoint_tuple
 
-        def patched_load_checkpoint_tuple(value):
+        def patched_load_checkpoint_tuple(value, cur):
             value["checkpoint"].pop("channel_values", None)
-            return load_checkpoint_tuple(value)
+            return load_checkpoint_tuple(value, cur)
 
         monkeypatch.setattr(
             saver, "_load_checkpoint_tuple", patched_load_checkpoint_tuple
