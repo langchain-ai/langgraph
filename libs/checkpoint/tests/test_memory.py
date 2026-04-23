@@ -7,10 +7,8 @@ from pydantic import BaseModel
 
 from langgraph.checkpoint.base import (
     DELTA_SENTINEL,
-    SEED_UNSET,
     Checkpoint,
     CheckpointMetadata,
-    DeltaChannelWrites,
     create_checkpoint,
     empty_checkpoint,
 )
@@ -346,8 +344,8 @@ class TestInMemorySaverDeltaChannel:
         assert result[channel] is DELTA_SENTINEL
 
     def test_get_channel_writes_collects_ancestor_writes_only(self) -> None:
-        """get_channel_writes collects ancestor writes oldest→newest, and
-        excludes writes stored at the target checkpoint itself (those are
+        """_get_channel_writes_history collects ancestor writes oldest→newest,
+        and excludes writes stored at the target checkpoint itself (those are
         pending writes for the next step, applied separately by pregel)."""
         saver = InMemorySaver()
         serde = JsonPlusSerializer()
@@ -386,9 +384,10 @@ class TestInMemorySaverDeltaChannel:
                 "checkpoint_id": "cp2",
             }
         }
-        result = saver.get_channel_writes(config, channel)
-        assert result == DeltaChannelWrites(writes=[{"content": "hi"}])
-        assert result.seed is SEED_UNSET
+        result = saver._get_channel_writes_history(config, channel)
+        assert result.seed is DELTA_SENTINEL
+        values = [v for _, _, v in result.writes]
+        assert values == [{"content": "hi"}]
 
     def test_get_channel_writes_at_root_returns_empty(self) -> None:
         """Reconstructing the root checkpoint's state: no ancestors → []."""
@@ -415,15 +414,15 @@ class TestInMemorySaverDeltaChannel:
                 "checkpoint_id": "cp1",
             }
         }
-        assert saver.get_channel_writes(config, channel) == DeltaChannelWrites(
-            writes=[]
-        )
+        result = saver._get_channel_writes_history(config, channel)
+        assert result.seed is DELTA_SENTINEL
+        assert result.writes == []
 
 
 class TestBaseFallbackGetChannelWrites:
-    """Exercises the `BaseCheckpointSaver.get_channel_writes` default
+    """Exercises the `BaseCheckpointSaver._get_channel_writes_history` default
     implementation — the path third-party savers inherit when they don't
-    override `get_channel_writes` themselves.
+    override `_get_channel_writes_history` themselves.
 
     Regression guard for a bug where the fallback passed the caller's config
     (with `checkpoint_id`) straight to `self.list()`, which most savers
@@ -439,11 +438,11 @@ class TestBaseFallbackGetChannelWrites:
         """
 
         class _ThirdPartyStyleSaver(InMemorySaver):
-            get_channel_writes = (
-                InMemorySaver.__mro__[1].get_channel_writes  # type: ignore[attr-defined]
+            _get_channel_writes_history = (
+                InMemorySaver.__mro__[1]._get_channel_writes_history  # type: ignore[attr-defined]
             )
-            aget_channel_writes = (
-                InMemorySaver.__mro__[1].aget_channel_writes  # type: ignore[attr-defined]
+            _aget_channel_writes_history = (
+                InMemorySaver.__mro__[1]._aget_channel_writes_history  # type: ignore[attr-defined]
             )
 
         saver = _ThirdPartyStyleSaver()
@@ -487,12 +486,11 @@ class TestBaseFallbackGetChannelWrites:
             }
         }
 
-        result = saver.get_channel_writes(config, "messages")
+        result = saver._get_channel_writes_history(config, "messages")
 
-        assert result == DeltaChannelWrites(
-            writes=[{"content": "first"}, {"content": "second"}]
-        )
-        assert result.seed is SEED_UNSET
+        assert result.seed is DELTA_SENTINEL
+        values = [v for _, _, v in result.writes]
+        assert values == [{"content": "first"}, {"content": "second"}]
 
     async def test_async_fallback_returns_ancestor_writes_oldest_first(self) -> None:
         saver, thread_id, ns = self._build_saver_with_chain()
@@ -505,18 +503,17 @@ class TestBaseFallbackGetChannelWrites:
             }
         }
 
-        result = await saver.aget_channel_writes(config, "messages")
+        result = await saver._aget_channel_writes_history(config, "messages")
 
-        assert result == DeltaChannelWrites(
-            writes=[{"content": "first"}, {"content": "second"}]
-        )
-        assert result.seed is SEED_UNSET
+        assert result.seed is DELTA_SENTINEL
+        values = [v for _, _, v in result.writes]
+        assert values == [{"content": "first"}, {"content": "second"}]
 
     async def test_async_fallback_concurrent_tasks_do_not_interfere(self) -> None:
         """Regression: the re-entrancy guard must be task-local, not thread-local.
 
-        Two concurrent `aget_channel_writes` calls on the same event-loop
-        thread must each see their full reconstructed writes. A
+        Two concurrent `_aget_channel_writes_history` calls on the same
+        event-loop thread must each see their full reconstructed writes. A
         `threading.local()` guard would let whichever task set it first
         short-circuit the other to `writes=[]`.
         """
@@ -545,15 +542,16 @@ class TestBaseFallbackGetChannelWrites:
         }
 
         results = await asyncio.gather(
-            saver.aget_channel_writes(config, "messages"),
-            saver.aget_channel_writes(config, "messages"),
+            saver._aget_channel_writes_history(config, "messages"),
+            saver._aget_channel_writes_history(config, "messages"),
         )
 
-        expected = DeltaChannelWrites(
-            writes=[{"content": "first"}, {"content": "second"}]
-        )
-        assert results[0] == expected
-        assert results[1] == expected
+        expected_values = [{"content": "first"}, {"content": "second"}]
+        for result in results:
+            assert result.seed is DELTA_SENTINEL
+            values = [v for _, _, v in result.writes]
+            assert values == expected_values
+
 
 class TestPreDeltaBlobTerminator:
     """Verify the pre-delta blob terminator: when the ancestor walk hits a
@@ -636,14 +634,15 @@ class TestPreDeltaBlobTerminator:
             }
         }
 
-        result = saver.get_channel_writes(config, channel)
+        result = saver._get_channel_writes_history(config, channel)
 
         # Seed came from the pre-delta blob at cp1.
         assert result.seed == ["A"]
         # Delta-era writes from cp2 replay through the reducer on top of seed.
         # cp3 is the target — its own write is pending for the NEXT step and
         # must be excluded.
-        assert result.writes == ["B"]
+        values = [v for _, _, v in result.writes]
+        assert values == ["B"]
 
     def test_pre_delta_blob_terminates_walk_before_older_writes(self) -> None:
         """Writes stored at the pre-delta ancestor itself must not be replayed
@@ -657,9 +656,10 @@ class TestPreDeltaBlobTerminator:
             }
         }
 
-        result = saver.get_channel_writes(config, channel)
+        result = saver._get_channel_writes_history(config, channel)
 
+        values = [v for _, _, v in result.writes]
         # The pre-delta write under cp1 must not appear (the blob subsumes it).
-        assert "PRE-DELTA-WRITE" not in result.writes
+        assert "PRE-DELTA-WRITE" not in values
         # And the pending write at the target is never folded in.
-        assert "PENDING-AT-TARGET" not in result.writes
+        assert "PENDING-AT-TARGET" not in values

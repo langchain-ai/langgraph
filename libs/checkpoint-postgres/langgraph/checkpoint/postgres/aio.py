@@ -8,13 +8,12 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
-    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    DeltaChannelWrites,
+    _ChannelWritesHistory,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
@@ -175,7 +174,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                             value["channel_values"],
                         )
             for value in values:
-                yield await self._load_checkpoint_tuple(value, cur)
+                yield await self._load_checkpoint_tuple(value)
 
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database asynchronously.
@@ -226,7 +225,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                         value["channel_values"],
                     )
 
-            return await self._load_checkpoint_tuple(value, cur)
+            return await self._load_checkpoint_tuple(value)
 
     async def aput(
         self,
@@ -398,61 +397,46 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    async def _areconstruct_delta_channel(
-        self,
-        *,
-        thread_id: str,
-        checkpoint_ns: str,
-        channel: str,
-        target_id: str,
-        cur: AsyncCursor[DictRow],
-    ) -> Any:
-        """Async mirror of `PostgresSaver._reconstruct_delta_channel`.
+    async def _aget_channel_writes_history(
+        self, config: RunnableConfig, channel: str
+    ) -> _ChannelWritesHistory:
+        """Fast-path override of `BaseCheckpointSaver._aget_channel_writes_history`.
 
         Three indexed roundtrips (`checkpoints`, `checkpoint_writes`,
         `checkpoint_blobs`); rows assembled by the shared pure helper on
         `BasePostgresSaver`. Rationale + benchmark in
         `notes/delta_channel_query_bench.md`.
         """
-        await cur.execute(SELECT_DELTA_PARENTS_SQL, (channel, thread_id, checkpoint_ns))
-        parents_rows = await cur.fetchall()
-        await cur.execute(SELECT_DELTA_WRITES_SQL, (thread_id, checkpoint_ns, channel))
-        writes_rows = await cur.fetchall()
-        await cur.execute(SELECT_DELTA_BLOBS_SQL, (thread_id, checkpoint_ns, channel))
-        blobs_rows = await cur.fetchall()
-        return self._build_delta_channel_writes(
-            target_id=target_id,
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = config["configurable"]["checkpoint_id"]
+        async with self._cursor() as cur:
+            await cur.execute(
+                SELECT_DELTA_PARENTS_SQL, (channel, thread_id, checkpoint_ns)
+            )
+            parents_rows = await cur.fetchall()
+            await cur.execute(
+                SELECT_DELTA_WRITES_SQL, (thread_id, checkpoint_ns, channel)
+            )
+            writes_rows = await cur.fetchall()
+            await cur.execute(
+                SELECT_DELTA_BLOBS_SQL, (thread_id, checkpoint_ns, channel)
+            )
+            blobs_rows = await cur.fetchall()
+        return self._build_delta_channel_writes_history(
+            channel=channel,
+            target_id=checkpoint_id,
             parents_rows=parents_rows,
             writes_rows=writes_rows,
             blobs_rows=blobs_rows,
         )
 
-    async def aget_channel_writes(
-        self, config: RunnableConfig, channel: str
-    ) -> DeltaChannelWrites:
-        thread_id = config["configurable"]["thread_id"]
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_id = config["configurable"]["checkpoint_id"]
-        async with self._cursor() as cur:
-            return await self._areconstruct_delta_channel(
-                thread_id=thread_id,
-                checkpoint_ns=checkpoint_ns,
-                channel=channel,
-                target_id=checkpoint_id,
-                cur=cur,
-            )
-
-    async def _load_checkpoint_tuple(
-        self, value: DictRow, cur: AsyncCursor[DictRow]
-    ) -> CheckpointTuple:
+    async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
         """
         Convert a database row into a CheckpointTuple object.
 
         Args:
             value: A row from the database containing checkpoint data.
-            cur: The cursor used by the caller; reused for DeltaChannel
-                 reconstruction to avoid re-entering `self.lock`, which is
-                 `asyncio.Lock` and would deadlock.
 
         Returns:
             CheckpointTuple: A structured representation of the checkpoint,
@@ -462,21 +446,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
         thread_id = value["thread_id"]
         checkpoint_ns = value["checkpoint_ns"]
         blob_values = value["channel_values"]
-
         channel_values: dict[str, Any] = {}
         if blob_values:
             channel_values = self._load_blobs(blob_values)
-            delta_channels = [
-                ch for ch, v in channel_values.items() if v is DELTA_SENTINEL
-            ]
-            for channel in delta_channels:
-                channel_values[channel] = await self._areconstruct_delta_channel(
-                    thread_id=thread_id,
-                    checkpoint_ns=checkpoint_ns,
-                    channel=channel,
-                    target_id=value["checkpoint_id"],
-                    cur=cur,
-                )
 
         return CheckpointTuple(
             {

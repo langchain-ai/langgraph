@@ -4,7 +4,7 @@ import copy as _copy
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
-from langgraph.checkpoint.base import DELTA_SENTINEL, SEED_UNSET, DeltaChannelWrites
+from langgraph.checkpoint.base import DELTA_SENTINEL, PendingWrite
 from typing_extensions import Self
 
 from langgraph._internal._typing import MISSING
@@ -96,27 +96,40 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         return self.operator(base, write)
 
     def from_checkpoint(self, checkpoint: Any) -> Self:
+        """Initialize from a seed value.
+
+        Pregel's hydration path calls this with the `seed` returned by
+        `saver.get_channel_history`:
+
+          * `MISSING` / `DELTA_SENTINEL` → channel starts empty. The walk
+            either reached the root (fresh delta thread) or found nothing
+            to seed from.
+          * any other value → use as the base value. Typically a pre-delta
+            blob preserved across a channel-type migration; `replay_writes`
+            folds subsequent deltas on top.
+        """
         new: DeltaChannel[Value] = DeltaChannel(self.operator)
         new.typ = self.typ
         new.key = self.key
-        if checkpoint is MISSING:
+        if checkpoint is MISSING or checkpoint is DELTA_SENTINEL:
             new.value = _empty(new.typ)
-        elif isinstance(checkpoint, DeltaChannelWrites):
-            # Saver reconstructed per-step writes; replay through the operator.
-            # `seed` (if set) is a pre-delta accumulated value that terminates
-            # the ancestor walk on the saver side: replay starts from it
-            # instead of the channel's empty value.
-            value: Any = (
-                _empty(new.typ) if checkpoint.seed is SEED_UNSET else checkpoint.seed
-            )
-            for write in checkpoint.writes:
-                value = new._apply_write(value, write)
-            new.value = value
         else:
-            # Backward compat: a pre-DeltaChannel thread stored the accumulated
-            # value directly (no saver-side reconstruction happened). Trust it.
             new.value = checkpoint
         return new
+
+    def replay_writes(self, writes: Sequence[PendingWrite]) -> None:
+        """Fold a sequence of `PendingWrite` tuples into the current value.
+
+        Called after `from_checkpoint` during pregel hydration to replay
+        per-step deltas from on-path ancestors through the reducer. Writes
+        are oldest→newest. `Overwrite` values inside the stream reset the
+        reducer state at that point, same as during a live super-step.
+        The `task_id` and `channel` fields of each `PendingWrite` are
+        ignored — `_get_channel_writes_history` has already filtered to
+        this channel.
+        """
+        for _, _, value in writes:
+            self.value = self._apply_write(self.value, value)
 
     def update(self, values: Sequence[Any]) -> bool:
         if not values:

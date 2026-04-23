@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.checkpoint.base import SEED_UNSET, DeltaChannelWrites
+from langgraph.checkpoint.base import DELTA_SENTINEL
 
 from langgraph._internal._typing import MISSING
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -149,22 +149,21 @@ def test_delta_channel_basic_two_steps() -> None:
 
 
 def test_delta_channel_from_checkpoint_writes_list() -> None:
-    """from_checkpoint given DeltaChannelWrites replays through the operator."""
+    """replay_writes on a fresh channel replays through the operator."""
     from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.checkpoint.base import DeltaChannelWrites
 
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
     spec = DeltaChannel(add_messages)
-    writes = DeltaChannelWrites(
+    ch = spec.from_checkpoint(DELTA_SENTINEL)
+    ch.replay_writes(
         [
-            HumanMessage(content="hi", id="h1"),
-            AIMessage(content="hello", id="a1"),
-            HumanMessage(content="bye", id="h2"),
+            ("t0", "messages", HumanMessage(content="hi", id="h1")),
+            ("t1", "messages", AIMessage(content="hello", id="a1")),
+            ("t2", "messages", HumanMessage(content="bye", id="h2")),
         ]
     )
-    ch = spec.from_checkpoint(writes)
     msgs = ch.get()
     assert len(msgs) == 3
     assert msgs[0].content == "hi"
@@ -227,16 +226,14 @@ def test_delta_channel_remove_message_and_replay() -> None:
     assert ch.get() == [HumanMessage(content="hi", id="h1")]
 
     # Replay the writes list from scratch — must reproduce the post-remove state
-    from langgraph.checkpoint.base import DeltaChannelWrites
-
-    writes = DeltaChannelWrites(
+    ch2 = spec.from_checkpoint(DELTA_SENTINEL)
+    ch2.replay_writes(
         [
-            HumanMessage(content="hi", id="h1"),
-            AIMessage(content="hello", id="a1"),
-            RemoveMessage(id="a1"),
+            ("t0", "messages", HumanMessage(content="hi", id="h1")),
+            ("t1", "messages", AIMessage(content="hello", id="a1")),
+            ("t2", "messages", RemoveMessage(id="a1")),
         ]
     )
-    ch2 = spec.from_checkpoint(writes)
     assert ch2.get() == [HumanMessage(content="hi", id="h1")]
 
 
@@ -258,15 +255,13 @@ def test_delta_channel_update_by_id_and_replay() -> None:
     assert ch.get() == [HumanMessage(content="updated", id="h1")]
 
     # Replay writes — must produce the updated message, not the original
-    from langgraph.checkpoint.base import DeltaChannelWrites
-
-    writes = DeltaChannelWrites(
+    ch2 = spec.from_checkpoint(DELTA_SENTINEL)
+    ch2.replay_writes(
         [
-            HumanMessage(content="original", id="h1"),
-            HumanMessage(content="updated", id="h1"),
+            ("t0", "messages", HumanMessage(content="original", id="h1")),
+            ("t1", "messages", HumanMessage(content="updated", id="h1")),
         ]
     )
-    ch2 = spec.from_checkpoint(writes)
     assert len(ch2.get()) == 1
     assert ch2.get()[0].content == "updated"
 
@@ -318,16 +313,13 @@ def test_delta_channel_inmemory_saver_assembles_writes() -> None:
     graph.invoke({"messages": [HumanMessage(content="hi", id="h1")]}, config)
     graph.invoke({"messages": [HumanMessage(content="bye", id="h2")]}, config)
 
-    # get_tuple must return a DeltaChannelWrites wrapper (not the raw sentinel)
-    from langgraph.checkpoint.base import DELTA_SENTINEL, DeltaChannelWrites
-
+    # get_tuple returns raw storage shape — channel_values stores DELTA_SENTINEL
+    # for delta channels; the reconstructed writes flow separately via
+    # saver._get_channel_writes_history.
     saved = saver.get_tuple(config)
     assert saved is not None
     assert "messages" in saved.checkpoint["channel_values"]
-    assert saved.checkpoint["channel_values"]["messages"] is not DELTA_SENTINEL
-    assert isinstance(
-        saved.checkpoint["channel_values"]["messages"], DeltaChannelWrites
-    )
+    assert saved.checkpoint["channel_values"]["messages"] is DELTA_SENTINEL
 
     state = graph.get_state(config)
     assert len(state.values["messages"]) == 4  # 2 human + 2 AI
@@ -376,15 +368,20 @@ def test_delta_channel_dict_reducer_basic_updates() -> None:
 
 
 def test_delta_channel_dict_reducer_writes_reconstruction() -> None:
-    """from_checkpoint given DeltaChannelWrites replays through a dict merge reducer."""
-    from langgraph.checkpoint.base import DeltaChannelWrites
+    """replay_writes on a fresh channel replays through a dict merge reducer."""
 
     def merge_dicts(left: dict, right: dict) -> dict:
         return {**left, **right}
 
     spec = _delta_channel_with_type(merge_dicts, dict)
-    writes = DeltaChannelWrites([{"a": 1}, {"b": 2}, {"c": 3}])
-    ch = spec.from_checkpoint(writes)
+    ch = spec.from_checkpoint(DELTA_SENTINEL)
+    ch.replay_writes(
+        [
+            ("t0", "files", {"a": 1}),
+            ("t1", "files", {"b": 2}),
+            ("t2", "files", {"c": 3}),
+        ]
+    )
     assert ch.get() == {"a": 1, "b": 2, "c": 3}
 
 
@@ -412,16 +409,14 @@ def test_delta_channel_dict_reducer_with_deletions() -> None:
     assert ch.get() == {"file2.py": "content2", "file3.py": "content3"}
 
     # Confirm writes reconstruction produces the same result
-    from langgraph.checkpoint.base import DeltaChannelWrites
-
-    writes = DeltaChannelWrites(
+    spec = _delta_channel_with_type(merge_files, dict)
+    ch2 = spec.from_checkpoint(DELTA_SENTINEL)
+    ch2.replay_writes(
         [
-            {"file1.py": "content1", "file2.py": "content2"},
-            {"file1.py": None, "file3.py": "content3"},
+            ("t0", "files", {"file1.py": "content1", "file2.py": "content2"}),
+            ("t1", "files", {"file1.py": None, "file3.py": "content3"}),
         ]
     )
-    spec = _delta_channel_with_type(merge_files, dict)
-    ch2 = spec.from_checkpoint(writes)
     assert ch2.get() == {"file2.py": "content2", "file3.py": "content3"}
 
 
@@ -440,23 +435,21 @@ def test_delta_channel_dict_reducer_overwrite_in_update() -> None:
 
 
 def test_delta_channel_dict_reducer_overwrite_in_writes_replay() -> None:
-    """Overwrite(dict) embedded in DeltaChannelWrites must reconstruct as dict."""
-    from langgraph.checkpoint.base import DeltaChannelWrites
-
+    """Overwrite(dict) embedded in replayed writes must reconstruct as dict."""
     from langgraph.types import Overwrite
 
     def merge_dicts(left: dict, right: dict) -> dict:
         return {**left, **right}
 
     spec = _delta_channel_with_type(merge_dicts, dict)
-    writes = DeltaChannelWrites(
+    ch = spec.from_checkpoint(DELTA_SENTINEL)
+    ch.replay_writes(
         [
-            {"a": 1},
-            Overwrite({"x": 10, "y": 20}),
-            {"z": 30},
+            ("t0", "files", {"a": 1}),
+            ("t1", "files", Overwrite({"x": 10, "y": 20})),
+            ("t2", "files", {"z": 30}),
         ]
     )
-    ch = spec.from_checkpoint(writes)
     assert ch.get() == {"x": 10, "y": 20, "z": 30}
 
 
@@ -498,7 +491,6 @@ def test_delta_channel_dict_reducer_end_to_end_filesystem() -> None:
     """
     from typing import Annotated
 
-    from langgraph.checkpoint.base import DELTA_SENTINEL, DeltaChannelWrites
     from langgraph.checkpoint.memory import InMemorySaver
     from typing_extensions import TypedDict
 
@@ -540,8 +532,7 @@ def test_delta_channel_dict_reducer_end_to_end_filesystem() -> None:
     saved = saver.get_tuple(config)
     assert saved is not None
     cv = saved.checkpoint["channel_values"]["files"]
-    assert cv is not DELTA_SENTINEL
-    assert isinstance(cv, DeltaChannelWrites)
+    assert cv is DELTA_SENTINEL
 
     state = graph.get_state(config)
     assert state.values["files"] == {
@@ -586,7 +577,7 @@ def test_delta_channel_dict_reducer_backwards_compat() -> None:
 
 
 def test_delta_channel_from_checkpoint_honors_seed() -> None:
-    """DeltaChannelWrites(seed=...) starts replay from that snapshot.
+    """A non-sentinel value to from_checkpoint is used as the pre-delta seed.
 
     Guards the pre-delta migration path: when the saver's ancestor walk hits
     a pre-DeltaChannel blob it passes it as `seed` so replay reconstructs
@@ -594,14 +585,13 @@ def test_delta_channel_from_checkpoint_honors_seed() -> None:
     """
     spec = DeltaChannel(add_messages)
     seed = [HumanMessage(content="pre-delta", id="p1")]
-    writes = DeltaChannelWrites(
-        writes=[
-            AIMessage(content="delta-1", id="d1"),
-            HumanMessage(content="delta-2", id="d2"),
-        ],
-        seed=seed,
+    ch = spec.from_checkpoint(seed)
+    ch.replay_writes(
+        [
+            ("t0", "messages", AIMessage(content="delta-1", id="d1")),
+            ("t1", "messages", HumanMessage(content="delta-2", id="d2")),
+        ]
     )
-    ch = spec.from_checkpoint(writes)
     msgs = ch.get()
     assert [m.content for m in msgs] == ["pre-delta", "delta-1", "delta-2"]
 
@@ -611,23 +601,23 @@ def test_delta_channel_from_checkpoint_seed_without_writes() -> None:
     just the seed — the saver's terminator fired immediately."""
     spec = DeltaChannel(add_messages)
     seed = [HumanMessage(content="only-snap", id="s1")]
-    ch = spec.from_checkpoint(DeltaChannelWrites(writes=[], seed=seed))
+    ch = spec.from_checkpoint(seed)
+    ch.replay_writes([])
     assert ch.get() == seed
 
 
-def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_unset() -> None:
-    """`seed=None` must start replay from None, not from the channel's empty
-    value. `SEED_UNSET` is the sentinel meaning 'no seed'."""
+def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_sentinel() -> None:
+    """`seed=None` must start replay from None, not from an empty channel.
+
+    The DELTA_SENTINEL / MISSING sentinels mean 'no seed'; passing `None`
+    explicitly should feed None to the reducer as the left operand.
+    """
 
     def replace(left, right):
         return right
 
     spec = DeltaChannel(replace)
-    ch = spec.from_checkpoint(DeltaChannelWrites(writes=["after"], seed=None))
+    ch = spec.from_checkpoint(None)
+    ch.replay_writes([("t0", "x", "after")])
     # Reducer replaces; seed=None → first write produces "after".
     assert ch.get() == "after"
-    # And the default (unset) is distinct.
-    unset = DeltaChannelWrites(writes=["after"])
-    assert unset.seed is SEED_UNSET
-
-

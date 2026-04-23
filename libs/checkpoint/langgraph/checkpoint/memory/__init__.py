@@ -21,8 +21,9 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    DeltaChannelWrites,
+    PendingWrite,
     SerializerProtocol,
+    _ChannelWritesHistory,
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
@@ -139,21 +140,9 @@ class InMemorySaver(
             result[k] = self.serde.loads_typed(vv)
         return result
 
-    def _resolve_delta_channels(
-        self,
-        config: RunnableConfig,
-        channel_values: dict[str, Any],
-    ) -> None:
-        """Replace DELTA_SENTINEL entries with DeltaChannelWrites so
-        `DeltaChannel.from_checkpoint` can distinguish reconstructed writes
-        from a pre-DeltaChannel accumulated value."""
-        for channel, value in channel_values.items():
-            if value is DELTA_SENTINEL:
-                channel_values[channel] = self.get_channel_writes(config, channel)
-
-    def get_channel_writes(
+    def _get_channel_writes_history(
         self, config: RunnableConfig, channel: str
-    ) -> DeltaChannelWrites:
+    ) -> _ChannelWritesHistory:
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = config["configurable"].get("checkpoint_id", "")
@@ -183,7 +172,7 @@ class InMemorySaver(
         # which already subsumes any writes stored under it. Processing
         # those writes first would fold them into the reconstructed value
         # twice (once via the blob, once via replay).
-        collected: list[Any] = []  # newest first
+        collected: list[PendingWrite] = []  # newest first
         for cp_id in chain:  # newest → oldest
             entry = ns_storage.get(cp_id)
             if entry is not None:
@@ -199,25 +188,27 @@ class InMemorySaver(
                             # Pre-delta snapshot terminator. Skip this
                             # ancestor's writes — the blob subsumes them.
                             collected.reverse()
-                            return DeltaChannelWrites(writes=collected, seed=blob_value)
+                            return _ChannelWritesHistory(
+                                seed=blob_value, writes=collected
+                            )
 
             step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
             # Within a superstep, sorted by (task_id, idx) = oldest → newest;
             # reverse for newest-first scan.
-            for (_task_id, _idx), (_, ch, serialized, _) in sorted(
+            for (_task_id, _idx), (tid, ch, serialized, _) in sorted(
                 step_writes.items(), reverse=True
             ):
                 if ch != channel:
                     continue
                 val = self.serde.loads_typed(serialized)
-                collected.append(val)
+                collected.append((tid, ch, val))
         collected.reverse()
-        return DeltaChannelWrites(writes=collected)
+        return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)
 
-    async def aget_channel_writes(
+    async def _aget_channel_writes_history(
         self, config: RunnableConfig, channel: str
-    ) -> DeltaChannelWrites:
-        return self.get_channel_writes(config, channel)
+    ) -> _ChannelWritesHistory:
+        return self._get_channel_writes_history(config, channel)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.
@@ -245,7 +236,6 @@ class InMemorySaver(
                     checkpoint_ns,
                     checkpoint_["channel_versions"],
                 )
-                self._resolve_delta_channels(config, channel_values)
                 return CheckpointTuple(
                     config=config,
                     checkpoint={
@@ -289,7 +279,6 @@ class InMemorySaver(
                     checkpoint_ns,
                     checkpoint_["channel_versions"],
                 )
-                self._resolve_delta_channels(resolved_config, channel_values)
                 return CheckpointTuple(
                     config=resolved_config,
                     checkpoint={
@@ -404,7 +393,6 @@ class InMemorySaver(
                         checkpoint_ns,
                         checkpoint_["channel_versions"],
                     )
-                    self._resolve_delta_channels(list_config, channel_values)
 
                     yield CheckpointTuple(
                         config=list_config,
