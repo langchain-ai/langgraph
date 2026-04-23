@@ -126,15 +126,6 @@ class DeltaState(TypedDict):
     messages: Annotated[list, DeltaChannel(add_messages)]
 
 
-_SNAPSHOT_EVERY = 25
-
-
-class DeltaSnapshotState(TypedDict):
-    messages: Annotated[
-        list, DeltaChannel(add_messages, snapshot_every=_SNAPSHOT_EVERY)
-    ]
-
-
 # ---------------------------------------------------------------------------
 # Graph factory
 # ---------------------------------------------------------------------------
@@ -232,9 +223,9 @@ def _approx_tokens(n_turns: int) -> str:
 # Extrapolation: 5,000 turns × ~200 tokens/turn ≈ 1M tokens (Claude's full context window).
 TURN_COUNTS = [10, 25, 50, 100, 500]
 
-# Snapshot-only counts: pure delta replay becomes painful past 500 turns and
-# add_messages storage balloons past 1 GB, so only the snapshot variant runs here.
-SNAPSHOT_ONLY_TURN_COUNTS = [1000]
+# Deep-thread counts where add_messages blob storage would exceed 1 GB;
+# only DeltaChannel runs here.
+DELTA_ONLY_TURN_COUNTS = [1000]
 
 
 def _checkpointer_factories() -> list[tuple[str, Any]]:
@@ -294,24 +285,22 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
     rows: list[tuple[int, Any, Any, Any, Any, Any, Any]] = []
     for turns in TURN_COUNTS:
         with _make_saver() as saver:
-            _, b_rt, b_bytes = _run_turns(turns, BinaryState, saver)
+            b_wt, b_rt, b_bytes = _run_turns(turns, BinaryState, saver)
         with _make_saver() as saver:
-            _, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
+            d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
+        rows.append((turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt))
+    for turns in DELTA_ONLY_TURN_COUNTS:
         with _make_saver() as saver:
-            _, s_rt, s_bytes = _run_turns(turns, DeltaSnapshotState, saver)
-        rows.append((turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt))
-    for turns in SNAPSHOT_ONLY_TURN_COUNTS:
-        with _make_saver() as saver:
-            _, s_rt, s_bytes = _run_turns(turns, DeltaSnapshotState, saver)
-        rows.append((turns, None, None, s_bytes, None, None, s_rt))
+            d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
+        rows.append((turns, None, d_bytes, None, d_rt, None, d_wt))
 
     # ── Table 1: Storage ─────────────────────────────────────────────────────
-    W = 78
+    W = 64
     print("Storage (checkpoint blob bytes)")
     print("=" * W)
     print(
         f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}  "
-        f"{'delta+snap':>12}  {'savings':>8}"
+        f"{'savings':>8}"
     )
     print("-" * W)
 
@@ -325,7 +314,7 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
     def _ms_or_na(v: Any) -> str:
         return "n/a" if v is None else f"{v * 1000:.1f}ms"
 
-    for turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt in rows:
+    for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
         if b_bytes is None or b_bytes < 0 or d_bytes is None or d_bytes < 0:
             ratio_str = "n/a"
         else:
@@ -334,35 +323,48 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
         print(
             f"{turns:>6}  {_approx_tokens(turns):>10}  "
             f"{_bytes_or_na(b_bytes):>12}  {_bytes_or_na(d_bytes):>12}  "
-            f"{_bytes_or_na(s_bytes):>12}  {ratio_str:>8}"
+            f"{ratio_str:>8}"
         )
     print("=" * W)
     print()
 
     # ── Table 2: Read latency ─────────────────────────────────────────────────
-    print("Read latency (avg of 5 get_state calls = cost per invoke)")
+    print("Read latency (avg of 5 get_state calls)")
     print("=" * W)
     print(
-        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}  "
-        f"{'delta+snap':>12}"
+        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}"
     )
     print("-" * W)
-    for turns, b_bytes, d_bytes, s_bytes, b_rt, d_rt, s_rt in rows:
+    for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
         print(
             f"{turns:>6}  {_approx_tokens(turns):>10}  "
-            f"{_ms_or_na(b_rt):>12}  {_ms_or_na(d_rt):>12}  "
-            f"{_ms_or_na(s_rt):>12}"
+            f"{_ms_or_na(b_rt):>12}  {_ms_or_na(d_rt):>12}"
+        )
+    print("=" * W)
+    print()
+
+    # ── Table 3: Per-invoke latency (total write_elapsed / turns) ─────────────
+    print("Per-invoke latency (total graph.invoke time / turns)")
+    print("=" * W)
+    print(
+        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}"
+    )
+    print("-" * W)
+    for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
+        def _per(wt: Any) -> str:
+            if wt is None:
+                return "n/a"
+            return f"{(wt / turns) * 1000:.1f}ms"
+        print(
+            f"{turns:>6}  {_approx_tokens(turns):>10}  "
+            f"{_per(b_wt):>12}  {_per(d_wt):>12}"
         )
     print("=" * W)
     print()
 
     print("Legend:")
-    print("  add_msgs   = Annotated[list, add_messages]  — O(N²) storage")
-    print("  delta      = DeltaChannel(add_messages)     — O(N) storage")
-    print(
-        f"  delta+snap = DeltaChannel(add_messages, snapshot_every={_SNAPSHOT_EVERY})"
-        "  — O(N) storage, bounded read"
-    )
+    print("  add_msgs  = Annotated[list, add_messages]  — O(N²) storage")
+    print("  delta     = Annotated[list, DeltaChannel(add_messages)]  — O(N) storage")
     print()
 
 

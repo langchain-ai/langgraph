@@ -48,21 +48,6 @@ _DELTA_RECONSTRUCTION: contextvars.ContextVar[bool] = contextvars.ContextVar(
 )
 
 
-def _overwrite_types() -> tuple[type, ...]:
-    """Return `(Overwrite,)` if `langgraph` is installed, else `()`.
-
-    `Overwrite` lives in `langgraph.types`, which this library does not depend
-    on; importing eagerly would also be circular. An empty tuple makes
-    `isinstance(x, overwrite_types)` safely return `False` when `langgraph` is
-    not installed — no `Overwrite` values can exist in that environment.
-    """
-    try:
-        from langgraph.types import Overwrite  # type: ignore[import-untyped]
-    except ImportError:
-        return ()
-    return (Overwrite,)
-
-
 def _split_list_config(
     config: RunnableConfig,
 ) -> tuple[RunnableConfig, RunnableConfig | None]:
@@ -527,8 +512,8 @@ class BaseCheckpointSaver(Generic[V]):
             Default `SEED_UNSET` means no seed.
 
         Walks the **parent chain** (not `list(before=...)`): for a thread with
-        forks, only on-path ancestors contribute. Scans newest→oldest and
-        stops at the first `Overwrite`, so reconstruction cost is bounded.
+        forks, only on-path ancestors contribute. Writes are returned
+        oldest→newest.
 
         Writes stored at the target `checkpoint_id` itself are pending writes
         for the next step and are excluded — pregel applies them separately
@@ -546,7 +531,6 @@ class BaseCheckpointSaver(Generic[V]):
         # method ignores — it only reads pending_writes).
         if _DELTA_RECONSTRUCTION.get():
             return DeltaChannelWrites(writes=[])
-        overwrite_types = _overwrite_types()
 
         token = _DELTA_RECONSTRUCTION.set(True)
         try:
@@ -566,9 +550,6 @@ class BaseCheckpointSaver(Generic[V]):
                         if ch != channel:
                             continue
                         collected.append(value)
-                        if isinstance(value, overwrite_types):
-                            collected.reverse()
-                            return DeltaChannelWrites(writes=collected)
                 cursor_config = tup.parent_config
             collected.reverse()
             return DeltaChannelWrites(writes=collected)
@@ -581,7 +562,6 @@ class BaseCheckpointSaver(Generic[V]):
         """Async version of `get_channel_writes`. See docstring there."""
         if _DELTA_RECONSTRUCTION.get():
             return DeltaChannelWrites(writes=[])
-        overwrite_types = _overwrite_types()
 
         token = _DELTA_RECONSTRUCTION.set(True)
         try:
@@ -599,9 +579,6 @@ class BaseCheckpointSaver(Generic[V]):
                         if ch != channel:
                             continue
                         collected.append(value)
-                        if isinstance(value, overwrite_types):
-                            collected.reverse()
-                            return DeltaChannelWrites(writes=collected)
                 cursor_config = tup.parent_config
             collected.reverse()
             return DeltaChannelWrites(writes=collected)

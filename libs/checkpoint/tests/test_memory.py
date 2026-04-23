@@ -555,43 +555,6 @@ class TestBaseFallbackGetChannelWrites:
         assert results[0] == expected
         assert results[1] == expected
 
-    def test_fallback_stops_at_first_overwrite(self) -> None:
-        """An `Overwrite` dominates older history: scan newest→oldest stops at
-        the first one (so `snapshot_every` / user Overwrites bound replay cost).
-        """
-        langgraph_types = pytest.importorskip(
-            "langgraph.types", reason="langgraph core not installed"
-        )
-        Overwrite = langgraph_types.Overwrite
-
-        saver, thread_id, ns = self._build_saver_with_chain()
-        serde = JsonPlusSerializer()
-        cp1_id = "00000000000000000000000000000002.0000000000000000"
-        # Replace cp1's write with an Overwrite — cp0's write must be dropped.
-        saver.writes[(thread_id, ns, cp1_id)][("task2", 0)] = (
-            "task2",
-            "messages",
-            serde.dumps_typed(Overwrite([{"content": "reset"}])),
-            "",
-        )
-
-        target_id = "00000000000000000000000000000003.0000000000000000"
-        config: RunnableConfig = {
-            "configurable": {
-                "thread_id": thread_id,
-                "checkpoint_ns": ns,
-                "checkpoint_id": target_id,
-            }
-        }
-
-        result = saver.get_channel_writes(config, "messages")
-
-        assert len(result.writes) == 1
-        assert isinstance(result.writes[0], Overwrite)
-        assert result.writes[0].value == [{"content": "reset"}]
-        assert result.seed is SEED_UNSET
-
-
 class TestPreDeltaBlobTerminator:
     """Verify the pre-delta blob terminator: when the ancestor walk hits a
     checkpoint whose blob for the channel is a real value (not
