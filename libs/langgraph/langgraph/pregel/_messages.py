@@ -279,6 +279,113 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
     AIMessageChunk shape.
     """
 
+    def on_chat_model_start(
+        self,
+        serialized: dict[str, Any],
+        messages: list[list[BaseMessage]],
+        *,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Record metadata with the FULL checkpoint namespace for v2.
+
+        v1's ``on_chat_model_start`` (inherited) slices the ns tuple
+        with ``[:-1]`` to re-position chat model tokens onto the
+        *containing pregel's* namespace — historically convenient for
+        consumers of ``stream_mode="messages"`` who want "where did
+        this node produce its output" rather than the chat-model's
+        own task ns.
+
+        For the protocol-v2 wire shape that is wrong: the client
+        subscribes the root feed at ``namespaces=[[]]`` with
+        ``depth=1``, and any message emitted at depth ``>=1`` that
+        still carries the containing node's ns must appear at the
+        *full* path from root so that depth filtering cleanly isolates
+        subgraph chatter from the root conversation. JS's
+        ``StreamMessagesHandlerV2`` already does
+        ``metadata.langgraph_checkpoint_ns.split("|")`` (no slice); this
+        override brings the Python v2 handler to the same shape.
+
+        Without this, a chat model invoked inside a nested subgraph
+        (e.g. ``research -> researcher``, ``research`` being a root
+        node that ``.ainvoke()``s a ``researcher`` subgraph) emits at
+        ``["research:<task>"]`` — a single level deep — which slips
+        through the root-feed depth-1 filter and pollutes the main
+        conversation with subgraph tokens. With this override we emit
+        at ``["research:<task>", "researcher:<task>"]`` so the client
+        routes those tokens to the subgraph card instead.
+        """
+        if metadata and (not tags or (TAG_NOSTREAM not in tags)):
+            task_checkpoint_ns = cast(str, metadata["langgraph_checkpoint_ns"])
+            # Keep the trailing ``:<task_id>`` segment (unlike the v1
+            # handler which strips it via ``[:-1]``). The client's
+            # lifecycle events land on the same ns, so message deltas
+            # now correlate 1:1 with a ``lifecycle: started`` event —
+            # ``useMessages(stream, subgraph)`` picks them up without
+            # needing to collapse sibling namespaces.
+            ns = tuple(task_checkpoint_ns.split(NS_SEP))
+            if not self.subgraphs and len(ns) > 1 and ns != self.parent_ns:
+                return
+            stream_metadata = dict(metadata)
+            # Preserve the v1-shaped ``langgraph_checkpoint_ns`` (task
+            # id stripped, trailing ``NS_END`` retained) so downstream
+            # consumers reading checkpoint metadata off a streamed
+            # message see the same shape they did pre-v2. Only the ns
+            # tuple emitted on the wire changes.
+            checkpoint_ns = (
+                f"{task_checkpoint_ns.rsplit(NS_END, 1)[0]}{NS_END}"
+                if NS_END in task_checkpoint_ns
+                else task_checkpoint_ns
+            )
+            stream_metadata["langgraph_checkpoint_ns"] = checkpoint_ns
+            stream_metadata["checkpoint_ns"] = checkpoint_ns
+            if tags:
+                if filtered_tags := [t for t in tags if not t.startswith("seq:step")]:
+                    stream_metadata["tags"] = filtered_tags
+            self.metadata[run_id] = (ns, stream_metadata)
+
+    def on_chain_start(
+        self,
+        serialized: dict[str, Any],
+        inputs: dict[str, Any],
+        *,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Record chain (node) metadata with the FULL checkpoint ns.
+
+        Mirror of :meth:`on_chat_model_start` for the node-start path,
+        so messages returned by ``on_chain_end`` (``Command`` updates
+        and plain state dict outputs) land at the same full-path ns as
+        any chat-model deltas from within that node. See the
+        :meth:`on_chat_model_start` docstring for why the v1 ``[:-1]``
+        slice is dropped here.
+        """
+        if (
+            metadata
+            and kwargs.get("name") == metadata.get("langgraph_node")
+            and (not tags or TAG_HIDDEN not in tags)
+        ):
+            ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))
+            if not self.subgraphs and len(ns) > 1:
+                return
+            self.metadata[run_id] = (ns, metadata)
+            for value in _state_values(inputs):
+                if isinstance(value, BaseMessage):
+                    if value.id is not None:
+                        self.seen.add(value.id)
+                elif isinstance(value, Sequence) and not isinstance(value, str):
+                    for item in value:
+                        if isinstance(item, BaseMessage):
+                            if item.id is not None:
+                                self.seen.add(item.id)
+
     def on_llm_new_token(
         self,
         token: str,
