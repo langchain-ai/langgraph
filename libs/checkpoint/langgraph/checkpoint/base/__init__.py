@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import contextvars
 import copy
 import logging
-import threading
 from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
 from typing import (
     Any,
@@ -39,7 +39,13 @@ from langgraph.checkpoint.serde.types import (
 V = TypeVar("V", int, float, str)
 PendingWrite = tuple[str, str, Any]
 
-_DELTA_RECONSTRUCTION: threading.local = threading.local()
+# Task-local guard: ContextVar is copied per asyncio Task, so concurrent
+# requests on the same event-loop thread do not share this flag. A plain
+# `threading.local()` would leak across tasks and let one in-flight
+# reconstruction silently short-circuit another.
+_DELTA_RECONSTRUCTION: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_DELTA_RECONSTRUCTION", default=False
+)
 
 
 def _overwrite_types() -> tuple[type, ...]:
@@ -538,11 +544,11 @@ class BaseCheckpointSaver(Generic[V]):
         # reconstruction which calls get_tuple() again, the inner call
         # returns tuples with DELTA_SENTINEL in channel_values (which this
         # method ignores — it only reads pending_writes).
-        if getattr(_DELTA_RECONSTRUCTION, "active", False):
+        if _DELTA_RECONSTRUCTION.get():
             return DeltaChannelWrites(writes=[])
         overwrite_types = _overwrite_types()
 
-        _DELTA_RECONSTRUCTION.active = True
+        token = _DELTA_RECONSTRUCTION.set(True)
         try:
             collected: list[Any] = []  # newest first
             target_tuple = self.get_tuple(config)
@@ -567,17 +573,17 @@ class BaseCheckpointSaver(Generic[V]):
             collected.reverse()
             return DeltaChannelWrites(writes=collected)
         finally:
-            _DELTA_RECONSTRUCTION.active = False
+            _DELTA_RECONSTRUCTION.reset(token)
 
     async def aget_channel_writes(
         self, config: RunnableConfig, channel: str
     ) -> DeltaChannelWrites:
         """Async version of `get_channel_writes`. See docstring there."""
-        if getattr(_DELTA_RECONSTRUCTION, "active", False):
+        if _DELTA_RECONSTRUCTION.get():
             return DeltaChannelWrites(writes=[])
         overwrite_types = _overwrite_types()
 
-        _DELTA_RECONSTRUCTION.active = True
+        token = _DELTA_RECONSTRUCTION.set(True)
         try:
             collected: list[Any] = []
             target_tuple = await self.aget_tuple(config)
@@ -600,7 +606,7 @@ class BaseCheckpointSaver(Generic[V]):
             collected.reverse()
             return DeltaChannelWrites(writes=collected)
         finally:
-            _DELTA_RECONSTRUCTION.active = False
+            _DELTA_RECONSTRUCTION.reset(token)
 
     def get_next_version(self, current: V | None, channel: None) -> V:
         """Generate the next version ID for a channel.
