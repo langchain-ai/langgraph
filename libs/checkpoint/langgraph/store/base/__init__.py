@@ -933,6 +933,7 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
         """
+        self._validate_namespace(namespace)
         self.batch([PutOp(namespace, str(key), None, ttl=None)])
 
     def list_namespaces(
@@ -1194,6 +1195,7 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
         """
+        await self._validate_namespace(namespace)
         await self.abatch([PutOp(namespace, str(key), None)])
 
     async def alist_namespaces(
