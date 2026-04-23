@@ -8,6 +8,7 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
+    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
@@ -409,7 +410,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_id = config["configurable"]["checkpoint_id"]
+        checkpoint_id = get_checkpoint_id(config)
+        if checkpoint_id is None:
+            target = await self.aget_tuple(config)
+            if target is None:
+                return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
+            checkpoint_id = target.config["configurable"]["checkpoint_id"]
         async with self._cursor() as cur:
             await cur.execute(
                 SELECT_DELTA_PARENTS_SQL, (channel, thread_id, checkpoint_ns)
