@@ -13,7 +13,6 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     ChannelVersions,
     DeltaChannelWrites,
-    _overwrite_types,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS
@@ -238,19 +237,14 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         (`AsyncPostgresSaver`); both paths run the queries themselves and
         feed the rows here.
 
-        Walk is newest → oldest from the target's parent. Stops at the first
-        terminator:
-
-          * a user-emitted `Overwrite` in `checkpoint_writes` — replaces
-            prior history;
-          * a non-sentinel blob in `checkpoint_blobs` — a pre-delta snapshot;
-            bound as `DeltaChannelWrites.seed` so replay starts from it.
+        Walk is newest → oldest from the target's parent. A non-sentinel
+        blob in `checkpoint_blobs` (a pre-delta snapshot) terminates the
+        walk and is bound as `DeltaChannelWrites.seed` so replay starts
+        from it.
 
         Writes stored at `target_id` itself are pending writes for the next
         step and are excluded — the walk begins at the target's parent.
         """
-        overwrite_types = _overwrite_types()
-
         parent_of: dict[str, str | None] = {}
         ver_of: dict[str, str | None] = {}
         for r in parents_rows:
@@ -298,15 +292,9 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                         seed = blob_value
                         found_seed = True
                         break
-            terminated = False
             for type_tag, write_blob, _task_id, _idx in writes_by_cid.get(cid, []):
                 val = self.serde.loads_typed((type_tag, write_blob))
                 collected.append(val)
-                if isinstance(val, overwrite_types):
-                    terminated = True
-                    break
-            if terminated:
-                break
 
         collected.reverse()  # oldest → newest
         if found_seed:

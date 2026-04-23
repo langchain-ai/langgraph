@@ -23,7 +23,6 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     DeltaChannelWrites,
     SerializerProtocol,
-    _overwrite_types,
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
@@ -173,14 +172,11 @@ class InMemorySaver(
             chain.append(current)
             _, _, parent = entry
             current = parent
-        overwrite_types = _overwrite_types()
-
-        # Scan newest→oldest. Two terminators stop the walk:
-        #   1. a user-emitted `Overwrite` in writes — replaces prior history;
-        #   2. a pre-delta blob on an ancestor — bind it as `seed`.
-        # Without (2), a thread migrated from pre-delta storage would replay
-        # ancestor writes all the way to the root AND miss any value that
-        # lived only in the old blob (e.g. from `update_state`).
+        # Scan newest→oldest. A pre-delta blob on an ancestor terminates the
+        # walk and is bound as `seed`; without this, a thread migrated from
+        # pre-delta storage would replay ancestor writes all the way to the
+        # root AND miss any value that lived only in the old blob (e.g. from
+        # `update_state`).
         #
         # At each ancestor, check the blob BEFORE processing its pending
         # writes: a pre-delta blob represents the state AT that ancestor,
@@ -215,9 +211,6 @@ class InMemorySaver(
                     continue
                 val = self.serde.loads_typed(serialized)
                 collected.append(val)
-                if isinstance(val, overwrite_types):
-                    collected.reverse()
-                    return DeltaChannelWrites(writes=collected)
         collected.reverse()
         return DeltaChannelWrites(writes=collected)
 
