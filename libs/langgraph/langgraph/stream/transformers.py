@@ -119,9 +119,19 @@ class MessagesTransformer(StreamTransformer):
 
     Native transformer — the `messages` projection is exposed as a
     direct attribute on the run stream.
+
+    `scope_exact = False`: matches events at the transformer's own
+    namespace **or** exactly one segment deeper (the chat-model /
+    node's own task ns). Mirrors JS's root-feed filter
+    (`namespaces=[[]], depth=1`) — root accepts depth-0 events plus
+    its own nodes' depth-1 tokens; subgraph mini-muxes accept their
+    own scope plus their internal nodes' tokens. Events deeper than
+    scope + 1 are dropped (the enclosing `SubgraphTransformer` has
+    already forwarded them to the matching child mini-mux).
     """
 
     _native = True
+    scope_exact = False
     required_stream_modes = ("messages",)
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
@@ -186,10 +196,16 @@ class MessagesTransformer(StreamTransformer):
         )
 
     def process(self, event: ProtocolEvent) -> bool:
-        # Namespace filtering is handled by the mux via `scope_exact`.
         if event["method"] != "messages":
             return True
         params = event["params"]
+        # Accept events at our scope or exactly one segment deeper
+        # (the chat-model / node's own task ns). Deeper events belong
+        # to a subgraph and are routed by `SubgraphTransformer`.
+        ns = tuple(params["namespace"])
+        depth = len(self.scope)
+        if len(ns) > depth + 1 or ns[:depth] != self.scope:
+            return True
 
         payload, metadata = params["data"]
         node: str | None = metadata.get("langgraph_node")

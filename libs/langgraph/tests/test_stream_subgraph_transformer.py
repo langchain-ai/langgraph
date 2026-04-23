@@ -237,7 +237,14 @@ class TestSubgraphTransformerUnit:
             {
                 "type": "event",
                 "method": "messages",
-                "params": {"namespace": ["t:c"], "timestamp": TS, "data": "x"},
+                "params": {
+                    "namespace": ["t:c"],
+                    "timestamp": TS,
+                    "data": (
+                        {"event": "message-start", "message_id": "m1"},
+                        {"run_id": "m1"},
+                    ),
+                },
             }
         )
         assert list(transformer._root_log._items) == []
