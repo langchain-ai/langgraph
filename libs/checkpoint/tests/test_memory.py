@@ -512,6 +512,49 @@ class TestBaseFallbackGetChannelWrites:
         )
         assert result.seed is SEED_UNSET
 
+    async def test_async_fallback_concurrent_tasks_do_not_interfere(self) -> None:
+        """Regression: the re-entrancy guard must be task-local, not thread-local.
+
+        Two concurrent `aget_channel_writes` calls on the same event-loop
+        thread must each see their full reconstructed writes. A
+        `threading.local()` guard would let whichever task set it first
+        short-circuit the other to `writes=[]`.
+        """
+        import asyncio
+
+        saver, thread_id, ns = self._build_saver_with_chain()
+
+        # Force the two tasks to interleave across the `set(True)` boundary:
+        # each `aget_tuple` yields control, so if the guard were thread-local
+        # the second task would observe `active=True` set by the first.
+        orig_aget_tuple = saver.aget_tuple
+
+        async def slow_aget_tuple(config: RunnableConfig) -> Any:
+            await asyncio.sleep(0)
+            return await orig_aget_tuple(config)
+
+        saver.aget_tuple = slow_aget_tuple  # type: ignore[method-assign]
+
+        target_id = "00000000000000000000000000000003.0000000000000000"
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": ns,
+                "checkpoint_id": target_id,
+            }
+        }
+
+        results = await asyncio.gather(
+            saver.aget_channel_writes(config, "messages"),
+            saver.aget_channel_writes(config, "messages"),
+        )
+
+        expected = DeltaChannelWrites(
+            writes=[{"content": "first"}, {"content": "second"}]
+        )
+        assert results[0] == expected
+        assert results[1] == expected
+
     def test_fallback_stops_at_first_overwrite(self) -> None:
         """An `Overwrite` dominates older history: scan newest→oldest stops at
         the first one (so `snapshot_every` / user Overwrites bound replay cost).
