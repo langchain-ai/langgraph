@@ -1049,14 +1049,13 @@ class Pregel(
 
         step = saved.metadata.get("step", -1) + 1
         stop = step + 2
-        checkpoint = saved.checkpoint
         channels, managed = channels_from_checkpoint(
             self.channels,
-            checkpoint,
+            saved.checkpoint,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
-            checkpoint,
+            saved.checkpoint,
             saved.pending_writes or [],
             self.nodes,
             channels,
@@ -1169,14 +1168,13 @@ class Pregel(
 
         step = saved.metadata.get("step", -1) + 1
         stop = step + 2
-        checkpoint = saved.checkpoint
         channels, managed = channels_from_checkpoint(
             self.channels,
-            checkpoint,
+            saved.checkpoint,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
-            checkpoint,
+            saved.checkpoint,
             saved.pending_writes or [],
             self.nodes,
             channels,
@@ -1522,8 +1520,9 @@ class Pregel(
             saved = checkpointer.get_tuple(config)
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
-            base_checkpoint = saved.checkpoint if saved else empty_checkpoint()
-            checkpoint = copy_checkpoint(base_checkpoint) if saved else base_checkpoint
+            checkpoint = (
+                copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+            )
             checkpoint_previous_versions = (
                 saved.checkpoint["channel_versions"].copy() if saved else {}
             )
@@ -1967,8 +1966,9 @@ class Pregel(
             saved = await checkpointer.aget_tuple(config)
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
-            base_checkpoint = saved.checkpoint if saved else empty_checkpoint()
-            checkpoint = copy_checkpoint(base_checkpoint) if saved else base_checkpoint
+            checkpoint = (
+                copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+            )
             checkpoint_previous_versions = (
                 saved.checkpoint["channel_versions"].copy() if saved else {}
             )

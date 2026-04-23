@@ -55,6 +55,26 @@ def _overwrite_types() -> tuple[type, ...]:
     return (Overwrite,)
 
 
+def _split_list_config(
+    config: RunnableConfig,
+) -> tuple[RunnableConfig, RunnableConfig | None]:
+    """Split a `get_channel_writes` config into `(list_config, before_config)`.
+
+    Most savers collapse `list(config)` to a single row when `config` carries a
+    `checkpoint_id`. For ancestor traversal we need the opposite: every tuple
+    strictly earlier than the target. Drop `checkpoint_id` from `list_config`
+    and pass the original as `before=` (which filters `checkpoint_id < target`).
+    """
+    configurable = config.get("configurable", {}) or {}
+    target_id = configurable.get("checkpoint_id")
+    if target_id is None:
+        return config, None
+    list_config: RunnableConfig = {
+        "configurable": {k: v for k, v in configurable.items() if k != "checkpoint_id"}
+    }
+    return list_config, config
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -503,14 +523,12 @@ class BaseCheckpointSaver(Generic[V]):
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
             return []
         overwrite_types = _overwrite_types()
+        list_config, before_config = _split_list_config(config)
 
         _DELTA_RECONSTRUCTION.active = True
         try:
             collected: list[Any] = []  # newest first
-            target_id = config["configurable"].get("checkpoint_id")
-            for tup in self.list(config):  # newest → oldest
-                if tup.config["configurable"].get("checkpoint_id") == target_id:
-                    continue
+            for tup in self.list(list_config, before=before_config):  # newest → oldest
                 if not tup.pending_writes:
                     continue
                 # Within a superstep, pending_writes are oldest→newest; reverse
@@ -531,17 +549,15 @@ class BaseCheckpointSaver(Generic[V]):
         self, config: RunnableConfig, channel: str
     ) -> List[Any]:  # noqa: UP006
         """Async version of get_channel_writes."""
-        overwrite_types = _overwrite_types()
-
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
             return []
+        overwrite_types = _overwrite_types()
+        list_config, before_config = _split_list_config(config)
+
         _DELTA_RECONSTRUCTION.active = True
         try:
             collected: list[Any] = []
-            target_id = config["configurable"].get("checkpoint_id")
-            async for tup in self.alist(config):
-                if tup.config["configurable"].get("checkpoint_id") == target_id:
-                    continue
+            async for tup in self.alist(list_config, before=before_config):
                 if not tup.pending_writes:
                     continue
                 for _, ch, value in reversed(tup.pending_writes):

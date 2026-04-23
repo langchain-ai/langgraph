@@ -95,6 +95,24 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         new._writes_since_snapshot = self._writes_since_snapshot
         return new
 
+    def _apply_write(self, value: Any, write: Any, counter: int) -> tuple[Any, int]:
+        """Apply one write to `value`; return (new_value, new_counter).
+
+        An `Overwrite` resets the counter to 0; any other write increments it.
+        Centralizes the Overwrite/reducer branching used by both `update` (live
+        super-step) and `from_checkpoint` (ancestor replay).
+        """
+        is_overwrite, overwrite_value = _get_overwrite(write)
+        if is_overwrite:
+            new_value = (
+                _copy.copy(overwrite_value)
+                if overwrite_value is not None
+                else _empty(self.typ)
+            )
+            return new_value, 0
+        base = _empty(self.typ) if value is MISSING else value
+        return self.operator(base, write), counter + 1
+
     def from_checkpoint(self, checkpoint: Any) -> Self:
         new: DeltaChannel[Value] = DeltaChannel(
             self.operator, snapshot_every=self.snapshot_every
@@ -106,22 +124,12 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
             new._writes_since_snapshot = 0
         elif isinstance(checkpoint, DeltaChannelWrites):
             # Saver reconstructed per-step writes; replay through the operator.
-            # Count writes since last Overwrite so the snapshot cadence stays
-            # accurate across reloads.
+            # Counter tracks writes since the last Overwrite so snapshot cadence
+            # stays accurate across reloads.
             value: Any = _empty(new.typ)
             counter = 0
             for write in checkpoint.writes:
-                is_overwrite, overwrite_value = _get_overwrite(write)
-                if is_overwrite:
-                    value = (
-                        _copy.copy(overwrite_value)
-                        if overwrite_value is not None
-                        else _empty(new.typ)
-                    )
-                    counter = 0
-                else:
-                    value = new.operator(value, write)
-                    counter += 1
+                value, counter = new._apply_write(value, write, counter)
             new.value = value
             new._writes_since_snapshot = counter
         else:
@@ -135,9 +143,8 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         if not values:
             return False
         seen_overwrite = False
-        applied = 0
         for value in values:
-            is_overwrite, overwrite_value = _get_overwrite(value)
+            is_overwrite, _ = _get_overwrite(value)
             if is_overwrite:
                 if seen_overwrite:
                     from langgraph.errors import (
@@ -151,19 +158,13 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
                         error_code=ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE,
                     )
                     raise InvalidUpdateError(msg)
-                self.value = (
-                    _copy.copy(overwrite_value)
-                    if overwrite_value is not None
-                    else _empty(self.typ)
-                )
                 seen_overwrite = True
-                self._writes_since_snapshot = 0
-            elif not seen_overwrite:
-                base = _empty(self.typ) if self.value is MISSING else self.value
-                self.value = self.operator(base, value)
-                applied += 1
-        if not seen_overwrite:
-            self._writes_since_snapshot += applied
+            elif seen_overwrite:
+                # Post-Overwrite writes within the same super-step are dropped.
+                continue
+            self.value, self._writes_since_snapshot = self._apply_write(
+                self.value, value, self._writes_since_snapshot
+            )
         return True
 
     def get(self) -> Any:

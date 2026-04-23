@@ -390,3 +390,125 @@ class TestInMemorySaverDeltaChannel:
         }
         result = saver.get_channel_writes(config, channel)
         assert result == [{"content": "hi"}, {"content": "bye"}]
+
+
+class TestBaseFallbackGetChannelWrites:
+    """Exercises the `BaseCheckpointSaver.get_channel_writes` default
+    implementation — the path third-party savers inherit when they don't
+    override `get_channel_writes` themselves.
+
+    Regression guard for a bug where the fallback passed the caller's config
+    (with `checkpoint_id`) straight to `self.list()`, which most savers
+    collapse to a single row — causing the fallback to return `[]`.
+    """
+
+    def _build_saver_with_chain(self) -> tuple[InMemorySaver, str, str]:
+        """Build an InMemorySaver with a 3-checkpoint chain and per-step writes
+        for a `messages` channel.
+
+        Returns `(saver, thread_id, namespace)`. The saver subclass deletes the
+        InMemorySaver override so the base class fallback is exercised.
+        """
+
+        class _ThirdPartyStyleSaver(InMemorySaver):
+            get_channel_writes = (
+                InMemorySaver.__mro__[1].get_channel_writes  # type: ignore[attr-defined]
+            )
+            aget_channel_writes = (
+                InMemorySaver.__mro__[1].aget_channel_writes  # type: ignore[attr-defined]
+            )
+
+        saver = _ThirdPartyStyleSaver()
+        serde = JsonPlusSerializer()
+        thread_id, ns, channel = "t1", "", "messages"
+
+        cp0 = empty_checkpoint()
+        cp0["id"] = "00000000000000000000000000000001.0000000000000000"
+        cp1 = empty_checkpoint()
+        cp1["id"] = "00000000000000000000000000000002.0000000000000000"
+        cp2 = empty_checkpoint()
+        cp2["id"] = "00000000000000000000000000000003.0000000000000000"
+        saver.storage[thread_id][ns] = {
+            cp0["id"]: (serde.dumps_typed(cp0), serde.dumps_typed({}), None),
+            cp1["id"]: (serde.dumps_typed(cp1), serde.dumps_typed({}), cp0["id"]),
+            cp2["id"]: (serde.dumps_typed(cp2), serde.dumps_typed({}), cp1["id"]),
+        }
+        # Writes under cp0 produced cp1's state; writes under cp1 produced cp2's.
+        saver.writes[(thread_id, ns, cp0["id"])][("task1", 0)] = (
+            "task1",
+            channel,
+            serde.dumps_typed({"content": "first"}),
+            "",
+        )
+        saver.writes[(thread_id, ns, cp1["id"])][("task2", 0)] = (
+            "task2",
+            channel,
+            serde.dumps_typed({"content": "second"}),
+            "",
+        )
+        return saver, thread_id, ns
+
+    def test_fallback_returns_ancestor_writes_oldest_first(self) -> None:
+        saver, thread_id, ns = self._build_saver_with_chain()
+        target_id = "00000000000000000000000000000003.0000000000000000"
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": ns,
+                "checkpoint_id": target_id,
+            }
+        }
+
+        result = saver.get_channel_writes(config, "messages")
+
+        assert result == [{"content": "first"}, {"content": "second"}]
+
+    async def test_async_fallback_returns_ancestor_writes_oldest_first(self) -> None:
+        saver, thread_id, ns = self._build_saver_with_chain()
+        target_id = "00000000000000000000000000000003.0000000000000000"
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": ns,
+                "checkpoint_id": target_id,
+            }
+        }
+
+        result = await saver.aget_channel_writes(config, "messages")
+
+        assert result == [{"content": "first"}, {"content": "second"}]
+
+    def test_fallback_stops_at_first_overwrite(self) -> None:
+        """An `Overwrite` dominates older history: scan newest→oldest stops at
+        the first one (so `snapshot_every` / user Overwrites bound replay cost).
+        """
+        langgraph_types = pytest.importorskip(
+            "langgraph.types", reason="langgraph core not installed"
+        )
+        Overwrite = langgraph_types.Overwrite
+
+        saver, thread_id, ns = self._build_saver_with_chain()
+        serde = JsonPlusSerializer()
+        cp1_id = "00000000000000000000000000000002.0000000000000000"
+        # Replace cp1's write with an Overwrite — cp0's write must be dropped.
+        saver.writes[(thread_id, ns, cp1_id)][("task2", 0)] = (
+            "task2",
+            "messages",
+            serde.dumps_typed(Overwrite([{"content": "reset"}])),
+            "",
+        )
+
+        target_id = "00000000000000000000000000000003.0000000000000000"
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": ns,
+                "checkpoint_id": target_id,
+            }
+        }
+
+        result = saver.get_channel_writes(config, "messages")
+
+        assert len(result) == 1
+        assert isinstance(result[0], Overwrite)
+        assert result[0].value == [{"content": "reset"}]

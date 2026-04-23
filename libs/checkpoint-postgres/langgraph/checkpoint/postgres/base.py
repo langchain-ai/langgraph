@@ -14,6 +14,7 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     ChannelVersions,
     DeltaChannelWrites,
+    _overwrite_types,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS
@@ -235,7 +236,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         1. Fetch all (checkpoint_id, parent_checkpoint_id) for the thread.
         2. Walk ancestry in Python, then fetch writes with a plain ANY() filter.
         """
-        from langgraph.types import Overwrite  # type: ignore[import-untyped]
+        overwrite_types = _overwrite_types()
 
         cur.execute(
             "SELECT checkpoint_id, parent_checkpoint_id FROM checkpoints "
@@ -268,7 +269,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             for type_tag, blob in writes_by_cp.get(cid, []):
                 val = self.serde.loads_typed((type_tag, blob))
                 collected.append(val)
-                if isinstance(val, Overwrite):
+                if isinstance(val, overwrite_types):
                     collected.reverse()
                     return collected
         collected.reverse()

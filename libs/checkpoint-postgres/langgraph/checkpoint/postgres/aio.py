@@ -15,6 +15,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     DeltaChannelWrites,
+    _overwrite_types,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
@@ -402,7 +403,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         cur: Any,
     ) -> list[Any]:
         """Async version of _get_channel_writes_cur — see sync version for rationale."""
-        from langgraph.types import Overwrite  # type: ignore[import-untyped]
+        overwrite_types = _overwrite_types()
 
         await cur.execute(
             "SELECT checkpoint_id, parent_checkpoint_id FROM checkpoints "
@@ -435,7 +436,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             for type_tag, blob in writes_by_cp.get(cid, []):
                 val = self.serde.loads_typed((type_tag, blob))
                 collected.append(val)
-                if isinstance(val, Overwrite):
+                if isinstance(val, overwrite_types):
                     collected.reverse()
                     return collected
         collected.reverse()
