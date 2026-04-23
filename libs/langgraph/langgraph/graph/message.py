@@ -184,24 +184,25 @@ def add_messages(
         ```
 
     """
-    # coerce to list
+    # 1. Coerce scalars to lists.
     if not isinstance(left, list):
         left = [left]  # type: ignore[assignment]
     if not isinstance(right, list):
         right = [right]  # type: ignore[assignment]
+    left = cast(list, left)
 
-    # Optimization 1: skip conversion + ID assignment on left when it already
-    # contains fully-resolved BaseMessage objects (the common case after the
-    # first call, since add_messages always returns list[BaseMessage] with IDs).
+    # 2. Normalize `left`. After the first call, `left` is the previous return
+    #    value of `add_messages` — a list of fully-resolved BaseMessages with
+    #    IDs — and needs no work. Fresh user input (dicts, tuples, message
+    #    chunks, BaseMessages without IDs) falls through to full conversion.
     left_msgs: list[BaseMessage]
-    left_seq = cast(list, left)
     if (
-        left_seq
-        and isinstance(left_seq[0], BaseMessage)
-        and left_seq[0].id is not None
-        and not isinstance(left_seq[0], BaseMessageChunk)
+        left
+        and isinstance(left[0], BaseMessage)
+        and not isinstance(left[0], BaseMessageChunk)
+        and left[0].id is not None
     ):
-        left_msgs = left_seq
+        left_msgs = left
     else:
         left_msgs = [
             message_chunk_to_message(cast(BaseMessageChunk, m))
@@ -211,12 +212,13 @@ def add_messages(
             if m.id is None:
                 m.id = str(uuid.uuid4())
 
-    # always normalise right — it's fresh external input
+    # 3. Normalize `right` — always fresh input. Assign missing IDs and detect
+    #    any RemoveMessage sentinels in a single pass.
     right_msgs: list[BaseMessage] = [
         message_chunk_to_message(cast(BaseMessageChunk, m))
         for m in convert_to_messages(right)
     ]
-    remove_all_idx = None
+    remove_all_idx: int | None = None
     has_remove = False
     for idx, m in enumerate(right_msgs):
         if m.id is None:
@@ -226,51 +228,53 @@ def add_messages(
             if m.id == REMOVE_ALL_MESSAGES:
                 remove_all_idx = idx
 
+    # 4. REMOVE_ALL_MESSAGES: discard everything up to and including the sentinel.
     if remove_all_idx is not None:
         return right_msgs[remove_all_idx + 1 :]
 
-    # Optimization 2: pure-append fast path — no removals, no ID overlaps with
-    # left, and no duplicate IDs within right (all imply a dedup/update is needed).
+    # 5. Decide fast vs. slow path. The fast path (pure append) is only valid
+    #    when `right` has no removals, no intra-right duplicate IDs, and no IDs
+    #    that overlap with `left` — any of those would force the indexed merge
+    #    below to update or dedup.
+    pure_append = False
     if not has_remove:
         left_ids = {m.id for m in left_msgs}
-        right_id_set = {m.id for m in right_msgs}
-        if len(right_id_set) == len(right_msgs) and not (right_id_set & left_ids):
-            result = left_msgs + right_msgs
-            if format == "langchain-openai":
-                return _format_messages(result)
-            elif format:
-                msg = (
-                    f"Unrecognized {format=}. Expected one of 'langchain-openai', None."
-                )
-                raise ValueError(msg)
-            return result
+        right_ids = {m.id for m in right_msgs}
+        pure_append = len(right_ids) == len(right_msgs) and right_ids.isdisjoint(
+            left_ids
+        )
 
-    # slow path: updates or removals present — full indexed merge
-    merged = left_msgs.copy()
-    merged_by_id = {m.id: i for i, m in enumerate(merged)}
-    ids_to_remove = set()
-    for m in right_msgs:
-        if (existing_idx := merged_by_id.get(m.id)) is not None:
-            if isinstance(m, RemoveMessage):
-                ids_to_remove.add(m.id)
+    if pure_append:
+        merged = left_msgs + right_msgs
+    else:
+        # 6. Slow path: build id→index map over `left`, then replay `right`.
+        #    In-place replacement for matching IDs, append for new IDs, and a
+        #    deferred removal pass so RemoveMessages can target either side.
+        merged = left_msgs.copy()
+        merged_by_id = {m.id: i for i, m in enumerate(merged)}
+        ids_to_remove = set()
+        for m in right_msgs:
+            if (existing_idx := merged_by_id.get(m.id)) is not None:
+                if isinstance(m, RemoveMessage):
+                    ids_to_remove.add(m.id)
+                else:
+                    ids_to_remove.discard(m.id)
+                    merged[existing_idx] = m
             else:
-                ids_to_remove.discard(m.id)
-                merged[existing_idx] = m
-        else:
-            if isinstance(m, RemoveMessage):
-                raise ValueError(
-                    f"Attempting to delete a message with an ID that doesn't exist ('{m.id}')"
-                )
-            merged_by_id[m.id] = len(merged)
-            merged.append(m)
-    merged = [m for m in merged if m.id not in ids_to_remove]
+                if isinstance(m, RemoveMessage):
+                    raise ValueError(
+                        f"Attempting to delete a message with an ID that doesn't exist ('{m.id}')"
+                    )
+                merged_by_id[m.id] = len(merged)
+                merged.append(m)
+        merged = [m for m in merged if m.id not in ids_to_remove]
 
+    # 7. Apply optional output format.
     if format == "langchain-openai":
-        merged = _format_messages(merged)
-    elif format:
+        return _format_messages(merged)
+    if format:
         msg = f"Unrecognized {format=}. Expected one of 'langchain-openai', None."
         raise ValueError(msg)
-
     return merged
 
 
