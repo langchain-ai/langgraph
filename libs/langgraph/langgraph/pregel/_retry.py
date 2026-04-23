@@ -39,18 +39,17 @@ logger = logging.getLogger(__name__)
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
-def _timeout_seconds(value: float | timedelta | None) -> float | None:
-    return timeout_seconds(value)
-
-
 class _TimedAttemptScope:
-    """Atomically disable writes and child scheduling after an attempt times out."""
+    """Guarded-config window: dispatch under a lock, atomically disable on close().
 
-    __slots__ = ("_active", "_lock", "node_name", "timeout_s")
+    `close()` and the guarded send/call are serialized so a late write cannot
+    slip past the timeout boundary.
+    """
 
-    def __init__(self, node_name: str, timeout_s: float) -> None:
+    __slots__ = ("_active", "_lock", "node_name")
+
+    def __init__(self, node_name: str) -> None:
         self.node_name = node_name
-        self.timeout_s = timeout_s
         self._active = True
         self._lock = threading.Lock()
 
@@ -74,8 +73,6 @@ class _TimedAttemptScope:
     ) -> Callable[[Sequence[tuple[str, Any]]], None]:
         def guarded_send(writes: Sequence[tuple[str, Any]]) -> None:
             with self._lock:
-                # Hold the lock through dispatch so close() cannot race a late write
-                # into the attempt after the timeout boundary has been crossed.
                 if self._active:
                     send(writes)
 
@@ -84,8 +81,6 @@ class _TimedAttemptScope:
     def _guard_call(self, call: Callable[..., Any]) -> Callable[..., Any]:
         def guarded_call(*args: Any, **kwargs: Any) -> Any:
             with self._lock:
-                # Same as guarded_send(): scheduling a child task must remain atomic
-                # with respect to close(), or a timed-out attempt can still leak work.
                 if self._active:
                     return call(*args, **kwargs)
                 future: Future[Any] = Future()
@@ -109,10 +104,21 @@ def _suppress_background_task_exception(task: asyncio.Task[Any]) -> None:
 def _task_timeout_payload(
     task: PregelExecutableTask, config: RunnableConfig, timeout_s: float
 ) -> dict[str, Any]:
-    runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+    configurable = config.get(CONF, {})
+    runtime = configurable.get(CONFIG_KEY_RUNTIME)
     execution_info = runtime.execution_info if isinstance(runtime, Runtime) else None
     attempt = execution_info.node_attempt if execution_info is not None else 1
     run_id = execution_info.run_id if execution_info is not None else None
+    thread_id = (
+        execution_info.thread_id
+        if execution_info is not None
+        else configurable.get(CONFIG_KEY_THREAD_ID)
+    )
+    checkpoint_ns = (
+        execution_info.checkpoint_ns
+        if execution_info is not None
+        else configurable.get(CONFIG_KEY_CHECKPOINT_NS)
+    )
     started_at = datetime.now(timezone.utc)
     return {
         "execution_id": f"run:{run_id or '-'}|task:{task.id}|attempt:{attempt}",
@@ -120,16 +126,8 @@ def _task_timeout_payload(
         "task_name": task.name,
         "attempt": attempt,
         "run_id": run_id,
-        "thread_id": (
-            execution_info.thread_id
-            if execution_info is not None
-            else config.get(CONF, {}).get(CONFIG_KEY_THREAD_ID)
-        ),
-        "checkpoint_ns": (
-            execution_info.checkpoint_ns
-            if execution_info is not None
-            else config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS)
-        ),
+        "thread_id": thread_id,
+        "checkpoint_ns": checkpoint_ns,
         "started_at": started_at.isoformat(),
         "deadline_at": (started_at + timedelta(seconds=timeout_s)).isoformat(),
         "timeout_secs": timeout_s,
@@ -148,6 +146,19 @@ def _notify_timed_attempt(
         callback(payload)
     except Exception:
         logger.warning("Timed attempt observer failed", exc_info=True)
+
+
+def _build_start_payload(
+    task: PregelExecutableTask,
+    config: RunnableConfig,
+    timeout_s: float | None,
+) -> dict[str, Any] | None:
+    """Return a start payload iff a timeout is set AND an observer is registered."""
+    if timeout_s is None:
+        return None
+    if config.get(CONF, {}).get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER) is None:
+        return None
+    return {**_task_timeout_payload(task, config, timeout_s), "event": "start"}
 
 
 def _timed_attempt_finish_payload(
@@ -180,7 +191,7 @@ def _invoke_with_timeout(
     """
     if timeout_s is None:
         return task.proc.invoke(task.input, config)
-    scoped_attempt = _TimedAttemptScope(task.name, timeout_s)
+    scoped_attempt = _TimedAttemptScope(task.name)
     scoped_config = scoped_attempt.wrap_config(config)
     result: list[Any] = []
     exc: list[BaseException] = []
@@ -204,8 +215,6 @@ def _invoke_with_timeout(
     if not done.wait(timeout_s):
         elapsed = time.monotonic() - start
         scoped_attempt.close()
-        # Discard any writes emitted before the deadline — a timed-out attempt
-        # is a failure, so partial writes must not leak into the commit.
         task.writes.clear()
         raise NodeTimeoutError(task.name, timeout_s, elapsed)
     if exc:
@@ -218,7 +227,7 @@ async def _ainvoke_with_timeout(
 ) -> Any:
     if timeout_s is None:
         return await task.proc.ainvoke(task.input, config)
-    scoped_attempt = _TimedAttemptScope(task.name, timeout_s)
+    scoped_attempt = _TimedAttemptScope(task.name)
     scoped_config = scoped_attempt.wrap_config(config)
     start = time.monotonic()
     invoke_task = asyncio.create_task(task.proc.ainvoke(task.input, scoped_config))
@@ -247,7 +256,7 @@ async def _astream_with_timeout(
         async for _ in task.proc.astream(task.input, config):
             pass
         return
-    scoped_attempt = _TimedAttemptScope(task.name, timeout_s)
+    scoped_attempt = _TimedAttemptScope(task.name)
     scoped_config = scoped_attempt.wrap_config(config)
     start = time.monotonic()
 
@@ -334,7 +343,7 @@ def run_with_retry(
 ) -> None:
     """Run a task with retries."""
     retry_policy = task.retry_policy or retry_policy
-    timeout_s = _timeout_seconds(task.timeout)
+    timeout_s = timeout_seconds(task.timeout)
     attempts = 0
     node_first_attempt_time = time.time()
     config = task.config
@@ -368,14 +377,7 @@ def run_with_retry(
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            timed_attempt_payload = (
-                {
-                    **_task_timeout_payload(task, config, timeout_s),
-                    "event": "start",
-                }
-                if timeout_s is not None
-                else None
-            )
+            timed_attempt_payload = _build_start_payload(task, config, timeout_s)
             _notify_timed_attempt(config, timed_attempt_payload)
             try:
                 result = _invoke_with_timeout(task, config, timeout_s)
@@ -478,7 +480,7 @@ async def arun_with_retry(
 ) -> None:
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
-    timeout_s = _timeout_seconds(task.timeout)
+    timeout_s = timeout_seconds(task.timeout)
     attempts = 0
     node_first_attempt_time = time.time()
     config = task.config
@@ -517,14 +519,7 @@ async def arun_with_retry(
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            timed_attempt_payload = (
-                {
-                    **_task_timeout_payload(task, config, timeout_s),
-                    "event": "start",
-                }
-                if timeout_s is not None
-                else None
-            )
+            timed_attempt_payload = _build_start_payload(task, config, timeout_s)
             _notify_timed_attempt(config, timed_attempt_payload)
             if stream:
                 try:

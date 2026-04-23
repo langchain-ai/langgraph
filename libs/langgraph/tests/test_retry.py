@@ -19,6 +19,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_THREAD_ID,
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
 )
+from langgraph._internal._timeout import timeout_seconds
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.errors import GraphInterrupt, NodeTimeoutError, ParentCommand
@@ -30,7 +31,6 @@ from langgraph.pregel._retry import (
     _checkpoint_ns_for_parent_command,
     _ensure_execution_info,
     _should_retry_on,
-    _timeout_seconds,
     arun_with_retry,
     run_with_retry,
 )
@@ -613,14 +613,14 @@ def _make_task(proc, *, timeout=None, retry_policy=(), name="timed", task_id="ti
 
 
 def test_timeout_seconds_coercion():
-    assert _timeout_seconds(None) is None
-    assert _timeout_seconds(1.5) == 1.5
-    assert _timeout_seconds(2) == 2.0
-    assert _timeout_seconds(timedelta(milliseconds=250)) == 0.25
+    assert timeout_seconds(None) is None
+    assert timeout_seconds(1.5) == 1.5
+    assert timeout_seconds(2) == 2.0
+    assert timeout_seconds(timedelta(milliseconds=250)) == 0.25
     with pytest.raises(ValueError, match="greater than 0"):
-        _timeout_seconds(0)
+        timeout_seconds(0)
     with pytest.raises(ValueError, match="greater than 0"):
-        _timeout_seconds(timedelta())
+        timeout_seconds(timedelta())
 
 
 def test_run_with_retry_timeout_fires_sync():
