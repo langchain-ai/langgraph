@@ -361,9 +361,9 @@ async def test_get_checkpoint_no_channel_values(
 
         load_checkpoint_tuple = saver._load_checkpoint_tuple
 
-        async def patched_load_checkpoint_tuple(value, cur):
+        async def patched_load_checkpoint_tuple(value):
             value["checkpoint"].pop("channel_values", None)
-            return await load_checkpoint_tuple(value, cur)
+            return await load_checkpoint_tuple(value)
 
         monkeypatch.setattr(
             saver, "_load_checkpoint_tuple", patched_load_checkpoint_tuple
