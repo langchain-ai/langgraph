@@ -9,7 +9,12 @@ from langchain_core.language_models.chat_model_stream import (
     ChatModelStream,
 )
 from langchain_core.messages import AIMessageChunk, BaseMessage
-from langchain_protocol.protocol import CheckpointRef, LifecycleData, MessagesData
+from langchain_protocol.protocol import (
+    CheckpointRef,
+    LifecycleCause,
+    LifecycleData,
+    MessagesData,
+)
 
 from langgraph.errors import GraphInterrupt
 from langgraph.stream._event_log import EventLog
@@ -285,8 +290,11 @@ class SubgraphRunStream(BaseRunStream):
     Lifecycle fields update in place as events arrive:
 
     - `path`: the namespace tuple — stable for the life of the handle.
-    - `graph_name` / `trigger_call_id`: set once from the `started`
-      payload.
+    - `graph_name` / `cause`: set once from the `started` payload.
+      `cause` is populated by product-specific stream transformers
+      (see `LifecycleCause` in the protocol definition); pregel itself
+      emits no `cause`, so it may be `None` for subgraphs not covered
+      by a product transformer.
     - `status`: advances `started` → `running` → `completed` /
       `failed` / `interrupted`.
     - `error` / `checkpoint`: set on the terminal event when present.
@@ -303,12 +311,12 @@ class SubgraphRunStream(BaseRunStream):
         mux: StreamMux,
         *,
         graph_name: str | None = None,
-        trigger_call_id: str | None = None,
+        cause: LifecycleCause | None = None,
     ) -> None:
         super().__init__(mux)
         self.path: tuple[str, ...] = path
         self.graph_name: str | None = graph_name
-        self.trigger_call_id: str | None = trigger_call_id
+        self.cause: LifecycleCause | None = cause
         self.status: SubgraphStatus = "started"
         self.error: str | None = None
         self.checkpoint: CheckpointRef | None = None
@@ -427,7 +435,7 @@ class SubgraphTransformer(StreamTransformer):
             path=ns,
             mux=child_mux,
             graph_name=data.get("graph_name"),
-            trigger_call_id=data.get("trigger_call_id"),
+            cause=data.get("cause"),
         )
         self._by_ns[ns] = handle
         self._root_log.push(handle)

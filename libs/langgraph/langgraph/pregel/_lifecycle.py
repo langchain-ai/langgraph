@@ -166,24 +166,6 @@ class StreamLifecycleHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             return ()
         return tuple(cast(str, nskey).split(NS_SEP))[:-1]
 
-    @staticmethod
-    def _trigger_call_id(metadata: dict[str, Any] | None) -> str | None:
-        """Extract `trigger_call_id` from task metadata if present.
-
-        The task that spawned a nested `Pregel` has its task id encoded
-        in `langgraph_checkpoint_ns`'s last segment as
-        `node_name:task_id`. Returns the `task_id` portion, which
-        parents can correlate with their `tools` / `tasks` events.
-        """
-        if not metadata:
-            return None
-        nskey = cast(str | None, metadata.get("langgraph_checkpoint_ns"))
-        if not nskey:
-            return None
-        last = nskey.split(NS_SEP)[-1]
-        _, sep, task_id = last.rpartition(":")
-        return task_id if sep else None
-
     def _emit(self, ns: tuple[str, ...], payload: dict[str, Any]) -> None:
         self.stream((ns, "lifecycle", payload))
 
@@ -248,9 +230,10 @@ class StreamLifecycleHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         payload: dict[str, Any] = {"event": "started"}
         if name:
             payload["graph_name"] = name
-        trigger_call_id = self._trigger_call_id(metadata)
-        if trigger_call_id:
-            payload["trigger_call_id"] = trigger_call_id
+        # `cause` is intentionally not populated here: pregel does not know
+        # what on the parent namespace triggered this subgraph. Product-
+        # specific stream transformers populate `cause` before events
+        # reach the wire. See LifecycleCause in the protocol definition.
         self._emit(ns, payload)
         self._pending_running.add(ns)
 

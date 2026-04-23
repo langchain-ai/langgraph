@@ -32,14 +32,14 @@ def _lifecycle(
     *,
     namespace: list[str] | None = None,
     graph_name: str | None = None,
-    trigger_call_id: str | None = None,
+    cause: dict[str, Any] | None = None,
     error: str | None = None,
 ) -> ProtocolEvent:
     data: dict[str, Any] = {"event": event}
     if graph_name is not None:
         data["graph_name"] = graph_name
-    if trigger_call_id is not None:
-        data["trigger_call_id"] = trigger_call_id
+    if cause is not None:
+        data["cause"] = cause
     if error is not None:
         data["error"] = error
     return {
@@ -125,14 +125,14 @@ class TestSubgraphTransformerUnit:
                 "started",
                 namespace=["task_a:child"],
                 graph_name="child",
-                trigger_call_id="task_a",
+                cause={"type": "toolCall", "tool_call_id": "call_abc"},
             )
         )
 
         handle = self._handle(transformer)
         assert handle.path == ("task_a:child",)
         assert handle.graph_name == "child"
-        assert handle.trigger_call_id == "task_a"
+        assert handle.cause == {"type": "toolCall", "tool_call_id": "call_abc"}
         assert handle.status == "started"
 
     def test_status_transitions(self) -> None:
@@ -371,10 +371,10 @@ class TestSubgraphTransformerAsyncEndToEnd:
         assert child.status == "completed"
 
 
-class TestSubgraphTriggerCallId:
-    """Confirm `trigger_call_id` flows from real pregel metadata."""
+class TestSubgraphCause:
+    """Pregel core emits no `cause`; product transformers populate it."""
 
-    def test_trigger_call_id_populated_end_to_end(self) -> None:
+    def test_cause_not_populated_by_pregel(self) -> None:
         graph = _build_nested_graph()
         run = graph.stream_v2({"value": "", "items": []})
 
@@ -382,14 +382,15 @@ class TestSubgraphTriggerCallId:
         assert len(collected) == 1
         child = collected[0]
 
-        # The child's single-segment path encodes `node_name:task_id`.
-        # Both the parsed task_id (`trigger_call_id`) and the segment
-        # should match the same task_id suffix.
+        # The child's single-segment path still encodes `node_name:task_id`
+        # (that's pregel's internal namespace format), but `cause` is now
+        # product-agnostic and must be populated by a stream transformer,
+        # not by pregel itself.
         assert ":" in child.path[0]
         node_name, _, task_id = child.path[0].partition(":")
         assert node_name == "sub"
         assert task_id  # non-empty
-        assert child.trigger_call_id == task_id
+        assert child.cause is None
 
 
 class TestSubgraphInterrupt:
