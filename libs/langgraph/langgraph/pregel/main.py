@@ -17,6 +17,7 @@ from collections.abc import (
     Sequence,
 )
 from dataclasses import is_dataclass, replace
+from datetime import timedelta
 from functools import partial
 from inspect import isclass
 from typing import (
@@ -186,6 +187,7 @@ class NodeBuilder:
         "_bound",
         "_retry_policy",
         "_cache_policy",
+        "_timeout",
     )
 
     _channels: str | list[str]
@@ -196,6 +198,7 @@ class NodeBuilder:
     _bound: Runnable
     _retry_policy: list[RetryPolicy]
     _cache_policy: CachePolicy | None
+    _timeout: float | timedelta | None
 
     def __init__(
         self,
@@ -208,6 +211,7 @@ class NodeBuilder:
         self._bound = DEFAULT_BOUND
         self._retry_policy = []
         self._cache_policy = None
+        self._timeout = None
 
     def subscribe_only(
         self,
@@ -326,6 +330,11 @@ class NodeBuilder:
         self._cache_policy = policy
         return self
 
+    def set_timeout(self, timeout: float | timedelta | None) -> Self:
+        """Set the per-attempt timeout for this node."""
+        self._timeout = timeout
+        return self
+
     def build(self) -> PregelNode:
         """Builds the node."""
         return PregelNode(
@@ -337,6 +346,7 @@ class NodeBuilder:
             bound=self._bound,
             retry_policy=self._retry_policy,
             cache_policy=self._cache_policy,
+            timeout=self._timeout,
         )
 
 

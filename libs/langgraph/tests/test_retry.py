@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import time
 from collections import deque
 from datetime import timedelta
@@ -13,13 +14,17 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RUNTIME,
+    CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
-    CONFIG_KEY_TASK_TIMEOUT_FINISHED,
-    CONFIG_KEY_TASK_TIMEOUT_STARTED,
     CONFIG_KEY_THREAD_ID,
+    CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
 )
+from langgraph.channels.ephemeral_value import EphemeralValue
+from langgraph.channels.last_value import LastValue
 from langgraph.errors import NodeTimeoutError
+from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
+from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.pregel._retry import (
     _checkpoint_ns_for_parent_command,
     _ensure_execution_info,
@@ -579,12 +584,14 @@ def test_run_with_retry_creates_execution_info_when_missing():
 
 def _make_task(proc, *, timeout=None, retry_policy=(), name="timed", task_id="tid"):
     runtime = DEFAULT_RUNTIME.override(execution_info=None)
+    writes = deque()
     config = {
         "run_id": "run-x",
         CONF: {
             CONFIG_KEY_RUNTIME: runtime,
             CONFIG_KEY_CHECKPOINT_ID: "cp",
             CONFIG_KEY_CHECKPOINT_NS: f"{name}:{task_id}",
+            CONFIG_KEY_SEND: writes.extend,
             CONFIG_KEY_TASK_ID: task_id,
             CONFIG_KEY_THREAD_ID: "thr",
         },
@@ -593,7 +600,7 @@ def _make_task(proc, *, timeout=None, retry_policy=(), name="timed", task_id="ti
         name=name,
         input=None,
         proc=proc,
-        writes=deque(),
+        writes=writes,
         config=config,
         triggers=[name],
         retry_policy=retry_policy,
@@ -609,6 +616,10 @@ def test_timeout_seconds_coercion():
     assert _timeout_seconds(1.5) == 1.5
     assert _timeout_seconds(2) == 2.0
     assert _timeout_seconds(timedelta(milliseconds=250)) == 0.25
+    with pytest.raises(ValueError, match="greater than 0"):
+        _timeout_seconds(0)
+    with pytest.raises(ValueError, match="greater than 0"):
+        _timeout_seconds(timedelta())
 
 
 def test_run_with_retry_timeout_fires_sync():
@@ -637,6 +648,20 @@ def test_run_with_retry_timeout_ok_when_fast():
     assert run_with_retry(task, retry_policy=None) == "ok"
 
 
+def test_run_with_retry_timeout_preserves_contextvars():
+    import contextvars
+
+    request_id = contextvars.ContextVar("request_id", default="missing")
+    request_id.set("req-123")
+
+    class Proc:
+        def invoke(self, input, config):
+            return request_id.get()
+
+    task = _make_task(Proc(), timeout=1.0)
+    assert run_with_retry(task, retry_policy=None) == "req-123"
+
+
 def test_run_with_retry_timeout_retries_when_retry_on_timeout():
     """With retry_policy.retry_on=NodeTimeoutError, a timed-out attempt is retried."""
     calls: list[float] = []
@@ -658,6 +683,37 @@ def test_run_with_retry_timeout_retries_when_retry_on_timeout():
     task = _make_task(FlakyProc(), timeout=0.05, retry_policy=(policy,))
     assert run_with_retry(task, retry_policy=None) == "ok"
     assert len(calls) == 2
+
+
+def test_run_with_retry_timeout_discards_stale_sync_writes():
+    release_first_attempt = threading.Event()
+
+    class FlakyProc:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def invoke(self, input, config):
+            self.calls += 1
+            if self.calls == 1:
+                release_first_attempt.wait(timeout=1.0)
+                config[CONF][CONFIG_KEY_SEND]([("value", "stale")])
+                return "late"
+            release_first_attempt.set()
+            config[CONF][CONFIG_KEY_SEND]([("value", "fresh")])
+            return "ok"
+
+    policy = RetryPolicy(
+        max_attempts=2,
+        initial_interval=0.0,
+        jitter=False,
+        retry_on=NodeTimeoutError,
+    )
+    task = _make_task(FlakyProc(), timeout=0.05, retry_policy=(policy,))
+
+    assert run_with_retry(task, retry_policy=None) == "ok"
+    time.sleep(0.05)
+
+    assert task.writes == deque([("value", "fresh")])
 
 
 def test_run_with_retry_timeout_accepts_timedelta():
@@ -740,9 +796,59 @@ def test_state_graph_add_node_timeout_composes_with_retry():
     assert len(attempts) == 2
 
 
-def test_run_with_retry_timeout_callbacks_track_attempts():
-    starts: list[dict] = []
-    finishes: list[dict] = []
+def test_task_decorator_timeout_e2e():
+    @task(timeout=0.05)
+    def slow_task(x: int) -> int:
+        time.sleep(0.2)
+        return x + 1
+
+    @entrypoint()
+    def workflow(x: int) -> int:
+        return slow_task(x).result()
+
+    with pytest.raises(NodeTimeoutError):
+        workflow.invoke(1)
+
+
+def test_entrypoint_timeout_e2e():
+    @entrypoint(timeout=0.05)
+    def slow_workflow(x: int) -> int:
+        time.sleep(0.2)
+        return x
+
+    with pytest.raises(NodeTimeoutError):
+        slow_workflow.invoke(1)
+
+
+def test_node_builder_timeout_e2e():
+    def slow(value: int) -> int:
+        time.sleep(0.2)
+        return value + 1
+
+    graph = Pregel(
+        nodes={
+            "slow": (
+                NodeBuilder()
+                .subscribe_only("input")
+                .do(slow)
+                .set_timeout(0.05)
+                .write_to("output")
+            )
+        },
+        channels={
+            "input": EphemeralValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
+
+    with pytest.raises(NodeTimeoutError):
+        graph.invoke(1)
+
+
+def test_run_with_retry_timeout_observer_tracks_attempts():
+    events: list[dict] = []
 
     class FlakyProc:
         def invoke(self, input, config):
@@ -758,11 +864,12 @@ def test_run_with_retry_timeout_callbacks_track_attempts():
         retry_on=NodeTimeoutError,
     )
     task = _make_task(FlakyProc(), timeout=0.05, retry_policy=(policy,), name="flaky")
-    task.config[CONF][CONFIG_KEY_TASK_TIMEOUT_STARTED] = starts.append
-    task.config[CONF][CONFIG_KEY_TASK_TIMEOUT_FINISHED] = finishes.append
+    task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
 
     assert run_with_retry(task, retry_policy=None) == "ok"
 
+    starts = [payload for payload in events if payload["event"] == "start"]
+    finishes = [payload for payload in events if payload["event"] == "finish"]
     assert [payload["attempt"] for payload in starts] == [1, 2]
     assert [payload["attempt"] for payload in finishes] == [1, 2]
     assert [payload["status"] for payload in finishes] == ["error", "success"]

@@ -5,6 +5,7 @@ import inspect
 import warnings
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import (
     Any,
     Generic,
@@ -51,6 +52,7 @@ class _TaskFunction(Generic[P, T]):
         *,
         retry_policy: Sequence[RetryPolicy],
         cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
+        timeout: float | timedelta | None = None,
         name: str | None = None,
     ) -> None:
         if name is not None:
@@ -67,6 +69,7 @@ class _TaskFunction(Generic[P, T]):
         self.func = func
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
+        self.timeout = timeout
         functools.update_wrapper(self, func)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> SyncAsyncFuture[T]:
@@ -74,6 +77,7 @@ class _TaskFunction(Generic[P, T]):
             self.func,
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
+            timeout=self.timeout,
             *args,
             **kwargs,
         )
@@ -98,6 +102,7 @@ def task(
     name: str | None = None,
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
+    timeout: float | timedelta | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> Callable[
     [Callable[P, Awaitable[T]] | Callable[P, T]],
@@ -119,6 +124,7 @@ def task(
     name: str | None = None,
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
+    timeout: float | timedelta | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> (
     Callable[[Callable[P, Awaitable[T]] | Callable[P, T]], _TaskFunction[P, T]]
@@ -142,6 +148,8 @@ def task(
         name: An optional name for the task. If not provided, the function name will be used.
         retry_policy: An optional retry policy (or list of policies) to use for the task in case of a failure.
         cache_policy: An optional cache policy to use for the task. This allows caching of the task results.
+        timeout: Maximum wall-clock duration for a single task attempt, in seconds
+            (or as a `timedelta`). If exceeded, `NodeTimeoutError` is raised.
 
     Returns:
         A callable function when used as a decorator.
@@ -209,7 +217,11 @@ def task(
         func: Callable[P, Awaitable[T]] | Callable[P, T],
     ) -> Callable[P, SyncAsyncFuture[T]]:
         return _TaskFunction(
-            func, retry_policy=retry_policies, cache_policy=cache_policy, name=name
+            func,
+            retry_policy=retry_policies,
+            cache_policy=cache_policy,
+            timeout=timeout,
+            name=name,
         )
 
     if __func_or_none__ is not None:
@@ -400,6 +412,7 @@ class entrypoint(Generic[ContextT]):
         context_schema: type[ContextT] | None = None,
         cache_policy: CachePolicy | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        timeout: float | timedelta | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         """Initialize the entrypoint decorator."""
@@ -426,6 +439,7 @@ class entrypoint(Generic[ContextT]):
         self.cache = cache
         self.cache_policy = cache_policy
         self.retry_policy = retry_policy
+        self.timeout = timeout
         self.context_schema = context_schema
 
     @dataclass(**_DC_KWARGS)
@@ -535,6 +549,7 @@ class entrypoint(Generic[ContextT]):
                     bound=bound,
                     triggers=[START],
                     channels=START,
+                    timeout=self.timeout,
                     writers=[
                         ChannelWrite(
                             [

@@ -8,6 +8,7 @@ import inspect
 import sys
 import types
 from collections.abc import Awaitable, Callable, Generator, Sequence
+from datetime import timedelta
 from typing import Any, Generic, TypeVar, cast
 
 from langchain_core.runnables import Runnable
@@ -255,6 +256,7 @@ def call(
     *args: Any,
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
+    timeout: float | timedelta | None = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
     config = get_config()
@@ -265,5 +267,6 @@ def call(
         retry_policy=retry_policy,
         cache_policy=cache_policy,
         callbacks=config["callbacks"],
+        timeout=timeout,
     )
     return fut

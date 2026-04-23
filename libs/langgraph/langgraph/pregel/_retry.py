@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import random
 import sys
 import threading
 import time
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from concurrent.futures import Future
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -16,14 +18,15 @@ from langchain_core.runnables import RunnableConfig
 from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
 from langgraph._internal._constants import (
     CONF,
+    CONFIG_KEY_CALL,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_RUNTIME,
+    CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
-    CONFIG_KEY_TASK_TIMEOUT_FINISHED,
-    CONFIG_KEY_TASK_TIMEOUT_STARTED,
     CONFIG_KEY_THREAD_ID,
+    CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
     NS_SEP,
 )
 from langgraph.errors import GraphBubbleUp, NodeTimeoutError, ParentCommand
@@ -37,9 +40,60 @@ SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 def _timeout_seconds(value: float | timedelta | None) -> float | None:
     if value is None:
         return None
-    if isinstance(value, timedelta):
-        return value.total_seconds()
-    return float(value)
+    timeout = value.total_seconds() if isinstance(value, timedelta) else float(value)
+    if timeout <= 0:
+        raise ValueError("timeout must be greater than 0")
+    return timeout
+
+
+@dataclass(slots=True)
+class _TimedAttemptScope:
+    node_name: str
+    timeout_s: float
+    _active: threading.Event
+
+    def __init__(self, node_name: str, timeout_s: float) -> None:
+        self.node_name = node_name
+        self.timeout_s = timeout_s
+        self._active = threading.Event()
+        self._active.set()
+
+    def wrap_config(self, config: RunnableConfig) -> RunnableConfig:
+        configurable = config.get(CONF, {})
+        updates: dict[str, Any] = {}
+        if (send := configurable.get(CONFIG_KEY_SEND)) is not None:
+            updates[CONFIG_KEY_SEND] = self._guard_send(send)
+        if (call := configurable.get(CONFIG_KEY_CALL)) is not None:
+            updates[CONFIG_KEY_CALL] = self._guard_call(call)
+        if not updates:
+            return config
+        return patch_configurable(config, updates)
+
+    def close(self) -> None:
+        self._active.clear()
+
+    def _guard_send(
+        self, send: Callable[[Sequence[tuple[str, Any]]], None]
+    ) -> Callable[[Sequence[tuple[str, Any]]], None]:
+        def guarded_send(writes: Sequence[tuple[str, Any]]) -> None:
+            if self._active.is_set():
+                send(writes)
+
+        return guarded_send
+
+    def _guard_call(self, call: Callable[..., Any]) -> Callable[..., Any]:
+        def guarded_call(*args: Any, **kwargs: Any) -> Any:
+            if self._active.is_set():
+                return call(*args, **kwargs)
+            future: Future[Any] = Future()
+            future.set_exception(
+                RuntimeError(
+                    f"Timed-out attempt for node '{self.node_name}' cannot schedule child tasks."
+                )
+            )
+            return future
+
+        return guarded_call
 
 
 def _task_timeout_payload(
@@ -47,21 +101,15 @@ def _task_timeout_payload(
 ) -> dict[str, Any]:
     runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
     execution_info = runtime.execution_info if isinstance(runtime, Runtime) else None
-    started_at = datetime.now(UTC)
+    attempt = execution_info.node_attempt if execution_info is not None else 1
+    run_id = execution_info.run_id if execution_info is not None else None
+    started_at = datetime.now(timezone.utc)
     return {
-        "execution_id": ":".join(
-            part
-            for part in (
-                execution_info.run_id if execution_info is not None else None,
-                task.id,
-                str(execution_info.node_attempt if execution_info is not None else 1),
-            )
-            if part is not None
-        ),
+        "execution_id": f"run:{run_id or '-'}|task:{task.id}|attempt:{attempt}",
         "task_id": task.id,
         "task_name": task.name,
-        "attempt": execution_info.node_attempt if execution_info is not None else 1,
-        "run_id": execution_info.run_id if execution_info is not None else None,
+        "attempt": attempt,
+        "run_id": run_id,
         "thread_id": (
             execution_info.thread_id
             if execution_info is not None
@@ -78,43 +126,35 @@ def _task_timeout_payload(
     }
 
 
-def _notify_task_timeout_started(
+def _notify_timed_attempt(
     config: RunnableConfig, payload: dict[str, Any] | None
 ) -> None:
     if payload is None:
         return
-    callback = config.get(CONF, {}).get(CONFIG_KEY_TASK_TIMEOUT_STARTED)
+    callback = config.get(CONF, {}).get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER)
     if callback is None:
         return
     try:
         callback(payload)
     except Exception:
-        logger.warning("Timed task start callback failed", exc_info=True)
+        logger.warning("Timed attempt observer failed", exc_info=True)
 
 
-def _notify_task_timeout_finished(
-    config: RunnableConfig,
+def _timed_attempt_finish_payload(
     payload: dict[str, Any] | None,
     *,
     error: BaseException | None,
-) -> None:
+) -> dict[str, Any] | None:
     if payload is None:
-        return
-    callback = config.get(CONF, {}).get(CONFIG_KEY_TASK_TIMEOUT_FINISHED)
-    if callback is None:
-        return
-    try:
-        callback(
-            {
-                **payload,
-                "finished_at": datetime.now(UTC).isoformat(),
-                "status": "error" if error is not None else "success",
-                "error_type": type(error).__name__ if error is not None else None,
-                "error_message": str(error) if error is not None else None,
-            }
-        )
-    except Exception:
-        logger.warning("Timed task finish callback failed", exc_info=True)
+        return None
+    return {
+        **payload,
+        "event": "finish",
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "status": "error" if error is not None else "success",
+        "error_type": type(error).__name__ if error is not None else None,
+        "error_message": str(error) if error is not None else None,
+    }
 
 
 def _invoke_with_timeout(
@@ -124,20 +164,26 @@ def _invoke_with_timeout(
 
     Python cannot safely cancel a running thread, so if the worker exceeds
     `timeout_s` we raise `NodeTimeoutError` and leave the thread to finish
-    on its own (daemonized, so it will not block process exit).
+    on its own. Writes and child task scheduling from a timed-out attempt are
+    discarded, but any other side effects in user code may still continue in
+    the daemon worker thread until it returns.
     """
     if timeout_s is None:
         return task.proc.invoke(task.input, config)
+    scoped_attempt = _TimedAttemptScope(task.name, timeout_s)
+    scoped_config = scoped_attempt.wrap_config(config)
     result: list[Any] = []
     exc: list[BaseException] = []
     done = threading.Event()
+    ctx = contextvars.copy_context()
 
     def target() -> None:
         try:
-            result.append(task.proc.invoke(task.input, config))
+            result.append(ctx.run(task.proc.invoke, task.input, scoped_config))
         except BaseException as e:
             exc.append(e)
         finally:
+            scoped_attempt.close()
             done.set()
 
     start = time.monotonic()
@@ -147,6 +193,7 @@ def _invoke_with_timeout(
     worker.start()
     if not done.wait(timeout_s):
         elapsed = time.monotonic() - start
+        scoped_attempt.close()
         raise NodeTimeoutError(task.name, timeout_s, elapsed)
     if exc:
         raise exc[0]
@@ -163,9 +210,9 @@ async def _ainvoke_with_timeout(
         return await asyncio.wait_for(
             task.proc.ainvoke(task.input, config), timeout=timeout_s
         )
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as exc:
         elapsed = time.monotonic() - start
-        raise NodeTimeoutError(task.name, timeout_s, elapsed) from None
+        raise NodeTimeoutError(task.name, timeout_s, elapsed) from exc
 
 
 async def _astream_with_timeout(
@@ -183,9 +230,9 @@ async def _astream_with_timeout(
 
     try:
         await asyncio.wait_for(_drain(), timeout=timeout_s)
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as exc:
         elapsed = time.monotonic() - start
-        raise NodeTimeoutError(task.name, timeout_s, elapsed) from None
+        raise NodeTimeoutError(task.name, timeout_s, elapsed) from exc
 
 
 def _ensure_execution_info(
@@ -282,18 +329,30 @@ def run_with_retry(
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            timeout_payload = (
-                _task_timeout_payload(task, config, timeout_s)
+            timed_attempt_payload = (
+                {
+                    **_task_timeout_payload(task, config, timeout_s),
+                    "event": "start",
+                }
                 if timeout_s is not None
                 else None
             )
-            _notify_task_timeout_started(config, timeout_payload)
+            _notify_timed_attempt(config, timed_attempt_payload)
             try:
                 result = _invoke_with_timeout(task, config, timeout_s)
             except BaseException as exc:
-                _notify_task_timeout_finished(config, timeout_payload, error=exc)
+                _notify_timed_attempt(
+                    config,
+                    _timed_attempt_finish_payload(
+                        timed_attempt_payload,
+                        error=exc,
+                    ),
+                )
                 raise
-            _notify_task_timeout_finished(config, timeout_payload, error=None)
+            _notify_timed_attempt(
+                config,
+                _timed_attempt_finish_payload(timed_attempt_payload, error=None),
+            )
             return result
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
@@ -405,29 +464,56 @@ async def arun_with_retry(
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            timeout_payload = (
-                _task_timeout_payload(task, config, timeout_s)
+            timed_attempt_payload = (
+                {
+                    **_task_timeout_payload(task, config, timeout_s),
+                    "event": "start",
+                }
                 if timeout_s is not None
                 else None
             )
-            _notify_task_timeout_started(config, timeout_payload)
+            _notify_timed_attempt(config, timed_attempt_payload)
             if stream:
                 try:
                     await _astream_with_timeout(task, config, timeout_s)
                 except BaseException as exc:
-                    _notify_task_timeout_finished(config, timeout_payload, error=exc)
+                    _notify_timed_attempt(
+                        config,
+                        _timed_attempt_finish_payload(
+                            timed_attempt_payload,
+                            error=exc,
+                        ),
+                    )
                     raise
                 else:
-                    _notify_task_timeout_finished(config, timeout_payload, error=None)
+                    _notify_timed_attempt(
+                        config,
+                        _timed_attempt_finish_payload(
+                            timed_attempt_payload,
+                            error=None,
+                        ),
+                    )
                     # if successful, end
                     break
             else:
                 try:
                     result = await _ainvoke_with_timeout(task, config, timeout_s)
                 except BaseException as exc:
-                    _notify_task_timeout_finished(config, timeout_payload, error=exc)
+                    _notify_timed_attempt(
+                        config,
+                        _timed_attempt_finish_payload(
+                            timed_attempt_payload,
+                            error=exc,
+                        ),
+                    )
                     raise
-                _notify_task_timeout_finished(config, timeout_payload, error=None)
+                _notify_timed_attempt(
+                    config,
+                    _timed_attempt_finish_payload(
+                        timed_attempt_payload,
+                        error=None,
+                    ),
+                )
                 return result
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
