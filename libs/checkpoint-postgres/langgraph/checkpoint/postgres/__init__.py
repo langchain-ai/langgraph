@@ -4,7 +4,7 @@ import threading
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, cast
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -24,7 +24,12 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from langgraph.checkpoint.postgres import _internal
-from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.base import (
+    SELECT_DELTA_BLOBS_SQL,
+    SELECT_DELTA_PARENTS_SQL,
+    SELECT_DELTA_WRITES_SQL,
+    BasePostgresSaver,
+)
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
 Conn = _internal.Conn  # For backward compatibility
@@ -431,6 +436,35 @@ class PostgresSaver(BasePostgresSaver):
                 with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
+    def _reconstruct_delta_channel(
+        self,
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+        channel: str,
+        target_id: str,
+        cur: Cursor[DictRow],
+    ) -> Any:
+        """Run the three reconstruction SELECTs and assemble `DeltaChannelWrites`.
+
+        Three indexed roundtrips (`checkpoints`, `checkpoint_writes`,
+        `checkpoint_blobs`) each filtered by `(thread_id, checkpoint_ns)` and
+        the per-table key. Plain SELECTs let the planner pick straight index
+        scans; rationale + benchmark in `notes/delta_channel_query_bench.md`.
+        """
+        cur.execute(SELECT_DELTA_PARENTS_SQL, (channel, thread_id, checkpoint_ns))
+        parents_rows = cur.fetchall()
+        cur.execute(SELECT_DELTA_WRITES_SQL, (thread_id, checkpoint_ns, channel))
+        writes_rows = cur.fetchall()
+        cur.execute(SELECT_DELTA_BLOBS_SQL, (thread_id, checkpoint_ns, channel))
+        blobs_rows = cur.fetchall()
+        return self._build_delta_channel_writes(
+            target_id=target_id,
+            parents_rows=parents_rows,
+            writes_rows=writes_rows,
+            blobs_rows=blobs_rows,
+        )
+
     def _load_checkpoint_tuple(
         self, value: DictRow, cur: Cursor[DictRow]
     ) -> CheckpointTuple:
@@ -448,18 +482,15 @@ class PostgresSaver(BasePostgresSaver):
             and pending writes.
         """
         channel_values = self._load_blobs(value["channel_values"])
-        if any(v is DELTA_SENTINEL for v in channel_values.values()):
-            cp_config = cast(
-                RunnableConfig,
-                {
-                    "configurable": {
-                        "thread_id": value["thread_id"],
-                        "checkpoint_ns": value["checkpoint_ns"],
-                        "checkpoint_id": value["checkpoint_id"],
-                    }
-                },
+        delta_channels = [ch for ch, v in channel_values.items() if v is DELTA_SENTINEL]
+        for channel in delta_channels:
+            channel_values[channel] = self._reconstruct_delta_channel(
+                thread_id=value["thread_id"],
+                checkpoint_ns=value["checkpoint_ns"],
+                channel=channel,
+                target_id=value["checkpoint_id"],
+                cur=cur,
             )
-            self._resolve_delta_channels(cp_config, channel_values, cur)
         return CheckpointTuple(
             {
                 "configurable": {

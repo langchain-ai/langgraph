@@ -257,7 +257,7 @@ def run_benchmark() -> None:
             import psycopg
 
             psycopg.connect(_POSTGRES_URI).close()
-            checkpointers.append(("Postgres (recursive CTE)", "postgres"))
+            checkpointers.append(("Postgres (plain SELECT)", "postgres"))
         except Exception:
             pass
 

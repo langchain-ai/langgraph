@@ -155,6 +155,30 @@ INSERT_CHECKPOINT_WRITES_SQL = """
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
 """
 
+# DeltaChannel reconstruction: three plain indexed SELECTs per channel.
+# Bench (notes/delta_channel_query_bench.md) showed the prior recursive CTE
+# carried a hidden O(ancestors x blobs_in_thread) join; plain SELECTs are
+# 3x-100x faster in the realistic depth range and the Python walk is O(n).
+SELECT_DELTA_PARENTS_SQL = """
+    SELECT checkpoint_id,
+           parent_checkpoint_id,
+           checkpoint -> 'channel_versions' ->> %s AS ver
+    FROM checkpoints
+    WHERE thread_id = %s AND checkpoint_ns = %s
+"""
+
+SELECT_DELTA_WRITES_SQL = """
+    SELECT checkpoint_id, type, blob, task_id, idx
+    FROM checkpoint_writes
+    WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s
+"""
+
+SELECT_DELTA_BLOBS_SQL = """
+    SELECT version, type, blob
+    FROM checkpoint_blobs
+    WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s
+"""
+
 
 class BasePostgresSaver(BaseCheckpointSaver[str]):
     SELECT_SQL = SELECT_SQL
@@ -200,190 +224,94 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                 result[k.decode()] = self.serde.loads_typed((type_tag, v))
         return result
 
-    def _resolve_delta_channels(
-        self,
-        config: RunnableConfig,
-        channel_values: dict[str, Any],
-        cur: Any,
-    ) -> None:
-        delta_channels = [ch for ch, v in channel_values.items() if v is DELTA_SENTINEL]
-        if not delta_channels:
-            return
-        reconstructed = self._reconstruct_delta_channels_cur(
-            thread_id=config["configurable"]["thread_id"],
-            checkpoint_ns=config["configurable"].get("checkpoint_ns", ""),
-            checkpoint_id=config["configurable"]["checkpoint_id"],
-            channels=delta_channels,
-            cur=cur,
-        )
-        for ch, writes in reconstructed.items():
-            channel_values[ch] = writes
-
-    def _reconstruct_delta_channels_cur(
+    def _build_delta_channel_writes(
         self,
         *,
-        thread_id: str,
-        checkpoint_ns: str,
-        checkpoint_id: str,
-        channels: Sequence[str],
-        cur: Any,
-    ) -> dict[str, DeltaChannelWrites]:
-        """Reconstruct `DeltaChannelWrites` for every `channel` in `channels`.
+        target_id: str,
+        parents_rows: Sequence[Any],
+        writes_rows: Sequence[Any],
+        blobs_rows: Sequence[Any],
+    ) -> DeltaChannelWrites:
+        """Reconstruct one delta channel from rows of the three SELECTs.
 
-        A single recursive CTE enumerates on-path ancestors (never siblings),
-        left-joined once against `checkpoint_writes` and once against
-        `checkpoint_blobs`. One roundtrip covers every delta channel in the
-        `get_tuple` — avoids the N-channels × 3-queries blowup and fits the
-        intent of the schema (`parent_checkpoint_id` is an indexed ancestor
-        pointer; postgres's planner handles this CTE shape well for the
-        ancestor depths seen in practice).
+        Pure data transform shared by sync (`PostgresSaver`) and async
+        (`AsyncPostgresSaver`); both paths run the queries themselves and
+        feed the rows here.
 
-        The walk newest→oldest stops per channel at the first terminator:
+        Walk is newest → oldest from the target's parent. Stops at the first
+        terminator:
 
           * a user-emitted `Overwrite` in `checkpoint_writes` — replaces
             prior history;
           * a non-sentinel blob in `checkpoint_blobs` — a pre-delta snapshot;
             bound as `DeltaChannelWrites.seed` so replay starts from it.
 
-        Writes stored AT `checkpoint_id` are pending for the next step and
-        excluded; the recursion starts from the target's parent.
+        Writes stored at `target_id` itself are pending writes for the next
+        step and are excluded — the walk begins at the target's parent.
         """
-        if not channels:
-            return {}
-
         overwrite_types = _overwrite_types()
-        channels_list = list(channels)
 
-        # depth=0 → target's parent (we never read writes or blob for the
-        # target itself). A NULL parent stops the recursion.
-        cur.execute(
-            """
-            WITH RECURSIVE ancestors(cid, parent, depth) AS (
-                SELECT parent_checkpoint_id, NULL::text, 0
-                FROM checkpoints
-                WHERE thread_id = %s AND checkpoint_ns = %s
-                  AND checkpoint_id = %s AND parent_checkpoint_id IS NOT NULL
-              UNION ALL
-                SELECT c.parent_checkpoint_id, a.cid, a.depth + 1
-                FROM checkpoints c
-                JOIN ancestors a ON c.checkpoint_id = a.cid
-                WHERE c.thread_id = %s AND c.checkpoint_ns = %s
-                  AND c.parent_checkpoint_id IS NOT NULL
-            ),
-            walk AS (
-                -- Each ancestor plus the channel_versions mapping for blob join.
-                SELECT a.cid, a.depth, c.checkpoint
-                FROM ancestors a
-                JOIN checkpoints c
-                  ON c.thread_id = %s AND c.checkpoint_ns = %s
-                 AND c.checkpoint_id = a.cid
+        parent_of: dict[str, str | None] = {}
+        ver_of: dict[str, str | None] = {}
+        for r in parents_rows:
+            cid = r["checkpoint_id"]
+            parent_of[cid] = r["parent_checkpoint_id"]
+            ver_of[cid] = r["ver"]
+
+        ancestors: list[str] = []
+        cid = parent_of.get(target_id)
+        while cid is not None:
+            ancestors.append(cid)
+            cid = parent_of.get(cid)
+        if not ancestors:
+            return DeltaChannelWrites(writes=[])
+        ancestor_set = set(ancestors)
+
+        # Group writes by ancestor cid; sort within (task_id DESC, idx DESC)
+        # to match the prior CTE ordering — newest write first per ancestor.
+        writes_by_cid: dict[str, list[tuple[str, bytes, str, int]]] = {}
+        for r in writes_rows:
+            cid = r["checkpoint_id"]
+            if cid not in ancestor_set:
+                continue
+            writes_by_cid.setdefault(cid, []).append(
+                (r["type"], r["blob"], r["task_id"], r["idx"])
             )
-            SELECT w.cid, w.depth,
-                   cw.channel AS write_channel, cw.type AS write_type,
-                   cw.blob AS write_blob, cw.task_id, cw.idx,
-                   bl.channel AS blob_channel, bl.type AS blob_type,
-                   bl.blob AS blob_blob
-            FROM walk w
-            LEFT JOIN checkpoint_writes cw
-              ON cw.thread_id = %s AND cw.checkpoint_ns = %s
-             AND cw.checkpoint_id = w.cid AND cw.channel = ANY(%s)
-            LEFT JOIN checkpoint_blobs bl
-              ON bl.thread_id = %s AND bl.checkpoint_ns = %s
-             AND bl.channel = ANY(%s)
-             AND bl.version = (w.checkpoint->'channel_versions'->>bl.channel)
-            ORDER BY w.depth ASC, cw.task_id DESC, cw.idx DESC
-            """,
-            (
-                thread_id,
-                checkpoint_ns,
-                checkpoint_id,  # anchor
-                thread_id,
-                checkpoint_ns,  # recursion
-                thread_id,
-                checkpoint_ns,  # walk join
-                thread_id,
-                checkpoint_ns,
-                channels_list,  # writes join
-                thread_id,
-                checkpoint_ns,
-                channels_list,  # blobs join
-            ),
-        )
+        for ws in writes_by_cid.values():
+            ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
 
-        # Group incoming rows by `cid` so we can, per ancestor, decide whether
-        # to terminate (pre-delta blob) BEFORE processing writes at that
-        # ancestor. Rows within a cid arrive in (task_id DESC, idx DESC)
-        # order; we preserve that when building per-cid writes lists.
-        rows_by_cid: dict[str, dict[str, Any]] = {}
-        cid_order: list[str] = []  # newest → oldest
-        seen_blob: set[tuple[str, str]] = set()
-        seen_write: set[tuple[str, str, str, int]] = set()
-        for row in cur.fetchall():
-            cid = row["cid"]
-            if cid not in rows_by_cid:
-                rows_by_cid[cid] = {"writes_per_channel": {}, "blob_per_channel": {}}
-                cid_order.append(cid)
-            # Writes: dedupe via (cid, channel, task_id, idx).
-            ch_w = row["write_channel"]
-            if ch_w is not None:
-                key = (cid, ch_w, row["task_id"], row["idx"])
-                if key not in seen_write:
-                    seen_write.add(key)
-                    rows_by_cid[cid]["writes_per_channel"].setdefault(ch_w, []).append(
-                        (row["write_type"], row["write_blob"])
-                    )
-            # Blobs: dedupe via (cid, channel).
-            ch_b = row["blob_channel"]
-            if ch_b is not None and (cid, ch_b) not in seen_blob:
-                seen_blob.add((cid, ch_b))
-                rows_by_cid[cid]["blob_per_channel"][ch_b] = (
-                    row["blob_type"],
-                    row["blob_blob"],
-                )
+        blob_by_ver: dict[str, tuple[str, bytes]] = {
+            r["version"]: (r["type"], r["blob"]) for r in blobs_rows
+        }
 
-        # Per-channel state. `collected[ch]` is newest→oldest during the walk.
-        collected: dict[str, list[Any]] = {ch: [] for ch in channels_list}
-        done: set[str] = set()
-        seeds: dict[str, Any] = {}
-
-        for cid in cid_order:  # newest → oldest
-            bucket = rows_by_cid[cid]
-            # At each ancestor, check the blob FIRST — a pre-delta blob
-            # subsumes any writes stored under the same checkpoint, so we
-            # must not fold those writes in before terminating.
-            for ch in list(channels_list):
-                if ch in done:
-                    continue
-                blob = bucket["blob_per_channel"].get(ch)
-                if blob is None or blob[0] == "empty":
-                    continue
-                blob_value = self.serde.loads_typed(blob)
-                if blob_value is DELTA_SENTINEL:
-                    continue
-                seeds[ch] = blob_value
-                done.add(ch)
-            # Then process per-channel writes for any channel still live.
-            for ch in list(channels_list):
-                if ch in done:
-                    continue
-                for type_tag, blob in bucket["writes_per_channel"].get(ch, []):
-                    val = self.serde.loads_typed((type_tag, blob))
-                    collected[ch].append(val)
-                    if isinstance(val, overwrite_types):
-                        done.add(ch)
+        collected: list[Any] = []  # newest first; reversed at the end
+        seed: Any = None
+        found_seed = False
+        for cid in ancestors:
+            # Pre-delta blob terminator: subsumes any writes at this ancestor.
+            ver = ver_of.get(cid)
+            if ver is not None:
+                seed_blob = blob_by_ver.get(ver)
+                if seed_blob is not None and seed_blob[0] != "empty":
+                    blob_value = self.serde.loads_typed(seed_blob)
+                    if blob_value is not DELTA_SENTINEL:
+                        seed = blob_value
+                        found_seed = True
                         break
-            if len(done) == len(channels_list):
+            terminated = False
+            for type_tag, write_blob, _task_id, _idx in writes_by_cid.get(cid, []):
+                val = self.serde.loads_typed((type_tag, write_blob))
+                collected.append(val)
+                if isinstance(val, overwrite_types):
+                    terminated = True
+                    break
+            if terminated:
                 break
 
-        result: dict[str, DeltaChannelWrites] = {}
-        for ch in channels_list:
-            ch_writes = collected[ch]
-            ch_writes.reverse()  # oldest → newest
-            if ch in seeds:
-                result[ch] = DeltaChannelWrites(writes=ch_writes, seed=seeds[ch])
-            else:
-                result[ch] = DeltaChannelWrites(writes=ch_writes)
-        return result
+        collected.reverse()  # oldest → newest
+        if found_seed:
+            return DeltaChannelWrites(writes=collected, seed=seed)
+        return DeltaChannelWrites(writes=collected)
 
     def _dump_blobs(
         self,
