@@ -62,6 +62,7 @@ from langgraph._internal._constants import (
     TASKS,
 )
 from langgraph._internal._scratchpad import PregelScratchpad
+from langgraph._internal._timeout import validate_timeout
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -146,7 +147,7 @@ class Call:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.callbacks = callbacks
-        self.timeout = timeout
+        self.timeout = validate_timeout(timeout)
 
 
 def should_interrupt(

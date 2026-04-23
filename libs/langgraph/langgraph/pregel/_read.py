@@ -12,6 +12,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph._internal._config import merge_configs
 from langgraph._internal._constants import CONF, CONFIG_KEY_READ
 from langgraph._internal._runnable import RunnableCallable, RunnableSeq
+from langgraph._internal._timeout import validate_timeout
 from langgraph.pregel._utils import find_subgraph_pregel
 from langgraph.pregel._write import ChannelWrite
 from langgraph.pregel.protocol import PregelProtocol
@@ -163,7 +164,7 @@ class PregelNode:
             self.retry_policy = (retry_policy,)
         else:
             self.retry_policy = retry_policy
-        self.timeout = timeout
+        self.timeout = validate_timeout(timeout)
         self.tags = tags
         self.metadata = metadata
         if subgraphs is not None:

@@ -96,6 +96,7 @@ from langgraph._internal._runnable import (
     RunnableSeq,
     coerce_to_runnable,
 )
+from langgraph._internal._timeout import validate_timeout
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.callbacks import (
     GraphInterruptEvent,
@@ -332,7 +333,7 @@ class NodeBuilder:
 
     def set_timeout(self, timeout: float | timedelta | None) -> Self:
         """Set the per-attempt timeout for this node."""
-        self._timeout = timeout
+        self._timeout = validate_timeout(timeout)
         return self
 
     def build(self) -> PregelNode:

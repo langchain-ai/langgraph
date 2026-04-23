@@ -23,6 +23,7 @@ from typing_extensions import Unpack
 
 from langgraph._internal import _serde
 from langgraph._internal._constants import CACHE_NS_WRITES, PREVIOUS
+from langgraph._internal._timeout import validate_timeout
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
@@ -204,6 +205,7 @@ def task(
         )
         if retry_policy is None:
             retry_policy = retry  # type: ignore[assignment]
+    validate_timeout(timeout)
 
     retry_policies: Sequence[RetryPolicy] = (
         ()
@@ -439,7 +441,7 @@ class entrypoint(Generic[ContextT]):
         self.cache = cache
         self.cache_policy = cache_policy
         self.retry_policy = retry_policy
-        self.timeout = timeout
+        self.timeout = validate_timeout(timeout)
         self.context_schema = context_schema
 
     @dataclass(**_DC_KWARGS)

@@ -21,10 +21,11 @@ from langgraph._internal._constants import (
 )
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
-from langgraph.errors import NodeTimeoutError
+from langgraph.errors import GraphInterrupt, NodeTimeoutError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.pregel import NodeBuilder, Pregel
+from langgraph.pregel._read import PregelNode
 from langgraph.pregel._retry import (
     _checkpoint_ns_for_parent_command,
     _ensure_execution_info,
@@ -34,7 +35,7 @@ from langgraph.pregel._retry import (
     run_with_retry,
 )
 from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
-from langgraph.types import PregelExecutableTask, RetryPolicy
+from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 
 
 def test_should_retry_on_single_exception():
@@ -716,6 +717,21 @@ def test_run_with_retry_timeout_discards_stale_sync_writes():
     assert task.writes == deque([("value", "fresh")])
 
 
+def test_run_with_retry_timeout_discards_pre_timeout_sync_writes():
+    class SlowWriterProc:
+        def invoke(self, input, config):
+            config[CONF][CONFIG_KEY_SEND]([("value", "stale-before-timeout")])
+            time.sleep(0.2)
+            return "late"
+
+    task = _make_task(SlowWriterProc(), timeout=0.05)
+
+    with pytest.raises(NodeTimeoutError):
+        run_with_retry(task, retry_policy=None)
+
+    assert task.writes == deque()
+
+
 def test_run_with_retry_timeout_accepts_timedelta():
     class SlowProc:
         def invoke(self, input, config):
@@ -743,8 +759,146 @@ def test_arun_with_retry_timeout_fires_async():
     asyncio.run(_run())
 
 
+def test_arun_with_retry_timeout_discards_stale_executor_writes():
+    release_first_attempt = threading.Event()
+
+    class FlakyAsyncProc:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def ainvoke(self, input, config):
+            self.calls += 1
+            if self.calls == 1:
+
+                def late_write() -> str:
+                    release_first_attempt.wait(timeout=1.0)
+                    config[CONF][CONFIG_KEY_SEND]([("value", "stale")])
+                    return "late"
+
+                return await asyncio.to_thread(late_write)
+            release_first_attempt.set()
+            config[CONF][CONFIG_KEY_SEND]([("value", "fresh")])
+            return "ok"
+
+    policy = RetryPolicy(
+        max_attempts=2,
+        initial_interval=0.0,
+        jitter=False,
+        retry_on=NodeTimeoutError,
+    )
+    task = _make_task(FlakyAsyncProc(), timeout=0.05, retry_policy=(policy,))
+
+    async def _run() -> None:
+        assert await arun_with_retry(task, retry_policy=None) == "ok"
+        await asyncio.sleep(0.05)
+        assert task.writes == deque([("value", "fresh")])
+
+    asyncio.run(_run())
+
+
+def test_arun_with_retry_timeout_discards_pre_timeout_writes():
+    class SlowAsyncWriterProc:
+        async def ainvoke(self, input, config):
+            config[CONF][CONFIG_KEY_SEND]([("value", "stale-before-timeout")])
+            await asyncio.sleep(0.2)
+            return "late"
+
+    task = _make_task(SlowAsyncWriterProc(), timeout=0.05, name="aslow-writer")
+
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError):
+            await arun_with_retry(task, retry_policy=None)
+        assert task.writes == deque()
+
+    asyncio.run(_run())
+
+
+def test_astream_with_retry_timeout_discards_pre_timeout_writes():
+    class SlowStreamWriterProc:
+        async def astream(self, input, config):
+            config[CONF][CONFIG_KEY_SEND]([("value", "stale-before-timeout")])
+            await asyncio.sleep(0.2)
+            if False:
+                yield None
+
+    task = _make_task(SlowStreamWriterProc(), timeout=0.05, name="astream-writer")
+
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError):
+            await arun_with_retry(task, retry_policy=None, stream=True)
+        assert task.writes == deque()
+
+    asyncio.run(_run())
+
+
+def test_arun_with_retry_timeout_cannot_be_swallowed():
+    class StubbornProc:
+        async def ainvoke(self, input, config):
+            try:
+                await asyncio.sleep(1.0)
+            except asyncio.CancelledError:
+                config[CONF][CONFIG_KEY_SEND]([("value", "stale")])
+                await asyncio.sleep(0)
+                return "late"
+            return "ok"
+
+    task = _make_task(StubbornProc(), timeout=0.05, name="stubborn")
+
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError) as excinfo:
+            await arun_with_retry(task, retry_policy=None)
+        assert excinfo.value.node == "stubborn"
+        await asyncio.sleep(0.05)
+        assert task.writes == deque()
+
+    asyncio.run(_run())
+
+
+def test_astream_with_retry_timeout_cannot_be_swallowed():
+    class StubbornStreamProc:
+        async def astream(self, input, config):
+            try:
+                await asyncio.sleep(1.0)
+            except asyncio.CancelledError:
+                config[CONF][CONFIG_KEY_SEND]([("value", "stale")])
+                await asyncio.sleep(0)
+                if False:
+                    yield None
+                return
+            yield "ok"
+
+    task = _make_task(StubbornStreamProc(), timeout=0.05, name="stubborn-stream")
+
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError) as excinfo:
+            await arun_with_retry(task, retry_policy=None, stream=True)
+        assert excinfo.value.node == "stubborn-stream"
+        await asyncio.sleep(0.05)
+        assert task.writes == deque()
+
+    asyncio.run(_run())
+
+
 class _TimeoutState(TypedDict):
     x: int
+
+
+def test_timeout_validation_is_eager_across_apis():
+    with pytest.raises(ValueError, match="greater than 0"):
+        task(timeout=0)
+
+    with pytest.raises(ValueError, match="greater than 0"):
+        entrypoint(timeout=0)
+
+    with pytest.raises(ValueError, match="greater than 0"):
+        NodeBuilder().set_timeout(0)
+
+    with pytest.raises(ValueError, match="greater than 0"):
+        PregelNode(channels="x", triggers=["x"], timeout=0)
+
+    builder = StateGraph(_TimeoutState)
+    with pytest.raises(ValueError, match="greater than 0"):
+        builder.add_node("slow", lambda state: state, timeout=0)
 
 
 def test_state_graph_add_node_timeout_e2e():
@@ -876,3 +1030,44 @@ def test_run_with_retry_timeout_observer_tracks_attempts():
     assert starts[0]["execution_id"] != starts[1]["execution_id"]
     assert starts[0]["timeout_secs"] == 0.05
     assert starts[0]["task_name"] == "flaky"
+
+
+def test_run_with_retry_timeout_observer_treats_parent_command_as_non_error():
+    events: list[dict] = []
+
+    class ParentProc:
+        def invoke(self, input, config):
+            raise ParentCommand(Command(graph=Command.PARENT))
+
+    task = _make_task(ParentProc(), timeout=0.05, name="parent")
+    task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
+
+    with pytest.raises(ParentCommand):
+        run_with_retry(task, retry_policy=None)
+
+    finish = next(payload for payload in events if payload["event"] == "finish")
+    assert finish["status"] == "success"
+    assert finish["error_type"] is None
+    assert finish["error_message"] is None
+
+
+def test_arun_with_retry_timeout_observer_treats_bubble_up_as_non_error():
+    events: list[dict] = []
+
+    class BubbleProc:
+        async def ainvoke(self, input, config):
+            raise GraphInterrupt(())
+
+    task = _make_task(BubbleProc(), timeout=0.05, name="bubble")
+    task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
+
+    async def _run() -> None:
+        with pytest.raises(GraphInterrupt):
+            await arun_with_retry(task, retry_policy=None)
+
+    asyncio.run(_run())
+
+    finish = next(payload for payload in events if payload["event"] == "finish")
+    assert finish["status"] == "success"
+    assert finish["error_type"] is None
+    assert finish["error_message"] is None
