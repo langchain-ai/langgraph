@@ -4,10 +4,9 @@ import copy
 import logging
 import threading
 from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
-from typing import (  # noqa: UP035
+from typing import (
     Any,
     Generic,
-    List,
     Literal,
     NamedTuple,
     TypedDict,
@@ -29,6 +28,9 @@ from langgraph.checkpoint.serde.types import (
     RESUME,
     SCHEDULED,
     ChannelProtocol,
+)
+from langgraph.checkpoint.serde.types import (
+    SEED_UNSET as SEED_UNSET,
 )
 from langgraph.checkpoint.serde.types import (
     DeltaChannelWrites as DeltaChannelWrites,
@@ -504,71 +506,99 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
-    def get_channel_writes(self, config: RunnableConfig, channel: str) -> List[Any]:  # noqa: UP006
-        """Collect writes for `channel` across this checkpoint's ancestry, oldest→newest.
+    def get_channel_writes(
+        self, config: RunnableConfig, channel: str
+    ) -> DeltaChannelWrites:
+        """Reconstruct a `DeltaChannel`'s write history at this checkpoint.
 
-        Scans newest→oldest and stops at the first `Overwrite` (either from
-        `snapshot_every` or user code), so reconstruction cost is bounded.
-        Default implementation walks the full thread history via `list()`; savers
-        can override with a more efficient query (InMemorySaver and PostgresSaver
-        do this).
+        Returns a `DeltaChannelWrites` carrying:
 
-        `List` is used instead of `list` to avoid mypy confusing it with the
-        saver's own `list` method.
+          * `writes` — per-step deltas from ancestors, oldest→newest, ready
+            to be replayed through the reducer in `DeltaChannel.from_checkpoint`.
+          * `seed` — when the ancestor walk hits a pre-delta blob (a value
+            stored before `DeltaChannel` was enabled for this field), replay
+            starts from that snapshot instead of the channel's empty value.
+            Default `SEED_UNSET` means no seed.
+
+        Walks the **parent chain** (not `list(before=...)`): for a thread with
+        forks, only on-path ancestors contribute. Scans newest→oldest and
+        stops at the first `Overwrite`, so reconstruction cost is bounded.
+
+        Writes stored at the target `checkpoint_id` itself are pending writes
+        for the next step and are excluded — pregel applies them separately
+        via `apply_writes`.
+
+        The base implementation uses `get_tuple` and `pending_writes`; it
+        never sees blobs, so it never sets `seed`. Savers that can read the
+        blob table directly (`InMemorySaver`, `PostgresSaver`) override this
+        method to set `seed` when appropriate, which both shortens the walk
+        and recovers state from pre-delta threads after migration.
         """
-        # Guard against re-entrant calls: when list() triggers reconstruction
-        # which calls list() again, the inner call returns tuples with
-        # DELTA_SENTINEL in channel_values (which get_channel_writes ignores —
-        # it only reads pending_writes). This breaks the recursion safely.
+        # Guard against re-entrant calls: when get_tuple() triggers
+        # reconstruction which calls get_tuple() again, the inner call
+        # returns tuples with DELTA_SENTINEL in channel_values (which this
+        # method ignores — it only reads pending_writes).
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
-            return []
+            return DeltaChannelWrites(writes=[])
         overwrite_types = _overwrite_types()
-        list_config, before_config = _split_list_config(config)
 
         _DELTA_RECONSTRUCTION.active = True
         try:
             collected: list[Any] = []  # newest first
-            for tup in self.list(list_config, before=before_config):  # newest → oldest
-                if not tup.pending_writes:
-                    continue
-                # Within a superstep, pending_writes are oldest→newest; reverse
-                # to scan newest-first.
-                for _, ch, value in reversed(tup.pending_writes):
-                    if ch != channel:
-                        continue
-                    collected.append(value)
-                    if isinstance(value, overwrite_types):
-                        collected.reverse()
-                        return collected
+            target_tuple = self.get_tuple(config)
+            cursor_config: RunnableConfig | None = (
+                target_tuple.parent_config if target_tuple else None
+            )
+            while cursor_config is not None:
+                tup = self.get_tuple(cursor_config)
+                if tup is None:
+                    break
+                if tup.pending_writes:
+                    # Within a superstep, pending_writes are oldest→newest;
+                    # reverse to scan newest-first.
+                    for _, ch, value in reversed(tup.pending_writes):
+                        if ch != channel:
+                            continue
+                        collected.append(value)
+                        if isinstance(value, overwrite_types):
+                            collected.reverse()
+                            return DeltaChannelWrites(writes=collected)
+                cursor_config = tup.parent_config
             collected.reverse()
-            return collected
+            return DeltaChannelWrites(writes=collected)
         finally:
             _DELTA_RECONSTRUCTION.active = False
 
     async def aget_channel_writes(
         self, config: RunnableConfig, channel: str
-    ) -> List[Any]:  # noqa: UP006
-        """Async version of get_channel_writes."""
+    ) -> DeltaChannelWrites:
+        """Async version of `get_channel_writes`. See docstring there."""
         if getattr(_DELTA_RECONSTRUCTION, "active", False):
-            return []
+            return DeltaChannelWrites(writes=[])
         overwrite_types = _overwrite_types()
-        list_config, before_config = _split_list_config(config)
 
         _DELTA_RECONSTRUCTION.active = True
         try:
             collected: list[Any] = []
-            async for tup in self.alist(list_config, before=before_config):
-                if not tup.pending_writes:
-                    continue
-                for _, ch, value in reversed(tup.pending_writes):
-                    if ch != channel:
-                        continue
-                    collected.append(value)
-                    if isinstance(value, overwrite_types):
-                        collected.reverse()
-                        return collected
+            target_tuple = await self.aget_tuple(config)
+            cursor_config: RunnableConfig | None = (
+                target_tuple.parent_config if target_tuple else None
+            )
+            while cursor_config is not None:
+                tup = await self.aget_tuple(cursor_config)
+                if tup is None:
+                    break
+                if tup.pending_writes:
+                    for _, ch, value in reversed(tup.pending_writes):
+                        if ch != channel:
+                            continue
+                        collected.append(value)
+                        if isinstance(value, overwrite_types):
+                            collected.reverse()
+                            return DeltaChannelWrites(writes=collected)
+                cursor_config = tup.parent_config
             collected.reverse()
-            return collected
+            return DeltaChannelWrites(writes=collected)
         finally:
             _DELTA_RECONSTRUCTION.active = False
 

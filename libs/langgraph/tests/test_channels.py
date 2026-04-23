@@ -2,13 +2,17 @@ import operator
 from collections.abc import Sequence
 
 import pytest
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.checkpoint.base import SEED_UNSET, DeltaChannelWrites
 
 from langgraph._internal._typing import MISSING
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph.graph.message import add_messages
 
 pytestmark = pytest.mark.anyio
 
@@ -662,6 +666,52 @@ def test_delta_channel_user_overwrite_resets_counter() -> None:
     ch.update([HumanMessage(content="d", id="d")])
     ch.update([HumanMessage(content="e", id="e")])
     assert ch.should_snapshot()
+
+
+def test_delta_channel_from_checkpoint_honors_seed() -> None:
+    """DeltaChannelWrites(seed=...) starts replay from that snapshot.
+
+    Guards the pre-delta migration path: when the saver's ancestor walk hits
+    a pre-DeltaChannel blob it passes it as `seed` so replay reconstructs
+    the post-migration state correctly rather than replaying from empty.
+    """
+    spec = DeltaChannel(add_messages)
+    seed = [HumanMessage(content="pre-delta", id="p1")]
+    writes = DeltaChannelWrites(
+        writes=[
+            AIMessage(content="delta-1", id="d1"),
+            HumanMessage(content="delta-2", id="d2"),
+        ],
+        seed=seed,
+    )
+    ch = spec.from_checkpoint(writes)
+    msgs = ch.get()
+    assert [m.content for m in msgs] == ["pre-delta", "delta-1", "delta-2"]
+
+
+def test_delta_channel_from_checkpoint_seed_without_writes() -> None:
+    """Reconstruction at a pre-delta ancestor with no newer deltas returns
+    just the seed — the saver's terminator fired immediately."""
+    spec = DeltaChannel(add_messages)
+    seed = [HumanMessage(content="only-snap", id="s1")]
+    ch = spec.from_checkpoint(DeltaChannelWrites(writes=[], seed=seed))
+    assert ch.get() == seed
+
+
+def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_unset() -> None:
+    """`seed=None` must start replay from None, not from the channel's empty
+    value. `SEED_UNSET` is the sentinel meaning 'no seed'."""
+
+    def replace(left, right):
+        return right
+
+    spec = DeltaChannel(replace)
+    ch = spec.from_checkpoint(DeltaChannelWrites(writes=["after"], seed=None))
+    # Reducer replaces; seed=None → first write produces "after".
+    assert ch.get() == "after"
+    # And the default (unset) is distinct.
+    unset = DeltaChannelWrites(writes=["after"])
+    assert unset.seed is SEED_UNSET
 
 
 def test_delta_channel_replay_tracks_counter_across_overwrite() -> None:

@@ -146,22 +146,26 @@ class InMemorySaver(
         channel_values: dict[str, Any],
     ) -> None:
         """Replace DELTA_SENTINEL entries with DeltaChannelWrites so
-        DeltaChannel.from_checkpoint can distinguish reconstructed writes from
-        a pre-DeltaChannel accumulated list."""
+        `DeltaChannel.from_checkpoint` can distinguish reconstructed writes
+        from a pre-DeltaChannel accumulated value."""
         for channel, value in channel_values.items():
             if value is DELTA_SENTINEL:
-                channel_values[channel] = DeltaChannelWrites(
-                    self.get_channel_writes(config, channel)
-                )
+                channel_values[channel] = self.get_channel_writes(config, channel)
 
-    def get_channel_writes(self, config: RunnableConfig, channel: str) -> list[Any]:
+    def get_channel_writes(
+        self, config: RunnableConfig, channel: str
+    ) -> DeltaChannelWrites:
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = config["configurable"].get("checkpoint_id", "")
         ns_storage = self.storage.get(thread_id, {}).get(checkpoint_ns, {})
-        # Walk the parent chain newest→oldest collecting checkpoint IDs.
+        # Walk the parent chain newest→oldest. Skip the target itself —
+        # writes stored AT `checkpoint_id` are pending for the next step
+        # (pregel applies them via `apply_writes`; they aren't part of the
+        # snapshot value AT `checkpoint_id`).
         chain: list[str] = []
-        current: str | None = checkpoint_id
+        target_entry = ns_storage.get(checkpoint_id)
+        current: str | None = target_entry[2] if target_entry is not None else None
         while current is not None:
             entry = ns_storage.get(current)
             if entry is None:
@@ -171,14 +175,39 @@ class InMemorySaver(
             current = parent
         overwrite_types = _overwrite_types()
 
-        # Scan writes newest→oldest. Stop at the first `Overwrite` — it
-        # dominates all older history. Either from `snapshot_every` or from
-        # user code: the bound applies the same way.
+        # Scan newest→oldest. Two terminators stop the walk:
+        #   1. a user-emitted `Overwrite` in writes — replaces prior history;
+        #   2. a pre-delta blob on an ancestor — bind it as `seed`.
+        # Without (2), a thread migrated from pre-delta storage would replay
+        # ancestor writes all the way to the root AND miss any value that
+        # lived only in the old blob (e.g. from `update_state`).
+        #
+        # At each ancestor, check the blob BEFORE processing its pending
+        # writes: a pre-delta blob represents the state AT that ancestor,
+        # which already subsumes any writes stored under it. Processing
+        # those writes first would fold them into the reconstructed value
+        # twice (once via the blob, once via replay).
         collected: list[Any] = []  # newest first
         for cp_id in chain:  # newest → oldest
+            entry = ns_storage.get(cp_id)
+            if entry is not None:
+                ckpt = self.serde.loads_typed(entry[0])
+                ver = ckpt.get("channel_versions", {}).get(channel)
+                if ver is not None:
+                    blob_entry = self.blobs.get(
+                        (thread_id, checkpoint_ns, channel, ver)
+                    )
+                    if blob_entry is not None and blob_entry[0] != "empty":
+                        blob_value = self.serde.loads_typed(blob_entry)
+                        if blob_value is not DELTA_SENTINEL:
+                            # Pre-delta snapshot terminator. Skip this
+                            # ancestor's writes — the blob subsumes them.
+                            collected.reverse()
+                            return DeltaChannelWrites(writes=collected, seed=blob_value)
+
             step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
-            # within a superstep, sorted by (task_id, idx) = oldest → newest,
-            # so reverse to get newest-first scan.
+            # Within a superstep, sorted by (task_id, idx) = oldest → newest;
+            # reverse for newest-first scan.
             for (_task_id, _idx), (_, ch, serialized, _) in sorted(
                 step_writes.items(), reverse=True
             ):
@@ -188,13 +217,13 @@ class InMemorySaver(
                 collected.append(val)
                 if isinstance(val, overwrite_types):
                     collected.reverse()
-                    return collected
+                    return DeltaChannelWrites(writes=collected)
         collected.reverse()
-        return collected
+        return DeltaChannelWrites(writes=collected)
 
     async def aget_channel_writes(
         self, config: RunnableConfig, channel: str
-    ) -> list[Any]:
+    ) -> DeltaChannelWrites:
         return self.get_channel_writes(config, channel)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:

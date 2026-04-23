@@ -6,8 +6,11 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 
 from langgraph.checkpoint.base import (
+    DELTA_SENTINEL,
+    SEED_UNSET,
     Checkpoint,
     CheckpointMetadata,
+    DeltaChannelWrites,
     create_checkpoint,
     empty_checkpoint,
 )
@@ -208,8 +211,6 @@ class TestMemorySaver:
 
 
 async def test_memory_saver() -> None:
-    from langgraph.checkpoint.memory import InMemorySaver
-
     memory_saver = InMemorySaver()
     assert isinstance(memory_saver, InMemorySaver)
 
@@ -325,11 +326,6 @@ def test_memory_saver_with_allowlist_proxy_isolated() -> None:
 class TestInMemorySaverDeltaChannel:
     def test_load_blobs_returns_sentinel_for_delta_channel(self) -> None:
         """_load_blobs returns DELTA_SENTINEL for delta channels (reconstruction deferred)."""
-        from langgraph.checkpoint.base import (
-            DELTA_SENTINEL,
-            empty_checkpoint,
-        )
-
         saver = InMemorySaver()
         serde = JsonPlusSerializer()
 
@@ -349,10 +345,10 @@ class TestInMemorySaverDeltaChannel:
         assert channel in result
         assert result[channel] is DELTA_SENTINEL
 
-    def test_get_channel_writes_collects_writes(self) -> None:
-        """get_channel_writes collects per-step writes oldest→newest."""
-        from langgraph.checkpoint.base import empty_checkpoint
-
+    def test_get_channel_writes_collects_ancestor_writes_only(self) -> None:
+        """get_channel_writes collects ancestor writes oldest→newest, and
+        excludes writes stored at the target checkpoint itself (those are
+        pending writes for the next step, applied separately by pregel)."""
         saver = InMemorySaver()
         serde = JsonPlusSerializer()
 
@@ -366,18 +362,20 @@ class TestInMemorySaverDeltaChannel:
             "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), None),
             "cp2": (serde.dumps_typed(cp2), serde.dumps_typed({}), "cp1"),
         }
-        # cp1 has a write for channel
+        # Writes stored at cp1 produced the cp1 snapshot; part of history.
         saver.writes[(thread_id, ns, "cp1")][("task1", 0)] = (
             "task1",
             channel,
             serde.dumps_typed({"content": "hi"}),
             "",
         )
-        # cp2 has a write for channel
+        # Writes stored at cp2 are pending — they will produce cp3 when the
+        # step that loaded cp2 completes. They MUST NOT appear in the
+        # reconstructed snapshot value at cp2.
         saver.writes[(thread_id, ns, "cp2")][("task2", 0)] = (
             "task2",
             channel,
-            serde.dumps_typed({"content": "bye"}),
+            serde.dumps_typed({"content": "pending"}),
             "",
         )
 
@@ -389,7 +387,37 @@ class TestInMemorySaverDeltaChannel:
             }
         }
         result = saver.get_channel_writes(config, channel)
-        assert result == [{"content": "hi"}, {"content": "bye"}]
+        assert result == DeltaChannelWrites(writes=[{"content": "hi"}])
+        assert result.seed is SEED_UNSET
+
+    def test_get_channel_writes_at_root_returns_empty(self) -> None:
+        """Reconstructing the root checkpoint's state: no ancestors → []."""
+        saver = InMemorySaver()
+        serde = JsonPlusSerializer()
+        thread_id, ns, channel = "t1", "", "messages"
+
+        cp1 = empty_checkpoint()
+        cp1["id"] = "cp1"
+        saver.storage[thread_id][ns] = {
+            "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), None),
+        }
+        saver.writes[(thread_id, ns, "cp1")][("task1", 0)] = (
+            "task1",
+            channel,
+            serde.dumps_typed({"content": "pending"}),
+            "",
+        )
+
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": ns,
+                "checkpoint_id": "cp1",
+            }
+        }
+        assert saver.get_channel_writes(config, channel) == DeltaChannelWrites(
+            writes=[]
+        )
 
 
 class TestBaseFallbackGetChannelWrites:
@@ -461,7 +489,10 @@ class TestBaseFallbackGetChannelWrites:
 
         result = saver.get_channel_writes(config, "messages")
 
-        assert result == [{"content": "first"}, {"content": "second"}]
+        assert result == DeltaChannelWrites(
+            writes=[{"content": "first"}, {"content": "second"}]
+        )
+        assert result.seed is SEED_UNSET
 
     async def test_async_fallback_returns_ancestor_writes_oldest_first(self) -> None:
         saver, thread_id, ns = self._build_saver_with_chain()
@@ -476,7 +507,10 @@ class TestBaseFallbackGetChannelWrites:
 
         result = await saver.aget_channel_writes(config, "messages")
 
-        assert result == [{"content": "first"}, {"content": "second"}]
+        assert result == DeltaChannelWrites(
+            writes=[{"content": "first"}, {"content": "second"}]
+        )
+        assert result.seed is SEED_UNSET
 
     def test_fallback_stops_at_first_overwrite(self) -> None:
         """An `Overwrite` dominates older history: scan newest→oldest stops at
@@ -509,6 +543,117 @@ class TestBaseFallbackGetChannelWrites:
 
         result = saver.get_channel_writes(config, "messages")
 
-        assert len(result) == 1
-        assert isinstance(result[0], Overwrite)
-        assert result[0].value == [{"content": "reset"}]
+        assert len(result.writes) == 1
+        assert isinstance(result.writes[0], Overwrite)
+        assert result.writes[0].value == [{"content": "reset"}]
+        assert result.seed is SEED_UNSET
+
+
+class TestPreDeltaBlobTerminator:
+    """Verify the pre-delta blob terminator: when the ancestor walk hits a
+    checkpoint whose blob for the channel is a real value (not
+    DELTA_SENTINEL), reconstruction seeds from it and stops. This guards
+
+      * back-compat: a thread written by pre-delta code, then extended under
+        delta — reconstruction must return the correct value without walking
+        past the last pre-delta ancestor;
+      * perf: without the terminator, every reconstruct-after-migration would
+        walk all the way to the thread root.
+    """
+
+    def _build_mixed_thread(self) -> tuple[InMemorySaver, str, str, str, str]:
+        """Three-checkpoint chain: cp1 (pre-delta, blob=[A]), cp2 (delta,
+        write=B), cp3 (delta, write=C). Reconstructing at cp3 must yield
+        seed=[A] + writes=[B, C].
+
+        Returns `(saver, thread_id, ns, channel, cp3_id)`.
+        """
+        saver = InMemorySaver()
+        serde = JsonPlusSerializer()
+        thread_id, ns, channel = "t1", "", "messages"
+
+        v1 = "00000000000000000000000000000001.0"
+        v2 = "00000000000000000000000000000002.0"
+        v3 = "00000000000000000000000000000003.0"
+
+        # Pre-delta: cp1 stored a real blob for the channel.
+        saver.blobs[(thread_id, ns, channel, v1)] = serde.dumps_typed(["A"])
+        # Delta-era: cp2 and cp3 store sentinels; real writes in checkpoint_writes.
+        saver.blobs[(thread_id, ns, channel, v2)] = serde.dumps_typed(DELTA_SENTINEL)
+        saver.blobs[(thread_id, ns, channel, v3)] = serde.dumps_typed(DELTA_SENTINEL)
+
+        cp1 = empty_checkpoint()
+        cp1["id"] = "cp1"
+        cp1["channel_versions"][channel] = v1
+        cp2 = empty_checkpoint()
+        cp2["id"] = "cp2"
+        cp2["channel_versions"][channel] = v2
+        cp3 = empty_checkpoint()
+        cp3["id"] = "cp3"
+        cp3["channel_versions"][channel] = v3
+
+        saver.storage[thread_id][ns] = {
+            "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), None),
+            "cp2": (serde.dumps_typed(cp2), serde.dumps_typed({}), "cp1"),
+            "cp3": (serde.dumps_typed(cp3), serde.dumps_typed({}), "cp2"),
+        }
+        # Write under cp1 would be from the pre-delta era and MUST be ignored
+        # (the blob already captures it). We add one and assert it is not
+        # folded into the reconstructed result.
+        saver.writes[(thread_id, ns, "cp1")][("task0", 0)] = (
+            "task0",
+            channel,
+            serde.dumps_typed("PRE-DELTA-WRITE"),
+            "",
+        )
+        saver.writes[(thread_id, ns, "cp2")][("task2", 0)] = (
+            "task2",
+            channel,
+            serde.dumps_typed("B"),
+            "",
+        )
+        saver.writes[(thread_id, ns, "cp3")][("task3", 0)] = (
+            "task3",
+            channel,
+            serde.dumps_typed("PENDING-AT-TARGET"),
+            "",
+        )
+        return saver, thread_id, ns, channel, "cp3"
+
+    def test_seed_from_pre_delta_ancestor_blob(self) -> None:
+        saver, thread_id, ns, channel, target = self._build_mixed_thread()
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": ns,
+                "checkpoint_id": target,
+            }
+        }
+
+        result = saver.get_channel_writes(config, channel)
+
+        # Seed came from the pre-delta blob at cp1.
+        assert result.seed == ["A"]
+        # Delta-era writes from cp2 replay through the reducer on top of seed.
+        # cp3 is the target — its own write is pending for the NEXT step and
+        # must be excluded.
+        assert result.writes == ["B"]
+
+    def test_pre_delta_blob_terminates_walk_before_older_writes(self) -> None:
+        """Writes stored at the pre-delta ancestor itself must not be replayed
+        (the blob subsumes them)."""
+        saver, thread_id, ns, channel, target = self._build_mixed_thread()
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": ns,
+                "checkpoint_id": target,
+            }
+        }
+
+        result = saver.get_channel_writes(config, channel)
+
+        # The pre-delta write under cp1 must not appear (the blob subsumes it).
+        assert "PRE-DELTA-WRITE" not in result.writes
+        # And the pending write at the target is never folded in.
+        assert "PENDING-AT-TARGET" not in result.writes
