@@ -392,11 +392,9 @@ def _default_handle_tool_errors(e: Exception) -> str:
 def _handle_tool_error(
     e: Exception,
     *,
-    flag: bool
-    | str
-    | Callable[..., str]
-    | type[Exception]
-    | tuple[type[Exception], ...],
+    flag: (
+        bool | str | Callable[..., str] | type[Exception] | tuple[type[Exception], ...]
+    ),
 ) -> str:
     """Generate error message content based on exception handling configuration.
 
@@ -744,11 +742,13 @@ class ToolNode(RunnableCallable):
         *,
         name: str = "tools",
         tags: list[str] | None = None,
-        handle_tool_errors: bool
-        | str
-        | Callable[..., str]
-        | type[Exception]
-        | tuple[type[Exception], ...] = _default_handle_tool_errors,
+        handle_tool_errors: (
+            bool
+            | str
+            | Callable[..., str]
+            | type[Exception]
+            | tuple[type[Exception], ...]
+        ) = _default_handle_tool_errors,
         messages_key: str = "messages",
         wrap_tool_call: ToolCallWrapper | None = None,
         awrap_tool_call: AsyncToolCallWrapper | None = None,
@@ -1368,7 +1368,9 @@ class ToolNode(RunnableCallable):
                         injected_args[tool_arg] = state
                     elif state_field in state:
                         injected_args[tool_arg] = state[state_field]
-                    elif tool_arg not in injected._optional_state_args:
+                    elif tool_arg in injected._optional_state_args:
+                        injected_args[tool_arg] = None
+                    else:
                         raise KeyError(state_field)
             else:
                 for tool_arg, state_field in injected.state.items():
@@ -1376,7 +1378,9 @@ class ToolNode(RunnableCallable):
                         injected_args[tool_arg] = state
                     elif hasattr(state, state_field):
                         injected_args[tool_arg] = getattr(state, state_field)
-                    elif tool_arg not in injected._optional_state_args:
+                    elif tool_arg in injected._optional_state_args:
+                        injected_args[tool_arg] = None
+                    else:
                         raise AttributeError(state_field)
 
         # Inject store
@@ -1812,6 +1816,20 @@ def _is_injection(
     return False
 
 
+def _type_allows_none(type_: Any) -> bool:
+    """Check if a type annotation allows None (e.g. str | None, Optional[str]).
+
+    Unwraps Annotated wrappers before checking.
+    """
+    # Unwrap Annotated
+    if get_origin(type_) is Annotated:
+        type_ = get_args(type_)[0]
+    origin = get_origin(type_)
+    if origin is Union or origin is UnionType:
+        return type(None) in get_args(type_)
+    return type_ is type(None)
+
+
 def _get_injection_from_type(
     type_: Any, injection_type: type[InjectedState | InjectedStore | ToolRuntime]
 ) -> Any | None:
@@ -1887,6 +1905,8 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
                 state_args[name] = state_inj.field
                 field_info = full_schema.model_fields.get(name)
                 if field_info and not field_info.is_required():
+                    _optional_state_args.add(name)
+                elif _type_allows_none(type_):
                     _optional_state_args.add(name)
             else:
                 state_args[name] = None
