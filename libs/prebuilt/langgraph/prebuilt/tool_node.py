@@ -859,14 +859,30 @@ class ToolNode(RunnableCallable):
 
     def _combine_tool_outputs(
         self,
-        outputs: list[ToolMessage | Command],
+        outputs: list[ToolMessage | Command | list[ToolMessage | Command]],
         input_type: Literal["list", "dict", "tool_calls"],
     ) -> list[Command | list[ToolMessage] | dict[str, list[ToolMessage]]]:
+        # Flatten list entries from tools that returned multiple items
+        flat_outputs: list[ToolMessage | Command]
+        if any(isinstance(output, list) for output in outputs):
+            flat_outputs = []
+            for output in outputs:
+                if isinstance(output, list):
+                    flat_outputs.extend(output)
+                else:
+                    flat_outputs.append(output)
+        else:
+            flat_outputs = cast("list[ToolMessage | Command]", outputs)
+
         # preserve existing behavior for non-command tool outputs for backwards
         # compatibility
-        if not any(isinstance(output, Command) for output in outputs):
+        if not any(isinstance(output, Command) for output in flat_outputs):
             # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-            return outputs if input_type == "list" else {self._messages_key: outputs}
+            return (
+                flat_outputs
+                if input_type == "list"
+                else {self._messages_key: flat_outputs}
+            )
 
         # LangGraph will automatically handle list of Command and non-command node
         # updates
@@ -876,7 +892,7 @@ class ToolNode(RunnableCallable):
 
         # combine all parent commands with goto into a single parent command
         parent_command: Command | None = None
-        for output in outputs:
+        for output in flat_outputs:
             if isinstance(output, Command):
                 if (
                     output.graph is Command.PARENT
@@ -906,7 +922,7 @@ class ToolNode(RunnableCallable):
         request: ToolCallRequest,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
-    ) -> ToolMessage | Command:
+    ) -> ToolMessage | Command | list[Command | ToolMessage]:
         """Execute tool call with configured error handling.
 
         Args:
@@ -915,7 +931,7 @@ class ToolNode(RunnableCallable):
             config: Runnable configuration.
 
         Returns:
-            ToolMessage or Command.
+            ToolMessage, Command, or list of Command/ToolMessage.
 
         Raises:
             Exception: If tool fails and handle_tool_errors is False.
@@ -946,6 +962,11 @@ class ToolNode(RunnableCallable):
                 raise ToolInvocationError(
                     call["name"], exc, call["args"], filtered_errors
                 ) from exc
+
+            # Inside try so validation errors route through _handle_tool_errors
+            return self._normalize_tool_response(
+                response, request.tool_call, input_type
+            )
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios,
@@ -988,23 +1009,12 @@ class ToolNode(RunnableCallable):
                 status="error",
             )
 
-        # Process successful response
-        if isinstance(response, Command):
-            # Validate Command before returning to handler
-            return self._validate_tool_command(response, request.tool_call, input_type)
-        if isinstance(response, ToolMessage):
-            response.content = cast("str | list", msg_content_output(response.content))
-            return response
-
-        msg = f"Tool {call['name']} returned unexpected type: {type(response)}"
-        raise TypeError(msg)
-
     def _run_one(
         self,
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         tool_runtime: ToolRuntime,
-    ) -> ToolMessage | Command:
+    ) -> ToolMessage | Command | list[Command | ToolMessage]:
         """Execute single tool call with wrap_tool_call wrapper if configured.
 
         Args:
@@ -1059,7 +1069,7 @@ class ToolNode(RunnableCallable):
         request: ToolCallRequest,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
-    ) -> ToolMessage | Command:
+    ) -> ToolMessage | Command | list[Command | ToolMessage]:
         """Execute tool call asynchronously with configured error handling.
 
         Args:
@@ -1068,7 +1078,7 @@ class ToolNode(RunnableCallable):
             config: Runnable configuration.
 
         Returns:
-            ToolMessage or Command.
+            ToolMessage, Command, or list of Command/ToolMessage.
 
         Raises:
             Exception: If tool fails and handle_tool_errors is False.
@@ -1099,6 +1109,11 @@ class ToolNode(RunnableCallable):
                 raise ToolInvocationError(
                     call["name"], exc, call["args"], filtered_errors
                 ) from exc
+
+            # Inside try so validation errors route through _handle_tool_errors
+            return self._normalize_tool_response(
+                response, request.tool_call, input_type
+            )
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios,
@@ -1141,23 +1156,12 @@ class ToolNode(RunnableCallable):
                 status="error",
             )
 
-        # Process successful response
-        if isinstance(response, Command):
-            # Validate Command before returning to handler
-            return self._validate_tool_command(response, request.tool_call, input_type)
-        if isinstance(response, ToolMessage):
-            response.content = cast("str | list", msg_content_output(response.content))
-            return response
-
-        msg = f"Tool {call['name']} returned unexpected type: {type(response)}"
-        raise TypeError(msg)
-
     async def _arun_one(
         self,
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         tool_runtime: ToolRuntime,
-    ) -> ToolMessage | Command:
+    ) -> ToolMessage | Command | list[Command | ToolMessage]:
         """Execute single tool call asynchronously with awrap_tool_call wrapper if configured.
 
         Args:
@@ -1404,11 +1408,84 @@ class ToolNode(RunnableCallable):
         tool_call_copy["args"] = {**stripped_args, **injected_args}
         return tool_call_copy
 
+    def _normalize_tool_response(
+        self,
+        response: Any,
+        tool_call: ToolCall,
+        input_type: Literal["list", "dict", "tool_calls"],
+    ) -> ToolMessage | Command | list[Command | ToolMessage]:
+        """Validate and normalize a tool's raw return value."""
+        if isinstance(response, Command):
+            return self._validate_tool_command(response, tool_call, input_type)
+        if isinstance(response, ToolMessage):
+            response.content = cast("str | list", msg_content_output(response.content))
+            return response
+        if isinstance(response, list):
+            if all(isinstance(r, (Command, ToolMessage)) for r in response):
+                return self._validate_tool_command_list(response, tool_call, input_type)
+            msg = (
+                f"Tool {tool_call['name']} returned a list with invalid element "
+                "types: expected all Command or ToolMessage"
+            )
+            raise TypeError(msg)
+        msg = f"Tool {tool_call['name']} returned unexpected type: {type(response)}"
+        raise TypeError(msg)
+
+    def _validate_tool_command_list(
+        self,
+        response: list[Command | ToolMessage],
+        tool_call: ToolCall,
+        input_type: Literal["list", "dict", "tool_calls"],
+    ) -> list[Command | ToolMessage]:
+        """Validate a list of Command/ToolMessage returned by a single tool call.
+
+        Requires exactly one terminating ToolMessage (matching the outer tool_call_id)
+        across the list — either as a top-level element or nested in a
+        Command.update["messages"].
+        """
+        expected_id = tool_call["id"]
+
+        terminator_count = 0
+        for item in response:
+            if isinstance(item, ToolMessage):
+                if item.tool_call_id == expected_id:
+                    terminator_count += 1
+            elif isinstance(item, Command) and isinstance(item.update, dict):
+                for msg in item.update.get(self._messages_key, []):
+                    if isinstance(msg, ToolMessage) and msg.tool_call_id == expected_id:
+                        terminator_count += 1
+
+        if terminator_count != 1:
+            msg = (
+                f"Tool {tool_call['name']} returned a list with "
+                f"{terminator_count} messages bound to tool_call_id "
+                f"{expected_id!r}; expected exactly one terminating ToolMessage."
+            )
+            raise ValueError(msg)
+
+        # Per-Command normalization still runs, but the list-level count above
+        # already guarantees exactly one terminator, so individual Commands may
+        # lack one.
+        validated: list[Command | ToolMessage] = []
+        for item in response:
+            if isinstance(item, Command):
+                validated.append(
+                    self._validate_tool_command(
+                        item, tool_call, input_type, require_terminator=False
+                    )
+                )
+            else:
+                item.content = cast("str | list", msg_content_output(item.content))
+                validated.append(item)
+        return validated
+
     def _validate_tool_command(
         self,
         command: Command,
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
+        *,
+        require_terminator: bool = True,
     ) -> Command:
         if isinstance(command.update, dict):
             # input type is dict when ToolNode is invoked with a dict input
@@ -1458,7 +1535,11 @@ class ToolNode(RunnableCallable):
 
         # validate that we always have a ToolMessage matching the tool call in
         # Command.update if command is sent to the CURRENT graph
-        if updated_command.graph is None and not has_matching_tool_message:
+        if (
+            require_terminator
+            and updated_command.graph is None
+            and not has_matching_tool_message
+        ):
             example_update = (
                 '`Command(update={"messages": '
                 '[ToolMessage("Success", tool_call_id=tool_call_id), ...]}, ...)`'

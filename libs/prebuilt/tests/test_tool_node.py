@@ -2223,3 +2223,195 @@ def test_tool_node_injected_state_overwrites_llm_value() -> None:
     )
     tool_message = result["messages"][-1]
     assert tool_message.content == "PUBLIC_DATA"
+
+
+class _ReturningTool(BaseTool):
+    """A tool that returns a configured value verbatim."""
+
+    name: str = "list_tool"
+    description: str = "Returns a configured value"
+    return_value: Any = None
+
+    def _run(self, **kwargs: Any) -> Any:
+        return self.return_value
+
+    async def _arun(self, **kwargs: Any) -> Any:
+        return self.return_value
+
+
+def _list_tool_call(outer_id: str = "call-1") -> dict[str, Any]:
+    return {"name": "list_tool", "args": {}, "id": outer_id, "type": "tool_call"}
+
+
+def _invoke_returning(
+    return_value: Any,
+    *,
+    outer_id: str = "call-1",
+    handle_tool_errors: bool = True,
+) -> Any:
+    node = ToolNode(
+        [_ReturningTool(return_value=return_value)],
+        handle_tool_errors=handle_tool_errors,
+    )
+    return node.invoke(
+        {"messages": [AIMessage("", tool_calls=[_list_tool_call(outer_id)])]},
+        config=_create_config_with_runtime(),
+    )
+
+
+def test_tool_node_list_return_command_and_tool_message() -> None:
+    """Valid: tool returns [Command(update={...}), ToolMessage(...)]."""
+    outer_id = "call-1"
+    result = _invoke_returning(
+        [
+            Command(update={"foo": "bar"}),
+            ToolMessage(content="done", tool_call_id=outer_id),
+        ]
+    )
+    assert isinstance(result, list)
+    commands = [r for r in result if isinstance(r, Command)]
+    assert len(commands) == 1
+    assert commands[0].update == {"foo": "bar"}
+    non_commands = [r for r in result if not isinstance(r, Command)]
+    assert len(non_commands) == 1
+    assert isinstance(non_commands[0], dict)
+    msgs = non_commands[0]["messages"]
+    assert len(msgs) == 1
+    assert isinstance(msgs[0], ToolMessage)
+    assert msgs[0].content == "done"
+    assert msgs[0].tool_call_id == outer_id
+
+
+def test_tool_node_list_return_nested_terminator() -> None:
+    """Valid: terminator nested inside Command.update['messages']."""
+    outer_id = "call-1"
+    result = _invoke_returning(
+        [
+            Command(update={"foo": "bar"}),
+            Command(
+                update={
+                    "messages": [ToolMessage(content="done", tool_call_id=outer_id)]
+                }
+            ),
+        ]
+    )
+    assert isinstance(result, list)
+    commands = [r for r in result if isinstance(r, Command)]
+    assert len(commands) == 2
+    updates = [c.update for c in commands]
+    assert {"foo": "bar"} in updates
+    msgs_update = next(u for u in updates if "messages" in (u or {}))
+    assert any(
+        isinstance(m, ToolMessage) and m.tool_call_id == outer_id
+        for m in msgs_update["messages"]
+    )
+
+
+def test_tool_node_list_return_parent_goto_with_terminator() -> None:
+    """Valid: [Command(graph=PARENT, goto=[Send(...)]), ToolMessage(...)]."""
+    outer_id = "call-1"
+    result = _invoke_returning(
+        [
+            Command(graph=Command.PARENT, goto=[Send("child", {})]),
+            ToolMessage(content="ok", tool_call_id=outer_id),
+        ]
+    )
+    assert isinstance(result, list)
+    parent_cmds = [
+        r for r in result if isinstance(r, Command) and r.graph is Command.PARENT
+    ]
+    assert len(parent_cmds) == 1
+    assert isinstance(parent_cmds[0].goto, list)
+    assert any(isinstance(s, Send) for s in parent_cmds[0].goto)
+    non_commands = [r for r in result if not isinstance(r, Command)]
+    assert len(non_commands) == 1
+
+
+def test_tool_node_list_return_no_terminator_raises() -> None:
+    """Invalid: list with no terminating ToolMessage."""
+    with pytest.raises(ValueError, match="0 messages bound to tool_call_id"):
+        _invoke_returning([Command(update={"foo": "bar"})], handle_tool_errors=False)
+
+
+def test_tool_node_list_return_multiple_terminators_raises() -> None:
+    """Invalid: list with two terminating ToolMessages."""
+    outer_id = "call-1"
+    with pytest.raises(ValueError, match="2 messages bound to tool_call_id"):
+        _invoke_returning(
+            [
+                ToolMessage(content="a", tool_call_id=outer_id),
+                ToolMessage(content="b", tool_call_id=outer_id),
+            ],
+            handle_tool_errors=False,
+        )
+
+
+def test_tool_node_list_return_validation_error_handled() -> None:
+    """handle_tool_errors=True converts validation errors to an error ToolMessage."""
+    result = _invoke_returning([Command(update={"foo": "bar"})])
+    assert isinstance(result, dict)
+    msg = result["messages"][0]
+    assert isinstance(msg, ToolMessage)
+    assert msg.status == "error"
+    assert "0 messages bound to tool_call_id" in msg.content
+
+
+async def test_tool_node_list_return_async_smoke() -> None:
+    """Async path parallels sync for the happy case."""
+    outer_id = "call-1"
+    node = ToolNode(
+        [
+            _ReturningTool(
+                return_value=[
+                    Command(update={"foo": "bar"}),
+                    ToolMessage(content="done", tool_call_id=outer_id),
+                ]
+            )
+        ]
+    )
+    result = await node.ainvoke(
+        {"messages": [AIMessage("", tool_calls=[_list_tool_call(outer_id)])]},
+        config=_create_config_with_runtime(),
+    )
+    assert isinstance(result, list)
+    commands = [r for r in result if isinstance(r, Command)]
+    assert len(commands) == 1 and commands[0].update == {"foo": "bar"}
+
+
+def test_tool_node_list_return_mixed_with_regular_tool() -> None:
+    """List-returning tool and a regular tool dispatched from the same AIMessage."""
+    list_tool_id = "call-list"
+    regular_tool_id = "call-regular"
+    list_tool = _ReturningTool(
+        return_value=[
+            Command(update={"foo": "bar"}),
+            ToolMessage(content="list done", tool_call_id=list_tool_id),
+        ]
+    )
+
+    def regular_tool(x: int) -> str:
+        """A normal tool."""
+        return f"regular: {x}"
+
+    tool_calls = [
+        {"name": "list_tool", "args": {}, "id": list_tool_id, "type": "tool_call"},
+        {
+            "name": "regular_tool",
+            "args": {"x": 7},
+            "id": regular_tool_id,
+            "type": "tool_call",
+        },
+    ]
+    node = ToolNode([list_tool, regular_tool])
+    result = node.invoke(
+        {"messages": [AIMessage("", tool_calls=tool_calls)]},
+        config=_create_config_with_runtime(),
+    )
+    assert isinstance(result, list)
+    commands = [r for r in result if isinstance(r, Command)]
+    assert len(commands) == 1
+    assert commands[0].update == {"foo": "bar"}
+    all_msgs = [m for r in result if isinstance(r, dict) for m in r["messages"]]
+    tool_call_ids = {m.tool_call_id for m in all_msgs}
+    assert list_tool_id in tool_call_ids
+    assert regular_tool_id in tool_call_ids
