@@ -4,7 +4,7 @@ import copy as _copy
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
-from langgraph.checkpoint.base import DELTA_SENTINEL, DeltaChannelWrites
+from langgraph.checkpoint.base import DELTA_SENTINEL, SEED_UNSET, DeltaChannelWrites
 from typing_extensions import Self
 
 from langgraph._internal._typing import MISSING
@@ -124,9 +124,14 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
             new._writes_since_snapshot = 0
         elif isinstance(checkpoint, DeltaChannelWrites):
             # Saver reconstructed per-step writes; replay through the operator.
-            # Counter tracks writes since the last Overwrite so snapshot cadence
-            # stays accurate across reloads.
-            value: Any = _empty(new.typ)
+            # `seed` (if set) is a pre-delta accumulated value that terminates
+            # the ancestor walk on the saver side: replay starts from it
+            # instead of the channel's empty value. Counter tracks writes
+            # since the last Overwrite so snapshot cadence stays accurate
+            # across reloads.
+            value: Any = (
+                _empty(new.typ) if checkpoint.seed is SEED_UNSET else checkpoint.seed
+            )
             counter = 0
             for write in checkpoint.writes:
                 value, counter = new._apply_write(value, write, counter)
@@ -134,7 +139,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
             new._writes_since_snapshot = counter
         else:
             # Backward compat: a pre-DeltaChannel thread stored the accumulated
-            # value directly. Trust it as-is.
+            # value directly (no saver-side reconstruction happened). Trust it.
             new.value = checkpoint
             new._writes_since_snapshot = 0
         return new

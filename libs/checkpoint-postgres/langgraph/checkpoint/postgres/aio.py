@@ -394,64 +394,162 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    async def _aget_channel_writes_cur(
+    async def _areconstruct_delta_channels_cur(
         self,
+        *,
         thread_id: str,
         checkpoint_ns: str,
         checkpoint_id: str,
-        channel: str,
+        channels: Sequence[str],
         cur: Any,
-    ) -> list[Any]:
-        """Async version of _get_channel_writes_cur — see sync version for rationale."""
+    ) -> dict[str, DeltaChannelWrites]:
+        """Async mirror of `_reconstruct_delta_channels_cur`.
+
+        Single recursive CTE enumerates on-path ancestors, LEFT-joined once
+        against `checkpoint_writes` and once against `checkpoint_blobs`. Per
+        channel the walk stops at the first terminator — a user `Overwrite`
+        in writes or a pre-delta blob (captured as `seed`). See the sync
+        docstring for the full rationale.
+        """
+        if not channels:
+            return {}
+
         overwrite_types = _overwrite_types()
+        channels_list = list(channels)
 
         await cur.execute(
-            "SELECT checkpoint_id, parent_checkpoint_id FROM checkpoints "
-            "WHERE thread_id = %s AND checkpoint_ns = %s",
-            (thread_id, checkpoint_ns),
+            """
+            WITH RECURSIVE ancestors(cid, parent, depth) AS (
+                SELECT parent_checkpoint_id, NULL::text, 0
+                FROM checkpoints
+                WHERE thread_id = %s AND checkpoint_ns = %s
+                  AND checkpoint_id = %s AND parent_checkpoint_id IS NOT NULL
+              UNION ALL
+                SELECT c.parent_checkpoint_id, a.cid, a.depth + 1
+                FROM checkpoints c
+                JOIN ancestors a ON c.checkpoint_id = a.cid
+                WHERE c.thread_id = %s AND c.checkpoint_ns = %s
+                  AND c.parent_checkpoint_id IS NOT NULL
+            ),
+            walk AS (
+                SELECT a.cid, a.depth, c.checkpoint
+                FROM ancestors a
+                JOIN checkpoints c
+                  ON c.thread_id = %s AND c.checkpoint_ns = %s
+                 AND c.checkpoint_id = a.cid
+            )
+            SELECT w.cid, w.depth,
+                   cw.channel AS write_channel, cw.type AS write_type,
+                   cw.blob AS write_blob, cw.task_id, cw.idx,
+                   bl.channel AS blob_channel, bl.type AS blob_type,
+                   bl.blob AS blob_blob
+            FROM walk w
+            LEFT JOIN checkpoint_writes cw
+              ON cw.thread_id = %s AND cw.checkpoint_ns = %s
+             AND cw.checkpoint_id = w.cid AND cw.channel = ANY(%s)
+            LEFT JOIN checkpoint_blobs bl
+              ON bl.thread_id = %s AND bl.checkpoint_ns = %s
+             AND bl.channel = ANY(%s)
+             AND bl.version = (w.checkpoint->'channel_versions'->>bl.channel)
+            ORDER BY w.depth ASC, cw.task_id DESC, cw.idx DESC
+            """,
+            (
+                thread_id,
+                checkpoint_ns,
+                checkpoint_id,
+                thread_id,
+                checkpoint_ns,
+                thread_id,
+                checkpoint_ns,
+                thread_id,
+                checkpoint_ns,
+                channels_list,
+                thread_id,
+                checkpoint_ns,
+                channels_list,
+            ),
         )
-        parent_map: dict[str, str | None] = {
-            row["checkpoint_id"]: row["parent_checkpoint_id"]
-            for row in await cur.fetchall()
-        }
-        ancestor_ids: list[str] = []
-        cid: str | None = parent_map.get(checkpoint_id)
-        while cid is not None:
-            ancestor_ids.append(cid)
-            cid = parent_map.get(cid)
-        if not ancestor_ids:
-            return []
-        await cur.execute(
-            "SELECT checkpoint_id, type, blob FROM checkpoint_writes "
-            "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
-            "  AND checkpoint_id = ANY(%s) "
-            "ORDER BY task_id DESC, idx DESC",
-            (thread_id, checkpoint_ns, channel, ancestor_ids),
-        )
-        writes_by_cp: dict[str, list[tuple[str, bytes]]] = defaultdict(list)
+
+        rows_by_cid: dict[str, dict[str, Any]] = {}
+        cid_order: list[str] = []
+        seen_blob: set[tuple[str, str]] = set()
+        seen_write: set[tuple[str, str, str, int]] = set()
         for row in await cur.fetchall():
-            writes_by_cp[row["checkpoint_id"]].append((row["type"], row["blob"]))
-        collected: list[Any] = []
-        for cid in ancestor_ids:
-            for type_tag, blob in writes_by_cp.get(cid, []):
-                val = self.serde.loads_typed((type_tag, blob))
-                collected.append(val)
-                if isinstance(val, overwrite_types):
-                    collected.reverse()
-                    return collected
-        collected.reverse()
-        return collected
+            cid = row["cid"]
+            if cid not in rows_by_cid:
+                rows_by_cid[cid] = {"writes_per_channel": {}, "blob_per_channel": {}}
+                cid_order.append(cid)
+            ch_w = row["write_channel"]
+            if ch_w is not None:
+                key = (cid, ch_w, row["task_id"], row["idx"])
+                if key not in seen_write:
+                    seen_write.add(key)
+                    rows_by_cid[cid]["writes_per_channel"].setdefault(ch_w, []).append(
+                        (row["write_type"], row["write_blob"])
+                    )
+            ch_b = row["blob_channel"]
+            if ch_b is not None and (cid, ch_b) not in seen_blob:
+                seen_blob.add((cid, ch_b))
+                rows_by_cid[cid]["blob_per_channel"][ch_b] = (
+                    row["blob_type"],
+                    row["blob_blob"],
+                )
+
+        collected: dict[str, list[Any]] = {ch: [] for ch in channels_list}
+        done: set[str] = set()
+        seeds: dict[str, Any] = {}
+
+        for cid in cid_order:
+            bucket = rows_by_cid[cid]
+            # Pre-delta blob check first — subsumes any writes at this cp.
+            for ch in list(channels_list):
+                if ch in done:
+                    continue
+                blob = bucket["blob_per_channel"].get(ch)
+                if blob is None or blob[0] == "empty":
+                    continue
+                blob_value = self.serde.loads_typed(blob)
+                if blob_value is DELTA_SENTINEL:
+                    continue
+                seeds[ch] = blob_value
+                done.add(ch)
+            for ch in list(channels_list):
+                if ch in done:
+                    continue
+                for type_tag, blob in bucket["writes_per_channel"].get(ch, []):
+                    val = self.serde.loads_typed((type_tag, blob))
+                    collected[ch].append(val)
+                    if isinstance(val, overwrite_types):
+                        done.add(ch)
+                        break
+            if len(done) == len(channels_list):
+                break
+
+        result: dict[str, DeltaChannelWrites] = {}
+        for ch in channels_list:
+            ch_writes = collected[ch]
+            ch_writes.reverse()
+            if ch in seeds:
+                result[ch] = DeltaChannelWrites(writes=ch_writes, seed=seeds[ch])
+            else:
+                result[ch] = DeltaChannelWrites(writes=ch_writes)
+        return result
 
     async def aget_channel_writes(
         self, config: RunnableConfig, channel: str
-    ) -> list[Any]:
+    ) -> DeltaChannelWrites:
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = config["configurable"]["checkpoint_id"]
         async with self._cursor() as cur:
-            return await self._aget_channel_writes_cur(
-                thread_id, checkpoint_ns, checkpoint_id, channel, cur
+            result = await self._areconstruct_delta_channels_cur(
+                thread_id=thread_id,
+                checkpoint_ns=checkpoint_ns,
+                checkpoint_id=checkpoint_id,
+                channels=[channel],
+                cur=cur,
             )
+            return result.get(channel, DeltaChannelWrites(writes=[]))
 
     async def _load_checkpoint_tuple(
         self, value: DictRow, cur: AsyncCursor[DictRow]
@@ -478,13 +576,19 @@ class AsyncPostgresSaver(BasePostgresSaver):
         channel_values: dict[str, Any] = {}
         if blob_values:
             channel_values = self._load_blobs(blob_values)
-            for channel, v in channel_values.items():
-                if v is DELTA_SENTINEL:
-                    channel_values[channel] = DeltaChannelWrites(
-                        await self._aget_channel_writes_cur(
-                            thread_id, checkpoint_ns, checkpoint_id, channel, cur
-                        )
-                    )
+            delta_channels = [
+                ch for ch, v in channel_values.items() if v is DELTA_SENTINEL
+            ]
+            if delta_channels:
+                reconstructed = await self._areconstruct_delta_channels_cur(
+                    thread_id=thread_id,
+                    checkpoint_ns=checkpoint_ns,
+                    checkpoint_id=checkpoint_id,
+                    channels=delta_channels,
+                    cur=cur,
+                )
+                for ch, writes in reconstructed.items():
+                    channel_values[ch] = writes
 
         return CheckpointTuple(
             {
