@@ -1161,9 +1161,7 @@ def test_subgraph_interrupt_resume_with_explicit_head_checkpoint_id(
     assert called == ["step_a", "ask_human"]
 
     # Resume with explicit head checkpoint_id in config
-    head_checkpoint_id = graph.get_state(config).config["configurable"][
-        "checkpoint_id"
-    ]
+    head_checkpoint_id = graph.get_state(config).config["configurable"]["checkpoint_id"]
     called.clear()
     resume_config = {
         "configurable": {
