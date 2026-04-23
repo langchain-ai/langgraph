@@ -5,6 +5,7 @@ import langchain_core
 import pytest
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     AnyMessage,
     HumanMessage,
     RemoveMessage,
@@ -336,6 +337,123 @@ def test_remove_all_messages():
     assert result == [
         _AnyIdHumanMessage(content="Updated hi there"),
     ]
+
+
+def test_fast_path_preserves_format_openai():
+    """Pure-append fast path must still apply the `langchain-openai` formatter."""
+    left = [HumanMessage(content="prior", id="1")]
+    right = [
+        AIMessage(
+            content=[
+                {
+                    "type": "tool_use",
+                    "name": "foo",
+                    "input": {"bar": "baz"},
+                    "id": "t1",
+                }
+            ],
+            id="2",
+        )
+    ]
+    result = add_messages(left, right, format="langchain-openai")
+    assert isinstance(result[0], HumanMessage)
+    assert result[0].content == "prior"
+    assert isinstance(result[1], AIMessage)
+    # formatter collapses the tool_use content block into `tool_calls`
+    assert result[1].content == ""
+    assert len(result[1].tool_calls) == 1
+    assert result[1].tool_calls[0]["name"] == "foo"
+    assert result[1].tool_calls[0]["args"] == {"bar": "baz"}
+    assert result[1].tool_calls[0]["id"] == "t1"
+
+
+def test_fast_path_rejects_invalid_format():
+    """Pure-append fast path must validate the `format` arg like the slow path."""
+    left = [HumanMessage(content="prior", id="1")]
+    right = [AIMessage(content="new", id="2")]
+    with pytest.raises(ValueError, match="Unrecognized format="):
+        add_messages(left, right, format="bogus")  # type: ignore[arg-type]
+
+
+def test_left_starting_with_chunk_is_normalized():
+    """Opt-1 guard: a `BaseMessageChunk` at left[0] must trigger full conversion."""
+    chunk = AIMessageChunk(content="chunk", id="c1")
+    result = add_messages([chunk], [HumanMessage(content="h", id="h1")])
+    assert len(result) == 2
+    # chunk must be converted to a non-chunk message
+    assert type(result[0]).__name__ == "AIMessage"
+    assert result[0].id == "c1"
+    assert result[1].id == "h1"
+
+
+def test_left_as_dicts_is_normalized():
+    """Opt-1 guard: dicts at left[0] must trigger full conversion."""
+    left = [{"role": "user", "content": "hi", "id": "d1"}]
+    right = [AIMessage(content="reply", id="a1")]
+    result = add_messages(left, right)
+    assert len(result) == 2
+    assert isinstance(result[0], HumanMessage)
+    assert result[0].id == "d1"
+    assert result[0].content == "hi"
+
+
+def test_left_as_tuples_is_normalized():
+    """Opt-1 guard: tuple-form messages must trigger full conversion."""
+    left = [("user", "hi")]
+    right = [AIMessage(content="reply", id="a1")]
+    result = add_messages(left, right)
+    assert len(result) == 2
+    assert isinstance(result[0], HumanMessage)
+    # id is auto-assigned
+    assert isinstance(result[0].id, str) and UUID(result[0].id, version=4)
+
+
+def test_left_first_msg_missing_id_is_normalized():
+    """Opt-1 guard: a BaseMessage without an id at left[0] falls to the else branch."""
+    left = [HumanMessage(content="hi")]  # no id
+    right = [AIMessage(content="reply", id="a1")]
+    result = add_messages(left, right)
+    assert len(result) == 2
+    # left's id must have been auto-assigned
+    assert isinstance(result[0].id, str) and UUID(result[0].id, version=4)
+
+
+def test_duplicate_ids_in_right_with_nonempty_left():
+    """Opt-2 guard: intra-right duplicate ids must take slow path (dedup kept)."""
+    left = [HumanMessage(content="prior", id="1")]
+    right = [
+        AIMessage(content="first", id="2"),
+        AIMessage(content="second", id="2"),
+    ]
+    result = add_messages(left, right)
+    assert len(result) == 2
+    assert result[0].id == "1"
+    assert result[1].id == "2"
+    assert result[1].content == "second"
+
+
+def test_right_with_none_ids_pure_append():
+    """Fast path still correct when right entries start with id=None (fresh uuids assigned)."""
+    left = [HumanMessage(content="prior", id="1")]
+    right = [AIMessage(content="a"), AIMessage(content="b")]
+    result = add_messages(left, right)
+    assert len(result) == 3
+    assert result[0].id == "1"
+    for m in result[1:]:
+        assert isinstance(m.id, str) and UUID(m.id, version=4)
+    # fresh uuids must be distinct
+    assert result[1].id != result[2].id
+
+
+def test_fast_path_returns_fresh_list():
+    """Fast path must return a new list object (not mutate or alias left)."""
+    left = [HumanMessage(content="prior", id="1")]
+    right = [AIMessage(content="new", id="2")]
+    result = add_messages(left, right)
+    assert result is not left
+    # left must be untouched
+    assert len(left) == 1
+    assert left[0].id == "1"
 
 
 def test_push_messages_in_graph():
