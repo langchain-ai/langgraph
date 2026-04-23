@@ -1,4 +1,3 @@
-import dataclasses
 from collections.abc import Sequence
 from typing import (
     Any,
@@ -32,39 +31,6 @@ class _DeltaSentinel:
 
 
 DELTA_SENTINEL = _DeltaSentinel()
-
-
-class _SeedUnset:
-    """Marker used as the default for `DeltaChannelWrites.seed`.
-
-    Distinct from `None`, which is a legitimate pre-delta value
-    (e.g. an `Optional` field whose accumulated value really was `None`).
-    """
-
-    __slots__ = ()
-
-    def __repr__(self) -> str:
-        return "SEED_UNSET"
-
-
-SEED_UNSET = _SeedUnset()
-
-
-@dataclasses.dataclass
-class DeltaChannelWrites:
-    """In-memory wrapper around per-step writes reconstructed by a saver.
-    Consumed by `DeltaChannel.from_checkpoint`. Never serialized — if this
-    reaches the wire, something upstream forgot to unwrap it.
-
-    `seed` is the value from which chain replay should begin. When the saver
-    encounters a pre-delta blob during the ancestor walk, it uses that blob
-    as the seed and stops walking further back (the older chain is
-    represented by the seed). `SEED_UNSET` means "no seed — replay from the
-    channel's empty value".
-    """
-
-    writes: list[Any]
-    seed: Any = SEED_UNSET
 
 
 Value = TypeVar("Value", covariant=True)

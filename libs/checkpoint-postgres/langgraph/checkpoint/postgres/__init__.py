@@ -8,12 +8,12 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
-    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    _ChannelWritesHistory,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
@@ -185,7 +185,7 @@ class PostgresSaver(BasePostgresSaver):
                             value["channel_values"],
                         )
             for value in values:
-                yield self._load_checkpoint_tuple(value, cur)
+                yield self._load_checkpoint_tuple(value)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database.
@@ -256,7 +256,7 @@ class PostgresSaver(BasePostgresSaver):
                         value["channel_values"],
                     )
 
-            return self._load_checkpoint_tuple(value, cur)
+            return self._load_checkpoint_tuple(value)
 
     def put(
         self,
@@ -436,45 +436,40 @@ class PostgresSaver(BasePostgresSaver):
                 with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    def _reconstruct_delta_channel(
-        self,
-        *,
-        thread_id: str,
-        checkpoint_ns: str,
-        channel: str,
-        target_id: str,
-        cur: Cursor[DictRow],
-    ) -> Any:
-        """Run the three reconstruction SELECTs and assemble `DeltaChannelWrites`.
+    def _get_channel_writes_history(
+        self, config: RunnableConfig, channel: str
+    ) -> _ChannelWritesHistory:
+        """Fast-path override of `BaseCheckpointSaver._get_channel_writes_history`.
 
         Three indexed roundtrips (`checkpoints`, `checkpoint_writes`,
         `checkpoint_blobs`) each filtered by `(thread_id, checkpoint_ns)` and
         the per-table key. Plain SELECTs let the planner pick straight index
         scans; rationale + benchmark in `notes/delta_channel_query_bench.md`.
         """
-        cur.execute(SELECT_DELTA_PARENTS_SQL, (channel, thread_id, checkpoint_ns))
-        parents_rows = cur.fetchall()
-        cur.execute(SELECT_DELTA_WRITES_SQL, (thread_id, checkpoint_ns, channel))
-        writes_rows = cur.fetchall()
-        cur.execute(SELECT_DELTA_BLOBS_SQL, (thread_id, checkpoint_ns, channel))
-        blobs_rows = cur.fetchall()
-        return self._build_delta_channel_writes(
-            target_id=target_id,
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = config["configurable"]["checkpoint_id"]
+        with self._cursor() as cur:
+            cur.execute(SELECT_DELTA_PARENTS_SQL, (channel, thread_id, checkpoint_ns))
+            parents_rows = cur.fetchall()
+            cur.execute(SELECT_DELTA_WRITES_SQL, (thread_id, checkpoint_ns, channel))
+            writes_rows = cur.fetchall()
+            cur.execute(SELECT_DELTA_BLOBS_SQL, (thread_id, checkpoint_ns, channel))
+            blobs_rows = cur.fetchall()
+        return self._build_delta_channel_writes_history(
+            channel=channel,
+            target_id=checkpoint_id,
             parents_rows=parents_rows,
             writes_rows=writes_rows,
             blobs_rows=blobs_rows,
         )
 
-    def _load_checkpoint_tuple(
-        self, value: DictRow, cur: Cursor[DictRow]
-    ) -> CheckpointTuple:
+    def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
         """
         Convert a database row into a CheckpointTuple object.
 
         Args:
             value: A row from the database containing checkpoint data.
-            cur: The cursor used by the caller; reused for DeltaChannel
-                 reconstruction to avoid acquiring `self.lock` a second time.
 
         Returns:
             CheckpointTuple: A structured representation of the checkpoint,
@@ -482,15 +477,6 @@ class PostgresSaver(BasePostgresSaver):
             and pending writes.
         """
         channel_values = self._load_blobs(value["channel_values"])
-        delta_channels = [ch for ch, v in channel_values.items() if v is DELTA_SENTINEL]
-        for channel in delta_channels:
-            channel_values[channel] = self._reconstruct_delta_channel(
-                thread_id=value["thread_id"],
-                checkpoint_ns=value["checkpoint_ns"],
-                channel=channel,
-                target_id=value["checkpoint_id"],
-                cur=cur,
-            )
         return CheckpointTuple(
             {
                 "configurable": {

@@ -12,7 +12,8 @@ from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
-    DeltaChannelWrites,
+    PendingWrite,
+    _ChannelWritesHistory,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS
@@ -223,15 +224,16 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                 result[k.decode()] = self.serde.loads_typed((type_tag, v))
         return result
 
-    def _build_delta_channel_writes(
+    def _build_delta_channel_writes_history(
         self,
         *,
+        channel: str,
         target_id: str,
         parents_rows: Sequence[Any],
         writes_rows: Sequence[Any],
         blobs_rows: Sequence[Any],
-    ) -> DeltaChannelWrites:
-        """Reconstruct one delta channel from rows of the three SELECTs.
+    ) -> _ChannelWritesHistory:
+        """Reconstruct one delta channel's history from rows of the three SELECTs.
 
         Pure data transform shared by sync (`PostgresSaver`) and async
         (`AsyncPostgresSaver`); both paths run the queries themselves and
@@ -239,8 +241,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
         Walk is newest → oldest from the target's parent. A non-sentinel
         blob in `checkpoint_blobs` (a pre-delta snapshot) terminates the
-        walk and is bound as `DeltaChannelWrites.seed` so replay starts
-        from it.
+        walk and is returned as the seed so replay starts from it.
 
         Writes stored at `target_id` itself are pending writes for the next
         step and are excluded — the walk begins at the target's parent.
@@ -258,7 +259,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             ancestors.append(cid)
             cid = parent_of.get(cid)
         if not ancestors:
-            return DeltaChannelWrites(writes=[])
+            return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
         ancestor_set = set(ancestors)
 
         # Group writes by ancestor cid; sort within (task_id DESC, idx DESC)
@@ -278,9 +279,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             r["version"]: (r["type"], r["blob"]) for r in blobs_rows
         }
 
-        collected: list[Any] = []  # newest first; reversed at the end
-        seed: Any = None
-        found_seed = False
+        collected: list[PendingWrite] = []  # newest first; reversed at the end
         for cid in ancestors:
             # Pre-delta blob terminator: subsumes any writes at this ancestor.
             ver = ver_of.get(cid)
@@ -289,17 +288,14 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                 if seed_blob is not None and seed_blob[0] != "empty":
                     blob_value = self.serde.loads_typed(seed_blob)
                     if blob_value is not DELTA_SENTINEL:
-                        seed = blob_value
-                        found_seed = True
-                        break
-            for type_tag, write_blob, _task_id, _idx in writes_by_cid.get(cid, []):
+                        collected.reverse()
+                        return _ChannelWritesHistory(seed=blob_value, writes=collected)
+            for type_tag, write_blob, task_id, _idx in writes_by_cid.get(cid, []):
                 val = self.serde.loads_typed((type_tag, write_blob))
-                collected.append(val)
+                collected.append((task_id, channel, val))
 
         collected.reverse()  # oldest → newest
-        if found_seed:
-            return DeltaChannelWrites(writes=collected, seed=seed)
-        return DeltaChannelWrites(writes=collected)
+        return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)
 
     def _dump_blobs(
         self,

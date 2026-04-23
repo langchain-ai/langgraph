@@ -331,9 +331,7 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
     # ── Table 2: Read latency ─────────────────────────────────────────────────
     print("Read latency (avg of 5 get_state calls)")
     print("=" * W)
-    print(
-        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}"
-    )
+    print(f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}")
     print("-" * W)
     for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
         print(
@@ -346,15 +344,15 @@ def _run_benchmark_for_checkpointer(cp_hint: Any) -> None:
     # ── Table 3: Per-invoke latency (total write_elapsed / turns) ─────────────
     print("Per-invoke latency (total graph.invoke time / turns)")
     print("=" * W)
-    print(
-        f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}"
-    )
+    print(f"{'turns':>6}  {'ctx size':>10}  {'add_msgs':>12}  {'delta':>12}")
     print("-" * W)
     for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
+
         def _per(wt: Any) -> str:
             if wt is None:
                 return "n/a"
             return f"{(wt / turns) * 1000:.1f}ms"
+
         print(
             f"{turns:>6}  {_approx_tokens(turns):>10}  "
             f"{_per(b_wt):>12}  {_per(d_wt):>12}"
