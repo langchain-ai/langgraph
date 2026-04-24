@@ -4,7 +4,7 @@ import dataclasses
 import logging
 import sys
 import types
-from collections import deque
+from collections import abc, deque
 from enum import Enum
 from typing import (
     Annotated,
@@ -157,7 +157,22 @@ def _collect_from_type(
     if origin is Literal:
         return
 
-    if origin in (list, set, tuple, dict, deque, frozenset):
+    if origin in (
+        list,
+        set,
+        tuple,
+        dict,
+        deque,
+        frozenset,
+        abc.Collection,
+        abc.Iterable,
+        abc.Mapping,
+        abc.MutableMapping,
+        abc.MutableSequence,
+        abc.MutableSet,
+        abc.Sequence,
+        abc.Set,
+    ):
         for arg in get_args(typ):
             _collect_from_type(arg, allowlist, seen, seen_ids)
         return
@@ -228,13 +243,19 @@ def _safe_get_type_hints(typ: Any) -> dict[str, Any]:
 def _is_pydantic_model(typ: Any) -> bool:
     if not isinstance(typ, type):
         return False
-    if issubclass(typ, BaseModel):
-        return True
+    try:
+        if issubclass(typ, BaseModel):
+            return True
+    except TypeError:
+        return False
     try:
         from pydantic.v1 import BaseModel as BaseModelV1
     except Exception:
         return False
-    return issubclass(typ, BaseModelV1)
+    try:
+        return issubclass(typ, BaseModelV1)
+    except TypeError:
+        return False
 
 
 def _pydantic_field_types(typ: type[Any]) -> list[Any]:
