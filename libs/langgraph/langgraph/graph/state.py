@@ -619,10 +619,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             timeout: Maximum wall-clock duration for a single invocation of this
                 node, in seconds (or as a `timedelta`). When exceeded, a
                 [`NodeTimeoutError`][langgraph.errors.NodeTimeoutError] is raised
-                and the retry policy (if any) decides whether to retry. For
-                synchronous nodes, timing out does not preempt arbitrary user
-                code, so external side effects may continue in a background
-                thread until that code returns.
+                and the retry policy (if any) decides whether to retry. Timeouts
+                are supported only for async nodes; sync nodes cannot be safely
+                cancelled in-process.
 
         Example:
             ```python

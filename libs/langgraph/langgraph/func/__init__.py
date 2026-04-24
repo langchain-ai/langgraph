@@ -23,7 +23,8 @@ from typing_extensions import Unpack
 
 from langgraph._internal import _serde
 from langgraph._internal._constants import CACHE_NS_WRITES, PREVIOUS
-from langgraph._internal._timeout import validate_timeout
+from langgraph._internal._runnable import is_async_callable
+from langgraph._internal._timeout import SYNC_TIMEOUT_UNSUPPORTED, validate_timeout
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
@@ -151,6 +152,7 @@ def task(
         cache_policy: An optional cache policy to use for the task. This allows caching of the task results.
         timeout: Maximum wall-clock duration for a single task attempt, in seconds
             (or as a `timedelta`). If exceeded, `NodeTimeoutError` is raised.
+            Supported only for async tasks.
 
     Returns:
         A callable function when used as a decorator.
@@ -218,6 +220,9 @@ def task(
     def decorator(
         func: Callable[P, Awaitable[T]] | Callable[P, T],
     ) -> Callable[P, SyncAsyncFuture[T]]:
+        if timeout is not None and not is_async_callable(func):
+            name_ = name or getattr(func, "__name__", func.__class__.__name__)
+            raise ValueError(f"{SYNC_TIMEOUT_UNSUPPORTED} Task {name_!r} is sync.")
         return _TaskFunction(
             func,
             retry_policy=retry_policies,

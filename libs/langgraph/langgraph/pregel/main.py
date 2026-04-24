@@ -139,7 +139,7 @@ from langgraph.pregel._messages import StreamMessagesHandler
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
-from langgraph.pregel._utils import get_new_channel_versions
+from langgraph.pregel._utils import get_new_channel_versions, validate_timeout_supported
 from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
@@ -828,6 +828,9 @@ class Pregel(
         )
 
     def validate(self) -> Self:
+        for name, node in self.nodes.items():
+            if node.timeout is not None:
+                validate_timeout_supported(node.bound, name=name)
         validate_graph(
             self.nodes,
             {k: v for k, v in self.channels.items() if isinstance(v, BaseChannel)},

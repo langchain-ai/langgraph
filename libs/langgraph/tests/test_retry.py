@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 import pytest
+from langchain_core.runnables import RunnableLambda
 from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 
@@ -626,55 +627,89 @@ def test_timeout_seconds_coercion():
         timeout_seconds(timedelta())
 
 
-def test_run_with_retry_timeout_fires_sync():
-    """Sync node that runs too long raises NodeTimeoutError with node name."""
+def test_run_with_retry_rejects_sync_timeout_without_starting_proc():
+    started = False
 
-    class SlowProc:
+    class Proc:
         def invoke(self, input, config):
-            time.sleep(1.0)
+            nonlocal started
+            started = True
             return input
 
-    task = _make_task(SlowProc(), timeout=0.05, name="slow")
-    with pytest.raises(NodeTimeoutError) as excinfo:
+    task = _make_task(Proc(), timeout=0.05, name="sync")
+
+    with pytest.raises(ValueError, match="only supported for async nodes"):
         run_with_retry(task, retry_policy=None)
-    assert excinfo.value.node == "slow"
-    assert excinfo.value.elapsed >= 0.05
+    assert not started
 
 
-def test_run_with_retry_timeout_ok_when_fast():
-    """Node that finishes under the timeout succeeds normally."""
+def test_arun_with_retry_rejects_sync_timeout_without_starting_proc():
+    started = False
 
+    class Proc:
+        def invoke(self, input, config):
+            nonlocal started
+            started = True
+            return input
+
+    task = _make_task(Proc(), timeout=0.05, name="sync")
+
+    async def _run() -> None:
+        with pytest.raises(ValueError, match="only supported for async nodes"):
+            await arun_with_retry(task, retry_policy=None)
+
+    asyncio.run(_run())
+    assert not started
+
+
+def test_arun_with_retry_stream_rejects_sync_runnable_lambda_timeout():
+    started = False
+
+    def proc(input):
+        nonlocal started
+        started = True
+        return input
+
+    task = _make_task(RunnableLambda(proc), timeout=0.05, name="sync-lambda")
+
+    async def _run() -> None:
+        with pytest.raises(ValueError, match="only supported for async nodes"):
+            await arun_with_retry(task, retry_policy=None, stream=True)
+
+    asyncio.run(_run())
+    assert not started
+
+
+def test_run_with_retry_without_timeout_runs_sync_directly():
     class FastProc:
         def invoke(self, input, config):
             return "ok"
 
-    task = _make_task(FastProc(), timeout=1.0)
+    task = _make_task(FastProc(), timeout=None)
     assert run_with_retry(task, retry_policy=None) == "ok"
 
 
-def test_run_with_retry_timeout_preserves_contextvars():
-    import contextvars
+def test_arun_with_retry_timeout_ok_when_fast():
+    class FastProc:
+        async def ainvoke(self, input, config):
+            return "ok"
 
-    request_id = contextvars.ContextVar("request_id", default="missing")
-    request_id.set("req-123")
+    task = _make_task(FastProc(), timeout=1.0)
 
-    class Proc:
-        def invoke(self, input, config):
-            return request_id.get()
+    async def _run() -> None:
+        assert await arun_with_retry(task, retry_policy=None) == "ok"
 
-    task = _make_task(Proc(), timeout=1.0)
-    assert run_with_retry(task, retry_policy=None) == "req-123"
+    asyncio.run(_run())
 
 
-def test_run_with_retry_timeout_retries_when_retry_on_timeout():
-    """With retry_policy.retry_on=NodeTimeoutError, a timed-out attempt is retried."""
+def test_arun_with_retry_timeout_retries_when_retry_on_timeout():
     calls: list[float] = []
 
     class FlakyProc:
-        def invoke(self, input, config):
+        async def ainvoke(self, input, config):
             calls.append(time.monotonic())
             if len(calls) < 2:
-                time.sleep(0.5)
+                await asyncio.sleep(0.5)
                 return "late"
             return "ok"
 
@@ -685,54 +720,12 @@ def test_run_with_retry_timeout_retries_when_retry_on_timeout():
         retry_on=NodeTimeoutError,
     )
     task = _make_task(FlakyProc(), timeout=0.05, retry_policy=(policy,))
-    assert run_with_retry(task, retry_policy=None) == "ok"
-    assert len(calls) == 2
 
+    async def _run() -> None:
+        assert await arun_with_retry(task, retry_policy=None) == "ok"
+        assert len(calls) == 2
 
-def test_run_with_retry_timeout_discards_stale_sync_writes():
-    release_first_attempt = threading.Event()
-
-    class FlakyProc:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        def invoke(self, input, config):
-            self.calls += 1
-            if self.calls == 1:
-                release_first_attempt.wait(timeout=1.0)
-                config[CONF][CONFIG_KEY_SEND]([("value", "stale")])
-                return "late"
-            release_first_attempt.set()
-            config[CONF][CONFIG_KEY_SEND]([("value", "fresh")])
-            return "ok"
-
-    policy = RetryPolicy(
-        max_attempts=2,
-        initial_interval=0.0,
-        jitter=False,
-        retry_on=NodeTimeoutError,
-    )
-    task = _make_task(FlakyProc(), timeout=0.05, retry_policy=(policy,))
-
-    assert run_with_retry(task, retry_policy=None) == "ok"
-    time.sleep(0.05)
-
-    assert task.writes == deque([("value", "fresh")])
-
-
-def test_run_with_retry_timeout_discards_pre_timeout_sync_writes():
-    class SlowWriterProc:
-        def invoke(self, input, config):
-            config[CONF][CONFIG_KEY_SEND]([("value", "stale-before-timeout")])
-            time.sleep(0.2)
-            return "late"
-
-    task = _make_task(SlowWriterProc(), timeout=0.05)
-
-    with pytest.raises(NodeTimeoutError):
-        run_with_retry(task, retry_policy=None)
-
-    assert task.writes == deque()
+    asyncio.run(_run())
 
 
 def test_entrypoint_timeout_allows_pre_timeout_child_task_to_run():
@@ -744,26 +737,32 @@ def test_entrypoint_timeout_allows_pre_timeout_child_task_to_run():
         return value + 1
 
     @entrypoint(timeout=0.05)
-    def parent(value: int) -> int:
+    async def parent(value: int) -> int:
         child(value)
-        time.sleep(0.2)
+        await asyncio.sleep(0.2)
         return value
 
-    with pytest.raises(NodeTimeoutError):
-        parent.invoke(1)
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError):
+            await parent.ainvoke(1)
 
+    asyncio.run(_run())
     assert child_started.wait(timeout=1.0)
 
 
-def test_run_with_retry_timeout_accepts_timedelta():
+def test_arun_with_retry_timeout_accepts_timedelta():
     class SlowProc:
-        def invoke(self, input, config):
-            time.sleep(0.5)
+        async def ainvoke(self, input, config):
+            await asyncio.sleep(0.5)
             return input
 
     task = _make_task(SlowProc(), timeout=timedelta(milliseconds=50))
-    with pytest.raises(NodeTimeoutError):
-        run_with_retry(task, retry_policy=None)
+
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError):
+            await arun_with_retry(task, retry_policy=None)
+
+    asyncio.run(_run())
 
 
 def test_arun_with_retry_timeout_fires_async():
@@ -924,11 +923,90 @@ def test_timeout_validation_is_eager_across_apis():
         builder.add_node("slow", lambda state: state, timeout=0)
 
 
-def test_state_graph_add_node_timeout_e2e():
-    """End-to-end: add_node(..., timeout=...) raises NodeTimeoutError on invoke."""
+def test_timeout_rejects_sync_functional_apis_at_declaration_time():
+    with pytest.raises(ValueError, match="only supported for async nodes"):
 
+        @task(timeout=0.05)
+        def sync_task(value: int) -> int:
+            return value
+
+    with pytest.raises(ValueError, match="only supported for async nodes"):
+
+        @entrypoint(timeout=0.05)
+        def sync_entrypoint(value: int) -> int:
+            return value
+
+
+def test_state_graph_compile_rejects_sync_node_timeout():
     def slow(state: _TimeoutState) -> _TimeoutState:
-        time.sleep(1.0)
+        return {"x": state["x"] + 1}
+
+    builder = StateGraph(_TimeoutState)
+    builder.add_node("slow", slow, timeout=0.05)
+    builder.add_edge(START, "slow")
+    builder.add_edge("slow", END)
+
+    with pytest.raises(ValueError, match="only supported for async nodes"):
+        builder.compile()
+
+
+def test_pregel_validate_rejects_sync_node_timeout():
+    def slow(value: int) -> int:
+        return value + 1
+
+    with pytest.raises(ValueError, match="only supported for async nodes"):
+        Pregel(
+            nodes={
+                "slow": (
+                    NodeBuilder()
+                    .subscribe_only("input")
+                    .do(slow)
+                    .set_timeout(0.05)
+                    .write_to("output")
+                )
+            },
+            channels={
+                "input": EphemeralValue(int),
+                "output": LastValue(int),
+            },
+            input_channels="input",
+            output_channels="output",
+        )
+
+
+def test_pregel_validate_accepts_async_runnable_lambda_timeout():
+    async def slow(value: int) -> int:
+        await asyncio.sleep(0.2)
+        return value + 1
+
+    graph = Pregel(
+        nodes={
+            "slow": (
+                NodeBuilder()
+                .subscribe_only("input")
+                .do(RunnableLambda(slow))
+                .set_timeout(0.05)
+                .write_to("output")
+            )
+        },
+        channels={
+            "input": EphemeralValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
+
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError):
+            await graph.ainvoke(1)
+
+    asyncio.run(_run())
+
+
+def test_state_graph_add_node_timeout_e2e():
+    async def slow(state: _TimeoutState) -> _TimeoutState:
+        await asyncio.sleep(1.0)
         return {"x": state["x"] + 1}
 
     builder = StateGraph(_TimeoutState)
@@ -937,8 +1015,11 @@ def test_state_graph_add_node_timeout_e2e():
     builder.add_edge("slow", END)
     graph = builder.compile()
 
-    with pytest.raises(NodeTimeoutError):
-        graph.invoke({"x": 1})
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError):
+            await graph.ainvoke({"x": 1})
+
+    asyncio.run(_run())
 
 
 def test_state_graph_add_node_timeout_composes_with_retry():
@@ -946,10 +1027,10 @@ def test_state_graph_add_node_timeout_composes_with_retry():
 
     attempts: list[int] = []
 
-    def flaky(state: _TimeoutState) -> _TimeoutState:
+    async def flaky(state: _TimeoutState) -> _TimeoutState:
         attempts.append(len(attempts))
         if len(attempts) < 2:
-            time.sleep(0.5)
+            await asyncio.sleep(0.5)
         return {"x": state["x"] + 1}
 
     builder = StateGraph(_TimeoutState)
@@ -968,38 +1049,47 @@ def test_state_graph_add_node_timeout_composes_with_retry():
     builder.add_edge("flaky", END)
     graph = builder.compile()
 
-    result = graph.invoke({"x": 0})
-    assert result == {"x": 1}
-    assert len(attempts) == 2
+    async def _run() -> None:
+        result = await graph.ainvoke({"x": 0})
+        assert result == {"x": 1}
+        assert len(attempts) == 2
+
+    asyncio.run(_run())
 
 
 def test_task_decorator_timeout_e2e():
     @task(timeout=0.05)
-    def slow_task(x: int) -> int:
-        time.sleep(0.2)
+    async def slow_task(x: int) -> int:
+        await asyncio.sleep(0.2)
         return x + 1
 
     @entrypoint()
-    def workflow(x: int) -> int:
-        return slow_task(x).result()
+    async def workflow(x: int) -> int:
+        return await slow_task(x)
 
-    with pytest.raises(NodeTimeoutError):
-        workflow.invoke(1)
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError):
+            await workflow.ainvoke(1)
+
+    asyncio.run(_run())
 
 
 def test_entrypoint_timeout_e2e():
     @entrypoint(timeout=0.05)
-    def slow_workflow(x: int) -> int:
-        time.sleep(0.2)
+    async def slow_workflow(x: int) -> int:
+        await asyncio.sleep(0.2)
         return x
 
-    with pytest.raises(NodeTimeoutError):
-        slow_workflow.invoke(1)
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError):
+            await slow_workflow.ainvoke(1)
+
+    asyncio.run(_run())
 
 
 def test_node_builder_timeout_e2e():
-    def slow(value: int) -> int:
-        time.sleep(0.2)
+    async def slow(value: int) -> int:
+        await asyncio.sleep(0.2)
         return value + 1
 
     graph = Pregel(
@@ -1020,18 +1110,21 @@ def test_node_builder_timeout_e2e():
         output_channels="output",
     )
 
-    with pytest.raises(NodeTimeoutError):
-        graph.invoke(1)
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError):
+            await graph.ainvoke(1)
+
+    asyncio.run(_run())
 
 
-def test_run_with_retry_timeout_observer_tracks_attempts():
+def test_arun_with_retry_timeout_observer_tracks_attempts():
     events: list[dict] = []
 
     class FlakyProc:
-        def invoke(self, input, config):
+        async def ainvoke(self, input, config):
             runtime = config[CONF][CONFIG_KEY_RUNTIME]
             if runtime.execution_info.node_attempt == 1:
-                time.sleep(0.2)
+                await asyncio.sleep(0.2)
             return "ok"
 
     policy = RetryPolicy(
@@ -1043,7 +1136,10 @@ def test_run_with_retry_timeout_observer_tracks_attempts():
     task = _make_task(FlakyProc(), timeout=0.05, retry_policy=(policy,), name="flaky")
     task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
 
-    assert run_with_retry(task, retry_policy=None) == "ok"
+    async def _run() -> None:
+        assert await arun_with_retry(task, retry_policy=None) == "ok"
+
+    asyncio.run(_run())
 
     starts = [payload for payload in events if payload["event"] == "start"]
     finishes = [payload for payload in events if payload["event"] == "finish"]
@@ -1059,18 +1155,21 @@ def test_run_with_retry_timeout_observer_tracks_attempts():
     assert starts[0]["deadline_at"] > starts[0]["started_at"]
 
 
-def test_run_with_retry_timeout_observer_treats_parent_command_as_non_error():
+def test_arun_with_retry_timeout_observer_treats_parent_command_as_non_error():
     events: list[dict] = []
 
     class ParentProc:
-        def invoke(self, input, config):
+        async def ainvoke(self, input, config):
             raise ParentCommand(Command(graph=Command.PARENT))
 
     task = _make_task(ParentProc(), timeout=0.05, name="parent")
     task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
 
-    with pytest.raises(ParentCommand):
-        run_with_retry(task, retry_policy=None)
+    async def _run() -> None:
+        with pytest.raises(ParentCommand):
+            await arun_with_retry(task, retry_policy=None)
+
+    asyncio.run(_run())
 
     finish = next(payload for payload in events if payload["event"] == "finish")
     assert finish["status"] == "success"
@@ -1078,11 +1177,11 @@ def test_run_with_retry_timeout_observer_treats_parent_command_as_non_error():
     assert finish["error_message"] is None
 
 
-def test_run_with_retry_timeout_observer_finishes_when_parent_writer_errors():
+def test_arun_with_retry_timeout_observer_finishes_when_parent_writer_errors():
     events: list[dict] = []
 
     class ParentProc:
-        def invoke(self, input, config):
+        async def ainvoke(self, input, config):
             raise ParentCommand(Command(graph="parent", update={"value": "updated"}))
 
     class FailingWriter:
@@ -1094,8 +1193,11 @@ def test_run_with_retry_timeout_observer_finishes_when_parent_writer_errors():
     )
     task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
 
-    with pytest.raises(ValueError, match="writer failed"):
-        run_with_retry(task, retry_policy=None)
+    async def _run() -> None:
+        with pytest.raises(ValueError, match="writer failed"):
+            await arun_with_retry(task, retry_policy=None)
+
+    asyncio.run(_run())
 
     finish = next(payload for payload in events if payload["event"] == "finish")
     assert finish["status"] == "error"

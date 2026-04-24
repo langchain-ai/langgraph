@@ -128,7 +128,7 @@ class PregelNode:
     timeout: float | timedelta | None
     """Maximum time in seconds (or a timedelta) allowed for a single invocation
     of this node. If exceeded, `NodeTimeoutError` is raised and the retry policy
-    (if any) decides whether to retry."""
+    (if any) decides whether to retry. Supported only for async nodes."""
 
     tags: Sequence[str] | None
     """Tags to attach to the node for tracing."""

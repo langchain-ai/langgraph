@@ -4,7 +4,7 @@ import ast
 import inspect
 import re
 import textwrap
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
@@ -12,7 +12,13 @@ from langgraph.checkpoint.base import ChannelVersions
 from typing_extensions import override
 
 from langgraph._internal._runnable import RunnableCallable, RunnableSeq
+from langgraph._internal._timeout import SYNC_TIMEOUT_UNSUPPORTED
 from langgraph.pregel.protocol import PregelProtocol
+
+_SEQUENCE_TYPES = (RunnableSeq, RunnableSequence)
+_CALLABLE_TYPES = (RunnableCallable, RunnableLambda)
+_BASE_AINVOKE = Runnable.ainvoke
+_BASE_ASTREAM = Runnable.astream
 
 
 def get_new_channel_versions(
@@ -62,6 +68,80 @@ def find_subgraph_pregel(candidate: Runnable) -> PregelProtocol | None:
                 )
 
     return None
+
+
+def _sequence_steps(runnable: Runnable) -> Sequence[Runnable] | None:
+    if isinstance(runnable, _SEQUENCE_TYPES):
+        return runnable.steps
+    return None
+
+
+def _is_async_runnable_lambda(runnable: RunnableLambda) -> bool:
+    return not hasattr(runnable, "func") and hasattr(runnable, "afunc")
+
+
+def _overrides_ainvoke(runnable: Runnable) -> bool:
+    method = getattr(type(runnable), "ainvoke", None)
+    return method is not None and method is not _BASE_AINVOKE
+
+
+def _overrides_astream(runnable: Runnable) -> bool:
+    method = getattr(type(runnable), "astream", None)
+    return method is not None and method is not _BASE_ASTREAM
+
+
+def _has_native_async(runnable: Runnable) -> bool:
+    if isinstance(runnable, RunnableCallable):
+        return runnable.func is None and runnable.afunc is not None
+    if isinstance(runnable, RunnableLambda):
+        return _is_async_runnable_lambda(runnable)
+    return _overrides_ainvoke(runnable)
+
+
+def _has_native_astream(runnable: Runnable) -> bool:
+    if _has_native_async(runnable):
+        return True
+    if isinstance(runnable, _CALLABLE_TYPES):
+        return False
+    return _overrides_astream(runnable)
+
+
+def _primary_step(runnable: Runnable) -> Runnable | None:
+    while (steps := _sequence_steps(runnable)) is not None:
+        if not steps:
+            return None
+        runnable = steps[0]
+    return runnable
+
+
+def runnable_has_native_async(runnable: Runnable) -> bool:
+    """Return whether a runnable can be timed without running sync code."""
+
+    if (steps := _sequence_steps(runnable)) is not None:
+        for step in steps:
+            if not runnable_has_native_async(step):
+                return False
+        return True
+    return _has_native_async(runnable)
+
+
+def runnable_primary_has_native_async(runnable: Runnable) -> bool:
+    """Check only the user step of an assembled Pregel task runnable."""
+
+    return (primary := _primary_step(runnable)) is not None and _has_native_async(
+        primary
+    )
+
+
+def runnable_primary_has_native_astream(runnable: Runnable) -> bool:
+    return (primary := _primary_step(runnable)) is not None and _has_native_astream(
+        primary
+    )
+
+
+def validate_timeout_supported(runnable: Runnable, *, name: str) -> None:
+    if not runnable_has_native_async(runnable):
+        raise ValueError(f"{SYNC_TIMEOUT_UNSUPPORTED} Node {name!r} is sync.")
 
 
 def get_function_nonlocals(func: Callable) -> list[Any]:

@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+SYNC_TIMEOUT_UNSUPPORTED = (
+    "Node timeouts are only supported for async nodes because sync Python "
+    "execution cannot be safely cancelled in-process."
+)
+
 
 def validate_timeout(value: float | timedelta | None) -> float | timedelta | None:
     if value is None:
