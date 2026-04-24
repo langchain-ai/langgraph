@@ -874,6 +874,15 @@ class Pregel(
 
     def copy(self, update: dict[str, Any] | None = None) -> Self:
         attrs = {k: v for k, v in self.__dict__.items() if k != "__orig_class__"}
+        # ``__init__`` accepts ``stream_transformers`` (public parameter) but
+        # the attribute is stored as ``_stream_transformers`` (private). Map
+        # the private key back onto the public kwarg so compile-time
+        # transformers survive ``copy()`` / ``with_config()``. Without this,
+        # ``_stream_transformers`` gets captured by ``**deprecated_kwargs``
+        # and the resulting instance silently has an empty transformer
+        # pipeline.
+        if "_stream_transformers" in attrs:
+            attrs["stream_transformers"] = attrs.pop("_stream_transformers")
         attrs.update(update or {})
         return self.__class__(**attrs)
 
