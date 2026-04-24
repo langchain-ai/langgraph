@@ -23,7 +23,13 @@ def _empty(typ: Any) -> Any:
 
 
 class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
-    """A channel that stores only a sentinel in checkpoints; per-step writes are
+    """Experimental — private API, subject to change or removal without notice.
+
+    Imported from the underscored module `langgraph.channels._delta` on purpose;
+    not re-exported from `langgraph.channels`. Intended for internal use only
+    while we validate the design on real workloads.
+
+    A channel that stores only a sentinel in checkpoints; per-step writes are
     stored in checkpoint_writes and replayed through the operator at load time.
 
     Use with append-style reducers (e.g. `add_messages`) on long-running threads
@@ -35,6 +41,8 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     a follow-up — today, use this on threads of a few hundred turns.
 
     Usage::
+
+        from langgraph.channels._delta import DeltaChannel
 
         class State(TypedDict):
             messages: Annotated[list[AnyMessage], DeltaChannel(add_messages)]

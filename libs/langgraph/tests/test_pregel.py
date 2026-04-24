@@ -9407,7 +9407,7 @@ async def test_delta_channel_end_to_end_inmemory() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels.delta import DeltaChannel
+    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9449,7 +9449,7 @@ async def test_delta_channel_time_travel() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels.delta import DeltaChannel
+    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9507,7 +9507,7 @@ async def test_delta_channel_remove_message_end_to_end() -> None:
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels.delta import DeltaChannel
+    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9554,7 +9554,7 @@ async def test_delta_channel_update_by_id_end_to_end() -> None:
     from langchain_core.messages import HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels.delta import DeltaChannel
+    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
