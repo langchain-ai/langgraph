@@ -13,6 +13,8 @@ from langchain_core.language_models.chat_model_stream import (
     ChatModelStream,
 )
 from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.runnables import RunnableConfig
+from typing_extensions import TypedDict
 
 from langgraph.constants import END, START
 from langgraph.graph import MessagesState, StateGraph
@@ -749,6 +751,65 @@ class TestDirectMessagesModeStaysV1:
             == "legacy path"
         )
 
+    def test_nested_graph_stream_messages_stays_v1_under_outer_stream_v2(self) -> None:
+        """An outer `stream_v2()` run must not flip an inner direct
+        `stream_mode="messages"` call onto the v2 event protocol."""
+        model = GenericFakeChatModel(messages=iter(["nested legacy path"]))
+
+        def call_model(state: MessagesState) -> dict[str, Any]:
+            return {"messages": model.invoke(state["messages"])}
+
+        inner = (
+            StateGraph(MessagesState)
+            .add_node("call_model", call_model)
+            .add_edge(START, "call_model")
+            .add_edge("call_model", END)
+            .compile()
+        )
+
+        class OuterState(TypedDict, total=False):
+            saw_only_chunks: bool
+            first_payload_type: str
+            text: str
+
+        def call_subgraph(state: OuterState, config: RunnableConfig) -> dict[str, Any]:
+            parts = list(
+                inner.stream(
+                    {"messages": "hi"},
+                    config,
+                    stream_mode="messages",
+                )
+            )
+            assert parts
+            payloads = [payload for payload, _metadata in parts]
+            return {
+                "saw_only_chunks": all(
+                    isinstance(payload, AIMessageChunk) for payload in payloads
+                ),
+                "first_payload_type": type(payloads[0]).__name__,
+                "text": "".join(
+                    payload.content
+                    for payload in payloads
+                    if isinstance(payload, AIMessageChunk)
+                    and isinstance(payload.content, str)
+                ),
+            }
+
+        outer = (
+            StateGraph(OuterState)
+            .add_node("call_subgraph", call_subgraph)
+            .add_edge(START, "call_subgraph")
+            .add_edge("call_subgraph", END)
+            .compile()
+        )
+
+        result = outer.stream_v2({}).output
+
+        assert result is not None
+        assert result["saw_only_chunks"] is True
+        assert result["first_payload_type"] == "AIMessageChunk"
+        assert result["text"] == "nested legacy path"
+
 
 # ---------------------------------------------------------------------------
 # StreamMessagesHandlerV2 unit
@@ -776,3 +837,36 @@ class TestStreamMessagesHandlerV2Unit:
         )
 
         assert emitted == []
+
+    def test_on_llm_end_dedupes_when_final_message_id_differs(self) -> None:
+        """A streamed v2 message should not be emitted again from the final
+        AIMessage fallback when its final id does not match `message-start`."""
+        from uuid import uuid4
+
+        from langchain_core.outputs import ChatGeneration, LLMResult
+
+        from langgraph.pregel._messages import StreamMessagesHandlerV2
+
+        emitted: list[Any] = []
+        handler = StreamMessagesHandlerV2(emitted.append, subgraphs=False)
+        run_id = uuid4()
+        handler.metadata[run_id] = ((), {"langgraph_node": "x"})
+
+        handler.on_stream_event(
+            {"event": "message-start", "message_id": "stream-msg-1"},
+            run_id=run_id,
+        )
+        handler.on_llm_end(
+            LLMResult(
+                generations=[
+                    [
+                        ChatGeneration(
+                            message=AIMessage(content="hello", id="final-msg-1")
+                        )
+                    ]
+                ]
+            ),
+            run_id=run_id,
+        )
+
+        assert len(emitted) == 1

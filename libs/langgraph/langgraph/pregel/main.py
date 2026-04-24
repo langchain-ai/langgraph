@@ -2601,19 +2601,7 @@ class Pregel(
         stream = SyncQueue()
 
         config = ensure_config(self.config, config)
-        callback_manager = get_callback_manager_for_config(config)
-        if "ls_integration" not in callback_manager.metadata:
-            callback_manager.add_metadata({"ls_integration": "langgraph"})
-        run_manager = callback_manager.on_chain_start(
-            None,
-            input,
-            name=config.get("run_name", self.get_name()),
-            run_id=config.get("run_id"),
-        )
-        graph_callback_manager = get_sync_graph_callback_manager_for_config(
-            config,
-            run_id=run_manager.run_id,
-        )
+        run_manager = None
         try:
             # assign defaults
             (
@@ -2634,6 +2622,30 @@ class Pregel(
                 interrupt_after=interrupt_after,
                 durability=durability,
             )
+            callback_manager = get_callback_manager_for_config(config)
+            if "messages" in stream_modes and version != "v2":
+                callback_manager.handlers = [
+                    h
+                    for h in callback_manager.handlers
+                    if not isinstance(h, StreamMessagesHandler)
+                ]
+                callback_manager.inheritable_handlers = [
+                    h
+                    for h in callback_manager.inheritable_handlers
+                    if not isinstance(h, StreamMessagesHandler)
+                ]
+            if "ls_integration" not in callback_manager.metadata:
+                callback_manager.add_metadata({"ls_integration": "langgraph"})
+            run_manager = callback_manager.on_chain_start(
+                None,
+                input,
+                name=config.get("run_name", self.get_name()),
+                run_id=config.get("run_id"),
+            )
+            graph_callback_manager = get_sync_graph_callback_manager_for_config(
+                config,
+                run_id=run_manager.run_id,
+            )
             if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
@@ -2645,9 +2657,12 @@ class Pregel(
             # set up messages stream mode
             if "messages" in stream_modes:
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                use_stream_messages_v2 = bool(
+                    version == "v2" and config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
+                )
                 messages_handler_cls = (
                     StreamMessagesHandlerV2
-                    if config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
+                    if use_stream_messages_v2
                     else StreamMessagesHandler
                 )
                 run_manager.inheritable_handlers.append(
@@ -2828,7 +2843,8 @@ class Pregel(
             # set final channel values as run output
             run_manager.on_chain_end(loop.output)
         except BaseException as e:
-            run_manager.on_chain_error(e)
+            if run_manager is not None:
+                run_manager.on_chain_error(e)
             raise
 
     @overload
@@ -2968,33 +2984,7 @@ class Pregel(
         )
 
         config = ensure_config(self.config, config)
-        callback_manager = get_async_callback_manager_for_config(config)
-        if "ls_integration" not in callback_manager.metadata:
-            callback_manager.add_metadata({"ls_integration": "langgraph"})
-        run_manager = await callback_manager.on_chain_start(
-            None,
-            input,
-            name=config.get("run_name", self.get_name()),
-            run_id=config.get("run_id"),
-        )
-        graph_callback_manager = get_async_graph_callback_manager_for_config(
-            config,
-            run_id=run_manager.run_id,
-        )
-        # if running from astream_log() run each proc with streaming
-        do_stream = (
-            next(
-                (
-                    True
-                    for h in run_manager.handlers
-                    if isinstance(h, _StreamingCallbackHandler)
-                    and not isinstance(h, StreamMessagesHandler)
-                ),
-                False,
-            )
-            if _StreamingCallbackHandler is not None
-            else False
-        )
+        run_manager = None
         try:
             # assign defaults
             (
@@ -3015,6 +3005,44 @@ class Pregel(
                 interrupt_after=interrupt_after,
                 durability=durability,
             )
+            callback_manager = get_async_callback_manager_for_config(config)
+            if "messages" in stream_modes and version != "v2":
+                callback_manager.handlers = [
+                    h
+                    for h in callback_manager.handlers
+                    if not isinstance(h, StreamMessagesHandler)
+                ]
+                callback_manager.inheritable_handlers = [
+                    h
+                    for h in callback_manager.inheritable_handlers
+                    if not isinstance(h, StreamMessagesHandler)
+                ]
+            if "ls_integration" not in callback_manager.metadata:
+                callback_manager.add_metadata({"ls_integration": "langgraph"})
+            run_manager = await callback_manager.on_chain_start(
+                None,
+                input,
+                name=config.get("run_name", self.get_name()),
+                run_id=config.get("run_id"),
+            )
+            graph_callback_manager = get_async_graph_callback_manager_for_config(
+                config,
+                run_id=run_manager.run_id,
+            )
+            # if running from astream_log() run each proc with streaming
+            do_stream = (
+                next(
+                    (
+                        True
+                        for h in run_manager.handlers
+                        if isinstance(h, _StreamingCallbackHandler)
+                        and not isinstance(h, StreamMessagesHandler)
+                    ),
+                    False,
+                )
+                if _StreamingCallbackHandler is not None
+                else False
+            )
             if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
@@ -3027,9 +3055,12 @@ class Pregel(
             if "messages" in stream_modes:
                 # namespace can be None in a root level graph?
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                use_stream_messages_v2 = bool(
+                    version == "v2" and config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
+                )
                 messages_handler_cls = (
                     StreamMessagesHandlerV2
-                    if config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
+                    if use_stream_messages_v2
                     else StreamMessagesHandler
                 )
                 run_manager.inheritable_handlers.append(
@@ -3263,7 +3294,8 @@ class Pregel(
             # set final channel values as run output
             await run_manager.on_chain_end(loop.output)
         except BaseException as e:
-            await asyncio.shield(run_manager.on_chain_error(e))
+            if run_manager is not None:
+                await asyncio.shield(run_manager.on_chain_error(e))
             raise
 
     def stream_v2(

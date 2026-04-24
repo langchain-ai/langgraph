@@ -301,6 +301,53 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
         """
         # Intentionally empty: v2 handler does not forward v1 chunks.
 
+    def __init__(
+        self,
+        stream: Callable[[StreamChunk], None],
+        subgraphs: bool,
+        *,
+        parent_ns: tuple[str, ...] | None = None,
+    ) -> None:
+        super().__init__(stream, subgraphs, parent_ns=parent_ns)
+        self._streamed_run_ids: set[UUID] = set()
+
+    def on_llm_end(
+        self,
+        response: LLMResult,
+        *,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        if meta := self.metadata.get(run_id):
+            if response.generations and response.generations[0]:
+                gen = response.generations[0][0]
+                if isinstance(gen, ChatGeneration):
+                    if run_id in self._streamed_run_ids:
+                        if gen.message.id is None:
+                            gen.message.id = str(uuid4())
+                        self.seen.add(gen.message.id)
+                    else:
+                        self._emit(meta, gen.message, dedupe=True)
+        self._streamed_run_ids.discard(run_id)
+        self.metadata.pop(run_id, None)
+
+    def on_llm_error(
+        self,
+        error: BaseException,
+        *,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        self._streamed_run_ids.discard(run_id)
+        super().on_llm_error(
+            error,
+            run_id=run_id,
+            parent_run_id=parent_run_id,
+            **kwargs,
+        )
+
     def on_stream_event(
         self,
         event: dict[str, Any],
@@ -331,6 +378,7 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
             # (otherwise the messages projection double-counts: once
             # from streaming, once from the chain output).
             if event.get("event") == "message-start":
+                self._streamed_run_ids.add(run_id)
                 msg_id = event.get("message_id")
                 if msg_id:
                     self.seen.add(msg_id)
