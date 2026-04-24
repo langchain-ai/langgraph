@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc
 import dataclasses
 import logging
 import sys
@@ -157,7 +158,17 @@ def _collect_from_type(
     if origin is Literal:
         return
 
-    if origin in (list, set, tuple, dict, deque, frozenset):
+    if origin in (list, set, tuple, dict, deque, frozenset) or origin in (
+        collections.abc.Sequence,
+        collections.abc.MutableSequence,
+        collections.abc.Set,
+        collections.abc.MutableSet,
+        collections.abc.Mapping,
+        collections.abc.MutableMapping,
+        collections.abc.Iterable,
+        collections.abc.Iterator,
+        collections.abc.Collection,
+    ):
         for arg in get_args(typ):
             _collect_from_type(arg, allowlist, seen, seen_ids)
         return
