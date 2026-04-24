@@ -1,7 +1,9 @@
 import operator
 from collections.abc import Sequence
+from typing import Annotated
 
 import pytest
+from typing_extensions import NotRequired, Required
 
 from langgraph._internal._typing import MISSING
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -88,6 +90,17 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+@pytest.mark.parametrize("wrapper", [Required, NotRequired])
+def test_binop_strips_required_notrequired_wrappers(wrapper) -> None:
+    channel = BinaryOperatorAggregate(
+        wrapper[Annotated[int, operator.add]], operator.add
+    ).from_checkpoint(MISSING)
+
+    assert channel.get() == 0
+    assert channel.update([1, 2])
+    assert channel.get() == 3
 
 
 def test_untracked_value() -> None:
