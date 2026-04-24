@@ -134,8 +134,7 @@ class GraphRunStream:
     def output(self) -> dict[str, Any] | None:
         """Drive the run to completion and return the final state."""
         _drive_until_done(self._pump_next)
-        err = self._values_transformer.error
-        if err is not None:
+        if (err := self._values_transformer.error) is not None:
             raise err
         return self._values_transformer._latest
 
@@ -148,8 +147,7 @@ class GraphRunStream:
             BaseException: If the run ended with an error.
         """
         _drive_until_done(self._pump_next)
-        err = self._values_transformer.error
-        if err is not None:
+        if (err := self._values_transformer.error) is not None:
             raise err
         return self._values_transformer._interrupted
 
@@ -161,8 +159,7 @@ class GraphRunStream:
             BaseException: If the run ended with an error.
         """
         _drive_until_done(self._pump_next)
-        err = self._values_transformer.error
-        if err is not None:
+        if (err := self._values_transformer.error) is not None:
             raise err
         return self._values_transformer._interrupts
 
