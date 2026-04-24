@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NewType, Optional, Union
@@ -57,6 +58,9 @@ class NestedDataclass:
     inner: InnerDataclass
     items: list[InnerModel]
     mapping: dict[str, InnerDataclass]
+    abstract_items: Sequence[InnerDataclass]
+    abstract_mapping: Mapping[str, InnerModel]
+    iterable: Iterable[InnerDataclass]
     optional: InnerModel | None
     union: InnerDataclass | InnerModel
     queue: deque[InnerDataclass]
