@@ -73,6 +73,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_STREAM_MESSAGES_V2,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     ERROR,
@@ -133,7 +134,10 @@ from langgraph.pregel._loop import (
     AsyncPregelLoop,
     SyncPregelLoop,
 )
-from langgraph.pregel._messages import StreamMessagesHandler
+from langgraph.pregel._messages import (
+    StreamMessagesHandler,
+    StreamMessagesHandlerV2,
+)
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
@@ -338,6 +342,17 @@ class NodeBuilder:
             retry_policy=self._retry_policy,
             cache_policy=self._cache_policy,
         )
+
+
+_STREAM_V2_MODES: list[StreamMode] = [
+    "values",
+    "updates",
+    "messages",
+    "custom",
+    "checkpoints",
+    "tasks",
+    "debug",
+]
 
 
 class Pregel(
@@ -2586,19 +2601,7 @@ class Pregel(
         stream = SyncQueue()
 
         config = ensure_config(self.config, config)
-        callback_manager = get_callback_manager_for_config(config)
-        if "ls_integration" not in callback_manager.metadata:
-            callback_manager.add_metadata({"ls_integration": "langgraph"})
-        run_manager = callback_manager.on_chain_start(
-            None,
-            input,
-            name=config.get("run_name", self.get_name()),
-            run_id=config.get("run_id"),
-        )
-        graph_callback_manager = get_sync_graph_callback_manager_for_config(
-            config,
-            run_id=run_manager.run_id,
-        )
+        run_manager = None
         try:
             # assign defaults
             (
@@ -2619,6 +2622,36 @@ class Pregel(
                 interrupt_after=interrupt_after,
                 durability=durability,
             )
+            callback_manager = get_callback_manager_for_config(config)
+            if "messages" in stream_modes and version != "v2":
+                # Strip any inherited v2 messages handler so a v1 stream
+                # does not get routed through the content-block event
+                # protocol. Leave v1 handlers in place — an outer
+                # stream(stream_mode="messages", subgraphs=True) relies
+                # on its inheritable handler to observe events emitted
+                # by inner stream(stream_mode="messages") calls.
+                callback_manager.handlers = [
+                    h
+                    for h in callback_manager.handlers
+                    if not isinstance(h, StreamMessagesHandlerV2)
+                ]
+                callback_manager.inheritable_handlers = [
+                    h
+                    for h in callback_manager.inheritable_handlers
+                    if not isinstance(h, StreamMessagesHandlerV2)
+                ]
+            if "ls_integration" not in callback_manager.metadata:
+                callback_manager.add_metadata({"ls_integration": "langgraph"})
+            run_manager = callback_manager.on_chain_start(
+                None,
+                input,
+                name=config.get("run_name", self.get_name()),
+                run_id=config.get("run_id"),
+            )
+            graph_callback_manager = get_sync_graph_callback_manager_for_config(
+                config,
+                run_id=run_manager.run_id,
+            )
             if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
@@ -2630,8 +2663,16 @@ class Pregel(
             # set up messages stream mode
             if "messages" in stream_modes:
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                use_stream_messages_v2 = bool(
+                    version == "v2" and config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
+                )
+                messages_handler_cls = (
+                    StreamMessagesHandlerV2
+                    if use_stream_messages_v2
+                    else StreamMessagesHandler
+                )
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(
+                    messages_handler_cls(
                         stream.put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
@@ -2808,7 +2849,8 @@ class Pregel(
             # set final channel values as run output
             run_manager.on_chain_end(loop.output)
         except BaseException as e:
-            run_manager.on_chain_error(e)
+            if run_manager is not None:
+                run_manager.on_chain_error(e)
             raise
 
     @overload
@@ -2948,33 +2990,7 @@ class Pregel(
         )
 
         config = ensure_config(self.config, config)
-        callback_manager = get_async_callback_manager_for_config(config)
-        if "ls_integration" not in callback_manager.metadata:
-            callback_manager.add_metadata({"ls_integration": "langgraph"})
-        run_manager = await callback_manager.on_chain_start(
-            None,
-            input,
-            name=config.get("run_name", self.get_name()),
-            run_id=config.get("run_id"),
-        )
-        graph_callback_manager = get_async_graph_callback_manager_for_config(
-            config,
-            run_id=run_manager.run_id,
-        )
-        # if running from astream_log() run each proc with streaming
-        do_stream = (
-            next(
-                (
-                    True
-                    for h in run_manager.handlers
-                    if isinstance(h, _StreamingCallbackHandler)
-                    and not isinstance(h, StreamMessagesHandler)
-                ),
-                False,
-            )
-            if _StreamingCallbackHandler is not None
-            else False
-        )
+        run_manager = None
         try:
             # assign defaults
             (
@@ -2995,6 +3011,50 @@ class Pregel(
                 interrupt_after=interrupt_after,
                 durability=durability,
             )
+            callback_manager = get_async_callback_manager_for_config(config)
+            if "messages" in stream_modes and version != "v2":
+                # Strip any inherited v2 messages handler so a v1 stream
+                # does not get routed through the content-block event
+                # protocol. Leave v1 handlers in place — an outer
+                # astream(stream_mode="messages", subgraphs=True) relies
+                # on its inheritable handler to observe events emitted
+                # by inner astream(stream_mode="messages") calls.
+                callback_manager.handlers = [
+                    h
+                    for h in callback_manager.handlers
+                    if not isinstance(h, StreamMessagesHandlerV2)
+                ]
+                callback_manager.inheritable_handlers = [
+                    h
+                    for h in callback_manager.inheritable_handlers
+                    if not isinstance(h, StreamMessagesHandlerV2)
+                ]
+            if "ls_integration" not in callback_manager.metadata:
+                callback_manager.add_metadata({"ls_integration": "langgraph"})
+            run_manager = await callback_manager.on_chain_start(
+                None,
+                input,
+                name=config.get("run_name", self.get_name()),
+                run_id=config.get("run_id"),
+            )
+            graph_callback_manager = get_async_graph_callback_manager_for_config(
+                config,
+                run_id=run_manager.run_id,
+            )
+            # if running from astream_log() run each proc with streaming
+            do_stream = (
+                next(
+                    (
+                        True
+                        for h in run_manager.handlers
+                        if isinstance(h, _StreamingCallbackHandler)
+                        and not isinstance(h, StreamMessagesHandler)
+                    ),
+                    False,
+                )
+                if _StreamingCallbackHandler is not None
+                else False
+            )
             if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
@@ -3007,8 +3067,16 @@ class Pregel(
             if "messages" in stream_modes:
                 # namespace can be None in a root level graph?
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                use_stream_messages_v2 = bool(
+                    version == "v2" and config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
+                )
+                messages_handler_cls = (
+                    StreamMessagesHandlerV2
+                    if use_stream_messages_v2
+                    else StreamMessagesHandler
+                )
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(
+                    messages_handler_cls(
                         stream_put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
@@ -3238,7 +3306,8 @@ class Pregel(
             # set final channel values as run output
             await run_manager.on_chain_end(loop.output)
         except BaseException as e:
-            await asyncio.shield(run_manager.on_chain_error(e))
+            if run_manager is not None:
+                await asyncio.shield(run_manager.on_chain_error(e))
             raise
 
     def stream_v2(
@@ -3277,12 +3346,13 @@ class Pregel(
             ValuesTransformer,
         )
 
-        values_t = ValuesTransformer()
+        parent_ns = _resolve_parent_ns(self.config, config)
+        values_t = ValuesTransformer(parent_ns=parent_ns)
         compiled_instances = [f() for f in self._stream_transformers]
         mux = StreamMux(
             [
                 values_t,
-                MessagesTransformer(),
+                MessagesTransformer(parent_ns=parent_ns),
                 *compiled_instances,
                 *(transformers or ()),
             ],
@@ -3291,16 +3361,8 @@ class Pregel(
         graph_iter = iter(
             self.stream(
                 input,
-                config,
-                stream_mode=[
-                    "values",
-                    "updates",
-                    "messages",
-                    "custom",
-                    "checkpoints",
-                    "tasks",
-                    "debug",
-                ],
+                patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
+                stream_mode=_STREAM_V2_MODES,
                 subgraphs=True,
                 version="v2",
                 interrupt_before=interrupt_before,
@@ -3339,12 +3401,13 @@ class Pregel(
             ValuesTransformer,
         )
 
-        values_t = ValuesTransformer()
+        parent_ns = _resolve_parent_ns(self.config, config)
+        values_t = ValuesTransformer(parent_ns=parent_ns)
         compiled_instances = [f() for f in self._stream_transformers]
         mux = StreamMux(
             [
                 values_t,
-                MessagesTransformer(),
+                MessagesTransformer(parent_ns=parent_ns),
                 *compiled_instances,
                 *(transformers or ()),
             ],
@@ -3352,16 +3415,8 @@ class Pregel(
         )
         graph_aiter = self.astream(
             input,
-            config,
-            stream_mode=[
-                "values",
-                "updates",
-                "messages",
-                "custom",
-                "checkpoints",
-                "tasks",
-                "debug",
-            ],
+            patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
+            stream_mode=_STREAM_V2_MODES,
             subgraphs=True,
             version="v2",
             interrupt_before=interrupt_before,
@@ -3842,6 +3897,24 @@ def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> Non
         and _START not in payload.get("next", ())
     ):
         payload["values"] = mapper(payload["values"])
+
+
+def _resolve_parent_ns(
+    graph_config: RunnableConfig | None, call_config: RunnableConfig | None
+) -> tuple[str, ...]:
+    """Return the checkpoint namespace the caller is running under.
+
+    `stream_v2` uses this to scope its native projections
+    (`ValuesTransformer`, `MessagesTransformer`) to events emitted at
+    the run's own level. A root call resolves to `()`; a call made
+    from inside a node carries the outer graph's task namespace so the
+    projection still matches its own root-level events.
+    """
+    merged = ensure_config(graph_config, call_config)
+    ns = merged.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS)
+    if not ns:
+        return ()
+    return tuple(ns.split(NS_SEP))
 
 
 def _build_server_info(
