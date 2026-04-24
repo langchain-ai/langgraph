@@ -344,21 +344,15 @@ class NodeBuilder:
         )
 
 
-def _merge_v2_messages_flag(
-    config: RunnableConfig | None,
-) -> RunnableConfig:
-    """Return a config with the v2 messages flag set in `configurable`.
-
-    Signals to pregel that `stream_mode="messages"` should attach
-    `StreamMessagesHandlerV2` for this call so invoke-time model runs
-    route through the v2 event generator and their protocol events
-    reach the messages channel.
-    """
-    merged: RunnableConfig = dict(config or {})  # type: ignore[assignment]
-    configurable = dict(merged.get(CONF) or {})
-    configurable[CONFIG_KEY_STREAM_MESSAGES_V2] = True
-    merged[CONF] = configurable
-    return merged
+_STREAM_V2_MODES: list[StreamMode] = [
+    "values",
+    "updates",
+    "messages",
+    "custom",
+    "checkpoints",
+    "tasks",
+    "debug",
+]
 
 
 class Pregel(
@@ -3322,16 +3316,8 @@ class Pregel(
         graph_iter = iter(
             self.stream(
                 input,
-                _merge_v2_messages_flag(config),
-                stream_mode=[
-                    "values",
-                    "updates",
-                    "messages",
-                    "custom",
-                    "checkpoints",
-                    "tasks",
-                    "debug",
-                ],
+                patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
+                stream_mode=_STREAM_V2_MODES,
                 subgraphs=True,
                 version="v2",
                 interrupt_before=interrupt_before,
@@ -3383,16 +3369,8 @@ class Pregel(
         )
         graph_aiter = self.astream(
             input,
-            _merge_v2_messages_flag(config),
-            stream_mode=[
-                "values",
-                "updates",
-                "messages",
-                "custom",
-                "checkpoints",
-                "tasks",
-                "debug",
-            ],
+            patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
+            stream_mode=_STREAM_V2_MODES,
             subgraphs=True,
             version="v2",
             interrupt_before=interrupt_before,
