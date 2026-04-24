@@ -28,17 +28,22 @@ class ValuesTransformer(StreamTransformer):
     Native transformer — projection keys are exposed as direct
     attributes on the run stream (e.g. `run.values`).
 
-    Only root-namespace values events are captured; subgraph state
-    snapshots are ignored.
+    Only values events at the run's own level are captured; snapshots
+    from deeper subgraphs are left in the main event log but excluded
+    from the projection. "Own level" is defined by `parent_ns`, which
+    `stream_v2` / `astream_v2` populate from the caller's checkpoint
+    namespace so that a nested `stream_v2` call still sees its own
+    root snapshots.
     """
 
     _native = True
 
-    def __init__(self) -> None:
+    def __init__(self, *, parent_ns: tuple[str, ...] = ()) -> None:
         self._log: EventLog[dict[str, Any]] = EventLog()
         self._latest: dict[str, Any] | None = None
         self._interrupted = False
         self._interrupts: list[Any] = []
+        self._parent_ns: list[str] = list(parent_ns)
 
     def init(self) -> dict[str, Any]:
         return {"values": self._log}
@@ -55,7 +60,7 @@ class ValuesTransformer(StreamTransformer):
         if event["method"] != "values":
             return True
         params = event["params"]
-        if params["namespace"]:
+        if params["namespace"] != self._parent_ns:
             return True
         self._latest = params["data"]
         interrupts = params.get("interrupts", ())
@@ -95,9 +100,14 @@ class MessagesTransformer(StreamTransformer):
     `stream()` method still surface their final `AIMessage` via
     `on_chain_end` when a node returns it as state.
 
-    Only root-namespace events are captured; tokens from subgraphs are
-    dropped. Consumers that need subgraph tokens should iterate the raw
-    event stream or register a custom transformer.
+    Only events at the run's own level are projected; tokens from
+    deeper subgraphs are left in the main event log but excluded from
+    `.messages`. "Own level" is defined by `parent_ns`, which
+    `stream_v2` / `astream_v2` populate from the caller's checkpoint
+    namespace so that a `stream_v2` call inside a node still sees its
+    own root chat model streams on `.messages`. Consumers that need
+    subgraph tokens should iterate the raw event stream or register a
+    custom transformer.
 
     Native transformer — the `messages` projection is exposed as a
     direct attribute on the run stream.
@@ -105,13 +115,18 @@ class MessagesTransformer(StreamTransformer):
 
     _native = True
 
-    def __init__(self) -> None:
+    def __init__(self, *, parent_ns: tuple[str, ...] = ()) -> None:
         self._log: EventLog[ChatModelStream] = EventLog()
         # Correlate protocol events back to a ChatModelStream by run_id
         # (attached to the event's metadata by StreamMessagesHandler).
         self._by_run: dict[str, ChatModelStream] = {}
         self._pump_fn: Callable[[], bool] | None = None
         self._apump_fn: Callable[[], Awaitable[bool]] | None = None
+        # Root scope for this projection. Only chat model streams whose
+        # emitted namespace matches `parent_ns` are surfaced on
+        # `.messages`; events from deeper subgraphs stay in the main
+        # event log for other consumers but are not projected here.
+        self._parent_ns: list[str] = list(parent_ns)
 
     def init(self) -> dict[str, Any]:
         return {"messages": self._log}
@@ -169,7 +184,7 @@ class MessagesTransformer(StreamTransformer):
         if event["method"] != "messages":
             return True
         params = event["params"]
-        if params["namespace"]:
+        if params["namespace"] != self._parent_ns:
             return True
 
         payload, metadata = params["data"]

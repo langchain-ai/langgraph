@@ -2624,15 +2624,21 @@ class Pregel(
             )
             callback_manager = get_callback_manager_for_config(config)
             if "messages" in stream_modes and version != "v2":
+                # Strip any inherited v2 messages handler so a v1 stream
+                # does not get routed through the content-block event
+                # protocol. Leave v1 handlers in place — an outer
+                # stream(stream_mode="messages", subgraphs=True) relies
+                # on its inheritable handler to observe events emitted
+                # by inner stream(stream_mode="messages") calls.
                 callback_manager.handlers = [
                     h
                     for h in callback_manager.handlers
-                    if not isinstance(h, StreamMessagesHandler)
+                    if not isinstance(h, StreamMessagesHandlerV2)
                 ]
                 callback_manager.inheritable_handlers = [
                     h
                     for h in callback_manager.inheritable_handlers
-                    if not isinstance(h, StreamMessagesHandler)
+                    if not isinstance(h, StreamMessagesHandlerV2)
                 ]
             if "ls_integration" not in callback_manager.metadata:
                 callback_manager.add_metadata({"ls_integration": "langgraph"})
@@ -3007,15 +3013,21 @@ class Pregel(
             )
             callback_manager = get_async_callback_manager_for_config(config)
             if "messages" in stream_modes and version != "v2":
+                # Strip any inherited v2 messages handler so a v1 stream
+                # does not get routed through the content-block event
+                # protocol. Leave v1 handlers in place — an outer
+                # astream(stream_mode="messages", subgraphs=True) relies
+                # on its inheritable handler to observe events emitted
+                # by inner astream(stream_mode="messages") calls.
                 callback_manager.handlers = [
                     h
                     for h in callback_manager.handlers
-                    if not isinstance(h, StreamMessagesHandler)
+                    if not isinstance(h, StreamMessagesHandlerV2)
                 ]
                 callback_manager.inheritable_handlers = [
                     h
                     for h in callback_manager.inheritable_handlers
-                    if not isinstance(h, StreamMessagesHandler)
+                    if not isinstance(h, StreamMessagesHandlerV2)
                 ]
             if "ls_integration" not in callback_manager.metadata:
                 callback_manager.add_metadata({"ls_integration": "langgraph"})
@@ -3334,12 +3346,13 @@ class Pregel(
             ValuesTransformer,
         )
 
-        values_t = ValuesTransformer()
+        parent_ns = _resolve_parent_ns(self.config, config)
+        values_t = ValuesTransformer(parent_ns=parent_ns)
         compiled_instances = [f() for f in self._stream_transformers]
         mux = StreamMux(
             [
                 values_t,
-                MessagesTransformer(),
+                MessagesTransformer(parent_ns=parent_ns),
                 *compiled_instances,
                 *(transformers or ()),
             ],
@@ -3388,12 +3401,13 @@ class Pregel(
             ValuesTransformer,
         )
 
-        values_t = ValuesTransformer()
+        parent_ns = _resolve_parent_ns(self.config, config)
+        values_t = ValuesTransformer(parent_ns=parent_ns)
         compiled_instances = [f() for f in self._stream_transformers]
         mux = StreamMux(
             [
                 values_t,
-                MessagesTransformer(),
+                MessagesTransformer(parent_ns=parent_ns),
                 *compiled_instances,
                 *(transformers or ()),
             ],
@@ -3883,6 +3897,24 @@ def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> Non
         and _START not in payload.get("next", ())
     ):
         payload["values"] = mapper(payload["values"])
+
+
+def _resolve_parent_ns(
+    graph_config: RunnableConfig | None, call_config: RunnableConfig | None
+) -> tuple[str, ...]:
+    """Return the checkpoint namespace the caller is running under.
+
+    `stream_v2` uses this to scope its native projections
+    (`ValuesTransformer`, `MessagesTransformer`) to events emitted at
+    the run's own level. A root call resolves to `()`; a call made
+    from inside a node carries the outer graph's task namespace so the
+    projection still matches its own root-level events.
+    """
+    merged = ensure_config(graph_config, call_config)
+    ns = merged.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS)
+    if not ns:
+        return ()
+    return tuple(ns.split(NS_SEP))
 
 
 def _build_server_info(
