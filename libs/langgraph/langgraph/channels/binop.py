@@ -118,8 +118,10 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
                 self.value = overwrite_value
                 seen_overwrite = True
                 continue
-            if not seen_overwrite:
-                self.value = self.operator(self.value, value)
+            # Values arriving after Overwrite should still be aggregated on top
+            # of the new base; otherwise concurrent writes that happen to sort
+            # after the Overwrite are silently discarded.
+            self.value = self.operator(self.value, value)
         return True
 
     def get(self) -> Value:
