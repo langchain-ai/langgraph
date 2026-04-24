@@ -2,7 +2,7 @@ import asyncio
 import threading
 import time
 from collections import deque
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
 import pytest
@@ -1053,6 +1053,10 @@ def test_run_with_retry_timeout_observer_tracks_attempts():
     assert starts[0]["execution_id"] != starts[1]["execution_id"]
     assert starts[0]["timeout_secs"] == 0.05
     assert starts[0]["task_name"] == "flaky"
+    assert isinstance(starts[0]["started_at"], datetime)
+    assert isinstance(starts[0]["deadline_at"], datetime)
+    assert isinstance(finishes[0]["finished_at"], datetime)
+    assert starts[0]["deadline_at"] > starts[0]["started_at"]
 
 
 def test_run_with_retry_timeout_observer_treats_parent_command_as_non_error():

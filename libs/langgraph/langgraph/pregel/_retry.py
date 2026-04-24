@@ -46,11 +46,11 @@ class _TimedAttemptPayload(TypedDict):
     run_id: str | None
     thread_id: str | None
     checkpoint_ns: str | None
-    started_at: str
-    deadline_at: str
+    started_at: datetime
+    deadline_at: datetime
     timeout_secs: float
     event: Literal["start", "finish"]
-    finished_at: NotRequired[str]
+    finished_at: NotRequired[datetime]
     status: NotRequired[Literal["success", "error"]]
     error_type: NotRequired[str | None]
     error_message: NotRequired[str | None]
@@ -124,8 +124,8 @@ def _task_timeout_payload(
         "run_id": run_id,
         "thread_id": thread_id,
         "checkpoint_ns": checkpoint_ns,
-        "started_at": started_at.isoformat(),
-        "deadline_at": (started_at + timedelta(seconds=timeout_s)).isoformat(),
+        "started_at": started_at,
+        "deadline_at": started_at + timedelta(seconds=timeout_s),
         "timeout_secs": timeout_s,
         "event": "start",
     }
@@ -168,7 +168,7 @@ def _timed_attempt_finish_payload(
     return {
         **payload,
         "event": "finish",
-        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "finished_at": datetime.now(timezone.utc),
         "status": "error" if error is not None else "success",
         "error_type": type(error).__name__ if error is not None else None,
         "error_message": str(error) if error is not None else None,
