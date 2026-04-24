@@ -50,7 +50,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
 from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.delta import DeltaChannel
+from langgraph.channels._delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
 
 pytestmark = pytest.mark.anyio

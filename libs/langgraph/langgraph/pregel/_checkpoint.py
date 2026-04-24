@@ -9,7 +9,7 @@ from langgraph.checkpoint.base.id import uuid6
 
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
-from langgraph.channels.delta import DeltaChannel
+from langgraph.channels._delta import DeltaChannel
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
 LATEST_VERSION = 4
