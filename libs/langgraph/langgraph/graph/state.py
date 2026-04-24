@@ -47,9 +47,9 @@ from langgraph._internal._fields import (
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
+from langgraph.channels._delta import DeltaChannel
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate, _strip_extras
-from langgraph.channels._delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.named_barrier_value import (
