@@ -6,8 +6,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.base import DELTA_SENTINEL
 
 from langgraph._internal._typing import MISSING
-from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels._delta import DeltaChannel
+from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
