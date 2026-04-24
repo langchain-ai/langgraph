@@ -1,4 +1,4 @@
-"""Tests for subgraph lifecycle events and the SubgraphTransformer."""
+"""Tests for SubgraphTransformer namespace-based discovery."""
 
 from __future__ import annotations
 
@@ -25,32 +25,6 @@ from langgraph.stream.transformers import (
 from langgraph.types import interrupt
 
 TS = int(time.time() * 1000)
-
-
-def _lifecycle(
-    event: str,
-    *,
-    namespace: list[str] | None = None,
-    graph_name: str | None = None,
-    trigger_call_id: str | None = None,
-    error: str | None = None,
-) -> ProtocolEvent:
-    data: dict[str, Any] = {"event": event}
-    if graph_name is not None:
-        data["graph_name"] = graph_name
-    if trigger_call_id is not None:
-        data["trigger_call_id"] = trigger_call_id
-    if error is not None:
-        data["error"] = error
-    return {
-        "type": "event",
-        "method": "lifecycle",
-        "params": {
-            "namespace": namespace or [],
-            "timestamp": TS,
-            "data": data,
-        },
-    }
 
 
 def _values(payload: dict[str, Any], *, namespace: list[str]) -> ProtocolEvent:
@@ -108,96 +82,90 @@ class TestSubgraphTransformerUnit:
         return mux, transformer
 
     def _handle(self, transformer: SubgraphTransformer) -> SubgraphRunStream:
-        """Return the single root handle after pushing one lifecycle started."""
         (handle,) = list(transformer._root_log._items)
         return handle
 
-    def test_root_started_is_ignored(self) -> None:
+    def test_root_event_does_not_create_handle(self) -> None:
         mux, transformer = self._mux()
-        mux.push(_lifecycle("started", graph_name="root"))
+        mux.push(_values({"value": 1}, namespace=[]))
         assert list(transformer._root_log._items) == []
         assert transformer._by_ns == {}
 
-    def test_child_started_yields_handle(self) -> None:
+    def test_first_event_at_child_depth_yields_handle(self) -> None:
         mux, transformer = self._mux()
-        mux.push(
-            _lifecycle(
-                "started",
-                namespace=["task_a:child"],
-                graph_name="child",
-                trigger_call_id="task_a",
-            )
-        )
+        mux.push(_values({"value": 1}, namespace=["child:task_a"]))
 
         handle = self._handle(transformer)
-        assert handle.path == ("task_a:child",)
+        assert handle.path == ("child:task_a",)
         assert handle.graph_name == "child"
         assert handle.trigger_call_id == "task_a"
         assert handle.status == "started"
 
-    def test_status_transitions(self) -> None:
+    def test_handle_without_task_id_suffix(self) -> None:
         mux, transformer = self._mux()
-        mux.push(_lifecycle("started", namespace=["t:c"], graph_name="c"))
-        mux.push(_lifecycle("running", namespace=["t:c"]))
-        mux.push(_lifecycle("completed", namespace=["t:c"]))
+        mux.push(_values({"value": 1}, namespace=["child"]))
 
         handle = self._handle(transformer)
-        assert handle.status == "completed"
+        assert handle.path == ("child",)
+        assert handle.graph_name == "child"
+        assert handle.trigger_call_id is None
+
+    def test_discovery_is_method_agnostic(self) -> None:
+        mux, transformer = self._mux()
+        # Method-agnostic means "any event method triggers discovery".
+        # Use `updates` — neither ValuesTransformer nor
+        # MessagesTransformer care about it, so the test only exercises
+        # SubgraphTransformer's discovery path.
+        mux.push(
+            {
+                "type": "event",
+                "method": "updates",
+                "params": {"namespace": ["c:t"], "timestamp": TS, "data": "x"},
+            }
+        )
+        handle = self._handle(transformer)
+        assert handle.path == ("c:t",)
 
     def test_grandchild_surfaces_under_child(self) -> None:
         mux, transformer = self._mux()
-        mux.push(_lifecycle("started", namespace=["t:child"], graph_name="child"))
+        mux.push(_values({"value": 1}, namespace=["child:t"]))
 
         child = self._handle(transformer)
         _pre_subscribe_handle(child)
 
-        mux.push(
-            _lifecycle(
-                "started",
-                namespace=["t:child", "u:grand"],
-                graph_name="grand",
-            )
-        )
+        mux.push(_values({"value": 2}, namespace=["child:t", "grand:u"]))
 
         (grand,) = _handle_subgraphs_items(child)
-        assert grand.path == ("t:child", "u:grand")
+        assert grand.path == ("child:t", "grand:u")
         assert grand.graph_name == "grand"
-
-    def test_failed_stores_error(self) -> None:
-        mux, transformer = self._mux()
-        mux.push(_lifecycle("started", namespace=["t:c"], graph_name="c"))
-        mux.push(_lifecycle("failed", namespace=["t:c"], error="boom"))
-
-        handle = self._handle(transformer)
-        assert handle.status == "failed"
-        assert handle.error == "boom"
+        assert grand.trigger_call_id == "u"
 
     def test_values_routed_into_handle(self) -> None:
         mux, transformer = self._mux()
-        mux.push(_lifecycle("started", namespace=["t:c"], graph_name="c"))
+        mux.push(_values({"value": 1}, namespace=["c:t"]))
 
         handle = self._handle(transformer)
         _pre_subscribe_handle(handle)
 
-        mux.push(_values({"value": 1}, namespace=["t:c"]))
-        mux.push(_values({"value": 2}, namespace=["t:c"]))
+        mux.push(_values({"value": 2}, namespace=["c:t"]))
 
+        # Both the discovery event and subsequent values land in the child.
         assert _handle_values_items(handle) == [{"value": 1}, {"value": 2}]
         assert handle.output == {"value": 2}
 
     def test_root_values_not_routed(self) -> None:
         mux, transformer = self._mux()
-        mux.push(_lifecycle("started", namespace=["t:c"], graph_name="c"))
+        mux.push(_values({"value": 1}, namespace=["c:t"]))
         handle = self._handle(transformer)
         _pre_subscribe_handle(handle)
 
         # Values event at root namespace — must not leak into child handle.
         mux.push(_values({"value": "root"}, namespace=[]))
-        assert _handle_values_items(handle) == []
+        assert _handle_values_items(handle) == [{"value": 1}]
 
     def test_finalize_closes_dangling(self) -> None:
         mux, transformer = self._mux()
-        mux.push(_lifecycle("started", namespace=["t:c"], graph_name="c"))
+        mux.push(_values({"value": 1}, namespace=["c:t"]))
         handle = self._handle(transformer)
 
         mux.close()
@@ -207,7 +175,7 @@ class TestSubgraphTransformerUnit:
 
     def test_fail_with_graph_interrupt_marks_interrupted(self) -> None:
         mux, transformer = self._mux()
-        mux.push(_lifecycle("started", namespace=["t:c"], graph_name="c"))
+        mux.push(_values({"value": 1}, namespace=["c:t"]))
         handle = self._handle(transformer)
 
         mux.fail(GraphInterrupt())
@@ -215,32 +183,22 @@ class TestSubgraphTransformerUnit:
 
     def test_fail_with_generic_error_marks_failed(self) -> None:
         mux, transformer = self._mux()
-        mux.push(_lifecycle("started", namespace=["t:c"], graph_name="c"))
+        mux.push(_values({"value": 1}, namespace=["c:t"]))
         handle = self._handle(transformer)
 
         mux.fail(RuntimeError("explode"))
         assert handle.status == "failed"
         assert handle.error == "explode"
 
-    def test_duplicate_started_ignored(self) -> None:
+    def test_repeated_events_same_ns_single_handle(self) -> None:
         mux, transformer = self._mux()
-        mux.push(_lifecycle("started", namespace=["t:c"], graph_name="c"))
-        mux.push(_lifecycle("started", namespace=["t:c"], graph_name="other"))
+        mux.push(_values({"value": 1}, namespace=["c:t"]))
+        mux.push(_values({"value": 2}, namespace=["c:t"]))
+        mux.push(_values({"value": 3}, namespace=["c:t"]))
 
         handles = list(transformer._root_log._items)
         assert len(handles) == 1
-        assert handles[0].graph_name == "c"
-
-    def test_non_lifecycle_non_values_passthrough(self) -> None:
-        mux, transformer = self._mux()
-        mux.push(
-            {
-                "type": "event",
-                "method": "messages",
-                "params": {"namespace": ["t:c"], "timestamp": TS, "data": "x"},
-            }
-        )
-        assert list(transformer._root_log._items) == []
+        assert handles[0].path == ("c:t",)
 
 
 # ---------------------------------------------------------------------------

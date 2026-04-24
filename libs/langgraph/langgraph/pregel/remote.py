@@ -650,29 +650,16 @@ class RemoteGraph(PregelProtocol):
         """
         updated_stream_modes: list[StreamModeSDK] = []
         req_single = True
-        # `"lifecycle"` is emitted locally by the `StreamLifecycleHandler`
-        # attached inside `Pregel.stream` / `astream`. The remote graph
-        # API has no corresponding mode, so requests for it against a
-        # `RemoteGraph` are silently stripped here and a warning is
-        # logged so the caller isn't left wondering why no lifecycle
-        # events arrive.
-        dropped_lifecycle = False
         # coerce to list, or add default stream mode
         if stream_mode:
             if isinstance(stream_mode, str):
-                if stream_mode != "lifecycle":
-                    updated_stream_modes.append(cast(StreamModeSDK, stream_mode))
-                else:
-                    dropped_lifecycle = True
+                updated_stream_modes.append(cast(StreamModeSDK, stream_mode))
             else:
                 req_single = False
                 for m in stream_mode:
-                    if m == "lifecycle":
-                        dropped_lifecycle = True
-                    else:
-                        updated_stream_modes.append(cast(StreamModeSDK, m))
+                    updated_stream_modes.append(cast(StreamModeSDK, m))
         else:
-            updated_stream_modes.append(default)  # type: ignore[arg-type]
+            updated_stream_modes.append(default)
         requested_stream_modes = updated_stream_modes.copy()
         # add any from parent graph
         stream: StreamProtocol | None = (
@@ -680,16 +667,7 @@ class RemoteGraph(PregelProtocol):
         )
         if stream:
             for m in stream.modes:
-                if m == "lifecycle":
-                    dropped_lifecycle = True
-                else:
-                    updated_stream_modes.append(cast(StreamModeSDK, m))
-        if dropped_lifecycle:
-            logger.warning(
-                "Stream mode 'lifecycle' is not supported by RemoteGraph "
-                "and was stripped from the request; no lifecycle events "
-                "will be emitted for this remote run."
-            )
+                updated_stream_modes.append(cast(StreamModeSDK, m))
         # map "messages" to "messages-tuple"
         if "messages" in updated_stream_modes:
             updated_stream_modes.remove("messages")

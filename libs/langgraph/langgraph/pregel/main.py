@@ -130,7 +130,6 @@ from langgraph.pregel._checkpoint import (
 )
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
-from langgraph.pregel._lifecycle import StreamLifecycleHandler
 from langgraph.pregel._loop import (
     AsyncPregelLoop,
     SyncPregelLoop,
@@ -353,7 +352,6 @@ _STREAM_V2_MODES: list[StreamMode] = [
     "checkpoints",
     "tasks",
     "debug",
-    "lifecycle",
 ]
 
 
@@ -363,11 +361,20 @@ def _build_stream_factories(
 ) -> list[Callable[..., Any]]:
     """Assemble the factory list handed to `StreamMux(factories=...)`.
 
-    Prepends the built-in `ValuesTransformer`, `MessagesTransformer`,
-    and `SubgraphTransformer` factories, then appends the graph's
-    compile-time `stream_transformers` followed by any call-site
-    additions. Factories flow down into subgraph mini-muxes, so
-    per-scope instances propagate automatically.
+    Prepends the auto-registered built-ins — `ValuesTransformer`
+    (state snapshots backing `run.output` / `run.interrupted`),
+    `MessagesTransformer` (LLM token streaming), and
+    `SubgraphTransformer` (in-process subgraph handle discovery) —
+    then appends the graph's compile-time `stream_transformers`
+    followed by any call-site additions. Factories flow down into
+    subgraph mini-muxes, so per-scope instances propagate
+    automatically.
+
+    `LifecycleTransformer` is opt-in: add it via compile-time
+    `stream_transformers=[...]` or the per-call `transformers=[...]`
+    kwarg on `stream_v2()` / `astream_v2()`. Without it, no
+    `lifecycle` wire events are emitted and `run.lifecycle` is
+    absent.
     """
     from langgraph.stream.transformers import (
         MessagesTransformer,
@@ -2703,15 +2710,6 @@ class Pregel(
                     )
                 )
 
-            # set up lifecycle stream mode
-            if "lifecycle" in stream_modes:
-                run_manager.inheritable_handlers.append(
-                    StreamLifecycleHandler(
-                        stream.put,
-                        root_graph_name=self.name,
-                    )
-                )
-
             # set up custom stream mode
             if "custom" in stream_modes:
 
@@ -3094,15 +3092,6 @@ class Pregel(
                     )
                 )
 
-            # set up lifecycle stream mode
-            if "lifecycle" in stream_modes:
-                run_manager.inheritable_handlers.append(
-                    StreamLifecycleHandler(
-                        stream_put,
-                        root_graph_name=self.name,
-                    )
-                )
-
             # set up custom stream mode
             def stream_writer(c: Any) -> None:
                 aioloop.call_soon_threadsafe(
@@ -3340,12 +3329,18 @@ class Pregel(
     ) -> Any:
         """Start a sync v2 streaming run driven by transformer projections.
 
-        Builds a `StreamMux` from the built-in `ValuesTransformer` /
-        `MessagesTransformer`, this graph's compile-time
+        Builds a `StreamMux` from the auto-registered built-ins
+        (`ValuesTransformer`, `MessagesTransformer`,
+        `SubgraphTransformer`), this graph's compile-time
         `stream_transformers`, and any additional `transformers=`
-        supplied at the call site. Returns a `GraphRunStream` that the
-        caller drives by iterating any projection — no background
+        supplied at the call site. Returns a `GraphRunStream` that
+        the caller drives by iterating any projection — no background
         thread.
+
+        `LifecycleTransformer` (emits `lifecycle` wire events,
+        exposes `run.lifecycle`) is opt-in — add it via
+        `stream_transformers` at compile time or via the
+        `transformers=` kwarg here.
 
         Args:
             input: Graph input.

@@ -37,7 +37,9 @@ class StreamChannel(Generic[T]):
     using only StreamChannels don't need `finalize` or `fail` hooks.
     """
 
-    def __init__(self, name: str, *, maxlen: int | None = None) -> None:
+    def __init__(
+        self, name: str, *, maxlen: int | None = None, retain: bool = False
+    ) -> None:
         """Initialize the channel with an empty inner log.
 
         Args:
@@ -45,9 +47,13 @@ class StreamChannel(Generic[T]):
                 events (`custom:<name>` on the wire).
             maxlen: Optional retention cap on the inner EventLog. See
                 `EventLog.__init__` for semantics.
+            retain: If True, the inner log retains pushes before any
+                consumer subscribes — needed for channels whose
+                consumer iterates after events have already flowed
+                (e.g. `lifecycle` inspected after draining `values`).
         """
         self.name = name
-        self._log: EventLog[T] = EventLog(maxlen=maxlen)
+        self._log: EventLog[T] = EventLog(maxlen=maxlen, retain=retain)
         self._wire_fn: Callable[[T], None] | None = None
 
     def _bind(self, *, is_async: bool) -> None:

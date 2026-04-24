@@ -9,12 +9,14 @@ from langchain_core.language_models.chat_model_stream import (
     ChatModelStream,
 )
 from langchain_core.messages import AIMessageChunk, BaseMessage
-from langchain_protocol.protocol import CheckpointRef, LifecycleData, MessagesData
+from langchain_protocol.protocol import CheckpointRef, MessagesData
+from typing_extensions import TypedDict
 
 from langgraph.errors import GraphInterrupt
 from langgraph.stream._event_log import EventLog
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from langgraph.stream.run_stream import BaseRunStream
+from langgraph.stream.stream_channel import StreamChannel
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -25,10 +27,36 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-SubgraphStatus = Literal["started", "running", "completed", "failed", "interrupted"]
+SubgraphStatus = Literal["started", "completed", "failed", "interrupted"]
 _TERMINAL_STATUSES: frozenset[SubgraphStatus] = frozenset(
     {"completed", "failed", "interrupted"}
 )
+
+
+def _is_new_direct_child(
+    ns: tuple[str, ...],
+    scope: tuple[str, ...],
+    seen: set[tuple[str, ...]] | dict[tuple[str, ...], Any],
+) -> bool:
+    """Return True iff `ns` is a direct child of `scope` not yet seen.
+
+    Shared by `SubgraphTransformer` (in-process handle discovery) and
+    `LifecycleTransformer` (wire event emission) so the two can't
+    disagree on what counts as a new subgraph.
+    """
+    return len(ns) == len(scope) + 1 and ns[:-1] == scope and ns not in seen
+
+
+def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
+    """Split `node_name:task_id` into (node_name, task_id).
+
+    Task ids are present when Pregel spawned the subgraph as a task;
+    absent on synthesized namespaces (tests, hand-crafted events).
+    """
+    node_name, sep, task_id = segment.partition(":")
+    if not sep:
+        return segment, None
+    return node_name, task_id or None
 
 
 class ValuesTransformer(StreamTransformer):
@@ -264,14 +292,17 @@ class SubgraphRunStream(BaseRunStream):
     `make_child`'s pump inheritance, so any cursor on a subagent
     projection drives the whole run forward.
 
-    Lifecycle fields update in place as events arrive:
+    Handle fields:
 
     - `path`: the namespace tuple — stable for the life of the handle.
-    - `graph_name` / `trigger_call_id`: set once from the `started`
-      payload.
-    - `status`: advances `started` → `running` → `completed` /
-      `failed` / `interrupted`.
-    - `error` / `checkpoint`: set on the terminal event when present.
+    - `graph_name` / `trigger_call_id`: parsed from the namespace
+      segment at discovery (`node_name:task_id`).
+    - `status`: `started` on discovery; advances to `completed` when
+      the parent mux closes, or `failed` / `interrupted` when it
+      errors.
+    - `error`: set on terminal error.
+    - `checkpoint`: unused by the current discovery path — kept for
+      compatibility with consumers that inspect it.
 
     `.output` is a snapshot of the latest values seen at this
     namespace — it doesn't drive the pump (unlike root's
@@ -311,10 +342,10 @@ class SubgraphRunStream(BaseRunStream):
 class SubgraphTransformer(StreamTransformer):
     """Discover subgraphs and route events into per-subgraph mini-muxes.
 
-    Thin state-machine + dispatcher. At its own `scope` (inherited
-    from `StreamTransformer`, determined by the enclosing mux), it
-    watches for `lifecycle` events at exactly one level deeper to
-    discover direct children. Each discovered child gets its own
+    Thin dispatcher. At its own `scope` (inherited from
+    `StreamTransformer`, determined by the enclosing mux), it watches
+    for the first event at exactly one namespace level deeper to
+    discover a direct child. Each discovered child gets its own
     `SubgraphRunStream` backed by a mini-`StreamMux` — built via
     `parent_mux.make_child(path)`, so the same factory list produces
     fresh transformer instances at the child's scope.
@@ -326,10 +357,15 @@ class SubgraphTransformer(StreamTransformer):
     `SubgraphTransformer` for grandchildren) handle the rest. No
     duplicated routing or assembly logic.
 
-    Lifecycle state for each handle (running / completed / failed /
-    interrupted) is updated in place as events fire. On terminal
-    events, the handle's mini-mux is closed so any subscribed cursors
-    unblock. `finalize` / `fail` handle dangling handles left mid-run.
+    Discovery is method-agnostic: the first event of any mode whose
+    namespace places it directly below `scope` spawns the handle.
+    `graph_name` and `trigger_call_id` are parsed from the namespace
+    segment, which encodes `node_name:task_id`.
+
+    Terminal status for each handle is set by the parent mux's
+    `close` / `fail` path. `finalize` transitions still-open handles
+    to `completed`; `fail` transitions them to `failed` or
+    `interrupted` depending on the error.
 
     Native transformer — `subgraphs` exposes the direct-children log.
 
@@ -357,45 +393,23 @@ class SubgraphTransformer(StreamTransformer):
 
     def process(self, event: ProtocolEvent) -> bool:
         ns = tuple(event["params"]["namespace"])
-        method = event["method"]
         depth = len(self.scope)
 
-        # 1. On `started` for a direct child (ns depth = mine + 1 and
-        #    ns prefix matches mine), register the handle.
-        if method == "lifecycle" and len(ns) == depth + 1 and ns[:-1] == self.scope:
-            data = cast(LifecycleData, event["params"]["data"])
-            if data.get("event") == "started":
-                self._on_started(ns, data)
+        # 1. Discover: first-seen direct-child namespace registers a
+        #    handle. Any event method triggers discovery — no dedicated
+        #    channel.
+        if _is_new_direct_child(ns, self.scope, self._by_ns):
+            self._on_started(ns)
 
-        # 2. Forward the event to the matching direct-child mini-mux
-        #    before the status-change step below so that terminal events
-        #    reach the child's log and grandchild transformers *before*
-        #    the child's mini-mux is closed. Prefix-match: ns must start
-        #    with some child's path.
+        # 2. Forward the event to the matching direct-child mini-mux.
+        #    Prefix-match: ns must start with some child's path.
         direct_child_ns = ns[: depth + 1] if len(ns) > depth else None
         if direct_child_ns is not None and direct_child_ns in self._by_ns:
             self._by_ns[direct_child_ns]._mux.push(event)
 
-        # 3. Status change for a direct child (ns = child's path, method
-        #    = lifecycle). Update handle fields, close mini-mux on
-        #    terminal.
-        if (
-            method == "lifecycle"
-            and ns in self._by_ns
-            and len(ns) == depth + 1
-            and ns[:-1] == self.scope
-        ):
-            data = cast(LifecycleData, event["params"]["data"])
-            event_type = data.get("event")
-            if event_type in ("running", "completed", "failed", "interrupted"):
-                self._on_status_change(ns, event_type, data)
-
         return True
 
-    def _on_started(self, ns: tuple[str, ...], data: LifecycleData) -> None:
-        if ns in self._by_ns:
-            # Duplicate started — ignore.
-            return
+    def _on_started(self, ns: tuple[str, ...]) -> None:
         # `_on_register` is called by the mux during registration, which
         # happens before any event can be dispatched — so this should
         # always be set by the time we process an event.
@@ -403,32 +417,16 @@ class SubgraphTransformer(StreamTransformer):
             "SubgraphTransformer processed an event before _on_register; "
             "transformer registration ordering is broken."
         )
+        graph_name, trigger_call_id = _parse_ns_segment(ns[-1])
         child_mux = self._mux.make_child(ns)
         handle = SubgraphRunStream(
             path=ns,
             mux=child_mux,
-            graph_name=data.get("graph_name"),
-            trigger_call_id=data.get("trigger_call_id"),
+            graph_name=graph_name,
+            trigger_call_id=trigger_call_id,
         )
         self._by_ns[ns] = handle
         self._root_log.push(handle)
-
-    def _on_status_change(
-        self,
-        ns: tuple[str, ...],
-        event_type: SubgraphStatus,
-        data: LifecycleData,
-    ) -> None:
-        handle = self._by_ns[ns]
-        handle.status = event_type
-        err = data.get("error")
-        if err is not None:
-            handle.error = err
-        checkpoint = data.get("checkpoint")
-        if checkpoint is not None:
-            handle.checkpoint = checkpoint
-        if event_type in _TERMINAL_STATUSES:
-            self._close_handle_mux(handle)
 
     @staticmethod
     def _close_handle_mux(handle: SubgraphRunStream) -> None:
@@ -446,10 +444,21 @@ class SubgraphTransformer(StreamTransformer):
                 )
 
     def finalize(self) -> None:
-        """Transition any still-open direct children to `completed`."""
+        """Transition any still-open direct children to `completed`.
+
+        Subgraph interrupts surface as a values event with a populated
+        `interrupts` field rather than as an exception at the graph
+        boundary — the parent pump exhausts normally and `finalize`
+        runs the close path. Inspect each child's `ValuesTransformer`
+        to distinguish "completed cleanly" from "interrupted".
+        """
         for handle in self._by_ns.values():
             if handle.status not in _TERMINAL_STATUSES:
-                handle.status = "completed"
+                values_t = handle._mux.transformer_by_key("values")
+                if isinstance(values_t, ValuesTransformer) and values_t._interrupted:
+                    handle.status = "interrupted"
+                else:
+                    handle.status = "completed"
             self._close_handle_mux(handle)
 
     def fail(self, err: BaseException) -> None:
@@ -472,3 +481,105 @@ class SubgraphTransformer(StreamTransformer):
                         handle.path,
                         exc_info=True,
                     )
+
+
+class LifecyclePayload(TypedDict, total=False):
+    """Payload of a lifecycle event emitted by `LifecycleTransformer`."""
+
+    event: SubgraphStatus
+    namespace: list[str]
+    graph_name: str | None
+    trigger_call_id: str | None
+    error: str | None
+
+
+class LifecycleTransformer(StreamTransformer):
+    """Synthesize subgraph lifecycle events from observed namespaces.
+
+    Observes the same namespace signal `SubgraphTransformer` uses for
+    in-process discovery and emits `started` / `completed` / `failed`
+    / `interrupted` payloads onto its `lifecycle` channel. Consumers
+    subscribed to that channel see the events in-process; wire
+    consumers receive them as protocol events with `method:
+    "lifecycle"` (unprefixed because this transformer is `_native`).
+
+    No `running` event: the ns-discovery signal only fires once a
+    subgraph has emitted output, so `started` already implies
+    execution. Consumers needing finer-grained task-start visibility
+    should read the `tasks` stream mode alongside.
+
+    No root `started`: the run object itself signals run start.
+
+    Terminal events are synthesized — `finalize` emits `completed` for
+    still-open handles; `fail` emits `failed` or `interrupted`
+    depending on whether the error is a `GraphInterrupt`.
+
+    `scope_exact = False` so the transformer sees events at any
+    namespace (needed for discovery of direct children).
+    """
+
+    _native = True
+    scope_exact = False
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        # retain=True: lifecycle events are low-volume and consumers
+        # commonly inspect them after draining `values`; without
+        # retention those pushes would be dropped.
+        self._channel: StreamChannel[LifecyclePayload] = StreamChannel(
+            "lifecycle", retain=True
+        )
+        self._seen: set[tuple[str, ...]] = set()
+        self._open: set[tuple[str, ...]] = set()
+
+    def init(self) -> dict[str, Any]:
+        return {"lifecycle": self._channel}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        ns = tuple(event["params"]["namespace"])
+        if _is_new_direct_child(ns, self.scope, self._seen):
+            self._emit_started(ns)
+        return True
+
+    def _emit_started(self, ns: tuple[str, ...]) -> None:
+        graph_name, trigger_call_id = _parse_ns_segment(ns[-1])
+        self._seen.add(ns)
+        self._open.add(ns)
+        payload: LifecyclePayload = {
+            "event": "started",
+            "namespace": list(ns),
+        }
+        if graph_name:
+            payload["graph_name"] = graph_name
+        if trigger_call_id is not None:
+            payload["trigger_call_id"] = trigger_call_id
+        self._channel.push(payload)
+
+    def finalize(self) -> None:
+        """Emit `completed` for every still-open direct child."""
+        for ns in list(self._open):
+            self._channel.push({"event": "completed", "namespace": list(ns)})
+        self._open.clear()
+
+    def fail(self, err: BaseException) -> None:
+        """Emit `failed` / `interrupted` for every still-open direct child.
+
+        Closes the channel after emitting rather than letting the mux
+        auto-fail it — the "failed" payload is the signal to
+        consumers, so they should be able to iterate it. A failed
+        channel would raise on iteration and hide the events that just
+        got pushed.
+        """
+        is_interrupt = isinstance(err, GraphInterrupt)
+        event_type: SubgraphStatus = "interrupted" if is_interrupt else "failed"
+        error_str = None if is_interrupt else str(err)
+        for ns in list(self._open):
+            payload: LifecyclePayload = {
+                "event": event_type,
+                "namespace": list(ns),
+            }
+            if error_str is not None:
+                payload["error"] = error_str
+            self._channel.push(payload)
+        self._open.clear()
+        self._channel._close()

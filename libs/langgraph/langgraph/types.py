@@ -123,7 +123,6 @@ StreamMode = Literal[
     "debug",
     "messages",
     "custom",
-    "lifecycle",
 ]
 """How the stream method should emit outputs.
 
@@ -136,7 +135,6 @@ StreamMode = Literal[
 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
 - `"debug"`: Emit `"checkpoints"` and `"tasks"` events for debugging purposes.
-- `"lifecycle"`: Emit subgraph lifecycle events (`started`, `running`, `completed`, `failed`, `interrupted`) with payloads matching `LifecycleData`.
 """
 
 StreamWriter = Callable[[Any], None]

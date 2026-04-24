@@ -140,6 +140,18 @@ class StreamMux:
             is_async=self._is_async,
             scope=scope,
         )
+        # Mini-muxes are created during the pump, after the first
+        # event at the child's scope has already been dispatched.
+        # Consumers reach child projections via the parent's
+        # `subgraphs` handle — necessarily after that first event.
+        # Flip retain on every log and channel so pushes are buffered
+        # until the consumer subscribes.
+        child._events._retain = True
+        for value in child.extensions.values():
+            if isinstance(value, EventLog):
+                value._retain = True
+            elif isinstance(value, StreamChannel):
+                value._log._retain = True
         if self._pump_fn is not None:
             child.bind_pump(self._pump_fn)
         if self._apump_fn is not None:
@@ -211,13 +223,14 @@ class StreamMux:
                 f"keys: {attributions}"
             )
         self._transformers.append(transformer)
-        self._bind_and_wire(projection)
+        is_native = bool(getattr(transformer, "_native", False))
+        self._bind_and_wire(projection, is_native=is_native)
         self.extensions.update(projection)
         owner_name = type(transformer).__name__
         for key in projection:
             self._projection_owners[key] = owner_name
             self._transformer_by_key[key] = transformer
-        if getattr(transformer, "_native", False):
+        if is_native:
             self.native_keys.update(projection.keys())
         on_register = getattr(transformer, "_on_register", None)
         if on_register is not None:
@@ -445,26 +458,34 @@ class StreamMux:
     # Binding and StreamChannel auto-wiring
     # ------------------------------------------------------------------
 
-    def _bind_and_wire(self, projection: dict[str, Any]) -> None:
-        """Bind and wire EventLog / StreamChannel instances in a projection."""
+    def _bind_and_wire(
+        self, projection: dict[str, Any], *, is_native: bool = False
+    ) -> None:
+        """Bind and wire EventLog / StreamChannel instances in a projection.
+
+        `is_native` controls wire naming: native transformer channels
+        emit events with `method` equal to the channel name, while
+        non-native channels get a `custom:` prefix to keep user-defined
+        projections from colliding with built-in method names.
+        """
         for value in projection.values():
             if isinstance(value, StreamChannel):
                 value._bind(is_async=self._is_async)
                 self._channels.append(value)
                 channel_name = value.name
 
-                def _make_forward(name: str) -> Callable[[Any], None]:
+                def _make_forward(name: str, native: bool) -> Callable[[Any], None]:
                     def _forward(item: Any) -> None:
-                        self._forward(name, item)
+                        self._forward(name, item, native=native)
 
                     return _forward
 
-                value._wire(_make_forward(channel_name))
+                value._wire(_make_forward(channel_name, is_native))
             elif isinstance(value, EventLog):
                 value._bind(is_async=self._is_async)
                 self._logs.append(value)
 
-    def _forward(self, channel_name: str, item: Any) -> None:
+    def _forward(self, channel_name: str, item: Any, *, native: bool) -> None:
         """Inject a ProtocolEvent for a StreamChannel push.
 
         Forwarded events bypass the transformer pipeline to avoid
@@ -472,12 +493,18 @@ class StreamMux:
         during `process()` would re-trigger itself). These events are
         visible in the main event log but are not passed through
         transformers' `process()` methods.
+
+        Native transformers emit with `method` equal to the channel
+        name (e.g. `"lifecycle"`); non-native transformers get a
+        `custom:` prefix so user-defined projections can't collide
+        with built-in method names.
         """
         self._seq += 1
+        method = channel_name if native else f"custom:{channel_name}"
         event: ProtocolEvent = {
             "type": "event",
             "seq": self._seq,
-            "method": f"custom:{channel_name}",
+            "method": method,
             "params": {
                 "namespace": [],
                 "timestamp": int(time.time() * 1000),
