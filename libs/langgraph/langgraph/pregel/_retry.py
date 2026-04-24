@@ -170,10 +170,15 @@ def run_with_retry(
                 interval * (matching_policy.backoff_factor ** (attempts - 1)),
             )
 
-            # Apply jitter if configured
-            sleep_time = (
-                interval + random.uniform(0, 1) if matching_policy.jitter else interval
-            )
+            # Apply jitter if configured, but keep the final sleep within
+            # max_interval so the documented cap isn't silently blown through.
+            if matching_policy.jitter:
+                sleep_time = min(
+                    matching_policy.max_interval,
+                    interval + random.uniform(0, 1),
+                )
+            else:
+                sleep_time = interval
             time.sleep(sleep_time)
 
             # log the retry
@@ -287,10 +292,15 @@ async def arun_with_retry(
                 interval * (matching_policy.backoff_factor ** (attempts - 1)),
             )
 
-            # Apply jitter if configured
-            sleep_time = (
-                interval + random.uniform(0, 1) if matching_policy.jitter else interval
-            )
+            # Apply jitter if configured, but keep the final sleep within
+            # max_interval so the documented cap isn't silently blown through.
+            if matching_policy.jitter:
+                sleep_time = min(
+                    matching_policy.max_interval,
+                    interval + random.uniform(0, 1),
+                )
+            else:
+                sleep_time = interval
             await asyncio.sleep(sleep_time)
 
             # log the retry
