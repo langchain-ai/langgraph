@@ -6,7 +6,7 @@ import random
 import sys
 import threading
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -30,10 +30,6 @@ from langgraph._internal._constants import (
 )
 from langgraph._internal._timeout import SYNC_TIMEOUT_UNSUPPORTED, timeout_seconds
 from langgraph.errors import GraphBubbleUp, NodeTimeoutError, ParentCommand
-from langgraph.pregel._utils import (
-    runnable_primary_has_native_astream,
-    runnable_primary_has_native_async,
-)
 from langgraph.runtime import ExecutionInfo, Runtime
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 
@@ -146,28 +142,6 @@ def _notify_timed_attempt(
         logger.warning("Timed attempt observer failed", exc_info=True)
 
 
-def _build_start_payload(
-    task: PregelExecutableTask,
-    config: RunnableConfig,
-    timeout_s: float,
-) -> _TimedAttemptPayload | None:
-    """Return a start payload iff an observer is registered."""
-    if config.get(CONF, {}).get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER) is None:
-        return None
-    return _task_timeout_payload(task, config, timeout_s)
-
-
-def _start_timed_attempt(
-    task: PregelExecutableTask,
-    config: RunnableConfig,
-    timeout_s: float,
-) -> _TimedAttemptPayload | None:
-    payload = _build_start_payload(task, config, timeout_s)
-    if payload is not None:
-        _notify_timed_attempt(config, payload)
-    return payload
-
-
 def _timed_attempt_finish_payload(
     payload: _TimedAttemptPayload,
     *,
@@ -183,85 +157,103 @@ def _timed_attempt_finish_payload(
     }
 
 
-def _finish_timed_attempt(
-    config: RunnableConfig,
-    payload: _TimedAttemptPayload | None,
-    error: BaseException | None = None,
-) -> None:
-    if payload is not None:
+class _TimedAttempt:
+    __slots__ = ("_config", "_payload")
+
+    def __init__(
+        self, config: RunnableConfig, payload: _TimedAttemptPayload | None
+    ) -> None:
+        self._config = config
+        self._payload = payload
+
+    @classmethod
+    def start(
+        cls,
+        task: PregelExecutableTask,
+        config: RunnableConfig,
+        timeout_s: float | None,
+    ) -> _TimedAttempt | None:
+        if (
+            timeout_s is None
+            or config.get(CONF, {}).get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER) is None
+        ):
+            return None
+        payload = _task_timeout_payload(task, config, timeout_s)
+        _notify_timed_attempt(config, payload)
+        return cls(config, payload)
+
+    def finish(self, error: BaseException | None = None) -> None:
+        if self._payload is None:
+            return
         _notify_timed_attempt(
-            config,
-            _timed_attempt_finish_payload(payload, error=error),
+            self._config,
+            _timed_attempt_finish_payload(self._payload, error=error),
         )
+        self._payload = None
 
 
-def _invoke_with_timeout(
-    task: PregelExecutableTask, config: RunnableConfig, timeout_s: float | None
-) -> Any:
-    if timeout_s is None:
-        return task.proc.invoke(task.input, config)
-    raise ValueError(f"{SYNC_TIMEOUT_UNSUPPORTED} Node {task.name!r} is sync.")
-
-
-async def _ainvoke_with_timeout(
-    task: PregelExecutableTask, config: RunnableConfig, timeout_s: float | None
-) -> Any:
-    if timeout_s is None:
-        return await task.proc.ainvoke(task.input, config)
-    scoped_attempt = _TimedAttemptScope()
-    scoped_config = scoped_attempt.wrap_config(config)
-    start = time.monotonic()
-    invoke_task = asyncio.create_task(task.proc.ainvoke(task.input, scoped_config))
-    try:
-        return await asyncio.wait_for(asyncio.shield(invoke_task), timeout=timeout_s)
-    except asyncio.TimeoutError as exc:
-        elapsed = time.monotonic() - start
-        scoped_attempt.close()
-        task.writes.clear()
-        invoke_task.cancel()
-        invoke_task.add_done_callback(_suppress_background_task_exception)
-        raise NodeTimeoutError(task.name, timeout_s, elapsed) from exc
-    except asyncio.CancelledError:
-        scoped_attempt.close()
-        invoke_task.cancel()
-        invoke_task.add_done_callback(_suppress_background_task_exception)
-        raise
-    finally:
-        scoped_attempt.close()
-
-
-async def _astream_with_timeout(
-    task: PregelExecutableTask, config: RunnableConfig, timeout_s: float | None
+def _finish_timed_attempt(
+    attempt: _TimedAttempt | None, error: BaseException | None = None
 ) -> None:
+    if attempt is not None:
+        attempt.finish(error)
+
+
+async def _arun_with_timeout(
+    task: PregelExecutableTask,
+    config: RunnableConfig,
+    timeout_s: float | None,
+    run: Callable[[RunnableConfig], Coroutine[Any, Any, Any]],
+) -> Any:
     if timeout_s is None:
-        async for _ in task.proc.astream(task.input, config):
-            pass
-        return
+        return await run(config)
     scoped_attempt = _TimedAttemptScope()
     scoped_config = scoped_attempt.wrap_config(config)
     start = time.monotonic()
-
-    async def _drain() -> None:
-        async for _ in task.proc.astream(task.input, scoped_config):
-            pass
-
-    stream_task = asyncio.create_task(_drain())
+    background_task: asyncio.Task[Any] = asyncio.create_task(run(scoped_config))
     try:
-        await asyncio.wait_for(asyncio.shield(stream_task), timeout=timeout_s)
+        return await asyncio.wait_for(
+            asyncio.shield(background_task), timeout=timeout_s
+        )
     except asyncio.TimeoutError as exc:
         elapsed = time.monotonic() - start
         scoped_attempt.close()
         task.writes.clear()
-        stream_task.cancel()
-        stream_task.add_done_callback(_suppress_background_task_exception)
+        background_task.cancel()
+        background_task.add_done_callback(_suppress_background_task_exception)
         raise NodeTimeoutError(task.name, timeout_s, elapsed) from exc
     except asyncio.CancelledError:
         scoped_attempt.close()
-        stream_task.cancel()
-        stream_task.add_done_callback(_suppress_background_task_exception)
+        background_task.cancel()
+        background_task.add_done_callback(_suppress_background_task_exception)
         raise
     finally:
         scoped_attempt.close()
+
+
+async def _arun_task_with_timeout(
+    task: PregelExecutableTask,
+    config: RunnableConfig,
+    timeout_s: float | None,
+    *,
+    stream: bool,
+) -> Any:
+    run: Callable[[RunnableConfig], Coroutine[Any, Any, Any]]
+    if stream:
+
+        async def drain_stream(run_config: RunnableConfig) -> None:
+            async for _ in task.proc.astream(task.input, run_config):
+                pass
+
+        run = drain_stream
+    else:
+
+        async def invoke(run_config: RunnableConfig) -> Any:
+            return await task.proc.ainvoke(task.input, run_config)
+
+        run = invoke
+
+    return await _arun_with_timeout(task, config, timeout_s, run)
 
 
 def _ensure_execution_info(
@@ -360,42 +352,22 @@ def run_with_retry(
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            timed_attempt_payload = (
-                _start_timed_attempt(task, config, timeout_s)
-                if timeout_s is not None
-                else None
-            )
-            try:
-                result = _invoke_with_timeout(task, config, timeout_s)
-            except (ParentCommand, GraphBubbleUp):
-                raise
-            except BaseException as exc:
-                _finish_timed_attempt(config, timed_attempt_payload, exc)
-                raise
-            _finish_timed_attempt(config, timed_attempt_payload)
-            return result
+            return task.proc.invoke(task.input, config)
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
             # strip task_ids from namespace for comparison (ns format: "node1|node2:task_id")
             if cmd.graph in (ns, recast_checkpoint_ns(ns), task.name):
                 # this command is for the current graph, handle it
-                try:
-                    for w in task.writers:
-                        w.invoke(cmd, config)
-                except Exception as writer_exc:
-                    _finish_timed_attempt(config, timed_attempt_payload, writer_exc)
-                    raise
-                _finish_timed_attempt(config, timed_attempt_payload)
+                for w in task.writers:
+                    w.invoke(cmd, config)
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent.
                 exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
-            _finish_timed_attempt(config, timed_attempt_payload)
             # bubble up
             raise
         except GraphBubbleUp:
-            _finish_timed_attempt(config, timed_attempt_payload)
             # if interrupted, end
             raise
         except Exception as exc:
@@ -453,14 +425,6 @@ async def arun_with_retry(
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
     timeout_s = timeout_seconds(task.timeout)
-    if timeout_s is not None:
-        supports_timeout = (
-            runnable_primary_has_native_astream(task.proc)
-            if stream
-            else runnable_primary_has_native_async(task.proc)
-        )
-        if not supports_timeout:
-            raise ValueError(f"{SYNC_TIMEOUT_UNSUPPORTED} Node {task.name!r} is sync.")
     attempts = 0
     node_first_attempt_time = time.time()
     config = task.config
@@ -495,37 +459,26 @@ async def arun_with_retry(
                     )
                 },
             )
+        timed_attempt: _TimedAttempt | None = None
         try:
             # clear any writes from previous attempts
             task.writes.clear()
+            timed_attempt = _TimedAttempt.start(task, config, timeout_s)
             # run the task
-            timed_attempt_payload = (
-                _start_timed_attempt(task, config, timeout_s)
-                if timeout_s is not None
-                else None
-            )
+            try:
+                result = await _arun_task_with_timeout(
+                    task, config, timeout_s, stream=stream
+                )
+            except GraphBubbleUp:
+                raise
+            except BaseException as exc:
+                _finish_timed_attempt(timed_attempt, exc)
+                raise
+            _finish_timed_attempt(timed_attempt)
             if stream:
-                try:
-                    await _astream_with_timeout(task, config, timeout_s)
-                except (ParentCommand, GraphBubbleUp):
-                    raise
-                except BaseException as exc:
-                    _finish_timed_attempt(config, timed_attempt_payload, exc)
-                    raise
-                else:
-                    _finish_timed_attempt(config, timed_attempt_payload)
-                    # if successful, end
-                    break
-            else:
-                try:
-                    result = await _ainvoke_with_timeout(task, config, timeout_s)
-                except (ParentCommand, GraphBubbleUp):
-                    raise
-                except BaseException as exc:
-                    _finish_timed_attempt(config, timed_attempt_payload, exc)
-                    raise
-                _finish_timed_attempt(config, timed_attempt_payload)
-                return result
+                # if successful, end
+                break
+            return result
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
@@ -536,21 +489,22 @@ async def arun_with_retry(
                     for w in task.writers:
                         w.invoke(cmd, config)
                 except Exception as writer_exc:
-                    _finish_timed_attempt(config, timed_attempt_payload, writer_exc)
+                    _finish_timed_attempt(timed_attempt, writer_exc)
                     raise
-                _finish_timed_attempt(config, timed_attempt_payload)
+                _finish_timed_attempt(timed_attempt)
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent.
                 exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
-            _finish_timed_attempt(config, timed_attempt_payload)
+            _finish_timed_attempt(timed_attempt)
             # bubble up
             raise
         except GraphBubbleUp:
-            _finish_timed_attempt(config, timed_attempt_payload)
+            _finish_timed_attempt(timed_attempt)
             # if interrupted, end
             raise
         except Exception as exc:
+            _finish_timed_attempt(timed_attempt, exc)
             if SUPPORTS_EXC_NOTES:
                 exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
             if not retry_policy:

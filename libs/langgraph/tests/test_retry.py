@@ -20,6 +20,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_THREAD_ID,
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
 )
+from langgraph._internal._runnable import RunnableCallable
 from langgraph._internal._timeout import timeout_seconds
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
@@ -643,43 +644,6 @@ def test_run_with_retry_rejects_sync_timeout_without_starting_proc():
     assert not started
 
 
-def test_arun_with_retry_rejects_sync_timeout_without_starting_proc():
-    started = False
-
-    class Proc:
-        def invoke(self, input, config):
-            nonlocal started
-            started = True
-            return input
-
-    task = _make_task(Proc(), timeout=0.05, name="sync")
-
-    async def _run() -> None:
-        with pytest.raises(ValueError, match="only supported for async nodes"):
-            await arun_with_retry(task, retry_policy=None)
-
-    asyncio.run(_run())
-    assert not started
-
-
-def test_arun_with_retry_stream_rejects_sync_runnable_lambda_timeout():
-    started = False
-
-    def proc(input):
-        nonlocal started
-        started = True
-        return input
-
-    task = _make_task(RunnableLambda(proc), timeout=0.05, name="sync-lambda")
-
-    async def _run() -> None:
-        with pytest.raises(ValueError, match="only supported for async nodes"):
-            await arun_with_retry(task, retry_policy=None, stream=True)
-
-    asyncio.run(_run())
-    assert not started
-
-
 def test_run_with_retry_without_timeout_runs_sync_directly():
     class FastProc:
         def invoke(self, input, config):
@@ -985,6 +949,39 @@ def test_pregel_validate_accepts_async_runnable_lambda_timeout():
                 NodeBuilder()
                 .subscribe_only("input")
                 .do(RunnableLambda(slow))
+                .set_timeout(0.05)
+                .write_to("output")
+            )
+        },
+        channels={
+            "input": EphemeralValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
+
+    async def _run() -> None:
+        with pytest.raises(NodeTimeoutError):
+            await graph.ainvoke(1)
+
+    asyncio.run(_run())
+
+
+def test_pregel_validate_accepts_runnable_callable_with_sync_and_async_timeout():
+    def sync(value: int) -> int:
+        return value + 1
+
+    async def async_(value: int) -> int:
+        await asyncio.sleep(0.2)
+        return value + 1
+
+    graph = Pregel(
+        nodes={
+            "slow": (
+                NodeBuilder()
+                .subscribe_only("input")
+                .do(RunnableCallable(sync, async_))
                 .set_timeout(0.05)
                 .write_to("output")
             )
