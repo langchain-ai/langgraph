@@ -583,7 +583,9 @@ def test_run_with_retry_creates_execution_info_when_missing():
     assert info.node_first_attempt_time is not None
 
 
-def _make_task(proc, *, timeout=None, retry_policy=(), name="timed", task_id="tid"):
+def _make_task(
+    proc, *, timeout=None, retry_policy=(), name="timed", task_id="tid", writers=()
+):
     runtime = DEFAULT_RUNTIME.override(execution_info=None)
     writes = deque()
     config = {
@@ -608,6 +610,7 @@ def _make_task(proc, *, timeout=None, retry_policy=(), name="timed", task_id="ti
         cache_key=None,
         id=task_id,
         path=("__pregel_pull", name),
+        writers=writers,
         timeout=timeout,
     )
 
@@ -730,6 +733,26 @@ def test_run_with_retry_timeout_discards_pre_timeout_sync_writes():
         run_with_retry(task, retry_policy=None)
 
     assert task.writes == deque()
+
+
+def test_entrypoint_timeout_allows_pre_timeout_child_task_to_run():
+    child_started = threading.Event()
+
+    @task()
+    def child(value: int) -> int:
+        child_started.set()
+        return value + 1
+
+    @entrypoint(timeout=0.05)
+    def parent(value: int) -> int:
+        child(value)
+        time.sleep(0.2)
+        return value
+
+    with pytest.raises(NodeTimeoutError):
+        parent.invoke(1)
+
+    assert child_started.wait(timeout=1.0)
 
 
 def test_run_with_retry_timeout_accepts_timedelta():
@@ -1049,6 +1072,31 @@ def test_run_with_retry_timeout_observer_treats_parent_command_as_non_error():
     assert finish["status"] == "success"
     assert finish["error_type"] is None
     assert finish["error_message"] is None
+
+
+def test_run_with_retry_timeout_observer_finishes_when_parent_writer_errors():
+    events: list[dict] = []
+
+    class ParentProc:
+        def invoke(self, input, config):
+            raise ParentCommand(Command(graph="parent", update={"value": "updated"}))
+
+    class FailingWriter:
+        def invoke(self, input, config):
+            raise ValueError("writer failed")
+
+    task = _make_task(
+        ParentProc(), timeout=0.05, name="parent", writers=(FailingWriter(),)
+    )
+    task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
+
+    with pytest.raises(ValueError, match="writer failed"):
+        run_with_retry(task, retry_policy=None)
+
+    finish = next(payload for payload in events if payload["event"] == "finish")
+    assert finish["status"] == "error"
+    assert finish["error_type"] == "ValueError"
+    assert finish["error_message"] == "writer failed"
 
 
 def test_arun_with_retry_timeout_observer_treats_bubble_up_as_non_error():
