@@ -6,13 +6,18 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.base import DELTA_SENTINEL
 
 from langgraph._internal._typing import MISSING
-from langgraph.channels._delta import DeltaChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 from langgraph.graph.message import add_messages
+
+import math as _math_compat
+from langgraph.channels.aggregate import AggregateChannel as _AggregateChannel_compat
+def DeltaChannel(op):
+    return _AggregateChannel_compat(op, snapshot_frequency=_math_compat.inf)
+
 
 pytestmark = pytest.mark.anyio
 
@@ -127,7 +132,6 @@ def test_delta_channel_basic_two_steps() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.checkpoint.base import DELTA_SENTINEL
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
     ch = DeltaChannel(add_messages).from_checkpoint(MISSING)
@@ -152,7 +156,6 @@ def test_delta_channel_from_checkpoint_writes_list() -> None:
     """replay_writes on a fresh channel replays through the operator."""
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
     spec = DeltaChannel(add_messages)
@@ -174,7 +177,6 @@ def test_delta_channel_from_checkpoint_writes_list() -> None:
 def test_delta_channel_from_checkpoint_backwards_compat() -> None:
     from langchain_core.messages import HumanMessage
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
     # Old BinaryOperatorAggregate checkpoint: plain list treated as backward compat
@@ -188,7 +190,6 @@ def test_delta_channel_overwrite() -> None:
     from langchain_core.messages import HumanMessage
     from langgraph.checkpoint.base import DELTA_SENTINEL
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph.message import add_messages
     from langgraph.types import Overwrite
 
@@ -207,7 +208,6 @@ def test_delta_channel_remove_message_and_replay() -> None:
     """RemoveMessage must round-trip correctly when writes are replayed."""
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
     spec = DeltaChannel(add_messages)
@@ -241,7 +241,6 @@ def test_delta_channel_update_by_id_and_replay() -> None:
     """Updating a message by ID must round-trip correctly through writes replay."""
     from langchain_core.messages import HumanMessage
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
     spec = DeltaChannel(add_messages)
@@ -270,7 +269,6 @@ def test_delta_channel_checkpoint_returns_sentinel() -> None:
     """checkpoint() always returns DELTA_SENTINEL regardless of state."""
     from langgraph.checkpoint.base import DELTA_SENTINEL
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph.message import add_messages
 
     ch = DeltaChannel(add_messages).from_checkpoint(MISSING)
@@ -290,7 +288,6 @@ def test_delta_channel_inmemory_saver_assembles_writes() -> None:
     from langgraph.checkpoint.memory import InMemorySaver
     from typing_extensions import TypedDict
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -329,7 +326,6 @@ def _delta_channel_with_type(operator, typ):
     """Build a DeltaChannel with an explicit type via the Annotated injection path."""
     from typing import Annotated
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph.state import _get_channel
 
     return _get_channel("_test", Annotated[typ, DeltaChannel(operator)])
@@ -464,7 +460,6 @@ def test_delta_channel_dict_reducer_with_notrequired_annotation() -> None:
 
     from typing_extensions import NotRequired
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph.state import _get_channel
 
     def merge_dicts(left: dict | None, right: dict) -> dict:
@@ -494,7 +489,6 @@ def test_delta_channel_dict_reducer_end_to_end_filesystem() -> None:
     from langgraph.checkpoint.memory import InMemorySaver
     from typing_extensions import TypedDict
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
 
     def merge_files(left: dict | None, right: dict) -> dict:

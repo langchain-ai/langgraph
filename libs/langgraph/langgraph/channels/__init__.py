@@ -1,3 +1,4 @@
+from langgraph.channels.aggregate import AggregateChannel
 from langgraph.channels.any_value import AnyValue
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -19,6 +20,7 @@ __all__ = (
     "LastValueAfterFinish",
     "UntrackedValue",
     "EphemeralValue",
+    "AggregateChannel",
     "BinaryOperatorAggregate",
     "NamedBarrierValue",
     "NamedBarrierValueAfterFinish",

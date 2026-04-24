@@ -49,9 +49,14 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
-from langgraph.channels._delta import DeltaChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.graph import END, START, StateGraph
+
+import math as _math_compat
+from langgraph.channels.aggregate import AggregateChannel as _AggregateChannel_compat
+def DeltaChannel(op):
+    return _AggregateChannel_compat(op, snapshot_frequency=_math_compat.inf)
+
 
 pytestmark = pytest.mark.anyio
 

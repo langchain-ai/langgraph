@@ -281,7 +281,14 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
         collected: list[PendingWrite] = []  # newest first; reversed at the end
         for cid in ancestors:
-            # Pre-delta blob terminator: subsumes any writes at this ancestor.
+            # Collect this ancestor's pending_writes FIRST. They encode the
+            # transition from state-AT-this-ancestor to state-AT-its-child;
+            # the ancestor's blob only reflects state AT the ancestor, not
+            # post-transition. Both pre-delta migration and snapshot-cadence
+            # cases require these writes folded onto the seed.
+            for type_tag, write_blob, task_id, _idx in writes_by_cid.get(cid, []):
+                val = self.serde.loads_typed((type_tag, write_blob))
+                collected.append((task_id, channel, val))
             ver = ver_of.get(cid)
             if ver is not None:
                 seed_blob = blob_by_ver.get(ver)
@@ -290,9 +297,6 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                     if blob_value is not DELTA_SENTINEL:
                         collected.reverse()
                         return _ChannelWritesHistory(seed=blob_value, writes=collected)
-            for type_tag, write_blob, task_id, _idx in writes_by_cid.get(cid, []):
-                val = self.serde.loads_typed((type_tag, write_blob))
-                collected.append((task_id, channel, val))
 
         collected.reverse()  # oldest → newest
         return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)

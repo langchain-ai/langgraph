@@ -47,7 +47,7 @@ from langgraph._internal._fields import (
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
-from langgraph.channels._delta import DeltaChannel
+from langgraph.channels.aggregate import AggregateChannel
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate, _strip_extras
 from langgraph.channels.ephemeral_value import EphemeralValue
@@ -1670,7 +1670,15 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
         # Search through all annotated medata to find channel annotations
         for item in meta:
             if isinstance(item, BaseChannel):
-                if isinstance(item, DeltaChannel) and hasattr(typ, "__origin__"):
+                # AggregateChannel instances without an explicit `typ` arg
+                # inherit the value type from the outer `Annotated[...]`.
+                # BinaryOperatorAggregate (a subclass) always sets typ
+                # explicitly, so _typ_provided is True and we skip inference.
+                if (
+                    isinstance(item, AggregateChannel)
+                    and not item._typ_provided
+                    and hasattr(typ, "__origin__")
+                ):
                     origin = typ.__origin__
                     # Unwrap parameterized Required[X]/NotRequired[X] to X
                     # (e.g. Annotated[NotRequired[dict[...]], ...]).

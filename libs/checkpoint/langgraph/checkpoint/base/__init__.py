@@ -540,13 +540,12 @@ class BaseCheckpointSaver(Generic[V]):
                 tup = self.get_tuple(cursor_config)
                 if tup is None:
                     break
-                # Pre-delta seed terminator: if the ancestor has a stored
-                # (non-sentinel) value for this channel, that snapshot
-                # subsumes any earlier writes on the chain. Stop here.
-                ancestor_value = tup.checkpoint["channel_values"].get(channel)
-                if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
-                    collected.reverse()
-                    return _ChannelWritesHistory(seed=ancestor_value, writes=collected)
+                # Collect this ancestor's pending_writes FIRST. They encode
+                # the transition from this ancestor's state to its child's
+                # state (K → K+1); the ancestor's `channel_values[channel]`
+                # blob reflects state AT K only, not post-transition. Both
+                # the pre-delta migration case and the snapshot-cadence
+                # case require these writes to be included.
                 if tup.pending_writes:
                     # Within a superstep, pending_writes are oldest→newest;
                     # reverse to scan newest-first.
@@ -554,6 +553,15 @@ class BaseCheckpointSaver(Generic[V]):
                         if write[1] != channel:
                             continue
                         collected.append(write)
+                # Seed terminator: any non-sentinel blob on an ancestor
+                # establishes the reconstruction base (state AT K). The
+                # writes we just collected fold on top to produce state
+                # at K+1; subsequent (already-collected, child-side)
+                # writes fold the chain up to the target.
+                ancestor_value = tup.checkpoint["channel_values"].get(channel)
+                if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
+                    collected.reverse()
+                    return _ChannelWritesHistory(seed=ancestor_value, writes=collected)
                 cursor_config = tup.parent_config
             collected.reverse()
             return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)
@@ -578,15 +586,17 @@ class BaseCheckpointSaver(Generic[V]):
                 tup = await self.aget_tuple(cursor_config)
                 if tup is None:
                     break
-                ancestor_value = tup.checkpoint["channel_values"].get(channel)
-                if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
-                    collected.reverse()
-                    return _ChannelWritesHistory(seed=ancestor_value, writes=collected)
+                # See sync variant for rationale: collect pending_writes
+                # BEFORE checking the blob terminator.
                 if tup.pending_writes:
                     for write in reversed(tup.pending_writes):
                         if write[1] != channel:
                             continue
                         collected.append(write)
+                ancestor_value = tup.checkpoint["channel_values"].get(channel)
+                if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
+                    collected.reverse()
+                    return _ChannelWritesHistory(seed=ancestor_value, writes=collected)
                 cursor_config = tup.parent_config
             collected.reverse()
             return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)

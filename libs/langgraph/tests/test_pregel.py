@@ -79,6 +79,14 @@ from tests.messages import (
     _AnyIdToolMessage,
 )
 
+import math as _math_compat
+from langgraph.channels.aggregate import AggregateChannel as _AggregateChannel_compat
+
+
+def DeltaChannel(op):
+    return _AggregateChannel_compat(op, snapshot_frequency=_math_compat.inf)
+
+
 pytestmark = pytest.mark.anyio
 
 logger = logging.getLogger(__name__)
@@ -9407,7 +9415,6 @@ async def test_delta_channel_end_to_end_inmemory() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9449,7 +9456,6 @@ async def test_delta_channel_time_travel() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9507,7 +9513,6 @@ async def test_delta_channel_remove_message_end_to_end() -> None:
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9554,7 +9559,6 @@ async def test_delta_channel_update_by_id_end_to_end() -> None:
     from langchain_core.messages import HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 

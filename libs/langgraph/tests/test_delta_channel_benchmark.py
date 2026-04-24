@@ -26,9 +26,14 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 
-from langgraph.channels._delta import DeltaChannel
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
+
+import math as _math_compat
+from langgraph.channels.aggregate import AggregateChannel as _AggregateChannel_compat
+def DeltaChannel(op):
+    return _AggregateChannel_compat(op, snapshot_frequency=_math_compat.inf)
+
 
 try:
     from langgraph.checkpoint.sqlite import SqliteSaver

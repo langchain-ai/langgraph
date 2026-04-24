@@ -161,19 +161,26 @@ class InMemorySaver(
             chain.append(current)
             _, _, parent = entry
             current = parent
-        # Scan newest→oldest. A pre-delta blob on an ancestor terminates the
-        # walk and is bound as `seed`; without this, a thread migrated from
-        # pre-delta storage would replay ancestor writes all the way to the
-        # root AND miss any value that lived only in the old blob (e.g. from
-        # `update_state`).
-        #
-        # At each ancestor, check the blob BEFORE processing its pending
-        # writes: a pre-delta blob represents the state AT that ancestor,
-        # which already subsumes any writes stored under it. Processing
-        # those writes first would fold them into the reconstructed value
-        # twice (once via the blob, once via replay).
+        # Scan newest→oldest. At each ancestor, collect its pending_writes
+        # BEFORE checking for a non-sentinel blob terminator. Rationale:
+        # a blob at ancestor K represents state AT step K; that ancestor's
+        # pending_writes are the writes that transition state K → state K+1.
+        # Both the pre-delta migration case (pre-migration blob + post-delta
+        # child) and the snapshot-cadence case (FULL blob mid-thread + later
+        # sentinel checkpoints) need those writes folded onto the seed.
         collected: list[PendingWrite] = []  # newest first
         for cp_id in chain:  # newest → oldest
+            step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
+            # Within a superstep, sorted by (task_id, idx) = oldest → newest;
+            # reverse for newest-first scan.
+            for (_task_id, _idx), (tid, ch, serialized, _) in sorted(
+                step_writes.items(), reverse=True
+            ):
+                if ch != channel:
+                    continue
+                val = self.serde.loads_typed(serialized)
+                collected.append((tid, ch, val))
+
             entry = ns_storage.get(cp_id)
             if entry is not None:
                 ckpt = self.serde.loads_typed(entry[0])
@@ -185,23 +192,13 @@ class InMemorySaver(
                     if blob_entry is not None and blob_entry[0] != "empty":
                         blob_value = self.serde.loads_typed(blob_entry)
                         if blob_value is not DELTA_SENTINEL:
-                            # Pre-delta snapshot terminator. Skip this
-                            # ancestor's writes — the blob subsumes them.
+                            # Non-sentinel blob terminator: state AT this
+                            # ancestor becomes the reconstruction seed.
                             collected.reverse()
                             return _ChannelWritesHistory(
                                 seed=blob_value, writes=collected
                             )
 
-            step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
-            # Within a superstep, sorted by (task_id, idx) = oldest → newest;
-            # reverse for newest-first scan.
-            for (_task_id, _idx), (tid, ch, serialized, _) in sorted(
-                step_writes.items(), reverse=True
-            ):
-                if ch != channel:
-                    continue
-                val = self.serde.loads_typed(serialized)
-                collected.append((tid, ch, val))
         collected.reverse()
         return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)
 

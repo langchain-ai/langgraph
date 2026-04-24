@@ -2,7 +2,7 @@
 
 **Status:** MVP scope approved. Implementation starting 2026-04-24.
 **Supersedes:** `langgraph.channels._delta.DeltaChannel` (experimental, private).
-**Branch:** `delta-channel-writes-based`.
+**Branch:** `sr/even-better-writes-idea` (forked from `delta-channel-writes-based`).
 
 ## Problem
 
