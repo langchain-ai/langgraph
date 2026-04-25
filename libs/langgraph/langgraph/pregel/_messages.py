@@ -196,7 +196,10 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         if (
             metadata
             and kwargs.get("name") == metadata.get("langgraph_node")
-            and (not tags or TAG_HIDDEN not in tags)
+            and (
+                not tags
+                or (TAG_HIDDEN not in tags and TAG_NOSTREAM not in tags)
+            )
         ):
             ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
                 :-1

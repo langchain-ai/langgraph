@@ -6905,6 +6905,40 @@ def test_tags_stream_mode_messages() -> None:
     ]
 
 
+def test_nostream_tag_suppresses_node_output_messages() -> None:
+    """Regression for #7509: a node tagged with `nostream` should not
+    leak its node output messages through `stream_mode="messages"`."""
+
+    def chatbot(state):
+        return {"messages": [AIMessage(content="hello from chatbot")]}
+
+    def silent(state):
+        return {"messages": [AIMessage(content="should not stream")]}
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("chatbot", chatbot)
+        .add_node(
+            "silent",
+            RunnableLambda(silent).with_config({"tags": ["nostream"]}),
+        )
+        .add_edge(START, "chatbot")
+        .add_edge("chatbot", "silent")
+        .add_edge("silent", END)
+        .compile()
+    )
+
+    streamed = list(
+        graph.stream(
+            {"messages": [HumanMessage(content="hi")]},
+            stream_mode="messages",
+        )
+    )
+    nodes = {meta["langgraph_node"] for _, meta in streamed}
+    assert "silent" not in nodes
+    assert "chatbot" in nodes
+
+
 def test_configurable_propagates_to_stream_metadata() -> None:
     """Regression: thread_id, run_id, assistant_id, graph_id,
     and langgraph_auth_user_id from configurable must appear
