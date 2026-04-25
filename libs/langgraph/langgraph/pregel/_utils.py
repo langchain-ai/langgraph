@@ -4,15 +4,20 @@ import ast
 import inspect
 import re
 import textwrap
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from functools import partial
 from typing import Any
 
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
+from langchain_core.runnables.config import run_in_executor
 from langgraph.checkpoint.base import ChannelVersions
 from typing_extensions import override
 
 from langgraph._internal._runnable import RunnableCallable, RunnableSeq
+from langgraph._internal._timeout import sync_timeout_unsupported
 from langgraph.pregel.protocol import PregelProtocol
+
+_SEQUENCE_TYPES = (RunnableSeq, RunnableSequence)
 
 
 def get_new_channel_versions(
@@ -62,6 +67,47 @@ def find_subgraph_pregel(candidate: Runnable) -> PregelProtocol | None:
                 )
 
     return None
+
+
+def _sequence_steps(runnable: Runnable) -> Sequence[Runnable] | None:
+    if isinstance(runnable, _SEQUENCE_TYPES):
+        return runnable.steps
+    return None
+
+
+def _has_method_override(runnable: Runnable, method_name: str) -> bool:
+    method = getattr(type(runnable), method_name, None)
+    return method is not None and method is not getattr(Runnable, method_name)
+
+
+def _is_executor_backed_afunc(afunc: Callable[..., Any] | None) -> bool:
+    return isinstance(afunc, partial) and afunc.func is run_in_executor
+
+
+def _has_native_async(runnable: Runnable) -> bool:
+    if isinstance(runnable, RunnableCallable):
+        return runnable.afunc is not None and not _is_executor_backed_afunc(
+            runnable.afunc
+        )
+    if isinstance(runnable, RunnableLambda):
+        return bool(getattr(runnable, "afunc", False))
+    return _has_method_override(runnable, "ainvoke")
+
+
+def _runnable_has_native_async(runnable: Runnable) -> bool:
+    """Return whether a runnable can be timed without running sync code."""
+
+    if (steps := _sequence_steps(runnable)) is not None:
+        for step in steps:
+            if not _runnable_has_native_async(step):
+                return False
+        return True
+    return _has_native_async(runnable)
+
+
+def validate_timeout_supported(runnable: Runnable, *, name: str) -> None:
+    if not _runnable_has_native_async(runnable):
+        raise sync_timeout_unsupported(name)
 
 
 def get_function_nonlocals(func: Callable) -> list[Any]:

@@ -4,12 +4,16 @@ import asyncio
 import logging
 import random
 import sys
+import threading
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Sequence
+from contextlib import suppress
 from dataclasses import replace
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, Literal
 
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import NotRequired, TypedDict
 
 from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
 from langgraph._internal._constants import (
@@ -18,16 +22,195 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_RUNTIME,
+    CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
+    CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
     NS_SEP,
 )
-from langgraph.errors import GraphBubbleUp, ParentCommand
+from langgraph._internal._timeout import sync_timeout_unsupported
+from langgraph.errors import GraphBubbleUp, NodeTimeoutError, ParentCommand
 from langgraph.runtime import ExecutionInfo, Runtime
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 
 logger = logging.getLogger(__name__)
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
+
+
+class _TimedAttemptPayload(TypedDict):
+    execution_id: str
+    task_id: str
+    task_name: str
+    attempt: int
+    run_id: str | None
+    thread_id: str | None
+    checkpoint_ns: str | None
+    started_at: datetime
+    deadline_at: datetime
+    timeout_secs: float
+    event: Literal["start", "finish"]
+    finished_at: NotRequired[datetime]
+    status: NotRequired[Literal["success", "error"]]
+    error_type: NotRequired[str | None]
+    error_message: NotRequired[str | None]
+
+
+class _TimedAttemptScope:
+    """Guarded-config window for timed attempts.
+
+    `close()` and the guarded send are serialized so writes from a cancelled
+    background task cannot slip past the timeout boundary.
+    """
+
+    __slots__ = ("_active", "_lock")
+
+    def __init__(self) -> None:
+        self._active = True
+        self._lock = threading.Lock()
+
+    def wrap_config(self, config: RunnableConfig) -> RunnableConfig:
+        configurable = config.get(CONF, {})
+        if (send := configurable.get(CONFIG_KEY_SEND)) is not None:
+            return patch_configurable(config, {CONFIG_KEY_SEND: self._guard_send(send)})
+        return config
+
+    def close(self) -> None:
+        with self._lock:
+            self._active = False
+
+    def _guard_send(
+        self, send: Callable[[Sequence[tuple[str, Any]]], None]
+    ) -> Callable[[Sequence[tuple[str, Any]]], None]:
+        def guarded_send(writes: Sequence[tuple[str, Any]]) -> None:
+            with self._lock:
+                if self._active:
+                    send(writes)
+
+        return guarded_send
+
+
+def _drain_cancelled(task: asyncio.Task[Any]) -> None:
+    # Mark the abandoned task's exception as retrieved so asyncio doesn't log it.
+    with suppress(asyncio.CancelledError):
+        task.exception()
+
+
+def _create_task_with_config_context(
+    run: Callable[[], Coroutine[Any, Any, Any]], config: RunnableConfig
+) -> asyncio.Task[Any]:
+    from langgraph._internal._runnable import set_config_context
+
+    with set_config_context(config) as context:
+        return context.run(lambda: asyncio.create_task(run()))
+
+
+def _start_timed_attempt(
+    task: PregelExecutableTask, config: RunnableConfig, timeout_s: float
+) -> _TimedAttemptPayload | None:
+    configurable = config.get(CONF, {})
+    callback = configurable.get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER)
+    if callback is None:
+        return None
+    runtime = configurable.get(CONFIG_KEY_RUNTIME)
+    execution_info = runtime.execution_info if isinstance(runtime, Runtime) else None
+    attempt = execution_info.node_attempt if execution_info is not None else 1
+    run_id = execution_info.run_id if execution_info is not None else None
+    thread_id = (
+        execution_info.thread_id
+        if execution_info is not None
+        else configurable.get(CONFIG_KEY_THREAD_ID)
+    )
+    checkpoint_ns = (
+        execution_info.checkpoint_ns
+        if execution_info is not None
+        else configurable.get(CONFIG_KEY_CHECKPOINT_NS)
+    )
+    started_at = datetime.now(timezone.utc)
+    payload: _TimedAttemptPayload = {
+        "execution_id": f"run:{run_id or '-'}|task:{task.id}|attempt:{attempt}",
+        "task_id": task.id,
+        "task_name": task.name,
+        "attempt": attempt,
+        "run_id": run_id,
+        "thread_id": thread_id,
+        "checkpoint_ns": checkpoint_ns,
+        "started_at": started_at,
+        "deadline_at": started_at + timedelta(seconds=timeout_s),
+        "timeout_secs": timeout_s,
+        "event": "start",
+    }
+    _dispatch_observer(callback, payload)
+    return payload
+
+
+def _finish_timed_attempt(
+    config: RunnableConfig,
+    payload: _TimedAttemptPayload | None,
+    error: BaseException | None = None,
+) -> None:
+    if payload is None:
+        return
+    callback = config.get(CONF, {}).get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER)
+    if callback is None:
+        return
+    finish: _TimedAttemptPayload = {
+        **payload,
+        "event": "finish",
+        "finished_at": datetime.now(timezone.utc),
+        "status": "error" if error is not None else "success",
+        "error_type": type(error).__name__ if error is not None else None,
+        "error_message": str(error) if error is not None else None,
+    }
+    _dispatch_observer(callback, finish)
+
+
+def _dispatch_observer(
+    callback: Callable[[_TimedAttemptPayload], None], payload: _TimedAttemptPayload
+) -> None:
+    try:
+        callback(payload)
+    except Exception:
+        logger.warning("Timed attempt observer failed", exc_info=True)
+
+
+async def _arun_with_timeout(
+    task: PregelExecutableTask,
+    config: RunnableConfig,
+    timeout_s: float,
+    *,
+    stream: bool,
+) -> Any:
+    scope = _TimedAttemptScope()
+    scoped_config = scope.wrap_config(config)
+    start = time.monotonic()
+    if stream:
+
+        async def run() -> Any:
+            async for _ in task.proc.astream(task.input, scoped_config):
+                pass
+
+    else:
+
+        async def run() -> Any:
+            return await task.proc.ainvoke(task.input, scoped_config)
+
+    bg = _create_task_with_config_context(run, scoped_config)
+    try:
+        return await asyncio.wait_for(asyncio.shield(bg), timeout=timeout_s)
+    except asyncio.TimeoutError as exc:
+        elapsed = time.monotonic() - start
+        scope.close()
+        task.writes.clear()
+        bg.cancel()
+        bg.add_done_callback(_drain_cancelled)
+        raise NodeTimeoutError(task.name, timeout_s, elapsed) from exc
+    except asyncio.CancelledError:
+        scope.close()
+        bg.cancel()
+        bg.add_done_callback(_drain_cancelled)
+        raise
+    finally:
+        scope.close()
 
 
 def _ensure_execution_info(
@@ -90,6 +273,11 @@ def run_with_retry(
 ) -> None:
     """Run a task with retries."""
     retry_policy = task.retry_policy or retry_policy
+    if task.timeout is not None:
+        # `validate_timeout_supported` catches sync nodes at compile time;
+        # this is a runtime safety net for paths (e.g. distributed runtime)
+        # that may bypass that validation.
+        raise sync_timeout_unsupported(task.name)
     attempts = 0
     node_first_attempt_time = time.time()
     config = task.config
@@ -195,6 +383,7 @@ async def arun_with_retry(
 ) -> None:
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
+    timeout_s = task.timeout
     attempts = 0
     node_first_attempt_time = time.time()
     config = task.config
@@ -229,35 +418,47 @@ async def arun_with_retry(
                     )
                 },
             )
+        attempt_payload = (
+            _start_timed_attempt(task, config, timeout_s)
+            if timeout_s is not None
+            else None
+        )
         try:
-            # clear any writes from previous attempts
             task.writes.clear()
-            # run the task
-            if stream:
-                async for _ in task.proc.astream(task.input, config):
-                    pass
-                # if successful, end
-                break
-            else:
+            if timeout_s is None:
+                if stream:
+                    async for _ in task.proc.astream(task.input, config):
+                        pass
+                    break
                 return await task.proc.ainvoke(task.input, config)
+            result = await _arun_with_timeout(task, config, timeout_s, stream=stream)
+            _finish_timed_attempt(config, attempt_payload)
+            if stream:
+                break
+            return result
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
             # strip task_ids from namespace for comparison (ns format: "node1|node2:task_id")
             if cmd.graph in (ns, recast_checkpoint_ns(ns), task.name):
-                # this command is for the current graph, handle it
-                for w in task.writers:
-                    w.invoke(cmd, config)
+                try:
+                    for w in task.writers:
+                        w.invoke(cmd, config)
+                except Exception as writer_exc:
+                    _finish_timed_attempt(config, attempt_payload, writer_exc)
+                    raise
+                _finish_timed_attempt(config, attempt_payload)
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent.
                 exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
-            # bubble up
+            _finish_timed_attempt(config, attempt_payload)
             raise
         except GraphBubbleUp:
-            # if interrupted, end
+            _finish_timed_attempt(config, attempt_payload)
             raise
         except Exception as exc:
+            _finish_timed_attempt(config, attempt_payload, exc)
             if SUPPORTS_EXC_NOTES:
                 exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
             if not retry_policy:
