@@ -72,6 +72,7 @@ from langchain_core.runnables.config import (
     RunnableConfig,
     get_config_list,
     get_executor_for_config,
+    run_in_executor,
 )
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
@@ -1205,7 +1206,9 @@ class ToolNode(RunnableCallable):
                 return await self._awrap_tool_call(tool_request, execute)
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
-            return self._wrap_tool_call(tool_request, _sync_execute)
+            return await run_in_executor(
+                config, self._wrap_tool_call, tool_request, _sync_execute
+            )
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:

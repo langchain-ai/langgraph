@@ -1,5 +1,7 @@
 """Unit tests for tool call interceptor in ToolNode."""
 
+import asyncio
+import time
 from collections.abc import Callable
 from unittest.mock import Mock
 
@@ -120,6 +122,49 @@ async def test_passthrough_handler_async() -> None:
     assert isinstance(tool_message, ToolMessage)
     assert tool_message.content == "5"
     assert tool_message.tool_call_id == "call_2"
+
+
+async def test_async_sync_handler_does_not_block_event_loop() -> None:
+    """Test sync handlers run off the event loop during async execution."""
+
+    def blocking_handler(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        time.sleep(0.1)
+        return execute(request)
+
+    tool_node = ToolNode([add], wrap_tool_call=blocking_handler)
+    started = time.perf_counter()
+    tick_elapsed = 0.0
+
+    async def tick() -> None:
+        nonlocal tick_elapsed
+        await asyncio.sleep(0.01)
+        tick_elapsed = time.perf_counter() - started
+
+    await asyncio.gather(
+        tool_node.ainvoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "adding",
+                        tool_calls=[
+                            {
+                                "name": "add",
+                                "args": {"a": 2, "b": 3},
+                                "id": "call_2",
+                            }
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        ),
+        tick(),
+    )
+
+    assert tick_elapsed < 0.08
 
 
 def test_modify_arguments() -> None:
