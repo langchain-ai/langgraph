@@ -1,3 +1,4 @@
+import asyncio
 from collections import deque
 from unittest.mock import Mock, patch
 
@@ -305,6 +306,88 @@ def test_graph_with_jitter_retry_policy():
     # Verify jitter was applied
     mock_random.assert_called_with(0, 1)  # Jitter should use random.uniform(0, 1)
     mock_sleep.assert_called_with(0.01 + 0.05)  # Sleep should include jitter
+
+
+def test_graph_with_jitter_retry_policy_respects_max_interval():
+    """Test that jitter never increases the sync sleep past max_interval."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempt_count = 0
+
+    def failing_node(state):
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count < 2:
+            raise ValueError("Intentional failure")
+        return {"foo": "success"}
+
+    retry_policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.5,
+        max_interval=0.5,
+        jitter=True,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, retry_policy=retry_policy)
+        .add_edge(START, "failing_node")
+        .compile()
+    )
+
+    with (
+        patch("random.uniform", return_value=0.75),
+        patch("time.sleep") as mock_sleep,
+    ):
+        result = graph.invoke({"foo": ""})
+
+    assert attempt_count == 2
+    assert result["foo"] == "success"
+    mock_sleep.assert_called_once_with(0.5)
+
+
+def test_async_graph_with_jitter_retry_policy_respects_max_interval():
+    """Test that jitter never increases the async sleep past max_interval."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempt_count = 0
+
+    async def failing_node(state):
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count < 2:
+            raise ValueError("Intentional failure")
+        return {"foo": "success"}
+
+    retry_policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.5,
+        max_interval=0.5,
+        jitter=True,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, retry_policy=retry_policy)
+        .add_edge(START, "failing_node")
+        .compile()
+    )
+
+    with (
+        patch("random.uniform", return_value=0.75),
+        patch("asyncio.sleep") as mock_sleep,
+    ):
+        result = asyncio.run(graph.ainvoke({"foo": ""}))
+
+    assert attempt_count == 2
+    assert result["foo"] == "success"
+    mock_sleep.assert_called_once_with(0.5)
 
 
 def test_graph_with_multiple_retry_policies():
