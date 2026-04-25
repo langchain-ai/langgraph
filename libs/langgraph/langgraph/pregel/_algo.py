@@ -62,7 +62,7 @@ from langgraph._internal._constants import (
     TASKS,
 )
 from langgraph._internal._scratchpad import PregelScratchpad
-from langgraph._internal._timeout import coerce_timeout
+from langgraph._internal._timeout import coerce_idle_timeout
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -122,7 +122,7 @@ class Call:
         "retry_policy",
         "cache_policy",
         "callbacks",
-        "timeout",
+        "idle_timeout",
     )
 
     func: Callable
@@ -130,7 +130,7 @@ class Call:
     retry_policy: Sequence[RetryPolicy] | None
     cache_policy: CachePolicy | None
     callbacks: Callbacks
-    timeout: float | None
+    idle_timeout: float | None
 
     def __init__(
         self,
@@ -140,14 +140,14 @@ class Call:
         retry_policy: Sequence[RetryPolicy] | None,
         cache_policy: CachePolicy | None,
         callbacks: Callbacks,
-        timeout: float | timedelta | None = None,
+        idle_timeout: float | timedelta | None = None,
     ) -> None:
         self.func = func
         self.input = input
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.callbacks = callbacks
-        self.timeout = coerce_timeout(timeout)
+        self.idle_timeout = coerce_idle_timeout(idle_timeout)
 
 
 def should_interrupt(
@@ -745,7 +745,7 @@ def prepare_single_task(
                         task_path[:3],
                         writers=proc.flat_writers,
                         subgraphs=proc.subgraphs,
-                        timeout=proc.timeout,
+                        idle_timeout=proc.idle_timeout,
                     )
             else:
                 return PregelTask(task_id, name, task_path[:3])
@@ -883,7 +883,7 @@ def prepare_push_task_functional(
             cache_key,
             task_id,
             in_progress_task_path,
-            timeout=call.timeout,
+            idle_timeout=call.idle_timeout,
         )
     else:
         return PregelTask(task_id, name, in_progress_task_path)
@@ -1055,7 +1055,7 @@ def prepare_push_task_send(
             translated_task_path,
             writers=proc.flat_writers,
             subgraphs=proc.subgraphs,
-            timeout=proc.timeout,
+            idle_timeout=proc.idle_timeout,
         )
     else:
         return PregelTask(task_id, packet.node, translated_task_path)

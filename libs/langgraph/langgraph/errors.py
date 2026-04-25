@@ -129,7 +129,7 @@ class TaskNotFound(Exception):
 
 
 class NodeTimeoutError(TimeoutError):
-    """Raised when a node invocation exceeds its configured `timeout`.
+    """Raised when a node invocation makes no progress for its `idle_timeout`.
 
     Subclasses the built-in `TimeoutError`, so existing `except TimeoutError`
     handlers keep working. If the node has a `retry_policy` whose `retry_on`
@@ -137,14 +137,14 @@ class NodeTimeoutError(TimeoutError):
     """
 
     node: str
-    timeout: float
+    idle_timeout: float
     elapsed: float
 
-    def __init__(self, node: str, timeout: float, elapsed: float) -> None:
+    def __init__(self, node: str, idle_timeout: float, elapsed: float) -> None:
         super().__init__(
-            f"Node '{node}' exceeded its timeout of {timeout:.3f}s "
-            f"(elapsed: {elapsed:.3f}s)."
+            f"Node '{node}' exceeded its idle timeout of {idle_timeout:.3f}s "
+            f"without making progress (elapsed: {elapsed:.3f}s)."
         )
         self.node = node
-        self.timeout = timeout
+        self.idle_timeout = idle_timeout
         self.elapsed = elapsed

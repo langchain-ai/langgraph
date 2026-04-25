@@ -14,7 +14,7 @@ from langgraph.checkpoint.base import ChannelVersions
 from typing_extensions import override
 
 from langgraph._internal._runnable import RunnableCallable, RunnableSeq
-from langgraph._internal._timeout import sync_timeout_unsupported
+from langgraph._internal._timeout import sync_idle_timeout_unsupported
 from langgraph.pregel.protocol import PregelProtocol
 
 _SEQUENCE_TYPES = (RunnableSeq, RunnableSequence)
@@ -95,7 +95,12 @@ def _has_native_async(runnable: Runnable) -> bool:
 
 
 def _runnable_has_native_async(runnable: Runnable) -> bool:
-    """Return whether a runnable can be timed without running sync code."""
+    """Return whether a runnable can be idle-timed without known sync code.
+
+    For custom runnable subclasses, an `ainvoke` override is treated as the
+    async contract. We do not introspect whether that implementation delegates
+    to blocking work internally.
+    """
 
     if (steps := _sequence_steps(runnable)) is not None:
         for step in steps:
@@ -105,9 +110,9 @@ def _runnable_has_native_async(runnable: Runnable) -> bool:
     return _has_native_async(runnable)
 
 
-def validate_timeout_supported(runnable: Runnable, *, name: str) -> None:
+def validate_idle_timeout_supported(runnable: Runnable, *, name: str) -> None:
     if not _runnable_has_native_async(runnable):
-        raise sync_timeout_unsupported(name)
+        raise sync_idle_timeout_unsupported(name)
 
 
 def get_function_nonlocals(func: Callable) -> list[Any]:

@@ -9,7 +9,7 @@ import time
 from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from contextlib import suppress
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from langchain_core.runnables import RunnableConfig
@@ -18,18 +18,21 @@ from typing_extensions import NotRequired, TypedDict
 from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
 from langgraph._internal._constants import (
     CONF,
+    CONFIG_KEY_CALL,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
     NS_SEP,
 )
-from langgraph._internal._timeout import sync_timeout_unsupported
+from langgraph._internal._timeout import sync_idle_timeout_unsupported
 from langgraph.errors import GraphBubbleUp, NodeTimeoutError, ParentCommand
+from langgraph.pregel.protocol import StreamProtocol
 from langgraph.runtime import ExecutionInfo, Runtime
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 
@@ -37,7 +40,7 @@ logger = logging.getLogger(__name__)
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
-class _TimedAttemptPayload(TypedDict):
+class _IdleTimedAttemptPayload(TypedDict):
     execution_id: str
     task_id: str
     task_name: str
@@ -46,8 +49,7 @@ class _TimedAttemptPayload(TypedDict):
     thread_id: str | None
     checkpoint_ns: str | None
     started_at: datetime
-    deadline_at: datetime
-    timeout_secs: float
+    idle_timeout_secs: float
     event: Literal["start", "finish"]
     finished_at: NotRequired[datetime]
     status: NotRequired[Literal["success", "error"]]
@@ -55,28 +57,55 @@ class _TimedAttemptPayload(TypedDict):
     error_message: NotRequired[str | None]
 
 
-class _TimedAttemptScope:
-    """Guarded-config window for timed attempts.
+class _IdleTimedAttemptScope:
+    """Guarded-config window for idle timed attempts.
 
-    `close()` and the guarded send are serialized so writes from a cancelled
-    background task cannot slip past the timeout boundary.
+    The wrapped config marks writes, stream events, runtime stream writer calls,
+    and child task scheduling as observable progress. `close()` and guarded
+    callbacks are serialized so cancelled background tasks cannot emit writes
+    or stream events past the idle_timeout boundary.
     """
 
-    __slots__ = ("_active", "_lock")
+    __slots__ = ("_active", "_last_progress", "_lock")
 
     def __init__(self) -> None:
         self._active = True
+        self._last_progress = time.monotonic()
         self._lock = threading.Lock()
 
     def wrap_config(self, config: RunnableConfig) -> RunnableConfig:
         configurable = config.get(CONF, {})
+        patch: dict[str, Any] = {}
         if (send := configurable.get(CONFIG_KEY_SEND)) is not None:
-            return patch_configurable(config, {CONFIG_KEY_SEND: self._guard_send(send)})
-        return config
+            patch[CONFIG_KEY_SEND] = self._guard_send(send)
+        if (stream := configurable.get(CONFIG_KEY_STREAM)) is not None:
+            patch[CONFIG_KEY_STREAM] = self._guard_stream(stream)
+        if (call := configurable.get(CONFIG_KEY_CALL)) is not None:
+            patch[CONFIG_KEY_CALL] = self._guard_call(call)
+        if isinstance(runtime := configurable.get(CONFIG_KEY_RUNTIME), Runtime):
+            patch[CONFIG_KEY_RUNTIME] = runtime.override(
+                stream_writer=self._guard_stream_writer(runtime.stream_writer)
+            )
+        return patch_configurable(config, patch) if patch else config
+
+    def touch(self) -> None:
+        with self._lock:
+            if self._active:
+                self._last_progress = time.monotonic()
 
     def close(self) -> None:
         with self._lock:
             self._active = False
+
+    async def wait_for_idle_timeout(self, idle_timeout_s: float) -> None:
+        while True:
+            with self._lock:
+                if not self._active:
+                    return
+                remaining = self._last_progress + idle_timeout_s - time.monotonic()
+            if remaining <= 0:
+                raise asyncio.TimeoutError
+            await asyncio.sleep(remaining)
 
     def _guard_send(
         self, send: Callable[[Sequence[tuple[str, Any]]], None]
@@ -84,9 +113,41 @@ class _TimedAttemptScope:
         def guarded_send(writes: Sequence[tuple[str, Any]]) -> None:
             with self._lock:
                 if self._active:
+                    if writes:
+                        self._last_progress = time.monotonic()
                     send(writes)
 
         return guarded_send
+
+    def _guard_stream(self, stream: StreamProtocol) -> StreamProtocol:
+        def guarded_stream(chunk: tuple[tuple[str, ...], str, Any]) -> None:
+            with self._lock:
+                if self._active:
+                    self._last_progress = time.monotonic()
+                    stream(chunk)
+
+        return StreamProtocol(guarded_stream, stream.modes)
+
+    def _guard_call(self, call: Callable[..., Any]) -> Callable[..., Any]:
+        def guarded_call(*args: Any, **kwargs: Any) -> Any:
+            with self._lock:
+                if self._active:
+                    self._last_progress = time.monotonic()
+                    return call(*args, **kwargs)
+            raise asyncio.CancelledError
+
+        return guarded_call
+
+    def _guard_stream_writer(
+        self, stream_writer: Callable[[Any], None]
+    ) -> Callable[[Any], None]:
+        def guarded_stream_writer(chunk: Any) -> None:
+            with self._lock:
+                if self._active:
+                    self._last_progress = time.monotonic()
+                    stream_writer(chunk)
+
+        return guarded_stream_writer
 
 
 def _drain_cancelled(task: asyncio.Task[Any]) -> None:
@@ -105,8 +166,8 @@ def _create_task_with_config_context(
 
 
 def _start_timed_attempt(
-    task: PregelExecutableTask, config: RunnableConfig, timeout_s: float
-) -> _TimedAttemptPayload | None:
+    task: PregelExecutableTask, config: RunnableConfig, idle_timeout_s: float
+) -> _IdleTimedAttemptPayload | None:
     configurable = config.get(CONF, {})
     callback = configurable.get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER)
     if callback is None:
@@ -126,7 +187,7 @@ def _start_timed_attempt(
         else configurable.get(CONFIG_KEY_CHECKPOINT_NS)
     )
     started_at = datetime.now(timezone.utc)
-    payload: _TimedAttemptPayload = {
+    payload: _IdleTimedAttemptPayload = {
         "execution_id": f"run:{run_id or '-'}|task:{task.id}|attempt:{attempt}",
         "task_id": task.id,
         "task_name": task.name,
@@ -135,8 +196,7 @@ def _start_timed_attempt(
         "thread_id": thread_id,
         "checkpoint_ns": checkpoint_ns,
         "started_at": started_at,
-        "deadline_at": started_at + timedelta(seconds=timeout_s),
-        "timeout_secs": timeout_s,
+        "idle_timeout_secs": idle_timeout_s,
         "event": "start",
     }
     _dispatch_observer(callback, payload)
@@ -145,7 +205,7 @@ def _start_timed_attempt(
 
 def _finish_timed_attempt(
     config: RunnableConfig,
-    payload: _TimedAttemptPayload | None,
+    payload: _IdleTimedAttemptPayload | None,
     error: BaseException | None = None,
 ) -> None:
     if payload is None:
@@ -153,7 +213,7 @@ def _finish_timed_attempt(
     callback = config.get(CONF, {}).get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER)
     if callback is None:
         return
-    finish: _TimedAttemptPayload = {
+    finish: _IdleTimedAttemptPayload = {
         **payload,
         "event": "finish",
         "finished_at": datetime.now(timezone.utc),
@@ -165,29 +225,30 @@ def _finish_timed_attempt(
 
 
 def _dispatch_observer(
-    callback: Callable[[_TimedAttemptPayload], None], payload: _TimedAttemptPayload
+    callback: Callable[[_IdleTimedAttemptPayload], None],
+    payload: _IdleTimedAttemptPayload,
 ) -> None:
     try:
         callback(payload)
     except Exception:
-        logger.warning("Timed attempt observer failed", exc_info=True)
+        logger.warning("Idle timed attempt observer failed", exc_info=True)
 
 
-async def _arun_with_timeout(
+async def _arun_with_idle_timeout(
     task: PregelExecutableTask,
     config: RunnableConfig,
-    timeout_s: float,
+    idle_timeout_s: float,
     *,
     stream: bool,
 ) -> Any:
-    scope = _TimedAttemptScope()
+    scope = _IdleTimedAttemptScope()
     scoped_config = scope.wrap_config(config)
     start = time.monotonic()
     if stream:
 
         async def run() -> Any:
             async for _ in task.proc.astream(task.input, scoped_config):
-                pass
+                scope.touch()
 
     else:
 
@@ -195,22 +256,34 @@ async def _arun_with_timeout(
             return await task.proc.ainvoke(task.input, scoped_config)
 
     bg = _create_task_with_config_context(run, scoped_config)
+    watchdog = asyncio.create_task(scope.wait_for_idle_timeout(idle_timeout_s))
     try:
-        return await asyncio.wait_for(asyncio.shield(bg), timeout=timeout_s)
+        done, _ = await asyncio.wait(
+            {bg, watchdog}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if bg in done:
+            watchdog.cancel()
+            with suppress(asyncio.CancelledError):
+                await watchdog
+            return await bg
+        await watchdog
+        raise AssertionError("idle timeout watchdog completed without timing out")
     except asyncio.TimeoutError as exc:
         elapsed = time.monotonic() - start
         scope.close()
         task.writes.clear()
         bg.cancel()
         bg.add_done_callback(_drain_cancelled)
-        raise NodeTimeoutError(task.name, timeout_s, elapsed) from exc
+        raise NodeTimeoutError(task.name, idle_timeout_s, elapsed) from exc
     except asyncio.CancelledError:
         scope.close()
         bg.cancel()
+        watchdog.cancel()
         bg.add_done_callback(_drain_cancelled)
         raise
     finally:
         scope.close()
+        watchdog.cancel()
 
 
 def _ensure_execution_info(
@@ -273,11 +346,11 @@ def run_with_retry(
 ) -> None:
     """Run a task with retries."""
     retry_policy = task.retry_policy or retry_policy
-    if task.timeout is not None:
-        # `validate_timeout_supported` catches sync nodes at compile time;
+    if task.idle_timeout is not None:
+        # `validate_idle_timeout_supported` catches sync nodes at compile time;
         # this is a runtime safety net for paths (e.g. distributed runtime)
         # that may bypass that validation.
-        raise sync_timeout_unsupported(task.name)
+        raise sync_idle_timeout_unsupported(task.name)
     attempts = 0
     node_first_attempt_time = time.time()
     config = task.config
@@ -383,7 +456,7 @@ async def arun_with_retry(
 ) -> None:
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
-    timeout_s = task.timeout
+    idle_timeout_s = task.idle_timeout
     attempts = 0
     node_first_attempt_time = time.time()
     config = task.config
@@ -419,19 +492,21 @@ async def arun_with_retry(
                 },
             )
         attempt_payload = (
-            _start_timed_attempt(task, config, timeout_s)
-            if timeout_s is not None
+            _start_timed_attempt(task, config, idle_timeout_s)
+            if idle_timeout_s is not None
             else None
         )
         try:
             task.writes.clear()
-            if timeout_s is None:
+            if idle_timeout_s is None:
                 if stream:
                     async for _ in task.proc.astream(task.input, config):
                         pass
                     break
                 return await task.proc.ainvoke(task.input, config)
-            result = await _arun_with_timeout(task, config, timeout_s, stream=stream)
+            result = await _arun_with_idle_timeout(
+                task, config, idle_timeout_s, stream=stream
+            )
             _finish_timed_attempt(config, attempt_payload)
             if stream:
                 break

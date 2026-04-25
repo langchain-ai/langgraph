@@ -548,7 +548,7 @@ class PregelExecutableTask:
     path: tuple[str | int | tuple, ...]
     writers: Sequence[Runnable] = ()
     subgraphs: Sequence[PregelProtocol] = ()
-    timeout: float | None = None
+    idle_timeout: float | None = None
 
 
 class StateSnapshot(NamedTuple):
