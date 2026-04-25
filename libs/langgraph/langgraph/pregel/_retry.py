@@ -6,7 +6,7 @@ import random
 import sys
 import threading
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -93,6 +93,15 @@ def _drain_cancelled(task: asyncio.Task[Any]) -> None:
     # Mark the abandoned task's exception as retrieved so asyncio doesn't log it.
     with suppress(asyncio.CancelledError):
         task.exception()
+
+
+def _create_task_with_config_context(
+    run: Callable[[], Coroutine[Any, Any, Any]], config: RunnableConfig
+) -> asyncio.Task[Any]:
+    from langgraph._internal._runnable import set_config_context
+
+    with set_config_context(config) as context:
+        return context.run(lambda: asyncio.create_task(run()))
 
 
 def _start_timed_attempt(
@@ -185,16 +194,18 @@ async def _arun_with_timeout(
         async def run() -> Any:
             return await task.proc.ainvoke(task.input, scoped_config)
 
-    bg: asyncio.Task[Any] = asyncio.create_task(run())
+    bg = _create_task_with_config_context(run, scoped_config)
     try:
         return await asyncio.wait_for(asyncio.shield(bg), timeout=timeout_s)
     except asyncio.TimeoutError as exc:
         elapsed = time.monotonic() - start
+        scope.close()
         task.writes.clear()
         bg.cancel()
         bg.add_done_callback(_drain_cancelled)
         raise NodeTimeoutError(task.name, timeout_s, elapsed) from exc
     except asyncio.CancelledError:
+        scope.close()
         bg.cancel()
         bg.add_done_callback(_drain_cancelled)
         raise

@@ -706,7 +706,12 @@ class RunnableSeq(Runnable):
                                 step.ainvoke(input, config, **kwargs), context=context
                             )
                     else:
-                        input = await step.ainvoke(input, config, **kwargs)
+                        with set_config_context(config) as context:
+                            input = await context.run(
+                                lambda: asyncio.create_task(
+                                    step.ainvoke(input, config, **kwargs)
+                                )
+                            )
                 else:
                     input = await step.ainvoke(input, config)
         # finish the root run
