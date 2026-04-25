@@ -4,7 +4,6 @@ import sys
 from collections import deque
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import asdict, dataclass
-from datetime import timedelta
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -549,7 +548,7 @@ class PregelExecutableTask:
     path: tuple[str | int | tuple, ...]
     writers: Sequence[Runnable] = ()
     subgraphs: Sequence[PregelProtocol] = ()
-    timeout: float | timedelta | None = None
+    timeout: float | None = None
 
 
 class StateSnapshot(NamedTuple):

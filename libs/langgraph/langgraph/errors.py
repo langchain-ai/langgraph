@@ -137,6 +137,7 @@ class NodeTimeoutError(TimeoutError):
     """
 
     node: str
+    timeout: float
     elapsed: float
 
     def __init__(self, node: str, timeout: float, elapsed: float) -> None:
@@ -145,4 +146,5 @@ class NodeTimeoutError(TimeoutError):
             f"(elapsed: {elapsed:.3f}s)."
         )
         self.node = node
+        self.timeout = timeout
         self.elapsed = elapsed

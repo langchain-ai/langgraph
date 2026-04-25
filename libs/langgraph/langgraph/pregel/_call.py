@@ -21,7 +21,7 @@ from langgraph._internal._runnable import (
     is_async_callable,
     run_in_executor,
 )
-from langgraph._internal._timeout import SYNC_TIMEOUT_UNSUPPORTED, validate_timeout
+from langgraph._internal._timeout import coerce_timeout, sync_timeout_unsupported
 from langgraph.config import get_config
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import CachePolicy, RetryPolicy
@@ -260,10 +260,10 @@ def call(
     timeout: float | timedelta | None = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
-    validate_timeout(timeout)
-    if timeout is not None and not is_async_callable(func):
+    timeout_s = coerce_timeout(timeout)
+    if timeout_s is not None and not is_async_callable(func):
         name = getattr(func, "__name__", func.__class__.__name__)
-        raise ValueError(f"{SYNC_TIMEOUT_UNSUPPORTED} Task {name!r} is sync.")
+        raise sync_timeout_unsupported(name, kind="Task")
     config = get_config()
     impl = config[CONF][CONFIG_KEY_CALL]
     fut = impl(
@@ -272,6 +272,6 @@ def call(
         retry_policy=retry_policy,
         cache_policy=cache_policy,
         callbacks=config["callbacks"],
-        timeout=timeout,
+        timeout=timeout_s,
     )
     return fut

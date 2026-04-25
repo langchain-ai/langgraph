@@ -12,7 +12,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph._internal._config import merge_configs
 from langgraph._internal._constants import CONF, CONFIG_KEY_READ
 from langgraph._internal._runnable import RunnableCallable, RunnableSeq
-from langgraph._internal._timeout import validate_timeout
+from langgraph._internal._timeout import coerce_timeout
 from langgraph.pregel._utils import find_subgraph_pregel
 from langgraph.pregel._write import ChannelWrite
 from langgraph.pregel.protocol import PregelProtocol
@@ -125,10 +125,10 @@ class PregelNode:
     cache_policy: CachePolicy | None
     """The cache policy to use when invoking the node."""
 
-    timeout: float | timedelta | None
-    """Maximum time in seconds (or a timedelta) allowed for a single invocation
-    of this node. If exceeded, `NodeTimeoutError` is raised and the retry policy
-    (if any) decides whether to retry. Supported only for async nodes."""
+    timeout: float | None
+    """Maximum time in seconds allowed for a single invocation of this node.
+    If exceeded, `NodeTimeoutError` is raised and the retry policy (if any)
+    decides whether to retry. Supported only for async nodes."""
 
     tags: Sequence[str] | None
     """Tags to attach to the node for tracing."""
@@ -164,7 +164,7 @@ class PregelNode:
             self.retry_policy = (retry_policy,)
         else:
             self.retry_policy = retry_policy
-        self.timeout = validate_timeout(timeout)
+        self.timeout = coerce_timeout(timeout)
         self.tags = tags
         self.metadata = metadata
         if subgraphs is not None:

@@ -24,7 +24,7 @@ from typing_extensions import Unpack
 from langgraph._internal import _serde
 from langgraph._internal._constants import CACHE_NS_WRITES, PREVIOUS
 from langgraph._internal._runnable import is_async_callable
-from langgraph._internal._timeout import SYNC_TIMEOUT_UNSUPPORTED, validate_timeout
+from langgraph._internal._timeout import coerce_timeout, sync_timeout_unsupported
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
@@ -54,7 +54,7 @@ class _TaskFunction(Generic[P, T]):
         *,
         retry_policy: Sequence[RetryPolicy],
         cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
-        timeout: float | timedelta | None = None,
+        timeout: float | None = None,
         name: str | None = None,
     ) -> None:
         if name is not None:
@@ -207,7 +207,7 @@ def task(
         )
         if retry_policy is None:
             retry_policy = retry  # type: ignore[assignment]
-    validate_timeout(timeout)
+    timeout_s = coerce_timeout(timeout)
 
     retry_policies: Sequence[RetryPolicy] = (
         ()
@@ -220,14 +220,14 @@ def task(
     def decorator(
         func: Callable[P, Awaitable[T]] | Callable[P, T],
     ) -> Callable[P, SyncAsyncFuture[T]]:
-        if timeout is not None and not is_async_callable(func):
+        if timeout_s is not None and not is_async_callable(func):
             name_ = name or getattr(func, "__name__", func.__class__.__name__)
-            raise ValueError(f"{SYNC_TIMEOUT_UNSUPPORTED} Task {name_!r} is sync.")
+            raise sync_timeout_unsupported(str(name_), kind="Task")
         return _TaskFunction(
             func,
             retry_policy=retry_policies,
             cache_policy=cache_policy,
-            timeout=timeout,
+            timeout=timeout_s,
             name=name,
         )
 
@@ -446,7 +446,7 @@ class entrypoint(Generic[ContextT]):
         self.cache = cache
         self.cache_policy = cache_policy
         self.retry_policy = retry_policy
-        self.timeout = validate_timeout(timeout)
+        self.timeout = coerce_timeout(timeout)
         self.context_schema = context_schema
 
     @dataclass(**_DC_KWARGS)

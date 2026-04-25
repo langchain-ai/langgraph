@@ -21,7 +21,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
 )
 from langgraph._internal._runnable import RunnableCallable
-from langgraph._internal._timeout import timeout_seconds
+from langgraph._internal._timeout import coerce_timeout
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.errors import GraphInterrupt, NodeTimeoutError, ParentCommand
@@ -613,19 +613,19 @@ def _make_task(
         id=task_id,
         path=("__pregel_pull", name),
         writers=writers,
-        timeout=timeout,
+        timeout=coerce_timeout(timeout),
     )
 
 
-def test_timeout_seconds_coercion():
-    assert timeout_seconds(None) is None
-    assert timeout_seconds(1.5) == 1.5
-    assert timeout_seconds(2) == 2.0
-    assert timeout_seconds(timedelta(milliseconds=250)) == 0.25
+def test_coerce_timeout():
+    assert coerce_timeout(None) is None
+    assert coerce_timeout(1.5) == 1.5
+    assert coerce_timeout(2) == 2.0
+    assert coerce_timeout(timedelta(milliseconds=250)) == 0.25
     with pytest.raises(ValueError, match="greater than 0"):
-        timeout_seconds(0)
+        coerce_timeout(0)
     with pytest.raises(ValueError, match="greater than 0"):
-        timeout_seconds(timedelta())
+        coerce_timeout(timedelta())
 
 
 def test_run_with_retry_rejects_sync_timeout_without_starting_proc():
@@ -741,6 +741,7 @@ def test_arun_with_retry_timeout_fires_async():
         with pytest.raises(NodeTimeoutError) as excinfo:
             await arun_with_retry(task, retry_policy=None)
         assert excinfo.value.node == "aslow"
+        assert excinfo.value.timeout == 0.05
 
     asyncio.run(_run())
 
