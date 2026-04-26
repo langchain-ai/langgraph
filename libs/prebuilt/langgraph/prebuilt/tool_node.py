@@ -1205,7 +1205,20 @@ class ToolNode(RunnableCallable):
                 return await self._awrap_tool_call(tool_request, execute)
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
-            return self._wrap_tool_call(tool_request, _sync_execute)
+            # Off-load sync wrap_tool_call to a worker thread so it does not
+            # block the event loop. _afunc dispatches every tool call via
+            # asyncio.gather, so a single blocking sync wrapper would otherwise
+            # serialize concurrent tool executions.
+            if inspect.iscoroutinefunction(self._wrap_tool_call):
+                # Defensive: a coroutine function passed as the sync wrapper.
+                # Await it directly instead of off-loading to a thread.
+                return await cast(
+                    "Awaitable[ToolMessage | Command]",
+                    self._wrap_tool_call(tool_request, _sync_execute),
+                )
+            return await asyncio.to_thread(
+                self._wrap_tool_call, tool_request, _sync_execute
+            )
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:

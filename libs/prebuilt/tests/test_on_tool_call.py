@@ -1,5 +1,7 @@
 """Unit tests for tool call interceptor in ToolNode."""
 
+import asyncio
+import threading
 from collections.abc import Callable
 from unittest.mock import Mock
 
@@ -1379,3 +1381,75 @@ def test_tool_call_request_is_frozen() -> None:
     assert fresh_new_request.tool == add  # Other fields should remain the same
     assert fresh_new_request.state == state
     assert fresh_new_request.runtime is None
+
+
+async def test_sync_wrap_tool_call_does_not_block_event_loop() -> None:
+    """Sync wrap_tool_call must run off the event loop in the async path.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/7591.
+
+    Before the fix, `ToolNode._arun_one` invoked the sync wrapper directly on
+    the event loop thread, so a single blocking sync wrapper stalled the loop
+    and serialized every concurrent `ainvoke` tool call. Here we have the
+    sync wrapper block on a `threading.Event` that is only ever set by a
+    concurrent asyncio task. If the event loop is blocked, the unblock task
+    never gets to run and the wrapper hangs forever (test fails by timeout).
+    """
+
+    started = threading.Event()
+    unblock = threading.Event()
+
+    def blocking_handler(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        # Signal that the wrapper is on the worker thread, then wait for the
+        # asyncio task running on the event loop to release us. If the wrapper
+        # is mistakenly invoked on the event loop, this wait deadlocks.
+        started.set()
+        # Cap the wait so a regression surfaces as a clean failure rather than
+        # hanging the whole test session.
+        if not unblock.wait(timeout=5.0):
+            msg = "event loop appears blocked: unblock signal never arrived"
+            raise AssertionError(msg)
+        return execute(request)
+
+    tool_node = ToolNode([add], wrap_tool_call=blocking_handler)
+
+    async def release_when_started() -> None:
+        # Wait off the wrapper's worker thread for it to enter the blocking
+        # section, then release it from the event loop. If the wrapper were
+        # running on the event loop, this coroutine would never run.
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, started.wait)
+        unblock.set()
+
+    releaser = asyncio.create_task(release_when_started())
+
+    result = await asyncio.wait_for(
+        tool_node.ainvoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "adding",
+                        tool_calls=[
+                            {
+                                "name": "add",
+                                "args": {"a": 1, "b": 2},
+                                "id": "call_event_loop",
+                            }
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        ),
+        timeout=10.0,
+    )
+
+    await releaser
+
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.content == "3"
+    assert tool_message.status != "error"
