@@ -3354,6 +3354,19 @@ class Pregel(
         caller drives by iterating any projection — no background
         thread.
 
+        Note:
+            Nesting v1 `stream(stream_mode="messages")` inside a node
+            of a `stream_v2` run is not fully supported. The outer v2
+            messages handler is inheritable, so it sits in the inner
+            chat model's callback chain; `BaseChatModel.invoke` then
+            routes through the v2 event protocol and the inner v1
+            messages handler does not see `on_llm_new_token` chunks.
+            The inner stream still yields a finalized message via
+            `on_llm_end`, but token-by-token output is lost. Use
+            `stream_v2` for the inner graph as well, or call
+            `chat_model.stream(...)` explicitly inside the node, to
+            get token-level streaming.
+
         Args:
             input: Graph input.
             config: Optional runnable config forwarded to the graph.
@@ -3412,6 +3425,17 @@ class Pregel(
         Returns an `AsyncGraphRunStream` whose projections can be awaited
         concurrently; each subscribed cursor drives the pump when its
         buffer is empty.
+
+        Note:
+            Same nesting limitation as `stream_v2`: nesting v1
+            `astream(stream_mode="messages")` inside a node of an
+            `astream_v2` run drops `on_llm_new_token` chunks because
+            the outer v2 handler reroutes `BaseChatModel.invoke`
+            through the v2 event protocol. The inner stream still
+            yields a finalized message at end-of-call. Use
+            `astream_v2` for the inner graph as well, or call
+            `chat_model.astream(...)` explicitly inside the node, to
+            get token-level streaming.
 
         Args:
             input: Graph input.
