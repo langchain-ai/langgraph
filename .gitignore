@@ -76,7 +76,13 @@ __pypackages__/
 
 # Environments
 .env
+.env.*
 .envrc
+*.pem
+*.key
+*.crt
+credentials.json
+node_modules/
 .venv
 .venvs
 env/

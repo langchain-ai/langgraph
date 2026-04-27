@@ -645,19 +645,11 @@ class SubgraphTransformer(_TasksLifecycleBase):
         handle = self._handles.get(candidate_path)
         if handle is None or handle._mux is None:
             return
-        try:
-            child_event: ProtocolEvent = {
-                **event,
-                "params": {**event["params"]},
-            }
-            handle._mux.push(child_event)
-        except Exception:
-            _logger.warning(
-                "Error forwarding event to subgraph mini-mux at %s; "
-                "subscribers may miss events.",
-                handle.path,
-                exc_info=True,
-            )
+        child_event: ProtocolEvent = {
+            **event,
+            "params": {**event["params"]},
+        }
+        handle._mux.push(child_event)
 
     async def _aforward_to_children(self, event: ProtocolEvent) -> None:
         """Async counterpart to `_forward_to_children`."""
@@ -669,19 +661,11 @@ class SubgraphTransformer(_TasksLifecycleBase):
         handle = self._handles.get(candidate_path)
         if handle is None or handle._mux is None:
             return
-        try:
-            child_event: ProtocolEvent = {
-                **event,
-                "params": {**event["params"]},
-            }
-            await handle._mux.apush(child_event)
-        except Exception:
-            _logger.warning(
-                "Error forwarding event to subgraph mini-mux at %s; "
-                "subscribers may miss events.",
-                handle.path,
-                exc_info=True,
-            )
+        child_event: ProtocolEvent = {
+            **event,
+            "params": {**event["params"]},
+        }
+        await handle._mux.apush(child_event)
 
     def _close_handle_mux(
         self, handle: SubgraphRunStream | AsyncSubgraphRunStream

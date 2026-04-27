@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import operator
 import time
+from collections.abc import AsyncIterator
+from functools import partial
 from typing import Annotated, Any
 
 import pytest
@@ -22,7 +24,12 @@ from langgraph.graph import StateGraph
 from langgraph.pregel.main import _split_user_transformers
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
-from langgraph.stream.run_stream import AsyncSubgraphRunStream, SubgraphRunStream
+from langgraph.stream.run_stream import (
+    AsyncGraphRunStream,
+    AsyncSubgraphRunStream,
+    GraphRunStream,
+    SubgraphRunStream,
+)
 from langgraph.stream.transformers import (
     LifecycleTransformer,
     MessagesTransformer,
@@ -93,6 +100,19 @@ def _native_factories() -> list[Any]:
         LifecycleTransformer,
         SubgraphTransformer,
     ]
+
+
+def _stream_part(
+    method: str,
+    namespace: tuple[str, ...],
+    data: Any,
+) -> dict[str, Any]:
+    return {"type": method, "ns": namespace, "data": data}
+
+
+async def _astream_parts(*parts: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
+    for part in parts:
+        yield part
 
 
 def _arm(mux: StreamMux) -> None:
@@ -405,21 +425,18 @@ async def test_async_child_mini_mux_fail_uses_async_lane() -> None:
     assert probe.failed is err
 
 
-class _ZeroArgTransformer(StreamTransformer):
-    """Transformer class with a zero-arg constructor for compatibility tests."""
-
-    def __init__(self) -> None:
-        super().__init__()
+class _StandardCtorTransformer(StreamTransformer):
+    """Transformer class that inherits the standard scoped constructor."""
 
     def init(self) -> dict[str, Any]:
-        return {"zero_arg": self}
+        return {"standard_ctor": self}
 
     def process(self, event: ProtocolEvent) -> bool:
         return True
 
 
 class _ScopedTransformer(StreamTransformer):
-    """Transformer class that opts into scope-aware construction."""
+    """Transformer class that uses the inherited scoped construction."""
 
     def init(self) -> dict[str, Any]:
         return {"scoped": self}
@@ -428,18 +445,136 @@ class _ScopedTransformer(StreamTransformer):
         return True
 
 
-def test_split_user_transformers_supports_zero_arg_and_scoped_classes() -> None:
-    factories, instances = _split_user_transformers(
-        [_ZeroArgTransformer, _ScopedTransformer]
-    )
+class _ConfigurableFactoryTransformer(StreamTransformer):
+    """Transformer built by a configured per-scope factory."""
 
-    assert instances == []
-    zero_arg = factories[0](("child",))
+    def __init__(self, scope: tuple[str, ...] = (), *, label: str) -> None:
+        super().__init__(scope)
+        self.label = label
+
+    def init(self) -> dict[str, Any]:
+        return {"configurable": self}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        return True
+
+
+class _ChildExploder(StreamTransformer):
+    """Raise from child mini-muxes to verify errors propagate upstream."""
+
+    def init(self) -> dict[str, Any]:
+        return {}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if self.scope and event["method"] == "values":
+            raise RuntimeError("child boom")
+        return True
+
+
+def test_split_user_transformers_supports_scoped_classes() -> None:
+    factories = _split_user_transformers([_StandardCtorTransformer, _ScopedTransformer])
+
+    standard_ctor = factories[0](("child",))
     scoped = factories[1](("child",))
-    assert isinstance(zero_arg, _ZeroArgTransformer)
-    assert zero_arg.scope == ()
+    assert isinstance(standard_ctor, _StandardCtorTransformer)
+    assert standard_ctor.scope == ("child",)
     assert isinstance(scoped, _ScopedTransformer)
     assert scoped.scope == ("child",)
+
+
+def test_split_user_transformers_supports_configured_factories() -> None:
+    factories = _split_user_transformers(
+        [partial(_ConfigurableFactoryTransformer, label="configured")]
+    )
+
+    built = factories[0](("child",))
+    assert isinstance(built, _ConfigurableFactoryTransformer)
+    assert built.label == "configured"
+    assert built.scope == ("child",)
+
+
+def test_split_user_transformers_rejects_instances() -> None:
+    with pytest.raises(TypeError, match="pre-built instance"):
+        _split_user_transformers([_StandardCtorTransformer()])
+
+
+def test_child_forwarding_errors_fail_sync_run() -> None:
+    mux = StreamMux(
+        factories=[
+            ValuesTransformer,
+            MessagesTransformer,
+            LifecycleTransformer,
+            SubgraphTransformer,
+            _ChildExploder,
+        ],
+        is_async=False,
+    )
+    values_t = mux.transformer_by_key("values")
+    assert isinstance(values_t, ValuesTransformer)
+    run = GraphRunStream(
+        iter(
+            [
+                _stream_part(
+                    "tasks",
+                    ("agent:abc",),
+                    {
+                        "id": "t1",
+                        "name": "tool",
+                        "input": None,
+                        "triggers": [],
+                    },
+                ),
+                _stream_part("values", ("agent:abc",), {"x": 1}),
+            ]
+        ),
+        mux,
+        values_t,
+    )
+
+    handle = next(iter(run.subgraphs))
+    assert handle.path == ("agent:abc",)
+    with pytest.raises(RuntimeError, match="child boom"):
+        _ = run.output
+    assert run._mux._events._error is not None
+
+
+@pytest.mark.anyio
+async def test_child_forwarding_errors_fail_async_run() -> None:
+    mux = StreamMux(
+        factories=[
+            ValuesTransformer,
+            MessagesTransformer,
+            LifecycleTransformer,
+            SubgraphTransformer,
+            _ChildExploder,
+        ],
+        is_async=True,
+    )
+    values_t = mux.transformer_by_key("values")
+    assert isinstance(values_t, ValuesTransformer)
+    run = AsyncGraphRunStream(
+        _astream_parts(
+            _stream_part(
+                "tasks",
+                ("agent:abc",),
+                {
+                    "id": "t1",
+                    "name": "tool",
+                    "input": None,
+                    "triggers": [],
+                },
+            ),
+            _stream_part("values", ("agent:abc",), {"x": 1}),
+        ),
+        mux,
+        values_t,
+    )
+
+    handle = await run.subgraphs.__aiter__().__anext__()
+    assert handle.path == ("agent:abc",)
+    with pytest.raises(RuntimeError, match="child boom"):
+        await run.output()
+    assert run._mux._events._error is not None
 
 
 # ---------------------------------------------------------------------------

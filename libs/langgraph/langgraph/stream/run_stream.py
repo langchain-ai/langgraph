@@ -96,6 +96,8 @@ class GraphRunStream:
             return False
         try:
             part = next(self._graph_iter)
+            self._mux.push(convert_to_protocol_event(part))
+            return True
         except StopIteration:
             self._mux.close()
             self._exhausted = True
@@ -104,8 +106,6 @@ class GraphRunStream:
             self._mux.fail(e)
             self._exhausted = True
             return False
-        self._mux.push(convert_to_protocol_event(part))
-        return True
 
     def abort(self) -> None:
         """Stop the run early.
@@ -320,6 +320,8 @@ class AsyncGraphRunStream:
         try:
             try:
                 part = await self._graph_aiter.__anext__()
+                await self._mux.apush(convert_to_protocol_event(part))
+                return True
             except StopAsyncIteration:
                 self._exhausted = True
                 await self._mux.aclose()
@@ -328,8 +330,6 @@ class AsyncGraphRunStream:
                 self._exhausted = True
                 await self._mux.afail(e)
                 return False
-            await self._mux.apush(convert_to_protocol_event(part))
-            return True
         finally:
             async with self._pump_cond:
                 self._pumping = False
