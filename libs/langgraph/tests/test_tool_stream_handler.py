@@ -1,4 +1,4 @@
-"""Tests for StreamToolCallHandler and emit_tool_output_delta.
+"""Tests for StreamToolCallHandler and ToolRuntime.emit_output_delta.
 
 These tests exercise the langgraph-core piece in isolation — the prebuilt
 `ToolCallTransformer` has its own test file. Here we feed real graphs
@@ -13,13 +13,13 @@ from typing import Annotated, Any
 import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
-from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt import ToolNode, ToolRuntime
 from typing_extensions import TypedDict
 
-from langgraph.config import emit_tool_output_delta
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
+from langgraph.pregel._tools import _tool_call_writer
 
 
 class _State(TypedDict):
@@ -99,12 +99,12 @@ class TestSyncGraphSyncTool:
         # ToolNode wraps the return in a ToolMessage.
         assert events[1][1]["tool_call_id"] == "tc1"
 
-    def test_emit_tool_output_delta_produces_delta_events(self) -> None:
+    def test_emit_output_delta_produces_delta_events(self) -> None:
         @tool
-        def streaming_echo(text: str) -> str:
+        def streaming_echo(text: str, runtime: ToolRuntime) -> str:
             """stream chunks."""
             for chunk in ("a", "b", "c"):
-                emit_tool_output_delta(chunk)
+                runtime.emit_output_delta(chunk)
             return text
 
         graph = _build_graph(
@@ -146,10 +146,10 @@ class TestSyncGraphSyncTool:
         assert kinds == ["tool-started", "tool-error"]
         assert events[1][1]["message"] == "nope"
 
-    def test_emit_outside_tool_is_noop(self) -> None:
-        # Called at import time (outside any tool body) — must not raise.
-        emit_tool_output_delta("ignored")
-        emit_tool_output_delta({"any": "payload"})
+    def test_writer_unset_outside_tool(self) -> None:
+        # Outside any tool body the ContextVar that ToolRuntime reads
+        # is unset — emitting from there would be a no-op.
+        assert _tool_call_writer.get() is None
 
     def test_no_events_without_tools_mode(self) -> None:
         @tool
@@ -177,9 +177,9 @@ class TestAsyncGraphAsyncTool:
     @pytest.mark.anyio
     async def test_async_tool_produces_events(self) -> None:
         @tool
-        async def aecho(text: str) -> str:
+        async def aecho(text: str, runtime: ToolRuntime) -> str:
             """async echo."""
-            emit_tool_output_delta(text)
+            runtime.emit_output_delta(text)
             return f"got:{text}"
 
         graph = _build_graph(_caller_async("aecho", {"text": "hi"}), [aecho])
@@ -200,10 +200,10 @@ class TestAsyncGraphAsyncTool:
 class TestConcurrentToolCalls:
     def test_parallel_tool_calls_do_not_bleed(self) -> None:
         @tool
-        def streamer(marker: str) -> str:
+        def streamer(marker: str, runtime: ToolRuntime) -> str:
             """emits marker twice."""
-            emit_tool_output_delta(f"{marker}-1")
-            emit_tool_output_delta(f"{marker}-2")
+            runtime.emit_output_delta(f"{marker}-1")
+            runtime.emit_output_delta(f"{marker}-2")
             return marker
 
         def caller(state: _State) -> dict:

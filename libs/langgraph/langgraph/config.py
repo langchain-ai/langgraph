@@ -1,7 +1,5 @@
 import asyncio
 import sys
-from collections.abc import Callable
-from contextvars import ContextVar
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -10,18 +8,6 @@ from langgraph.store.base import BaseStore
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.types import StreamWriter
-
-_tool_call_writer: ContextVar[Callable[[Any], None] | None] = ContextVar(
-    "langgraph_tool_call_writer", default=None
-)
-"""ContextVar holding the writer for the currently-executing tool call.
-
-Set by `StreamToolCallHandler.on_tool_start` and reset on end/error.
-Defined here (rather than alongside the handler in `pregel/_tools.py`)
-so `emit_tool_output_delta` can import it without triggering the
-pregel import chain — user tool code does
-`from langgraph.config import emit_tool_output_delta` at import time.
-"""
 
 
 def _no_op_stream_writer(c: Any) -> None:
@@ -208,30 +194,3 @@ def get_stream_writer() -> StreamWriter:
     """
     runtime = get_config()[CONF][CONFIG_KEY_RUNTIME]
     return runtime.stream_writer
-
-
-def emit_tool_output_delta(delta: Any) -> None:
-    """Emit a `tool-output-delta` event onto the `tools` stream mode.
-
-    Must be called from inside a tool's execution scope (sync or async).
-    While a tool is running, `StreamToolCallHandler.on_tool_start` sets a
-    writer closure on a ContextVar keyed to that call's `tool_call_id`
-    and namespace; this helper reads the ContextVar and forwards `delta`
-    through it.
-
-    When called outside any tool call, or when the graph was not
-    streamed with `"tools"` in `stream_mode`, this is a silent no-op —
-    tool authors can leave `emit_tool_output_delta` calls in place
-    without gating them on stream mode.
-
-    Args:
-        delta: The partial output chunk to stream. Shape is up to the
-            caller — strings are the common case, but any JSON-
-            serializable value is accepted and surfaced as-is on the
-            `tools` channel's `tool-output-delta` payload under
-            `"delta"`.
-    """
-    writer = _tool_call_writer.get()
-    if writer is None:
-        return
-    writer(delta)
