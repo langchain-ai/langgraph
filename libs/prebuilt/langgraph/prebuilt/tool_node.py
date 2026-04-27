@@ -1304,7 +1304,7 @@ class ToolNode(RunnableCallable):
             # Match the previous inlined-state contract by reading channels only;
             # managed values have their own injection path (`ToolRuntime.context`).
             channels = read.args[1]
-            return cast("dict[str, Any]", read(list(channels), False))
+            return cast("dict[str, Any]", read(list(channels), True))
         return input
 
     def _inject_tool_args(
