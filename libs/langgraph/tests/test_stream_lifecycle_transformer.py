@@ -123,12 +123,52 @@ def test_started_dedup_on_repeat_namespace() -> None:
     assert [p["event"] for p in payloads] == ["started"]
 
 
-def test_grandchild_namespace_ignored_at_root_scope() -> None:
-    """A length-2 namespace is not a direct child of the root mux."""
+def test_grandchild_namespace_discovered() -> None:
+    """Subgraphs at any depth below scope are tracked, not just direct children."""
     mux = _build_lifecycle_mux()
+    # First-seen task at length-2 ns means a 2nd-level subgraph started.
     mux.push(_tasks_start(["agent:abc", "tool:def"], task_id="t1", name="x"))
 
-    assert _drain_lifecycle(mux) == []
+    [payload] = _drain_lifecycle(mux)
+    assert payload["event"] == "started"
+    assert payload["namespace"] == ["agent:abc", "tool:def"]
+
+
+def test_nested_chain_emits_started_at_each_depth() -> None:
+    """A graph → subgraph → subgraph chain produces a started event per level."""
+    mux = _build_lifecycle_mux()
+    # Subgraph1 starts emitting tasks (events tagged with its own ns).
+    mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
+    # Subgraph1 invokes subgraph2; subgraph2's first task event arrives.
+    mux.push(_tasks_start(["agent:abc", "tool:def"], task_id="t2", name="deep"))
+
+    payloads = _drain_lifecycle(mux)
+    assert [p["namespace"] for p in payloads] == [
+        ["agent:abc"],
+        ["agent:abc", "tool:def"],
+    ]
+    assert all(p["event"] == "started" for p in payloads)
+
+
+def test_nested_chain_emits_completed_at_each_depth() -> None:
+    """Each subgraph in a nested chain closes when its parent task result arrives."""
+    mux = _build_lifecycle_mux()
+    mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
+    mux.push(_tasks_start(["agent:abc", "tool:def"], task_id="t2", name="deep"))
+
+    # Subgraph2's owning task (id=def, inside subgraph1) finishes.
+    mux.push(_tasks_result(["agent:abc"], task_id="def", name="tool"))
+    # Subgraph1's owning task (id=abc, at root) finishes.
+    mux.push(_tasks_result([], task_id="abc", name="agent"))
+
+    payloads = _drain_lifecycle(mux)
+    events = [(p["event"], p["namespace"]) for p in payloads]
+    assert events == [
+        ("started", ["agent:abc"]),
+        ("started", ["agent:abc", "tool:def"]),
+        ("completed", ["agent:abc", "tool:def"]),
+        ("completed", ["agent:abc"]),
+    ]
 
 
 def test_completed_on_parent_task_result() -> None:
@@ -226,20 +266,23 @@ def test_unrelated_methods_pass_through() -> None:
     assert _drain_lifecycle(mux) == []
 
 
-def test_scoped_transformer_filters_by_scope() -> None:
-    """A transformer scoped to ('agent:abc',) emits only its direct children."""
+def test_scoped_transformer_filters_outside_scope_but_tracks_all_depths() -> None:
+    """Scope filters the prefix; subgraphs at any depth below scope are tracked."""
     mux = _build_lifecycle_mux(scope=("agent:abc",))
-    # Root-level task — out of scope.
+    # Root-level task — out of scope (no shared prefix).
     mux.push(_tasks_start(["other:1"], task_id="t1", name="other"))
     # Direct child of agent:abc — in scope.
     mux.push(_tasks_start(["agent:abc", "tool:def"], task_id="t2", name="tool"))
-    # Grandchild of agent:abc — out of scope.
+    # Grandchild of agent:abc — also in scope, tracked at its own depth.
     mux.push(
         _tasks_start(["agent:abc", "tool:def", "deep:ghi"], task_id="t3", name="deep")
     )
 
-    [payload] = _drain_lifecycle(mux)
-    assert payload["namespace"] == ["agent:abc", "tool:def"]
+    payloads = _drain_lifecycle(mux)
+    assert [p["namespace"] for p in payloads] == [
+        ["agent:abc", "tool:def"],
+        ["agent:abc", "tool:def", "deep:ghi"],
+    ]
 
 
 def test_required_stream_modes_declared() -> None:
@@ -254,3 +297,15 @@ def test_protocol_event_method_is_native() -> None:
     methods = {evt["method"] for evt in mux._events._items}
     assert "lifecycle" in methods
     assert "custom:lifecycle" not in methods
+
+
+def test_tasks_events_suppressed_from_main_log() -> None:
+    """Tasks events are folded into lifecycle and don't appear on the main log."""
+    mux = _build_lifecycle_mux()
+    mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
+    mux.push(_tasks_result([], task_id="abc", name="agent"))
+
+    methods = [evt["method"] for evt in mux._events._items]
+    assert "tasks" not in methods
+    # Lifecycle events did make it through, though.
+    assert "lifecycle" in methods

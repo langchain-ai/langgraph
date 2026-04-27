@@ -302,6 +302,14 @@ class LifecycleTransformer(StreamTransformer):
     `finalize` and `fail` are safety nets for subgraphs that didn't
     receive a parent-result event before the run ended.
 
+    `tasks` events are **suppressed from the main event log** — they
+    are an implementation detail of lifecycle inference, not a
+    user-facing surface. Consumers iterating the raw protocol stream
+    won't see them; they get the synthesized lifecycle events instead.
+    Other transformers in the pipeline still see tasks events via
+    `process()`, so their own projections can use them; only the main
+    log append is skipped.
+
     Native transformer — projection key `lifecycle` is exposed as
     `run.lifecycle`.
     """
@@ -330,12 +338,23 @@ class LifecycleTransformer(StreamTransformer):
             self._handle_task_result(ns, data)
         else:
             self._handle_task_start(ns)
-        return True
+        # Tasks events are folded into the synthesized lifecycle stream;
+        # suppress them from the main event log so iterators don't
+        # double-see the same information in two shapes.
+        return False
 
-    def _is_direct_child_ns(self, ns: tuple[str, ...]) -> bool:
-        """True iff `ns` is exactly one segment deeper than this transformer's scope."""
+    def _is_within_scope(self, ns: tuple[str, ...]) -> bool:
+        """True iff `ns` is strictly deeper than scope and shares the scope prefix.
+
+        The transformer tracks subgraphs at every depth below its
+        scope, not just direct children — a graph → subgraph →
+        subgraph chain produces lifecycle events for both nested
+        levels. Each level's first observed task event triggers its
+        `started` payload; deduplication via `_seen` ensures one
+        event per discovered subgraph instance.
+        """
         depth = len(self.scope)
-        return len(ns) == depth + 1 and ns[:depth] == self.scope
+        return len(ns) > depth and ns[:depth] == self.scope
 
     @staticmethod
     def _terminal_from_result(
@@ -355,7 +374,7 @@ class LifecycleTransformer(StreamTransformer):
         return "completed", None
 
     def _handle_task_start(self, ns: tuple[str, ...]) -> None:
-        if not self._is_direct_child_ns(ns):
+        if not self._is_within_scope(ns):
             return
         if ns in self._seen:
             return
