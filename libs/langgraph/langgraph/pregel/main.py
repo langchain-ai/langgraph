@@ -353,10 +353,15 @@ def _collect_stream_modes(mux: Any) -> list[StreamMode]:
     default set. If zero transformers declare a given mode, the graph
     does not stream events for it.
     """
-    modes: set[str] = set()
+    modes: set[StreamMode] = set()
     for transformer in mux._transformers:
-        modes.update(getattr(transformer, "required_stream_modes", ()))
-    return cast("list[StreamMode]", list(modes))
+        modes.update(
+            cast(
+                "tuple[StreamMode, ...]",
+                getattr(transformer, "required_stream_modes", ()),
+            )
+        )
+    return list(modes)
 
 
 class Pregel(

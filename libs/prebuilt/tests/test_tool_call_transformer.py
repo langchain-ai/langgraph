@@ -21,11 +21,11 @@ from langgraph.stream.transformers import (
 from typing_extensions import TypedDict
 
 from langgraph.prebuilt import (
-    ToolCallStream,
     ToolCallTransformer,
     ToolNode,
     ToolRuntime,
 )
+from langgraph.prebuilt._tool_call_stream import ToolCallStream
 
 TS = int(time.time() * 1000)
 
