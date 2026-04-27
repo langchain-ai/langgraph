@@ -359,6 +359,36 @@ def _collect_stream_modes(mux: Any) -> list[StreamMode]:
     return cast("list[StreamMode]", list(modes))
 
 
+def _split_user_transformers(
+    specs: Any,
+) -> tuple[list[Callable[..., Any]], list[Any]]:
+    """Split a user-supplied transformer list into factories and root-only instances.
+
+    Three accepted shapes per item:
+    - **Class** — used as a scope-aware factory (the class itself
+      is called with the mini-mux's scope, propagating through
+      `StreamMux.make_child`).
+    - **Other callable** — wrapped as a no-arg factory; each scope
+      gets a fresh instance, but the instance is scope-blind.
+    - **Instance** — registered on the root mux only; not cloned
+      into mini-muxes.
+
+    Compile-time `stream_transformers` (zero-arg `Callable[[], ...]`)
+    fall in the second bucket via the same wrapper, so they now
+    propagate to mini-muxes too — consistent with the per-call API.
+    """
+    factories: list[Callable[..., Any]] = []
+    instances: list[Any] = []
+    for spec in specs or ():
+        if isinstance(spec, type):
+            factories.append(spec)
+        elif callable(spec):
+            factories.append(lambda scope, _f=spec: _f())
+        else:
+            instances.append(spec)
+    return factories, instances
+
+
 class Pregel(
     PregelProtocol[StateT, ContextT, InputT, OutputT],
     Generic[StateT, ContextT, InputT, OutputT],
@@ -3388,17 +3418,17 @@ class Pregel(
         )
 
         parent_ns = _resolve_parent_ns(self.config, config)
-        compiled_instances = [f() for f in self._stream_transformers]
-        extra = [t() if isinstance(t, type) else t for t in (transformers or ())]
-        # Native factories propagate to child mini-muxes via `make_child`.
-        # Compiled / per-call transformers stay root-only.
+        compiled_factories, _ = _split_user_transformers(self._stream_transformers)
+        extra_factories, extra_instances = _split_user_transformers(transformers)
         mux = StreamMux(
-            transformers=[*compiled_instances, *extra],
+            transformers=extra_instances,
             factories=[
                 ValuesTransformer,
                 MessagesTransformer,
                 LifecycleTransformer,
                 SubgraphTransformer,
+                *compiled_factories,
+                *extra_factories,
             ],
             scope=parent_ns,
             is_async=False,
@@ -3461,17 +3491,17 @@ class Pregel(
         )
 
         parent_ns = _resolve_parent_ns(self.config, config)
-        compiled_instances = [f() for f in self._stream_transformers]
-        extra = [t() if isinstance(t, type) else t for t in (transformers or ())]
-        # Native factories propagate to child mini-muxes via `make_child`.
-        # Compiled / per-call transformers stay root-only.
+        compiled_factories, _ = _split_user_transformers(self._stream_transformers)
+        extra_factories, extra_instances = _split_user_transformers(transformers)
         mux = StreamMux(
-            transformers=[*compiled_instances, *extra],
+            transformers=extra_instances,
             factories=[
                 ValuesTransformer,
                 MessagesTransformer,
                 LifecycleTransformer,
                 SubgraphTransformer,
+                *compiled_factories,
+                *extra_factories,
             ],
             scope=parent_ns,
             is_async=True,
