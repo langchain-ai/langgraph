@@ -6,21 +6,22 @@ import random
 import sys
 import threading
 import time
+import weakref
 from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from langchain_core.callbacks import (
-    BaseCallbackHandler,
-    BaseCallbackManager,
-    Callbacks,
-)
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import NotRequired, TypedDict
 
-from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
+from langgraph._internal._config import (
+    merge_configs,
+    patch_configurable,
+    recast_checkpoint_ns,
+)
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CALL,
@@ -73,7 +74,7 @@ class _IdleTimedAttemptScope:
     tasks cannot emit writes or stream events past the idle_timeout boundary.
     """
 
-    __slots__ = ("_active", "_last_progress", "_lock")
+    __slots__ = ("__weakref__", "_active", "_last_progress", "_lock")
 
     def __init__(self) -> None:
         self._active = True
@@ -95,20 +96,9 @@ class _IdleTimedAttemptScope:
                 heartbeat=self.touch,
             )
         new_config = patch_configurable(config, patch) if patch else config
-        return self._attach_callback_handler(new_config)
-
-    def _attach_callback_handler(self, config: RunnableConfig) -> RunnableConfig:
-        handler = _IdleHeartbeatCallbackHandler(self)
-        callbacks: Callbacks = config.get("callbacks")
-        new_callbacks: Callbacks
-        if callbacks is None:
-            new_callbacks = [handler]
-        elif isinstance(callbacks, BaseCallbackManager):
-            new_callbacks = callbacks.copy()
-            new_callbacks.add_handler(handler, inherit=True)
-        else:
-            new_callbacks = [*callbacks, handler]
-        return {**config, "callbacks": new_callbacks}
+        return merge_configs(
+            new_config, {"callbacks": [_IdleHeartbeatCallbackHandler(self)]}
+        )
 
     def touch(self) -> None:
         with self._lock:
@@ -177,16 +167,21 @@ class _IdleHeartbeatCallbackHandler(BaseCallbackHandler):
 
     Inherits via `config["callbacks"]`, so it sees only events emitted by
     runs descended from the node's attempt — sibling nodes do not bleed
-    through.
+    through. Holds the scope by weakref so a child manager that outlives
+    the attempt cannot keep the scope alive.
     """
 
+    # Run inline so touch() is synchronous with event emission and races
+    # cleanly against the watchdog (which reads `_last_progress` under
+    # the same lock); thread-pool dispatch would reorder these.
     run_inline = True
 
     def __init__(self, scope: _IdleTimedAttemptScope) -> None:
-        self._scope = scope
+        self._scope_ref = weakref.ref(scope)
 
     def _touch(self, *args: Any, **kwargs: Any) -> None:
-        self._scope.touch()
+        if (scope := self._scope_ref()) is not None:
+            scope.touch()
 
     on_llm_start = _touch
     on_chat_model_start = _touch
