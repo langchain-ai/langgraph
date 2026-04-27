@@ -291,132 +291,187 @@ class LifecyclePayload(TypedDict, total=False):
     error: NotRequired[str]
 
 
-class LifecycleTransformer(StreamTransformer):
-    """Surface subgraph lifecycle as `lifecycle` protocol events.
+class _TasksLifecycleBase(StreamTransformer):
+    """Shared bookkeeping for `tasks`-event-driven lifecycle inference.
 
-    Subscribes to `tasks` events and emits `LifecyclePayload` to a
-    `StreamChannel` named `lifecycle`. The channel is auto-forwarded
-    by the mux so payloads land in the main event log under
-    `method = "lifecycle"` (native transformer — no `custom:` prefix)
-    — visible to remote SDK clients over the wire and to in-process
-    consumers via `run.lifecycle`.
+    Both `LifecycleTransformer` (wire-serializable channel) and
+    `SubgraphTransformer` (in-process navigation handles) discover
+    subgraphs by watching the same `tasks` stream — `started` on the
+    first event at a tracked namespace, terminal status when the
+    parent's `TaskResultPayload` arrives. Centralizing the dispatch
+    + open-set bookkeeping here keeps the inference rules from
+    drifting between the two surfaces.
 
-    Discovery: a `tasks` event tagged with a namespace one segment
-    deeper than this transformer's scope, seen for the first time,
-    triggers a `started` payload. Discovery uses `tasks` rather than
-    arbitrary protocol events so the inference is silent-mode-safe
-    when the consumer subscribes to `lifecycle` alone.
+    Subclasses provide three template-method hooks:
 
-    Terminal state: a `TaskResultPayload` at the parent's namespace
-    whose `id` matches an open child's encoded task id triggers the
-    matching terminal payload (`completed` / `failed` / `interrupted`).
-    `finalize` and `fail` are safety nets for subgraphs that didn't
-    receive a parent-result event before the run ended.
+    - `_should_track(ns)` — scope filter (e.g. multi-depth vs
+      direct-children-only).
+    - `_on_started(ns, graph_name, trigger_call_id)` — first sighting
+      action (push payload / build handle / etc.). Called once per
+      discovered namespace.
+    - `_on_terminal(ns, status, error)` — terminal action (push
+      terminal payload / mark handle status). Called once per
+      tracked namespace at result time, or via `finalize` / `fail`
+      sweeps if no parent result arrived.
 
-    `tasks` events are **suppressed from the main event log** — they
-    are an implementation detail of lifecycle inference, not a
-    user-facing surface. Consumers iterating the raw protocol stream
-    won't see them; they get the synthesized lifecycle events instead.
-    Other transformers in the pipeline still see tasks events via
-    `process()`, so their own projections can use them; only the main
-    log append is skipped.
-
-    Native transformer — projection key `lifecycle` is exposed as
-    `run.lifecycle`.
+    Tasks events are suppressed from the main event log (`process`
+    returns False) — they're folded into whichever projection the
+    subclass populates; consumers iterating the raw protocol stream
+    see the higher-level view.
     """
 
-    _native = True
     required_stream_modes = ("tasks",)
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._channel: StreamChannel[LifecyclePayload] = StreamChannel("lifecycle")
         self._seen: set[tuple[str, ...]] = set()
-        # Maps direct-child namespace -> task_id of the parent task that
-        # owns the child loop (encoded in the last segment of the child ns).
+        # Maps tracked namespace -> task_id of the parent task whose
+        # `TaskResultPayload` will close it.
         self._open: dict[tuple[str, ...], str] = {}
 
-    def init(self) -> dict[str, Any]:
-        return {"lifecycle": self._channel}
+    # --- Template-method hooks (subclass overrides) ---
+
+    def _should_track(self, ns: tuple[str, ...]) -> bool:
+        """Scope filter — return True iff `ns` is in this transformer's region."""
+        raise NotImplementedError
+
+    def _on_started(
+        self,
+        ns: tuple[str, ...],
+        graph_name: str | None,
+        trigger_call_id: str | None,
+    ) -> None:
+        """Fired once per discovered namespace (first observed task event)."""
+        raise NotImplementedError
+
+    def _on_terminal(
+        self,
+        ns: tuple[str, ...],
+        status: SubgraphStatus,
+        error: str | None,
+    ) -> None:
+        """Fired once per tracked namespace when its parent's result arrives,
+        or via finalize/fail safety-net sweeps.
+        """
+        raise NotImplementedError
+
+    # --- Dispatch + bookkeeping (shared) ---
 
     def process(self, event: ProtocolEvent) -> bool:
         if event["method"] != "tasks":
             return True
         ns = tuple(event["params"]["namespace"])
         data = event["params"]["data"]
-
         if "result" in data:
             self._handle_task_result(ns, data)
         else:
             self._handle_task_start(ns)
-        # Tasks events are folded into the synthesized lifecycle stream;
-        # suppress them from the main event log so iterators don't
-        # double-see the same information in two shapes.
+        # Tasks events are folded into the synthesized projections;
+        # suppress from the main event log so iterators don't double-see
+        # the same information in two shapes.
         return False
 
-    def _is_within_scope(self, ns: tuple[str, ...]) -> bool:
-        """True iff `ns` is strictly deeper than scope and shares the scope prefix.
-
-        The transformer tracks subgraphs at every depth below its
-        scope, not just direct children — a graph → subgraph →
-        subgraph chain produces lifecycle events for both nested
-        levels. Each level's first observed task event triggers its
-        `started` payload; deduplication via `_seen` ensures one
-        event per discovered subgraph instance.
-        """
-        depth = len(self.scope)
-        return len(ns) > depth and ns[:depth] == self.scope
-
-    @staticmethod
-    def _terminal_from_result(
-        payload: dict[str, Any],
-    ) -> tuple[SubgraphStatus, str | None]:
-        """Map a `TaskResultPayload` to a `(status, error)` pair.
-
-        Order matters: a result with both `error` and `interrupts`
-        prefers the interrupt classification, since `GraphInterrupt`
-        manifests as a populated `interrupts` list, not as `error`.
-        """
-        if payload.get("interrupts"):
-            return "interrupted", None
-        error = payload.get("error")
-        if error:
-            return "failed", str(error)
-        return "completed", None
-
     def _handle_task_start(self, ns: tuple[str, ...]) -> None:
-        if not self._is_within_scope(ns):
-            return
-        if ns in self._seen:
+        if not self._should_track(ns) or ns in self._seen:
             return
         self._seen.add(ns)
         graph_name, trigger_call_id = _parse_ns_segment(ns[-1])
-        if trigger_call_id is None:
-            # No task_id encoded — can't correlate a parent-result event
-            # back to this namespace. Treat as a started-only entry; rely
-            # on finalize/fail to close it.
-            return
-        self._open[ns] = trigger_call_id
-        payload: LifecyclePayload = {"event": "started", "namespace": list(ns)}
-        if graph_name:
-            payload["graph_name"] = graph_name
-        payload["trigger_call_id"] = trigger_call_id
-        self._channel.push(payload)
+        self._on_started(ns, graph_name or None, trigger_call_id)
+        if trigger_call_id is not None:
+            self._open[ns] = trigger_call_id
 
     def _handle_task_result(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
-        # A parent's task result closes any direct-child subgraph whose
-        # owning task id matches this result's id.
         result_id = data.get("id")
         if not result_id:
             return
         for child_ns, parent_task_id in list(self._open.items()):
             if child_ns[:-1] != ns or parent_task_id != result_id:
                 continue
-            status, error = self._terminal_from_result(data)
-            self._emit_terminal(child_ns, status, error)
+            status, error = _terminal_from_result(data)
+            self._on_terminal(child_ns, status, error)
             del self._open[child_ns]
 
-    def _emit_terminal(
+    def finalize(self) -> None:
+        """Emit `completed` for any tracked namespace still open at run end."""
+        for ns in list(self._open):
+            self._on_terminal(ns, "completed", None)
+        self._open.clear()
+
+    def fail(self, err: BaseException) -> None:
+        """Emit `failed` / `interrupted` for any tracked namespace still open."""
+        is_interrupt = isinstance(err, GraphInterrupt)
+        status: SubgraphStatus = "interrupted" if is_interrupt else "failed"
+        error_str = None if is_interrupt else str(err)
+        for ns in list(self._open):
+            self._on_terminal(ns, status, error_str)
+        self._open.clear()
+
+
+def _terminal_from_result(
+    payload: dict[str, Any],
+) -> tuple[SubgraphStatus, str | None]:
+    """Map a `TaskResultPayload` to a `(status, error)` pair.
+
+    Order matters: a result with both `error` and `interrupts` prefers
+    the interrupt classification, since `GraphInterrupt` manifests as
+    a populated `interrupts` list, not as `error`.
+    """
+    if payload.get("interrupts"):
+        return "interrupted", None
+    error = payload.get("error")
+    if error:
+        return "failed", str(error)
+    return "completed", None
+
+
+class LifecycleTransformer(_TasksLifecycleBase):
+    """Surface subgraph lifecycle as `lifecycle` protocol events.
+
+    Pushes `LifecyclePayload` to a `StreamChannel` named `lifecycle`.
+    The channel is auto-forwarded by the mux so payloads land in the
+    main event log under `method = "lifecycle"` (native transformer —
+    no `custom:` prefix) — visible to remote SDK clients over the
+    wire and to in-process consumers via `run.lifecycle`.
+
+    Tracks subgraphs at every depth strictly below the transformer's
+    scope, so a graph → subgraph → subgraph chain produces lifecycle
+    events for both nested levels in a flat stream.
+
+    Native transformer — projection key `lifecycle` is exposed as
+    `run.lifecycle`.
+    """
+
+    _native = True
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._channel: StreamChannel[LifecyclePayload] = StreamChannel("lifecycle")
+
+    def init(self) -> dict[str, Any]:
+        return {"lifecycle": self._channel}
+
+    def _should_track(self, ns: tuple[str, ...]) -> bool:
+        depth = len(self.scope)
+        return len(ns) > depth and ns[:depth] == self.scope
+
+    def _on_started(
+        self,
+        ns: tuple[str, ...],
+        graph_name: str | None,
+        trigger_call_id: str | None,
+    ) -> None:
+        if trigger_call_id is None:
+            # Without a task id we can't correlate a parent-result
+            # event back to this namespace — skip the started payload
+            # and rely on finalize/fail to close.
+            return
+        payload: LifecyclePayload = {"event": "started", "namespace": list(ns)}
+        if graph_name:
+            payload["graph_name"] = graph_name
+        payload["trigger_call_id"] = trigger_call_id
+        self._channel.push(payload)
+
+    def _on_terminal(
         self,
         ns: tuple[str, ...],
         status: SubgraphStatus,
@@ -427,47 +482,26 @@ class LifecycleTransformer(StreamTransformer):
             payload["error"] = error
         self._channel.push(payload)
 
-    def finalize(self) -> None:
-        """Emit `completed` for any subgraph still open at run end."""
-        for ns in list(self._open):
-            self._emit_terminal(ns, "completed", None)
-        self._open.clear()
 
-    def fail(self, err: BaseException) -> None:
-        """Emit `failed` / `interrupted` for any subgraph still open at run failure."""
-        is_interrupt = isinstance(err, GraphInterrupt)
-        status: SubgraphStatus = "interrupted" if is_interrupt else "failed"
-        error_str = None if is_interrupt else str(err)
-        for ns in list(self._open):
-            self._emit_terminal(ns, status, error_str)
-        self._open.clear()
+class SubgraphTransformer(_TasksLifecycleBase):
+    """Discover subgraph invocations as in-process navigation handles.
 
+    Per discovered direct-child subgraph, builds a `SubgraphRunStream`
+    (or `AsyncSubgraphRunStream`) wrapping a child mini-mux scoped to
+    the subgraph's namespace. Consumers iterate `run.subgraphs` to
+    receive handles, then drill into `handle.values` / `handle.messages`
+    / `handle.subgraphs` (recursive grandchildren) / `handle.lifecycle`.
 
-class SubgraphTransformer(StreamTransformer):
-    """Discover subgraph invocations as in-process `SubgraphRunStream` handles.
-
-    Subscribes to `tasks` events (same signal as `LifecycleTransformer`,
-    so the two can't drift on terminal-status timing) and produces a
-    handle per discovered subgraph in an `EventLog[SubgraphRunStream]`
-    projection. Each handle wraps a child mini-mux built via
-    `parent_mux.make_child(ns)`, giving consumers a navigable view of
-    each subgraph's own projections.
-
-    Discovery: the first `tasks` event at a namespace strictly deeper
-    than this transformer's scope (sharing the scope prefix) is treated
-    as a new subgraph at that depth. The handle is built on first
-    sighting; later events forwarded into the handle's mini-mux feed
-    the handle's `values` / `messages` / `subgraphs` projections.
-
-    Terminal state: a parent `TaskResultPayload` whose id matches an
-    open child's encoded task id sets the handle's `status` and
-    closes the mini-mux.
+    Each mini-mux owns its own scope and uses its own
+    `SubgraphTransformer` to discover its direct children, so
+    grandchildren live on the child handle — never on the root's
+    `subgraphs` log. Forwarding non-tasks events into the matching
+    child mini-mux is what keeps the child's projections populated.
 
     Native transformer — `subgraphs` is exposed as `run.subgraphs`.
     """
 
     _native = True
-    required_stream_modes = ("tasks",)
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
@@ -475,7 +509,6 @@ class SubgraphTransformer(StreamTransformer):
         self._handles: dict[
             tuple[str, ...], SubgraphRunStream | AsyncSubgraphRunStream
         ] = {}
-        self._open: dict[tuple[str, ...], str] = {}
         self._mux: StreamMux | None = None
 
     def init(self) -> dict[str, Any]:
@@ -484,63 +517,26 @@ class SubgraphTransformer(StreamTransformer):
     def _on_register(self, mux: Any) -> None:
         self._mux = mux
 
-    def _is_direct_child_ns(self, ns: tuple[str, ...]) -> bool:
-        """True iff `ns` is exactly one segment deeper than this transformer's scope.
-
-        Each mini-mux owns its own scope and discovers only its
-        direct children; deeper subgraphs are picked up by the
-        child's own SubgraphTransformer via the forwarded events.
-        """
+    def _should_track(self, ns: tuple[str, ...]) -> bool:
+        # Direct children only — grandchildren are picked up by the
+        # child mini-mux's own SubgraphTransformer.
         depth = len(self.scope)
         return len(ns) == depth + 1 and ns[:depth] == self.scope
 
-    @staticmethod
-    def _terminal_from_result(
-        payload: dict[str, Any],
-    ) -> tuple[SubgraphStatus, str | None]:
-        if payload.get("interrupts"):
-            return "interrupted", None
-        error = payload.get("error")
-        if error:
-            return "failed", str(error)
-        return "completed", None
-
-    def process(self, event: ProtocolEvent) -> bool:
-        # Discover / update terminal status before forwarding so a
-        # `started` handle exists by the time the child mini-mux sees
-        # its own first event.
-        keep = True
-        if event["method"] == "tasks":
-            ns = tuple(event["params"]["namespace"])
-            data = event["params"]["data"]
-            if "result" in data:
-                self._handle_task_result(ns, data)
-            else:
-                self._handle_task_start(ns)
-            # Tasks events are folded into the synthesized
-            # lifecycle/subgraph projections; suppress from the main
-            # event log so consumers see the higher-level view.
-            keep = False
-        # Forward every event (tasks included) into any matching child
-        # mini-mux so the child's own ValuesTransformer /
-        # MessagesTransformer / SubgraphTransformer / etc. populate
-        # the handle's projections — including grandchild discovery.
-        self._forward_to_children(event)
-        return keep
-
-    def _handle_task_start(self, ns: tuple[str, ...]) -> None:
-        if not self._is_direct_child_ns(ns) or ns in self._handles:
-            return
+    def _on_started(
+        self,
+        ns: tuple[str, ...],
+        graph_name: str | None,
+        trigger_call_id: str | None,
+    ) -> None:
         if self._mux is None:
             return
-        graph_name, trigger_call_id = _parse_ns_segment(ns[-1])
         try:
             child_mux = self._mux.make_child(ns)
         except RuntimeError:
-            # Mux wasn't built from factories — mini-mux nesting
-            # isn't available, so we can't produce a real handle.
-            # Skip; LifecycleTransformer still tracks the subgraph
-            # via the flat event stream.
+            # Mux wasn't built from factories — no mini-mux navigation
+            # available. Skip; LifecycleTransformer still tracks the
+            # subgraph via the flat event stream.
             return
         # Late import dodges the run_stream → transformers cycle.
         from langgraph.stream.run_stream import (
@@ -556,26 +552,13 @@ class SubgraphTransformer(StreamTransformer):
             mux=child_mux,
             values_transformer=values_t,
             path=ns,
-            graph_name=graph_name or None,
+            graph_name=graph_name,
             trigger_call_id=trigger_call_id,
         )
         self._handles[ns] = handle
-        if trigger_call_id is not None:
-            self._open[ns] = trigger_call_id
         self._log.push(handle)
 
-    def _handle_task_result(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
-        result_id = data.get("id")
-        if not result_id:
-            return
-        for child_ns, parent_task_id in list(self._open.items()):
-            if child_ns[:-1] != ns or parent_task_id != result_id:
-                continue
-            status, error = self._terminal_from_result(data)
-            self._set_terminal(child_ns, status, error)
-            del self._open[child_ns]
-
-    def _set_terminal(
+    def _on_terminal(
         self,
         ns: tuple[str, ...],
         status: SubgraphStatus,
@@ -589,6 +572,17 @@ class SubgraphTransformer(StreamTransformer):
             handle.error = error
         handle._seen_terminal = True
         self._close_handle_mux(handle)
+
+    def process(self, event: ProtocolEvent) -> bool:
+        # Discover / update terminal status before forwarding so a
+        # `started` handle exists by the time the child mini-mux sees
+        # its own first event.
+        keep = super().process(event)
+        # Forward every event (tasks included) into the matching
+        # direct-child mini-mux so the child's own transformers
+        # populate its projections — including grandchild discovery.
+        self._forward_to_children(event)
+        return keep
 
     def _forward_to_children(self, event: ProtocolEvent) -> None:
         """Push the event into the matching direct-child mini-mux, if any.
@@ -631,12 +625,10 @@ class SubgraphTransformer(StreamTransformer):
             )
 
     def finalize(self) -> None:
-        """Mark any still-open handles as `completed` and close their muxes."""
-        for ns in list(self._open):
-            self._set_terminal(ns, "completed", None)
-        self._open.clear()
-        # Close any handles that finished implicitly without a parent
-        # task result (e.g. trigger_call_id was missing).
+        super().finalize()
+        # Close any handles whose started fired without a trigger_call_id
+        # (so `_open` never tracked them) — they finish implicitly at
+        # run end with status `completed`.
         for handle in self._handles.values():
             if not handle._seen_terminal:
                 handle.status = "completed"
@@ -644,13 +636,10 @@ class SubgraphTransformer(StreamTransformer):
                 self._close_handle_mux(handle)
 
     def fail(self, err: BaseException) -> None:
-        """Mark any still-open handles as `failed` / `interrupted`."""
+        super().fail(err)
         is_interrupt = isinstance(err, GraphInterrupt)
         status: SubgraphStatus = "interrupted" if is_interrupt else "failed"
         error_str = None if is_interrupt else str(err)
-        for ns in list(self._open):
-            self._set_terminal(ns, status, error_str)
-        self._open.clear()
         for handle in self._handles.values():
             if not handle._seen_terminal:
                 handle.status = status
