@@ -40,6 +40,7 @@ class ValuesTransformer(StreamTransformer):
     """
 
     _native = True
+    required_stream_modes = ("values",)
 
     def __init__(self, *, parent_ns: tuple[str, ...] = ()) -> None:
         self._log: EventLog[dict[str, Any]] = EventLog()
@@ -117,6 +118,7 @@ class MessagesTransformer(StreamTransformer):
     """
 
     _native = True
+    required_stream_modes = ("messages",)
 
     def __init__(self, *, parent_ns: tuple[str, ...] = ()) -> None:
         self._log: EventLog[ChatModelStream] = EventLog()
