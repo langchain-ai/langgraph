@@ -804,6 +804,30 @@ class TestConvertToProtocolEvent:
         assert isinstance(event["params"]["namespace"], list)
         assert event["params"]["namespace"] == ["a", "b", "c"]
 
+    def test_messages_conversion_uses_wire_shape(self) -> None:
+        part = {
+            "type": "messages",
+            "ns": ("call_model:task-1",),
+            "data": (
+                {
+                    "event": "content-block-delta",
+                    "index": 0,
+                    "content_block": {"type": "text", "text": "hi"},
+                },
+                {"langgraph_node": "call_model", "run_id": "run-1"},
+            ),
+        }
+        event = convert_to_protocol_event(part)
+        assert event["method"] == "messages"
+        assert event["params"]["namespace"] == ["call_model:task-1"]
+        assert event["params"]["node"] == "call_model"
+        assert event["params"]["run_id"] == "run-1"
+        assert event["params"]["data"] == {
+            "event": "content-block-delta",
+            "index": 0,
+            "content": {"type": "text", "text": "hi"},
+        }
+
 
 # ---------------------------------------------------------------------------
 # StreamMux unit tests
@@ -973,20 +997,24 @@ class TestMessagesTransformer:
         assert hasattr(items[0], "dispatch")
         assert items[0].message_id == "run-1"
 
-    def test_ignores_non_root_namespace(self) -> None:
-        """Namespace filtering is enforced by the mux via `scope_exact`."""
+    def test_ignores_deeper_than_scope_plus_one(self) -> None:
+        """Root MessagesTransformer accepts scope + 1 (matching JS's
+        `depth=1` root feed), so a depth-1 chat-model ns is kept, but
+        events nested two or more segments deep belong to a subgraph
+        and are dropped.
+        """
         mux = StreamMux([MessagesTransformer()], is_async=False)
         t = mux.transformer_by_key("messages")
         assert isinstance(t, MessagesTransformer)
         t._bind_pump(lambda: False)
         it = iter(t._log)
 
-        meta = {"langgraph_node": "llm", "run_id": "run-1"}
+        meta = {"langgraph_node": "llm", "run_id": "run-deep"}
         mux.push(
             _event(
                 "messages",
-                ({"event": "message-start", "message_id": "run-1"}, meta),
-                namespace=["sub"],
+                ({"event": "message-start", "message_id": "run-deep"}, meta),
+                namespace=["outer:task", "inner:task"],
             )
         )
         t._log.close()

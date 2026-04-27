@@ -20,6 +20,7 @@ from langgraph.stream.transformers import (
     MessagesTransformer,
     SubgraphRunStream,
     SubgraphTransformer,
+    ToolLifecycleTransformer,
     ValuesTransformer,
 )
 from langgraph.types import interrupt
@@ -32,14 +33,14 @@ def _lifecycle(
     *,
     namespace: list[str] | None = None,
     graph_name: str | None = None,
-    trigger_call_id: str | None = None,
+    cause: dict[str, Any] | None = None,
     error: str | None = None,
 ) -> ProtocolEvent:
     data: dict[str, Any] = {"event": event}
     if graph_name is not None:
         data["graph_name"] = graph_name
-    if trigger_call_id is not None:
-        data["trigger_call_id"] = trigger_call_id
+    if cause is not None:
+        data["cause"] = cause
     if error is not None:
         data["error"] = error
     return {
@@ -75,7 +76,12 @@ def _subscribe(log: EventLog) -> None:
 # ---------------------------------------------------------------------------
 
 
-_FACTORIES = [ValuesTransformer, MessagesTransformer, SubgraphTransformer]
+_FACTORIES = [
+    ValuesTransformer,
+    ToolLifecycleTransformer,
+    MessagesTransformer,
+    SubgraphTransformer,
+]
 
 
 def _handle_values_items(handle: SubgraphRunStream) -> list:
@@ -125,15 +131,176 @@ class TestSubgraphTransformerUnit:
                 "started",
                 namespace=["task_a:child"],
                 graph_name="child",
-                trigger_call_id="task_a",
+                cause={"type": "toolCall", "tool_call_id": "call_abc"},
             )
         )
 
         handle = self._handle(transformer)
         assert handle.path == ("task_a:child",)
         assert handle.graph_name == "child"
-        assert handle.trigger_call_id == "task_a"
+        assert handle.cause == {"type": "toolCall", "tool_call_id": "call_abc"}
         assert handle.status == "started"
+
+    def test_tool_started_is_synthesized_before_tool_caused_lifecycle(self) -> None:
+        mux, transformer = self._mux()
+        events = iter(mux._events)
+        mux.push(
+            _values(
+                {
+                    "messages": [
+                        {
+                            "tool_calls": [
+                                {
+                                    "id": "call_abc",
+                                    "name": "task",
+                                    "args": {"subagent_type": "researcher"},
+                                }
+                            ]
+                        }
+                    ]
+                },
+                namespace=[],
+            )
+        )
+        mux.push(
+            _lifecycle(
+                "started",
+                namespace=["task:child"],
+                graph_name="child",
+                cause={"type": "toolCall", "tool_call_id": "call_abc"},
+            )
+        )
+
+        mux.close()
+        tool_started, lifecycle_started = list(events)[1:3]
+        assert tool_started["method"] == "tools"
+        assert tool_started["params"]["namespace"] == []
+        assert tool_started["params"]["data"] == {
+            "event": "tool-started",
+            "tool_call_id": "call_abc",
+            "tool_name": "task",
+            "input": {"subagent_type": "researcher"},
+        }
+        assert lifecycle_started["method"] == "lifecycle"
+        assert tool_started["seq"] < lifecycle_started["seq"]
+        assert self._handle(transformer).path == ("task:child",)
+
+    def test_core_golden_trace_uses_js_wire_shape_and_ordering(self) -> None:
+        mux, _transformer = self._mux()
+        events = iter(mux._events)
+        mux.push(
+            _values(
+                {
+                    "messages": [
+                        {
+                            "tool_calls": [
+                                {
+                                    "id": "call_abc",
+                                    "name": "task",
+                                    "args": {"subagent_type": "researcher"},
+                                }
+                            ]
+                        }
+                    ]
+                },
+                namespace=[],
+            )
+        )
+        for data in (
+            {"event": "message-start", "id": "msg-1", "role": "ai"},
+            {
+                "event": "content-block-delta",
+                "index": 0,
+                "content": {"type": "text", "text": "hi"},
+            },
+        ):
+            mux.push(
+                {
+                    "type": "event",
+                    "method": "messages",
+                    "params": {
+                        "namespace": ["call_model:task-1"],
+                        "timestamp": TS,
+                        "data": data,
+                        "run_id": "run-1",
+                    },
+                }
+            )
+        mux.push(
+            _lifecycle(
+                "started",
+                namespace=["task:child"],
+                graph_name="child",
+                cause={"type": "toolCall", "tool_call_id": "call_abc"},
+            )
+        )
+        mux.close()
+
+        trace = [
+            (event["method"], event["params"]["namespace"], event["params"]["data"])
+            for event in events
+        ]
+        assert trace == [
+            (
+                "values",
+                [],
+                {
+                    "messages": [
+                        {
+                            "tool_calls": [
+                                {
+                                    "id": "call_abc",
+                                    "name": "task",
+                                    "args": {"subagent_type": "researcher"},
+                                }
+                            ]
+                        }
+                    ]
+                },
+            ),
+            (
+                "messages",
+                ["call_model:task-1"],
+                {"event": "message-start", "id": "msg-1", "role": "ai"},
+            ),
+            (
+                "messages",
+                ["call_model:task-1"],
+                {
+                    "event": "content-block-start",
+                    "index": 0,
+                    "content": {"type": "text", "text": ""},
+                },
+            ),
+            (
+                "messages",
+                ["call_model:task-1"],
+                {
+                    "event": "content-block-delta",
+                    "index": 0,
+                    "content": {"type": "text", "text": "hi"},
+                },
+            ),
+            (
+                "tools",
+                [],
+                {
+                    "event": "tool-started",
+                    "tool_call_id": "call_abc",
+                    "tool_name": "task",
+                    "input": {"subagent_type": "researcher"},
+                },
+            ),
+            (
+                "lifecycle",
+                ["task:child"],
+                {
+                    "event": "started",
+                    "graph_name": "child",
+                    "cause": {"type": "toolCall", "tool_call_id": "call_abc"},
+                },
+            ),
+        ]
 
     def test_status_transitions(self) -> None:
         mux, transformer = self._mux()
@@ -237,7 +404,14 @@ class TestSubgraphTransformerUnit:
             {
                 "type": "event",
                 "method": "messages",
-                "params": {"namespace": ["t:c"], "timestamp": TS, "data": "x"},
+                "params": {
+                    "namespace": ["t:c"],
+                    "timestamp": TS,
+                    "data": (
+                        {"event": "message-start", "message_id": "m1"},
+                        {"run_id": "m1"},
+                    ),
+                },
             }
         )
         assert list(transformer._root_log._items) == []
@@ -364,10 +538,10 @@ class TestSubgraphTransformerAsyncEndToEnd:
         assert child.status == "completed"
 
 
-class TestSubgraphTriggerCallId:
-    """Confirm `trigger_call_id` flows from real pregel metadata."""
+class TestSubgraphCause:
+    """Pregel core emits no `cause`; product transformers populate it."""
 
-    def test_trigger_call_id_populated_end_to_end(self) -> None:
+    def test_cause_not_populated_by_pregel(self) -> None:
         graph = _build_nested_graph()
         run = graph.stream_v2({"value": "", "items": []})
 
@@ -375,14 +549,15 @@ class TestSubgraphTriggerCallId:
         assert len(collected) == 1
         child = collected[0]
 
-        # The child's single-segment path encodes `node_name:task_id`.
-        # Both the parsed task_id (`trigger_call_id`) and the segment
-        # should match the same task_id suffix.
+        # The child's single-segment path still encodes `node_name:task_id`
+        # (that's pregel's internal namespace format), but `cause` is now
+        # product-agnostic and must be populated by a stream transformer,
+        # not by pregel itself.
         assert ":" in child.path[0]
         node_name, _, task_id = child.path[0].partition(":")
         assert node_name == "sub"
         assert task_id  # non-empty
-        assert child.trigger_call_id == task_id
+        assert child.cause is None
 
 
 class TestSubgraphInterrupt:

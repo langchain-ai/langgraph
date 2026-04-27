@@ -183,7 +183,7 @@ class TestProtocolEventRouting:
         log.close()
         (stream,) = list(log._items)
         assert stream.done
-        assert stream.output.content == "hello world"
+        assert str(stream.text) == "hello world"
 
     def test_message_finish_cleans_up_routing(self) -> None:
         t, log = _make_sync_transformer()
@@ -220,8 +220,8 @@ class TestProtocolEventRouting:
         streams = list(log._items)
         assert len(streams) == 2
         by_id = {s.message_id: s for s in streams}
-        assert by_id["run-a"].output.content == "aaaa"
-        assert by_id["run-b"].output.content == "bbbb"
+        assert str(by_id["run-a"].text) == "aaaa"
+        assert str(by_id["run-b"].text) == "bbbb"
 
     def test_text_deltas_accumulated_on_stream(self) -> None:
         t, log = _make_sync_transformer()
@@ -257,6 +257,82 @@ class TestProtocolEventRouting:
         (stream,) = [*log._items]
         assert stream.node == "my_llm"
 
+    def test_wire_shape_routes_to_chat_model_stream(self) -> None:
+        t, log = _make_sync_transformer()
+        for evt in (
+            {"event": "message-start", "role": "ai", "id": "msg-1"},
+            {
+                "event": "content-block-start",
+                "index": 0,
+                "content": {"type": "text", "text": ""},
+            },
+            {
+                "event": "content-block-delta",
+                "index": 0,
+                "content": {"type": "text", "text": "hello"},
+            },
+            {
+                "event": "content-block-finish",
+                "index": 0,
+                "content": {"type": "text", "text": "hello"},
+            },
+            {"event": "message-finish", "reason": "stop"},
+        ):
+            t.process(
+                {
+                    "type": "event",
+                    "method": "messages",
+                    "params": {
+                        "namespace": [],
+                        "timestamp": TS,
+                        "data": evt,
+                        "node": "llm",
+                        "run_id": "run-1",
+                    },
+                }
+            )
+        (stream,) = [*log._items]
+        assert stream.message_id == "msg-1"
+        assert str(stream.text) == "hello"
+
+    def test_missing_content_block_start_is_synthesized_in_main_log(self) -> None:
+        mux = StreamMux([MessagesTransformer()], is_async=False)
+        events = iter(mux._events)
+
+        for evt in (
+            {"event": "message-start", "role": "ai", "id": "msg-1"},
+            {
+                "event": "content-block-delta",
+                "index": 0,
+                "content": {"type": "text", "text": "hello"},
+            },
+        ):
+            mux.push(
+                {
+                    "type": "event",
+                    "method": "messages",
+                    "params": {
+                        "namespace": [],
+                        "timestamp": TS,
+                        "data": evt,
+                        "run_id": "run-1",
+                    },
+                }
+            )
+        mux.close()
+
+        emitted = list(events)
+        assert [event["params"]["data"]["event"] for event in emitted] == [
+            "message-start",
+            "content-block-start",
+            "content-block-delta",
+        ]
+        assert emitted[1]["params"]["data"]["content"] == {
+            "type": "text",
+            "text": "",
+        }
+        assert emitted[0]["seq"] < emitted[1]["seq"] < emitted[2]["seq"]
+
 
 # ---------------------------------------------------------------------------
 # Non-streaming (whole AIMessage) fallback
@@ -270,7 +346,7 @@ class TestWholeMessageFallback:
         log.close()
         (stream,) = list(log._items)
         assert stream.done
-        assert stream.output.content == "the full answer"
+        assert str(stream.text) == "the full answer"
 
     def test_whole_message_has_full_lifecycle(self) -> None:
         t, log = _make_sync_transformer()
@@ -317,7 +393,12 @@ class TestFiltering:
         assert t.process(values_event) is True
 
     def test_subgraph_namespace_dropped(self) -> None:
-        """Root MessagesTransformer (via the mux) ignores non-root events."""
+        """Root MessagesTransformer accepts its scope + one segment (JS
+        `depth=1`), so a root-node chat-model ns (depth 1) is picked
+        up, but deeper subgraph chatter (depth 2+) is dropped —
+        `SubgraphTransformer` has already forwarded those into the
+        matching child mini-mux.
+        """
         from langgraph.stream._mux import StreamMux
 
         mux = StreamMux([MessagesTransformer()], is_async=False)
@@ -326,22 +407,34 @@ class TestFiltering:
         t._log._subscribed = True
         t._bind_pump(lambda: False)
 
-        mux.push(
-            {
-                "type": "event",
-                "method": "messages",
-                "params": {
-                    "namespace": ["subgraph"],
-                    "timestamp": TS,
-                    "data": (
-                        {"event": "message-start", "message_id": "run-x"},
-                        {"run_id": "run-x"},
-                    ),
-                },
-            }
-        )
+        def _push(ns: list[str], run_id: str) -> None:
+            mux.push(
+                {
+                    "type": "event",
+                    "method": "messages",
+                    "params": {
+                        "namespace": ns,
+                        "timestamp": TS,
+                        "data": (
+                            {
+                                "event": "message-start",
+                                "message_id": run_id,
+                            },
+                            {"run_id": run_id},
+                        ),
+                    },
+                }
+            )
+
+        # Depth 1 (a root-node chat model): accepted.
+        _push(["call_model:task-1"], run_id="run-root")
+        # Depth 2 (subgraph internal): dropped by the root transformer.
+        _push(["outer:task-1", "inner:task-2"], run_id="run-sub")
+
         t._log.close()
-        assert list(t._log._items) == []
+        streams = list(t._log._items)
+        assert len(streams) == 1
+        assert streams[0].message_id == "run-root"
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +503,7 @@ class TestAsyncMode:
             t.process(_proto_event(evt))
         (stream,) = list(log._items)
         msg = await stream.output
-        assert msg.content == "async"
+        assert msg.content == [{"type": "text", "text": "async", "index": 0}]
 
 
 # ---------------------------------------------------------------------------
@@ -471,7 +564,7 @@ class TestViaMux:
         mux.close()
 
         (stream,) = list(log._items)
-        assert stream.output.content == "mux stream"
+        assert str(stream.text) == "mux stream"
 
     def test_whole_message_via_mux(self) -> None:
         t = MessagesTransformer()
@@ -485,7 +578,7 @@ class TestViaMux:
         mux.close()
 
         (stream,) = list(log._items)
-        assert stream.output.content == "result"
+        assert str(stream.text) == "result"
 
     @pytest.mark.anyio
     async def test_async_streaming_via_mux(self) -> None:
@@ -501,7 +594,7 @@ class TestViaMux:
         streams = list(log._items)
         assert len(streams) == 1
         msg = await streams[0].output
-        assert msg.content == "async mux"
+        assert msg.content == [{"type": "text", "text": "async mux", "index": 0}]
         await mux.aclose()
 
 
@@ -545,7 +638,7 @@ class TestEndToEnd:
 
         assert len(streams) == 1
         assert isinstance(streams[0], ChatModelStream)
-        assert streams[0].output.content == "hello world"
+        assert str(streams[0].text) == "hello world"
 
     def test_node_stream_v2_text_deltas_iterate(self) -> None:
         """Consumer can iterate `.text` on the streamed message in real time."""
@@ -588,7 +681,7 @@ class TestEndToEnd:
         streams = list(run.messages)
 
         assert len(streams) == 1
-        assert streams[0].output.content == "hardcoded"
+        assert str(streams[0].text) == "hardcoded"
 
     @pytest.mark.anyio
     async def test_async_node_calling_astream_v2(self) -> None:
@@ -616,7 +709,7 @@ class TestEndToEnd:
         assert len(streams) == 1
         assert isinstance(streams[0], AsyncChatModelStream)
         msg = await streams[0].output
-        assert msg.content == "async answer"
+        assert msg.content == [{"type": "text", "text": "async answer", "index": 0}]
 
     @pytest.mark.anyio
     async def test_nested_async_iteration_yields_text_deltas(self) -> None:
@@ -693,7 +786,7 @@ class TestEndToEndV2Invoke:
         )
         stream = streams[0]
         assert isinstance(stream, ChatModelStream)
-        assert stream.output.content == "hello world"
+        assert str(stream.text) == "hello world"
 
     def test_invoke_v2_emits_protocol_events(self) -> None:
         """Iterating the stream yields the full v2 lifecycle (not v1 chunks)."""
@@ -726,7 +819,7 @@ class TestEndToEndV2Invoke:
             assert isinstance(event, dict)
             assert "event" in event
         # Typed projection still assembles the final text.
-        assert stream.output.content == "streamed answer"
+        assert str(stream.text) == "streamed answer"
 
     def test_invoke_text_deltas_iterate_live(self) -> None:
         """`.text` projection yields deltas in order."""
@@ -774,7 +867,7 @@ class TestEndToEndV2Invoke:
         streams = list(run.messages)
 
         assert len(streams) == 2
-        contents = {s.output.content for s in streams}
+        contents = {str(s.text) for s in streams}
         assert contents == {"alpha", "beta"}
 
     def test_invoke_plus_constructed_message_two_streams(self) -> None:
@@ -805,9 +898,9 @@ class TestEndToEndV2Invoke:
 
         assert len(streams) == 2
         assert streams[0].node == "streaming_node"
-        assert streams[0].output.content == "live stream"
+        assert str(streams[0].text) == "live stream"
         assert streams[1].node == "constructed_node"
-        assert streams[1].output.content == "hardcoded"
+        assert str(streams[1].text) == "hardcoded"
         assert streams[1].message_id == "constructed-1"
 
     @pytest.mark.anyio
@@ -835,7 +928,7 @@ class TestEndToEndV2Invoke:
         assert len(streams) == 1
         assert isinstance(streams[0], AsyncChatModelStream)
         msg = await streams[0].output
-        assert msg.content == "async invoke"
+        assert msg.content == [{"type": "text", "text": "async invoke", "index": 0}]
 
 
 class TestDirectMessagesModeStaysV1:
