@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from langchain_core.language_models._compat_bridge import message_to_events
 from langchain_core.language_models.chat_model_stream import (
@@ -9,9 +9,12 @@ from langchain_core.language_models.chat_model_stream import (
 )
 from langchain_core.messages import AIMessageChunk, BaseMessage
 from langchain_protocol.protocol import MessagesData
+from typing_extensions import NotRequired, TypedDict
 
+from langgraph.errors import GraphInterrupt
 from langgraph.stream._event_log import EventLog
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
+from langgraph.stream.stream_channel import StreamChannel
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -244,3 +247,163 @@ class MessagesTransformer(StreamTransformer):
         for stream in list(self._by_run.values()):
             stream.fail(err)
         self._by_run.clear()
+
+
+SubgraphStatus = Literal["started", "completed", "failed", "interrupted"]
+
+
+def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
+    """Split a namespace segment into `(graph_name, trigger_call_id)`.
+
+    Segments are formatted `node_name:task_id` by `prepare_next_tasks`.
+    Returns `(segment, None)` if no `:` is present.
+    """
+    name, sep, task_id = segment.partition(":")
+    return name, task_id if sep else None
+
+
+class LifecyclePayload(TypedDict, total=False):
+    """Payload of a lifecycle event surfaced on the `lifecycle` channel.
+
+    Auto-forwarded as `custom:lifecycle` protocol events so remote SDK
+    clients receive the same data in-process consumers see via
+    `run.lifecycle`.
+    """
+
+    event: SubgraphStatus
+    namespace: list[str]
+    graph_name: NotRequired[str]
+    trigger_call_id: NotRequired[str]
+    error: NotRequired[str]
+
+
+class LifecycleTransformer(StreamTransformer):
+    """Surface subgraph lifecycle as `custom:lifecycle` protocol events.
+
+    Subscribes to `tasks` events and emits `LifecyclePayload` to a
+    `StreamChannel` named `lifecycle`. The channel is auto-forwarded
+    by the mux so payloads land in the main event log under
+    `method = "custom:lifecycle"` — visible to remote SDK clients
+    over the wire and to in-process consumers via `run.lifecycle`.
+
+    Discovery: a `tasks` event tagged with a namespace one segment
+    deeper than this transformer's scope, seen for the first time,
+    triggers a `started` payload. Discovery uses `tasks` rather than
+    arbitrary protocol events so the inference is silent-mode-safe
+    when the consumer subscribes to `lifecycle` alone.
+
+    Terminal state: a `TaskResultPayload` at the parent's namespace
+    whose `id` matches an open child's encoded task id triggers the
+    matching terminal payload (`completed` / `failed` / `interrupted`).
+    `finalize` and `fail` are safety nets for subgraphs that didn't
+    receive a parent-result event before the run ended.
+
+    Native transformer — projection key `lifecycle` is exposed as
+    `run.lifecycle`.
+    """
+
+    _native = True
+    required_stream_modes = ("tasks",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._channel: StreamChannel[LifecyclePayload] = StreamChannel("lifecycle")
+        self._seen: set[tuple[str, ...]] = set()
+        # Maps direct-child namespace -> task_id of the parent task that
+        # owns the child loop (encoded in the last segment of the child ns).
+        self._open: dict[tuple[str, ...], str] = {}
+
+    def init(self) -> dict[str, Any]:
+        return {"lifecycle": self._channel}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] != "tasks":
+            return True
+        ns = tuple(event["params"]["namespace"])
+        data = event["params"]["data"]
+
+        if "result" in data:
+            self._handle_task_result(ns, data)
+        else:
+            self._handle_task_start(ns)
+        return True
+
+    def _is_direct_child_ns(self, ns: tuple[str, ...]) -> bool:
+        """True iff `ns` is exactly one segment deeper than this transformer's scope."""
+        depth = len(self.scope)
+        return len(ns) == depth + 1 and ns[:depth] == self.scope
+
+    @staticmethod
+    def _terminal_from_result(
+        payload: dict[str, Any],
+    ) -> tuple[SubgraphStatus, str | None]:
+        """Map a `TaskResultPayload` to a `(status, error)` pair.
+
+        Order matters: a result with both `error` and `interrupts`
+        prefers the interrupt classification, since `GraphInterrupt`
+        manifests as a populated `interrupts` list, not as `error`.
+        """
+        if payload.get("interrupts"):
+            return "interrupted", None
+        error = payload.get("error")
+        if error:
+            return "failed", str(error)
+        return "completed", None
+
+    def _handle_task_start(self, ns: tuple[str, ...]) -> None:
+        if not self._is_direct_child_ns(ns):
+            return
+        if ns in self._seen:
+            return
+        self._seen.add(ns)
+        graph_name, trigger_call_id = _parse_ns_segment(ns[-1])
+        if trigger_call_id is None:
+            # No task_id encoded — can't correlate a parent-result event
+            # back to this namespace. Treat as a started-only entry; rely
+            # on finalize/fail to close it.
+            return
+        self._open[ns] = trigger_call_id
+        payload: LifecyclePayload = {"event": "started", "namespace": list(ns)}
+        if graph_name:
+            payload["graph_name"] = graph_name
+        payload["trigger_call_id"] = trigger_call_id
+        self._channel.push(payload)
+
+    def _handle_task_result(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
+        # A parent's task result closes any direct-child subgraph whose
+        # owning task id matches this result's id.
+        result_id = data.get("id")
+        if not result_id:
+            return
+        for child_ns, parent_task_id in list(self._open.items()):
+            if child_ns[:-1] != ns or parent_task_id != result_id:
+                continue
+            status, error = self._terminal_from_result(data)
+            self._emit_terminal(child_ns, status, error)
+            del self._open[child_ns]
+
+    def _emit_terminal(
+        self,
+        ns: tuple[str, ...],
+        status: SubgraphStatus,
+        error: str | None,
+    ) -> None:
+        payload: LifecyclePayload = {"event": status, "namespace": list(ns)}
+        if error is not None:
+            payload["error"] = error
+        self._channel.push(payload)
+
+    def finalize(self) -> None:
+        """Emit `completed` for any subgraph still open at run end."""
+        for ns in list(self._open):
+            self._emit_terminal(ns, "completed", None)
+        self._open.clear()
+
+    def fail(self, err: BaseException) -> None:
+        """Emit `failed` / `interrupted` for any subgraph still open at run failure."""
+        is_interrupt = isinstance(err, GraphInterrupt)
+        status: SubgraphStatus = "interrupted" if is_interrupt else "failed"
+        error_str = None if is_interrupt else str(err)
+        for ns in list(self._open):
+            self._emit_terminal(ns, status, error_str)
+        self._open.clear()

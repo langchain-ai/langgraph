@@ -3368,6 +3368,7 @@ class Pregel(
         from langgraph.stream._mux import StreamMux
         from langgraph.stream.run_stream import GraphRunStream
         from langgraph.stream.transformers import (
+            LifecycleTransformer,
             MessagesTransformer,
             ValuesTransformer,
         )
@@ -3380,6 +3381,7 @@ class Pregel(
             [
                 values_t,
                 MessagesTransformer(parent_ns=parent_ns),
+                LifecycleTransformer(scope=parent_ns),
                 *compiled_instances,
                 *extra,
             ],
@@ -3424,6 +3426,7 @@ class Pregel(
         from langgraph.stream._mux import StreamMux
         from langgraph.stream.run_stream import AsyncGraphRunStream
         from langgraph.stream.transformers import (
+            LifecycleTransformer,
             MessagesTransformer,
             ValuesTransformer,
         )
@@ -3436,6 +3439,7 @@ class Pregel(
             [
                 values_t,
                 MessagesTransformer(parent_ns=parent_ns),
+                LifecycleTransformer(scope=parent_ns),
                 *compiled_instances,
                 *extra,
             ],
