@@ -3,17 +3,24 @@
 Consumes the `tasks` stream mode and emits subgraph lifecycle payloads
 on the `lifecycle` channel for both in-process iteration via
 `run.lifecycle` and wire delivery via `custom:lifecycle` protocol
-events. These tests dispatch synthetic protocol events through a
-`StreamMux` rather than running a real graph, to keep the inference
-logic isolated.
+events. Most tests dispatch synthetic protocol events through a
+`StreamMux` to keep the inference logic isolated; the end-of-file
+group exercises the path through real graphs (multi-depth
+discovery, nested `stream_v2` calls with non-empty `parent_ns`).
 """
 
 from __future__ import annotations
 
+import operator
 import time
-from typing import Any
+from typing import Annotated, Any
 
+from typing_extensions import TypedDict
+
+from langgraph._internal._constants import CONF, CONFIG_KEY_CHECKPOINT_NS
+from langgraph.constants import END, START
 from langgraph.errors import GraphInterrupt
+from langgraph.graph import StateGraph
 from langgraph.stream._mux import StreamMux
 from langgraph.stream.transformers import (
     LifecyclePayload,
@@ -309,3 +316,86 @@ def test_tasks_events_suppressed_from_main_log() -> None:
     assert "tasks" not in methods
     # Lifecycle events did make it through, though.
     assert "lifecycle" in methods
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: real graphs through stream_v2
+# ---------------------------------------------------------------------------
+
+
+class _State(TypedDict):
+    value: str
+    items: Annotated[list[str], operator.add]
+
+
+def _passthrough(state: _State) -> dict[str, Any]:
+    return {"value": state["value"] + "!", "items": ["x"]}
+
+
+def _make_two_level_nested() -> Any:
+    """Build outer → middle → inner. Three Pregel instances, two nesting levels."""
+    inner_b: StateGraph = StateGraph(_State, input_schema=_State)
+    inner_b.add_node("inner_node", _passthrough)
+    inner_b.add_edge(START, "inner_node")
+    inner_b.add_edge("inner_node", END)
+    inner = inner_b.compile()
+
+    middle_b: StateGraph = StateGraph(_State, input_schema=_State)
+    middle_b.add_node("inner", inner)
+    middle_b.add_edge(START, "inner")
+    middle_b.add_edge("inner", END)
+    middle = middle_b.compile()
+
+    outer_b: StateGraph = StateGraph(_State, input_schema=_State)
+    outer_b.add_node("middle", middle)
+    outer_b.add_edge(START, "middle")
+    outer_b.add_edge("middle", END)
+    return outer_b.compile()
+
+
+def test_stream_v2_real_graph_emits_lifecycle_at_each_depth() -> None:
+    """Outer graph with two nested subgraphs surfaces lifecycle for both."""
+    graph = _make_two_level_nested()
+    run = graph.stream_v2({"value": "x", "items": []})
+
+    # Iterating the projection drives the pump and drains synthesized
+    # lifecycle events at the same time.
+    payloads = list(run.lifecycle)
+    # Each subgraph instance produces a started + a terminal event. Two
+    # nested instances, so four payloads total in some interleaving.
+    by_event = {p["event"] for p in payloads}
+    assert "started" in by_event
+    assert "completed" in by_event
+    # Two distinct namespaces — direct child of root, and grandchild.
+    namespaces = {tuple(p["namespace"]) for p in payloads}
+    direct_children = {ns for ns in namespaces if len(ns) == 1}
+    grandchildren = {ns for ns in namespaces if len(ns) == 2}
+    assert direct_children, f"expected a level-1 lifecycle namespace, got {namespaces}"
+    assert grandchildren, f"expected a level-2 lifecycle namespace, got {namespaces}"
+    # Every direct-child namespace has a matching grandchild whose path extends it.
+    for parent in direct_children:
+        assert any(gc[: len(parent)] == parent for gc in grandchildren), (
+            f"grandchild does not extend parent {parent}: {grandchildren}"
+        )
+
+
+def test_stream_v2_with_nested_parent_ns_scopes_lifecycle() -> None:
+    """When `stream_v2` is called with a non-empty checkpoint_ns in config,
+    `_resolve_parent_ns` returns that namespace and the registered
+    `LifecycleTransformer` is constructed with `scope=parent_ns`. This
+    exercises the path that exists today purely for nested-stream_v2
+    callers; the test simulates such a caller by injecting a
+    checkpoint_ns into the config.
+    """
+    graph = _make_two_level_nested()
+    config = {CONF: {CONFIG_KEY_CHECKPOINT_NS: "outer:abc"}}
+    run = graph.stream_v2({"value": "x", "items": []}, config=config)
+
+    payloads = list(run.lifecycle)
+    # Every emitted lifecycle namespace must extend the caller's scope —
+    # nothing at root-level, nothing under a sibling prefix.
+    for p in payloads:
+        ns = tuple(p["namespace"])
+        assert ns[:1] == ("outer:abc",), (
+            f"namespace {ns} not within scoped prefix ('outer:abc',)"
+        )
