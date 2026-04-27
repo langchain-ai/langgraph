@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 import weakref
-from collections.abc import Awaitable, Callable, Coroutine, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -36,6 +36,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
     NS_SEP,
 )
+from langgraph._internal._runnable import create_task_in_config_context
 from langgraph._internal._timeout import sync_idle_timeout_unsupported
 from langgraph.errors import GraphBubbleUp, NodeTimeoutError, ParentCommand
 from langgraph.pregel.protocol import StreamProtocol
@@ -47,7 +48,6 @@ SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
 class _IdleTimedAttemptPayload(TypedDict):
-    execution_id: str
     task_id: str
     task_name: str
     attempt: int
@@ -101,9 +101,10 @@ class _IdleTimedAttemptScope:
         )
 
     def touch(self) -> None:
-        with self._lock:
-            if self._active:
-                self._last_progress = time.monotonic()
+        # Avoid locking this hot progress path. We accept a small race window in
+        # timestamp ordering because idle_timeout is expected to be coarse compared
+        # with scheduler/thread timing.
+        self._last_progress = time.monotonic()
 
     def close(self) -> None:
         with self._lock:
@@ -210,15 +211,6 @@ def _drain_cancelled(task: asyncio.Task[Any]) -> None:
         task.exception()
 
 
-def _create_task_with_config_context(
-    run: Callable[[], Coroutine[Any, Any, Any]], config: RunnableConfig
-) -> asyncio.Task[Any]:
-    from langgraph._internal._runnable import set_config_context
-
-    with set_config_context(config) as context:
-        return context.run(lambda: asyncio.create_task(run()))
-
-
 def _start_timed_attempt(
     task: PregelExecutableTask, config: RunnableConfig, idle_timeout_s: float
 ) -> _IdleTimedAttemptPayload | None:
@@ -242,7 +234,6 @@ def _start_timed_attempt(
     )
     started_at = datetime.now(timezone.utc)
     payload: _IdleTimedAttemptPayload = {
-        "execution_id": f"run:{run_id or '-'}|task:{task.id}|attempt:{attempt}",
         "task_id": task.id,
         "task_name": task.name,
         "attempt": attempt,
@@ -309,7 +300,7 @@ async def _arun_with_idle_timeout(
         async def run() -> Any:
             return await task.proc.ainvoke(task.input, scoped_config)
 
-    bg = _create_task_with_config_context(run, scoped_config)
+    bg = create_task_in_config_context(run, scoped_config)
     watchdog = asyncio.create_task(scope.wait_for_idle_timeout(idle_timeout_s))
     try:
         done, _ = await asyncio.wait(
@@ -407,8 +398,7 @@ def run_with_retry(
     retry_policy = task.retry_policy or retry_policy
     if task.idle_timeout is not None:
         # `validate_idle_timeout_supported` catches sync nodes at compile time;
-        # this is a runtime safety net for paths (e.g. distributed runtime)
-        # that may bypass that validation.
+        # this is a runtime safety net for paths that may bypass that validation.
         raise sync_idle_timeout_unsupported(task.name)
     attempts = 0
     node_first_attempt_time = time.time()
@@ -568,6 +558,7 @@ async def arun_with_retry(
             )
             _finish_timed_attempt(config, attempt_payload)
             if stream:
+                # if successful, end
                 break
             return result
         except ParentCommand as exc:
@@ -576,6 +567,7 @@ async def arun_with_retry(
             # strip task_ids from namespace for comparison (ns format: "node1|node2:task_id")
             if cmd.graph in (ns, recast_checkpoint_ns(ns), task.name):
                 try:
+                    # this command is for the current graph, handle it
                     for w in task.writers:
                         w.invoke(cmd, config)
                 except Exception as writer_exc:
@@ -587,8 +579,10 @@ async def arun_with_retry(
                 # this command is for the parent graph, assign it to the parent.
                 exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
             _finish_timed_attempt(config, attempt_payload)
+            # bubble up the exception to the parent graph
             raise
         except GraphBubbleUp:
+            # if interrupted, end
             _finish_timed_attempt(config, attempt_payload)
             raise
         except Exception as exc:

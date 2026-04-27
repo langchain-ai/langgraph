@@ -37,7 +37,7 @@ from langgraph.pregel._call import (
     P,
     SyncAsyncFuture,
     T,
-    call,
+    _call_with_options,
     get_runnable_for_entrypoint,
     identifier,
 )
@@ -78,13 +78,13 @@ class _TaskFunction(Generic[P, T]):
         functools.update_wrapper(self, func)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> SyncAsyncFuture[T]:
-        return call(
+        return _call_with_options(
             self.func,
+            args,
+            kwargs,
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
             idle_timeout=self.idle_timeout,
-            *args,
-            **kwargs,
         )
 
     def clear_cache(self, cache: BaseCache) -> None:

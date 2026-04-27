@@ -8,7 +8,12 @@ from collections.abc import Callable, Sequence
 from functools import partial
 from typing import Any
 
-from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
+from langchain_core.runnables import (
+    Runnable,
+    RunnableLambda,
+    RunnableParallel,
+    RunnableSequence,
+)
 from langchain_core.runnables.base import RunnableBindingBase
 from langchain_core.runnables.config import run_in_executor
 from langgraph.checkpoint.base import ChannelVersions
@@ -76,6 +81,12 @@ def _sequence_steps(runnable: Runnable) -> Sequence[Runnable] | None:
     return None
 
 
+def _parallel_steps(runnable: Runnable) -> Sequence[Runnable] | None:
+    if isinstance(runnable, RunnableParallel):
+        return tuple(runnable.steps__.values())
+    return None
+
+
 def _has_method_override(runnable: Runnable, method_name: str) -> bool:
     method = getattr(type(runnable), method_name, None)
     return method is not None and method is not getattr(Runnable, method_name)
@@ -106,6 +117,11 @@ def _runnable_has_native_async(runnable: Runnable) -> bool:
     while isinstance(runnable, RunnableBindingBase):
         runnable = runnable.bound
     if (steps := _sequence_steps(runnable)) is not None:
+        for step in steps:
+            if not _runnable_has_native_async(step):
+                return False
+        return True
+    if (steps := _parallel_steps(runnable)) is not None:
         for step in steps:
             if not _runnable_has_native_async(step):
                 return False

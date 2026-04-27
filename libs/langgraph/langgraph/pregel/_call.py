@@ -263,6 +263,25 @@ def call(
     idle_timeout: float | timedelta | None = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
+    return _call_with_options(
+        func,
+        args,
+        kwargs,
+        retry_policy=retry_policy,
+        cache_policy=cache_policy,
+        idle_timeout=idle_timeout,
+    )
+
+
+def _call_with_options(
+    func: Callable[P, Awaitable[T]] | Callable[P, T],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    retry_policy: Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy | None = None,
+    idle_timeout: float | timedelta | None = None,
+) -> SyncAsyncFuture[T]:
     idle_timeout_s = coerce_idle_timeout(idle_timeout)
     if idle_timeout_s is not None and not is_async_callable(func):
         name = getattr(func, "__name__", func.__class__.__name__)
