@@ -9,6 +9,7 @@ from functools import partial
 from typing import Any
 
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
+from langchain_core.runnables.base import RunnableBindingBase
 from langchain_core.runnables.config import run_in_executor
 from langgraph.checkpoint.base import ChannelVersions
 from typing_extensions import override
@@ -102,6 +103,8 @@ def _runnable_has_native_async(runnable: Runnable) -> bool:
     to blocking work internally.
     """
 
+    if isinstance(runnable, RunnableBindingBase):
+        return _runnable_has_native_async(runnable.bound)
     if (steps := _sequence_steps(runnable)) is not None:
         for step in steps:
             if not _runnable_has_native_async(step):

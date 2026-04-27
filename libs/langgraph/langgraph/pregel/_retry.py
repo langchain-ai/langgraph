@@ -317,18 +317,19 @@ async def _arun_with_idle_timeout(
         )
         if bg in done:
             watchdog.cancel()
-            with suppress(asyncio.CancelledError):
+            with suppress(asyncio.CancelledError, asyncio.TimeoutError):
                 await watchdog
             return await bg
-        await watchdog
+        try:
+            await watchdog
+        except asyncio.TimeoutError as exc:
+            elapsed = time.monotonic() - start
+            scope.close()
+            task.writes.clear()
+            bg.cancel()
+            bg.add_done_callback(_drain_cancelled)
+            raise NodeTimeoutError(task.name, idle_timeout_s, elapsed) from exc
         raise AssertionError("idle timeout watchdog completed without timing out")
-    except asyncio.TimeoutError as exc:
-        elapsed = time.monotonic() - start
-        scope.close()
-        task.writes.clear()
-        bg.cancel()
-        bg.add_done_callback(_drain_cancelled)
-        raise NodeTimeoutError(task.name, idle_timeout_s, elapsed) from exc
     except asyncio.CancelledError:
         scope.close()
         bg.cancel()

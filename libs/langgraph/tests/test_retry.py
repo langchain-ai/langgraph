@@ -750,6 +750,51 @@ def test_arun_with_retry_timeout_fires_async():
     asyncio.run(_run())
 
 
+def test_arun_with_retry_preserves_inner_timeout_error():
+    calls = 0
+
+    class InnerTimeoutProc:
+        async def ainvoke(self, input, config):
+            nonlocal calls
+            calls += 1
+            raise asyncio.TimeoutError("inner")
+
+    policy = RetryPolicy(
+        max_attempts=2,
+        initial_interval=0.0,
+        jitter=False,
+        retry_on=NodeTimeoutError,
+    )
+    task = _make_task(
+        InnerTimeoutProc(), idle_timeout=1.0, retry_policy=(policy,), name="parent"
+    )
+
+    async def _run():
+        with pytest.raises(asyncio.TimeoutError, match="inner"):
+            await arun_with_retry(task, retry_policy=None)
+
+    asyncio.run(_run())
+    assert calls == 1
+
+
+def test_arun_with_retry_preserves_child_node_timeout_error():
+    child_timeout = NodeTimeoutError("child", 0.1, 0.2)
+
+    class ChildTimeoutProc:
+        async def ainvoke(self, input, config):
+            raise child_timeout
+
+    task = _make_task(ChildTimeoutProc(), idle_timeout=1.0, name="parent")
+
+    async def _run():
+        with pytest.raises(NodeTimeoutError) as excinfo:
+            await arun_with_retry(task, retry_policy=None)
+        assert excinfo.value is child_timeout
+        assert excinfo.value.node == "child"
+
+    asyncio.run(_run())
+
+
 def test_arun_with_retry_idle_timeout_resets_on_stream_event():
     events = []
 
@@ -1046,6 +1091,30 @@ def test_state_graph_compile_rejects_sync_node_timeout():
 
     with pytest.raises(ValueError, match="only supported for async nodes"):
         builder.compile()
+
+
+def test_pregel_validate_rejects_wrapped_sync_runnable_lambda_timeout():
+    def slow(value: int) -> int:
+        return value + 1
+
+    with pytest.raises(ValueError, match="only supported for async nodes"):
+        Pregel(
+            nodes={
+                "slow": (
+                    NodeBuilder()
+                    .subscribe_only("input")
+                    .do(RunnableLambda(slow).with_config(tags=["wrapped"]))
+                    .set_idle_timeout(0.05)
+                    .write_to("output")
+                )
+            },
+            channels={
+                "input": EphemeralValue(int),
+                "output": LastValue(int),
+            },
+            input_channels="input",
+            output_channels="output",
+        )
 
 
 def test_pregel_validate_rejects_sync_node_timeout():
