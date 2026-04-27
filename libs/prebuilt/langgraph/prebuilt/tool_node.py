@@ -1616,6 +1616,28 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     execution_info: ExecutionInfo | None = None
     server_info: ServerInfo | None = None
 
+    def emit_output_delta(self, delta: Any) -> None:
+        """Stream a partial output chunk on the `tools` stream channel.
+
+        Reads the per-tool-call writer that `StreamToolCallHandler`
+        installs on a ContextVar at `on_tool_start` and forwards `delta`
+        through it. Silent no-op when the graph was not run with
+        `"tools"` in `stream_mode` (no writer is set), so tool authors
+        can leave `emit_output_delta` calls in place without gating
+        them on stream mode.
+
+        Args:
+            delta: Partial output chunk. Any JSON-serializable value;
+                surfaced as-is on the `tools` channel's
+                `tool-output-delta` payload under `"delta"`.
+        """
+        from langgraph.config import _tool_call_writer
+
+        writer = _tool_call_writer.get()
+        if writer is None:
+            return
+        writer(delta)
+
 
 class InjectedState(InjectedToolArg):
     """Annotation for injecting graph state into tool arguments.

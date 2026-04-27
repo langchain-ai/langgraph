@@ -8,7 +8,6 @@ from typing import Annotated, Any
 import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
-from langgraph.config import emit_tool_output_delta
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
@@ -21,7 +20,12 @@ from langgraph.stream.transformers import (
 )
 from typing_extensions import TypedDict
 
-from langgraph.prebuilt import ToolCallStream, ToolCallTransformer, ToolNode
+from langgraph.prebuilt import (
+    ToolCallStream,
+    ToolCallTransformer,
+    ToolNode,
+    ToolRuntime,
+)
 
 TS = int(time.time() * 1000)
 
@@ -171,10 +175,10 @@ def _build_graph(caller, tools):
 class TestToolCallTransformerEndToEnd:
     def test_sync_streaming_tool_populates_tool_calls(self) -> None:
         @tool
-        def streamer(text: str) -> str:
+        def streamer(text: str, runtime: ToolRuntime) -> str:
             """streams chunks."""
             for chunk in ("one", "two"):
-                emit_tool_output_delta(chunk)
+                runtime.emit_output_delta(chunk)
             return text
 
         def caller(state: _State) -> dict:
@@ -238,10 +242,10 @@ class TestToolCallTransformerEndToEnd:
     @pytest.mark.anyio
     async def test_async_streaming_tool_populates_tool_calls(self) -> None:
         @tool
-        async def astreamer(text: str) -> str:
+        async def astreamer(text: str, runtime: ToolRuntime) -> str:
             """async streams."""
-            emit_tool_output_delta(text)
-            emit_tool_output_delta(text + "!")
+            runtime.emit_output_delta(text)
+            runtime.emit_output_delta(text + "!")
             return text
 
         async def caller(state: _State) -> dict:

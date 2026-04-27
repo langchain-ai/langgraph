@@ -32,10 +32,10 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     `tool-finished` / `tool-error` payloads keyed by `tool_call_id`.
 
     While a tool is executing, this handler sets `_tool_call_writer` to a
-    closure bound to that call's namespace and `tool_call_id`. The
-    `emit_tool_output_delta` helper in `langgraph.config` reads that
-    ContextVar so tool bodies can stream partial output without threading
-    the writer through their own signature.
+    closure bound to that call's namespace and `tool_call_id`.
+    `ToolRuntime.emit_output_delta` reads that ContextVar so tool bodies
+    can stream partial output without threading the writer through their
+    own signature.
 
     Attached by `Pregel.stream` / `astream` when `"tools"` is in
     `stream_modes`. `run_inline = True` keeps event ordering
