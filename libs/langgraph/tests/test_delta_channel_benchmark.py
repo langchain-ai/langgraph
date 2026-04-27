@@ -29,16 +29,6 @@ from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 
-try:
-    from langgraph.checkpoint.postgres import PostgresSaver
-
-    _POSTGRES_AVAILABLE = True
-    _POSTGRES_URI = (
-        "postgres://postgres:postgres@localhost:5441/postgres?sslmode=disable"
-    )
-except ImportError:
-    _POSTGRES_AVAILABLE = False
-
 # ---------------------------------------------------------------------------
 # Realistic message payload (~100 tokens / ~400 chars each)
 # ---------------------------------------------------------------------------
@@ -251,7 +241,9 @@ def run_baseline_benchmark() -> None:
 
     print("Storage (blob bytes)")
     print("-" * W)
-    print(f"{'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta(inf)':>12}  {'savings':>8}")
+    print(
+        f"{'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta(inf)':>12}  {'savings':>8}"
+    )
     print("-" * W)
     for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
         if b_bytes is None or b_bytes < 0 or d_bytes is None or d_bytes < 0:
@@ -315,7 +307,9 @@ def run_snapshot_freq_benchmark() -> None:
     # Storage table
     print()
     print("Storage (blob bytes) — lower is better")
-    header = f"{'turns':>6}  {'ctx':>10}" + "".join(f"  {f'freq={l}':>{col_w}}" for l in freq_labels)
+    header = f"{'turns':>6}  {'ctx':>10}" + "".join(
+        f"  {f'freq={freq_label}':>{col_w}}" for freq_label in freq_labels
+    )
     print(header)
     print("-" * len(header))
     for turns in SWEEP_TURN_COUNTS:
@@ -353,7 +347,9 @@ def run_snapshot_freq_benchmark() -> None:
 
     print()
     print("Legend:")
-    print("  freq=1    snapshot every write (full blob always — same as add_messages / BinOp)")
+    print(
+        "  freq=1    snapshot every write (full blob always — same as add_messages / BinOp)"
+    )
     print("  freq=N    snapshot every N writes; read walks at most N ancestor writes")
     print("  freq=inf  pure delta; read walks entire ancestor chain")
     print()
