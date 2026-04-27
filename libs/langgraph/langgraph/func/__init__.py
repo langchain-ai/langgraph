@@ -155,8 +155,10 @@ def task(
         cache_policy: An optional cache policy to use for the task. This allows caching of the task results.
         idle_timeout: Maximum time a single task attempt may go without observable
             progress, in seconds (or as a `timedelta`). Progress includes writes,
-            stream output, yielded stream chunks, and child task scheduling. If
-            exceeded, `NodeTimeoutError` is raised. Supported only for async tasks.
+            stream output, yielded stream chunks, child task scheduling, LangChain
+            callback events from runs descended from this task, and explicit
+            `runtime.heartbeat()` calls. If exceeded, `NodeTimeoutError` is raised.
+            Supported only for async tasks.
 
     Returns:
         A callable function when used as a decorator.

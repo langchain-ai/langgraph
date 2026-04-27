@@ -807,6 +807,80 @@ def test_astream_with_retry_idle_timeout_resets_on_yielded_chunks():
     asyncio.run(_run())
 
 
+def test_arun_with_retry_idle_timeout_resets_on_runtime_heartbeat():
+    class HeartbeatProc:
+        async def ainvoke(self, input, config):
+            runtime = config[CONF][CONFIG_KEY_RUNTIME]
+            for _ in range(3):
+                await asyncio.sleep(0.08)
+                runtime.heartbeat()
+            return "ok"
+
+    task = _make_task(HeartbeatProc(), idle_timeout=0.15, name="heartbeat")
+
+    async def _run() -> None:
+        assert await arun_with_retry(task, retry_policy=None) == "ok"
+
+    asyncio.run(_run())
+
+
+def test_runtime_heartbeat_outside_idle_attempt_is_no_op():
+    from langgraph.runtime import DEFAULT_RUNTIME
+
+    DEFAULT_RUNTIME.heartbeat()
+
+
+def test_arun_with_retry_idle_timeout_resets_on_callback_event():
+    from uuid import uuid4
+
+    class HandlerEmittingProc:
+        async def ainvoke(self, input, config):
+            handlers = config["callbacks"]
+            run_id = uuid4()
+            for _ in range(3):
+                await asyncio.sleep(0.08)
+                for handler in handlers:
+                    handler.on_llm_new_token("tok", run_id=run_id)
+            return "ok"
+
+    task = _make_task(HandlerEmittingProc(), idle_timeout=0.15, name="cb")
+
+    async def _run() -> None:
+        assert await arun_with_retry(task, retry_policy=None) == "ok"
+
+    asyncio.run(_run())
+
+
+def test_arun_with_retry_idle_timeout_preserves_existing_callbacks():
+    from uuid import uuid4
+
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    seen: list[str] = []
+
+    class RecordingHandler(BaseCallbackHandler):
+        run_inline = True
+
+        def on_llm_new_token(self, token, *, run_id, **kwargs):
+            seen.append(token)
+
+    class HandlerEmittingProc:
+        async def ainvoke(self, input, config):
+            run_id = uuid4()
+            for handler in config["callbacks"]:
+                handler.on_llm_new_token("tok", run_id=run_id)
+            return "ok"
+
+    task = _make_task(HandlerEmittingProc(), idle_timeout=0.5, name="cb-pre")
+    task.config["callbacks"] = [RecordingHandler()]
+
+    async def _run() -> None:
+        assert await arun_with_retry(task, retry_policy=None) == "ok"
+
+    asyncio.run(_run())
+    assert seen == ["tok"]
+
+
 def test_arun_with_retry_timeout_discards_stale_executor_writes():
     release_first_attempt = threading.Event()
 

@@ -618,8 +618,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                     This is only used for graph rendering and doesn't have any effect on the graph execution.
             idle_timeout: Maximum time a single invocation of this node may go
                 without observable progress, in seconds (or as a `timedelta`).
-                Progress includes writes, stream output, yielded stream chunks,
-                and child task scheduling. When exceeded, a
+                Progress includes writes, stream output, yielded stream
+                chunks, child task scheduling, LangChain callback events
+                from runs descended from this node, and explicit
+                `runtime.heartbeat()` calls. When exceeded, a
                 [`NodeTimeoutError`][langgraph.errors.NodeTimeoutError] is raised
                 and the retry policy (if any) decides whether to retry. Timeouts
                 are supported only for async nodes; sync nodes cannot be safely

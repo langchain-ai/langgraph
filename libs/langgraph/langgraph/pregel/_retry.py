@@ -12,6 +12,11 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any, Literal
 
+from langchain_core.callbacks import (
+    BaseCallbackHandler,
+    BaseCallbackManager,
+    Callbacks,
+)
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import NotRequired, TypedDict
 
@@ -61,9 +66,11 @@ class _IdleTimedAttemptScope:
     """Guarded-config window for idle timed attempts.
 
     The wrapped config marks writes, stream events, runtime stream writer calls,
-    and child task scheduling as observable progress. `close()` and guarded
-    callbacks are serialized so cancelled background tasks cannot emit writes
-    or stream events past the idle_timeout boundary.
+    child task scheduling, and any LangChain callback event emitted under the
+    node's run as observable progress. `runtime.heartbeat()` exposes a manual
+    progress signal for work that doesn't otherwise emit any of these.
+    `close()` and guarded callbacks are serialized so cancelled background
+    tasks cannot emit writes or stream events past the idle_timeout boundary.
     """
 
     __slots__ = ("_active", "_last_progress", "_lock")
@@ -84,9 +91,24 @@ class _IdleTimedAttemptScope:
             patch[CONFIG_KEY_CALL] = self._guard_call(call)
         if isinstance(runtime := configurable.get(CONFIG_KEY_RUNTIME), Runtime):
             patch[CONFIG_KEY_RUNTIME] = runtime.override(
-                stream_writer=self._guard_stream_writer(runtime.stream_writer)
+                stream_writer=self._guard_stream_writer(runtime.stream_writer),
+                heartbeat=self.touch,
             )
-        return patch_configurable(config, patch) if patch else config
+        new_config = patch_configurable(config, patch) if patch else config
+        return self._attach_callback_handler(new_config)
+
+    def _attach_callback_handler(self, config: RunnableConfig) -> RunnableConfig:
+        handler = _IdleHeartbeatCallbackHandler(self)
+        callbacks: Callbacks = config.get("callbacks")
+        new_callbacks: Callbacks
+        if callbacks is None:
+            new_callbacks = [handler]
+        elif isinstance(callbacks, BaseCallbackManager):
+            new_callbacks = callbacks.copy()
+            new_callbacks.add_handler(handler, inherit=True)
+        else:
+            new_callbacks = [*callbacks, handler]
+        return {**config, "callbacks": new_callbacks}
 
     def touch(self) -> None:
         with self._lock:
@@ -148,6 +170,43 @@ class _IdleTimedAttemptScope:
                     stream_writer(chunk)
 
         return guarded_stream_writer
+
+
+class _IdleHeartbeatCallbackHandler(BaseCallbackHandler):
+    """Resets the idle_timeout clock on any LangChain callback event.
+
+    Inherits via `config["callbacks"]`, so it sees only events emitted by
+    runs descended from the node's attempt — sibling nodes do not bleed
+    through.
+    """
+
+    run_inline = True
+
+    def __init__(self, scope: _IdleTimedAttemptScope) -> None:
+        self._scope = scope
+
+    def _touch(self, *args: Any, **kwargs: Any) -> None:
+        self._scope.touch()
+
+    on_llm_start = _touch
+    on_chat_model_start = _touch
+    on_llm_new_token = _touch
+    on_llm_end = _touch
+    on_llm_error = _touch
+    on_chain_start = _touch
+    on_chain_end = _touch
+    on_chain_error = _touch
+    on_tool_start = _touch
+    on_tool_end = _touch
+    on_tool_error = _touch
+    on_retriever_start = _touch
+    on_retriever_end = _touch
+    on_retriever_error = _touch
+    on_agent_action = _touch
+    on_agent_finish = _touch
+    on_text = _touch
+    on_retry = _touch
+    on_custom_event = _touch
 
 
 def _drain_cancelled(task: asyncio.Task[Any]) -> None:
