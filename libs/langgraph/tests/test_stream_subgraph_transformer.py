@@ -19,10 +19,10 @@ from langgraph.constants import END, START
 from langgraph.errors import GraphInterrupt
 from langgraph.graph import StateGraph
 from langgraph.stream._mux import StreamMux
+from langgraph.stream.run_stream import SubgraphRunStream
 from langgraph.stream.transformers import (
     LifecycleTransformer,
     MessagesTransformer,
-    SubgraphRunStream,
     SubgraphTransformer,
     ValuesTransformer,
 )

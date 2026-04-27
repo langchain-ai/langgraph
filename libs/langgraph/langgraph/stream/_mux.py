@@ -81,7 +81,7 @@ class StreamMux:
             TypeError: If a transformer's `init()` doesn't return a dict.
             ValueError: If transformers' projection keys collide.
         """
-        self._is_async = is_async
+        self.is_async = is_async
         self.scope: tuple[str, ...] = scope
         self._events: EventLog[ProtocolEvent] = EventLog()
         self._events._bind(is_async=is_async)
@@ -182,7 +182,7 @@ class StreamMux:
             )
         child = StreamMux(
             factories=self._factories,
-            is_async=self._is_async,
+            is_async=self.is_async,
             scope=scope,
         )
         if self._pump_fn is not None:
@@ -198,7 +198,7 @@ class StreamMux:
         processing, binds any EventLog or StreamChannel instances in
         the projection, and merges the projection into `extensions`.
         """
-        if transformer_requires_async(transformer) and not self._is_async:
+        if transformer_requires_async(transformer) and not self.is_async:
             raise RuntimeError(
                 f"{type(transformer).__name__} requires an async run — "
                 "it overrides aprocess/afinalize/afail or sets "
@@ -450,7 +450,7 @@ class StreamMux:
         """
         for value in projection.values():
             if isinstance(value, StreamChannel):
-                value._bind(is_async=self._is_async)
+                value._bind(is_async=self.is_async)
                 self._channels.append(value)
                 method = value.name if native else f"custom:{value.name}"
 
@@ -462,7 +462,7 @@ class StreamMux:
 
                 value._wire(_make_forward(method))
             elif isinstance(value, EventLog):
-                value._bind(is_async=self._is_async)
+                value._bind(is_async=self.is_async)
                 self._logs.append(value)
 
     def _forward(self, method: str, item: Any) -> None:

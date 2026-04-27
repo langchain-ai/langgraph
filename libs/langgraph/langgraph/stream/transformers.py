@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from langchain_core.language_models._compat_bridge import message_to_events
@@ -22,6 +21,10 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from langgraph.stream._mux import StreamMux
+    from langgraph.stream.run_stream import (
+        AsyncSubgraphRunStream,
+        SubgraphRunStream,
+    )
 
 _logger = logging.getLogger(__name__)
 
@@ -440,84 +443,6 @@ class LifecycleTransformer(StreamTransformer):
         self._open.clear()
 
 
-@dataclass
-class SubgraphRunStream:
-    """In-process handle for a discovered subgraph invocation.
-
-    Wraps a child `StreamMux` scoped to the subgraph's namespace —
-    consumers iterate `handle.values` / `handle.messages` /
-    `handle.subgraphs` (recursive grandchildren) to drill into the
-    subgraph's own projections. Cursors on these projections drive
-    the root pump, so iterating a handle's values advances the whole
-    run; consumers don't need to manage child-pump plumbing.
-
-    Status is updated in place by `SubgraphTransformer` from the
-    parent's `TaskResultPayload`. Iterate `run.subgraphs` to receive
-    handles as subgraphs spawn, then read `status` / `error` after
-    iterating the handle's projections to completion.
-
-    !!! warning "Subscribe before advancing the run"
-        Mini-mux projections follow the same lazy-subscribe rule as
-        root-level ones (`run.values`, `run.messages`): pushes to an
-        unsubscribed log are silently dropped. Drill into a handle's
-        projections **inside** the loop body that yields it, before
-        the next pump cycle:
-
-        ```python
-        for handle in run.subgraphs:
-            for v in handle.values:
-                ...
-        ```
-
-        The "drain handles first, drill in later" pattern
-        (`handles = list(run.subgraphs); ...`) loses every event
-        that flowed past while no consumer was attached.
-    """
-
-    path: tuple[str, ...]
-    graph_name: str | None = None
-    trigger_call_id: str | None = None
-    status: SubgraphStatus = "started"
-    error: str | None = None
-    _mux: StreamMux | None = field(default=None, repr=False)
-    _seen_terminal: bool = field(default=False, repr=False)
-
-    @property
-    def values(self) -> Any:
-        """Subgraph's `values` projection (state snapshots at this level)."""
-        return self._extension("values")
-
-    @property
-    def messages(self) -> Any:
-        """Subgraph's `messages` projection (chat model streams at this level)."""
-        return self._extension("messages")
-
-    @property
-    def subgraphs(self) -> Any:
-        """Recursive grandchildren — handles for subgraphs nested inside this one."""
-        return self._extension("subgraphs")
-
-    @property
-    def lifecycle(self) -> Any:
-        """Subgraph's own `lifecycle` channel (events scoped to this subtree)."""
-        return self._extension("lifecycle")
-
-    def _extension(self, key: str) -> Any:
-        if self._mux is None:
-            raise RuntimeError(
-                f"SubgraphRunStream at {self.path} has no backing mux; "
-                "this handle was constructed outside the normal "
-                "SubgraphTransformer / make_child path."
-            )
-        try:
-            return self._mux.extensions[key]
-        except KeyError as exc:
-            raise AttributeError(
-                f"Subgraph at {self.path} does not expose a {key!r} "
-                "projection; check the registered transformer factories."
-            ) from exc
-
-
 class SubgraphTransformer(StreamTransformer):
     """Discover subgraph invocations as in-process `SubgraphRunStream` handles.
 
@@ -546,8 +471,10 @@ class SubgraphTransformer(StreamTransformer):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[SubgraphRunStream] = EventLog()
-        self._handles: dict[tuple[str, ...], SubgraphRunStream] = {}
+        self._log: EventLog[SubgraphRunStream | AsyncSubgraphRunStream] = EventLog()
+        self._handles: dict[
+            tuple[str, ...], SubgraphRunStream | AsyncSubgraphRunStream
+        ] = {}
         self._open: dict[tuple[str, ...], str] = {}
         self._mux: StreamMux | None = None
 
@@ -610,15 +537,27 @@ class SubgraphTransformer(StreamTransformer):
         try:
             child_mux = self._mux.make_child(ns)
         except RuntimeError:
-            # Mux wasn't built from factories — handle becomes
-            # metadata-only. Still useful for status tracking.
-            child_mux = None
-        handle = SubgraphRunStream(
+            # Mux wasn't built from factories — mini-mux nesting
+            # isn't available, so we can't produce a real handle.
+            # Skip; LifecycleTransformer still tracks the subgraph
+            # via the flat event stream.
+            return
+        # Late import dodges the run_stream → transformers cycle.
+        from langgraph.stream.run_stream import (
+            AsyncSubgraphRunStream,
+            SubgraphRunStream,
+        )
+
+        values_t = child_mux.transformer_by_key("values")
+        if not isinstance(values_t, ValuesTransformer):
+            return
+        handle_cls = AsyncSubgraphRunStream if child_mux.is_async else SubgraphRunStream
+        handle = handle_cls(
+            mux=child_mux,
+            values_transformer=values_t,
             path=ns,
             graph_name=graph_name or None,
             trigger_call_id=trigger_call_id,
-            status="started",
-            _mux=child_mux,
         )
         self._handles[ns] = handle
         if trigger_call_id is not None:
@@ -676,7 +615,9 @@ class SubgraphTransformer(StreamTransformer):
                 exc_info=True,
             )
 
-    def _close_handle_mux(self, handle: SubgraphRunStream) -> None:
+    def _close_handle_mux(
+        self, handle: SubgraphRunStream | AsyncSubgraphRunStream
+    ) -> None:
         if handle._mux is None or handle._mux._events._closed:
             return
         try:
