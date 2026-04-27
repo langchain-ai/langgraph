@@ -3383,23 +3383,27 @@ class Pregel(
         from langgraph.stream.transformers import (
             LifecycleTransformer,
             MessagesTransformer,
+            SubgraphTransformer,
             ValuesTransformer,
         )
 
         parent_ns = _resolve_parent_ns(self.config, config)
-        values_t = ValuesTransformer(parent_ns=parent_ns)
         compiled_instances = [f() for f in self._stream_transformers]
         extra = [t() if isinstance(t, type) else t for t in (transformers or ())]
+        # Native factories propagate to child mini-muxes via `make_child`.
+        # Compiled / per-call transformers stay root-only.
         mux = StreamMux(
-            [
-                values_t,
-                MessagesTransformer(parent_ns=parent_ns),
-                LifecycleTransformer(scope=parent_ns),
-                *compiled_instances,
-                *extra,
+            transformers=[*compiled_instances, *extra],
+            factories=[
+                ValuesTransformer,
+                MessagesTransformer,
+                LifecycleTransformer,
+                SubgraphTransformer,
             ],
+            scope=parent_ns,
             is_async=False,
         )
+        values_t = cast(ValuesTransformer, mux.transformer_by_key("values"))
         graph_iter = iter(
             self.stream(
                 input,
@@ -3452,23 +3456,27 @@ class Pregel(
         from langgraph.stream.transformers import (
             LifecycleTransformer,
             MessagesTransformer,
+            SubgraphTransformer,
             ValuesTransformer,
         )
 
         parent_ns = _resolve_parent_ns(self.config, config)
-        values_t = ValuesTransformer(parent_ns=parent_ns)
         compiled_instances = [f() for f in self._stream_transformers]
         extra = [t() if isinstance(t, type) else t for t in (transformers or ())]
+        # Native factories propagate to child mini-muxes via `make_child`.
+        # Compiled / per-call transformers stay root-only.
         mux = StreamMux(
-            [
-                values_t,
-                MessagesTransformer(parent_ns=parent_ns),
-                LifecycleTransformer(scope=parent_ns),
-                *compiled_instances,
-                *extra,
+            transformers=[*compiled_instances, *extra],
+            factories=[
+                ValuesTransformer,
+                MessagesTransformer,
+                LifecycleTransformer,
+                SubgraphTransformer,
             ],
+            scope=parent_ns,
             is_async=True,
         )
+        values_t = cast(ValuesTransformer, mux.transformer_by_key("values"))
         graph_aiter = self.astream(
             input,
             patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),

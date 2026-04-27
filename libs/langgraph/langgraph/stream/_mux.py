@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langgraph.stream._event_log import EventLog
@@ -62,12 +62,16 @@ class StreamMux:
         any EventLog / StreamChannel instances are bound and wired.
 
         Args:
-            transformers: Already-built transformer instances. Mutually
-                exclusive with `factories`.
+            transformers: Already-built transformer instances. Registered
+                only on this mux — they are NOT cloned into child
+                mini-muxes built by `make_child`. Use `factories` for
+                transformers that should propagate to nested scopes.
             is_async: True for async dispatch (`apush` / `aclose` /
                 `afail`), False for the sync path.
-            factories: Zero-or-one-argument callables producing
-                transformers. Called with this mux's `scope`.
+            factories: One-argument callables `(scope) -> StreamTransformer`.
+                Called once with this mux's `scope` here, and cloned
+                again per child scope by `make_child` so each
+                sub-mux gets fresh instances.
             scope: The namespace the mux operates within. The root mux
                 is `()`.
 
@@ -75,12 +79,8 @@ class StreamMux:
             RuntimeError: If any transformer requires an async run but
                 the mux is in sync mode.
             TypeError: If a transformer's `init()` doesn't return a dict.
-            ValueError: If transformers' projection keys collide, or if
-                both `transformers` and `factories` are supplied.
+            ValueError: If transformers' projection keys collide.
         """
-        if transformers is not None and factories is not None:
-            raise ValueError("Pass either `transformers` or `factories`, not both.")
-
         self._is_async = is_async
         self.scope: tuple[str, ...] = scope
         self._events: EventLog[ProtocolEvent] = EventLog()
@@ -95,16 +95,101 @@ class StreamMux:
         self._projection_owners: dict[str, str] = {}
         self._transformer_by_key: dict[str, StreamTransformer] = {}
 
+        # Stored only when constructed from factories — used by
+        # `make_child` to clone the transformer pipeline at a deeper
+        # scope. Pre-built transformers can't be cloned, so a mux
+        # built with `transformers=` rejects `make_child`.
+        self._factories: list[TransformerFactory] | None = (
+            list(factories) if factories is not None else None
+        )
+        self._pump_fn: Callable[[], bool] | None = None
+        self._apump_fn: Callable[[], Awaitable[bool]] | None = None
+
+        # Factories run first (they propagate to child mini-muxes
+        # via `make_child`), then any pre-built `transformers=`
+        # instances are registered as root-only — they aren't cloned
+        # for child scopes.
         if factories is not None:
             for factory in factories:
                 self._register(factory(scope))
-        else:
-            for transformer in transformers or ():
-                self._register(transformer)
+        for transformer in transformers or ():
+            self._register(transformer)
 
     def transformer_by_key(self, key: str) -> StreamTransformer | None:
         """Return the transformer that contributed `key` to the projection."""
         return self._transformer_by_key.get(key)
+
+    # ------------------------------------------------------------------
+    # Pump wiring + mini-mux nesting
+    # ------------------------------------------------------------------
+
+    def bind_pump(self, fn: Callable[[], bool]) -> None:
+        """Wire the sync pull callback onto every projection in this mux.
+
+        Records the pump on the mux so child mini-muxes built by
+        `make_child` can inherit it. Propagates to:
+        - the main event log (`self._events`)
+        - every projection EventLog and StreamChannel in `extensions`
+        - any registered transformer that exposes `_bind_pump` (e.g.
+          `MessagesTransformer` so `ChatModelStream` instances drive the
+          shared pump from their cursors)
+        """
+        self._pump_fn = fn
+        self._events._request_more = fn
+        for value in self.extensions.values():
+            if isinstance(value, EventLog):
+                value._request_more = fn
+            elif isinstance(value, StreamChannel):
+                value._log._request_more = fn
+        for transformer in self._transformers:
+            bind = getattr(transformer, "_bind_pump", None)
+            if bind is not None:
+                bind(fn)
+
+    def bind_apump(self, fn: Callable[[], Awaitable[bool]]) -> None:
+        """Async counterpart to `bind_pump`."""
+        self._apump_fn = fn
+        self._events._arequest_more = fn
+        for value in self.extensions.values():
+            if isinstance(value, EventLog):
+                value._arequest_more = fn
+            elif isinstance(value, StreamChannel):
+                value._log._arequest_more = fn
+        for transformer in self._transformers:
+            abind = getattr(transformer, "_bind_apump", None)
+            if abind is not None:
+                abind(fn)
+
+    def make_child(self, scope: tuple[str, ...]) -> StreamMux:
+        """Build a mini-mux with the same factories scoped to `scope`.
+
+        Used by `SubgraphTransformer` to attach a fresh transformer
+        pipeline to each discovered subgraph handle. The child mux
+        inherits the current pump bindings (so cursors on its
+        projection logs drive the root pump) and carries the same
+        factory list forward to any grandchild subgraphs.
+
+        Raises:
+            RuntimeError: If the mux was not constructed with
+                `factories=`. Mini-muxes require factories so each scope
+                gets its own fresh transformer instances.
+        """
+        if self._factories is None:
+            raise RuntimeError(
+                "StreamMux.make_child requires the mux to be constructed "
+                "with `factories=`; pre-built transformers can't be "
+                "cloned to a new scope."
+            )
+        child = StreamMux(
+            factories=self._factories,
+            is_async=self._is_async,
+            scope=scope,
+        )
+        if self._pump_fn is not None:
+            child.bind_pump(self._pump_fn)
+        if self._apump_fn is not None:
+            child.bind_apump(self._apump_fn)
+        return child
 
     def _register(self, transformer: StreamTransformer) -> None:
         """Register a single transformer.
@@ -146,6 +231,7 @@ class StreamMux:
             self._transformer_by_key[key] = transformer
         if is_native:
             self.native_keys.update(projection.keys())
+        transformer._on_register(self)
 
     def push(self, event: ProtocolEvent) -> None:
         """Route an event through all transformers, then append to the main log.

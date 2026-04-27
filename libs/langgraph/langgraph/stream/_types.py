@@ -117,6 +117,14 @@ class StreamTransformer(ABC):
         """
         ...
 
+    def _on_register(self, mux: Any) -> None:
+        """Called by `StreamMux._register` after this transformer is wired in.
+
+        Default is a no-op. Override to capture a reference to the
+        owning mux — needed for transformers that build mini-muxes
+        via `mux.make_child(...)` (e.g. `SubgraphTransformer`).
+        """
+
     def process(self, event: ProtocolEvent) -> bool:
         """Handle an event on the sync lane.
 

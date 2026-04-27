@@ -12,7 +12,9 @@ from langgraph.stream.stream_channel import StreamChannel
 from langgraph.stream.transformers import (
     LifecyclePayload,
     LifecycleTransformer,
+    SubgraphRunStream,
     SubgraphStatus,
+    SubgraphTransformer,
 )
 
 __all__ = [
@@ -24,5 +26,7 @@ __all__ = [
     "ProtocolEvent",
     "StreamChannel",
     "StreamTransformer",
+    "SubgraphRunStream",
     "SubgraphStatus",
+    "SubgraphTransformer",
 ]
