@@ -90,4 +90,3 @@ class StateNodeSpec(Generic[NodeInputT, ContextT]):
     cache_policy: CachePolicy | None
     ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
     defer: bool = False
-    timeout: float | None = None
