@@ -572,7 +572,10 @@ class SubgraphTransformer(_TasksLifecycleBase):
         if error is not None and handle.error is None:
             handle.error = error
         handle._seen_terminal = True
-        self._close_handle_mux(handle)
+        if status == "failed":
+            self._fail_handle_mux(handle, RuntimeError(error or "Subgraph failed"))
+        else:
+            self._close_handle_mux(handle)
 
     def process(self, event: ProtocolEvent) -> bool:
         # Discover / update terminal status before forwarding so a
@@ -628,7 +631,12 @@ class SubgraphTransformer(_TasksLifecycleBase):
         if error is not None and handle.error is None:
             handle.error = error
         handle._seen_terminal = True
-        await self._aclose_handle_mux(handle)
+        if status == "failed":
+            await self._afail_handle_mux(
+                handle, RuntimeError(error or "Subgraph failed")
+            )
+        else:
+            await self._aclose_handle_mux(handle)
 
     def _forward_to_children(self, event: ProtocolEvent) -> None:
         """Push the event into the matching direct-child mini-mux, if any.
@@ -643,7 +651,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
             return
         candidate_path = ns[: depth + 1]
         handle = self._handles.get(candidate_path)
-        if handle is None or handle._mux is None:
+        if handle is None or handle._mux is None or handle._mux._events._closed:
             return
         child_event: ProtocolEvent = {
             **event,
@@ -659,7 +667,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
             return
         candidate_path = ns[: depth + 1]
         handle = self._handles.get(candidate_path)
-        if handle is None or handle._mux is None:
+        if handle is None or handle._mux is None or handle._mux._events._closed:
             return
         child_event: ProtocolEvent = {
             **event,
@@ -680,6 +688,20 @@ class SubgraphTransformer(_TasksLifecycleBase):
         if handle._mux is None or handle._mux._events._closed:
             return
         await handle._mux.aclose()
+
+    def _fail_handle_mux(
+        self, handle: SubgraphRunStream | AsyncSubgraphRunStream, err: BaseException
+    ) -> None:
+        if handle._mux is None or handle._mux._events._closed:
+            return
+        handle._mux.fail(err)
+
+    async def _afail_handle_mux(
+        self, handle: SubgraphRunStream | AsyncSubgraphRunStream, err: BaseException
+    ) -> None:
+        if handle._mux is None or handle._mux._events._closed:
+            return
+        await handle._mux.afail(err)
 
     def finalize(self) -> None:
         first_error: BaseException | None = None

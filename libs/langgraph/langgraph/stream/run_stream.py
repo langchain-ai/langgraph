@@ -474,7 +474,12 @@ class SubgraphRunStream(GraphRunStream, _SubgraphRunStreamMixin):
         buffers empty. Driving the parent fans events into our
         mini-mux, transparently advancing the whole run.
         """
-        if self._exhausted or self._parent_pump_fn is None:
+        if (
+            self._exhausted
+            or self._seen_terminal
+            or self._mux._events._closed
+            or self._parent_pump_fn is None
+        ):
             return False
         return self._parent_pump_fn()
 
@@ -507,6 +512,11 @@ class AsyncSubgraphRunStream(AsyncGraphRunStream, _SubgraphRunStreamMixin):
 
     async def _apump_next(self) -> bool:
         """Delegate to the parent's async pump."""
-        if self._exhausted or self._parent_apump_fn is None:
+        if (
+            self._exhausted
+            or self._seen_terminal
+            or self._mux._events._closed
+            or self._parent_apump_fn is None
+        ):
             return False
         return await self._parent_apump_fn()

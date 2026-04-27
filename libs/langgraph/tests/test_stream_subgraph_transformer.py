@@ -703,6 +703,54 @@ def _make_two_level_nested() -> Any:
     return outer_b.compile()
 
 
+def _item_node(item: str):
+    def node(state: _State) -> dict[str, Any]:
+        return {"items": [item]}
+
+    return node
+
+
+def _make_two_sibling_subgraphs() -> Any:
+    """outer → one → two, where both nodes are compiled subgraphs."""
+    one_b: StateGraph = StateGraph(_State, input_schema=_State)
+    one_b.add_node("add_one", _item_node("one"))
+    one_b.add_edge(START, "add_one")
+    one_b.add_edge("add_one", END)
+    one = one_b.compile()
+
+    two_b: StateGraph = StateGraph(_State, input_schema=_State)
+    two_b.add_node("add_two", _item_node("two"))
+    two_b.add_edge(START, "add_two")
+    two_b.add_edge("add_two", END)
+    two = two_b.compile()
+
+    outer_b: StateGraph = StateGraph(_State, input_schema=_State)
+    outer_b.add_node("one", one)
+    outer_b.add_node("two", two)
+    outer_b.add_edge(START, "one")
+    outer_b.add_edge("one", "two")
+    outer_b.add_edge("two", END)
+    return outer_b.compile()
+
+
+def _failing_node(state: _State) -> dict[str, Any]:
+    raise ValueError("child boom")
+
+
+def _make_failing_nested() -> Any:
+    inner_b: StateGraph = StateGraph(_State, input_schema=_State)
+    inner_b.add_node("fail", _failing_node)
+    inner_b.add_edge(START, "fail")
+    inner_b.add_edge("fail", END)
+    inner = inner_b.compile()
+
+    outer_b: StateGraph = StateGraph(_State, input_schema=_State)
+    outer_b.add_node("inner", inner)
+    outer_b.add_edge(START, "inner")
+    outer_b.add_edge("inner", END)
+    return outer_b.compile()
+
+
 def test_stream_v2_real_graph_yields_subgraph_handles() -> None:
     """Iterating `run.subgraphs` yields handles for direct-child subgraphs."""
     graph = _make_two_level_nested()
@@ -742,3 +790,57 @@ def test_stream_v2_grandchild_visible_on_child_handle() -> None:
     inner_path = grandchild_paths[0]
     assert inner_path[1].startswith("inner:")
     assert inner_path[: len(middle_path)] == middle_path
+
+
+def test_subgraph_output_stops_at_own_terminal_without_draining_siblings() -> None:
+    """A handle's `output` must not pump past its terminal event.
+
+    If it over-pumps the root run, the second sibling handle is yielded
+    only after it has already completed, so subscribing to `values`
+    inside the loop body misses its events.
+    """
+    graph = _make_two_sibling_subgraphs()
+    run = graph.stream_v2({"value": "x", "items": []})
+
+    paths: list[tuple[str, ...]] = []
+    second_values: list[dict[str, Any]] = []
+    for handle in run.subgraphs:
+        paths.append(handle.path)
+        if handle.graph_name == "one":
+            assert handle.output is not None
+            assert handle.status == "completed"
+        elif handle.graph_name == "two":
+            second_values = list(handle.values)
+
+    assert [path[0].split(":", 1)[0] for path in paths] == ["one", "two"]
+    assert second_values
+    assert second_values[-1]["items"] == ["one", "two"]
+
+
+def test_aborted_subgraph_handle_does_not_fail_parent_forwarding() -> None:
+    graph = _make_two_sibling_subgraphs()
+    run = graph.stream_v2({"value": "x", "items": []})
+
+    seen: list[str | None] = []
+    for handle in run.subgraphs:
+        seen.append(handle.graph_name)
+        if handle.graph_name == "one":
+            # Subscribe before aborting to ensure forwarding into the
+            # closed mini-mux would have raised without the closed check.
+            iter(handle.values)
+            handle.abort()
+        elif handle.graph_name == "two":
+            assert list(handle.values)
+
+    assert seen == ["one", "two"]
+
+
+def test_failed_subgraph_output_raises_terminal_error() -> None:
+    graph = _make_failing_nested()
+    run = graph.stream_v2({"value": "x", "items": []})
+
+    handle = next(iter(run.subgraphs))
+    with pytest.raises(RuntimeError, match="child boom"):
+        _ = handle.output
+    assert handle.status == "failed"
+    assert handle.error == "child boom"
