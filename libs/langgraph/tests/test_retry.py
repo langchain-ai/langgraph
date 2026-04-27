@@ -750,7 +750,7 @@ def test_arun_with_retry_timeout_fires_async():
     asyncio.run(_run())
 
 
-def test_arun_with_retry_preserves_inner_timeout_error():
+def test_arun_with_retry_does_not_swallow_proc_asyncio_timeout():
     calls = 0
 
     class InnerTimeoutProc:
@@ -759,6 +759,9 @@ def test_arun_with_retry_preserves_inner_timeout_error():
             calls += 1
             raise asyncio.TimeoutError("inner")
 
+    # `retry_on=NodeTimeoutError` + `calls == 1` is the load-bearing assertion:
+    # if the proc's TimeoutError were misclassified as NodeTimeoutError it
+    # would be retried, and `calls` would be 2.
     policy = RetryPolicy(
         max_attempts=2,
         initial_interval=0.0,
@@ -777,7 +780,7 @@ def test_arun_with_retry_preserves_inner_timeout_error():
     assert calls == 1
 
 
-def test_arun_with_retry_preserves_child_node_timeout_error():
+def test_arun_with_retry_does_not_swallow_proc_node_timeout():
     child_timeout = NodeTimeoutError("child", 0.1, 0.2)
 
     class ChildTimeoutProc:
@@ -1115,6 +1118,29 @@ def test_pregel_validate_rejects_wrapped_sync_runnable_lambda_timeout():
             input_channels="input",
             output_channels="output",
         )
+
+
+def test_pregel_validate_accepts_wrapped_async_runnable_lambda_timeout():
+    async def slow(value: int) -> int:
+        return value + 1
+
+    Pregel(
+        nodes={
+            "slow": (
+                NodeBuilder()
+                .subscribe_only("input")
+                .do(RunnableLambda(slow).with_config(tags=["wrapped"]))
+                .set_idle_timeout(0.05)
+                .write_to("output")
+            )
+        },
+        channels={
+            "input": EphemeralValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
 
 
 def test_pregel_validate_rejects_sync_node_timeout():

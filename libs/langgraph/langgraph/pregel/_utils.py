@@ -103,8 +103,8 @@ def _runnable_has_native_async(runnable: Runnable) -> bool:
     to blocking work internally.
     """
 
-    if isinstance(runnable, RunnableBindingBase):
-        return _runnable_has_native_async(runnable.bound)
+    while isinstance(runnable, RunnableBindingBase):
+        runnable = runnable.bound
     if (steps := _sequence_steps(runnable)) is not None:
         for step in steps:
             if not _runnable_has_native_async(step):

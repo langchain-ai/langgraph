@@ -317,9 +317,13 @@ async def _arun_with_idle_timeout(
         )
         if bg in done:
             watchdog.cancel()
+            # FIRST_COMPLETED can return both; the watchdog may have
+            # already raised TimeoutError before we cancelled it.
             with suppress(asyncio.CancelledError, asyncio.TimeoutError):
                 await watchdog
             return await bg
+        # Only the watchdog's TimeoutError converts to NodeTimeoutError;
+        # any TimeoutError raised by the proc itself propagates unchanged.
         try:
             await watchdog
         except asyncio.TimeoutError as exc:
