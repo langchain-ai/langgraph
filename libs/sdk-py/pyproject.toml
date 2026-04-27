@@ -33,7 +33,7 @@ lint = [
     "ruff==0.15.12",
     "codespell",
     "mypy==1.20.2",
-    "ty==0.0.32",
+    "ty==0.0.23",
     "starlette",
 ]
 dev = [
