@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from langchain_core.language_models._compat_bridge import message_to_events
@@ -655,8 +656,16 @@ class SubgraphTransformer(_TasksLifecycleBase):
             return
         child_event: ProtocolEvent = {
             **event,
-            "params": {**event["params"]},
+            "params": {
+                **event["params"],
+                "namespace": list(event["params"]["namespace"]),
+                "data": deepcopy(event["params"]["data"]),
+            },
         }
+        if "interrupts" in event["params"]:
+            child_event["params"]["interrupts"] = deepcopy(
+                event["params"]["interrupts"]
+            )
         handle._mux.push(child_event)
 
     async def _aforward_to_children(self, event: ProtocolEvent) -> None:
@@ -671,8 +680,16 @@ class SubgraphTransformer(_TasksLifecycleBase):
             return
         child_event: ProtocolEvent = {
             **event,
-            "params": {**event["params"]},
+            "params": {
+                **event["params"],
+                "namespace": list(event["params"]["namespace"]),
+                "data": deepcopy(event["params"]["data"]),
+            },
         }
+        if "interrupts" in event["params"]:
+            child_event["params"]["interrupts"] = deepcopy(
+                event["params"]["interrupts"]
+            )
         await handle._mux.apush(child_event)
 
     def _close_handle_mux(

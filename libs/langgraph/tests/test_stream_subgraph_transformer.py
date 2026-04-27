@@ -347,6 +347,49 @@ def test_child_mutation_does_not_leak_into_root_event_log() -> None:
     assert methods == ["lifecycle", "values"]
 
 
+class _ChildNestedPayloadMutator(StreamTransformer):
+    """Mutates nested child event payload to verify forwarding isolation."""
+
+    def init(self) -> dict[str, Any]:
+        return {}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if self.scope and event["method"] == "values":
+            event["params"]["namespace"].append("mutated")
+            event["params"]["data"]["x"] = 999
+        return True
+
+
+def test_child_nested_mutation_does_not_leak_into_root_event_log() -> None:
+    mux = StreamMux(
+        factories=[
+            ValuesTransformer,
+            MessagesTransformer,
+            LifecycleTransformer,
+            SubgraphTransformer,
+            _ChildNestedPayloadMutator,
+        ],
+        is_async=False,
+    )
+    _arm(mux)
+    mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
+    mux.push(
+        {
+            "type": "event",
+            "method": "values",
+            "params": {
+                "namespace": ["agent:abc"],
+                "timestamp": TS,
+                "data": {"x": 1},
+            },
+        }
+    )
+
+    [root_event] = [evt for evt in mux._events._items if evt["method"] == "values"]
+    assert root_event["params"]["namespace"] == ["agent:abc"]
+    assert root_event["params"]["data"] == {"x": 1}
+
+
 class _AsyncProbeTransformer(StreamTransformer):
     """Async-only transformer used to verify mini-mux async dispatch."""
 
