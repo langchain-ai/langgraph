@@ -73,12 +73,13 @@ def _tasks_result(
 
 
 def _arm(mux: StreamMux) -> None:
-    """Force the lifecycle channel's log to accept pushes.
+    """Force projection logs to accept pushes (skip lazy-subscribe gate).
 
     `EventLog.push` is a no-op until a subscriber attaches. Tests that
     inspect `_items` directly need the gate flipped before any event
     is dispatched.
     """
+    mux._events._subscribed = True
     for transformer in mux._transformers:
         if isinstance(transformer, LifecycleTransformer):
             transformer._channel._log._subscribed = True
@@ -243,3 +244,13 @@ def test_scoped_transformer_filters_by_scope() -> None:
 
 def test_required_stream_modes_declared() -> None:
     assert LifecycleTransformer.required_stream_modes == ("tasks",)
+
+
+def test_protocol_event_method_is_native() -> None:
+    """Native transformer — auto-forwarded events use `lifecycle`, not `custom:lifecycle`."""
+    mux = _build_lifecycle_mux()
+    mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
+
+    methods = {evt["method"] for evt in mux._events._items}
+    assert "lifecycle" in methods
+    assert "custom:lifecycle" not in methods

@@ -265,8 +265,9 @@ def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
 class LifecyclePayload(TypedDict, total=False):
     """Payload of a lifecycle event surfaced on the `lifecycle` channel.
 
-    Auto-forwarded as `custom:lifecycle` protocol events so remote SDK
-    clients receive the same data in-process consumers see via
+    Auto-forwarded as `lifecycle` protocol events (no `custom:` prefix
+    because `LifecycleTransformer` is a native transformer) so remote
+    SDK clients receive the same data in-process consumers see via
     `run.lifecycle`.
     """
 
@@ -278,13 +279,14 @@ class LifecyclePayload(TypedDict, total=False):
 
 
 class LifecycleTransformer(StreamTransformer):
-    """Surface subgraph lifecycle as `custom:lifecycle` protocol events.
+    """Surface subgraph lifecycle as `lifecycle` protocol events.
 
     Subscribes to `tasks` events and emits `LifecyclePayload` to a
     `StreamChannel` named `lifecycle`. The channel is auto-forwarded
     by the mux so payloads land in the main event log under
-    `method = "custom:lifecycle"` — visible to remote SDK clients
-    over the wire and to in-process consumers via `run.lifecycle`.
+    `method = "lifecycle"` (native transformer — no `custom:` prefix)
+    — visible to remote SDK clients over the wire and to in-process
+    consumers via `run.lifecycle`.
 
     Discovery: a `tasks` event tagged with a namespace one segment
     deeper than this transformer's scope, seen for the first time,

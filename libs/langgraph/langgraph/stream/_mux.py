@@ -136,14 +136,15 @@ class StreamMux:
                 f"projection keys that conflict with already-registered "
                 f"keys: {attributions}"
             )
+        is_native = bool(getattr(transformer, "_native", False))
         self._transformers.append(transformer)
-        self._bind_and_wire(projection)
+        self._bind_and_wire(projection, native=is_native)
         self.extensions.update(projection)
         owner_name = type(transformer).__name__
         for key in projection:
             self._projection_owners[key] = owner_name
             self._transformer_by_key[key] = transformer
-        if getattr(transformer, "_native", False):
+        if is_native:
             self.native_keys.update(projection.keys())
 
     def push(self, event: ProtocolEvent) -> None:
@@ -348,26 +349,37 @@ class StreamMux:
     # Binding and StreamChannel auto-wiring
     # ------------------------------------------------------------------
 
-    def _bind_and_wire(self, projection: dict[str, Any]) -> None:
-        """Bind and wire EventLog / StreamChannel instances in a projection."""
+    def _bind_and_wire(
+        self, projection: dict[str, Any], *, native: bool = False
+    ) -> None:
+        """Bind and wire EventLog / StreamChannel instances in a projection.
+
+        Args:
+            projection: The projection dict returned by a transformer's
+                `init()`.
+            native: True when the owning transformer is `_native`.
+                Channels owned by a native transformer use the channel
+                name directly as the protocol method; user-defined
+                channels are prefixed with `custom:`.
+        """
         for value in projection.values():
             if isinstance(value, StreamChannel):
                 value._bind(is_async=self._is_async)
                 self._channels.append(value)
-                channel_name = value.name
+                method = value.name if native else f"custom:{value.name}"
 
-                def _make_forward(name: str) -> Callable[[Any], None]:
+                def _make_forward(method_name: str) -> Callable[[Any], None]:
                     def _forward(item: Any) -> None:
-                        self._forward(name, item)
+                        self._forward(method_name, item)
 
                     return _forward
 
-                value._wire(_make_forward(channel_name))
+                value._wire(_make_forward(method))
             elif isinstance(value, EventLog):
                 value._bind(is_async=self._is_async)
                 self._logs.append(value)
 
-    def _forward(self, channel_name: str, item: Any) -> None:
+    def _forward(self, method: str, item: Any) -> None:
         """Inject a ProtocolEvent for a StreamChannel push.
 
         Forwarded events bypass the transformer pipeline to avoid
@@ -375,12 +387,17 @@ class StreamMux:
         during `process()` would re-trigger itself). These events are
         visible in the main event log but are not passed through
         transformers' `process()` methods.
+
+        Args:
+            method: The full protocol method (already with or without
+                the `custom:` prefix; resolved by `_bind_and_wire`).
+            item: The payload pushed onto the channel.
         """
         self._seq += 1
         event: ProtocolEvent = {
             "type": "event",
             "seq": self._seq,
-            "method": f"custom:{channel_name}",
+            "method": method,
             "params": {
                 "namespace": [],
                 "timestamp": int(time.time() * 1000),
