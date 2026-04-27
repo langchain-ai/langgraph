@@ -144,10 +144,10 @@ class _IdleTimedAttemptScope:
     def _guard_call(self, call: Callable[..., Any]) -> Callable[..., Any]:
         def guarded_call(*args: Any, **kwargs: Any) -> Any:
             with self._lock:
-                if self._active:
-                    self._last_progress = time.monotonic()
-                    return call(*args, **kwargs)
-            raise asyncio.CancelledError
+                if not self._active:
+                    raise asyncio.CancelledError
+                self._last_progress = time.monotonic()
+            return call(*args, **kwargs)
 
         return guarded_call
 

@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import threading
 import time
 from collections import deque
@@ -40,6 +41,7 @@ from langgraph.pregel._read import PregelNode
 from langgraph.pregel._retry import (
     _checkpoint_ns_for_parent_command,
     _ensure_execution_info,
+    _IdleTimedAttemptScope,
     _should_retry_on,
     arun_with_retry,
     run_with_retry,
@@ -47,6 +49,11 @@ from langgraph.pregel._retry import (
 from langgraph.pregel.protocol import StreamProtocol
 from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
+
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 
 def test_should_retry_on_single_exception():
@@ -662,6 +669,16 @@ def test_run_with_retry_without_timeout_runs_sync_directly():
     assert run_with_retry(task, retry_policy=None) == "ok"
 
 
+def test_idle_timeout_guard_call_does_not_hold_scope_lock():
+    scope = _IdleTimedAttemptScope()
+
+    def call():
+        assert not scope._lock.locked()
+        return "ok"
+
+    assert scope._guard_call(call)() == "ok"
+
+
 @pytest.mark.anyio
 async def test_arun_with_retry_timeout_ok_when_fast():
     class FastProc:
@@ -1255,6 +1272,7 @@ async def test_state_graph_add_node_timeout_composes_with_retry():
     assert len(attempts) == 2
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.anyio
 async def test_task_decorator_timeout_e2e():
     @task(idle_timeout=0.05)
@@ -1270,6 +1288,7 @@ async def test_task_decorator_timeout_e2e():
         await workflow.ainvoke(1)
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.anyio
 async def test_task_decorator_preserves_user_idle_timeout_kwarg():
     @task(idle_timeout=1.0)
