@@ -18,7 +18,7 @@ from collections.abc import (
 )
 from dataclasses import is_dataclass, replace
 from functools import partial
-from inspect import isclass
+from inspect import isclass, signature
 from typing import (
     Any,
     Generic,
@@ -359,31 +359,42 @@ def _collect_stream_modes(mux: Any) -> list[StreamMode]:
     return cast("list[StreamMode]", list(modes))
 
 
+def _callable_accepts_scope(fn: Callable[..., Any]) -> bool:
+    """Return True if `fn(scope)` is a valid call shape."""
+    try:
+        signature(fn).bind(())
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
 def _split_user_transformers(
     specs: Any,
 ) -> tuple[list[Callable[..., Any]], list[Any]]:
     """Split a user-supplied transformer list into factories and root-only instances.
 
     Three accepted shapes per item:
-    - **Class** — used as a scope-aware factory (the class itself
-      is called with the mini-mux's scope, propagating through
-      `StreamMux.make_child`).
-    - **Other callable** — wrapped as a no-arg factory; each scope
-      gets a fresh instance, but the instance is scope-blind.
+    - **Scope-aware callable/class** — if `spec(scope)` is a valid
+      call shape, use it as a scope-aware factory and propagate it
+      through `StreamMux.make_child`.
+    - **Zero-arg callable/class** — wrapped as a no-arg factory; each
+      scope gets a fresh instance, but the instance is scope-blind.
     - **Instance** — registered on the root mux only; not cloned
       into mini-muxes.
 
-    Compile-time `stream_transformers` (zero-arg `Callable[[], ...]`)
-    fall in the second bucket via the same wrapper, so they now
-    propagate to mini-muxes too — consistent with the per-call API.
+    Compile-time `stream_transformers` (historically zero-arg
+    `Callable[[], ...]`) use the same wrapper, so they propagate to
+    mini-muxes without requiring a `(scope)` parameter.
     """
     factories: list[Callable[..., Any]] = []
     instances: list[Any] = []
     for spec in specs or ():
-        if isinstance(spec, type):
-            factories.append(spec)
-        elif callable(spec):
-            factories.append(lambda scope, _f=spec: _f())
+        if callable(spec):
+            accepts_scope = _callable_accepts_scope(spec)
+            if accepts_scope:
+                factories.append(lambda scope, _f=spec: _f(scope))
+            else:
+                factories.append(lambda scope, _f=spec: _f())
         else:
             instances.append(spec)
     return factories, instances

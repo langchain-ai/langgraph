@@ -83,6 +83,9 @@ class StreamTransformer(ABC):
             example, transformers that call `schedule()` from a sync
             `process`). The mux also auto-detects the async lane when
             `aprocess`, `afinalize`, or `afail` is overridden.
+        supports_sync: Set True only for transformers that override
+            async-lane hooks while still fully supporting the sync lane.
+            Such transformers may be registered under `stream()`.
         required_stream_modes: Stream modes the graph must emit for
             this transformer to have anything to process. Computed as
             the union across all registered transformers to determine
@@ -92,6 +95,7 @@ class StreamTransformer(ABC):
     """
 
     requires_async: ClassVar[bool] = False
+    supports_sync: ClassVar[bool] = False
     required_stream_modes: ClassVar[tuple[str, ...]] = ()
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
@@ -288,7 +292,8 @@ def transformer_requires_async(transformer: StreamTransformer) -> bool:
 
     A transformer requires async if it explicitly opts in
     (`requires_async = True`) or overrides any of the async-lane methods
-    (`aprocess`, `afinalize`, `afail`).
+    (`aprocess`, `afinalize`, `afail`) without also declaring that it
+    supports the sync lane.
 
     Args:
         transformer: The transformer to inspect.
@@ -298,6 +303,8 @@ def transformer_requires_async(transformer: StreamTransformer) -> bool:
     """
     if transformer.requires_async:
         return True
+    if transformer.supports_sync:
+        return False
     cls = type(transformer)
     for name in ("aprocess", "afinalize", "afail"):
         if getattr(cls, name) is not getattr(StreamTransformer, name):

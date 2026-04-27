@@ -13,13 +13,16 @@ import operator
 import time
 from typing import Annotated, Any
 
+import pytest
 from typing_extensions import TypedDict
 
 from langgraph.constants import END, START
 from langgraph.errors import GraphInterrupt
 from langgraph.graph import StateGraph
+from langgraph.pregel.main import _split_user_transformers
 from langgraph.stream._mux import StreamMux
-from langgraph.stream.run_stream import SubgraphRunStream
+from langgraph.stream._types import ProtocolEvent, StreamTransformer
+from langgraph.stream.run_stream import AsyncSubgraphRunStream, SubgraphRunStream
 from langgraph.stream.transformers import (
     LifecycleTransformer,
     MessagesTransformer,
@@ -281,6 +284,121 @@ def test_tasks_events_suppressed_from_main_log() -> None:
 
     methods = [evt["method"] for evt in mux._events._items]
     assert "tasks" not in methods
+
+
+class _AsyncProbeTransformer(StreamTransformer):
+    """Async-only transformer used to verify mini-mux async dispatch."""
+
+    required_stream_modes = ("tasks",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self.seen: list[tuple[str, ...]] = []
+        self.finalized = False
+        self.failed: BaseException | None = None
+
+    def init(self) -> dict[str, Any]:
+        return {"async_probe": self}
+
+    async def aprocess(self, event: ProtocolEvent) -> bool:
+        self.seen.append(tuple(event["params"]["namespace"]))
+        return True
+
+    async def afinalize(self) -> None:
+        self.finalized = True
+
+    async def afail(self, err: BaseException) -> None:
+        self.failed = err
+
+
+@pytest.mark.anyio
+async def test_async_child_mini_mux_uses_async_lane() -> None:
+    mux = StreamMux(
+        factories=[
+            ValuesTransformer,
+            MessagesTransformer,
+            LifecycleTransformer,
+            SubgraphTransformer,
+            _AsyncProbeTransformer,
+        ],
+        is_async=True,
+    )
+    await mux.apush(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
+
+    sub_t = mux.transformer_by_key("subgraphs")
+    assert isinstance(sub_t, SubgraphTransformer)
+    handle = sub_t._handles[("agent:abc",)]
+    assert isinstance(handle, AsyncSubgraphRunStream)
+    assert handle._mux is not None
+    probe = handle._mux.transformer_by_key("async_probe")
+    assert isinstance(probe, _AsyncProbeTransformer)
+    assert probe.seen == [("agent:abc",)]
+
+    await mux.apush(_tasks_result([], task_id="abc", name="agent"))
+    assert probe.finalized is True
+
+
+@pytest.mark.anyio
+async def test_async_child_mini_mux_fail_uses_async_lane() -> None:
+    mux = StreamMux(
+        factories=[
+            ValuesTransformer,
+            MessagesTransformer,
+            LifecycleTransformer,
+            SubgraphTransformer,
+            _AsyncProbeTransformer,
+        ],
+        is_async=True,
+    )
+    await mux.apush(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
+
+    sub_t = mux.transformer_by_key("subgraphs")
+    assert isinstance(sub_t, SubgraphTransformer)
+    handle = sub_t._handles[("agent:abc",)]
+    assert handle._mux is not None
+    probe = handle._mux.transformer_by_key("async_probe")
+    assert isinstance(probe, _AsyncProbeTransformer)
+
+    err = RuntimeError("boom")
+    await mux.afail(err)
+    assert probe.failed is err
+
+
+class _ZeroArgTransformer(StreamTransformer):
+    """Transformer class with a zero-arg constructor for compatibility tests."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def init(self) -> dict[str, Any]:
+        return {"zero_arg": self}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        return True
+
+
+class _ScopedTransformer(StreamTransformer):
+    """Transformer class that opts into scope-aware construction."""
+
+    def init(self) -> dict[str, Any]:
+        return {"scoped": self}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        return True
+
+
+def test_split_user_transformers_supports_zero_arg_and_scoped_classes() -> None:
+    factories, instances = _split_user_transformers(
+        [_ZeroArgTransformer, _ScopedTransformer]
+    )
+
+    assert instances == []
+    zero_arg = factories[0](("child",))
+    scoped = factories[1](("child",))
+    assert isinstance(zero_arg, _ZeroArgTransformer)
+    assert zero_arg.scope == ()
+    assert isinstance(scoped, _ScopedTransformer)
+    assert scoped.scope == ("child",)
 
 
 # ---------------------------------------------------------------------------
