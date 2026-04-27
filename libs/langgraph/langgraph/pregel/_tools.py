@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Iterator
-from contextvars import Token
+from contextvars import ContextVar, Token
 from typing import Any, TypeVar, cast
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
 
 from langgraph._internal._constants import NS_SEP
-from langgraph.config import _tool_call_writer
 from langgraph.constants import TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
 
@@ -23,6 +22,15 @@ T = TypeVar("T")
 ToolCallWriter = Callable[[Any], None]
 """A closure bound to a single tool call that emits `tool-output-delta` events."""
 
+_tool_call_writer: ContextVar[ToolCallWriter | None] = ContextVar(
+    "langgraph_tool_call_writer", default=None
+)
+"""ContextVar holding the writer for the currently-executing tool call.
+
+Set by `StreamToolCallHandler.on_tool_start` and reset on end/error.
+Read by `ToolRuntime.emit_output_delta` (in `langgraph.prebuilt`).
+"""
+
 
 class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     """Callback handler that emits tool-call lifecycle events on the stream.
@@ -32,10 +40,10 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     `tool-finished` / `tool-error` payloads keyed by `tool_call_id`.
 
     While a tool is executing, this handler sets `_tool_call_writer` to a
-    closure bound to that call's namespace and `tool_call_id`. The
-    `emit_tool_output_delta` helper in `langgraph.config` reads that
-    ContextVar so tool bodies can stream partial output without threading
-    the writer through their own signature.
+    closure bound to that call's namespace and `tool_call_id`.
+    `ToolRuntime.emit_output_delta` reads that ContextVar so tool bodies
+    can stream partial output without threading the writer through their
+    own signature.
 
     Attached by `Pregel.stream` / `astream` when `"tools"` is in
     `stream_modes`. `run_inline = True` keeps event ordering
