@@ -257,6 +257,82 @@ class TestProtocolEventRouting:
         (stream,) = [*log._items]
         assert stream.node == "my_llm"
 
+    def test_wire_shape_routes_to_chat_model_stream(self) -> None:
+        t, log = _make_sync_transformer()
+        for evt in (
+            {"event": "message-start", "role": "ai", "id": "msg-1"},
+            {
+                "event": "content-block-start",
+                "index": 0,
+                "content": {"type": "text", "text": ""},
+            },
+            {
+                "event": "content-block-delta",
+                "index": 0,
+                "content": {"type": "text", "text": "hello"},
+            },
+            {
+                "event": "content-block-finish",
+                "index": 0,
+                "content": {"type": "text", "text": "hello"},
+            },
+            {"event": "message-finish", "reason": "stop"},
+        ):
+            t.process(
+                {
+                    "type": "event",
+                    "method": "messages",
+                    "params": {
+                        "namespace": [],
+                        "timestamp": TS,
+                        "data": evt,
+                        "node": "llm",
+                        "run_id": "run-1",
+                    },
+                }
+            )
+        (stream,) = [*log._items]
+        assert stream.message_id == "msg-1"
+        assert str(stream.text) == "hello"
+
+    def test_missing_content_block_start_is_synthesized_in_main_log(self) -> None:
+        mux = StreamMux([MessagesTransformer()], is_async=False)
+        events = iter(mux._events)
+
+        for evt in (
+            {"event": "message-start", "role": "ai", "id": "msg-1"},
+            {
+                "event": "content-block-delta",
+                "index": 0,
+                "content": {"type": "text", "text": "hello"},
+            },
+        ):
+            mux.push(
+                {
+                    "type": "event",
+                    "method": "messages",
+                    "params": {
+                        "namespace": [],
+                        "timestamp": TS,
+                        "data": evt,
+                        "run_id": "run-1",
+                    },
+                }
+            )
+        mux.close()
+
+        emitted = list(events)
+        assert [event["params"]["data"]["event"] for event in emitted] == [
+            "message-start",
+            "content-block-start",
+            "content-block-delta",
+        ]
+        assert emitted[1]["params"]["data"]["content"] == {
+            "type": "text",
+            "text": "",
+        }
+        assert emitted[0]["seq"] < emitted[1]["seq"] < emitted[2]["seq"]
+
 
 # ---------------------------------------------------------------------------
 # Non-streaming (whole AIMessage) fallback

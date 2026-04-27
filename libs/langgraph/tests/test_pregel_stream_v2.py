@@ -804,6 +804,30 @@ class TestConvertToProtocolEvent:
         assert isinstance(event["params"]["namespace"], list)
         assert event["params"]["namespace"] == ["a", "b", "c"]
 
+    def test_messages_conversion_uses_wire_shape(self) -> None:
+        part = {
+            "type": "messages",
+            "ns": ("call_model:task-1",),
+            "data": (
+                {
+                    "event": "content-block-delta",
+                    "index": 0,
+                    "content_block": {"type": "text", "text": "hi"},
+                },
+                {"langgraph_node": "call_model", "run_id": "run-1"},
+            ),
+        }
+        event = convert_to_protocol_event(part)
+        assert event["method"] == "messages"
+        assert event["params"]["namespace"] == ["call_model:task-1"]
+        assert event["params"]["node"] == "call_model"
+        assert event["params"]["run_id"] == "run-1"
+        assert event["params"]["data"] == {
+            "event": "content-block-delta",
+            "index": 0,
+            "content": {"type": "text", "text": "hi"},
+        }
+
 
 # ---------------------------------------------------------------------------
 # StreamMux unit tests

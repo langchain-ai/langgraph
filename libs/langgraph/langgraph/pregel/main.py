@@ -375,11 +375,13 @@ def _build_stream_factories(
     from langgraph.stream.transformers import (
         MessagesTransformer,
         SubgraphTransformer,
+        ToolLifecycleTransformer,
         ValuesTransformer,
     )
 
     builtins: list[Callable[..., Any]] = [
         ValuesTransformer,
+        ToolLifecycleTransformer,
         MessagesTransformer,
         SubgraphTransformer,
     ]
@@ -3361,6 +3363,9 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         transformers: Sequence[Any] | None = None,
+        stream_modes: Sequence[StreamMode] | None = None,
+        output_keys: str | Sequence[str] | None = None,
+        **kwargs: Any,
     ) -> Any:
         """Start a sync v2 streaming run driven by transformer projections.
 
@@ -3387,16 +3392,19 @@ class Pregel(
 
         factories = _build_stream_factories(self._stream_transformers, transformers)
         mux = StreamMux(factories=factories, is_async=False)
-        stream_modes = _collect_stream_modes(mux)
+        requested_stream_modes = set(_collect_stream_modes(mux))
+        requested_stream_modes.update(stream_modes or ())
         graph_iter = iter(
             self.stream(
                 input,
                 _merge_v2_messages_flag(config),
-                stream_mode=stream_modes,
+                stream_mode=list(requested_stream_modes),
                 subgraphs=True,
                 version="v2",
+                output_keys=output_keys,
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
+                **kwargs,
             )
         )
         return GraphRunStream(graph_iter, mux)
@@ -3409,6 +3417,9 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         transformers: Sequence[Any] | None = None,
+        stream_modes: Sequence[StreamMode] | None = None,
+        output_keys: str | Sequence[str] | None = None,
+        **kwargs: Any,
     ) -> Any:
         """Async counterpart to `stream_v2`.
 
@@ -3429,15 +3440,18 @@ class Pregel(
 
         factories = _build_stream_factories(self._stream_transformers, transformers)
         mux = StreamMux(factories=factories, is_async=True)
-        stream_modes = _collect_stream_modes(mux)
+        requested_stream_modes = set(_collect_stream_modes(mux))
+        requested_stream_modes.update(stream_modes or ())
         graph_aiter = self.astream(
             input,
             _merge_v2_messages_flag(config),
-            stream_mode=stream_modes,
+            stream_mode=list(requested_stream_modes),
             subgraphs=True,
             version="v2",
+            output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            **kwargs,
         ).__aiter__()
         return AsyncGraphRunStream(graph_aiter, mux)
 

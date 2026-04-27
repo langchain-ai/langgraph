@@ -227,6 +227,18 @@ class StreamMux:
         """Return the transformer that owns the projection at `key`, if any."""
         return self._transformer_by_key.get(key)
 
+    def emit(self, event: ProtocolEvent) -> None:
+        """Append a protocol event directly to the main log.
+
+        Built-in transformers use this for protocol repair events that
+        must appear before the source event they are processing. Direct
+        emission intentionally bypasses the transformer pipeline, but
+        still lets this mux remain the only local sequencing authority.
+        """
+        self._seq += 1
+        event["seq"] = self._seq
+        self._events.push(event)
+
     def push(self, event: ProtocolEvent) -> None:
         """Route an event through all transformers, then append to the main log.
 
@@ -473,10 +485,8 @@ class StreamMux:
         visible in the main event log but are not passed through
         transformers' `process()` methods.
         """
-        self._seq += 1
         event: ProtocolEvent = {
             "type": "event",
-            "seq": self._seq,
             "method": f"custom:{channel_name}",
             "params": {
                 "namespace": [],
@@ -484,4 +494,4 @@ class StreamMux:
                 "data": item,
             },
         }
-        self._events.push(event)
+        self.emit(event)

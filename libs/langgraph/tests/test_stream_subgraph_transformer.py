@@ -20,6 +20,7 @@ from langgraph.stream.transformers import (
     MessagesTransformer,
     SubgraphRunStream,
     SubgraphTransformer,
+    ToolLifecycleTransformer,
     ValuesTransformer,
 )
 from langgraph.types import interrupt
@@ -75,7 +76,12 @@ def _subscribe(log: EventLog) -> None:
 # ---------------------------------------------------------------------------
 
 
-_FACTORIES = [ValuesTransformer, MessagesTransformer, SubgraphTransformer]
+_FACTORIES = [
+    ValuesTransformer,
+    ToolLifecycleTransformer,
+    MessagesTransformer,
+    SubgraphTransformer,
+]
 
 
 def _handle_values_items(handle: SubgraphRunStream) -> list:
@@ -134,6 +140,167 @@ class TestSubgraphTransformerUnit:
         assert handle.graph_name == "child"
         assert handle.cause == {"type": "toolCall", "tool_call_id": "call_abc"}
         assert handle.status == "started"
+
+    def test_tool_started_is_synthesized_before_tool_caused_lifecycle(self) -> None:
+        mux, transformer = self._mux()
+        events = iter(mux._events)
+        mux.push(
+            _values(
+                {
+                    "messages": [
+                        {
+                            "tool_calls": [
+                                {
+                                    "id": "call_abc",
+                                    "name": "task",
+                                    "args": {"subagent_type": "researcher"},
+                                }
+                            ]
+                        }
+                    ]
+                },
+                namespace=[],
+            )
+        )
+        mux.push(
+            _lifecycle(
+                "started",
+                namespace=["task:child"],
+                graph_name="child",
+                cause={"type": "toolCall", "tool_call_id": "call_abc"},
+            )
+        )
+
+        mux.close()
+        tool_started, lifecycle_started = list(events)[1:3]
+        assert tool_started["method"] == "tools"
+        assert tool_started["params"]["namespace"] == []
+        assert tool_started["params"]["data"] == {
+            "event": "tool-started",
+            "tool_call_id": "call_abc",
+            "tool_name": "task",
+            "input": {"subagent_type": "researcher"},
+        }
+        assert lifecycle_started["method"] == "lifecycle"
+        assert tool_started["seq"] < lifecycle_started["seq"]
+        assert self._handle(transformer).path == ("task:child",)
+
+    def test_core_golden_trace_uses_js_wire_shape_and_ordering(self) -> None:
+        mux, _transformer = self._mux()
+        events = iter(mux._events)
+        mux.push(
+            _values(
+                {
+                    "messages": [
+                        {
+                            "tool_calls": [
+                                {
+                                    "id": "call_abc",
+                                    "name": "task",
+                                    "args": {"subagent_type": "researcher"},
+                                }
+                            ]
+                        }
+                    ]
+                },
+                namespace=[],
+            )
+        )
+        for data in (
+            {"event": "message-start", "id": "msg-1", "role": "ai"},
+            {
+                "event": "content-block-delta",
+                "index": 0,
+                "content": {"type": "text", "text": "hi"},
+            },
+        ):
+            mux.push(
+                {
+                    "type": "event",
+                    "method": "messages",
+                    "params": {
+                        "namespace": ["call_model:task-1"],
+                        "timestamp": TS,
+                        "data": data,
+                        "run_id": "run-1",
+                    },
+                }
+            )
+        mux.push(
+            _lifecycle(
+                "started",
+                namespace=["task:child"],
+                graph_name="child",
+                cause={"type": "toolCall", "tool_call_id": "call_abc"},
+            )
+        )
+        mux.close()
+
+        trace = [
+            (event["method"], event["params"]["namespace"], event["params"]["data"])
+            for event in events
+        ]
+        assert trace == [
+            (
+                "values",
+                [],
+                {
+                    "messages": [
+                        {
+                            "tool_calls": [
+                                {
+                                    "id": "call_abc",
+                                    "name": "task",
+                                    "args": {"subagent_type": "researcher"},
+                                }
+                            ]
+                        }
+                    ]
+                },
+            ),
+            (
+                "messages",
+                ["call_model:task-1"],
+                {"event": "message-start", "id": "msg-1", "role": "ai"},
+            ),
+            (
+                "messages",
+                ["call_model:task-1"],
+                {
+                    "event": "content-block-start",
+                    "index": 0,
+                    "content": {"type": "text", "text": ""},
+                },
+            ),
+            (
+                "messages",
+                ["call_model:task-1"],
+                {
+                    "event": "content-block-delta",
+                    "index": 0,
+                    "content": {"type": "text", "text": "hi"},
+                },
+            ),
+            (
+                "tools",
+                [],
+                {
+                    "event": "tool-started",
+                    "tool_call_id": "call_abc",
+                    "tool_name": "task",
+                    "input": {"subagent_type": "researcher"},
+                },
+            ),
+            (
+                "lifecycle",
+                ["task:child"],
+                {
+                    "event": "started",
+                    "graph_name": "child",
+                    "cause": {"type": "toolCall", "tool_call_id": "call_abc"},
+                },
+            ),
+        ]
 
     def test_status_transitions(self) -> None:
         mux, transformer = self._mux()
