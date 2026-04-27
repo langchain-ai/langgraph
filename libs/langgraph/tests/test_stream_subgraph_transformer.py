@@ -471,6 +471,26 @@ class _ChildExploder(StreamTransformer):
         return True
 
 
+class _ChildFinalizeExploder(StreamTransformer):
+    """Raise from child mini-mux finalization."""
+
+    supports_sync = True
+
+    def init(self) -> dict[str, Any]:
+        return {}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        return True
+
+    def finalize(self) -> None:
+        if self.scope:
+            raise RuntimeError("child finalize boom")
+
+    async def afinalize(self) -> None:
+        if self.scope:
+            raise RuntimeError("child afinalize boom")
+
+
 def test_split_user_transformers_supports_scoped_classes() -> None:
     factories = _split_user_transformers([_StandardCtorTransformer, _ScopedTransformer])
 
@@ -575,6 +595,77 @@ async def test_child_forwarding_errors_fail_async_run() -> None:
     with pytest.raises(RuntimeError, match="child boom"):
         await run.output()
     assert run._mux._events._error is not None
+
+
+def test_child_finalize_errors_propagate_to_sync_run() -> None:
+    mux = StreamMux(
+        factories=[
+            ValuesTransformer,
+            MessagesTransformer,
+            LifecycleTransformer,
+            SubgraphTransformer,
+            _ChildFinalizeExploder,
+        ],
+        is_async=False,
+    )
+    values_t = mux.transformer_by_key("values")
+    assert isinstance(values_t, ValuesTransformer)
+    run = GraphRunStream(
+        iter(
+            [
+                _stream_part(
+                    "tasks",
+                    ("agent:abc",),
+                    {
+                        "id": "t1",
+                        "name": "tool",
+                        "input": None,
+                        "triggers": [],
+                    },
+                )
+            ]
+        ),
+        mux,
+        values_t,
+    )
+
+    with pytest.raises(RuntimeError, match="child finalize boom"):
+        _ = run.output
+
+
+@pytest.mark.anyio
+async def test_child_finalize_errors_propagate_to_async_run() -> None:
+    mux = StreamMux(
+        factories=[
+            ValuesTransformer,
+            MessagesTransformer,
+            LifecycleTransformer,
+            SubgraphTransformer,
+            _ChildFinalizeExploder,
+        ],
+        is_async=True,
+    )
+    values_t = mux.transformer_by_key("values")
+    assert isinstance(values_t, ValuesTransformer)
+    run = AsyncGraphRunStream(
+        _astream_parts(
+            _stream_part(
+                "tasks",
+                ("agent:abc",),
+                {
+                    "id": "t1",
+                    "name": "tool",
+                    "input": None,
+                    "triggers": [],
+                },
+            )
+        ),
+        mux,
+        values_t,
+    )
+
+    with pytest.raises(RuntimeError, match="child afinalize boom"):
+        await run.output()
 
 
 # ---------------------------------------------------------------------------

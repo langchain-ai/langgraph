@@ -672,45 +672,23 @@ class SubgraphTransformer(_TasksLifecycleBase):
     ) -> None:
         if handle._mux is None or handle._mux._events._closed:
             return
-        try:
-            handle._mux.close()
-        except Exception:
-            _logger.warning(
-                "Error closing subgraph mini-mux at %s; subscribers "
-                "may not see a clean close.",
-                handle.path,
-                exc_info=True,
-            )
+        handle._mux.close()
 
     async def _aclose_handle_mux(
         self, handle: SubgraphRunStream | AsyncSubgraphRunStream
     ) -> None:
         if handle._mux is None or handle._mux._events._closed:
             return
-        try:
-            await handle._mux.aclose()
-        except Exception:
-            _logger.warning(
-                "Error closing subgraph mini-mux at %s; subscribers "
-                "may not see a clean close.",
-                handle.path,
-                exc_info=True,
-            )
+        await handle._mux.aclose()
 
     def finalize(self) -> None:
-        super().finalize()
-        # Close any handles whose started fired without a trigger_call_id
-        # (so `_open` never tracked them) — they finish implicitly at
-        # run end with status `completed`.
-        for handle in self._handles.values():
-            if not handle._seen_terminal:
-                handle.status = "completed"
-                handle._seen_terminal = True
-                self._close_handle_mux(handle)
-
-    async def afinalize(self) -> None:
+        first_error: BaseException | None = None
         for ns in list(self._open):
-            await self._aon_terminal(ns, "completed", None)
+            try:
+                self._on_terminal(ns, "completed", None)
+            except BaseException as e:
+                if first_error is None:
+                    first_error = e
         self._open.clear()
         # Close any handles whose started fired without a trigger_call_id
         # (so `_open` never tracked them) — they finish implicitly at
@@ -719,7 +697,37 @@ class SubgraphTransformer(_TasksLifecycleBase):
             if not handle._seen_terminal:
                 handle.status = "completed"
                 handle._seen_terminal = True
-                await self._aclose_handle_mux(handle)
+                try:
+                    self._close_handle_mux(handle)
+                except BaseException as e:
+                    if first_error is None:
+                        first_error = e
+        if first_error is not None:
+            raise first_error
+
+    async def afinalize(self) -> None:
+        first_error: BaseException | None = None
+        for ns in list(self._open):
+            try:
+                await self._aon_terminal(ns, "completed", None)
+            except BaseException as e:
+                if first_error is None:
+                    first_error = e
+        self._open.clear()
+        # Close any handles whose started fired without a trigger_call_id
+        # (so `_open` never tracked them) — they finish implicitly at
+        # run end with status `completed`.
+        for handle in self._handles.values():
+            if not handle._seen_terminal:
+                handle.status = "completed"
+                handle._seen_terminal = True
+                try:
+                    await self._aclose_handle_mux(handle)
+                except BaseException as e:
+                    if first_error is None:
+                        first_error = e
+        if first_error is not None:
+            raise first_error
 
     def fail(self, err: BaseException) -> None:
         is_interrupt = isinstance(err, GraphInterrupt)
