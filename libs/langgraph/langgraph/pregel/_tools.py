@@ -9,6 +9,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from langgraph._internal._constants import NS_SEP
 from langgraph.config import _tool_call_writer
+from langgraph.constants import TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
 
 try:
@@ -43,14 +44,31 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
 
     run_inline = True
 
-    def __init__(self, stream: Callable[[StreamChunk], None]) -> None:
-        """Initialize the handler.
+    def __init__(
+        self,
+        stream: Callable[[StreamChunk], None],
+        subgraphs: bool,
+        *,
+        parent_ns: tuple[str, ...] | None = None,
+    ) -> None:
+        """Configure the handler to stream tool-call events.
 
         Args:
             stream: Callable that accepts a `StreamChunk` tuple
                 `(namespace, mode, payload)` and enqueues it.
+            subgraphs: Whether to emit events from tools called inside
+                nested subgraphs. When False, only tools at the
+                handler's own scope (`parent_ns`) emit.
+            parent_ns: Namespace where the handler was attached.
+                Mirrors the `StreamMessagesHandler` escape hatch:
+                tools whose containing namespace equals `parent_ns`
+                still emit even with `subgraphs=False`, so a node that
+                explicitly streams a subgraph with `stream_mode="tools"`
+                sees its own tools.
         """
         self.stream = stream
+        self.subgraphs = subgraphs
+        self.parent_ns = parent_ns
         # run_id → (namespace, tool_call_id, ContextVar token)
         # `on_tool_end` does not receive `tool_call_id` in kwargs, so
         # we correlate by `run_id` which is present on every callback.
@@ -58,24 +76,39 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             UUID, tuple[tuple[str, ...], str, Token[ToolCallWriter | None]]
         ] = {}
 
-    @staticmethod
-    def _containing_ns_from_metadata(
+    def _ns_for_emit(
+        self,
         metadata: dict[str, Any] | None,
-    ) -> tuple[str, ...]:
-        """Return the namespace of the subgraph that contains this tool call.
+        tags: list[str] | None,
+    ) -> tuple[str, ...] | None:
+        """Resolve the namespace this tool call should emit at, or `None` to skip.
 
-        `langgraph_checkpoint_ns` on a tool's callback metadata ends with
-        the `node_name:task_id` segment of the node that invoked the
-        tool. Dropping that segment gives the subgraph's own namespace,
-        which matches what other `tools` / `lifecycle` / `messages`
-        emitters use.
+        Mirrors `StreamMessagesHandler.on_chat_model_start`'s namespace
+        derivation: parses `langgraph_checkpoint_ns` (which ends with
+        the `node_name:task_id` of the calling node), drops that
+        trailing segment, and returns the containing subgraph's own
+        namespace. Returns `None` when the call should be silently
+        suppressed:
+
+        - `metadata` is missing — handler is attached to a context
+          without Pregel routing info.
+        - `TAG_NOSTREAM` is in `tags` — caller explicitly opted out.
+        - Tool runs in a subgraph (`len(ns) > 0`) and the handler was
+          attached with `subgraphs=False` and a different `parent_ns`
+          than the call's containing subgraph.
         """
         if not metadata:
-            return ()
+            return None
+        if tags and TAG_NOSTREAM in tags:
+            return None
         nskey = metadata.get("langgraph_checkpoint_ns")
         if not nskey:
-            return ()
-        return tuple(cast(str, nskey).split(NS_SEP))[:-1]
+            ns: tuple[str, ...] = ()
+        else:
+            ns = tuple(cast(str, nskey).split(NS_SEP))[:-1]
+        if not self.subgraphs and len(ns) > 0 and ns != self.parent_ns:
+            return None
+        return ns
 
     def _start(
         self,
@@ -84,16 +117,19 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         *,
         run_id: UUID,
         metadata: dict[str, Any] | None,
+        tags: list[str] | None,
         inputs: dict[str, Any] | None,
         kwargs: dict[str, Any],
     ) -> None:
+        ns = self._ns_for_emit(metadata, tags)
+        if ns is None:
+            return
         tool_call_id = cast("str | None", kwargs.get("tool_call_id")) or str(run_id)
         tool_name = (
             (serialized or {}).get("name")
             or cast("str | None", kwargs.get("name"))
             or ""
         )
-        ns = self._containing_ns_from_metadata(metadata)
 
         def writer(delta: Any) -> None:
             self.stream(
@@ -198,6 +234,7 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             input_str,
             run_id=run_id,
             metadata=metadata,
+            tags=tags,
             inputs=inputs,
             kwargs=kwargs,
         )

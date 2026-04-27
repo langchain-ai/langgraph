@@ -2685,8 +2685,13 @@ class Pregel(
 
             # set up tools stream mode
             if "tools" in stream_modes:
+                ns_tools = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 run_manager.inheritable_handlers.append(
-                    StreamToolCallHandler(stream.put)
+                    StreamToolCallHandler(
+                        stream.put,
+                        subgraphs,
+                        parent_ns=tuple(ns_tools.split(NS_SEP)) if ns_tools else None,
+                    )
                 )
 
             # set up custom stream mode
@@ -3095,8 +3100,13 @@ class Pregel(
 
             # set up tools stream mode
             if "tools" in stream_modes:
+                ns_tools = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 run_manager.inheritable_handlers.append(
-                    StreamToolCallHandler(stream_put)
+                    StreamToolCallHandler(
+                        stream_put,
+                        subgraphs,
+                        parent_ns=tuple(ns_tools.split(NS_SEP)) if ns_tools else None,
+                    )
                 )
 
             # set up custom stream mode
