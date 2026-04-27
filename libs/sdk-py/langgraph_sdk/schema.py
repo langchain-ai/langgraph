@@ -57,6 +57,7 @@ StreamMode = Literal[
     "checkpoints",
     "debug",
     "custom",
+    "tools",
     "messages-tuple",
 ]
 """
@@ -69,6 +70,7 @@ Defines the mode of streaming:
 - "tasks": Stream task start and finish events.
 - "debug": Stream detailed debug information.
 - "custom": Stream custom events.
+- "tools": Stream tool-call lifecycle events (`tool-started`, `tool-output-delta`, `tool-finished`, `tool-error`) keyed by `tool_call_id`.
 """
 
 DisconnectMode = Literal["cancel", "continue"]
@@ -842,6 +844,21 @@ class DebugStreamPart(TypedDict):
     """The debug event payload."""
 
 
+class ToolsStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="tools"`.
+
+    `data` carries one of `tool-started` / `tool-output-delta` /
+    `tool-finished` / `tool-error`, keyed by `tool_call_id`.
+    """
+
+    type: Literal["tools"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: dict[str, Any]
+    """Tool-call lifecycle event payload."""
+
+
 class MetadataStreamPart(TypedDict):
     """Control event with `run_id` and other run metadata."""
 
@@ -864,6 +881,7 @@ StreamPartV2 = (
     | CheckpointsStreamPart
     | TasksStreamPart
     | DebugStreamPart
+    | ToolsStreamPart
     | MetadataStreamPart
 )
 """Discriminated union of all v2 stream part types.
