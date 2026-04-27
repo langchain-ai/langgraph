@@ -82,6 +82,7 @@ from langchain_core.tools.base import (
     _is_injected_arg_type,
     get_all_basemodel_annotations,
 )
+from langgraph._internal._constants import CONF, CONFIG_KEY_READ
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
@@ -800,7 +801,7 @@ class ToolNode(RunnableCallable):
         # Construct ToolRuntime instances at the top level for each tool call
         tool_runtimes = []
         for call, cfg in zip(tool_calls, config_list, strict=False):
-            state = self._extract_state(input)
+            state = self._extract_state(input, cfg)
             tool_runtime = ToolRuntime(
                 state=state,
                 tool_call_id=call["id"],
@@ -835,7 +836,7 @@ class ToolNode(RunnableCallable):
         # Construct ToolRuntime instances at the top level for each tool call
         tool_runtimes = []
         for call, cfg in zip(tool_calls, config_list, strict=False):
-            state = self._extract_state(input)
+            state = self._extract_state(input, cfg)
             tool_runtime = ToolRuntime(
                 state=state,
                 tool_call_id=call["id"],
@@ -1277,18 +1278,37 @@ class ToolNode(RunnableCallable):
         return None
 
     def _extract_state(
-        self, input: list[AnyMessage] | dict[str, Any] | BaseModel
+        self,
+        input: list[AnyMessage] | dict[str, Any] | BaseModel,
+        config: RunnableConfig,
     ) -> list[AnyMessage] | dict[str, Any] | BaseModel:
-        """Extract state from input, handling ToolCallWithContext if present.
+        """Extract state from input.
 
-        Args:
-            input: The input which may be raw state or ToolCallWithContext.
+        Three input shapes:
 
-        Returns:
-            The actual state to pass to wrap_tool_call wrappers.
+        - `ToolCallWithContext` dict — legacy Send payload carrying an inlined
+          state snapshot; return `input["state"]`.
+        - list of `ToolCall` dicts — new Send payload with no inlined state;
+          hydrate state from channels via `CONFIG_KEY_READ`.
+        - regular graph state (dict/list/BaseModel) — return `input` as-is.
         """
         if isinstance(input, dict) and input.get("__type") == "tool_call_with_context":
             return input["state"]
+        if (
+            isinstance(input, list)
+            and input
+            and isinstance(input[-1], dict)
+            and input[-1].get("type") == "tool_call"
+        ):
+            read = config.get(CONF, {}).get(CONFIG_KEY_READ)
+            if read is None:
+                return {}
+            # Pregel installs CONFIG_KEY_READ as
+            # `functools.partial(local_read, scratchpad, channels, managed, task)`.
+            # Match the previous inlined-state contract by reading channels only;
+            # managed values have their own injection path (`ToolRuntime.context`).
+            channels = read.args[1]
+            return cast("dict[str, Any]", read(list(channels), True))
         return input
 
     def _inject_tool_args(

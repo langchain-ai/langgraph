@@ -1320,6 +1320,98 @@ async def test_state_extraction_with_tool_call_with_context_async() -> None:
     assert "tool_call" not in state_seen[0]
 
 
+def _config_with_channel_read(
+    channel_values: dict[str, object],
+    store: BaseStore | None = None,
+) -> RunnableConfig:
+    """Build a config that mimics `CONFIG_KEY_READ` as Pregel installs it.
+
+    Pregel always installs a `functools.partial(local_read, scratchpad,
+    channels, managed, task)`, and `ToolNode` introspects that partial to
+    learn channel names. The stub matches the shape: partial whose second and
+    third positional args are `channels` and `managed` mappings.
+    """
+    import functools
+
+    channels_stub = {k: None for k in channel_values}
+    managed_stub: dict[str, object] = {}
+
+    # Shape matches pregel's real partial:
+    # functools.partial(local_read, scratchpad, channels, managed, task)
+    def _read(scratchpad, channels, managed, task, select, fresh):  # noqa: ARG001
+        if isinstance(select, str):
+            return channel_values[select]
+        return {k: channel_values[k] for k in select if k in channel_values}
+
+    read = functools.partial(_read, None, channels_stub, managed_stub, None)
+    cfg = _create_config_with_runtime(store)
+    cfg["configurable"]["__pregel_read"] = read
+    return cfg
+
+
+def test_list_form_send_hydrates_state_from_channel_read() -> None:
+    """Send('tools', [tool_call]) with no inlined state should hydrate
+    ToolRuntime.state from CONFIG_KEY_READ (full state read)."""
+    state_seen = []
+
+    def state_inspector_handler(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        state_seen.append(request.state)
+        return execute(request)
+
+    channel_values = {
+        "messages": [AIMessage("from channels")],
+        "files": {"/a.md": "body"},
+    }
+
+    tool_node = ToolNode([add], wrap_tool_call=state_inspector_handler)
+
+    tool_call: ToolCall = {
+        "name": "add",
+        "args": {"a": 1, "b": 2},
+        "id": "call_1",
+        "type": "tool_call",
+    }
+
+    tool_node.invoke([tool_call], config=_config_with_channel_read(channel_values))
+
+    assert len(state_seen) == 1
+    got = state_seen[0]
+    assert got == channel_values
+    assert "messages" in got and "files" in got
+
+
+async def test_list_form_send_hydrates_state_async() -> None:
+    state_seen = []
+
+    def state_inspector_handler(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        state_seen.append(request.state)
+        return execute(request)
+
+    channel_values = {"messages": [AIMessage("from channels")], "files": {}}
+
+    tool_node = ToolNode([add], wrap_tool_call=state_inspector_handler)
+
+    tool_call: ToolCall = {
+        "name": "add",
+        "args": {"a": 1, "b": 2},
+        "id": "call_1",
+        "type": "tool_call",
+    }
+
+    await tool_node.ainvoke(
+        [tool_call], config=_config_with_channel_read(channel_values)
+    )
+
+    assert len(state_seen) == 1
+    assert state_seen[0] == channel_values
+
+
 def test_tool_call_request_is_frozen() -> None:
     """Test that ToolCallRequest raises deprecation warnings on direct attribute reassignment."""
     tool_call: ToolCall = {"name": "add", "args": {"a": 1, "b": 2}, "id": "call_1"}
