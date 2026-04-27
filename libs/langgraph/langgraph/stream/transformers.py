@@ -646,7 +646,11 @@ class SubgraphTransformer(_TasksLifecycleBase):
         if handle is None or handle._mux is None:
             return
         try:
-            handle._mux.push(event)
+            child_event: ProtocolEvent = {
+                **event,
+                "params": {**event["params"]},
+            }
+            handle._mux.push(child_event)
         except Exception:
             _logger.warning(
                 "Error forwarding event to subgraph mini-mux at %s; "
@@ -666,7 +670,11 @@ class SubgraphTransformer(_TasksLifecycleBase):
         if handle is None or handle._mux is None:
             return
         try:
-            await handle._mux.apush(event)
+            child_event: ProtocolEvent = {
+                **event,
+                "params": {**event["params"]},
+            }
+            await handle._mux.apush(child_event)
         except Exception:
             _logger.warning(
                 "Error forwarding event to subgraph mini-mux at %s; "

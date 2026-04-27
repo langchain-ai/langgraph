@@ -286,6 +286,47 @@ def test_tasks_events_suppressed_from_main_log() -> None:
     assert "tasks" not in methods
 
 
+class _ChildMethodMutator(StreamTransformer):
+    """Mutates child-scope events to verify forwarding isolation."""
+
+    def init(self) -> dict[str, Any]:
+        return {}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if self.scope and event["method"] == "values":
+            event["method"] = "mutated-values"
+        return True
+
+
+def test_child_mutation_does_not_leak_into_root_event_log() -> None:
+    mux = StreamMux(
+        factories=[
+            ValuesTransformer,
+            MessagesTransformer,
+            LifecycleTransformer,
+            SubgraphTransformer,
+            _ChildMethodMutator,
+        ],
+        is_async=False,
+    )
+    _arm(mux)
+    mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
+    mux.push(
+        {
+            "type": "event",
+            "method": "values",
+            "params": {
+                "namespace": ["agent:abc"],
+                "timestamp": TS,
+                "data": {"x": 1},
+            },
+        }
+    )
+
+    methods = [evt["method"] for evt in mux._events._items]
+    assert methods == ["lifecycle", "values"]
+
+
 class _AsyncProbeTransformer(StreamTransformer):
     """Async-only transformer used to verify mini-mux async dispatch."""
 
