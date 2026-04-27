@@ -15,6 +15,7 @@ Key insight:
 
 from __future__ import annotations
 
+import contextlib
 import math
 import sys
 import time
@@ -28,6 +29,14 @@ from typing_extensions import TypedDict
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
+
+try:
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    _POSTGRES_AVAILABLE = True
+    _POSTGRES_URI = "postgres://sydney_runkle@localhost:5441/postgres?sslmode=disable"
+except ImportError:
+    _POSTGRES_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
 # Realistic message payload (~100 tokens / ~400 chars each)
@@ -208,6 +217,39 @@ def _approx_tokens(n_turns: int) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Checkpointer factories
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def _pg_saver(thread_id: str = "bench"):
+    """Context manager that yields a fresh PostgresSaver and cleans up after."""
+    with PostgresSaver.from_conn_string(_POSTGRES_URI) as saver:
+        saver.setup()
+        with saver._cursor() as cur:
+            for tbl in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+                cur.execute(f"DELETE FROM {tbl} WHERE thread_id = %s", (thread_id,))
+        yield saver
+        with saver._cursor() as cur:
+            for tbl in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+                cur.execute(f"DELETE FROM {tbl} WHERE thread_id = %s", (thread_id,))
+
+
+def _checkpointers() -> list[tuple[str, Any]]:
+    """Return (label, saver_or_None) pairs for available checkpointers."""
+    result: list[tuple[str, Any]] = [("InMemory", None)]
+    if _POSTGRES_AVAILABLE:
+        try:
+            import psycopg
+
+            psycopg.connect(_POSTGRES_URI).close()
+            result.append(("Postgres", "postgres"))
+        except Exception:
+            pass
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Part 1: baseline DeltaChannel(inf) vs add_messages
 # ---------------------------------------------------------------------------
 
@@ -215,21 +257,25 @@ BASELINE_TURN_COUNTS = [10, 25, 50, 100, 500]
 DELTA_ONLY_TURN_COUNTS = [1000]
 
 
-def run_baseline_benchmark() -> None:
-    print()
-    print("Part 1 — DeltaChannel(inf) vs add_messages: storage & latency")
-    print("=" * 72)
+def _run_baseline_for_checkpointer(cp_label: str, cp_hint: Any) -> None:
+    W = 72
+
+    def _make_saver():
+        if cp_hint is None:
+            return contextlib.nullcontext(None)
+        return _pg_saver()
 
     rows: list[tuple[int, Any, Any, Any, Any, Any, Any]] = []
     for turns in BASELINE_TURN_COUNTS:
-        b_wt, b_rt, b_bytes = _run_turns(turns, BinaryState)
-        d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState)
+        with _make_saver() as saver:
+            b_wt, b_rt, b_bytes = _run_turns(turns, BinaryState, saver)
+        with _make_saver() as saver:
+            d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
         rows.append((turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt))
     for turns in DELTA_ONLY_TURN_COUNTS:
-        d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState)
+        with _make_saver() as saver:
+            d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
         rows.append((turns, None, d_bytes, None, d_rt, None, d_wt))
-
-    W = 72
 
     def _bytes_or_na(v: Any) -> str:
         if v is None or v < 0:
@@ -239,12 +285,11 @@ def run_baseline_benchmark() -> None:
     def _ms_or_na(v: Any) -> str:
         return "n/a" if v is None else f"{v * 1000:.1f}ms"
 
-    print("Storage (blob bytes)")
-    print("-" * W)
+    print(f"\n  [{cp_label}] Storage (blob bytes)")
     print(
-        f"{'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta(inf)':>12}  {'savings':>8}"
+        f"  {'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta(inf)':>12}  {'savings':>8}"
     )
-    print("-" * W)
+    print("  " + "-" * (W - 2))
     for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
         if b_bytes is None or b_bytes < 0 or d_bytes is None or d_bytes < 0:
             ratio_str = "n/a"
@@ -252,20 +297,26 @@ def run_baseline_benchmark() -> None:
             ratio = b_bytes / d_bytes if d_bytes else float("inf")
             ratio_str = f"{ratio:.0f}x"
         print(
-            f"{turns:>6}  {_approx_tokens(turns):>10}  "
+            f"  {turns:>6}  {_approx_tokens(turns):>10}  "
             f"{_bytes_or_na(b_bytes):>12}  {_bytes_or_na(d_bytes):>12}  {ratio_str:>8}"
         )
-    print()
 
-    print("Read latency (avg of 5 get_state calls)")
-    print("-" * W)
-    print(f"{'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta(inf)':>12}")
-    print("-" * W)
+    print(f"\n  [{cp_label}] Read latency (avg of 5 get_state calls)")
+    print(f"  {'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta(inf)':>12}")
+    print("  " + "-" * (W - 2))
     for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
         print(
-            f"{turns:>6}  {_approx_tokens(turns):>10}  "
+            f"  {turns:>6}  {_approx_tokens(turns):>10}  "
             f"{_ms_or_na(b_rt):>12}  {_ms_or_na(d_rt):>12}"
         )
+
+
+def run_baseline_benchmark() -> None:
+    print()
+    print("Part 1 — DeltaChannel(inf) vs add_messages: storage & latency")
+    print("=" * 72)
+    for cp_label, cp_hint in _checkpointers():
+        _run_baseline_for_checkpointer(cp_label, cp_hint)
     print()
 
 
@@ -286,65 +337,69 @@ def _freq_label(freq: int | float) -> str:
     return str(int(freq))
 
 
-def run_snapshot_freq_benchmark() -> None:
-    print()
-    print("Part 2 — DeltaChannel snapshot_frequency sweep")
-    print("Lower freq → fewer snapshots → less storage but deeper read replay")
-    print("=" * 80)
+def _run_sweep_for_checkpointer(cp_label: str, cp_hint: Any) -> None:
+    def _make_saver():
+        if cp_hint is None:
+            return contextlib.nullcontext(None)
+        return _pg_saver()
 
-    # Collect results: {turns: {freq: (write_s, read_s, bytes)}}
-    results: dict[int, dict[str | int, tuple[float, float, int]]] = {}
+    # Collect results: {turns: {freq_label: (write_s, read_s, bytes)}}
+    results: dict[int, dict[str, tuple[float, float, int]]] = {}
     for turns in SWEEP_TURN_COUNTS:
         results[turns] = {}
         for freq in SNAPSHOT_FREQUENCIES:
             state_cls = _make_delta_state(freq)
-            wt, rt, bb = _run_turns(turns, state_cls)
+            with _make_saver() as saver:
+                wt, rt, bb = _run_turns(turns, state_cls, saver)
             results[turns][_freq_label(freq)] = (wt, rt, bb)
 
     freq_labels = [_freq_label(f) for f in SNAPSHOT_FREQUENCIES]
     col_w = 12
 
-    # Storage table
-    print()
-    print("Storage (blob bytes) — lower is better")
-    header = f"{'turns':>6}  {'ctx':>10}" + "".join(
+    header = f"  {'turns':>6}  {'ctx':>10}" + "".join(
         f"  {f'freq={freq_label}':>{col_w}}" for freq_label in freq_labels
     )
+
+    print(f"\n  [{cp_label}] Storage (blob bytes) — lower is better")
     print(header)
-    print("-" * len(header))
+    print("  " + "-" * (len(header) - 2))
     for turns in SWEEP_TURN_COUNTS:
-        row = f"{turns:>6}  {_approx_tokens(turns):>10}"
+        row = f"  {turns:>6}  {_approx_tokens(turns):>10}"
         for label in freq_labels:
             _, _, bb = results[turns][label]
             row += f"  {_fmt_bytes(bb) if bb >= 0 else 'n/a':>{col_w}}"
         print(row)
 
-    print()
-
-    # Read latency table
-    print("Read latency (avg of 5 get_state) — lower is better")
+    print(f"\n  [{cp_label}] Read latency (avg of 5 get_state) — lower is better")
     print(header)
-    print("-" * len(header))
+    print("  " + "-" * (len(header) - 2))
     for turns in SWEEP_TURN_COUNTS:
-        row = f"{turns:>6}  {_approx_tokens(turns):>10}"
+        row = f"  {turns:>6}  {_approx_tokens(turns):>10}"
         for label in freq_labels:
             _, rt, _ = results[turns][label]
             row += f"  {f'{rt * 1000:.1f}ms':>{col_w}}"
         print(row)
 
-    print()
-
-    # Per-invoke write latency
-    print("Per-invoke write latency (total / turns) — lower is better")
+    print(
+        f"\n  [{cp_label}] Per-invoke write latency (total / turns) — lower is better"
+    )
     print(header)
-    print("-" * len(header))
+    print("  " + "-" * (len(header) - 2))
     for turns in SWEEP_TURN_COUNTS:
-        row = f"{turns:>6}  {_approx_tokens(turns):>10}"
+        row = f"  {turns:>6}  {_approx_tokens(turns):>10}"
         for label in freq_labels:
             wt, _, _ = results[turns][label]
             row += f"  {f'{(wt / turns) * 1000:.1f}ms':>{col_w}}"
         print(row)
 
+
+def run_snapshot_freq_benchmark() -> None:
+    print()
+    print("Part 2 — DeltaChannel snapshot_frequency sweep")
+    print("Lower freq → fewer snapshots → less storage but deeper read replay")
+    print("=" * 80)
+    for cp_label, cp_hint in _checkpointers():
+        _run_sweep_for_checkpointer(cp_label, cp_hint)
     print()
     print("Legend:")
     print(
