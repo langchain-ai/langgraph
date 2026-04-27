@@ -85,6 +85,7 @@ from langchain_core.tools.base import (
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.pregel._tools import _tool_call_writer
 from langgraph.runtime import ExecutionInfo, ServerInfo  # noqa: TC002
 from langgraph.store.base import BaseStore  # noqa: TC002
 from langgraph.types import Command, Send, StreamWriter
@@ -1631,8 +1632,6 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
                 surfaced as-is on the `tools` channel's
                 `tool-output-delta` payload under `"delta"`.
         """
-        from langgraph.config import _tool_call_writer
-
         writer = _tool_call_writer.get()
         if writer is None:
             return

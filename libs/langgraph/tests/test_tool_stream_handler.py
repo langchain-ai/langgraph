@@ -16,10 +16,10 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode, ToolRuntime
 from typing_extensions import TypedDict
 
-from langgraph.config import _tool_call_writer
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
+from langgraph.pregel._tools import _tool_call_writer
 
 
 class _State(TypedDict):

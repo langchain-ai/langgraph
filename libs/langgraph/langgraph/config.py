@@ -1,7 +1,5 @@
 import asyncio
 import sys
-from collections.abc import Callable
-from contextvars import ContextVar
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -10,19 +8,6 @@ from langgraph.store.base import BaseStore
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.types import StreamWriter
-
-_tool_call_writer: ContextVar[Callable[[Any], None] | None] = ContextVar(
-    "langgraph_tool_call_writer", default=None
-)
-"""ContextVar holding the writer for the currently-executing tool call.
-
-Set by `StreamToolCallHandler.on_tool_start` and reset on end/error.
-Read via `ToolRuntime.emit_output_delta` from inside a tool body.
-Defined here (rather than alongside the handler in `pregel/_tools.py`)
-to keep the var in a low-dependency module — the prebuilt
-`ToolRuntime` reads it without pulling the pregel runtime into
-prebuilt's import-time graph beyond what's already required.
-"""
 
 
 def _no_op_stream_writer(c: Any) -> None:

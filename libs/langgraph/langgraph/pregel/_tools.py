@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Iterator
-from contextvars import Token
+from contextvars import ContextVar, Token
 from typing import Any, TypeVar, cast
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
 
 from langgraph._internal._constants import NS_SEP
-from langgraph.config import _tool_call_writer
 from langgraph.constants import TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
 
@@ -22,6 +21,15 @@ T = TypeVar("T")
 
 ToolCallWriter = Callable[[Any], None]
 """A closure bound to a single tool call that emits `tool-output-delta` events."""
+
+_tool_call_writer: ContextVar[ToolCallWriter | None] = ContextVar(
+    "langgraph_tool_call_writer", default=None
+)
+"""ContextVar holding the writer for the currently-executing tool call.
+
+Set by `StreamToolCallHandler.on_tool_start` and reset on end/error.
+Read by `ToolRuntime.emit_output_delta` (in `langgraph.prebuilt`).
+"""
 
 
 class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
