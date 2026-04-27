@@ -116,13 +116,13 @@ jobs:
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h
           echo "Finished starting up langgraph-test-h"
           LANGGRAPH_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langgraph'); print(v);")
-          if [ "$LANGGRAPH_VERSION" != "1.1.2" ]; then
-            echo "LANGGRAPH_VERSION != 1.1.2; $LANGGRAPH_VERSION"
+          if [ "$LANGGRAPH_VERSION" != "1.1.5" ]; then
+            echo "LANGGRAPH_VERSION != 1.1.5; $LANGGRAPH_VERSION"
             exit 1
           fi
           LANGCHAIN_OPENAI_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-openai'); print(v);")
-          if [ "$LANGCHAIN_OPENAI_VERSION" != "1.0.1" ]; then
-            echo "LANGCHAIN_OPENAI_VERSION != 1.0.1; $LANGCHAIN_OPENAI_VERSION"
+          if [ "$LANGCHAIN_OPENAI_VERSION" != "1.1.14" ]; then
+            echo "LANGCHAIN_OPENAI_VERSION != 1.1.14; $LANGCHAIN_OPENAI_VERSION"
             exit 1
           fi
           LANGCHAIN_ANTHROPIC_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-anthropic'); print(v);")
@@ -136,3 +136,33 @@ jobs:
         working-directory: libs/cli/examples/graph_prerelease_reqs_fail
         run: |
           langgraph build -t langgraph-test-i || [ $? -eq 1 ]
+
+      - name: Build uv simple service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
+        working-directory: libs/cli/uv-examples/simple
+        run: |
+          langgraph build -t langgraph-test-uv-simple
+      - name: Test uv simple service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        working-directory: libs/cli/uv-examples/simple
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
+          cp .env.example .env
+          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-simple
+
+      - name: Build uv monorepo service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
+        working-directory: libs/cli/uv-examples/monorepo/apps/agent
+        run: |
+          langgraph build -t langgraph-test-uv-monorepo
+      - name: Test uv monorepo service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        working-directory: libs/cli/uv-examples/monorepo/apps/agent
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
+          cp .env.example .env
+          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
+          timeout 60 python ../../../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-uv-monorepo

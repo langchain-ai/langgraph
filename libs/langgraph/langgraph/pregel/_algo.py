@@ -7,6 +7,7 @@ import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import copy
+from datetime import timedelta
 from functools import partial
 from hashlib import sha1
 from typing import (
@@ -45,6 +46,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_THREAD_ID,
     ERROR,
     INTERRUPT,
     NO_WRITES,
@@ -60,6 +62,7 @@ from langgraph._internal._constants import (
     TASKS,
 )
 from langgraph._internal._scratchpad import PregelScratchpad
+from langgraph._internal._timeout import coerce_timeout
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -70,7 +73,7 @@ from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
-from langgraph.runtime import DEFAULT_RUNTIME, Runtime
+from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
 from langgraph.types import (
     All,
     CacheKey,
@@ -113,13 +116,21 @@ class PregelTaskWrites(NamedTuple):
 
 
 class Call:
-    __slots__ = ("func", "input", "retry_policy", "cache_policy", "callbacks")
+    __slots__ = (
+        "func",
+        "input",
+        "retry_policy",
+        "cache_policy",
+        "callbacks",
+        "timeout",
+    )
 
     func: Callable
     input: tuple[tuple[Any, ...], dict[str, Any]]
     retry_policy: Sequence[RetryPolicy] | None
     cache_policy: CachePolicy | None
     callbacks: Callbacks
+    timeout: float | None
 
     def __init__(
         self,
@@ -129,12 +140,14 @@ class Call:
         retry_policy: Sequence[RetryPolicy] | None,
         cache_policy: CachePolicy | None,
         callbacks: Callbacks,
+        timeout: float | timedelta | None = None,
     ) -> None:
         self.func = func
         self.input = input
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.callbacks = callbacks
+        self.timeout = coerce_timeout(timeout)
 
 
 def should_interrupt(
@@ -668,6 +681,13 @@ def prepare_single_task(
                     runtime = runtime.override(
                         previous=checkpoint["channel_values"].get(PREVIOUS, None),
                         store=store,
+                        execution_info=ExecutionInfo(
+                            checkpoint_id=checkpoint["id"],
+                            checkpoint_ns=task_checkpoint_ns,
+                            task_id=task_id,
+                            thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+                            run_id=str(rid) if (rid := config.get("run_id")) else None,
+                        ),
                     )
                     additional_config = {
                         "metadata": metadata,
@@ -725,6 +745,7 @@ def prepare_single_task(
                         task_path[:3],
                         writers=proc.flat_writers,
                         subgraphs=proc.subgraphs,
+                        timeout=proc.timeout,
                     )
             else:
                 return PregelTask(task_id, name, task_path[:3])
@@ -813,7 +834,16 @@ def prepare_push_task_functional(
             stop,
         )
         runtime = cast(Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME))
-        runtime = runtime.override(store=store)
+        runtime = runtime.override(
+            store=store,
+            execution_info=ExecutionInfo(
+                checkpoint_id=checkpoint["id"],
+                checkpoint_ns=task_checkpoint_ns,
+                task_id=task_id,
+                thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+                run_id=str(rid) if (rid := config.get("run_id")) else None,
+            ),
+        )
         return PregelExecutableTask(
             name,
             call.input,
@@ -853,6 +883,7 @@ def prepare_push_task_functional(
             cache_key,
             task_id,
             in_progress_task_path,
+            timeout=call.timeout,
         )
     else:
         return PregelTask(task_id, name, in_progress_task_path)
@@ -966,7 +997,15 @@ def prepare_push_task_send(
         )
         runtime = cast(Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME))
         runtime = runtime.override(
-            store=store, previous=checkpoint["channel_values"].get(PREVIOUS, None)
+            store=store,
+            previous=checkpoint["channel_values"].get(PREVIOUS, None),
+            execution_info=ExecutionInfo(
+                checkpoint_id=checkpoint["id"],
+                checkpoint_ns=task_checkpoint_ns,
+                task_id=task_id,
+                thread_id=configurable.get(CONFIG_KEY_THREAD_ID),
+                run_id=str(rid) if (rid := config.get("run_id")) else None,
+            ),
         )
         additional_config: RunnableConfig = {
             "metadata": metadata,
@@ -1016,6 +1055,7 @@ def prepare_push_task_send(
             translated_task_path,
             writers=proc.flat_writers,
             subgraphs=proc.subgraphs,
+            timeout=proc.timeout,
         )
     else:
         return PregelTask(task_id, packet.node, translated_task_path)
