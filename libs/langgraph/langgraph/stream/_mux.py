@@ -13,6 +13,16 @@ from langgraph.stream._types import (
 )
 from langgraph.stream.stream_channel import StreamChannel
 
+TransformerFactory = Callable[["tuple[str, ...]"], StreamTransformer]
+"""Factory that builds a scoped transformer for a mux.
+
+Called once per `StreamMux` with the mux's scope (typically `()` for
+the root). Standard transformer classes accept a single positional
+scope argument, so the class itself is a valid factory. User
+transformers can close over their config:
+`lambda scope: MyTransformer(scope, foo=...)`.
+"""
+
 
 class StreamMux:
     """Central event dispatcher for the streaming infrastructure.
@@ -40,28 +50,39 @@ class StreamMux:
         transformers: list[StreamTransformer] | None = None,
         *,
         is_async: bool = False,
+        factories: list[TransformerFactory] | None = None,
+        scope: tuple[str, ...] = (),
     ) -> None:
         """Initialize the mux and register transformers in order.
 
-        Transformers are fixed at construction time — there is no
-        post-init `register()`. Each transformer's `init()` is called,
-        projections are merged into `extensions`, `_native` keys are
-        recorded in `native_keys`, and any EventLog / StreamChannel
-        instances are bound and wired.
+        Callers pass either `transformers` (pre-built instances) or
+        `factories` (callables producing fresh instances per mux). Each
+        transformer's `init()` is called, projections are merged into
+        `extensions`, `_native` keys are recorded in `native_keys`, and
+        any EventLog / StreamChannel instances are bound and wired.
 
         Args:
-            transformers: Transformers to register, in dispatch order.
-                `None` or empty gives a mux with no projections.
+            transformers: Already-built transformer instances. Mutually
+                exclusive with `factories`.
             is_async: True for async dispatch (`apush` / `aclose` /
                 `afail`), False for the sync path.
+            factories: Zero-or-one-argument callables producing
+                transformers. Called with this mux's `scope`.
+            scope: The namespace the mux operates within. The root mux
+                is `()`.
 
         Raises:
             RuntimeError: If any transformer requires an async run but
                 the mux is in sync mode.
             TypeError: If a transformer's `init()` doesn't return a dict.
-            ValueError: If transformers' projection keys collide.
+            ValueError: If transformers' projection keys collide, or if
+                both `transformers` and `factories` are supplied.
         """
+        if transformers is not None and factories is not None:
+            raise ValueError("Pass either `transformers` or `factories`, not both.")
+
         self._is_async = is_async
+        self.scope: tuple[str, ...] = scope
         self._events: EventLog[ProtocolEvent] = EventLog()
         self._events._bind(is_async=is_async)
         self._transformers: list[StreamTransformer] = []
@@ -72,9 +93,18 @@ class StreamMux:
         self.extensions: dict[str, Any] = {}
         self.native_keys: set[str] = set()
         self._projection_owners: dict[str, str] = {}
+        self._transformer_by_key: dict[str, StreamTransformer] = {}
 
-        for transformer in transformers or ():
-            self._register(transformer)
+        if factories is not None:
+            for factory in factories:
+                self._register(factory(scope))
+        else:
+            for transformer in transformers or ():
+                self._register(transformer)
+
+    def transformer_by_key(self, key: str) -> StreamTransformer | None:
+        """Return the transformer that contributed `key` to the projection."""
+        return self._transformer_by_key.get(key)
 
     def _register(self, transformer: StreamTransformer) -> None:
         """Register a single transformer.
@@ -112,6 +142,7 @@ class StreamMux:
         owner_name = type(transformer).__name__
         for key in projection:
             self._projection_owners[key] = owner_name
+            self._transformer_by_key[key] = transformer
         if getattr(transformer, "_native", False):
             self.native_keys.update(projection.keys())
 

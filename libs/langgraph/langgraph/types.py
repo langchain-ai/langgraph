@@ -116,7 +116,14 @@ def ensure_valid_checkpointer(checkpointer: Checkpointer) -> Checkpointer:
 
 
 StreamMode = Literal[
-    "values", "updates", "checkpoints", "tasks", "debug", "messages", "custom"
+    "values",
+    "updates",
+    "checkpoints",
+    "tasks",
+    "debug",
+    "messages",
+    "custom",
+    "tools",
 ]
 """How the stream method should emit outputs.
 
@@ -129,6 +136,7 @@ StreamMode = Literal[
 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
 - `"debug"`: Emit `"checkpoints"` and `"tasks"` events for debugging purposes.
+- `"tools"`: Emit tool-call lifecycle events (`tool-started`, `tool-output-delta`, `tool-finished`, `tool-error`) keyed by `tool_call_id`.
 """
 
 StreamWriter = Callable[[Any], None]

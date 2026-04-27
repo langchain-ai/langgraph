@@ -75,14 +75,34 @@ class StreamTransformer(ABC):
     scoring, cost lookup, external tracing).
 
     Attributes:
+        scope: Namespace the transformer operates within — `()` for the
+            root mux. Set at construction from the mux's scope (each
+            factory is called as `factory(scope)`).
         requires_async: Explicit opt-in for transformers that need a
             running event loop but don't override any async method (for
             example, transformers that call `schedule()` from a sync
             `process`). The mux also auto-detects the async lane when
             `aprocess`, `afinalize`, or `afail` is overridden.
+        required_stream_modes: Stream modes the graph must emit for
+            this transformer to have anything to process. Computed as
+            the union across all registered transformers to determine
+            which modes a `stream_v2` run requests from the graph.
+            Empty tuple means the transformer consumes only synthetic
+            events (or is purely passive).
     """
 
     requires_async: ClassVar[bool] = False
+    required_stream_modes: ClassVar[tuple[str, ...]] = ()
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        """Initialize the transformer with its mux's scope.
+
+        Args:
+            scope: The namespace tuple the owning mux is scoped to.
+                `()` for the root. Factories receive this at
+                construction time (`factory(scope)` in `StreamMux`).
+        """
+        self.scope: tuple[str, ...] = scope
 
     @abstractmethod
     def init(self) -> dict[str, Any]:

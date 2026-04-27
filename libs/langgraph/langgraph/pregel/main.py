@@ -141,6 +141,7 @@ from langgraph.pregel._messages import (
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
+from langgraph.pregel._tools import StreamToolCallHandler
 from langgraph.pregel._utils import get_new_channel_versions
 from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
@@ -353,6 +354,19 @@ _STREAM_V2_MODES: list[StreamMode] = [
     "tasks",
     "debug",
 ]
+
+
+def _collect_stream_modes(mux: Any) -> list[StreamMode]:
+    """Return base modes plus the union of `required_stream_modes` declarations.
+
+    `_STREAM_V2_MODES` is the always-on base set required by built-in
+    transformers. Additional modes (e.g. `"tools"`) are added when a
+    registered transformer declares `required_stream_modes` for them.
+    """
+    modes: set[str] = set(_STREAM_V2_MODES)
+    for transformer in mux._transformers:
+        modes.update(getattr(transformer, "required_stream_modes", ()))
+    return cast("list[StreamMode]", list(modes))
 
 
 class Pregel(
@@ -2679,6 +2693,12 @@ class Pregel(
                     )
                 )
 
+            # set up tools stream mode
+            if "tools" in stream_modes:
+                run_manager.inheritable_handlers.append(
+                    StreamToolCallHandler(stream.put)
+                )
+
             # set up custom stream mode
             if "custom" in stream_modes:
 
@@ -3083,6 +3103,12 @@ class Pregel(
                     )
                 )
 
+            # set up tools stream mode
+            if "tools" in stream_modes:
+                run_manager.inheritable_handlers.append(
+                    StreamToolCallHandler(stream_put)
+                )
+
             # set up custom stream mode
             def stream_writer(c: Any) -> None:
                 aioloop.call_soon_threadsafe(
@@ -3349,12 +3375,13 @@ class Pregel(
         parent_ns = _resolve_parent_ns(self.config, config)
         values_t = ValuesTransformer(parent_ns=parent_ns)
         compiled_instances = [f() for f in self._stream_transformers]
+        extra = [t() if isinstance(t, type) else t for t in (transformers or ())]
         mux = StreamMux(
             [
                 values_t,
                 MessagesTransformer(parent_ns=parent_ns),
                 *compiled_instances,
-                *(transformers or ()),
+                *extra,
             ],
             is_async=False,
         )
@@ -3362,7 +3389,7 @@ class Pregel(
             self.stream(
                 input,
                 patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
-                stream_mode=_STREAM_V2_MODES,
+                stream_mode=_collect_stream_modes(mux),
                 subgraphs=True,
                 version="v2",
                 interrupt_before=interrupt_before,
@@ -3404,19 +3431,20 @@ class Pregel(
         parent_ns = _resolve_parent_ns(self.config, config)
         values_t = ValuesTransformer(parent_ns=parent_ns)
         compiled_instances = [f() for f in self._stream_transformers]
+        extra = [t() if isinstance(t, type) else t for t in (transformers or ())]
         mux = StreamMux(
             [
                 values_t,
                 MessagesTransformer(parent_ns=parent_ns),
                 *compiled_instances,
-                *(transformers or ()),
+                *extra,
             ],
             is_async=True,
         )
         graph_aiter = self.astream(
             input,
             patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
-            stream_mode=_STREAM_V2_MODES,
+            stream_mode=_collect_stream_modes(mux),
             subgraphs=True,
             version="v2",
             interrupt_before=interrupt_before,
