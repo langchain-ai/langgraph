@@ -122,6 +122,24 @@ def _build_custom_stream_graph():
     return builder.compile()
 
 
+class _CustomPassthroughTransformer(StreamTransformer):
+    """Opts a run into the `custom` stream mode without building a projection.
+
+    `stream_v2` requests only the modes that registered transformers
+    declare via `required_stream_modes`. Custom events are raw user
+    emissions from `StreamWriter`, so tests that want them visible on
+    the main event log register this pass-through transformer.
+    """
+
+    required_stream_modes = ("custom",)
+
+    def init(self) -> dict[str, Any]:
+        return {}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        return True
+
+
 # ---------------------------------------------------------------------------
 # EventLog unit tests
 # ---------------------------------------------------------------------------
@@ -414,11 +432,27 @@ class TestStreamV2Sync:
             del run.extensions["values"]  # type: ignore[attr-defined]
 
     def test_custom_stream_events(self) -> None:
-        run = _build_custom_stream_graph().stream_v2({"value": "x", "items": []})
+        run = _build_custom_stream_graph().stream_v2(
+            {"value": "x", "items": []},
+            transformers=[_CustomPassthroughTransformer],
+        )
         custom_events = [e for e in run if e["method"] == "custom"]
         assert len(custom_events) == 2
         assert custom_events[0]["params"]["data"] == {"step": "start"}
         assert custom_events[1]["params"]["data"] == {"step": "end"}
+
+    def test_custom_events_suppressed_without_transformer(self) -> None:
+        """Without a transformer declaring `"custom"`, no custom events flow.
+
+        `stream_v2` asks the graph only for the modes that registered
+        transformers require. Built-ins cover `values` / `messages`;
+        consumers that want raw custom events surface them by
+        registering a transformer whose `required_stream_modes`
+        includes `"custom"`.
+        """
+        run = _build_custom_stream_graph().stream_v2({"value": "x", "items": []})
+        custom_events = [e for e in run if e["method"] == "custom"]
+        assert custom_events == []
 
     def test_interleave_values_and_messages(self) -> None:
         run = _build_simple_graph().stream_v2({"value": "x", "items": []})
@@ -538,7 +572,10 @@ class TestStreamV2Async:
         assert run.messages is run.extensions["messages"]
 
     async def test_custom_stream_events(self) -> None:
-        run = await _build_custom_stream_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_custom_stream_graph().astream_v2(
+            {"value": "x", "items": []},
+            transformers=[_CustomPassthroughTransformer],
+        )
         events = [e async for e in run]
         custom_events = [e for e in events if e["method"] == "custom"]
         assert len(custom_events) == 2

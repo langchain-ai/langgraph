@@ -345,25 +345,15 @@ class NodeBuilder:
         )
 
 
-_STREAM_V2_MODES: list[StreamMode] = [
-    "values",
-    "updates",
-    "messages",
-    "custom",
-    "checkpoints",
-    "tasks",
-    "debug",
-]
-
-
 def _collect_stream_modes(mux: Any) -> list[StreamMode]:
-    """Return base modes plus the union of `required_stream_modes` declarations.
+    """Return the union of `required_stream_modes` across registered transformers.
 
-    `_STREAM_V2_MODES` is the always-on base set required by built-in
-    transformers. Additional modes (e.g. `"tools"`) are added when a
-    registered transformer declares `required_stream_modes` for them.
+    Transformers declare the stream modes they need to function, and
+    `stream_v2` asks the graph for exactly that union — no hardcoded
+    default set. If zero transformers declare a given mode, the graph
+    does not stream events for it.
     """
-    modes: set[str] = set(_STREAM_V2_MODES)
+    modes: set[str] = set()
     for transformer in mux._transformers:
         modes.update(getattr(transformer, "required_stream_modes", ()))
     return cast("list[StreamMode]", list(modes))
