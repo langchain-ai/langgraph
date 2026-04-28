@@ -663,3 +663,148 @@ class TestPreDeltaBlobTerminator:
         assert "PRE-DELTA-WRITE" not in values
         # And the pending write at the target is never folded in.
         assert "PENDING-AT-TARGET" not in values
+
+
+class TestInMemorySaverPrune:
+    """Tests for InMemorySaver.prune with DeltaChannel awareness."""
+
+    def _build_chain(
+        self,
+        saver: InMemorySaver,
+        thread_id: str,
+        ns: str,
+        channel: str,
+        n: int,
+        *,
+        snapshot_at: set[int] | None = None,
+    ) -> list[str]:
+        """Build a chain of n checkpoints with DELTA_SENTINEL blobs.
+
+        If snapshot_at is provided, writes a _DeltaSnapshot blob at those steps.
+        Returns list of checkpoint IDs in order (oldest first).
+        """
+        from langgraph.checkpoint.serde.types import _DeltaSnapshot
+
+        serde = saver.serde
+        cp_ids = []
+        parent_id = None
+        ver_base = "0000000000000000000000000000000{i}.0000000000000000"
+
+        for i in range(n):
+            cp_id = f"cp{i:04d}"
+            ver = ver_base.format(i=i)
+            cp = empty_checkpoint()
+            cp["id"] = cp_id
+            cp["channel_versions"][channel] = ver
+
+            if snapshot_at and i in snapshot_at:
+                blob = serde.dumps_typed(_DeltaSnapshot(value=[f"msg{i}"]))
+            else:
+                blob = serde.dumps_typed(DELTA_SENTINEL)
+
+            saver.blobs[(thread_id, ns, channel, ver)] = blob
+            saver.storage[thread_id][ns][cp_id] = (
+                serde.dumps_typed(cp),
+                serde.dumps_typed({}),
+                parent_id,
+            )
+            # Add a dummy write for this checkpoint
+            saver.writes[(thread_id, ns, cp_id)][("task", i)] = (
+                "task",
+                channel,
+                serde.dumps_typed(f"write{i}"),
+                "",
+            )
+            cp_ids.append(cp_id)
+            parent_id = cp_id
+
+        return cp_ids
+
+    def test_prune_pure_delta_keeps_all(self) -> None:
+        """With no snapshots, all checkpoints are required for reconstruction."""
+        saver = InMemorySaver()
+        thread_id, ns, channel = "t1", "", "messages"
+        cp_ids = self._build_chain(saver, thread_id, ns, channel, n=5)
+
+        saver.prune([thread_id], strategy="keep_latest")
+
+        # All checkpoints must be retained (walk needs the full chain)
+        remaining = set(saver.storage[thread_id][ns].keys())
+        assert remaining == set(cp_ids)
+
+    def test_prune_with_snapshot_removes_pre_snapshot_checkpoints(self) -> None:
+        """Checkpoints older than the nearest snapshot can be safely pruned."""
+        saver = InMemorySaver()
+        thread_id, ns, channel = "t1", "", "messages"
+        # Snapshot at step 2; steps 3 and 4 are sentinels
+        cp_ids = self._build_chain(saver, thread_id, ns, channel, n=5, snapshot_at={2})
+
+        saver.prune([thread_id], strategy="keep_latest")
+
+        remaining = set(saver.storage[thread_id][ns].keys())
+        # cp0, cp1 (before snapshot) must be gone; cp2, cp3, cp4 must remain
+        assert cp_ids[0] not in remaining  # pre-snapshot
+        assert cp_ids[1] not in remaining  # pre-snapshot
+        assert cp_ids[2] in remaining  # the snapshot itself
+        assert cp_ids[3] in remaining  # sentinel after snapshot
+        assert cp_ids[4] in remaining  # latest
+
+    def test_prune_removes_orphaned_blobs(self) -> None:
+        """Blob entries for pruned checkpoints are cleaned up."""
+        saver = InMemorySaver()
+        thread_id, ns, channel = "t1", "", "messages"
+        self._build_chain(saver, thread_id, ns, channel, n=4, snapshot_at={1})
+        saver.prune([thread_id], strategy="keep_latest")
+
+        # cp0 blob should be gone (pruned); cp1, cp2, cp3 blobs remain
+        assert (
+            thread_id,
+            ns,
+            channel,
+            f"0000000000000000000000000000000{0}.0000000000000000",
+        ) not in saver.blobs
+        for i in range(1, 4):
+            ver = f"0000000000000000000000000000000{i}.0000000000000000"
+            assert (thread_id, ns, channel, ver) in saver.blobs
+
+    def test_prune_removes_writes_for_pruned_checkpoints(self) -> None:
+        """checkpoint_writes for pruned checkpoints are deleted."""
+        saver = InMemorySaver()
+        thread_id, ns, channel = "t1", "", "messages"
+        cp_ids = self._build_chain(saver, thread_id, ns, channel, n=4, snapshot_at={1})
+
+        saver.prune([thread_id], strategy="keep_latest")
+
+        # writes for cp0 must be gone
+        assert (thread_id, ns, cp_ids[0]) not in saver.writes
+        # writes for cp1+ must remain (they're in the walk chain)
+        for cp_id in cp_ids[1:]:
+            assert (thread_id, ns, cp_id) in saver.writes
+
+    def test_prune_delete_strategy_removes_everything(self) -> None:
+        """strategy='delete' removes all checkpoints for the thread."""
+        saver = InMemorySaver()
+        thread_id, ns, channel = "t1", "", "messages"
+        self._build_chain(saver, thread_id, ns, channel, n=3)
+
+        saver.prune([thread_id], strategy="delete")
+
+        assert not saver.storage.get(thread_id, {}).get(ns)
+        assert not any(k[0] == thread_id for k in saver.writes)
+        assert not any(k[0] == thread_id for k in saver.blobs)
+
+    def test_prune_non_delta_channel_always_pruneable(self) -> None:
+        """A channel with full snapshot blobs (no sentinels) allows full prune."""
+
+        saver = InMemorySaver()
+        thread_id, ns, channel = "t1", "", "messages"
+        # All snapshots, no sentinels
+        cp_ids = self._build_chain(
+            saver, thread_id, ns, channel, n=4, snapshot_at={0, 1, 2, 3}
+        )
+
+        saver.prune([thread_id], strategy="keep_latest")
+
+        remaining = set(saver.storage[thread_id][ns].keys())
+        # Only the latest checkpoint is needed (all blobs are snapshots)
+        assert remaining == {cp_ids[-1]}
