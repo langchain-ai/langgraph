@@ -25,6 +25,7 @@ from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
+    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
@@ -198,6 +199,7 @@ class PregelLoop:
     checkpoint_pending_writes: list[PendingWrite]
     checkpoint_previous_versions: dict[str, str | float | int]
     prev_checkpoint_config: RunnableConfig | None
+    _pending_write_futs: list[concurrent.futures.Future]
 
     status: Literal[
         "input",
@@ -407,7 +409,7 @@ class PregelLoop:
                     task = self.tasks.get(task_id)
                 else:
                     task = None
-                self.submit(
+                fut = self.submit(
                     self.checkpointer_put_writes,
                     config,
                     writes_to_save,
@@ -415,12 +417,13 @@ class PregelLoop:
                     task_path_str(task.path) if task else "",
                 )
             else:
-                self.submit(
+                fut = self.submit(
                     self.checkpointer_put_writes,
                     config,
                     writes_to_save,
                     task_id,
                 )
+            self._pending_write_futs.append(fut)
         # output writes
         if hasattr(self, "tasks"):
             self.output_writes(task_id, writes)
@@ -891,6 +894,9 @@ class PregelLoop:
             self.step,
             id=self.checkpoint["id"] if exiting else None,
             updated_channels=self.updated_channels,
+            get_next_version=self.checkpointer_get_next_version
+            if do_checkpoint
+            else None,
         )
         # sanitize TASK channel in the checkpoint before saving (durability=="exit")
         if TASKS in self.checkpoint["channel_values"] and any(
@@ -927,6 +933,17 @@ class PregelLoop:
                 self.checkpoint_previous_versions, channel_versions
             )
             self.checkpoint_previous_versions = channel_versions
+
+            # If the checkpoint has any DELTA_SENTINEL blobs, the sentinel is
+            # only meaningful if checkpoint_writes are durable first.  Flush
+            # pending write futures synchronously before committing the blob so
+            # we never end up with a sentinel blob backed by missing writes.
+            if self._pending_write_futs and any(
+                v is DELTA_SENTINEL for v in self.checkpoint["channel_values"].values()
+            ):
+                for fut in self._pending_write_futs:
+                    fut.result()
+                self._pending_write_futs.clear()
 
             # save it, without blocking
             # if there's a previous checkpoint save in progress, wait for it
@@ -1272,6 +1289,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if saved.pending_writes is not None
             else []
         )
+        self._pending_write_futs = []
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = channels_from_checkpoint(
             self.specs,
@@ -1477,6 +1495,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if saved.pending_writes is not None
             else []
         )
+        self._pending_write_futs = []
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )

@@ -16,7 +16,7 @@ from langgraph.checkpoint.base import (
     _ChannelWritesHistory,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.serde.types import TASKS
+from langgraph.checkpoint.serde.types import TASKS, _DeltaSnapshot
 from psycopg.types.json import Jsonb
 
 MetadataInput = dict[str, Any] | None
@@ -281,13 +281,29 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
         collected: list[PendingWrite] = []  # newest first; reversed at the end
         for cid in ancestors:
-            # Pre-delta blob terminator: subsumes any writes at this ancestor.
             ver = ver_of.get(cid)
             if ver is not None:
                 seed_blob = blob_by_ver.get(ver)
                 if seed_blob is not None and seed_blob[0] != "empty":
                     blob_value = self.serde.loads_typed(seed_blob)
                     if blob_value is not DELTA_SENTINEL:
+                        if isinstance(blob_value, _DeltaSnapshot):
+                            # Step-based snapshot: collect this ancestor's
+                            # pending_writes first (they encode the NEXT step's
+                            # transition, not subsumed by the snapshot blob).
+                            for (
+                                type_tag,
+                                write_blob,
+                                task_id,
+                                _idx,
+                            ) in writes_by_cid.get(cid, []):
+                                val = self.serde.loads_typed((type_tag, write_blob))
+                                collected.append((task_id, channel, val))
+                            collected.reverse()
+                            return _ChannelWritesHistory(
+                                seed=blob_value, writes=collected
+                            )
+                        # Pre-delta blob: subsumes this ancestor's writes.
                         collected.reverse()
                         return _ChannelWritesHistory(seed=blob_value, writes=collected)
             for type_tag, write_blob, task_id, _idx in writes_by_cid.get(cid, []):

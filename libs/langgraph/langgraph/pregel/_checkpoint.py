@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import DELTA_SENTINEL, BaseCheckpointSaver, Checkpoint
 from langgraph.checkpoint.base.id import uuid6
+from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
 from langgraph._internal._typing import MISSING
-from langgraph.channels._delta import DeltaChannel
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.delta import DeltaChannel
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
 LATEST_VERSION = 4
+
+GetNextVersion = Callable[[Any, None], Any]
 
 
 def empty_checkpoint() -> Checkpoint:
@@ -33,28 +37,65 @@ def create_checkpoint(
     *,
     id: str | None = None,
     updated_channels: set[str] | None = None,
+    get_next_version: GetNextVersion | None = None,
 ) -> Checkpoint:
-    """Create a checkpoint for the given channels."""
+    """Create a checkpoint for the given channels.
+
+    For `DeltaChannel` with `snapshot_frequency=N`, snapshot steps write a
+    `_DeltaSnapshot` blob rather than `DELTA_SENTINEL`, bounding the ancestor
+    walk to at most N steps. Snapshots are eager: even if the channel had no
+    write this step, a version bump is forced (via `get_next_version`) so the
+    blob is stored by `put()`. Without `get_next_version` (e.g. static
+    contexts), snapshot steps gracefully fall back to sentinel.
+    """
     ts = datetime.now(timezone.utc).isoformat()
     if channels is None:
         values = checkpoint["channel_values"]
+        channel_versions = checkpoint["channel_versions"]
     else:
         values = {}
+        channel_versions = dict(checkpoint["channel_versions"])
         for k in channels:
-            if k not in checkpoint["channel_versions"]:
+            if k not in channel_versions:
                 continue
-            v = channels[k].checkpoint()
-            if v is not MISSING:
-                values[k] = v
+            ch = channels[k]
+            if (
+                isinstance(ch, DeltaChannel)
+                and ch.is_snapshot_step(step)
+                and ch.is_available()
+            ):
+                # Eager snapshot: bump version if not already written this step
+                # so put() includes this channel in new_versions and stores blob.
+                if get_next_version is not None and (
+                    updated_channels is None or k not in updated_channels
+                ):
+                    channel_versions[k] = get_next_version(channel_versions[k], None)
+                values[k] = _DeltaSnapshot(ch.get())
+            else:
+                v = ch.checkpoint()
+                if v is not MISSING:
+                    values[k] = v
     return Checkpoint(
         v=LATEST_VERSION,
         ts=ts,
         id=id or str(uuid6(clock_seq=step)),
         channel_values=values,
-        channel_versions=checkpoint["channel_versions"],
+        channel_versions=channel_versions,
         versions_seen=checkpoint["versions_seen"],
         updated_channels=None if updated_channels is None else sorted(updated_channels),
     )
+
+
+def _needs_replay(spec: BaseChannel, stored: object) -> bool:
+    """True if `spec` is a `DeltaChannel` and the stored blob is a sentinel,
+    requiring an ancestor walk to reconstruct.
+
+    `_DeltaSnapshot` blobs and plain values (migration) resolve directly via
+    `from_checkpoint` — only `DELTA_SENTINEL` / `MISSING` trigger replay.
+    """
+    if not isinstance(spec, DeltaChannel):
+        return False
+    return stored is MISSING or stored is DELTA_SENTINEL
 
 
 def channels_from_checkpoint(
@@ -67,14 +108,10 @@ def channels_from_checkpoint(
     """Hydrate channels from a checkpoint.
 
     For most channels, `spec.from_checkpoint(checkpoint["channel_values"][k])`
-    is sufficient — the stored value IS the reconstructed state.
-
-    `DeltaChannel` is the exception: its stored value is a sentinel; the
-    full state is spread across `checkpoint_writes` along the ancestor
-    chain. When `saver` and `config` are provided, this function fetches
-    that history via `saver._get_channel_writes_history` and folds it
-    through the channel's reducer. Without them (static contexts — graph
-    drawing, unit tests), delta channels fall back to empty.
+    is sufficient. `DeltaChannel` is the exception: sentinel blobs require an
+    ancestor walk via `saver._get_channel_writes_history`. The walk terminates
+    at the nearest `_DeltaSnapshot` blob (step-based) or a pre-migration plain
+    value, so read depth is bounded by `snapshot_frequency`.
     """
     channel_specs: dict[str, BaseChannel] = {}
     managed_specs: dict[str, ManagedValueSpec] = {}
@@ -88,22 +125,12 @@ def channels_from_checkpoint(
     for k, spec in channel_specs.items():
         ch: BaseChannel
         stored = checkpoint["channel_values"].get(k, MISSING)
-        if (
-            isinstance(spec, DeltaChannel)
-            and saver is not None
-            and config is not None
-            and (stored is MISSING or stored is DELTA_SENTINEL)
-        ):
-            # Target's own blob is empty/sentinel — walk ancestors for
-            # seed + writes. Skipping this when `stored` is a real value
-            # preserves state written via `update_state` or sitting at the
-            # tip of a pre-migration thread: the saver's ancestor walk
-            # intentionally excludes the target's own blob, so without
-            # this short-circuit we'd lose it.
+        if _needs_replay(spec, stored) and saver is not None and config is not None:
+            assert isinstance(spec, DeltaChannel)
             history = saver._get_channel_writes_history(config, k)
-            delta_ch = spec.from_checkpoint(history.seed)
-            delta_ch.replay_writes(history.writes)
-            ch = delta_ch
+            replay_ch = spec.from_checkpoint(history.seed)
+            replay_ch.replay_writes(history.writes)
+            ch = replay_ch
         else:
             ch = spec.from_checkpoint(stored)
         channels[k] = ch
@@ -130,16 +157,12 @@ async def achannels_from_checkpoint(
     for k, spec in channel_specs.items():
         ch: BaseChannel
         stored = checkpoint["channel_values"].get(k, MISSING)
-        if (
-            isinstance(spec, DeltaChannel)
-            and saver is not None
-            and config is not None
-            and (stored is MISSING or stored is DELTA_SENTINEL)
-        ):
+        if _needs_replay(spec, stored) and saver is not None and config is not None:
+            assert isinstance(spec, DeltaChannel)
             history = await saver._aget_channel_writes_history(config, k)
-            delta_ch = spec.from_checkpoint(history.seed)
-            delta_ch.replay_writes(history.writes)
-            ch = delta_ch
+            replay_ch = spec.from_checkpoint(history.seed)
+            replay_ch.replay_writes(history.writes)
+            ch = replay_ch
         else:
             ch = spec.from_checkpoint(stored)
         channels[k] = ch

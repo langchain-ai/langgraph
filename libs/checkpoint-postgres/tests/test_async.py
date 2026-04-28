@@ -377,13 +377,13 @@ async def test_get_checkpoint_no_channel_values(
 async def test_delta_channel_chain_reconstruction(saver_name: str) -> None:
     """AsyncPostgresSaver reconstructs DeltaChannel chain via point-lookup traversal."""
     pytest.importorskip(
-        "langgraph.channels._delta", reason="langgraph core not installed"
+        "langgraph.channels.delta", reason="langgraph core not installed"
     )
 
     from typing import Annotated
 
     from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.channels._delta import DeltaChannel
+    from langgraph.channels.delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
     from typing_extensions import TypedDict
