@@ -71,8 +71,10 @@ class _IdleTimedAttemptScope:
     child task scheduling, and any LangChain callback event emitted under the
     node's run as observable progress. `runtime.heartbeat()` exposes a manual
     progress signal for work that doesn't otherwise emit any of these.
-    `close()` and guarded callbacks are serialized so cancelled background
-    tasks cannot emit writes or stream events past the idle_timeout boundary.
+    Guarded writes are serialized with `close()` so cancelled background tasks
+    cannot persist writes past the idle_timeout boundary. Stream/custom output is
+    best-effort: it is dropped after close is observed, but callbacks run outside
+    the lock because they may contain arbitrary user/runtime code.
     """
 
     __slots__ = (
@@ -162,9 +164,10 @@ class _IdleTimedAttemptScope:
     def _guard_stream(self, stream: StreamProtocol) -> StreamProtocol:
         def guarded_stream(chunk: tuple[tuple[str, ...], str, Any]) -> None:
             with self._lock:
-                if self._active:
-                    self._last_progress = time.monotonic()
-                    stream(chunk)
+                if not self._active:
+                    return
+                self._last_progress = time.monotonic()
+            stream(chunk)
 
         return StreamProtocol(guarded_stream, stream.modes)
 
@@ -183,9 +186,10 @@ class _IdleTimedAttemptScope:
     ) -> Callable[[Any], None]:
         def guarded_stream_writer(chunk: Any) -> None:
             with self._lock:
-                if self._active:
-                    self._last_progress = time.monotonic()
-                    stream_writer(chunk)
+                if not self._active:
+                    return
+                self._last_progress = time.monotonic()
+            stream_writer(chunk)
 
         return guarded_stream_writer
 

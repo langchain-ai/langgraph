@@ -679,6 +679,26 @@ def test_idle_timeout_guard_call_does_not_hold_scope_lock():
     assert scope._guard_call(call)() == "ok"
 
 
+def test_idle_timeout_guard_stream_does_not_hold_scope_lock():
+    scope = _IdleTimedAttemptScope()
+
+    def stream(chunk):
+        assert not scope._lock.locked()
+        assert chunk == ((), "custom", "ok")
+
+    scope._guard_stream(StreamProtocol(stream, {"custom"}))(((), "custom", "ok"))
+
+
+def test_idle_timeout_guard_stream_writer_does_not_hold_scope_lock():
+    scope = _IdleTimedAttemptScope()
+
+    def stream_writer(chunk):
+        assert not scope._lock.locked()
+        assert chunk == "ok"
+
+    scope._guard_stream_writer(stream_writer)("ok")
+
+
 @pytest.mark.anyio
 async def test_arun_with_retry_timeout_ok_when_fast():
     class FastProc:
