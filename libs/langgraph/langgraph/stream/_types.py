@@ -45,8 +45,7 @@ class StreamTransformer(ABC):
     """Extension point for custom stream projections.
 
     Transformers observe protocol events flowing through the StreamMux and
-    build typed derived projections (EventLogs, StreamChannels, promises,
-    etc.).
+    build typed derived projections (StreamChannels, promises, etc.).
 
     Set `_native = True` on a transformer to have its projection keys
     exposed as direct attributes on the run stream (in addition to
@@ -55,9 +54,9 @@ class StreamTransformer(ABC):
     Subclasses must implement `init` and override at least one of
     `process` / `aprocess`. The `finalize` / `afinalize` and `fail` /
     `afail` hooks are optional — the default implementations are no-ops.
-    EventLog and StreamChannel instances in the projection dict are
-    auto-closed / auto-failed by the mux, so most transformers don't
-    need `finalize` or `fail` at all.
+    StreamChannel instances in the projection dict are auto-closed /
+    auto-failed by the mux, so most transformers don't need `finalize`
+    or `fail` at all.
 
     Transformers that need async work pick the async lane by:
 
@@ -170,15 +169,16 @@ class StreamTransformer(ABC):
     def finalize(self) -> None:
         """Called when the run ends normally (sync lane).
 
-        Override to close EventLogs, resolve promises, or perform other
-        teardown. StreamChannel instances are auto-closed by the mux.
+        Override to close StreamChannels, resolve promises, or perform
+        other teardown. StreamChannel instances in the projection dict
+        are auto-closed by the mux.
         """
 
     async def afinalize(self) -> None:
         """Called when the run ends normally (async lane).
 
         By the time this runs, the mux has already awaited every task
-        started via `schedule()`, so EventLogs can be closed here
+        started via `schedule()`, so StreamChannels can be closed here
         without a last-task-wins race.
 
         The default delegates to `finalize`.
@@ -188,8 +188,9 @@ class StreamTransformer(ABC):
     def fail(self, err: BaseException) -> None:
         """Called when the run ends with an error (sync lane).
 
-        Override to fail EventLogs, reject promises, or perform other
-        teardown. StreamChannel instances are auto-failed by the mux.
+        Override to fail StreamChannels, reject promises, or perform
+        other teardown. StreamChannel instances in the projection dict
+        are auto-failed by the mux.
 
         Args:
             err: The exception that ended the run.

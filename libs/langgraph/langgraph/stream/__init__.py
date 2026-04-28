@@ -5,7 +5,6 @@ Compile a graph with `transformers=[...]` and call `graph.stream_v2()` /
 graph's raw events into ergonomic per-channel streams.
 """
 
-from langgraph.stream._event_log import EventLog
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from langgraph.stream.run_stream import (
     AsyncGraphRunStream,
@@ -32,7 +31,6 @@ __all__ = [
     "CheckpointsTransformer",
     "CustomTransformer",
     "DebugTransformer",
-    "EventLog",
     "GraphRunStream",
     "LifecyclePayload",
     "LifecycleTransformer",

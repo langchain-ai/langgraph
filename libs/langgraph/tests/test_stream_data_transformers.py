@@ -17,8 +17,8 @@ from typing_extensions import TypedDict
 
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
-from langgraph.stream._event_log import EventLog
 from langgraph.stream._mux import StreamMux
+from langgraph.stream.stream_channel import StreamChannel
 from langgraph.stream.transformers import (
     CheckpointsTransformer,
     CustomTransformer,
@@ -170,7 +170,7 @@ def test_custom_init_returns_correct_key() -> None:
     t = CustomTransformer()
     projection = t.init()
     assert "custom" in projection
-    assert isinstance(projection["custom"], EventLog)
+    assert isinstance(projection["custom"], StreamChannel)
 
 
 # ---------------------------------------------------------------------------

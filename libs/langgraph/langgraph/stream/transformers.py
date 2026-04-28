@@ -13,7 +13,6 @@ from langchain_protocol.protocol import MessagesData
 from typing_extensions import NotRequired, TypedDict
 
 from langgraph.errors import GraphInterrupt
-from langgraph.stream._event_log import EventLog
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from langgraph.stream.run_stream import AsyncSubgraphRunStream, SubgraphRunStream
 from langgraph.stream.stream_channel import StreamChannel
@@ -50,7 +49,7 @@ class ValuesTransformer(StreamTransformer):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[dict[str, Any]] = EventLog()
+        self._log: StreamChannel[dict[str, Any]] = StreamChannel()
         self._latest: dict[str, Any] | None = None
         self._interrupted = False
         self._interrupts: list[Any] = []
@@ -88,7 +87,7 @@ class CustomTransformer(StreamTransformer):
     """Capture custom events as a drainable stream of arbitrary payloads.
 
     Nodes emit custom data via `get_stream_writer()`. This transformer
-    surfaces those events on `run.custom` as an `EventLog[Any]`,
+    surfaces those events on `run.custom` as a `StreamChannel[Any]`,
     preserving payloads in arrival order.
 
     Only events at the run's own scope are captured; custom data from
@@ -103,7 +102,7 @@ class CustomTransformer(StreamTransformer):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[Any] = EventLog()
+        self._log: StreamChannel[Any] = StreamChannel()
         self._scope_list: list[str] = list(scope)
 
     def init(self) -> dict[str, Any]:
@@ -122,9 +121,9 @@ class CustomTransformer(StreamTransformer):
 class UpdatesTransformer(StreamTransformer):
     """Capture updates events as a drainable stream of node outputs.
 
-    Surfaces `stream_mode="updates"` data on `run.updates` as an
-    `EventLog[dict[str, Any]]`. Each item is a dict mapping a node (or
-    task) name to the update it returned after a step.
+    Surfaces `stream_mode="updates"` data on `run.updates` as a
+    `StreamChannel[dict[str, Any]]`. Each item is a dict mapping a node
+    (or task) name to the update it returned after a step.
 
     Only events at the run's own scope are captured; updates from deeper
     subgraphs are available on the respective subgraph handle's
@@ -138,7 +137,7 @@ class UpdatesTransformer(StreamTransformer):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[dict[str, Any]] = EventLog()
+        self._log: StreamChannel[dict[str, Any]] = StreamChannel()
         self._scope_list: list[str] = list(scope)
 
     def init(self) -> dict[str, Any]:
@@ -201,7 +200,7 @@ class MessagesTransformer(StreamTransformer):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[ChatModelStream] = EventLog()
+        self._log: StreamChannel[ChatModelStream] = StreamChannel()
         # Correlate protocol events back to a ChatModelStream by run_id
         # (attached to the event's metadata by StreamMessagesHandler).
         self._by_run: dict[str, ChatModelStream] = {}
@@ -589,7 +588,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[SubgraphRunStream | AsyncSubgraphRunStream] = EventLog()
+        self._log: StreamChannel[SubgraphRunStream | AsyncSubgraphRunStream] = (
+            StreamChannel()
+        )
         self._handles: dict[
             tuple[str, ...], SubgraphRunStream | AsyncSubgraphRunStream
         ] = {}
@@ -822,8 +823,8 @@ class CheckpointsTransformer(StreamTransformer):
     """Capture checkpoint events as a drainable stream.
 
     Surfaces `stream_mode="checkpoints"` data on `run.checkpoints` as
-    an `EventLog[dict[str, Any]]`. Each item is in the same format as
-    returned by `get_state()`.
+    a `StreamChannel[dict[str, Any]]`. Each item is in the same format
+    as returned by `get_state()`.
 
     Checkpoint events are only emitted when a checkpointer is configured
     on the graph. When no checkpointer is present, the projection exists
@@ -841,7 +842,7 @@ class CheckpointsTransformer(StreamTransformer):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[dict[str, Any]] = EventLog()
+        self._log: StreamChannel[dict[str, Any]] = StreamChannel()
         self._scope_list: list[str] = list(scope)
 
     def init(self) -> dict[str, Any]:
@@ -860,8 +861,8 @@ class CheckpointsTransformer(StreamTransformer):
 class DebugTransformer(StreamTransformer):
     """Capture debug events as a drainable stream.
 
-    Surfaces `stream_mode="debug"` data on `run.debug` as an
-    `EventLog[dict[str, Any]]`. Each item is a debug event with
+    Surfaces `stream_mode="debug"` data on `run.debug` as a
+    `StreamChannel[dict[str, Any]]`. Each item is a debug event with
     step-level detail (checkpoint snapshots, task payloads, and
     task results wrapped with step number and timestamp).
 
@@ -877,7 +878,7 @@ class DebugTransformer(StreamTransformer):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[dict[str, Any]] = EventLog()
+        self._log: StreamChannel[dict[str, Any]] = StreamChannel()
         self._scope_list: list[str] = list(scope)
 
     def init(self) -> dict[str, Any]:
@@ -896,9 +897,9 @@ class DebugTransformer(StreamTransformer):
 class TasksTransformer(StreamTransformer):
     """Capture raw task events as a drainable stream.
 
-    Surfaces `stream_mode="tasks"` data on `run.tasks` as an
-    `EventLog[dict[str, Any]]`. Each item is a task payload (start
-    or result).
+    Surfaces `stream_mode="tasks"` data on `run.tasks` as a
+    `StreamChannel[dict[str, Any]]`. Each item is a task payload
+    (start or result).
 
     `LifecycleTransformer` and `SubgraphTransformer` also consume
     `tasks` events for subgraph discovery and lifecycle tracking.
@@ -917,7 +918,7 @@ class TasksTransformer(StreamTransformer):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[dict[str, Any]] = EventLog()
+        self._log: StreamChannel[dict[str, Any]] = StreamChannel()
         self._scope_list: list[str] = list(scope)
 
     def init(self) -> dict[str, Any]:

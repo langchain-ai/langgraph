@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from langgraph.stream._event_log import EventLog
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
+from langgraph.stream.stream_channel import StreamChannel
 
 from langgraph.prebuilt._tool_call_stream import ToolCallStream
 
@@ -21,11 +21,12 @@ class ToolCallTransformer(StreamTransformer):
     Native transformer — the `tool_calls` projection is exposed as a
     direct attribute on the run stream.
 
-    `EventLog[ToolCallStream]` is used (not `StreamChannel`) because the
-    live handles are not serializable and should not be auto-forwarded
-    onto the main event log. Wire consumers subscribe to the `tools`
-    channel instead, where the raw protocol events flow through
-    untouched by this transformer (`process` returns `True`).
+    A nameless `StreamChannel[ToolCallStream]` is used (no protocol
+    auto-forwarding) because the live handles are not serializable and
+    should not be injected into the main event log. Wire consumers
+    subscribe to the `tools` channel instead, where the raw protocol
+    events flow through untouched by this transformer (`process`
+    returns `True`).
 
     Registered explicitly by users at compile time via
     `builder.compile(transformers=[ToolCallTransformer])` — not a
@@ -37,7 +38,7 @@ class ToolCallTransformer(StreamTransformer):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[ToolCallStream] = EventLog()
+        self._log: StreamChannel[ToolCallStream] = StreamChannel()
         self._active: dict[str, ToolCallStream] = {}
         self._is_async = False
         self._pump_fn: Callable[[], bool] | None = None
