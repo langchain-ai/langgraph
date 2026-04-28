@@ -27,6 +27,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
+from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -185,8 +186,31 @@ class InMemorySaver(
                     if blob_entry is not None and blob_entry[0] != "empty":
                         blob_value = self.serde.loads_typed(blob_entry)
                         if blob_value is not DELTA_SENTINEL:
-                            # Pre-delta snapshot terminator. Skip this
-                            # ancestor's writes — the blob subsumes them.
+                            if isinstance(blob_value, _DeltaSnapshot):
+                                # Step-based snapshot: the blob is state AT this
+                                # ancestor, but the ancestor's pending_writes
+                                # encode the NEXT step's transition and are NOT
+                                # subsumed by the snapshot — collect them first.
+                                step_writes = self.writes.get(
+                                    (thread_id, checkpoint_ns, cp_id), {}
+                                )
+                                for (_task_id, _idx), (
+                                    tid,
+                                    ch,
+                                    serialized,
+                                    _,
+                                ) in sorted(step_writes.items(), reverse=True):
+                                    if ch != channel:
+                                        continue
+                                    collected.append(
+                                        (tid, ch, self.serde.loads_typed(serialized))
+                                    )
+                                collected.reverse()
+                                return _ChannelWritesHistory(
+                                    seed=blob_value, writes=collected
+                                )
+                            # Pre-delta blob: state AT this ancestor already
+                            # subsumes its pending_writes — skip them.
                             collected.reverse()
                             return _ChannelWritesHistory(
                                 seed=blob_value, writes=collected

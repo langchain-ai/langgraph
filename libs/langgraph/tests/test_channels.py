@@ -275,6 +275,124 @@ def test_delta_channel_checkpoint_returns_sentinel() -> None:
     assert ch.checkpoint() is DELTA_SENTINEL
 
 
+def test_delta_channel_snapshot_step_based() -> None:
+    """Snapshots fire on every Nth step regardless of whether the channel was written.
+
+    With snapshot_frequency=N, every Nth pregel step produces a _DeltaSnapshot
+    blob — even if the channel had no write that step (eager snapshot). This
+    bounds the ancestor walk to at most N steps on any read.
+    """
+    from typing import Annotated
+
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.serde.types import _DeltaSnapshot
+    from typing_extensions import TypedDict
+
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
+
+    # snapshot_frequency=5: snapshot every 5 pregel steps
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(add_messages, snapshot_frequency=5)]
+        other: str
+
+    def node_a(state: State) -> dict:
+        # writes to messages
+        i = len(state["messages"]) // 2
+        return {"messages": [AIMessage(content=f"a{i}", id=f"a{i}")]}
+
+    def node_b(state: State) -> dict:
+        # writes ONLY to other, not messages — snapshot must still fire at step N
+        return {"other": "y"}
+
+    g = StateGraph(State)
+    g.add_node("a", node_a)
+    g.add_node("b", node_b)
+    g.add_edge(START, "a")
+    g.add_edge("a", "b")
+    saver = InMemorySaver()
+    graph = g.compile(checkpointer=saver)
+
+    config = {"configurable": {"thread_id": "t1"}}
+    for i in range(6):
+        graph.invoke(
+            {"messages": [HumanMessage(content=f"h{i}", id=f"h{i}")], "other": ""},
+            config,
+        )
+
+    # Confirm at least one snapshot blob exists for messages
+    msg_blob_values = [
+        saver.serde.loads_typed((type_tag, blob))
+        for k, (type_tag, blob) in saver.blobs.items()
+        if k[2] == "messages" and type_tag == "msgpack" and blob
+    ]
+    snapshots = [v for v in msg_blob_values if isinstance(v, _DeltaSnapshot)]
+    assert snapshots, "expected at least one _DeltaSnapshot blob for messages"
+
+    # Final state must be correct regardless of snapshot cadence
+    state = graph.get_state(config)
+    assert len(state.values["messages"]) == 12  # 6 human + 6 AI
+
+
+def test_delta_channel_snapshot_fires_even_when_not_written() -> None:
+    """Eager snapshot: _DeltaSnapshot stored at snapshot step even when the
+    channel had no write that step (node_b doesn't touch messages).
+    """
+    from typing import Annotated
+
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.serde.types import _DeltaSnapshot
+    from typing_extensions import TypedDict
+
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(add_messages, snapshot_frequency=3)]
+        tick: int
+
+    def writer(state: State) -> dict:
+        i = len(state["messages"]) // 2
+        return {"messages": [AIMessage(content=f"a{i}", id=f"a{i}")]}
+
+    def ticker(state: State) -> dict:
+        # never writes messages
+        return {"tick": state["tick"] + 1}
+
+    g = StateGraph(State)
+    g.add_node("writer", writer)
+    g.add_node("ticker", ticker)
+    g.add_edge(START, "writer")
+    g.add_edge("writer", "ticker")
+    saver = InMemorySaver()
+    graph = g.compile(checkpointer=saver)
+
+    config = {"configurable": {"thread_id": "t1"}}
+    for i in range(5):
+        graph.invoke(
+            {"messages": [HumanMessage(content=f"h{i}", id=f"h{i}")], "tick": 0},
+            config,
+        )
+
+    # Count distinct message channel blob versions
+    msg_blobs = {
+        k: saver.serde.loads_typed((t, b))
+        for k, (t, b) in saver.blobs.items()
+        if k[2] == "messages" and t == "msgpack" and b
+    }
+    snapshots = {k: v for k, v in msg_blobs.items() if isinstance(v, _DeltaSnapshot)}
+    # There must be snapshots (ticker steps are snapshot steps too)
+    assert snapshots, (
+        "eager snapshots must fire even on steps where messages wasn't written"
+    )
+
+    # All get_state calls must return the correct accumulated value
+    state = graph.get_state(config)
+    assert len(state.values["messages"]) == 10  # 5 human + 5 AI
+
+
 def test_delta_channel_inmemory_saver_assembles_writes() -> None:
     """InMemorySaver assembles writes from checkpoint_writes inside get_tuple."""
     from typing import Annotated

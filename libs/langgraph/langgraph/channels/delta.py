@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import copy as _copy
-import math
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
 from langgraph.checkpoint.base import DELTA_SENTINEL, PendingWrite
+from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import Self
 
 from langgraph._internal._constants import OVERWRITE
@@ -40,38 +40,34 @@ def _get_overwrite(value: Any) -> tuple[bool, Any]:
 class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     """Fold-reducer channel with configurable snapshot cadence.
 
-    `snapshot_frequency=math.inf` (default): pure delta mode — stores only
-    `DELTA_SENTINEL` in checkpoint blobs; reads replay all ancestor writes
-    through `operator`. O(N) storage, O(N) read replay depth.
+    `snapshot_frequency=None` (default): pure delta — stores only
+    `DELTA_SENTINEL` in checkpoint blobs; reads replay all ancestor writes.
 
-    `snapshot_frequency=N` (integer > 1): writes a full snapshot blob every
-    N steps; on non-snapshot steps stores `DELTA_SENTINEL`. Reads walk at
-    most N ancestors before finding the snapshot, bounding replay depth to N.
-    Storage is O(N²/N) = O(N·avg_msg_size) — still linear per step,
-    but snapshots grow with accumulated messages so total is O(N²/N).
+    `snapshot_frequency=N`: pregel's `create_checkpoint` writes a full
+    `_DeltaSnapshot` blob every N steps (eagerly, even if the channel had
+    no write that step). Reads walk at most N ancestor checkpoints before
+    hitting the snapshot, bounding replay depth to N regardless of thread
+    length.
 
     Parameters:
-        operator: Binary reducer `(Value, Value) -> Value` applied pairwise.
-            Must be associative when `snapshot_frequency > 1` since replayed
-            writes fold through the same operator as live writes.
-        snapshot_frequency: Every Nth step writes a full snapshot blob.
-            Default `math.inf` (pure delta, never snapshot).
+        operator: Binary reducer `(Value, Value) -> Value`.
+        snapshot_frequency: Every Nth pregel step writes a snapshot blob.
+            `None` (default) = pure delta, never snapshot.
     """
 
-    __slots__ = ("value", "operator", "snapshot_frequency", "_write_count")
+    __slots__ = ("value", "operator", "snapshot_frequency")
     value: Value | Any
 
     def __init__(
         self,
         operator: Callable[[Any, Any], Any],
         *,
-        snapshot_frequency: int | float = math.inf,
+        snapshot_frequency: int | None = None,
     ) -> None:
         super().__init__(list)
         self.operator = operator
         self.snapshot_frequency = snapshot_frequency
         self.value: Any = []
-        self._write_count: int = 0
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, DeltaChannel):
@@ -93,19 +89,23 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     def UpdateType(self) -> Any:
         return self.typ
 
+    def is_snapshot_step(self, step: int) -> bool:
+        """True if pregel should write a snapshot blob at this step."""
+        return (
+            self.snapshot_frequency is not None and step % self.snapshot_frequency == 0
+        )
+
     def _clone_empty(self) -> Self:
         new = self.__class__.__new__(self.__class__)
         new.typ = self.typ
         new.key = self.key
         new.operator = self.operator
         new.snapshot_frequency = self.snapshot_frequency
-        new._write_count = 0
         new.value = MISSING
         return new
 
     def copy(self) -> Self:
         new = self._clone_empty()
-        new._write_count = self._write_count
         new.value = self.value if self.value is MISSING else _copy.copy(self.value)
         return new
 
@@ -123,36 +123,24 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     def from_checkpoint(self, checkpoint: Any) -> Self:
         """Initialize from a stored blob or sentinel.
 
-        Blob formats:
-          * `DELTA_SENTINEL` / `MISSING`: start empty; caller will replay writes.
-          * `{"__delta_v__": value, "__delta_wc__": n}`: snapshot blob — restore
-            value and write count so future writes trigger the next snapshot at
-            the right cadence.
-          * plain value (migration from old DeltaChannel blobs): restore value,
-            reset write count to 0.
+        Blob types (dispatched via serde ext code, not dict key inspection):
+          * `DELTA_SENTINEL` / `MISSING`: start empty; caller replays writes.
+          * `_DeltaSnapshot(value)`: restore value directly from snapshot.
+          * plain value (migration from old BinOp blobs): use directly.
         """
         new = self._clone_empty()
         if checkpoint is MISSING or checkpoint is DELTA_SENTINEL:
-            new.value = _empty(self.typ)
-            new._write_count = 0
-        elif isinstance(checkpoint, dict) and "__delta_v__" in checkpoint:
-            new.value = checkpoint["__delta_v__"]
-            new._write_count = checkpoint["__delta_wc__"]
+            new.value = _empty(new.typ)
+        elif isinstance(checkpoint, _DeltaSnapshot):
+            new.value = checkpoint.value
         else:
             new.value = checkpoint
-            new._write_count = 0
         return new
 
     def replay_writes(self, writes: Sequence[PendingWrite]) -> None:
-        """Fold ancestor writes oldest→newest into current value.
-
-        Also increments `_write_count` per replayed write so the snapshot
-        cadence stays correct across invocations. The count resumes from
-        wherever the seed's `__delta_wc__` left off (set by `from_checkpoint`).
-        """
+        """Fold ancestor writes oldest→newest into current value."""
         for _, _, value in writes:
             self.value = self._apply_write(self.value, value)
-            self._write_count += 1
 
     def update(self, values: Sequence[Any]) -> bool:
         if not values:
@@ -171,7 +159,6 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
             elif seen_overwrite:
                 continue
             self.value = self._apply_write(self.value, value)
-        self._write_count += 1
         return True
 
     def get(self) -> Any:
@@ -183,19 +170,12 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         return self.value is not MISSING
 
     def checkpoint(self) -> Any:
-        """Return stored representation.
+        """Return stored representation: always `DELTA_SENTINEL`.
 
-        Pure delta mode (`snapshot_frequency=math.inf`) always returns
-        `DELTA_SENTINEL`. For finite `snapshot_frequency`, returns a snapshot
-        blob `{"__delta_v__": value, "__delta_wc__": n}` every
-        `snapshot_frequency` writes, with the current write count embedded so
-        `from_checkpoint` can restore the counter and maintain correct cadence
-        across invocations. All other writes return `DELTA_SENTINEL`.
+        Snapshot decisions are made by `create_checkpoint` in pregel (which
+        has the step number) via `is_snapshot_step`. `checkpoint()` is only
+        called for non-snapshot steps or when no checkpointer is available.
         """
         if self.value is MISSING:
             return MISSING
-        if self.snapshot_frequency == math.inf:
-            return DELTA_SENTINEL
-        if self._write_count > 0 and self._write_count % self.snapshot_frequency == 0:
-            return {"__delta_v__": self.value, "__delta_wc__": self._write_count}
         return DELTA_SENTINEL
