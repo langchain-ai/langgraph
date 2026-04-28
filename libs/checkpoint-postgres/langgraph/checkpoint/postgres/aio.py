@@ -26,9 +26,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import (
-    SELECT_DELTA_BLOBS_SQL,
-    SELECT_DELTA_PARENTS_SQL,
-    SELECT_DELTA_WRITES_SQL,
+    SELECT_DELTA_COMBINED_SQL,
     BasePostgresSaver,
 )
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
@@ -403,8 +401,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
     ) -> _ChannelWritesHistory:
         """Fast-path override of `BaseCheckpointSaver._aget_channel_writes_history`.
 
-        Three indexed roundtrips (`checkpoints`, `checkpoint_writes`,
-        `checkpoint_blobs`); rows assembled by the shared pure helper on
+        One combined UNION ALL query (`SELECT_DELTA_COMBINED_SQL`) fetches rows
+        from `checkpoints`, `checkpoint_writes`, and `checkpoint_blobs` in a
+        single roundtrip; rows assembled by the shared pure helper on
         `BasePostgresSaver`. Rationale + benchmark in
         `notes/delta_channel_query_bench.md`.
         """
@@ -418,23 +417,24 @@ class AsyncPostgresSaver(BasePostgresSaver):
             checkpoint_id = target.config["configurable"]["checkpoint_id"]
         async with self._cursor() as cur:
             await cur.execute(
-                SELECT_DELTA_PARENTS_SQL, (channel, thread_id, checkpoint_ns)
+                SELECT_DELTA_COMBINED_SQL,
+                (
+                    channel,
+                    thread_id,
+                    checkpoint_ns,
+                    thread_id,
+                    checkpoint_ns,
+                    channel,
+                    thread_id,
+                    checkpoint_ns,
+                    channel,
+                ),
             )
-            parents_rows = await cur.fetchall()
-            await cur.execute(
-                SELECT_DELTA_WRITES_SQL, (thread_id, checkpoint_ns, channel)
-            )
-            writes_rows = await cur.fetchall()
-            await cur.execute(
-                SELECT_DELTA_BLOBS_SQL, (thread_id, checkpoint_ns, channel)
-            )
-            blobs_rows = await cur.fetchall()
+            rows = await cur.fetchall()
         return self._build_delta_channel_writes_history(
             channel=channel,
             target_id=checkpoint_id,
-            parents_rows=parents_rows,
-            writes_rows=writes_rows,
-            blobs_rows=blobs_rows,
+            rows=rows,
         )
 
     async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
