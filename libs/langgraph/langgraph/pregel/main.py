@@ -153,6 +153,15 @@ from langgraph.runtime import (
     Runtime,
     ServerInfo,
 )
+from langgraph.stream._mux import StreamMux
+from langgraph.stream._types import StreamTransformer
+from langgraph.stream.run_stream import AsyncGraphRunStream, GraphRunStream
+from langgraph.stream.transformers import (
+    LifecycleTransformer,
+    MessagesTransformer,
+    SubgraphTransformer,
+    ValuesTransformer,
+)
 from langgraph.types import (
     All,
     CachePolicy,
@@ -362,6 +371,39 @@ def _collect_stream_modes(mux: Any) -> list[StreamMode]:
             )
         )
     return list(modes)
+
+
+def _normalize_stream_transformer_factories(
+    specs: Sequence[Callable[[tuple[str, ...]], Any]] | None,
+) -> list[Callable[[tuple[str, ...]], Any]]:
+    """Normalize stream transformer specs to scoped factories.
+
+    A stream transformer spec is a callable that accepts
+    `scope: tuple[str, ...]` and returns a fresh `StreamTransformer`.
+    Transformer classes work when their constructor follows the same
+    shape. Pre-built instances are rejected because they cannot be
+    cloned into subgraph scopes.
+    """
+    factories: list[Callable[[tuple[str, ...]], Any]] = []
+    for spec in specs or ():
+        if isinstance(spec, StreamTransformer):
+            raise TypeError(
+                "stream_v2 transformers must be scope-aware callables, "
+                f"got pre-built instance {type(spec).__name__}. Pass the "
+                "transformer class or a factory like "
+                "`lambda scope: MyTransformer(scope, ...)`."
+            )
+        if not callable(spec):
+            raise TypeError(
+                "stream_v2 transformers must be scope-aware callables, "
+                f"got {type(spec).__name__}."
+            )
+
+        def factory(scope: tuple[str, ...], _spec: Callable[..., Any] = spec) -> Any:
+            return _spec(scope)
+
+        factories.append(factory)
+    return factories
 
 
 class Pregel(
@@ -695,7 +737,7 @@ class Pregel(
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         name: str = "LangGraph",
-        stream_transformers: Sequence[Callable[[], Any]] | None = None,
+        stream_transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         if (
@@ -742,7 +784,7 @@ class Pregel(
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.name = name
-        self._stream_transformers: tuple[Callable[[], Any], ...] = tuple(
+        self.stream_transformers: tuple[Callable[[tuple[str, ...]], Any], ...] = tuple(
             stream_transformers or ()
         )
         self._serde_allowlist: set[tuple[str, ...]] | None = None
@@ -3348,7 +3390,7 @@ class Pregel(
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        transformers: Sequence[Any] | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> Any:
         """Start a sync v2 streaming run driven by transformer projections.
 
@@ -3377,32 +3419,32 @@ class Pregel(
             config: Optional runnable config forwarded to the graph.
             interrupt_before: Nodes to interrupt before, if any.
             interrupt_after: Nodes to interrupt after, if any.
-            transformers: Extra transformer instances appended after
-                compile-time `stream_transformers`.
+            transformers: Extra transformer classes or configured factories
+                appended after compile-time `stream_transformers`. Factories
+                are called as `factory(scope)` so they can propagate to
+                subgraph scopes.
 
         Returns:
             A `GraphRunStream` the caller iterates to drive the run.
         """
-        from langgraph.stream._mux import StreamMux
-        from langgraph.stream.run_stream import GraphRunStream
-        from langgraph.stream.transformers import (
-            MessagesTransformer,
-            ValuesTransformer,
-        )
-
         parent_ns = _resolve_parent_ns(self.config, config)
-        values_t = ValuesTransformer(parent_ns=parent_ns)
-        compiled_instances = [f() for f in self._stream_transformers]
-        extra = [t() if isinstance(t, type) else t for t in (transformers or ())]
+        compiled_factories = _normalize_stream_transformer_factories(
+            self.stream_transformers
+        )
+        extra_factories = _normalize_stream_transformer_factories(transformers)
         mux = StreamMux(
-            [
-                values_t,
-                MessagesTransformer(parent_ns=parent_ns),
-                *compiled_instances,
-                *extra,
+            factories=[
+                ValuesTransformer,
+                MessagesTransformer,
+                LifecycleTransformer,
+                SubgraphTransformer,
+                *compiled_factories,
+                *extra_factories,
             ],
+            scope=parent_ns,
             is_async=False,
         )
+        values_t = cast(ValuesTransformer, mux.transformer_by_key("values"))
         graph_iter = iter(
             self.stream(
                 input,
@@ -3423,7 +3465,7 @@ class Pregel(
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        transformers: Sequence[Any] | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> Any:
         """Async counterpart to `stream_v2`.
 
@@ -3447,29 +3489,29 @@ class Pregel(
             config: Optional runnable config forwarded to the graph.
             interrupt_before: Nodes to interrupt before, if any.
             interrupt_after: Nodes to interrupt after, if any.
-            transformers: Extra transformer instances appended after
-                compile-time `stream_transformers`.
+            transformers: Extra transformer classes or configured factories
+                appended after compile-time `stream_transformers`. Factories
+                are called as `factory(scope)` so they can propagate to
+                subgraph scopes.
         """
-        from langgraph.stream._mux import StreamMux
-        from langgraph.stream.run_stream import AsyncGraphRunStream
-        from langgraph.stream.transformers import (
-            MessagesTransformer,
-            ValuesTransformer,
-        )
-
         parent_ns = _resolve_parent_ns(self.config, config)
-        values_t = ValuesTransformer(parent_ns=parent_ns)
-        compiled_instances = [f() for f in self._stream_transformers]
-        extra = [t() if isinstance(t, type) else t for t in (transformers or ())]
+        compiled_factories = _normalize_stream_transformer_factories(
+            self.stream_transformers
+        )
+        extra_factories = _normalize_stream_transformer_factories(transformers)
         mux = StreamMux(
-            [
-                values_t,
-                MessagesTransformer(parent_ns=parent_ns),
-                *compiled_instances,
-                *extra,
+            factories=[
+                ValuesTransformer,
+                MessagesTransformer,
+                LifecycleTransformer,
+                SubgraphTransformer,
+                *compiled_factories,
+                *extra_factories,
             ],
+            scope=parent_ns,
             is_async=True,
         )
+        values_t = cast(ValuesTransformer, mux.transformer_by_key("values"))
         graph_aiter = self.astream(
             input,
             patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
