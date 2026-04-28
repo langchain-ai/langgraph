@@ -28,20 +28,19 @@ _logger = logging.getLogger(__name__)
 class ValuesTransformer(StreamTransformer):
     """Capture values events as a drainable stream of state snapshots.
 
-    Keeps `_latest` / `_interrupted` / `_interrupts` as scalar state
-    regardless of whether the log has a subscriber — so `run.output()`
-    and `run.interrupted` work without forcing the caller to iterate
-    `run.values`. Log pushes are silent no-ops when unsubscribed.
+    Provides the ``run.values`` projection. ``run.output``,
+    ``run.interrupted`` and ``run.interrupts`` are tracked directly
+    by the run stream and do not depend on this transformer.
 
     Native transformer — projection keys are exposed as direct
-    attributes on the run stream (e.g. `run.values`).
+    attributes on the run stream (e.g. ``run.values``).
 
     Only values events at the run's own level are captured; snapshots
     from deeper subgraphs are left in the main event log but excluded
-    from the projection. "Own level" is defined by `scope`, which
-    `stream_v2` / `astream_v2` populate from the caller's checkpoint
-    namespace so that a nested `stream_v2` call still sees its own
-    root snapshots.
+    from the projection. "Own level" is defined by ``scope``, which
+    ``stream_v2`` / ``astream_v2`` populate from the caller's
+    checkpoint namespace so that a nested ``stream_v2`` call still
+    sees its own root snapshots.
     """
 
     _native = True
@@ -636,6 +635,8 @@ class SubgraphTransformer(_TasksLifecycleBase):
         return handle
 
     def process(self, event: ProtocolEvent) -> bool:
+        # Run tasks bookkeeping first so a `started` handle exists
+        # by the time we forward the event to the child mini-mux.
         keep = super().process(event)
         handle = self._handle_for_event(event)
         if handle is not None:
@@ -644,6 +645,8 @@ class SubgraphTransformer(_TasksLifecycleBase):
         return keep
 
     async def aprocess(self, event: ProtocolEvent) -> bool:
+        # Async counterpart: repeats the tasks bookkeeping here so
+        # child mini-muxes receive events through their async lane.
         if event["method"] == "tasks":
             ns = tuple(event["params"]["namespace"])
             data = event["params"]["data"]

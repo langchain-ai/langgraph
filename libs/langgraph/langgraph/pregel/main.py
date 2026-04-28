@@ -3403,6 +3403,17 @@ class Pregel(
         ``run.output``, ``run.interrupted`` and ``run.interrupts`` work
         regardless of which transformers are registered.
 
+        Note:
+            Nesting v1 ``stream(stream_mode="messages")`` inside a node
+            of a ``stream_v2`` run is not fully supported. The outer v2
+            messages handler reroutes ``BaseChatModel.invoke`` through
+            the v2 event protocol, so the inner v1 handler does not see
+            ``on_llm_new_token`` chunks. The inner stream still yields a
+            finalized message via ``on_llm_end``. Use ``stream_v2`` for
+            the inner graph as well, or call
+            ``chat_model.stream(...)`` explicitly, to get token-level
+            streaming.
+
         Args:
             input: Graph input.
             config: Optional runnable config forwarded to the graph.
