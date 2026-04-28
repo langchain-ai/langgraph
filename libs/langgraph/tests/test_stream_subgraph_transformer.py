@@ -306,88 +306,57 @@ def test_tasks_events_suppressed_from_main_log() -> None:
     assert "tasks" not in methods
 
 
-class _ChildMethodMutator(StreamTransformer):
-    """Mutates child-scope events to verify forwarding isolation."""
+class _ChildEventObserver(StreamTransformer):
+    """Records child-scope event identity without mutating it."""
+
+    records: list[tuple[tuple[str, ...], int, int, bool]] = []
 
     def init(self) -> dict[str, Any]:
         return {}
 
     def process(self, event: ProtocolEvent) -> bool:
         if self.scope and event["method"] == "values":
-            event["method"] = "mutated-values"
+            self.records.append(
+                (
+                    self.scope,
+                    id(event),
+                    id(event["params"]["data"]),
+                    "seq" in event,
+                )
+            )
         return True
 
 
-def test_child_mutation_does_not_leak_into_root_event_log() -> None:
+def test_child_forwarding_reuses_event_without_assigning_seq() -> None:
+    _ChildEventObserver.records = []
     mux = StreamMux(
         factories=[
             ValuesTransformer,
             MessagesTransformer,
             LifecycleTransformer,
             SubgraphTransformer,
-            _ChildMethodMutator,
+            _ChildEventObserver,
         ],
         is_async=False,
     )
     _arm(mux)
     mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
-    mux.push(
-        {
-            "type": "event",
-            "method": "values",
-            "params": {
-                "namespace": ["agent:abc"],
-                "timestamp": TS,
-                "data": {"x": 1},
-            },
-        }
-    )
+    data = {"x": 1}
+    event: ProtocolEvent = {
+        "type": "event",
+        "method": "values",
+        "params": {
+            "namespace": ["agent:abc"],
+            "timestamp": TS,
+            "data": data,
+        },
+    }
+    mux.push(event)
 
-    methods = [evt["method"] for evt in mux._events._items]
-    assert methods == ["lifecycle", "values"]
-
-
-class _ChildNestedPayloadMutator(StreamTransformer):
-    """Mutates nested child event payload to verify forwarding isolation."""
-
-    def init(self) -> dict[str, Any]:
-        return {}
-
-    def process(self, event: ProtocolEvent) -> bool:
-        if self.scope and event["method"] == "values":
-            event["params"]["namespace"].append("mutated")
-            event["params"]["data"]["x"] = 999
-        return True
-
-
-def test_child_nested_mutation_does_not_leak_into_root_event_log() -> None:
-    mux = StreamMux(
-        factories=[
-            ValuesTransformer,
-            MessagesTransformer,
-            LifecycleTransformer,
-            SubgraphTransformer,
-            _ChildNestedPayloadMutator,
-        ],
-        is_async=False,
-    )
-    _arm(mux)
-    mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
-    mux.push(
-        {
-            "type": "event",
-            "method": "values",
-            "params": {
-                "namespace": ["agent:abc"],
-                "timestamp": TS,
-                "data": {"x": 1},
-            },
-        }
-    )
-
+    assert _ChildEventObserver.records == [(("agent:abc",), id(event), id(data), False)]
     [root_event] = [evt for evt in mux._events._items if evt["method"] == "values"]
-    assert root_event["params"]["namespace"] == ["agent:abc"]
-    assert root_event["params"]["data"] == {"x": 1}
+    assert root_event is event
+    assert "seq" in root_event
 
 
 class _AsyncProbeTransformer(StreamTransformer):

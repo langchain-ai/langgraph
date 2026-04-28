@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from langchain_core.language_models._compat_bridge import message_to_events
@@ -644,7 +643,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
 
         Events at a child's exact level (length `depth + 1`) and below
         (length `> depth + 1`) are routed into the child whose path
-        matches the event's first `depth + 1` segments.
+        matches the event's first `depth + 1` segments. The same event
+        object is forwarded; child muxes do not assign `seq`, so this
+        does not mutate the shared envelope.
         """
         ns = tuple(event["params"]["namespace"])
         depth = len(self.scope)
@@ -654,19 +655,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         handle = self._handles.get(candidate_path)
         if handle is None or handle._mux is None or handle._mux._events._closed:
             return
-        child_event: ProtocolEvent = {
-            **event,
-            "params": {
-                **event["params"],
-                "namespace": list(event["params"]["namespace"]),
-                "data": deepcopy(event["params"]["data"]),
-            },
-        }
-        if "interrupts" in event["params"]:
-            child_event["params"]["interrupts"] = deepcopy(
-                event["params"]["interrupts"]
-            )
-        handle._mux.push(child_event)
+        handle._mux.push(event)
 
     async def _aforward_to_children(self, event: ProtocolEvent) -> None:
         """Async counterpart to `_forward_to_children`."""
@@ -678,19 +667,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         handle = self._handles.get(candidate_path)
         if handle is None or handle._mux is None or handle._mux._events._closed:
             return
-        child_event: ProtocolEvent = {
-            **event,
-            "params": {
-                **event["params"],
-                "namespace": list(event["params"]["namespace"]),
-                "data": deepcopy(event["params"]["data"]),
-            },
-        }
-        if "interrupts" in event["params"]:
-            child_event["params"]["interrupts"] = deepcopy(
-                event["params"]["interrupts"]
-            )
-        await handle._mux.apush(child_event)
+        await handle._mux.apush(event)
 
     def _close_handle_mux(
         self, handle: SubgraphRunStream | AsyncSubgraphRunStream

@@ -29,8 +29,8 @@ class ProtocolEvent(TypedDict):
     """A protocol event emitted by the streaming infrastructure.
 
     Wraps a raw stream part (values, messages, custom, etc.) in a uniform
-    envelope with a monotonic sequence number assigned by the StreamMux.
-    Consumers that need a total order across events should use `seq`, not
+    envelope with a monotonic sequence number assigned by the root StreamMux.
+    Consumers that need a total order across root events should use `seq`, not
     `params.timestamp` (which is wall-clock and not monotonic).
     """
 

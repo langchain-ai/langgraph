@@ -52,6 +52,7 @@ class StreamMux:
         is_async: bool = False,
         factories: list[TransformerFactory] | None = None,
         scope: tuple[str, ...] = (),
+        assign_seq: bool = True,
     ) -> None:
         """Initialize the mux and register transformers in order.
 
@@ -74,6 +75,10 @@ class StreamMux:
                 sub-mux gets fresh instances.
             scope: The namespace the mux operates within. The root mux
                 is `()`.
+            assign_seq: Whether this mux assigns monotonic `seq` numbers
+                when appending to its main event log. Only the root mux
+                assigns `seq`; child muxes share forwarded event objects
+                and must not mutate their envelopes.
 
         Raises:
             RuntimeError: If any transformer requires an async run but
@@ -83,6 +88,7 @@ class StreamMux:
         """
         self.is_async = is_async
         self.scope: tuple[str, ...] = scope
+        self._assign_seq = assign_seq
         self._events: EventLog[ProtocolEvent] = EventLog()
         self._events._bind(is_async=is_async)
         self._transformers: list[StreamTransformer] = []
@@ -166,8 +172,10 @@ class StreamMux:
         Used by `SubgraphTransformer` to attach a fresh transformer
         pipeline to each discovered subgraph handle. The child mux
         inherits the current pump bindings (so cursors on its
-        projection logs drive the root pump) and carries the same
-        factory list forward to any grandchild subgraphs.
+        projection logs drive the root pump), carries the same factory
+        list forward to any grandchild subgraphs, and does not assign
+        `seq` numbers so forwarded events can be shared without
+        mutating their envelope.
 
         Raises:
             RuntimeError: If the mux was not constructed with
@@ -184,6 +192,7 @@ class StreamMux:
             factories=self._factories,
             is_async=self.is_async,
             scope=scope,
+            assign_seq=False,
         )
         if self._pump_fn is not None:
             child.bind_pump(self._pump_fn)
@@ -241,11 +250,13 @@ class StreamMux:
         the main log, but transformers that already saw it keep their
         side effects.
 
-        Seq is assigned right before an event enters the main log, not
-        before the transformer pipeline runs. This ensures that events
-        auto-forwarded from StreamChannels during `process()` get
-        earlier seq numbers than the original event, preserving
-        monotonic ordering in the log.
+        On the root mux, `seq` is assigned right before an event enters
+        the main log, not before the transformer pipeline runs. This
+        ensures that events auto-forwarded from StreamChannels during
+        `process()` get earlier seq numbers than the original event,
+        preserving monotonic ordering in the root log. Child muxes do
+        not assign `seq`, so subgraph forwarding can share event objects
+        without mutating their envelopes.
 
         Args:
             event: The protocol event to dispatch.
@@ -255,8 +266,9 @@ class StreamMux:
             if not transformer.process(event):
                 keep = False
         if keep:
-            self._seq += 1
-            event["seq"] = self._seq
+            if self._assign_seq:
+                self._seq += 1
+                event["seq"] = self._seq
             self._events.push(event)
 
     def close(self) -> None:
@@ -330,8 +342,10 @@ class StreamMux:
         `process` / `aprocess` instead.
 
         The main log append is a non-blocking `push` — matching v1's
-        `put_nowait` shape. Memory is bounded by caller pace via the
-        caller-driven pump; see `EventLog` for the full tradeoff story.
+        `put_nowait` shape. The root mux assigns `seq`; child muxes do
+        not, so forwarded subgraph events can be shared without copying.
+        Memory is bounded by caller pace via the caller-driven pump; see
+        `EventLog` for the full tradeoff story.
 
         Args:
             event: The protocol event to dispatch.
@@ -341,8 +355,9 @@ class StreamMux:
             if not await transformer.aprocess(event):
                 keep = False
         if keep:
-            self._seq += 1
-            event["seq"] = self._seq
+            if self._assign_seq:
+                self._seq += 1
+                event["seq"] = self._seq
             self._events.push(event)
 
     async def aclose(self) -> None:
@@ -471,18 +486,17 @@ class StreamMux:
         Forwarded events bypass the transformer pipeline to avoid
         infinite recursion (a transformer that pushes to a channel
         during `process()` would re-trigger itself). These events are
-        visible in the main event log but are not passed through
-        transformers' `process()` methods.
+        visible in this mux's main event log but are not passed through
+        transformers' `process()` methods. Only the root mux assigns
+        `seq` to forwarded channel events.
 
         Args:
             method: The full protocol method (already with or without
                 the `custom:` prefix; resolved by `_bind_and_wire`).
             item: The payload pushed onto the channel.
         """
-        self._seq += 1
         event: ProtocolEvent = {
             "type": "event",
-            "seq": self._seq,
             "method": method,
             "params": {
                 "namespace": [],
@@ -490,4 +504,7 @@ class StreamMux:
                 "data": item,
             },
         }
+        if self._assign_seq:
+            self._seq += 1
+            event["seq"] = self._seq
         self._events.push(event)
