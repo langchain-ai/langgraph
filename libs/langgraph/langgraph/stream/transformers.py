@@ -548,17 +548,10 @@ class SubgraphTransformer(_TasksLifecycleBase):
         try:
             child_mux = self._mux._make_child(ns)
         except RuntimeError:
-            # Mux wasn't built from factories — no mini-mux navigation
-            # available. Skip; LifecycleTransformer still tracks the
-            # subgraph via the flat event stream.
-            return
-        values_t = child_mux.transformer_by_key("values")
-        if not isinstance(values_t, ValuesTransformer):
             return
         handle_cls = AsyncSubgraphRunStream if child_mux.is_async else SubgraphRunStream
         handle = handle_cls(
             mux=child_mux,
-            values_transformer=values_t,
             path=ns,
             graph_name=graph_name,
             trigger_call_id=trigger_call_id,
@@ -629,7 +622,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
         else:
             await handle._mux.aclose()
 
-    def _child_mux_for_event(self, event: ProtocolEvent) -> StreamMux | None:
+    def _handle_for_event(
+        self, event: ProtocolEvent
+    ) -> SubgraphRunStream | AsyncSubgraphRunStream | None:
         ns = tuple(event["params"]["namespace"])
         depth = len(self.scope)
         if len(ns) < depth + 1:
@@ -637,22 +632,17 @@ class SubgraphTransformer(_TasksLifecycleBase):
         handle = self._handles.get(ns[: depth + 1])
         if handle is None or handle._mux is None or handle._mux._events._closed:
             return None
-        return handle._mux
+        return handle
 
     def process(self, event: ProtocolEvent) -> bool:
-        # Discover / update terminal status before forwarding so a
-        # `started` handle exists by the time the child mini-mux sees
-        # its own first event.
         keep = super().process(event)
-        child_mux = self._child_mux_for_event(event)
-        if child_mux is not None:
-            child_mux.push(event)
+        handle = self._handle_for_event(event)
+        if handle is not None:
+            handle._observe_event(event)
+            handle._mux.push(event)  # type: ignore[union-attr]
         return keep
 
     async def aprocess(self, event: ProtocolEvent) -> bool:
-        # Async counterpart to `process`: repeat the tasks bookkeeping
-        # here instead of delegating to `process`, so child mini-muxes
-        # receive events through their async lane.
         if event["method"] == "tasks":
             ns = tuple(event["params"]["namespace"])
             data = event["params"]["data"]
@@ -664,9 +654,10 @@ class SubgraphTransformer(_TasksLifecycleBase):
             keep = False
         else:
             keep = True
-        child_mux = self._child_mux_for_event(event)
-        if child_mux is not None:
-            await child_mux.apush(event)
+        handle = self._handle_for_event(event)
+        if handle is not None:
+            handle._observe_event(event)
+            await handle._mux.apush(event)  # type: ignore[union-attr]
         return keep
 
     def _complete_open_handles(self) -> BaseException | None:

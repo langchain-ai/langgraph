@@ -10,7 +10,7 @@ from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
 
 if TYPE_CHECKING:
-    from langgraph.stream.transformers import SubgraphStatus, ValuesTransformer
+    from langgraph.stream.transformers import SubgraphStatus
 
 
 def _drive_until_done(pump: Callable[[], bool]) -> None:
@@ -44,7 +44,6 @@ class GraphRunStream:
         self,
         graph_iter: Iterator[Any] | None,
         mux: StreamMux,
-        values_transformer: ValuesTransformer,
         *,
         wire_pump: bool = True,
     ) -> None:
@@ -55,8 +54,6 @@ class GraphRunStream:
                 or `None` for nested run streams whose pump is driven
                 by an outer run (e.g. `SubgraphRunStream`).
             mux: The StreamMux owning projections and the main log.
-            values_transformer: The built-in values transformer
-                providing `output` / `interrupted` / `interrupts`.
             wire_pump: When True (default), bind `_pump_next` as the
                 mux's pump callable. Subclasses that inherit a parent
                 pump via `StreamMux._make_child` should pass False to
@@ -65,8 +62,11 @@ class GraphRunStream:
         self._graph_iter = graph_iter
         self._mux = mux
         self.extensions: Mapping[str, Any] = MappingProxyType(mux.extensions)
-        self._values_transformer = values_transformer
         self._exhausted = False
+        self._latest: dict[str, Any] | None = None
+        self._interrupted = False
+        self._interrupts: list[Any] = []
+        self._scope_list: list[str] = list(mux.scope)
         for key in mux.native_keys:
             setattr(self, key, mux.extensions[key])
         if wire_pump:
@@ -83,6 +83,19 @@ class GraphRunStream:
         """
         mux.bind_pump(self._pump_next)
 
+    def _observe_event(self, event: ProtocolEvent) -> None:
+        """Track values-event state for output/interrupted/interrupts."""
+        if event["method"] != "values":
+            return
+        params = event["params"]
+        if params["namespace"] != self._scope_list:
+            return
+        self._latest = params["data"]
+        interrupts = params.get("interrupts", ())
+        if interrupts:
+            self._interrupted = True
+            self._interrupts.extend(interrupts)
+
     def _pump_next(self) -> bool:
         """Pull one event from the graph and push it through the mux.
 
@@ -95,7 +108,9 @@ class GraphRunStream:
             return False
         try:
             part = next(self._graph_iter)
-            self._mux.push(convert_to_protocol_event(part))
+            event = convert_to_protocol_event(part)
+            self._observe_event(event)
+            self._mux.push(event)
             return True
         except StopIteration:
             self._mux.close()
@@ -136,9 +151,9 @@ class GraphRunStream:
     def output(self) -> dict[str, Any] | None:
         """Drive the run to completion and return the final state."""
         _drive_until_done(self._pump_next)
-        if (err := self._values_transformer.error) is not None:
+        if (err := self._mux._events._error) is not None:
             raise err
-        return self._values_transformer._latest
+        return self._latest
 
     @property
     def interrupted(self) -> bool:
@@ -149,9 +164,9 @@ class GraphRunStream:
             BaseException: If the run ended with an error.
         """
         _drive_until_done(self._pump_next)
-        if (err := self._values_transformer.error) is not None:
+        if (err := self._mux._events._error) is not None:
             raise err
-        return self._values_transformer._interrupted
+        return self._interrupted
 
     @property
     def interrupts(self) -> list[Any]:
@@ -161,9 +176,9 @@ class GraphRunStream:
             BaseException: If the run ended with an error.
         """
         _drive_until_done(self._pump_next)
-        if (err := self._values_transformer.error) is not None:
+        if (err := self._mux._events._error) is not None:
             raise err
-        return self._values_transformer._interrupts
+        return self._interrupts
 
     def __iter__(self) -> Iterator[ProtocolEvent]:
         """Subscribe to the main event log and iterate protocol events."""
@@ -247,7 +262,6 @@ class AsyncGraphRunStream:
         self,
         graph_aiter: AsyncIterator[Any] | None,
         mux: StreamMux,
-        values_transformer: ValuesTransformer,
         *,
         wire_pump: bool = True,
     ) -> None:
@@ -258,8 +272,6 @@ class AsyncGraphRunStream:
                 `None` for nested run streams whose pump is driven by
                 an outer run (e.g. `AsyncSubgraphRunStream`).
             mux: The StreamMux owning projections and the main log.
-            values_transformer: The built-in values transformer
-                providing `output` / `interrupted` / `interrupts`.
             wire_pump: When True (default), bind `_apump_next` as the
                 mux's async pump callable. Subclasses that inherit a
                 parent pump via `StreamMux._make_child` should pass
@@ -268,14 +280,30 @@ class AsyncGraphRunStream:
         self._graph_aiter = graph_aiter
         self._mux = mux
         self.extensions: Mapping[str, Any] = MappingProxyType(mux.extensions)
-        self._values_transformer = values_transformer
         self._exhausted = False
+        self._latest: dict[str, Any] | None = None
+        self._interrupted = False
+        self._interrupts: list[Any] = []
+        self._scope_list: list[str] = list(mux.scope)
         self._pump_cond = asyncio.Condition()
         self._pumping = False
         for key in mux.native_keys:
             setattr(self, key, mux.extensions[key])
         if wire_pump:
             self._wire_arequest_more(mux)
+
+    def _observe_event(self, event: ProtocolEvent) -> None:
+        """Track values-event state for output/interrupted/interrupts."""
+        if event["method"] != "values":
+            return
+        params = event["params"]
+        if params["namespace"] != self._scope_list:
+            return
+        self._latest = params["data"]
+        interrupts = params.get("interrupts", ())
+        if interrupts:
+            self._interrupted = True
+            self._interrupts.extend(interrupts)
 
     def _wire_arequest_more(self, mux: StreamMux) -> None:
         """Wire the async pull callback through the mux.
@@ -319,7 +347,9 @@ class AsyncGraphRunStream:
         try:
             try:
                 part = await self._graph_aiter.__anext__()
-                await self._mux.apush(convert_to_protocol_event(part))
+                event = convert_to_protocol_event(part)
+                self._observe_event(event)
+                await self._mux.apush(event)
                 return True
             except StopAsyncIteration:
                 self._exhausted = True
@@ -378,9 +408,9 @@ class AsyncGraphRunStream:
             BaseException: If the run ended with an error.
         """
         await _adrive_until_done(self._apump_next)
-        if (err := self._values_transformer.error) is not None:
+        if (err := self._mux._events._error) is not None:
             raise err
-        return self._values_transformer._latest
+        return self._latest
 
     async def interrupted(self) -> bool:
         """Drive the run to completion and return whether it was
@@ -390,9 +420,9 @@ class AsyncGraphRunStream:
             BaseException: If the run ended with an error.
         """
         await _adrive_until_done(self._apump_next)
-        if (err := self._values_transformer.error) is not None:
+        if (err := self._mux._events._error) is not None:
             raise err
-        return self._values_transformer._interrupted
+        return self._interrupted
 
     async def interrupts(self) -> list[Any]:
         """Drive the run to completion and return interrupt payloads.
@@ -401,9 +431,9 @@ class AsyncGraphRunStream:
             BaseException: If the run ended with an error.
         """
         await _adrive_until_done(self._apump_next)
-        if (err := self._values_transformer.error) is not None:
+        if (err := self._mux._events._error) is not None:
             raise err
-        return self._values_transformer._interrupts
+        return self._interrupts
 
     def __aiter__(self) -> AsyncIterator[ProtocolEvent]:
         """Subscribe to the main event log and iterate protocol events."""
@@ -444,7 +474,6 @@ class SubgraphRunStream(GraphRunStream, _SubgraphRunStreamMixin):
     def __init__(
         self,
         mux: StreamMux,
-        values_transformer: ValuesTransformer,
         *,
         path: tuple[str, ...],
         graph_name: str | None = None,
@@ -456,7 +485,6 @@ class SubgraphRunStream(GraphRunStream, _SubgraphRunStreamMixin):
         super().__init__(
             graph_iter=None,
             mux=mux,
-            values_transformer=values_transformer,
             wire_pump=False,
         )
         self.path = path
@@ -489,7 +517,6 @@ class AsyncSubgraphRunStream(AsyncGraphRunStream, _SubgraphRunStreamMixin):
     def __init__(
         self,
         mux: StreamMux,
-        values_transformer: ValuesTransformer,
         *,
         path: tuple[str, ...],
         graph_name: str | None = None,
@@ -499,7 +526,6 @@ class AsyncSubgraphRunStream(AsyncGraphRunStream, _SubgraphRunStreamMixin):
         super().__init__(
             graph_aiter=None,
             mux=mux,
-            values_transformer=values_transformer,
             wire_pump=False,
         )
         self.path = path

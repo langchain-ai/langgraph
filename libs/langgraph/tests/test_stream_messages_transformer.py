@@ -399,7 +399,7 @@ class TestWireRequestMore:
         mux = StreamMux([values_t, messages_t], is_async=False)
 
         assert messages_t._pump_fn is None
-        run = GraphRunStream(iter([]), mux, values_t)
+        run = GraphRunStream(iter([]), mux)
         assert messages_t._pump_fn is not None
         assert messages_t._pump_fn() is False
         assert run._exhausted
@@ -408,7 +408,7 @@ class TestWireRequestMore:
         values_t = ValuesTransformer()
         messages_t = MessagesTransformer()
         mux = StreamMux([values_t, messages_t], is_async=False)
-        GraphRunStream(iter([]), mux, values_t)
+        GraphRunStream(iter([]), mux)
 
         log: EventLog[ChatModelStream] = mux.extensions["messages"]
         log._subscribed = True
