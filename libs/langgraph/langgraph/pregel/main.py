@@ -3470,7 +3470,16 @@ class Pregel(
 
         Returns an `AsyncGraphRunStream` whose projections can be awaited
         concurrently; each subscribed cursor drives the pump when its
-        buffer is empty. See `stream_v2` for details.
+        buffer is empty.
+
+        Note:
+            Same nesting limitation as `stream_v2`: nesting v1
+            ``astream(stream_mode="messages")`` inside a node of an
+            ``astream_v2`` run drops ``on_llm_new_token`` chunks because
+            the outer v2 handler reroutes ``BaseChatModel.invoke``
+            through the v2 event protocol. Use ``astream_v2`` for the
+            inner graph as well, or call ``chat_model.astream(...)``
+            explicitly, to get token-level streaming.
 
         Args:
             input: Graph input.
