@@ -333,13 +333,16 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             ),
         )
     elif hasattr(obj, "get_secret_value") and callable(obj.get_secret_value):
+        # SECURITY: Never serialize plaintext secrets to checkpoints.
+        # Use the redacted display value so the type round-trips safely
+        # without exposing sensitive data.
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    obj.get_secret_value(),
+                    str(obj),
                 ),
             ),
         )

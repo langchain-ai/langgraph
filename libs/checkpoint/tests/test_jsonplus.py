@@ -181,9 +181,17 @@ def test_serde_jsonplus() -> None:
     dumped = serde.dumps_typed(to_serialize)
 
     assert dumped[0] == "msgpack"
-    assert serde.loads_typed(dumped) == to_serialize
+    loaded = serde.loads_typed(dumped)
+    # Secrets are redacted during serialization for security
+    expected = dict(to_serialize)
+    expected["my_secret_str"] = SecretStr("**********")
+    if sys.version_info < (3, 14):
+        expected["my_secret_str_v1"] = SecretStrV1("**********")
+    assert loaded == expected
 
-    for value in to_serialize.values():
+    for key, value in to_serialize.items():
+        if key in ("my_secret_str", "my_secret_str_v1"):
+            continue
         assert serde.loads_typed(serde.dumps_typed(value)) == value
 
     surrogates = [
@@ -290,7 +298,7 @@ def test_serde_jsonplus_json_mode() -> None:
         "my_dataclass": {"foo": "foo", "bar": 1, "inner": {"hello": "hello"}},
         "my_enum": "foo",
         "my_pydantic": {"foo": "foo", "bar": 1, "inner": {"hello": "hello"}},
-        "my_secret_str": "meow",
+            "my_secret_str": "**********",
         "person": {"name": "foo"},
         "a_bool": True,
         "a_none": None,
@@ -318,7 +326,7 @@ def test_serde_jsonplus_json_mode() -> None:
             "bar": 1,
             "inner": {"hello": "hello"},
         }
-        expected_result["my_secret_str_v1"] = "meow"
+        expected_result["my_secret_str_v1"] = "**********"
 
     assert result == expected_result
 
