@@ -155,26 +155,38 @@ INSERT_CHECKPOINT_WRITES_SQL = """
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
 """
 
-# DeltaChannel reconstruction: three plain indexed SELECTs per channel.
+# DeltaChannel reconstruction: one combined CTE+UNION ALL query per channel.
 # Bench (notes/delta_channel_query_bench.md) showed the prior recursive CTE
 # carried a hidden O(ancestors x blobs_in_thread) join; plain SELECTs are
 # 3x-100x faster in the realistic depth range and the Python walk is O(n).
-SELECT_DELTA_PARENTS_SQL = """
-    SELECT checkpoint_id,
+# The three plain SELECTs are further collapsed into one UNION ALL query so
+# that only one roundtrip is needed per channel reconstruction.
+#
+# Parameter order: (channel, thread_id, checkpoint_ns,
+#                   thread_id, checkpoint_ns, channel,
+#                   thread_id, checkpoint_ns, channel)
+SELECT_DELTA_COMBINED_SQL = """
+    SELECT 'p'::text       AS _kind,
+           checkpoint_id,
            parent_checkpoint_id,
-           checkpoint -> 'channel_versions' ->> %s AS ver
+           checkpoint -> 'channel_versions' ->> %s AS ver,
+           NULL::text       AS type,
+           NULL::bytea      AS blob,
+           NULL::text       AS task_id,
+           NULL::int        AS idx,
+           NULL::text       AS version
     FROM checkpoints
     WHERE thread_id = %s AND checkpoint_ns = %s
-"""
-
-SELECT_DELTA_WRITES_SQL = """
-    SELECT checkpoint_id, type, blob, task_id, idx
+    UNION ALL
+    SELECT 'w',
+           checkpoint_id, NULL, NULL,
+           type, blob, task_id, idx, NULL
     FROM checkpoint_writes
     WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s
-"""
-
-SELECT_DELTA_BLOBS_SQL = """
-    SELECT version, type, blob
+    UNION ALL
+    SELECT 'b',
+           NULL, NULL, NULL,
+           type, blob, NULL, NULL, version
     FROM checkpoint_blobs
     WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s
 """
@@ -229,15 +241,13 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         *,
         channel: str,
         target_id: str,
-        parents_rows: Sequence[Any],
-        writes_rows: Sequence[Any],
-        blobs_rows: Sequence[Any],
+        rows: Sequence[Any],
     ) -> _ChannelWritesHistory:
-        """Reconstruct one delta channel's history from rows of the three SELECTs.
+        """Reconstruct one delta channel's history from the combined UNION ALL rows.
 
         Pure data transform shared by sync (`PostgresSaver`) and async
-        (`AsyncPostgresSaver`); both paths run the queries themselves and
-        feed the rows here.
+        (`AsyncPostgresSaver`); both paths run `SELECT_DELTA_COMBINED_SQL`
+        and feed the tagged rows here.
 
         Walk is newest → oldest from the target's parent. A non-sentinel
         blob in `checkpoint_blobs` (a pre-delta snapshot) terminates the
@@ -248,10 +258,27 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         """
         parent_of: dict[str, str | None] = {}
         ver_of: dict[str, str | None] = {}
-        for r in parents_rows:
-            cid = r["checkpoint_id"]
-            parent_of[cid] = r["parent_checkpoint_id"]
-            ver_of[cid] = r["ver"]
+        writes_by_cid: dict[str, list[tuple[str, bytes, str, int]]] = {}
+        blob_by_ver: dict[str, tuple[str, bytes]] = {}
+
+        for r in rows:
+            kind = r["_kind"]
+            if kind == "p":
+                cid = r["checkpoint_id"]
+                parent_of[cid] = r["parent_checkpoint_id"]
+                ver_of[cid] = r["ver"]
+            elif kind == "w":
+                cid = r["checkpoint_id"]
+                writes_by_cid.setdefault(cid, []).append(
+                    (r["type"], r["blob"], r["task_id"], r["idx"])
+                )
+            else:  # kind == "b"
+                blob_by_ver[r["version"]] = (r["type"], r["blob"])
+
+        # Sort writes within each checkpoint (task_id DESC, idx DESC) to match
+        # the prior CTE ordering — newest write first per ancestor.
+        for ws in writes_by_cid.values():
+            ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
 
         ancestors: list[str] = []
         cid = parent_of.get(target_id)
@@ -260,55 +287,24 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             cid = parent_of.get(cid)
         if not ancestors:
             return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
-        ancestor_set = set(ancestors)
-
-        # Group writes by ancestor cid; sort within (task_id DESC, idx DESC)
-        # to match the prior CTE ordering — newest write first per ancestor.
-        writes_by_cid: dict[str, list[tuple[str, bytes, str, int]]] = {}
-        for r in writes_rows:
-            cid = r["checkpoint_id"]
-            if cid not in ancestor_set:
-                continue
-            writes_by_cid.setdefault(cid, []).append(
-                (r["type"], r["blob"], r["task_id"], r["idx"])
-            )
-        for ws in writes_by_cid.values():
-            ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
-
-        blob_by_ver: dict[str, tuple[str, bytes]] = {
-            r["version"]: (r["type"], r["blob"]) for r in blobs_rows
-        }
 
         collected: list[PendingWrite] = []  # newest first; reversed at the end
         for cid in ancestors:
+            # Collect writes first — they encode the transition FROM this
+            # ancestor's state to its child's and must be included even if
+            # this ancestor is also the seed checkpoint.
+            for type_tag, write_blob, task_id, _idx in writes_by_cid.get(cid, []):
+                val = self.serde.loads_typed((type_tag, write_blob))
+                collected.append((task_id, channel, val))
+            # Then check seed terminator.
             ver = ver_of.get(cid)
             if ver is not None:
                 seed_blob = blob_by_ver.get(ver)
                 if seed_blob is not None and seed_blob[0] != "empty":
                     blob_value = self.serde.loads_typed(seed_blob)
                     if blob_value is not DELTA_SENTINEL:
-                        if isinstance(blob_value, _DeltaSnapshot):
-                            # Step-based snapshot: collect this ancestor's
-                            # pending_writes first (they encode the NEXT step's
-                            # transition, not subsumed by the snapshot blob).
-                            for (
-                                type_tag,
-                                write_blob,
-                                task_id,
-                                _idx,
-                            ) in writes_by_cid.get(cid, []):
-                                val = self.serde.loads_typed((type_tag, write_blob))
-                                collected.append((task_id, channel, val))
-                            collected.reverse()
-                            return _ChannelWritesHistory(
-                                seed=blob_value, writes=collected
-                            )
-                        # Pre-delta blob: subsumes this ancestor's writes.
                         collected.reverse()
                         return _ChannelWritesHistory(seed=blob_value, writes=collected)
-            for type_tag, write_blob, task_id, _idx in writes_by_cid.get(cid, []):
-                val = self.serde.loads_typed((type_tag, write_blob))
-                collected.append((task_id, channel, val))
 
         collected.reverse()  # oldest → newest
         return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)
