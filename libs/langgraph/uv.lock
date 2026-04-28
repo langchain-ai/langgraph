@@ -1367,7 +1367,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "1.1.9"
+version = "1.1.10"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },
@@ -1742,7 +1742,7 @@ test = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "1.0.11"
+version = "1.0.12"
 source = { editable = "../prebuilt" }
 dependencies = [
     { name = "langchain-core" },
@@ -1826,20 +1826,20 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "langgraph", editable = "." },
-    { name = "mypy", specifier = "==1.19.1" },
+    { name = "mypy", specifier = "==1.20.2" },
     { name = "pydantic", specifier = ">=2.12.4" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watch" },
-    { name = "ruff", specifier = "==0.15.6" },
+    { name = "ruff", specifier = "==0.15.12" },
     { name = "starlette" },
     { name = "ty", specifier = "==0.0.23" },
 ]
 lint = [
     { name = "codespell" },
-    { name = "mypy", specifier = "==1.19.1" },
-    { name = "ruff", specifier = "==0.15.6" },
+    { name = "mypy", specifier = "==1.20.2" },
+    { name = "ruff", specifier = "==0.15.12" },
     { name = "starlette" },
     { name = "ty", specifier = "==0.0.23" },
 ]
