@@ -1433,6 +1433,37 @@ async def test_arun_with_retry_timeout_observer_tracks_attempts():
 
 
 @pytest.mark.anyio
+async def test_arun_with_retry_timeout_observer_emits_progress_on_heartbeat():
+    events: list[dict] = []
+
+    class HeartbeatProc:
+        async def ainvoke(self, input, config):
+            runtime = config[CONF][CONFIG_KEY_RUNTIME]
+            for _ in range(8):
+                await asyncio.sleep(0.05)
+                runtime.heartbeat()
+            return "ok"
+
+    task = _make_task(HeartbeatProc(), idle_timeout=0.2, name="heartbeat")
+    task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
+    assert await arun_with_retry(task, retry_policy=None) == "ok"
+
+    by_event = [ev["event"] for ev in events]
+    assert by_event[0] == "start"
+    assert by_event[-1] == "finish"
+    progress = [ev for ev in events if ev["event"] == "progress"]
+    assert progress, "expected at least one progress event from heartbeat"
+    # Rate limit is `idle_timeout / 4` = 0.05s; with 8 heartbeats spaced ~0.05s
+    # we should see at most ~one progress event per heartbeat (well below 8).
+    assert len(progress) <= len(by_event)
+    for ev in progress:
+        assert ev["task_name"] == "heartbeat"
+        assert ev["attempt"] == 1
+        assert ev["idle_timeout_secs"] == 0.2
+        assert isinstance(ev["progress_at"], datetime)
+
+
+@pytest.mark.anyio
 async def test_arun_with_retry_timeout_observer_treats_parent_command_as_non_error():
     events: list[dict] = []
 

@@ -56,7 +56,8 @@ class _IdleTimedAttemptPayload(TypedDict):
     checkpoint_ns: str | None
     started_at: datetime
     idle_timeout_secs: float
-    event: Literal["start", "finish"]
+    event: Literal["start", "progress", "finish"]
+    progress_at: NotRequired[datetime]
     finished_at: NotRequired[datetime]
     status: NotRequired[Literal["success", "error"]]
     error_type: NotRequired[str | None]
@@ -74,12 +75,28 @@ class _IdleTimedAttemptScope:
     tasks cannot emit writes or stream events past the idle_timeout boundary.
     """
 
-    __slots__ = ("__weakref__", "_active", "_last_progress", "_lock")
+    __slots__ = (
+        "__weakref__",
+        "_active",
+        "_last_progress",
+        "_last_progress_emit",
+        "_lock",
+        "_on_progress",
+        "_progress_min_interval",
+    )
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        on_progress: Callable[[], None] | None = None,
+        progress_min_interval: float = 0.0,
+    ) -> None:
         self._active = True
         self._last_progress = time.monotonic()
         self._lock = threading.Lock()
+        self._on_progress = on_progress
+        self._progress_min_interval = progress_min_interval
+        # `-inf` so the first touch always passes the rate-limit gate.
+        self._last_progress_emit: float = float("-inf")
 
     def wrap_config(self, config: RunnableConfig) -> RunnableConfig:
         configurable = config.get(CONF, {})
@@ -104,7 +121,17 @@ class _IdleTimedAttemptScope:
         # Avoid locking this hot progress path. We accept a small race window in
         # timestamp ordering because idle_timeout is expected to be coarse compared
         # with scheduler/thread timing.
-        self._last_progress = time.monotonic()
+        now = time.monotonic()
+        self._last_progress = now
+        if self._on_progress is None:
+            return
+        # Best-effort rate limit: a benign race may emit a duplicate progress
+        # event under heavy concurrency, which observers must already tolerate
+        # (callbacks fire from arbitrary threads).
+        if now - self._last_progress_emit < self._progress_min_interval:
+            return
+        self._last_progress_emit = now
+        self._on_progress()
 
     def close(self) -> None:
         with self._lock:
@@ -269,6 +296,18 @@ def _finish_timed_attempt(
     _dispatch_observer(callback, finish)
 
 
+def _emit_progress(
+    callback: Callable[[_IdleTimedAttemptPayload], None],
+    payload: _IdleTimedAttemptPayload,
+) -> None:
+    progress: _IdleTimedAttemptPayload = {
+        **payload,
+        "event": "progress",
+        "progress_at": datetime.now(timezone.utc),
+    }
+    _dispatch_observer(callback, progress)
+
+
 def _dispatch_observer(
     callback: Callable[[_IdleTimedAttemptPayload], None],
     payload: _IdleTimedAttemptPayload,
@@ -283,10 +322,21 @@ async def _arun_with_idle_timeout(
     task: PregelExecutableTask,
     config: RunnableConfig,
     idle_timeout_s: float,
+    attempt_payload: _IdleTimedAttemptPayload | None,
     *,
     stream: bool,
 ) -> Any:
-    scope = _IdleTimedAttemptScope()
+    on_progress: Callable[[], None] | None = None
+    if attempt_payload is not None:
+        callback = config.get(CONF, {}).get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER)
+        if callback is not None:
+            on_progress = lambda: _emit_progress(callback, attempt_payload)  # noqa: E731
+    scope = _IdleTimedAttemptScope(
+        on_progress=on_progress,
+        # Cap progress emission at ~4 events per idle window so token-rate
+        # callbacks don't flood the observer.
+        progress_min_interval=idle_timeout_s / 4,
+    )
     scoped_config = scope.wrap_config(config)
     start = time.monotonic()
     if stream:
@@ -554,7 +604,7 @@ async def arun_with_retry(
                     break
                 return await task.proc.ainvoke(task.input, config)
             result = await _arun_with_idle_timeout(
-                task, config, idle_timeout_s, stream=stream
+                task, config, idle_timeout_s, attempt_payload, stream=stream
             )
             _finish_timed_attempt(config, attempt_payload)
             if stream:
