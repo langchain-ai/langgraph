@@ -181,8 +181,9 @@ class Runtime(Generic[ContextT]):
 
     Call this from inside long-running work that does not naturally emit
     writes, stream chunks, child tasks, or LangChain callback events, to
-    prevent the node from being treated as idle. Outside an idle-timed
-    attempt this is a no-op.
+    prevent the node from being treated as idle. It is also the only
+    progress signal honored under `TimeoutPolicy(refresh_on="heartbeat")`.
+    Outside an idle-timed attempt this is a no-op.
     """
 
     previous: Any = field(default=None)

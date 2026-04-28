@@ -145,7 +145,7 @@ class NodeTimeoutError(TimeoutError):
     run_timeout: float | None
     idle_timeout: float | None
     elapsed: float
-    kind: str
+    kind: Literal["idle", "run"]
 
     def __init__(
         self,

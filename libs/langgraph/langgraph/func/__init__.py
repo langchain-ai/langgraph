@@ -162,7 +162,11 @@ def task(
         timeout: Timeout for each task attempt. A number or `timedelta` is a hard
             wall-clock cap and is not refreshed. Use `TimeoutPolicy` to configure
             both a wall-clock `run_timeout` and an `idle_timeout` refreshed by
-            progress signals. Supported only for async tasks.
+            progress signals. For long-running work that doesn't naturally emit
+            progress, call `runtime.heartbeat()` from inside the task. When the
+            timeout fires, `NodeTimeoutError` is raised and the retry policy (if
+            any) decides whether to retry. Supported only for async tasks; sync
+            tasks cannot be safely cancelled in-process.
 
     Returns:
         A callable function when used as a decorator.
@@ -300,7 +304,12 @@ class entrypoint(Generic[ContextT]):
         timeout: Timeout for each workflow attempt. A number or `timedelta` is a
             hard wall-clock cap and is not refreshed. Use `TimeoutPolicy` to
             configure both a wall-clock `run_timeout` and an `idle_timeout`
-            refreshed by progress signals. Supported only for async workflows.
+            refreshed by progress signals. For long-running work that doesn't
+            naturally emit progress, call `runtime.heartbeat()` from inside the
+            workflow. When the timeout fires, `NodeTimeoutError` is raised and
+            the retry policy (if any) decides whether to retry. Supported only
+            for async workflows; sync workflows cannot be safely cancelled
+            in-process.
 
     !!! warning "`config_schema` Deprecated"
         The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
