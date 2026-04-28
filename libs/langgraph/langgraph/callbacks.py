@@ -245,15 +245,6 @@ class _GraphCallbackManager(BaseCallbackManager):
             run_id=run_id,
         )
 
-    def add_handler(
-        self,
-        handler: BaseCallbackHandler,
-        inherit: bool = True,  # noqa: FBT001,FBT002
-    ) -> None:
-        if not isinstance(handler, GraphCallbackHandler):
-            raise TypeError("handlers must inherit GraphCallbackHandler")
-        super().add_handler(handler, inherit=inherit)
-
     def copy(
         self,
         *,
@@ -320,15 +311,6 @@ class _AsyncGraphCallbackManager(BaseCallbackManager):
             inheritable_metadata=inheritable_metadata,
             run_id=run_id,
         )
-
-    def add_handler(
-        self,
-        handler: BaseCallbackHandler,
-        inherit: bool = True,  # noqa: FBT001,FBT002
-    ) -> None:
-        if not isinstance(handler, GraphCallbackHandler):
-            raise TypeError("handlers must inherit GraphCallbackHandler")
-        super().add_handler(handler, inherit=inherit)
 
     def copy(
         self,
