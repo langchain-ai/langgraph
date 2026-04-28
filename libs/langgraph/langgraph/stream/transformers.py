@@ -639,7 +639,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         handle = self._handle_for_event(event)
         if handle is not None:
             handle._observe_event(event)
-            handle._mux.push(event)  # type: ignore[union-attr]
+            handle._mux.push(event)
         return keep
 
     async def aprocess(self, event: ProtocolEvent) -> bool:
@@ -657,7 +657,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         handle = self._handle_for_event(event)
         if handle is not None:
             handle._observe_event(event)
-            await handle._mux.apush(event)  # type: ignore[union-attr]
+            await handle._mux.apush(event)
         return keep
 
     def _complete_open_handles(self) -> BaseException | None:
