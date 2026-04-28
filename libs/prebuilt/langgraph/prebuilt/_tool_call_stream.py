@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
-from langgraph.stream._event_log import EventLog
+from langgraph.stream.stream_channel import StreamChannel
 
 
 class ToolCallStream:
@@ -21,7 +21,7 @@ class ToolCallStream:
     are populated as events arrive:
 
     - `tool_call_id`, `tool_name`, `input`: stable from the start event.
-    - `output_deltas`: an `EventLog` of delta chunks. Iterate (sync or
+    - `output_deltas`: a `StreamChannel` of delta chunks. Iterate (sync or
       async) to consume partial output in arrival order.
     - `output`: terminal payload from `tool-finished`, or `None` if the
       call failed or is still in flight.
@@ -51,14 +51,14 @@ class ToolCallStream:
         self.tool_call_id = tool_call_id
         self.tool_name = tool_name
         self.input = input
-        self._output_deltas: EventLog[Any] = EventLog()
+        self._output_deltas: StreamChannel[Any] = StreamChannel()
         self.output: Any = None
         self.error: str | None = None
         self.completed = False
 
     @property
-    def output_deltas(self) -> EventLog[Any]:
-        """The EventLog of streamed `tool-output-delta` payloads.
+    def output_deltas(self) -> StreamChannel[Any]:
+        """The channel of streamed `tool-output-delta` payloads.
 
         Iterate (sync or async depending on how the run was started)
         to consume partial output in arrival order. The log closes when

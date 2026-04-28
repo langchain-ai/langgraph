@@ -15,7 +15,6 @@ from typing_extensions import TypedDict
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.stream import (
-    EventLog,
     StreamChannel,
     StreamTransformer,
 )
@@ -141,13 +140,13 @@ class _CustomPassthroughTransformer(StreamTransformer):
 
 
 # ---------------------------------------------------------------------------
-# EventLog unit tests
+# StreamChannel (local, unnamed) unit tests
 # ---------------------------------------------------------------------------
 
 
-class TestEventLog:
+class TestStreamChannelLocal:
     def test_sync_iteration(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         it = iter(log)
         log.push(1)
@@ -157,7 +156,7 @@ class TestEventLog:
         assert list(it) == [1, 2, 3]
 
     def test_drain_on_consume(self) -> None:
-        log: EventLog[str] = EventLog()
+        log: StreamChannel[str] = StreamChannel()
         log._bind(is_async=False)
         it = iter(log)
         log.push("a")
@@ -167,7 +166,7 @@ class TestEventLog:
         assert list(log._items) == []
 
     def test_second_subscribe_raises(self) -> None:
-        log: EventLog[str] = EventLog()
+        log: StreamChannel[str] = StreamChannel()
         log._bind(is_async=False)
         log.close()
         _ = iter(log)
@@ -176,7 +175,7 @@ class TestEventLog:
 
     def test_pre_subscription_push_is_noop(self) -> None:
         # Lazy-subscribe: pushes before subscription are dropped silently.
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         log.push(1)
         log.push(2)
@@ -186,7 +185,7 @@ class TestEventLog:
         assert list(it) == [3]
 
     def test_fail_propagation(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         it = iter(log)
         log.push(1)
@@ -195,7 +194,7 @@ class TestEventLog:
             list(it)
 
     def test_sync_cursor_yields_items_before_error(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         it = iter(log)
         log.push(1)
@@ -209,60 +208,60 @@ class TestEventLog:
         assert items == [1, 2, 3]
 
     def test_push_after_close_raises(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         it = iter(log)
         log.push(1)
         log.close()
-        with pytest.raises(RuntimeError, match="Cannot push to a closed EventLog"):
+        with pytest.raises(RuntimeError, match="Cannot push to a closed StreamChannel"):
             log.push(2)
         _ = list(it)
 
     def test_push_after_fail_raises(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         it = iter(log)
         log.fail(ValueError("err"))
-        with pytest.raises(RuntimeError, match="Cannot push to a closed EventLog"):
+        with pytest.raises(RuntimeError, match="Cannot push to a closed StreamChannel"):
             log.push(1)
         with pytest.raises(ValueError, match="err"):
             list(it)
 
     def test_empty_log_sync(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         log.close()
         assert list(log) == []
 
     def test_empty_log_fail_sync(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         log.fail(ValueError("empty fail"))
         with pytest.raises(ValueError, match="empty fail"):
             list(log)
 
     def test_unbound_iter_raises(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log.close()
         with pytest.raises(TypeError, match="has not been bound"):
             list(log)
 
     def test_sync_bound_aiter_raises(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         log.close()
         with pytest.raises(TypeError, match="bound to sync mode"):
             log.__aiter__()
 
     def test_double_bind_raises(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         with pytest.raises(RuntimeError, match="already bound"):
             log._bind(is_async=True)
 
     @pytest.mark.anyio
     async def test_async_iteration(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=True)
         cursor = aiter(log)
         for i in range(3):
@@ -272,7 +271,7 @@ class TestEventLog:
 
     @pytest.mark.anyio
     async def test_async_second_subscribe_raises(self) -> None:
-        log: EventLog[str] = EventLog()
+        log: StreamChannel[str] = StreamChannel()
         log._bind(is_async=True)
         log.close()
         _ = log.__aiter__()
@@ -281,7 +280,7 @@ class TestEventLog:
 
     @pytest.mark.anyio
     async def test_async_fail(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=True)
         cursor = aiter(log)
         log.push(1)
@@ -292,7 +291,7 @@ class TestEventLog:
 
     @pytest.mark.anyio
     async def test_async_cursor_yields_items_before_error(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=True)
         cursor = aiter(log)
         log.push(1)
@@ -307,14 +306,14 @@ class TestEventLog:
 
     @pytest.mark.anyio
     async def test_empty_log_async(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=True)
         log.close()
         assert [item async for item in log] == []
 
     @pytest.mark.anyio
     async def test_empty_log_fail_async(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=True)
         log.fail(ValueError("empty fail"))
         with pytest.raises(ValueError, match="empty fail"):
@@ -323,7 +322,7 @@ class TestEventLog:
 
     @pytest.mark.anyio
     async def test_async_bound_iter_raises(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=True)
         log.close()
         with pytest.raises(TypeError, match="bound to async mode"):
@@ -331,18 +330,18 @@ class TestEventLog:
 
 
 # ---------------------------------------------------------------------------
-# StreamChannel unit tests
+# StreamChannel (named, wired) unit tests
 # ---------------------------------------------------------------------------
 
 
-class TestStreamChannel:
+class TestStreamChannelNamed:
     def test_push_and_iterate(self) -> None:
         ch: StreamChannel[str] = StreamChannel("test")
         ch._bind(is_async=False)
         it = iter(ch)
         ch.push("a")
         ch.push("b")
-        ch._close()
+        ch.close()
         assert list(it) == ["a", "b"]
 
     def test_wire_callback(self) -> None:
@@ -353,7 +352,7 @@ class TestStreamChannel:
         it = iter(ch)
         ch.push("x")
         ch.push("y")
-        ch._close()
+        ch.close()
         assert forwarded == ["x", "y"]
         assert list(it) == ["x", "y"]
 
@@ -362,7 +361,7 @@ class TestStreamChannel:
         ch._bind(is_async=False)
         it = iter(ch)
         ch.push("a")
-        ch._fail(ValueError("channel error"))
+        ch.fail(ValueError("channel error"))
         items: list[str] = []
         with pytest.raises(ValueError, match="channel error"):
             for item in it:
@@ -375,7 +374,7 @@ class TestStreamChannel:
         assert ch._wire_fn is None
         it = iter(ch)
         ch.push(42)
-        ch._close()
+        ch.close()
         assert list(it) == [42]
 
     @pytest.mark.anyio
@@ -383,9 +382,9 @@ class TestStreamChannel:
         ch: StreamChannel[str] = StreamChannel("test")
         ch._bind(is_async=True)
         cursor = ch.__aiter__()
-        ch._log.push("x")
-        ch._log.push("y")
-        ch._close()
+        ch.push("x")
+        ch.push("y")
+        ch.close()
         assert [item async for item in cursor] == ["x", "y"]
 
 
@@ -922,7 +921,7 @@ class TestStreamMuxResilience:
         mux = StreamMux([t])
         with pytest.raises(RuntimeError, match="finalize broke"):
             mux.close()
-        assert t._channel._log._closed
+        assert t._channel._closed
 
 
 # ---------------------------------------------------------------------------
@@ -963,7 +962,7 @@ class TestCustomTransformer:
 
             def __init__(self, scope: tuple[str, ...] = ()) -> None:
                 super().__init__(scope)
-                self._log: EventLog[str] = EventLog()
+                self._log: StreamChannel[str] = StreamChannel()
 
             def init(self) -> dict[str, Any]:
                 return {"foo": self._log}
@@ -1046,7 +1045,7 @@ class TestCustomTransformer:
         class ConflictTransformer(StreamTransformer):
             def __init__(self, scope: tuple[str, ...] = ()) -> None:
                 super().__init__(scope)
-                self._log: EventLog[str] = EventLog()
+                self._log: StreamChannel[str] = StreamChannel()
 
             def init(self) -> dict[str, Any]:
                 return {"values": self._log}
@@ -1061,16 +1060,16 @@ class TestCustomTransformer:
 
 
 # ---------------------------------------------------------------------------
-# EventLog auto-lifecycle via StreamMux
+# StreamChannel auto-lifecycle via StreamMux
 # ---------------------------------------------------------------------------
 
 
-class TestEventLogAutoLifecycle:
-    def test_mux_auto_closes_event_logs(self) -> None:
+class TestStreamChannelAutoLifecycle:
+    def test_mux_auto_closes_channels(self) -> None:
         class SimpleTransformer(StreamTransformer):
             def __init__(self) -> None:
                 super().__init__()
-                self._log: EventLog[str] = EventLog()
+                self._log: StreamChannel[str] = StreamChannel()
 
             def init(self) -> dict[str, Any]:
                 return {"items": self._log}
@@ -1085,11 +1084,11 @@ class TestEventLogAutoLifecycle:
         mux.close()
         assert len(list(it)) == 1
 
-    def test_mux_auto_fails_event_logs(self) -> None:
+    def test_mux_auto_fails_channels(self) -> None:
         class SimpleTransformer(StreamTransformer):
             def __init__(self) -> None:
                 super().__init__()
-                self._log: EventLog[str] = EventLog()
+                self._log: StreamChannel[str] = StreamChannel()
 
             def init(self) -> dict[str, Any]:
                 return {"items": self._log}
@@ -1110,7 +1109,7 @@ class TestEventLogAutoLifecycle:
         class ManualCloseTransformer(StreamTransformer):
             def __init__(self) -> None:
                 super().__init__()
-                self._log: EventLog[str] = EventLog()
+                self._log: StreamChannel[str] = StreamChannel()
 
             def init(self) -> dict[str, Any]:
                 return {"items": self._log}
@@ -1128,7 +1127,7 @@ class TestEventLogAutoLifecycle:
         class MinimalTransformer(StreamTransformer):
             def __init__(self, scope: tuple[str, ...] = ()) -> None:
                 super().__init__(scope)
-                self._log: EventLog[str] = EventLog()
+                self._log: StreamChannel[str] = StreamChannel()
 
             def init(self) -> dict[str, Any]:
                 return {"minimal": self._log}
@@ -1216,7 +1215,7 @@ class TestAsyncTransformerLane:
             requires_async = True
 
             def __init__(self) -> None:
-                self._log: EventLog[str] = EventLog()
+                self._log: StreamChannel[str] = StreamChannel()
 
             def init(self) -> dict[str, Any]:
                 return {"out": self._log}
@@ -1273,7 +1272,7 @@ class TestAsyncTransformerLane:
             requires_async = True
 
             def __init__(self) -> None:
-                self._log: EventLog[str] = EventLog()
+                self._log: StreamChannel[str] = StreamChannel()
 
             def init(self) -> dict[str, Any]:
                 return {"out": self._log}
@@ -1353,7 +1352,7 @@ class TestAsyncTransformerLane:
             requires_async = True
 
             def __init__(self) -> None:
-                self._log: EventLog[str] = EventLog()
+                self._log: StreamChannel[str] = StreamChannel()
 
             def init(self) -> dict[str, Any]:
                 return {"seen": self._log}
@@ -1381,7 +1380,7 @@ class TestAsyncTransformerLane:
 
             def __init__(self, scope: tuple[str, ...] = ()) -> None:
                 super().__init__(scope)
-                self._log: EventLog[int] = EventLog()
+                self._log: StreamChannel[int] = StreamChannel()
 
             def init(self) -> dict[str, Any]:
                 return {"scores": self._log}
@@ -1469,20 +1468,20 @@ class TestMemoryBounds:
 
 
 # ---------------------------------------------------------------------------
-# DrainOnConsume: EventLog capacity semantics
+# DrainOnConsume: StreamChannel capacity semantics
 # ---------------------------------------------------------------------------
 
 
 class TestDrainOnConsume:
     def test_invalid_maxlen_raises(self) -> None:
         with pytest.raises(ValueError, match="positive int or None"):
-            EventLog(maxlen=0)
+            StreamChannel(maxlen=0)
         with pytest.raises(ValueError, match="positive int or None"):
-            EventLog(maxlen=-3)
+            StreamChannel(maxlen=-3)
 
     def test_push_unbounded_by_design(self) -> None:
         """Push is non-blocking; the caller-driven pump bounds memory via iteration pace."""
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         it = iter(log)
         for i in range(100):
@@ -1491,7 +1490,7 @@ class TestDrainOnConsume:
         assert list(it) == list(range(100))
 
     def test_tee_fans_out_sync(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=False)
         a, b = log.tee(2)
         for i in range(3):
@@ -1502,7 +1501,7 @@ class TestDrainOnConsume:
 
     @pytest.mark.anyio
     async def test_atee_fans_out(self) -> None:
-        log: EventLog[int] = EventLog()
+        log: StreamChannel[int] = StreamChannel()
         log._bind(is_async=True)
         a, b = log.atee(2)
         for i in range(3):

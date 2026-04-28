@@ -124,10 +124,8 @@ def _arm(mux: StreamMux) -> None:
     """
     mux._events._subscribed = True
     for value in mux.extensions.values():
-        if hasattr(value, "_subscribed"):  # EventLog
+        if hasattr(value, "_subscribed"):
             value._subscribed = True
-        elif hasattr(value, "_log"):  # StreamChannel
-            value._log._subscribed = True
 
 
 def _arm_recursive(mux: StreamMux) -> None:
@@ -177,7 +175,7 @@ def _event_items(mux: StreamMux) -> list[ProtocolEvent]:
 def _lifecycle_payloads(mux: StreamMux) -> list[dict[str, Any]]:
     lifecycle_t = mux.transformer_by_key("lifecycle")
     assert isinstance(lifecycle_t, LifecycleTransformer)
-    return list(lifecycle_t._channel._log._items)
+    return list(lifecycle_t._channel._items)
 
 
 # ---------------------------------------------------------------------------

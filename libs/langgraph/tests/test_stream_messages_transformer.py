@@ -18,9 +18,9 @@ from typing_extensions import TypedDict
 
 from langgraph.constants import END, START
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.stream._event_log import EventLog
 from langgraph.stream._mux import StreamMux
 from langgraph.stream.run_stream import GraphRunStream
+from langgraph.stream.stream_channel import StreamChannel
 from langgraph.stream.transformers import MessagesTransformer, ValuesTransformer
 
 TS = int(time.time() * 1000)
@@ -90,9 +90,11 @@ def _whole_msg(
     }
 
 
-def _make_sync_transformer() -> tuple[MessagesTransformer, EventLog[ChatModelStream]]:
+def _make_sync_transformer() -> tuple[
+    MessagesTransformer, StreamChannel[ChatModelStream]
+]:
     t = MessagesTransformer()
-    log: EventLog[ChatModelStream] = t.init()["messages"]
+    log: StreamChannel[ChatModelStream] = t.init()["messages"]
     log._bind(is_async=False)
     # Subscribe up front so pushes during process() are retained.
     log._subscribed = True
@@ -100,9 +102,11 @@ def _make_sync_transformer() -> tuple[MessagesTransformer, EventLog[ChatModelStr
     return t, log
 
 
-def _make_async_transformer() -> tuple[MessagesTransformer, EventLog[ChatModelStream]]:
+def _make_async_transformer() -> tuple[
+    MessagesTransformer, StreamChannel[ChatModelStream]
+]:
     t = MessagesTransformer()
-    log: EventLog[ChatModelStream] = t.init()["messages"]
+    log: StreamChannel[ChatModelStream] = t.init()["messages"]
     log._bind(is_async=True)
     log._subscribed = True
     return t, log
@@ -410,7 +414,7 @@ class TestWireRequestMore:
         mux = StreamMux([values_t, messages_t], is_async=False)
         GraphRunStream(iter([]), mux, values_t)
 
-        log: EventLog[ChatModelStream] = mux.extensions["messages"]
+        log: StreamChannel[ChatModelStream] = mux.extensions["messages"]
         log._subscribed = True
         for evt in _lifecycle():
             messages_t.process(_proto_event(evt))
@@ -427,12 +431,12 @@ class TestWireRequestMore:
 class TestViaMux:
     def _make_mux(
         self,
-    ) -> tuple[MessagesTransformer, StreamMux, EventLog[ChatModelStream]]:
+    ) -> tuple[MessagesTransformer, StreamMux, StreamChannel[ChatModelStream]]:
         t = MessagesTransformer()
         v = ValuesTransformer()
         mux = StreamMux([v, t], is_async=False)
         t._bind_pump(lambda: False)
-        log: EventLog[ChatModelStream] = mux.extensions["messages"]
+        log: StreamChannel[ChatModelStream] = mux.extensions["messages"]
         log._subscribed = True
         return t, mux, log
 
@@ -456,7 +460,7 @@ class TestViaMux:
         t = MessagesTransformer()
         v = ValuesTransformer()
         mux = StreamMux([v, t], is_async=True)
-        log: EventLog[ChatModelStream] = mux.extensions["messages"]
+        log: StreamChannel[ChatModelStream] = mux.extensions["messages"]
         log._subscribed = True
 
         for evt in _lifecycle(text="async mux"):
