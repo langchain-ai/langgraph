@@ -27,7 +27,6 @@ from langgraph.checkpoint.serde.types import (
     RESUME,
     SCHEDULED,
     ChannelProtocol,
-    _DeltaSnapshot,
 )
 
 V = TypeVar("V", int, float, str)
