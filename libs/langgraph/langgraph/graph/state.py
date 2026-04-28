@@ -1065,6 +1065,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1097,6 +1098,13 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
+            transformers: Optional sequence of `StreamTransformer` classes or
+                configured factories. Classes and factories are instantiated
+                per run whenever `stream_v2` / `astream_v2` is called and are
+                propagated to subgraph scopes. Custom factories should follow
+                the standard `StreamTransformer` constructor shape by
+                accepting `scope` as their first argument. Appended after the
+                built-in stream transformers.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
@@ -1179,6 +1187,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             store=store,
             cache=cache,
             name=name or "LangGraph",
+            stream_transformers=transformers,
         )
         compiled._serde_allowlist = serde_allowlist
 
