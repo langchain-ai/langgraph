@@ -7,7 +7,6 @@ import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import copy
-from datetime import timedelta
 from functools import partial
 from hashlib import sha1
 from typing import (
@@ -62,7 +61,6 @@ from langgraph._internal._constants import (
     TASKS,
 )
 from langgraph._internal._scratchpad import PregelScratchpad
-from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -141,15 +139,14 @@ class Call:
         retry_policy: Sequence[RetryPolicy] | None,
         cache_policy: CachePolicy | None,
         callbacks: Callbacks,
-        timeout: float | timedelta | TimeoutPolicy | None = None,
-        idle_timeout: float | timedelta | None = None,
+        timeout: TimeoutPolicy | None = None,
     ) -> None:
         self.func = func
         self.input = input
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.callbacks = callbacks
-        self.timeout = coerce_timeout_policy(timeout, idle_timeout=idle_timeout)
+        self.timeout = timeout
 
 
 def should_interrupt(

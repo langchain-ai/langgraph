@@ -573,13 +573,6 @@ class PregelExecutableTask:
     subgraphs: Sequence[PregelProtocol] = ()
     timeout: TimeoutPolicy | None = None
 
-    @property
-    def idle_timeout(self) -> float | None:
-        if self.timeout is None:
-            return None
-        value = self.timeout.idle_timeout
-        return value.total_seconds() if isinstance(value, timedelta) else value
-
 
 class StateSnapshot(NamedTuple):
     """Snapshot of the state of the graph at the beginning of a step."""

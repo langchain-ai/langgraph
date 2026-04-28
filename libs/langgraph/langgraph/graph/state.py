@@ -678,8 +678,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
             if input_schema is None:
                 input_schema = cast(type[NodeInputT] | None, input_)
-        if (idle_timeout := kwargs.get("idle_timeout", MISSING)) is not MISSING:
-            timeout = coerce_timeout_policy(timeout, idle_timeout=idle_timeout)  # type: ignore[arg-type]
         timeout = coerce_timeout_policy(timeout)
 
         if not isinstance(node, str):

@@ -91,7 +91,7 @@ class _AttemptEvent:
     error_message: str | None = None
 
 
-class _IdleTimedAttemptScope:
+class _TimedAttemptScope:
     """Guarded-config window for timed attempts.
 
     The wrapped config marks writes, stream events, runtime stream writer calls,
@@ -245,12 +245,11 @@ class _IdleHeartbeatCallbackHandler(BaseCallbackHandler):
     the attempt cannot keep the scope alive.
     """
 
-    # Run inline so touch() is synchronous with event emission and races
-    # cleanly against the watchdog (which reads `_last_progress` under
-    # the same lock); thread-pool dispatch would reorder these.
+    # Run inline so progress is recorded in callback emission order;
+    # thread-pool dispatch would introduce extra reordering.
     run_inline = True
 
-    def __init__(self, scope: _IdleTimedAttemptScope) -> None:
+    def __init__(self, scope: _TimedAttemptScope) -> None:
         self._scope_ref = weakref.ref(scope)
 
     def _touch(self, *args: Any, **kwargs: Any) -> None:
@@ -293,25 +292,15 @@ def _start_timed_attempt(
         return None
     runtime = configurable.get(CONFIG_KEY_RUNTIME)
     execution_info = runtime.execution_info if isinstance(runtime, Runtime) else None
-    attempt = execution_info.node_attempt if execution_info is not None else 1
-    run_id = execution_info.run_id if execution_info is not None else None
-    thread_id = (
-        execution_info.thread_id
-        if execution_info is not None
-        else configurable.get(CONFIG_KEY_THREAD_ID)
-    )
-    checkpoint_ns = (
-        execution_info.checkpoint_ns
-        if execution_info is not None
-        else configurable.get(CONFIG_KEY_CHECKPOINT_NS)
-    )
     context = _AttemptContext(
         task_id=task.id,
         task_name=task.name,
-        attempt=attempt,
-        run_id=run_id,
-        thread_id=thread_id,
-        checkpoint_ns=checkpoint_ns,
+        attempt=execution_info.node_attempt if execution_info is not None else 1,
+        run_id=execution_info.run_id if execution_info is not None else None,
+        thread_id=execution_info.thread_id if execution_info is not None else None,
+        checkpoint_ns=(
+            execution_info.checkpoint_ns if execution_info is not None else None
+        ),
         started_at=datetime.now(timezone.utc),
         run_timeout_secs=(
             _timeout_secs(timeout.run_timeout)
@@ -373,7 +362,7 @@ def _dispatch_observer(
     try:
         callback(event)
     except Exception:
-        logger.warning("Idle timed attempt observer failed", exc_info=True)
+        logger.warning("Timed attempt observer failed", exc_info=True)
 
 
 async def _run_timeout_watchdog(run_timeout_s: float) -> None:
@@ -402,7 +391,7 @@ async def _arun_with_timeout(
         callback = config.get(CONF, {}).get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER)
         if callback is not None and idle_timeout_s is not None:
             on_progress = lambda: _emit_progress(callback, attempt_ctx)  # noqa: E731
-    scope = _IdleTimedAttemptScope(
+    scope = _TimedAttemptScope(
         on_progress=on_progress,
         # Cap progress emission at ~4 events per idle window so token-rate
         # callbacks don't flood the observer.
@@ -426,22 +415,19 @@ async def _arun_with_timeout(
             return await task.proc.ainvoke(task.input, scoped_config)
 
     bg = create_task_in_config_context(run, scoped_config)
-    watchdogs: dict[asyncio.Task[None], tuple[Literal["idle", "run"], float]] = {}
+    watchdogs: dict[asyncio.Task[None], Literal["idle", "run"]] = {}
     if idle_timeout_s is not None:
         watchdogs[asyncio.create_task(scope.wait_for_idle_timeout(idle_timeout_s))] = (
-            "idle",
-            idle_timeout_s,
+            "idle"
         )
     if run_timeout_s is not None:
-        watchdogs[asyncio.create_task(_run_timeout_watchdog(run_timeout_s))] = (
-            "run",
-            run_timeout_s,
-        )
+        watchdogs[asyncio.create_task(_run_timeout_watchdog(run_timeout_s))] = "run"
     try:
         done, _ = await asyncio.wait(
             {bg, *watchdogs}, return_when=asyncio.FIRST_COMPLETED
         )
         if bg in done:
+            # Task completed in time.
             for watchdog in watchdogs:
                 watchdog.cancel()
             # FIRST_COMPLETED can return both; a watchdog may have
@@ -455,7 +441,7 @@ async def _arun_with_timeout(
         # NodeTimeoutError; any TimeoutError raised by the proc itself
         # propagates unchanged.
         for watchdog in done:
-            kind, _ = watchdogs[watchdog]
+            kind = watchdogs[watchdog]
             try:
                 await watchdog
             except asyncio.TimeoutError as exc:
@@ -471,10 +457,10 @@ async def _arun_with_timeout(
                     idle_timeout=idle_timeout_s,
                     run_timeout=run_timeout_s,
                 ) from exc
-            raise AssertionError(
-                f"{kind} timeout watchdog completed without timing out"
+            raise RuntimeError(
+                f"{kind} timeout watchdog completed without raising TimeoutError"
             )
-        raise AssertionError("timeout wait completed without task or watchdog")
+        raise RuntimeError("timeout wait completed without task or watchdog")
     except asyncio.CancelledError:
         scope.close()
         bg.cancel()

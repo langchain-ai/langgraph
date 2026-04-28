@@ -217,8 +217,6 @@ def task(
         )
         if retry_policy is None:
             retry_policy = retry  # type: ignore[assignment]
-    if (idle_timeout := kwargs.get("idle_timeout", MISSING)) is not MISSING:
-        timeout = coerce_timeout_policy(timeout, idle_timeout=idle_timeout)  # type: ignore[arg-type]
     timeout_policy = coerce_timeout_policy(timeout)
 
     retry_policies: Sequence[RetryPolicy] = (
@@ -456,9 +454,6 @@ class entrypoint(Generic[ContextT]):
             )
             if retry_policy is None:
                 retry_policy = cast("RetryPolicy | Sequence[RetryPolicy]", retry)
-
-        if (idle_timeout := kwargs.get("idle_timeout", MISSING)) is not MISSING:
-            timeout = coerce_timeout_policy(timeout, idle_timeout=idle_timeout)  # type: ignore[arg-type]
 
         self.checkpointer = checkpointer
         self.store = store

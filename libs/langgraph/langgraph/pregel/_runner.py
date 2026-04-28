@@ -14,7 +14,6 @@ from collections.abc import (
     Iterator,
     Sequence,
 )
-from datetime import timedelta
 from functools import partial
 from typing import (
     Any,
@@ -539,8 +538,7 @@ def _call(
     *,
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
-    timeout: float | timedelta | TimeoutPolicy | None = None,
-    idle_timeout: float | timedelta | None = None,
+    timeout: TimeoutPolicy | None = None,
     callbacks: Callbacks = None,
     futures: weakref.ref[FuturesDict],
     schedule_task: Callable[
@@ -565,7 +563,6 @@ def _call(
             cache_policy=cache_policy,
             callbacks=callbacks,
             timeout=timeout,
-            idle_timeout=idle_timeout,
         ),
     ):
         if fut := next(
@@ -630,8 +627,7 @@ def _acall(
     *,
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
-    timeout: float | timedelta | TimeoutPolicy | None = None,
-    idle_timeout: float | timedelta | None = None,
+    timeout: TimeoutPolicy | None = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict],
@@ -666,7 +662,6 @@ def _acall(
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             timeout=timeout,
-            idle_timeout=idle_timeout,
             callbacks=callbacks,
             futures=futures,
             schedule_task=schedule_task,
@@ -688,8 +683,7 @@ async def _acall_impl(
     *,
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
-    timeout: float | timedelta | TimeoutPolicy | None = None,
-    idle_timeout: float | timedelta | None = None,
+    timeout: TimeoutPolicy | None = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict[asyncio.Future, asyncio.Event]],
@@ -716,7 +710,6 @@ async def _acall_impl(
                 cache_policy=cache_policy,
                 callbacks=callbacks,
                 timeout=timeout,
-                idle_timeout=idle_timeout,
             ),
         ):
             if fut := next(

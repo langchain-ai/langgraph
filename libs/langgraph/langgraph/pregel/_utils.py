@@ -130,16 +130,17 @@ def _runnable_has_native_async(runnable: Runnable) -> bool:
             if not _runnable_has_native_async(step):
                 return False
         return True
+    # This check intentionally covers raw callables and the common composition
+    # wrappers created by graph builders. We do not exhaustively unwrap every
+    # Runnable wrapper because most timed nodes are raw functions, and broader
+    # wrapper introspection adds validation cost for low-value edge cases.
+    # Wrappers that provide `ainvoke` are treated as owning the async contract.
     return _has_native_async(runnable)
 
 
 def validate_timeout_supported(runnable: Runnable, *, name: str) -> None:
     if not _runnable_has_native_async(runnable):
         raise sync_timeout_unsupported(name)
-
-
-def validate_idle_timeout_supported(runnable: Runnable, *, name: str) -> None:
-    validate_timeout_supported(runnable, name=name)
 
 
 def get_function_nonlocals(func: Callable) -> list[Any]:

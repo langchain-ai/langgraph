@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import timedelta
 from typing import Any, Generic, Protocol, TypeAlias
 
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -92,10 +91,3 @@ class StateNodeSpec(Generic[NodeInputT, ContextT]):
     ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
     defer: bool = False
     timeout: TimeoutPolicy | None = None
-
-    @property
-    def idle_timeout(self) -> float | None:
-        if self.timeout is None:
-            return None
-        value = self.timeout.idle_timeout
-        return value.total_seconds() if isinstance(value, timedelta) else value

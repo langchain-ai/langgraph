@@ -340,11 +340,6 @@ class NodeBuilder:
         self._timeout = coerce_timeout_policy(timeout)
         return self
 
-    def set_idle_timeout(self, idle_timeout: float | timedelta | None) -> Self:
-        """Set the per-attempt idle timeout for this node."""
-        self._timeout = coerce_timeout_policy(None, idle_timeout=idle_timeout)
-        return self
-
     def build(self) -> PregelNode:
         """Builds the node."""
         return PregelNode(
@@ -839,7 +834,7 @@ class Pregel(
     def validate(self) -> Self:
         for name, node in self.nodes.items():
             if node.timeout is not None:
-                validate_timeout_supported(node.bound, name=name)
+                validate_timeout_supported(node.node or node.bound, name=name)
         validate_graph(
             self.nodes,
             {k: v for k, v in self.channels.items() if isinstance(v, BaseChannel)},

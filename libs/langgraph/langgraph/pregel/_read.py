@@ -155,7 +155,6 @@ class PregelNode:
         cache_policy: CachePolicy | None = None,
         subgraphs: Sequence[PregelProtocol] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
-        idle_timeout: float | timedelta | None = None,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -167,7 +166,7 @@ class PregelNode:
             self.retry_policy = (retry_policy,)
         else:
             self.retry_policy = retry_policy
-        self.timeout = coerce_timeout_policy(timeout, idle_timeout=idle_timeout)
+        self.timeout = coerce_timeout_policy(timeout)
         self.tags = tags
         self.metadata = metadata
         if subgraphs is not None:
@@ -191,13 +190,6 @@ class PregelNode:
         attrs.pop("node", None)
         attrs.pop("input_cache_key", None)
         return PregelNode(**attrs)
-
-    @property
-    def idle_timeout(self) -> float | None:
-        if self.timeout is None:
-            return None
-        value = self.timeout.idle_timeout
-        return value.total_seconds() if isinstance(value, timedelta) else value
 
     @cached_property
     def flat_writers(self) -> list[Runnable]:

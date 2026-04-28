@@ -22,22 +22,11 @@ def _coerce_timeout_seconds(
     return seconds
 
 
-def coerce_idle_timeout(value: float | timedelta | None) -> float | None:
-    """Normalize an idle timeout to positive seconds, or None if unset."""
-    return _coerce_timeout_seconds(value, field="idle_timeout")
-
-
 def coerce_timeout_policy(
     value: float | timedelta | TimeoutPolicy | None,
-    *,
-    idle_timeout: float | timedelta | None = None,
 ) -> TimeoutPolicy | None:
     """Normalize a timeout value to positive-second policy fields."""
-    if value is not None and idle_timeout is not None:
-        raise ValueError("Pass either `timeout` or `idle_timeout`, not both")
-    if idle_timeout is not None:
-        value = TimeoutPolicy(idle_timeout=idle_timeout)
-    elif value is not None and not isinstance(value, TimeoutPolicy):
+    if value is not None and not isinstance(value, TimeoutPolicy):
         value = TimeoutPolicy(run_timeout=value)
     if value is None:
         return None
@@ -59,10 +48,3 @@ def sync_timeout_unsupported(
 ) -> ValueError:
     """Build the canonical error for using `timeout` with a sync target."""
     return ValueError(f"{_SYNC_TIMEOUT_PREFIX} {kind} {name!r} is sync.")
-
-
-def sync_idle_timeout_unsupported(
-    name: str, *, kind: Literal["Node", "Task"] = "Node"
-) -> ValueError:
-    """Build the canonical error for using `idle_timeout` with a sync target."""
-    return sync_timeout_unsupported(name, kind=kind)

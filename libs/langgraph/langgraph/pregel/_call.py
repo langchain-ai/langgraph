@@ -269,7 +269,7 @@ def call(
         kwargs,
         retry_policy=retry_policy,
         cache_policy=cache_policy,
-        timeout=timeout,
+        timeout=coerce_timeout_policy(timeout),
     )
 
 
@@ -280,11 +280,9 @@ def _call_with_options(
     *,
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
-    timeout: float | timedelta | TimeoutPolicy | None = None,
-    idle_timeout: float | timedelta | None = None,
+    timeout: TimeoutPolicy | None = None,
 ) -> SyncAsyncFuture[T]:
-    timeout_policy = coerce_timeout_policy(timeout, idle_timeout=idle_timeout)
-    if timeout_policy is not None and not is_async_callable(func):
+    if timeout is not None and not is_async_callable(func):
         name = getattr(func, "__name__", func.__class__.__name__)
         raise sync_timeout_unsupported(name, kind="Task")
     config = get_config()
@@ -295,6 +293,6 @@ def _call_with_options(
         retry_policy=retry_policy,
         cache_policy=cache_policy,
         callbacks=config["callbacks"],
-        timeout=timeout_policy,
+        timeout=timeout,
     )
     return fut
