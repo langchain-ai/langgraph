@@ -27,6 +27,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
+from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -185,8 +186,31 @@ class InMemorySaver(
                     if blob_entry is not None and blob_entry[0] != "empty":
                         blob_value = self.serde.loads_typed(blob_entry)
                         if blob_value is not DELTA_SENTINEL:
-                            # Pre-delta snapshot terminator. Skip this
-                            # ancestor's writes — the blob subsumes them.
+                            if isinstance(blob_value, _DeltaSnapshot):
+                                # Step-based snapshot: the blob is state AT this
+                                # ancestor, but the ancestor's pending_writes
+                                # encode the NEXT step's transition and are NOT
+                                # subsumed by the snapshot — collect them first.
+                                step_writes = self.writes.get(
+                                    (thread_id, checkpoint_ns, cp_id), {}
+                                )
+                                for (_task_id, _idx), (
+                                    tid,
+                                    ch,
+                                    serialized,
+                                    _,
+                                ) in sorted(step_writes.items(), reverse=True):
+                                    if ch != channel:
+                                        continue
+                                    collected.append(
+                                        (tid, ch, self.serde.loads_typed(serialized))
+                                    )
+                                collected.reverse()
+                                return _ChannelWritesHistory(
+                                    seed=blob_value, writes=collected
+                                )
+                            # Pre-delta blob: state AT this ancestor already
+                            # subsumes its pending_writes — skip them.
                             collected.reverse()
                             return _ChannelWritesHistory(
                                 seed=blob_value, writes=collected
@@ -500,6 +524,99 @@ class InMemorySaver(
                 self.serde.dumps_typed(v),
                 task_path,
             )
+
+    def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Prune checkpoints for the given threads.
+
+        For DeltaChannel channels, a checkpoint is only deleted if the walk
+        from the latest checkpoint would not need to traverse it — i.e., a
+        `_DeltaSnapshot` blob exists in the kept ancestry that covers all
+        sentinel channels.  Checkpoints that are still in the active walk
+        chain (because no snapshot has been taken yet, e.g. with
+        `snapshot_frequency=None`) are retained.
+
+        Args:
+            thread_ids: Thread IDs to prune.
+            strategy: ``"keep_latest"`` keeps only the most recent checkpoint
+                per namespace; ``"delete"`` removes all checkpoints.
+        """
+        for thread_id in thread_ids:
+            if strategy == "delete":
+                self.delete_thread(thread_id)
+                continue
+
+            if strategy != "keep_latest":
+                raise ValueError(
+                    f"Unknown pruning strategy {strategy!r}. "
+                    "Expected 'keep_latest' or 'delete'."
+                )
+
+            for checkpoint_ns, ns_storage in list(
+                self.storage.get(thread_id, {}).items()
+            ):
+                if not ns_storage:
+                    continue
+
+                # Latest checkpoint (uuid6 IDs are lexicographically monotonic)
+                latest_id = max(ns_storage.keys())
+                latest_data, _, _ = ns_storage[latest_id]
+                latest_cp = self.serde.loads_typed(latest_data)
+
+                # Which channels in the latest checkpoint still have sentinels?
+                sentinel_channels: set[str] = set()
+                for ch, ver in latest_cp.get("channel_versions", {}).items():
+                    blob = self.blobs.get((thread_id, checkpoint_ns, ch, ver))
+                    if blob is not None and blob[0] == "delta":
+                        sentinel_channels.add(ch)
+
+                # Walk the parent chain to find the oldest ancestor still needed.
+                # We stop (and mark "safe to prune before here") when all
+                # sentinel channels are covered by a non-sentinel blob.
+                required_ids: set[str] = {latest_id}
+                if sentinel_channels:
+                    _, _, parent_id = ns_storage[latest_id]
+                    remaining = set(sentinel_channels)
+                    while parent_id is not None and remaining:
+                        entry = ns_storage.get(parent_id)
+                        if entry is None:
+                            break
+                        required_ids.add(parent_id)
+                        cp_data, _, grandparent_id = entry
+                        cp = self.serde.loads_typed(cp_data)
+                        resolved: set[str] = set()
+                        for ch in remaining:
+                            ver = cp.get("channel_versions", {}).get(ch)
+                            if ver is None:
+                                continue
+                            blob = self.blobs.get((thread_id, checkpoint_ns, ch, ver))
+                            if blob is not None and blob[0] not in ("delta", "empty"):
+                                resolved.add(ch)
+                        remaining -= resolved
+                        parent_id = grandparent_id
+
+                # Delete everything outside the required set
+                for cp_id in list(ns_storage.keys()):
+                    if cp_id in required_ids:
+                        continue
+                    cp_data, _, _ = ns_storage.pop(cp_id)
+                    self.writes.pop((thread_id, checkpoint_ns, cp_id), None)
+
+                # Clean up blobs no longer referenced by any kept checkpoint
+                live: set[tuple[str, str, str, Any]] = set()
+                for cp_data, _, _ in ns_storage.values():
+                    cp = self.serde.loads_typed(cp_data)
+                    for ch, ver in cp.get("channel_versions", {}).items():
+                        live.add((thread_id, checkpoint_ns, ch, ver))
+                for key in [
+                    k for k in self.blobs if k[:2] == (thread_id, checkpoint_ns)
+                ]:
+                    if key not in live:
+                        del self.blobs[key]
 
     def delete_thread(self, thread_id: str) -> None:
         """Delete all checkpoints and writes associated with a thread ID.

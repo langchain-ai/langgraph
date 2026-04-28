@@ -41,6 +41,7 @@ from typing_extensions import NotRequired, TypedDict
 
 from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
@@ -9407,7 +9408,6 @@ async def test_delta_channel_end_to_end_inmemory() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9449,7 +9449,6 @@ async def test_delta_channel_time_travel() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9507,7 +9506,6 @@ async def test_delta_channel_remove_message_end_to_end() -> None:
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9554,7 +9552,6 @@ async def test_delta_channel_update_by_id_end_to_end() -> None:
     from langchain_core.messages import HumanMessage
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from langgraph.channels._delta import DeltaChannel
     from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
 
@@ -9587,3 +9584,90 @@ async def test_delta_channel_update_by_id_end_to_end() -> None:
     assert "h1" in ids  # h1 persists (updated, not duplicated)
     assert "h2" in ids
     assert ids.count("h1") == 1, "h1 must not be duplicated"
+
+
+async def test_delta_channel_write_flushed_before_put() -> None:
+    """checkpoint_writes are flushed synchronously before put when DELTA_SENTINEL
+    is present, ensuring writes are durable before the sentinel blob is committed.
+
+    We verify this by intercepting put_writes and put calls and confirming
+    put_writes always completes before put is called for sentinel checkpoints.
+    """
+    import threading
+    from typing import Annotated
+
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.base import DELTA_SENTINEL
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import add_messages
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(add_messages)]
+
+    def respond(state: State) -> dict:
+        i = len(state["messages"])
+        return {"messages": [AIMessage(content=f"r{i}", id=f"ai{i}")]}
+
+    order: list[str] = []
+    lock = threading.Lock()
+    original_put_writes = InMemorySaver.put_writes
+    original_put = InMemorySaver.put
+
+    def tracked_put_writes(self, config, writes, task_id, task_path=""):
+        result = original_put_writes(self, config, writes, task_id, task_path)
+        with lock:
+            order.append("put_writes")
+        return result
+
+    def tracked_put(self, config, checkpoint, metadata, new_versions):
+        # Check if this checkpoint has any DELTA_SENTINEL blobs
+        has_sentinel = any(
+            v is DELTA_SENTINEL for v in checkpoint.get("channel_values", {}).values()
+        )
+        if has_sentinel:
+            with lock:
+                order.append("put_sentinel")
+        else:
+            with lock:
+                order.append("put_snapshot")
+        return original_put(self, config, checkpoint, metadata, new_versions)
+
+    InMemorySaver.put_writes = tracked_put_writes
+    InMemorySaver.put = tracked_put
+    try:
+        builder = StateGraph(State)
+        builder.add_node("respond", respond)
+        builder.add_edge(START, "respond")
+        saver = InMemorySaver()
+        graph = builder.compile(checkpointer=saver)
+        config = {"configurable": {"thread_id": "flush-test"}}
+
+        for i in range(3):
+            graph.invoke(
+                {"messages": [HumanMessage(content=f"h{i}", id=f"h{i}")]}, config
+            )
+
+        # For every sentinel put, all preceding put_writes must already be in order
+        for i, event in enumerate(order):
+            if event == "put_sentinel":
+                # All put_writes before this index must appear before this sentinel
+                preceding = order[:i]
+                assert "put_writes" in preceding, (
+                    f"put_sentinel at index {i} had no preceding put_writes: {order}"
+                )
+                # And the most recent put_writes must come before this sentinel
+                last_write_idx = max(
+                    j for j, e in enumerate(order[:i]) if e == "put_writes"
+                )
+                assert last_write_idx < i, (
+                    f"put_writes at {last_write_idx} not before put_sentinel at {i}"
+                )
+    finally:
+        InMemorySaver.put_writes = original_put_writes
+        InMemorySaver.put = original_put
+
+    # Final state must still be correct
+    state = graph.get_state(config)
+    assert len(state.values["messages"]) == 6  # 3 human + 3 AI

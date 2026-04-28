@@ -28,6 +28,7 @@ from langgraph.checkpoint.serde.types import (
     RESUME,
     SCHEDULED,
     ChannelProtocol,
+    _DeltaSnapshot,
 )
 
 V = TypeVar("V", int, float, str)
@@ -545,6 +546,16 @@ class BaseCheckpointSaver(Generic[V]):
                 # subsumes any earlier writes on the chain. Stop here.
                 ancestor_value = tup.checkpoint["channel_values"].get(channel)
                 if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
+                    if isinstance(ancestor_value, _DeltaSnapshot):
+                        # Step-based snapshot: the blob is state AT this ancestor,
+                        # but pending_writes encode the NEXT step's transition and
+                        # are NOT subsumed — collect them before terminating.
+                        if tup.pending_writes:
+                            for write in reversed(tup.pending_writes):
+                                if write[1] != channel:
+                                    continue
+                                collected.append(write)
+                    # Pre-delta blob: subsumes its own writes — stop immediately.
                     collected.reverse()
                     return _ChannelWritesHistory(seed=ancestor_value, writes=collected)
                 if tup.pending_writes:
@@ -578,8 +589,15 @@ class BaseCheckpointSaver(Generic[V]):
                 tup = await self.aget_tuple(cursor_config)
                 if tup is None:
                     break
+                # See sync variant for rationale.
                 ancestor_value = tup.checkpoint["channel_values"].get(channel)
                 if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
+                    if isinstance(ancestor_value, _DeltaSnapshot):
+                        if tup.pending_writes:
+                            for write in reversed(tup.pending_writes):
+                                if write[1] != channel:
+                                    continue
+                                collected.append(write)
                     collected.reverse()
                     return _ChannelWritesHistory(seed=ancestor_value, writes=collected)
                 if tup.pending_writes:
