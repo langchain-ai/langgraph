@@ -12,11 +12,23 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.serde.jsonplus import (
+    JsonPlusSerializer,
+    _warned_blocked_types,
+    _warned_unregistered_types,
+)
 
 
 class MemoryPydantic(BaseModel):
     foo: str
+
+
+@pytest.fixture(autouse=True)
+def _reset_warned_types() -> None:
+    # Warning dedup state is process-global; reset per-test so each case sees
+    # a fresh slate and assertions about warning emission are stable.
+    _warned_unregistered_types.clear()
+    _warned_blocked_types.clear()
 
 
 class TestMemorySaver:
