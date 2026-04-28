@@ -12,11 +12,11 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph._internal._config import merge_configs
 from langgraph._internal._constants import CONF, CONFIG_KEY_READ
 from langgraph._internal._runnable import RunnableCallable, RunnableSeq
-from langgraph._internal._timeout import coerce_idle_timeout
+from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph.pregel._utils import find_subgraph_pregel
 from langgraph.pregel._write import ChannelWrite
 from langgraph.pregel.protocol import PregelProtocol
-from langgraph.types import CachePolicy, RetryPolicy
+from langgraph.types import CachePolicy, RetryPolicy, TimeoutPolicy
 
 READ_TYPE = Callable[[str | Sequence[str], bool], Any | dict[str, Any]]
 INPUT_CACHE_KEY_TYPE = tuple[Callable[..., Any], tuple[str, ...]]
@@ -125,10 +125,12 @@ class PregelNode:
     cache_policy: CachePolicy | None
     """The cache policy to use when invoking the node."""
 
-    idle_timeout: float | None
-    """Maximum time in seconds a single invocation may go without observable
-    progress. If exceeded, `NodeTimeoutError` is raised and the retry policy
-    (if any) decides whether to retry. Supported only for async nodes."""
+    timeout: TimeoutPolicy | None
+    """Timeout policy for a single invocation.
+
+    If exceeded, `NodeTimeoutError` is raised and the retry policy (if any)
+    decides whether to retry. Supported only for async nodes.
+    """
 
     tags: Sequence[str] | None
     """Tags to attach to the node for tracing."""
@@ -152,6 +154,7 @@ class PregelNode:
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         subgraphs: Sequence[PregelProtocol] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         idle_timeout: float | timedelta | None = None,
     ) -> None:
         self.channels = channels
@@ -164,7 +167,7 @@ class PregelNode:
             self.retry_policy = (retry_policy,)
         else:
             self.retry_policy = retry_policy
-        self.idle_timeout = coerce_idle_timeout(idle_timeout)
+        self.timeout = coerce_timeout_policy(timeout, idle_timeout=idle_timeout)
         self.tags = tags
         self.metadata = metadata
         if subgraphs is not None:
@@ -188,6 +191,13 @@ class PregelNode:
         attrs.pop("node", None)
         attrs.pop("input_cache_key", None)
         return PregelNode(**attrs)
+
+    @property
+    def idle_timeout(self) -> float | None:
+        if self.timeout is None:
+            return None
+        value = self.timeout.idle_timeout
+        return value.total_seconds() if isinstance(value, timedelta) else value
 
     @cached_property
     def flat_writers(self) -> list[Runnable]:

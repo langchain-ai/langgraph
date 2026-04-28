@@ -4,6 +4,7 @@ import sys
 from collections import deque
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import asdict, dataclass
+from datetime import timedelta
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -67,6 +68,7 @@ __all__ = (
     "CheckpointPayload",
     "DebugPayload",
     "RetryPolicy",
+    "TimeoutPolicy",
     "CachePolicy",
     "Interrupt",
     "StateUpdate",
@@ -423,6 +425,27 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns `True` for exceptions that should trigger a retry."""
 
 
+@dataclass(**_DC_KWARGS)
+class TimeoutPolicy:
+    """Configuration for timing out node attempts."""
+
+    run_timeout: float | timedelta | None = None
+    """Hard wall-clock cap for a single node attempt.
+
+    This timeout is never refreshed by progress signals or `runtime.heartbeat()`.
+    """
+
+    idle_timeout: float | timedelta | None = None
+    """Maximum time a single node attempt may go without observable progress."""
+
+    refresh_on: Literal["auto", "heartbeat"] = "auto"
+    """Which signals refresh `idle_timeout`.
+
+    `"auto"` refreshes on standard graph progress signals and explicit heartbeats.
+    `"heartbeat"` refreshes only on explicit `runtime.heartbeat()` calls.
+    """
+
+
 KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., str | bytes])
 
 
@@ -548,7 +571,14 @@ class PregelExecutableTask:
     path: tuple[str | int | tuple, ...]
     writers: Sequence[Runnable] = ()
     subgraphs: Sequence[PregelProtocol] = ()
-    idle_timeout: float | None = None
+    timeout: TimeoutPolicy | None = None
+
+    @property
+    def idle_timeout(self) -> float | None:
+        if self.timeout is None:
+            return None
+        value = self.timeout.idle_timeout
+        return value.total_seconds() if isinstance(value, timedelta) else value
 
 
 class StateSnapshot(NamedTuple):

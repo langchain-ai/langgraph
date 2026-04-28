@@ -96,7 +96,7 @@ from langgraph._internal._runnable import (
     RunnableSeq,
     coerce_to_runnable,
 )
-from langgraph._internal._timeout import coerce_idle_timeout
+from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.callbacks import (
     GraphInterruptEvent,
@@ -141,7 +141,7 @@ from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
 from langgraph.pregel._utils import (
     get_new_channel_versions,
-    validate_idle_timeout_supported,
+    validate_timeout_supported,
 )
 from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
@@ -166,6 +166,7 @@ from langgraph.types import (
     StateUpdate,
     StreamMode,
     StreamPart,
+    TimeoutPolicy,
     ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
@@ -191,7 +192,7 @@ class NodeBuilder:
         "_bound",
         "_retry_policy",
         "_cache_policy",
-        "_idle_timeout",
+        "_timeout",
     )
 
     _channels: str | list[str]
@@ -202,7 +203,7 @@ class NodeBuilder:
     _bound: Runnable
     _retry_policy: list[RetryPolicy]
     _cache_policy: CachePolicy | None
-    _idle_timeout: float | None
+    _timeout: TimeoutPolicy | None
 
     def __init__(
         self,
@@ -215,7 +216,7 @@ class NodeBuilder:
         self._bound = DEFAULT_BOUND
         self._retry_policy = []
         self._cache_policy = None
-        self._idle_timeout = None
+        self._timeout = None
 
     def subscribe_only(
         self,
@@ -334,9 +335,14 @@ class NodeBuilder:
         self._cache_policy = policy
         return self
 
+    def set_timeout(self, timeout: float | timedelta | TimeoutPolicy | None) -> Self:
+        """Set the per-attempt timeout policy for this node."""
+        self._timeout = coerce_timeout_policy(timeout)
+        return self
+
     def set_idle_timeout(self, idle_timeout: float | timedelta | None) -> Self:
         """Set the per-attempt idle timeout for this node."""
-        self._idle_timeout = coerce_idle_timeout(idle_timeout)
+        self._timeout = coerce_timeout_policy(None, idle_timeout=idle_timeout)
         return self
 
     def build(self) -> PregelNode:
@@ -350,7 +356,7 @@ class NodeBuilder:
             bound=self._bound,
             retry_policy=self._retry_policy,
             cache_policy=self._cache_policy,
-            idle_timeout=self._idle_timeout,
+            timeout=self._timeout,
         )
 
 
@@ -832,8 +838,8 @@ class Pregel(
 
     def validate(self) -> Self:
         for name, node in self.nodes.items():
-            if node.idle_timeout is not None:
-                validate_idle_timeout_supported(node.bound, name=name)
+            if node.timeout is not None:
+                validate_timeout_supported(node.bound, name=name)
         validate_graph(
             self.nodes,
             {k: v for k, v in self.channels.items() if isinstance(v, BaseChannel)},

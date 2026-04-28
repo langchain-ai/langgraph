@@ -46,7 +46,7 @@ from langgraph._internal._fields import (
 )
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
-from langgraph._internal._timeout import coerce_idle_timeout
+from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -83,6 +83,7 @@ from langgraph.types import (
     Command,
     RetryPolicy,
     Send,
+    TimeoutPolicy,
     ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
@@ -302,7 +303,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
-        idle_timeout: float | timedelta | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -370,7 +371,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
-        idle_timeout: float | timedelta | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph` where input schema is specified.
@@ -443,7 +444,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
-        idle_timeout: float | timedelta | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -511,7 +512,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
-        idle_timeout: float | timedelta | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is specified.
@@ -586,7 +587,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
-        idle_timeout: float | timedelta | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`.
@@ -616,12 +617,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 !!! warning
 
                     This is only used for graph rendering and doesn't have any effect on the graph execution.
-            idle_timeout: Maximum time a single invocation of this node may go
-                without observable progress, in seconds (or as a `timedelta`).
-                Progress includes writes, stream output, yielded stream
-                chunks, child task scheduling, LangChain callback events
-                from runs descended from this node, and explicit
-                `runtime.heartbeat()` calls. When exceeded, a
+            timeout: Timeout for each node attempt. A number or `timedelta` is
+                a hard wall-clock cap and is not refreshed. Use `TimeoutPolicy`
+                to configure both a wall-clock `run_timeout` and an
+                `idle_timeout` refreshed by progress signals. When exceeded, a
                 [`NodeTimeoutError`][langgraph.errors.NodeTimeoutError] is raised
                 and the retry policy (if any) decides whether to retry. Timeouts
                 are supported only for async nodes; sync nodes cannot be safely
@@ -679,7 +678,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
             if input_schema is None:
                 input_schema = cast(type[NodeInputT] | None, input_)
-        idle_timeout = coerce_idle_timeout(idle_timeout)
+        if (idle_timeout := kwargs.get("idle_timeout", MISSING)) is not MISSING:
+            timeout = coerce_timeout_policy(timeout, idle_timeout=idle_timeout)  # type: ignore[arg-type]
+        timeout = coerce_timeout_policy(timeout)
 
         if not isinstance(node, str):
             action = node
@@ -775,7 +776,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 cache_policy=cache_policy,
                 ends=ends,
                 defer=defer,
-                idle_timeout=idle_timeout,
+                timeout=timeout,
             )
         elif inferred_input_schema is not None:
             self.nodes[node] = StateNodeSpec(
@@ -786,7 +787,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 cache_policy=cache_policy,
                 ends=ends,
                 defer=defer,
-                idle_timeout=idle_timeout,
+                timeout=timeout,
             )
         else:
             self.nodes[node] = StateNodeSpec[StateT, ContextT](
@@ -797,7 +798,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 cache_policy=cache_policy,
                 ends=ends,
                 defer=defer,
-                idle_timeout=idle_timeout,
+                timeout=timeout,
             )
 
         input_schema = input_schema or inferred_input_schema
@@ -1353,7 +1354,7 @@ class CompiledStateGraph(
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
                 bound=node.runnable,  # type: ignore[arg-type]
-                idle_timeout=node.idle_timeout,
+                timeout=node.timeout,
             )
         else:
             raise RuntimeError

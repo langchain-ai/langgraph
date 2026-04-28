@@ -47,6 +47,7 @@ from langgraph.types import (
     CachePolicy,
     PregelExecutableTask,
     RetryPolicy,
+    TimeoutPolicy,
 )
 
 F = TypeVar("F", concurrent.futures.Future, asyncio.Future)
@@ -538,6 +539,7 @@ def _call(
     *,
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
+    timeout: float | timedelta | TimeoutPolicy | None = None,
     idle_timeout: float | timedelta | None = None,
     callbacks: Callbacks = None,
     futures: weakref.ref[FuturesDict],
@@ -562,6 +564,7 @@ def _call(
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             callbacks=callbacks,
+            timeout=timeout,
             idle_timeout=idle_timeout,
         ),
     ):
@@ -627,6 +630,7 @@ def _acall(
     *,
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
+    timeout: float | timedelta | TimeoutPolicy | None = None,
     idle_timeout: float | timedelta | None = None,
     callbacks: Callbacks = None,
     # injected dependencies
@@ -661,6 +665,7 @@ def _acall(
             input,
             retry_policy=retry_policy,
             cache_policy=cache_policy,
+            timeout=timeout,
             idle_timeout=idle_timeout,
             callbacks=callbacks,
             futures=futures,
@@ -683,6 +688,7 @@ async def _acall_impl(
     *,
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
+    timeout: float | timedelta | TimeoutPolicy | None = None,
     idle_timeout: float | timedelta | None = None,
     callbacks: Callbacks = None,
     # injected dependencies
@@ -709,6 +715,7 @@ async def _acall_impl(
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
                 callbacks=callbacks,
+                timeout=timeout,
                 idle_timeout=idle_timeout,
             ),
         ):

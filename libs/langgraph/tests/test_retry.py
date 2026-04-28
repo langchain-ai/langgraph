@@ -30,7 +30,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
 )
 from langgraph._internal._runnable import RunnableCallable
-from langgraph._internal._timeout import coerce_idle_timeout
+from langgraph._internal._timeout import coerce_idle_timeout, coerce_timeout_policy
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.errors import GraphInterrupt, NodeTimeoutError, ParentCommand
@@ -48,7 +48,7 @@ from langgraph.pregel._retry import (
 )
 from langgraph.pregel.protocol import StreamProtocol
 from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
-from langgraph.types import Command, PregelExecutableTask, RetryPolicy
+from langgraph.types import Command, PregelExecutableTask, RetryPolicy, TimeoutPolicy
 
 NEEDS_CONTEXTVARS = pytest.mark.skipif(
     sys.version_info < (3, 11),
@@ -602,7 +602,14 @@ def test_run_with_retry_creates_execution_info_when_missing():
 
 
 def _make_task(
-    proc, *, idle_timeout=None, retry_policy=(), name="timed", task_id="tid", writers=()
+    proc,
+    *,
+    timeout=None,
+    idle_timeout=None,
+    retry_policy=(),
+    name="timed",
+    task_id="tid",
+    writers=(),
 ):
     runtime = DEFAULT_RUNTIME.override(execution_info=None)
     writes = deque()
@@ -629,7 +636,7 @@ def _make_task(
         id=task_id,
         path=("__pregel_pull", name),
         writers=writers,
-        idle_timeout=coerce_idle_timeout(idle_timeout),
+        timeout=coerce_timeout_policy(timeout, idle_timeout=idle_timeout),
     )
 
 
@@ -642,6 +649,18 @@ def test_coerce_timeout():
         coerce_idle_timeout(0)
     with pytest.raises(ValueError, match="greater than 0"):
         coerce_idle_timeout(timedelta())
+
+
+def test_coerce_timeout_policy_scalar_is_run_timeout():
+    assert coerce_timeout_policy(None) is None
+    policy = coerce_timeout_policy(timedelta(milliseconds=250))
+    assert policy == TimeoutPolicy(run_timeout=0.25)
+
+    idle_policy = coerce_timeout_policy(TimeoutPolicy(idle_timeout=1.5))
+    assert idle_policy == TimeoutPolicy(idle_timeout=1.5)
+
+    with pytest.raises(ValueError, match="run_timeout must be greater than 0"):
+        coerce_timeout_policy(0)
 
 
 def test_run_with_retry_rejects_sync_timeout_without_starting_proc():
@@ -741,7 +760,7 @@ async def test_entrypoint_timeout_allows_pre_timeout_child_task_to_run():
         child_started.set()
         return value + 1
 
-    @entrypoint(idle_timeout=0.05)
+    @entrypoint(timeout=TimeoutPolicy(idle_timeout=0.05))
     async def parent(value: int) -> int:
         child(value)
         await asyncio.sleep(0.2)
@@ -776,6 +795,23 @@ async def test_arun_with_retry_timeout_fires_async():
         await arun_with_retry(task, retry_policy=None)
     assert excinfo.value.node == "aslow"
     assert excinfo.value.idle_timeout == 0.05
+
+
+@pytest.mark.anyio
+async def test_arun_with_retry_run_timeout_is_not_refreshed_by_heartbeat():
+    class HeartbeatingProc:
+        async def ainvoke(self, input, config):
+            runtime = config[CONF][CONFIG_KEY_RUNTIME]
+            while True:
+                runtime.heartbeat()
+                await asyncio.sleep(0.01)
+
+    task = _make_task(HeartbeatingProc(), timeout=0.05, name="run-timeout")
+    with pytest.raises(NodeTimeoutError) as excinfo:
+        await arun_with_retry(task, retry_policy=None)
+    assert excinfo.value.kind == "run"
+    assert excinfo.value.run_timeout == 0.05
+    assert excinfo.value.idle_timeout is None
 
 
 @pytest.mark.anyio
@@ -898,6 +934,46 @@ async def test_arun_with_retry_idle_timeout_resets_on_runtime_heartbeat():
             return "ok"
 
     task = _make_task(HeartbeatProc(), idle_timeout=0.15, name="heartbeat")
+    assert await arun_with_retry(task, retry_policy=None) == "ok"
+
+
+@pytest.mark.anyio
+async def test_arun_with_retry_heartbeat_refresh_mode_ignores_stream_events():
+    events = []
+
+    class StreamingProc:
+        async def ainvoke(self, input, config):
+            while True:
+                await asyncio.sleep(0.01)
+                config[CONF][CONFIG_KEY_STREAM](((), "custom", "tick"))
+
+    task = _make_task(
+        StreamingProc(),
+        timeout=TimeoutPolicy(idle_timeout=0.05, refresh_on="heartbeat"),
+        name="heartbeat-only",
+    )
+    task.config[CONF][CONFIG_KEY_STREAM] = StreamProtocol(events.append, {"custom"})
+    with pytest.raises(NodeTimeoutError) as excinfo:
+        await arun_with_retry(task, retry_policy=None)
+    assert excinfo.value.kind == "idle"
+    assert events
+
+
+@pytest.mark.anyio
+async def test_arun_with_retry_heartbeat_refresh_mode_accepts_heartbeat():
+    class HeartbeatProc:
+        async def ainvoke(self, input, config):
+            runtime = config[CONF][CONFIG_KEY_RUNTIME]
+            for _ in range(3):
+                await asyncio.sleep(0.03)
+                runtime.heartbeat()
+            return "ok"
+
+    task = _make_task(
+        HeartbeatProc(),
+        timeout=TimeoutPolicy(idle_timeout=0.08, refresh_on="heartbeat"),
+        name="heartbeat-only",
+    )
     assert await arun_with_retry(task, retry_policy=None) == "ok"
 
 
@@ -1042,32 +1118,32 @@ class _TimeoutState(TypedDict):
 
 def test_timeout_validation_is_eager_across_apis():
     with pytest.raises(ValueError, match="greater than 0"):
-        task(idle_timeout=0)
+        task(timeout=0)
 
     with pytest.raises(ValueError, match="greater than 0"):
-        entrypoint(idle_timeout=0)
+        entrypoint(timeout=0)
 
     with pytest.raises(ValueError, match="greater than 0"):
-        NodeBuilder().set_idle_timeout(0)
+        NodeBuilder().set_timeout(0)
 
     with pytest.raises(ValueError, match="greater than 0"):
-        PregelNode(channels="x", triggers=["x"], idle_timeout=0)
+        PregelNode(channels="x", triggers=["x"], timeout=0)
 
     builder = StateGraph(_TimeoutState)
     with pytest.raises(ValueError, match="greater than 0"):
-        builder.add_node("slow", lambda state: state, idle_timeout=0)
+        builder.add_node("slow", lambda state: state, timeout=0)
 
 
 def test_timeout_rejects_sync_functional_apis_at_declaration_time():
     with pytest.raises(ValueError, match="only supported for async nodes"):
 
-        @task(idle_timeout=0.05)
+        @task(timeout=TimeoutPolicy(idle_timeout=0.05))
         def sync_task(value: int) -> int:
             return value
 
     with pytest.raises(ValueError, match="only supported for async nodes"):
 
-        @entrypoint(idle_timeout=0.05)
+        @entrypoint(timeout=TimeoutPolicy(idle_timeout=0.05))
         def sync_entrypoint(value: int) -> int:
             return value
 
@@ -1077,7 +1153,7 @@ def test_state_graph_compile_rejects_sync_node_timeout():
         return {"x": state["x"] + 1}
 
     builder = StateGraph(_TimeoutState)
-    builder.add_node("slow", slow, idle_timeout=0.05)
+    builder.add_node("slow", slow, timeout=TimeoutPolicy(idle_timeout=0.05))
     builder.add_edge(START, "slow")
     builder.add_edge("slow", END)
 
@@ -1230,7 +1306,7 @@ async def test_pregel_validate_accepts_runnable_callable_with_sync_and_async_tim
                 NodeBuilder()
                 .subscribe_only("input")
                 .do(RunnableCallable(sync, async_))
-                .set_idle_timeout(0.05)
+                .set_timeout(TimeoutPolicy(idle_timeout=0.05))
                 .write_to("output")
             )
         },
@@ -1252,7 +1328,7 @@ async def test_state_graph_add_node_timeout_e2e():
         return {"x": state["x"] + 1}
 
     builder = StateGraph(_TimeoutState)
-    builder.add_node("slow", slow, idle_timeout=0.05)
+    builder.add_node("slow", slow, timeout=TimeoutPolicy(idle_timeout=0.05))
     builder.add_edge(START, "slow")
     builder.add_edge("slow", END)
     graph = builder.compile()
@@ -1262,7 +1338,7 @@ async def test_state_graph_add_node_timeout_e2e():
 
 @pytest.mark.anyio
 async def test_state_graph_add_node_timeout_composes_with_retry():
-    """add_node(..., idle_timeout=...) + retry_policy retries then succeeds."""
+    """add_node(..., timeout=TimeoutPolicy(...)) retries then succeeds."""
 
     attempts: list[int] = []
 
@@ -1276,7 +1352,7 @@ async def test_state_graph_add_node_timeout_composes_with_retry():
     builder.add_node(
         "flaky",
         flaky,
-        idle_timeout=0.1,
+        timeout=TimeoutPolicy(idle_timeout=0.1),
         retry_policy=RetryPolicy(
             max_attempts=3,
             initial_interval=0.0,
@@ -1295,7 +1371,7 @@ async def test_state_graph_add_node_timeout_composes_with_retry():
 @NEEDS_CONTEXTVARS
 @pytest.mark.anyio
 async def test_task_decorator_timeout_e2e():
-    @task(idle_timeout=0.05)
+    @task(timeout=TimeoutPolicy(idle_timeout=0.05))
     async def slow_task(x: int) -> int:
         await asyncio.sleep(0.2)
         return x + 1
@@ -1311,7 +1387,7 @@ async def test_task_decorator_timeout_e2e():
 @NEEDS_CONTEXTVARS
 @pytest.mark.anyio
 async def test_task_decorator_preserves_user_idle_timeout_kwarg():
-    @task(idle_timeout=1.0)
+    @task(timeout=TimeoutPolicy(idle_timeout=1.0))
     async def echo_idle_timeout(*, idle_timeout: int) -> int:
         await asyncio.sleep(0)
         return idle_timeout
@@ -1323,9 +1399,24 @@ async def test_task_decorator_preserves_user_idle_timeout_kwarg():
     assert await workflow.ainvoke(5) == 5
 
 
+@NEEDS_CONTEXTVARS
+@pytest.mark.anyio
+async def test_task_decorator_preserves_user_timeout_kwarg():
+    @task(timeout=1.0)
+    async def echo_timeout(*, timeout: int) -> int:
+        await asyncio.sleep(0)
+        return timeout
+
+    @entrypoint()
+    async def workflow(x: int) -> int:
+        return await echo_timeout(timeout=x)
+
+    assert await workflow.ainvoke(5) == 5
+
+
 @pytest.mark.anyio
 async def test_entrypoint_timeout_e2e():
-    @entrypoint(idle_timeout=0.05)
+    @entrypoint(timeout=TimeoutPolicy(idle_timeout=0.05))
     async def slow_workflow(x: int) -> int:
         await asyncio.sleep(0.2)
         return x
@@ -1377,7 +1468,11 @@ async def test_idle_timeout_resets_on_message_stream_callbacks():
         return {"messages": [response]}
 
     builder = StateGraph(_MessageStreamState)
-    builder.add_node("call_model", call_model, idle_timeout=0.15)
+    builder.add_node(
+        "call_model",
+        call_model,
+        timeout=TimeoutPolicy(idle_timeout=0.15),
+    )
     builder.add_edge(START, "call_model")
     builder.add_edge("call_model", END)
     graph = builder.compile()

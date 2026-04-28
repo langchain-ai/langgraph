@@ -20,7 +20,7 @@ from langgraph.checkpoint.base import ChannelVersions
 from typing_extensions import override
 
 from langgraph._internal._runnable import RunnableCallable, RunnableSeq
-from langgraph._internal._timeout import sync_idle_timeout_unsupported
+from langgraph._internal._timeout import sync_timeout_unsupported
 from langgraph.pregel.protocol import PregelProtocol
 
 _SEQUENCE_TYPES = (RunnableSeq, RunnableSequence)
@@ -129,9 +129,13 @@ def _runnable_has_native_async(runnable: Runnable) -> bool:
     return _has_native_async(runnable)
 
 
-def validate_idle_timeout_supported(runnable: Runnable, *, name: str) -> None:
+def validate_timeout_supported(runnable: Runnable, *, name: str) -> None:
     if not _runnable_has_native_async(runnable):
-        raise sync_idle_timeout_unsupported(name)
+        raise sync_timeout_unsupported(name)
+
+
+def validate_idle_timeout_supported(runnable: Runnable, *, name: str) -> None:
+    validate_timeout_supported(runnable, name=name)
 
 
 def get_function_nonlocals(func: Callable) -> list[Any]:

@@ -129,7 +129,7 @@ class TaskNotFound(Exception):
 
 
 class NodeTimeoutError(TimeoutError):
-    """Raised when a node invocation makes no progress for its `idle_timeout`.
+    """Raised when a node invocation exceeds one of its configured timeouts.
 
     Subclasses the built-in `TimeoutError`, so existing `except TimeoutError`
     handlers keep working. If the node has a `retry_policy` whose `retry_on`
@@ -137,14 +137,38 @@ class NodeTimeoutError(TimeoutError):
     """
 
     node: str
-    idle_timeout: float
+    timeout: float
+    run_timeout: float | None
+    idle_timeout: float | None
     elapsed: float
+    kind: str
 
-    def __init__(self, node: str, idle_timeout: float, elapsed: float) -> None:
-        super().__init__(
-            f"Node '{node}' exceeded its idle timeout of {idle_timeout:.3f}s "
-            f"without making progress (elapsed: {elapsed:.3f}s)."
-        )
+    def __init__(
+        self,
+        node: str,
+        timeout: float,
+        elapsed: float,
+        *,
+        kind: str = "idle",
+    ) -> None:
+        if kind == "idle":
+            message = (
+                f"Node '{node}' exceeded its idle timeout of {timeout:.3f}s "
+                f"without making progress (elapsed: {elapsed:.3f}s)."
+            )
+            self.run_timeout = None
+            self.idle_timeout = timeout
+        elif kind == "run":
+            message = (
+                f"Node '{node}' exceeded its run timeout of {timeout:.3f}s "
+                f"(elapsed: {elapsed:.3f}s)."
+            )
+            self.run_timeout = timeout
+            self.idle_timeout = None
+        else:
+            raise ValueError("kind must be 'idle' or 'run'")
+        super().__init__(message)
         self.node = node
-        self.idle_timeout = idle_timeout
+        self.timeout = timeout
         self.elapsed = elapsed
+        self.kind = kind
