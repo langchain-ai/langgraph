@@ -80,23 +80,23 @@ def _tasks_result(
 
 
 def _arm(mux: StreamMux) -> None:
-    """Force projection logs to accept pushes (skip lazy-subscribe gate).
+    """Force projection channels to accept pushes (skip lazy-subscribe gate).
 
-    `EventLog.push` is a no-op until a subscriber attaches. Tests that
-    inspect `_items` directly need the gate flipped before any event
-    is dispatched.
+    `StreamChannel.push` only appends to the local buffer when a
+    subscriber is attached. Tests that inspect `_items` directly need
+    the gate flipped before any event is dispatched.
     """
     mux._events._subscribed = True
     for transformer in mux._transformers:
         if isinstance(transformer, LifecycleTransformer):
-            transformer._channel._log._subscribed = True
+            transformer._channel._subscribed = True
 
 
 def _drain_lifecycle(mux: StreamMux) -> list[LifecyclePayload]:
-    """Snapshot the lifecycle channel's underlying log."""
+    """Snapshot the lifecycle channel's buffer."""
     transformer = mux.transformer_by_key("lifecycle")
     assert isinstance(transformer, LifecycleTransformer)
-    return list(transformer._channel._log._items)
+    return list(transformer._channel._items)
 
 
 def _build_lifecycle_mux(*, scope: tuple[str, ...] = ()) -> StreamMux:

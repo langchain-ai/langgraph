@@ -11,9 +11,9 @@ from langchain_core.tools import tool
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.stream._event_log import EventLog
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
+from langgraph.stream.stream_channel import StreamChannel
 from langgraph.stream.transformers import (
     MessagesTransformer,
     ValuesTransformer,
@@ -63,7 +63,7 @@ def _tool_event(
     }
 
 
-def _subscribe(log: EventLog) -> None:
+def _subscribe(log: StreamChannel) -> None:
     log._subscribed = True
 
 

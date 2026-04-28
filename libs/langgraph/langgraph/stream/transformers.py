@@ -13,7 +13,6 @@ from langchain_protocol.protocol import MessagesData
 from typing_extensions import NotRequired, TypedDict
 
 from langgraph.errors import GraphInterrupt
-from langgraph.stream._event_log import EventLog
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from langgraph.stream.run_stream import AsyncSubgraphRunStream, SubgraphRunStream
 from langgraph.stream.stream_channel import StreamChannel
@@ -50,7 +49,7 @@ class ValuesTransformer(StreamTransformer):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[dict[str, Any]] = EventLog()
+        self._log: StreamChannel[dict[str, Any]] = StreamChannel()
         self._latest: dict[str, Any] | None = None
         self._interrupted = False
         self._interrupts: list[Any] = []
@@ -131,7 +130,7 @@ class MessagesTransformer(StreamTransformer):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[ChatModelStream] = EventLog()
+        self._log: StreamChannel[ChatModelStream] = StreamChannel()
         # Correlate protocol events back to a ChatModelStream by run_id
         # (attached to the event's metadata by StreamMessagesHandler).
         self._by_run: dict[str, ChatModelStream] = {}
@@ -519,7 +518,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
-        self._log: EventLog[SubgraphRunStream | AsyncSubgraphRunStream] = EventLog()
+        self._log: StreamChannel[SubgraphRunStream | AsyncSubgraphRunStream] = (
+            StreamChannel()
+        )
         self._handles: dict[
             tuple[str, ...], SubgraphRunStream | AsyncSubgraphRunStream
         ] = {}
