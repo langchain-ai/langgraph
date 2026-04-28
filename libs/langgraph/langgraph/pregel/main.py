@@ -784,7 +784,7 @@ class Pregel(
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.name = name
-        self._stream_transformers: tuple[Callable[[tuple[str, ...]], Any], ...] = tuple(
+        self.stream_transformers: tuple[Callable[[tuple[str, ...]], Any], ...] = tuple(
             stream_transformers or ()
         )
         self._serde_allowlist: set[tuple[str, ...]] | None = None
@@ -3429,7 +3429,7 @@ class Pregel(
         """
         parent_ns = _resolve_parent_ns(self.config, config)
         compiled_factories = _normalize_stream_transformer_factories(
-            self._stream_transformers
+            self.stream_transformers
         )
         extra_factories = _normalize_stream_transformer_factories(transformers)
         mux = StreamMux(
@@ -3496,7 +3496,7 @@ class Pregel(
         """
         parent_ns = _resolve_parent_ns(self.config, config)
         compiled_factories = _normalize_stream_transformer_factories(
-            self._stream_transformers
+            self.stream_transformers
         )
         extra_factories = _normalize_stream_transformer_factories(transformers)
         mux = StreamMux(
