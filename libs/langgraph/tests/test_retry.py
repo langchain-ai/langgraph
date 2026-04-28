@@ -1515,7 +1515,7 @@ async def test_node_builder_timeout_e2e():
 
 @pytest.mark.anyio
 async def test_arun_with_retry_timeout_observer_tracks_attempts():
-    events: list[dict] = []
+    events: list = []
 
     class FlakyProc:
         async def ainvoke(self, input, config):
@@ -1536,20 +1536,20 @@ async def test_arun_with_retry_timeout_observer_tracks_attempts():
     task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
     assert await arun_with_retry(task, retry_policy=None) == "ok"
 
-    starts = [payload for payload in events if payload["event"] == "start"]
-    finishes = [payload for payload in events if payload["event"] == "finish"]
-    assert [payload["attempt"] for payload in starts] == [1, 2]
-    assert [payload["attempt"] for payload in finishes] == [1, 2]
-    assert [payload["status"] for payload in finishes] == ["error", "success"]
-    assert starts[0]["idle_timeout_secs"] == 0.05
-    assert starts[0]["task_name"] == "flaky"
-    assert isinstance(starts[0]["started_at"], datetime)
-    assert isinstance(finishes[0]["finished_at"], datetime)
+    starts = [event for event in events if event.event == "start"]
+    finishes = [event for event in events if event.event == "finish"]
+    assert [event.context.attempt for event in starts] == [1, 2]
+    assert [event.context.attempt for event in finishes] == [1, 2]
+    assert [event.status for event in finishes] == ["error", "success"]
+    assert starts[0].context.idle_timeout_secs == 0.05
+    assert starts[0].context.task_name == "flaky"
+    assert isinstance(starts[0].context.started_at, datetime)
+    assert isinstance(finishes[0].finished_at, datetime)
 
 
 @pytest.mark.anyio
 async def test_arun_with_retry_timeout_observer_emits_progress_on_heartbeat():
-    events: list[dict] = []
+    events: list = []
 
     class HeartbeatProc:
         async def ainvoke(self, input, config):
@@ -1563,24 +1563,24 @@ async def test_arun_with_retry_timeout_observer_emits_progress_on_heartbeat():
     task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
     assert await arun_with_retry(task, retry_policy=None) == "ok"
 
-    by_event = [ev["event"] for ev in events]
+    by_event = [ev.event for ev in events]
     assert by_event[0] == "start"
     assert by_event[-1] == "finish"
-    progress = [ev for ev in events if ev["event"] == "progress"]
+    progress = [ev for ev in events if ev.event == "progress"]
     assert progress, "expected at least one progress event from heartbeat"
     # Rate limit is `idle_timeout / 4` = 0.05s; with 8 heartbeats spaced ~0.05s
     # we should see at most ~one progress event per heartbeat (well below 8).
     assert len(progress) <= len(by_event)
     for ev in progress:
-        assert ev["task_name"] == "heartbeat"
-        assert ev["attempt"] == 1
-        assert ev["idle_timeout_secs"] == 0.2
-        assert isinstance(ev["progress_at"], datetime)
+        assert ev.context.task_name == "heartbeat"
+        assert ev.context.attempt == 1
+        assert ev.context.idle_timeout_secs == 0.2
+        assert isinstance(ev.progress_at, datetime)
 
 
 @pytest.mark.anyio
 async def test_arun_with_retry_timeout_observer_treats_parent_command_as_non_error():
-    events: list[dict] = []
+    events: list = []
 
     class ParentProc:
         async def ainvoke(self, input, config):
@@ -1591,15 +1591,15 @@ async def test_arun_with_retry_timeout_observer_treats_parent_command_as_non_err
     with pytest.raises(ParentCommand):
         await arun_with_retry(task, retry_policy=None)
 
-    finish = next(payload for payload in events if payload["event"] == "finish")
-    assert finish["status"] == "success"
-    assert finish["error_type"] is None
-    assert finish["error_message"] is None
+    finish = next(event for event in events if event.event == "finish")
+    assert finish.status == "success"
+    assert finish.error_type is None
+    assert finish.error_message is None
 
 
 @pytest.mark.anyio
 async def test_arun_with_retry_timeout_observer_finishes_when_parent_writer_errors():
-    events: list[dict] = []
+    events: list = []
 
     class ParentProc:
         async def ainvoke(self, input, config):
@@ -1616,15 +1616,15 @@ async def test_arun_with_retry_timeout_observer_finishes_when_parent_writer_erro
     with pytest.raises(ValueError, match="writer failed"):
         await arun_with_retry(task, retry_policy=None)
 
-    finish = next(payload for payload in events if payload["event"] == "finish")
-    assert finish["status"] == "error"
-    assert finish["error_type"] == "ValueError"
-    assert finish["error_message"] == "writer failed"
+    finish = next(event for event in events if event.event == "finish")
+    assert finish.status == "error"
+    assert finish.error_type == "ValueError"
+    assert finish.error_message == "writer failed"
 
 
 @pytest.mark.anyio
 async def test_arun_with_retry_timeout_observer_treats_bubble_up_as_non_error():
-    events: list[dict] = []
+    events: list = []
 
     class BubbleProc:
         async def ainvoke(self, input, config):
@@ -1635,7 +1635,7 @@ async def test_arun_with_retry_timeout_observer_treats_bubble_up_as_non_error():
     with pytest.raises(GraphInterrupt):
         await arun_with_retry(task, retry_policy=None)
 
-    finish = next(payload for payload in events if payload["event"] == "finish")
-    assert finish["status"] == "success"
-    assert finish["error_type"] is None
-    assert finish["error_message"] is None
+    finish = next(event for event in events if event.event == "finish")
+    assert finish.status == "success"
+    assert finish.error_type is None
+    assert finish.error_message is None
