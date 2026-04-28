@@ -16,7 +16,7 @@ from langgraph.checkpoint.base import (
     _ChannelWritesHistory,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.serde.types import TASKS, _DeltaSnapshot
+from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
 
 MetadataInput = dict[str, Any] | None
