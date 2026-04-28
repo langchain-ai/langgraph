@@ -9,7 +9,14 @@ import pytest
 from typing_extensions import assert_type
 
 from langgraph_sdk._shared.utilities import _sse_to_v2_dict
-from langgraph_sdk.client import HttpClient, SyncHttpClient
+from langgraph_sdk.client import (
+    HttpClient,
+    SyncHttpClient,
+    SyncThreadStream,
+    SyncThreadsClient,
+    ThreadStream,
+    ThreadsClient,
+)
 from langgraph_sdk.schema import (
     CheckpointPayload,
     CheckpointsStreamPart,
@@ -152,6 +159,107 @@ def test_sync_http_client_stream_flushes_trailing_event():
         parts = list(http_client.stream("/stream", "GET"))
 
     assert parts == [StreamPart(event="foo", data={"bar": 1})]
+
+
+@pytest.mark.asyncio
+async def test_async_threads_stream_sends_commands_and_subscribes() -> None:
+    requests: list[tuple[str, str]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body = await request.aread()
+        requests.append((request.method, request.url.path))
+        if request.url.path == "/v2/threads/thread-1/commands":
+            assert request.method == "POST"
+            payload = httpx.Response(200, content=body).json()
+            if payload["method"] == "run.input":
+                assert payload["params"]["assistant_id"] == "agent"
+                return httpx.Response(200, json={"id": payload["id"], "result": "ok"})
+            if payload["method"] == "subscription.unsubscribe":
+                return httpx.Response(200, json={"id": payload["id"], "result": {}})
+        if request.url.path == "/v2/threads/thread-1/events":
+            assert request.method == "POST"
+            assert httpx.Response(200, content=body).json() == {
+                "channels": ["messages"]
+            }
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream"},
+                content=(
+                    b"id: evt-1\n"
+                    b"event: messages\n"
+                    b'data: {"type":"event","method":"messages","params":{"namespace":[],"timestamp":1,"data":{"event":"message-start","id":"m1"}}}\n\n'
+                ),
+            )
+        raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        threads = ThreadsClient(HttpClient(client))
+        thread = threads.stream("thread-1", assistant_id="agent")
+        assert isinstance(thread, ThreadStream)
+        assert await thread.run.input({"input": {"messages": []}}) == "ok"
+        subscription = await thread.subscribe(["messages"])
+        events = [event async for event in subscription]
+        await subscription.unsubscribe()
+
+    assert events[0]["method"] == "messages"
+    assert events[0]["event_id"] == "evt-1"
+    assert requests == [
+        ("POST", "/v2/threads/thread-1/commands"),
+        ("POST", "/v2/threads/thread-1/events"),
+        ("POST", "/v2/threads/thread-1/commands"),
+    ]
+
+
+def test_sync_threads_stream_sends_commands_and_subscribes() -> None:
+    requests: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = request.read()
+        requests.append((request.method, request.url.path))
+        if request.url.path == "/v2/threads/thread-1/commands":
+            assert request.method == "POST"
+            payload = httpx.Response(200, content=body).json()
+            if payload["method"] == "run.input":
+                assert payload["params"]["assistant_id"] == "agent"
+                return httpx.Response(200, json={"id": payload["id"], "result": "ok"})
+            if payload["method"] == "subscription.unsubscribe":
+                return httpx.Response(200, json={"id": payload["id"], "result": {}})
+        if request.url.path == "/v2/threads/thread-1/events":
+            assert request.method == "POST"
+            assert httpx.Response(200, content=body).json() == {
+                "channels": ["messages"]
+            }
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream"},
+                content=(
+                    b"id: evt-1\n"
+                    b"event: messages\n"
+                    b'data: {"type":"event","method":"messages","params":{"namespace":[],"timestamp":1,"data":{"event":"message-start","id":"m1"}}}\n\n'
+                ),
+            )
+        raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        threads = SyncThreadsClient(SyncHttpClient(client))
+        thread = threads.stream("thread-1", assistant_id="agent")
+        assert isinstance(thread, SyncThreadStream)
+        assert thread.run.input({"input": {"messages": []}}) == "ok"
+        subscription = thread.subscribe(["messages"])
+        events = list(subscription)
+        subscription.unsubscribe()
+
+    assert events[0]["method"] == "messages"
+    assert events[0]["event_id"] == "evt-1"
+    assert requests == [
+        ("POST", "/v2/threads/thread-1/commands"),
+        ("POST", "/v2/threads/thread-1/events"),
+        ("POST", "/v2/threads/thread-1/commands"),
+    ]
 
 
 def test_sync_http_client_stream_recovers_after_disconnect():

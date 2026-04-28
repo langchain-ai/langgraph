@@ -1020,6 +1020,99 @@ class RemoteGraph(PregelProtocol):
             else:
                 yield chunk
 
+    def stream_v2(
+        self,
+        input: dict[str, Any] | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: Context | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        transformers: Sequence[Any] | None = None,
+        stream_modes: Sequence[StreamMode] | None = None,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Start a sync v2 remote run driven by transformer projections."""
+        from langgraph.pregel.main import (
+            _build_stream_factories,
+            _collect_stream_modes,
+            _merge_v2_messages_flag,
+        )
+        from langgraph.stream._convert import convert_to_protocol_event
+        from langgraph.stream._mux import StreamMux
+        from langgraph.stream.run_stream import RemoteGraphRunStream
+
+        factories = _build_stream_factories((), transformers)
+        mux = StreamMux(factories=factories, is_async=False)
+        requested_stream_modes = set(_collect_stream_modes(mux))
+        requested_stream_modes.update(stream_modes or ())
+        remote_iter = (
+            convert_to_protocol_event(part)
+            for part in self.stream(
+                input,
+                _merge_v2_messages_flag(config),
+                context=context,
+                stream_mode=list(requested_stream_modes),
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                subgraphs=True,
+                headers=headers,
+                params=params,
+                version="v2",
+                **kwargs,
+            )
+        )
+        return RemoteGraphRunStream(iter(remote_iter), mux)
+
+    async def astream_v2(
+        self,
+        input: dict[str, Any] | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: Context | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        transformers: Sequence[Any] | None = None,
+        stream_modes: Sequence[StreamMode] | None = None,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Async counterpart to ``stream_v2`` for remote graphs."""
+        from langgraph.pregel.main import (
+            _build_stream_factories,
+            _collect_stream_modes,
+            _merge_v2_messages_flag,
+        )
+        from langgraph.stream._convert import convert_to_protocol_event
+        from langgraph.stream._mux import StreamMux
+        from langgraph.stream.run_stream import AsyncRemoteGraphRunStream
+
+        factories = _build_stream_factories((), transformers)
+        mux = StreamMux(factories=factories, is_async=True)
+        requested_stream_modes = set(_collect_stream_modes(mux))
+        requested_stream_modes.update(stream_modes or ())
+
+        async def remote_events() -> AsyncIterator[Any]:
+            async for part in self.astream(
+                input,
+                _merge_v2_messages_flag(config),
+                context=context,
+                stream_mode=list(requested_stream_modes),
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                subgraphs=True,
+                headers=headers,
+                params=params,
+                version="v2",
+                **kwargs,
+            ):
+                yield convert_to_protocol_event(part)
+
+        return AsyncRemoteGraphRunStream(remote_events().__aiter__(), mux)
+
     async def astream_events(
         self,
         input: Any,

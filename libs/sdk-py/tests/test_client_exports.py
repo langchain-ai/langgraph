@@ -10,17 +10,23 @@ from langgraph_sdk import get_sync_client as public_get_sync_client
 from langgraph_sdk.client import (
     AssistantsClient,
     CronClient,
+    EventSubscription,
     HttpClient,
     LangGraphClient,
     RunsClient,
     StoreClient,
+    ProtocolSseTransport,
     SyncAssistantsClient,
     SyncCronClient,
+    SyncEventSubscription,
     SyncHttpClient,
     SyncLangGraphClient,
+    SyncProtocolSseTransport,
     SyncRunsClient,
     SyncStoreClient,
+    SyncThreadStream,
     SyncThreadsClient,
+    ThreadStream,
     ThreadsClient,
     _adecode_json,
     _aencode_json,
@@ -52,6 +58,9 @@ def test_client_exports():
     assert RunsClient is not None
     assert CronClient is not None
     assert StoreClient is not None
+    assert EventSubscription is not None
+    assert ProtocolSseTransport is not None
+    assert ThreadStream is not None
 
     # Resource client classes - Sync
     assert SyncAssistantsClient is not None
@@ -59,6 +68,9 @@ def test_client_exports():
     assert SyncRunsClient is not None
     assert SyncCronClient is not None
     assert SyncStoreClient is not None
+    assert SyncEventSubscription is not None
+    assert SyncProtocolSseTransport is not None
+    assert SyncThreadStream is not None
 
     # Internal utilities (used by tests)
     assert callable(_aencode_json)

@@ -410,3 +410,62 @@ class AsyncGraphRunStream(BaseRunStream):
         if (err := self._values_transformer.error) is not None:
             raise err
         return self._values_transformer._interrupts
+
+
+class RemoteGraphRunStream(GraphRunStream):
+    """Sync run stream fed by already-normalized remote protocol events."""
+
+    def __init__(self, events: Iterator[ProtocolEvent], mux: StreamMux) -> None:
+        super().__init__(events, mux)
+
+    def _pump_next(self) -> bool:
+        """Pull one remote protocol event and push it through the mux."""
+        if self._exhausted:
+            return False
+        try:
+            event = next(self._graph_iter)
+        except StopIteration:
+            self._mux.close()
+            self._exhausted = True
+            return False
+        except Exception as e:
+            self._mux.fail(e)
+            self._exhausted = True
+            return False
+        self._mux.push(event)
+        return True
+
+
+class AsyncRemoteGraphRunStream(AsyncGraphRunStream):
+    """Async run stream fed by already-normalized remote protocol events."""
+
+    def __init__(self, events: AsyncIterator[ProtocolEvent], mux: StreamMux) -> None:
+        super().__init__(events, mux)
+
+    async def _apump_next(self) -> bool:
+        """Pull one remote protocol event and push it through the mux."""
+        async with self._pump_cond:
+            if self._exhausted:
+                return False
+            if self._pumping:
+                await self._pump_cond.wait()
+                return not self._exhausted
+            self._pumping = True
+
+        try:
+            try:
+                event = await self._graph_aiter.__anext__()
+            except StopAsyncIteration:
+                self._exhausted = True
+                await self._mux.aclose()
+                return False
+            except Exception as e:
+                self._exhausted = True
+                await self._mux.afail(e)
+                return False
+            await self._mux.apush(event)
+            return True
+        finally:
+            async with self._pump_cond:
+                self._pumping = False
+                self._pump_cond.notify_all()

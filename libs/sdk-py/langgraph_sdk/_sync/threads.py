@@ -6,6 +6,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.stream import SyncProtocolSseTransport, SyncThreadStream
 from langgraph_sdk.schema import (
     Checkpoint,
     Json,
@@ -40,6 +41,28 @@ class SyncThreadsClient:
 
     def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
+
+    def stream(
+        self,
+        thread_id: str,
+        *,
+        assistant_id: str,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> SyncThreadStream:
+        """Create a thread-centric protocol stream.
+
+        This mirrors the JavaScript SDK's ``client.threads.stream(...)`` API
+        and is intentionally separate from ``join_stream()``, which follows
+        the older thread event stream endpoint.
+        """
+        transport = SyncProtocolSseTransport(
+            self.http,
+            thread_id,
+            headers=headers,
+            params=params,
+        )
+        return SyncThreadStream(transport, assistant_id=assistant_id)
 
     def get(
         self,

@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._async.stream import ProtocolSseTransport, ThreadStream
 from langgraph_sdk.schema import (
     Checkpoint,
     Json,
@@ -41,6 +42,28 @@ class ThreadsClient:
 
     def __init__(self, http: HttpClient) -> None:
         self.http = http
+
+    def stream(
+        self,
+        thread_id: str,
+        *,
+        assistant_id: str,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> ThreadStream:
+        """Create a thread-centric protocol stream.
+
+        This mirrors the JavaScript SDK's ``client.threads.stream(...)`` API
+        and is intentionally separate from ``join_stream()``, which follows
+        the older thread event stream endpoint.
+        """
+        transport = ProtocolSseTransport(
+            self.http,
+            thread_id,
+            headers=headers,
+            params=params,
+        )
+        return ThreadStream(transport, assistant_id=assistant_id)
 
     async def get(
         self,

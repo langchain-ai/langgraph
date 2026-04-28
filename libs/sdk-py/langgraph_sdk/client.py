@@ -17,6 +17,11 @@ from langgraph_sdk._async.client import LangGraphClient, get_client
 from langgraph_sdk._async.cron import CronClient
 from langgraph_sdk._async.http import HttpClient, _adecode_json, _aencode_json
 from langgraph_sdk._async.runs import RunsClient
+from langgraph_sdk._async.stream import (
+    EventSubscription,
+    ProtocolSseTransport,
+    ThreadStream,
+)
 from langgraph_sdk._async.store import StoreClient
 from langgraph_sdk._async.threads import ThreadsClient
 from langgraph_sdk._shared.utilities import configure_loopback_transports
@@ -27,6 +32,11 @@ from langgraph_sdk._sync.client import SyncLangGraphClient, get_sync_client
 from langgraph_sdk._sync.cron import SyncCronClient
 from langgraph_sdk._sync.http import SyncHttpClient, _decode_json, _encode_json
 from langgraph_sdk._sync.runs import SyncRunsClient
+from langgraph_sdk._sync.stream import (
+    SyncEventSubscription,
+    SyncProtocolSseTransport,
+    SyncThreadStream,
+)
 from langgraph_sdk._sync.store import SyncStoreClient
 from langgraph_sdk._sync.threads import SyncThreadsClient
 
@@ -35,15 +45,21 @@ __all__ = [
     "CronClient",
     "HttpClient",
     "LangGraphClient",
+    "EventSubscription",
+    "ProtocolSseTransport",
     "RunsClient",
     "StoreClient",
     "SyncAssistantsClient",
     "SyncCronClient",
     "SyncHttpClient",
     "SyncLangGraphClient",
+    "SyncEventSubscription",
+    "SyncProtocolSseTransport",
     "SyncRunsClient",
     "SyncStoreClient",
+    "SyncThreadStream",
     "SyncThreadsClient",
+    "ThreadStream",
     "ThreadsClient",
     "_adecode_json",
     "_aencode_json",
