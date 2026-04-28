@@ -55,6 +55,10 @@ class _AttemptContext(NamedTuple):
 
     Built once at attempt start and referenced (not copied) by every emitted
     `_AttemptEvent`, so per-event allocation is just the small event wrapper.
+
+    Intentionally underscore-prefixed: this and `_AttemptEvent` are part of an
+    internal observer contract consumed by langgraph-server. Do not move to
+    `langgraph.types` — server imports them by this path.
     """
 
     task_id: str
@@ -408,7 +412,9 @@ async def _arun_with_timeout(
     scoped_config = scope.wrap_config(config)
     start = time.monotonic()
     if stream:
-
+        # Yielded chunks count as progress only under `refresh_on="auto"`.
+        # `refresh_on="heartbeat"` is the strict mode where only explicit
+        # `runtime.heartbeat()` calls reset the idle clock.
         async def run() -> Any:
             async for _ in task.proc.astream(task.input, scoped_config):
                 if timeout.refresh_on == "auto" and idle_timeout_s is not None:
@@ -444,12 +450,12 @@ async def _arun_with_timeout(
                 with suppress(asyncio.CancelledError, asyncio.TimeoutError):
                     await watchdog
             return await bg
-        # Only a watchdog's TimeoutError converts to NodeTimeoutError;
-        # any TimeoutError raised by the proc itself propagates unchanged.
+        # bg was not in `done`, so every member of `done` is one of our
+        # watchdogs. Only a watchdog's TimeoutError converts to
+        # NodeTimeoutError; any TimeoutError raised by the proc itself
+        # propagates unchanged.
         for watchdog in done:
-            if watchdog not in watchdogs:
-                continue
-            kind, timeout_s = watchdogs[watchdog]
+            kind, _ = watchdogs[watchdog]
             try:
                 await watchdog
             except asyncio.TimeoutError as exc:
@@ -459,7 +465,11 @@ async def _arun_with_timeout(
                 bg.cancel()
                 bg.add_done_callback(_drain_cancelled)
                 raise NodeTimeoutError(
-                    task.name, timeout_s, elapsed, kind=kind
+                    task.name,
+                    elapsed,
+                    kind=kind,
+                    idle_timeout=idle_timeout_s,
+                    run_timeout=run_timeout_s,
                 ) from exc
             raise AssertionError(
                 f"{kind} timeout watchdog completed without timing out"

@@ -111,7 +111,11 @@ def _runnable_has_native_async(runnable: Runnable) -> bool:
 
     For custom runnable subclasses, an `ainvoke` override is treated as the
     async contract. We do not introspect whether that implementation delegates
-    to blocking work internally.
+    to blocking work internally — e.g. a subclass whose `ainvoke` calls
+    `asyncio.to_thread(self.invoke, ...)` will pass this check but the wrapped
+    sync work is still uncancellable. Idle-timeout enforcement on such a
+    runnable will fire `NodeTimeoutError` correctly, but the background thread
+    will keep running until its sync work returns.
     """
 
     while isinstance(runnable, RunnableBindingBase):

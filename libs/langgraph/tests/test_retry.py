@@ -815,6 +815,29 @@ async def test_arun_with_retry_run_timeout_is_not_refreshed_by_heartbeat():
 
 
 @pytest.mark.anyio
+async def test_node_timeout_error_carries_both_configured_timeouts():
+    """Both `idle_timeout` and `run_timeout` reflect the configured policy
+    even when only one of them fires."""
+
+    class SlowProc:
+        async def ainvoke(self, input, config):
+            await asyncio.sleep(1.0)
+
+    task = _make_task(
+        SlowProc(),
+        timeout=TimeoutPolicy(run_timeout=0.05, idle_timeout=0.5),
+        name="both",
+    )
+    with pytest.raises(NodeTimeoutError) as excinfo:
+        await arun_with_retry(task, retry_policy=None)
+    assert excinfo.value.kind == "run"
+    assert excinfo.value.run_timeout == 0.05
+    assert excinfo.value.idle_timeout == 0.5
+    # `timeout` is the one that fired.
+    assert excinfo.value.timeout == 0.05
+
+
+@pytest.mark.anyio
 async def test_arun_with_retry_does_not_swallow_proc_asyncio_timeout():
     calls = 0
 
@@ -843,7 +866,7 @@ async def test_arun_with_retry_does_not_swallow_proc_asyncio_timeout():
 
 @pytest.mark.anyio
 async def test_arun_with_retry_does_not_swallow_proc_node_timeout():
-    child_timeout = NodeTimeoutError("child", 0.1, 0.2)
+    child_timeout = NodeTimeoutError("child", 0.2, kind="idle", idle_timeout=0.1)
 
     class ChildTimeoutProc:
         async def ainvoke(self, input, config):
