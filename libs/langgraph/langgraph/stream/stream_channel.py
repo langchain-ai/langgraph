@@ -42,7 +42,11 @@ class StreamChannel(Generic[T]):
 
         Args:
             name: The protocol channel name used for auto-forwarded
-                events (`custom:<name>` on the wire).
+                events. Surfaced on the wire as `custom:<name>` for
+                user-defined transformers, or as `<name>` for channels
+                owned by a native transformer (`_native = True`). The
+                StreamMux derives the prefix from the owning
+                transformer at registration time.
             maxlen: Optional retention cap on the inner EventLog. See
                 `EventLog.__init__` for semantics.
         """

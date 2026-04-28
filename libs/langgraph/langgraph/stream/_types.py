@@ -29,8 +29,8 @@ class ProtocolEvent(TypedDict):
     """A protocol event emitted by the streaming infrastructure.
 
     Wraps a raw stream part (values, messages, custom, etc.) in a uniform
-    envelope with a monotonic sequence number assigned by the StreamMux.
-    Consumers that need a total order across events should use `seq`, not
+    envelope with a monotonic sequence number assigned by the root StreamMux.
+    Consumers that need a total order across root events should use `seq`, not
     `params.timestamp` (which is wall-clock and not monotonic).
     """
 
@@ -75,14 +75,38 @@ class StreamTransformer(ABC):
     scoring, cost lookup, external tracing).
 
     Attributes:
+        scope: Namespace the transformer operates within — `()` for the
+            root mux. Set at construction from the mux's scope (each
+            factory is called as `factory(scope)`).
         requires_async: Explicit opt-in for transformers that need a
             running event loop but don't override any async method (for
             example, transformers that call `schedule()` from a sync
             `process`). The mux also auto-detects the async lane when
             `aprocess`, `afinalize`, or `afail` is overridden.
+        supports_sync: Set True only for transformers that override
+            async-lane hooks while still fully supporting the sync lane.
+            Such transformers may be registered under `stream()`.
+        required_stream_modes: Stream modes the graph must emit for
+            this transformer to have anything to process. Computed as
+            the union across all registered transformers to determine
+            which modes a `stream_v2` run requests from the graph.
+            Empty tuple means the transformer consumes only synthetic
+            events (or is purely passive).
     """
 
     requires_async: ClassVar[bool] = False
+    supports_sync: ClassVar[bool] = False
+    required_stream_modes: ClassVar[tuple[str, ...]] = ()
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        """Initialize the transformer with its mux's scope.
+
+        Args:
+            scope: The namespace tuple the owning mux is scoped to.
+                `()` for the root. Factories receive this at
+                construction time (`factory(scope)` in `StreamMux`).
+        """
+        self.scope: tuple[str, ...] = scope
 
     @abstractmethod
     def init(self) -> dict[str, Any]:
@@ -96,6 +120,14 @@ class StreamTransformer(ABC):
         wired by the StreamMux for protocol event auto-forwarding.
         """
         ...
+
+    def _on_register(self, mux: Any) -> None:
+        """Called by `StreamMux._register` after this transformer is wired in.
+
+        Default is a no-op. Override to capture a reference to the
+        owning mux — needed for transformers that build mini-muxes
+        via `mux._make_child(...)` (e.g. `SubgraphTransformer`).
+        """
 
     def process(self, event: ProtocolEvent) -> bool:
         """Handle an event on the sync lane.
@@ -260,7 +292,8 @@ def transformer_requires_async(transformer: StreamTransformer) -> bool:
 
     A transformer requires async if it explicitly opts in
     (`requires_async = True`) or overrides any of the async-lane methods
-    (`aprocess`, `afinalize`, `afail`).
+    (`aprocess`, `afinalize`, `afail`) without also declaring that it
+    supports the sync lane.
 
     Args:
         transformer: The transformer to inspect.
@@ -270,6 +303,8 @@ def transformer_requires_async(transformer: StreamTransformer) -> bool:
     """
     if transformer.requires_async:
         return True
+    if transformer.supports_sync:
+        return False
     cls = type(transformer)
     for name in ("aprocess", "afinalize", "afail"):
         if getattr(cls, name) is not getattr(StreamTransformer, name):

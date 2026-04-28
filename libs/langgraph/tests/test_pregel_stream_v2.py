@@ -122,6 +122,24 @@ def _build_custom_stream_graph():
     return builder.compile()
 
 
+class _CustomPassthroughTransformer(StreamTransformer):
+    """Opts a run into the `custom` stream mode without building a projection.
+
+    `stream_v2` requests only the modes that registered transformers
+    declare via `required_stream_modes`. Custom events are raw user
+    emissions from `StreamWriter`, so tests that want them visible on
+    the main event log register this pass-through transformer.
+    """
+
+    required_stream_modes = ("custom",)
+
+    def init(self) -> dict[str, Any]:
+        return {}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        return True
+
+
 # ---------------------------------------------------------------------------
 # EventLog unit tests
 # ---------------------------------------------------------------------------
@@ -414,11 +432,27 @@ class TestStreamV2Sync:
             del run.extensions["values"]  # type: ignore[attr-defined]
 
     def test_custom_stream_events(self) -> None:
-        run = _build_custom_stream_graph().stream_v2({"value": "x", "items": []})
+        run = _build_custom_stream_graph().stream_v2(
+            {"value": "x", "items": []},
+            transformers=[_CustomPassthroughTransformer],
+        )
         custom_events = [e for e in run if e["method"] == "custom"]
         assert len(custom_events) == 2
         assert custom_events[0]["params"]["data"] == {"step": "start"}
         assert custom_events[1]["params"]["data"] == {"step": "end"}
+
+    def test_custom_events_suppressed_without_transformer(self) -> None:
+        """Without a transformer declaring `"custom"`, no custom events flow.
+
+        `stream_v2` asks the graph only for the modes that registered
+        transformers require. Built-ins cover `values` / `messages`;
+        consumers that want raw custom events surface them by
+        registering a transformer whose `required_stream_modes`
+        includes `"custom"`.
+        """
+        run = _build_custom_stream_graph().stream_v2({"value": "x", "items": []})
+        custom_events = [e for e in run if e["method"] == "custom"]
+        assert custom_events == []
 
     def test_interleave_values_and_messages(self) -> None:
         run = _build_simple_graph().stream_v2({"value": "x", "items": []})
@@ -538,7 +572,10 @@ class TestStreamV2Async:
         assert run.messages is run.extensions["messages"]
 
     async def test_custom_stream_events(self) -> None:
-        run = await _build_custom_stream_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_custom_stream_graph().astream_v2(
+            {"value": "x", "items": []},
+            transformers=[_CustomPassthroughTransformer],
+        )
         events = [e async for e in run]
         custom_events = [e for e in events if e["method"] == "custom"]
         assert len(custom_events) == 2
@@ -896,8 +933,8 @@ class TestStreamMuxResilience:
 class TestCustomTransformer:
     def test_extension_transformer_with_stream_channel(self) -> None:
         class CounterTransformer(StreamTransformer):
-            def __init__(self) -> None:
-                super().__init__()
+            def __init__(self, scope: tuple[str, ...] = ()) -> None:
+                super().__init__(scope)
                 self._channel: StreamChannel[int] = StreamChannel("counter")
                 self._count = 0
 
@@ -910,9 +947,8 @@ class TestCustomTransformer:
                     self._channel.push(self._count)
                 return True
 
-        counter_t = CounterTransformer()
         run = _build_simple_graph().stream_v2(
-            {"value": "x", "items": []}, transformers=[counter_t]
+            {"value": "x", "items": []}, transformers=[CounterTransformer]
         )
         assert "counter" in run.extensions
         counter_iter = iter(run.extensions["counter"])
@@ -925,8 +961,8 @@ class TestCustomTransformer:
         class FooTransformer(StreamTransformer):
             _native = True
 
-            def __init__(self) -> None:
-                super().__init__()
+            def __init__(self, scope: tuple[str, ...] = ()) -> None:
+                super().__init__(scope)
                 self._log: EventLog[str] = EventLog()
 
             def init(self) -> dict[str, Any]:
@@ -937,21 +973,33 @@ class TestCustomTransformer:
                     self._log.push("saw_values")
                 return True
 
-        foo_t = FooTransformer()
         run = _build_simple_graph().stream_v2(
-            {"value": "x", "items": []}, transformers=[foo_t]
+            {"value": "x", "items": []}, transformers=[FooTransformer]
         )
         foo_iter = iter(run.foo)
         _ = run.output
         assert "foo" in run.extensions and run.foo is run.extensions["foo"]
         assert "saw_values" in list(foo_iter)
 
+    def test_stream_v2_rejects_transformer_instances(self) -> None:
+        class InstanceTransformer(StreamTransformer):
+            def init(self) -> dict[str, Any]:
+                return {}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                return True
+
+        with pytest.raises(TypeError, match="pre-built instance"):
+            _build_simple_graph().stream_v2(
+                {"value": "x", "items": []}, transformers=[InstanceTransformer()]
+            )
+
     def test_stream_channel_auto_forward(self) -> None:
         """StreamChannel pushes inject ProtocolEvents into the main log."""
 
         class EmitterTransformer(StreamTransformer):
-            def __init__(self) -> None:
-                super().__init__()
+            def __init__(self, scope: tuple[str, ...] = ()) -> None:
+                super().__init__(scope)
                 self._channel: StreamChannel[str] = StreamChannel("emitter")
 
             def init(self) -> dict[str, Any]:
@@ -963,7 +1011,7 @@ class TestCustomTransformer:
                 return True
 
         run = _build_simple_graph().stream_v2(
-            {"value": "x", "items": []}, transformers=[EmitterTransformer()]
+            {"value": "x", "items": []}, transformers=[EmitterTransformer]
         )
         custom_events = [e for e in run if e["method"] == "custom:emitter"]
         assert len(custom_events) > 0
@@ -996,8 +1044,8 @@ class TestCustomTransformer:
 
     def test_projection_key_conflict_raises(self) -> None:
         class ConflictTransformer(StreamTransformer):
-            def __init__(self) -> None:
-                super().__init__()
+            def __init__(self, scope: tuple[str, ...] = ()) -> None:
+                super().__init__(scope)
                 self._log: EventLog[str] = EventLog()
 
             def init(self) -> dict[str, Any]:
@@ -1008,7 +1056,7 @@ class TestCustomTransformer:
 
         with pytest.raises(ValueError, match=r"conflict.*'values'.*ValuesTransformer"):
             _build_simple_graph().stream_v2(
-                {"value": "x", "items": []}, transformers=[ConflictTransformer()]
+                {"value": "x", "items": []}, transformers=[ConflictTransformer]
             )
 
 
@@ -1078,8 +1126,8 @@ class TestEventLogAutoLifecycle:
 
     def test_transformer_without_finalize_works(self) -> None:
         class MinimalTransformer(StreamTransformer):
-            def __init__(self) -> None:
-                super().__init__()
+            def __init__(self, scope: tuple[str, ...] = ()) -> None:
+                super().__init__(scope)
                 self._log: EventLog[str] = EventLog()
 
             def init(self) -> dict[str, Any]:
@@ -1090,9 +1138,8 @@ class TestEventLogAutoLifecycle:
                     self._log.push("got_it")
                 return True
 
-        t = MinimalTransformer()
         run = _build_simple_graph().stream_v2(
-            {"value": "x", "items": []}, transformers=[t]
+            {"value": "x", "items": []}, transformers=[MinimalTransformer]
         )
         minimal_iter = iter(run.extensions["minimal"])
         _ = run.output
@@ -1332,7 +1379,8 @@ class TestAsyncTransformerLane:
         class Scorer(StreamTransformer):
             requires_async = True
 
-            def __init__(self) -> None:
+            def __init__(self, scope: tuple[str, ...] = ()) -> None:
+                super().__init__(scope)
                 self._log: EventLog[int] = EventLog()
 
             def init(self) -> dict[str, Any]:
@@ -1352,7 +1400,7 @@ class TestAsyncTransformerLane:
                 self._log.close()
 
         run = await _build_simple_graph().astream_v2(
-            {"value": "x", "items": []}, transformers=[Scorer()]
+            {"value": "x", "items": []}, transformers=[Scorer]
         )
         scores_cursor = aiter(run.extensions["scores"])
         _ = await run.output()

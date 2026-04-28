@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langgraph.stream._event_log import EventLog
@@ -12,6 +12,16 @@ from langgraph.stream._types import (
     transformer_requires_async,
 )
 from langgraph.stream.stream_channel import StreamChannel
+
+TransformerFactory = Callable[["tuple[str, ...]"], StreamTransformer]
+"""Factory that builds a scoped transformer for a mux.
+
+Called once per `StreamMux` with the mux's scope (typically `()` for
+the root). Standard transformer classes accept a single positional
+scope argument, so the class itself is a valid factory. User
+transformers can close over their config:
+`lambda scope: MyTransformer(scope, foo=...)`.
+"""
 
 
 class StreamMux:
@@ -40,20 +50,35 @@ class StreamMux:
         transformers: list[StreamTransformer] | None = None,
         *,
         is_async: bool = False,
+        factories: list[TransformerFactory] | None = None,
+        scope: tuple[str, ...] = (),
+        _assign_seq: bool = True,
     ) -> None:
         """Initialize the mux and register transformers in order.
 
-        Transformers are fixed at construction time — there is no
-        post-init `register()`. Each transformer's `init()` is called,
-        projections are merged into `extensions`, `_native` keys are
-        recorded in `native_keys`, and any EventLog / StreamChannel
-        instances are bound and wired.
+        Callers pass either `transformers` (pre-built instances) or
+        `factories` (callables producing fresh instances per mux). Each
+        transformer's `init()` is called, projections are merged into
+        `extensions`, `_native` keys are recorded in `native_keys`, and
+        any EventLog / StreamChannel instances are bound and wired.
 
         Args:
-            transformers: Transformers to register, in dispatch order.
-                `None` or empty gives a mux with no projections.
+            transformers: Already-built transformer instances. Registered
+                only on this mux — they are NOT cloned into child
+                mini-muxes built by `_make_child`. Use `factories` for
+                transformers that should propagate to nested scopes.
             is_async: True for async dispatch (`apush` / `aclose` /
                 `afail`), False for the sync path.
+            factories: One-argument callables `(scope) -> StreamTransformer`.
+                Called once with this mux's `scope` here, and cloned
+                again per child scope by `_make_child` so each
+                sub-mux gets fresh instances.
+            scope: The namespace the mux operates within. The root mux
+                is `()`.
+            _assign_seq: Internal flag for child muxes. Root muxes assign
+                monotonic `seq` numbers when appending to their main event
+                log; child muxes share forwarded event objects and must not
+                mutate their envelopes.
 
         Raises:
             RuntimeError: If any transformer requires an async run but
@@ -61,7 +86,9 @@ class StreamMux:
             TypeError: If a transformer's `init()` doesn't return a dict.
             ValueError: If transformers' projection keys collide.
         """
-        self._is_async = is_async
+        self.is_async = is_async
+        self.scope: tuple[str, ...] = scope
+        self._assign_seq = _assign_seq
         self._events: EventLog[ProtocolEvent] = EventLog()
         self._events._bind(is_async=is_async)
         self._transformers: list[StreamTransformer] = []
@@ -72,9 +99,106 @@ class StreamMux:
         self.extensions: dict[str, Any] = {}
         self.native_keys: set[str] = set()
         self._projection_owners: dict[str, str] = {}
+        self._transformer_by_key: dict[str, StreamTransformer] = {}
 
+        # Stored only when constructed from factories — used by
+        # `_make_child` to clone the transformer pipeline at a deeper
+        # scope. Pre-built transformers can't be cloned, so a mux
+        # built with `transformers=` rejects child construction.
+        self._factories: list[TransformerFactory] | None = (
+            list(factories) if factories is not None else None
+        )
+        self._pump_fn: Callable[[], bool] | None = None
+        self._apump_fn: Callable[[], Awaitable[bool]] | None = None
+
+        # Factories run first (they propagate to child mini-muxes
+        # via `_make_child`), then any pre-built `transformers=`
+        # instances are registered as root-only — they aren't cloned
+        # for child scopes.
+        if factories is not None:
+            for factory in factories:
+                self._register(factory(scope))
         for transformer in transformers or ():
             self._register(transformer)
+
+    def transformer_by_key(self, key: str) -> StreamTransformer | None:
+        """Return the transformer that contributed `key` to the projection."""
+        return self._transformer_by_key.get(key)
+
+    # ------------------------------------------------------------------
+    # Pump wiring + mini-mux nesting
+    # ------------------------------------------------------------------
+
+    def bind_pump(self, fn: Callable[[], bool]) -> None:
+        """Wire the sync pull callback onto every projection in this mux.
+
+        Records the pump on the mux so child mini-muxes built by
+        `_make_child` can inherit it. Propagates to:
+        - the main event log (`self._events`)
+        - every projection EventLog and StreamChannel in `extensions`
+        - any registered transformer that exposes `_bind_pump` (e.g.
+          `MessagesTransformer` so `ChatModelStream` instances drive the
+          shared pump from their cursors)
+        """
+        self._pump_fn = fn
+        self._events._request_more = fn
+        for value in self.extensions.values():
+            if isinstance(value, EventLog):
+                value._request_more = fn
+            elif isinstance(value, StreamChannel):
+                value._log._request_more = fn
+        for transformer in self._transformers:
+            bind = getattr(transformer, "_bind_pump", None)
+            if bind is not None:
+                bind(fn)
+
+    def bind_apump(self, fn: Callable[[], Awaitable[bool]]) -> None:
+        """Async counterpart to `bind_pump`."""
+        self._apump_fn = fn
+        self._events._arequest_more = fn
+        for value in self.extensions.values():
+            if isinstance(value, EventLog):
+                value._arequest_more = fn
+            elif isinstance(value, StreamChannel):
+                value._log._arequest_more = fn
+        for transformer in self._transformers:
+            abind = getattr(transformer, "_bind_apump", None)
+            if abind is not None:
+                abind(fn)
+
+    def _make_child(self, scope: tuple[str, ...]) -> StreamMux:
+        """Build a mini-mux with the same factories scoped to `scope`.
+
+        Used by `SubgraphTransformer` to attach a fresh transformer
+        pipeline to each discovered subgraph handle. The child mux
+        inherits the current pump bindings (so cursors on its
+        projection logs drive the root pump), carries the same factory
+        list forward to any grandchild subgraphs, and does not assign
+        `seq` numbers so forwarded events can be shared without
+        mutating their envelope.
+
+        Raises:
+            RuntimeError: If the mux was not constructed with
+                `factories=`. Mini-muxes require factories so each scope
+                gets its own fresh transformer instances.
+        """
+        if self._factories is None:
+            raise RuntimeError(
+                "StreamMux._make_child requires the mux to be constructed "
+                "with `factories=`; pre-built transformers can't be "
+                "cloned to a new scope."
+            )
+        child = StreamMux(
+            factories=self._factories,
+            is_async=self.is_async,
+            scope=scope,
+            _assign_seq=False,
+        )
+        if self._pump_fn is not None:
+            child.bind_pump(self._pump_fn)
+        if self._apump_fn is not None:
+            child.bind_apump(self._apump_fn)
+        return child
 
     def _register(self, transformer: StreamTransformer) -> None:
         """Register a single transformer.
@@ -83,7 +207,7 @@ class StreamMux:
         processing, binds any EventLog or StreamChannel instances in
         the projection, and merges the projection into `extensions`.
         """
-        if transformer_requires_async(transformer) and not self._is_async:
+        if transformer_requires_async(transformer) and not self.is_async:
             raise RuntimeError(
                 f"{type(transformer).__name__} requires an async run — "
                 "it overrides aprocess/afinalize/afail or sets "
@@ -106,14 +230,17 @@ class StreamMux:
                 f"projection keys that conflict with already-registered "
                 f"keys: {attributions}"
             )
+        is_native = bool(getattr(transformer, "_native", False))
         self._transformers.append(transformer)
-        self._bind_and_wire(projection)
+        self._bind_and_wire(projection, native=is_native)
         self.extensions.update(projection)
         owner_name = type(transformer).__name__
         for key in projection:
             self._projection_owners[key] = owner_name
-        if getattr(transformer, "_native", False):
+            self._transformer_by_key[key] = transformer
+        if is_native:
             self.native_keys.update(projection.keys())
+        transformer._on_register(self)
 
     def push(self, event: ProtocolEvent) -> None:
         """Route an event through all transformers, then append to the main log.
@@ -123,11 +250,13 @@ class StreamMux:
         the main log, but transformers that already saw it keep their
         side effects.
 
-        Seq is assigned right before an event enters the main log, not
-        before the transformer pipeline runs. This ensures that events
-        auto-forwarded from StreamChannels during `process()` get
-        earlier seq numbers than the original event, preserving
-        monotonic ordering in the log.
+        On the root mux, `seq` is assigned right before an event enters
+        the main log, not before the transformer pipeline runs. This
+        ensures that events auto-forwarded from StreamChannels during
+        `process()` get earlier seq numbers than the original event,
+        preserving monotonic ordering in the root log. Child muxes do
+        not assign `seq`, so subgraph forwarding can share event objects
+        without mutating their envelopes.
 
         Args:
             event: The protocol event to dispatch.
@@ -137,8 +266,9 @@ class StreamMux:
             if not transformer.process(event):
                 keep = False
         if keep:
-            self._seq += 1
-            event["seq"] = self._seq
+            if self._assign_seq:
+                self._seq += 1
+                event["seq"] = self._seq
             self._events.push(event)
 
     def close(self) -> None:
@@ -212,8 +342,10 @@ class StreamMux:
         `process` / `aprocess` instead.
 
         The main log append is a non-blocking `push` — matching v1's
-        `put_nowait` shape. Memory is bounded by caller pace via the
-        caller-driven pump; see `EventLog` for the full tradeoff story.
+        `put_nowait` shape. The root mux assigns `seq`; child muxes do
+        not, so forwarded subgraph events can be shared without copying.
+        Memory is bounded by caller pace via the caller-driven pump; see
+        `EventLog` for the full tradeoff story.
 
         Args:
             event: The protocol event to dispatch.
@@ -223,8 +355,9 @@ class StreamMux:
             if not await transformer.aprocess(event):
                 keep = False
         if keep:
-            self._seq += 1
-            event["seq"] = self._seq
+            if self._assign_seq:
+                self._seq += 1
+                event["seq"] = self._seq
             self._events.push(event)
 
     async def aclose(self) -> None:
@@ -317,43 +450,61 @@ class StreamMux:
     # Binding and StreamChannel auto-wiring
     # ------------------------------------------------------------------
 
-    def _bind_and_wire(self, projection: dict[str, Any]) -> None:
-        """Bind and wire EventLog / StreamChannel instances in a projection."""
+    def _bind_and_wire(
+        self, projection: dict[str, Any], *, native: bool = False
+    ) -> None:
+        """Bind and wire EventLog / StreamChannel instances in a projection.
+
+        Args:
+            projection: The projection dict returned by a transformer's
+                `init()`.
+            native: True when the owning transformer is `_native`.
+                Channels owned by a native transformer use the channel
+                name directly as the protocol method; user-defined
+                channels are prefixed with `custom:`.
+        """
         for value in projection.values():
             if isinstance(value, StreamChannel):
-                value._bind(is_async=self._is_async)
+                value._bind(is_async=self.is_async)
                 self._channels.append(value)
-                channel_name = value.name
+                method = value.name if native else f"custom:{value.name}"
 
-                def _make_forward(name: str) -> Callable[[Any], None]:
+                def _make_forward(method_name: str) -> Callable[[Any], None]:
                     def _forward(item: Any) -> None:
-                        self._forward(name, item)
+                        self._forward(method_name, item)
 
                     return _forward
 
-                value._wire(_make_forward(channel_name))
+                value._wire(_make_forward(method))
             elif isinstance(value, EventLog):
-                value._bind(is_async=self._is_async)
+                value._bind(is_async=self.is_async)
                 self._logs.append(value)
 
-    def _forward(self, channel_name: str, item: Any) -> None:
+    def _forward(self, method: str, item: Any) -> None:
         """Inject a ProtocolEvent for a StreamChannel push.
 
         Forwarded events bypass the transformer pipeline to avoid
         infinite recursion (a transformer that pushes to a channel
         during `process()` would re-trigger itself). These events are
-        visible in the main event log but are not passed through
-        transformers' `process()` methods.
+        visible in this mux's main event log but are not passed through
+        transformers' `process()` methods. Only the root mux assigns
+        `seq` to forwarded channel events.
+
+        Args:
+            method: The full protocol method (already with or without
+                the `custom:` prefix; resolved by `_bind_and_wire`).
+            item: The payload pushed onto the channel.
         """
-        self._seq += 1
         event: ProtocolEvent = {
             "type": "event",
-            "seq": self._seq,
-            "method": f"custom:{channel_name}",
+            "method": method,
             "params": {
                 "namespace": [],
                 "timestamp": int(time.time() * 1000),
                 "data": item,
             },
         }
+        if self._assign_seq:
+            self._seq += 1
+            event["seq"] = self._seq
         self._events.push(event)
