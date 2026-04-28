@@ -1,7 +1,7 @@
 """Tests for SubgraphTransformer.
 
 Subscribes to `tasks` events and produces in-process `SubgraphRunStream`
-handles backed by mini-muxes (built via `StreamMux.make_child`). The
+handles backed by mini-muxes (built via `StreamMux._make_child`). The
 synthetic-event tests isolate the inference / mini-mux wiring; the
 real-graph tests exercise the end-to-end navigation path through
 `stream_v2`.
@@ -21,7 +21,7 @@ from typing_extensions import TypedDict
 from langgraph.constants import END, START
 from langgraph.errors import GraphInterrupt
 from langgraph.graph import StateGraph
-from langgraph.pregel.main import _split_user_transformers
+from langgraph.pregel.main import _normalize_stream_transformer_factories
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from langgraph.stream.run_stream import (
@@ -140,11 +140,9 @@ def _arm_recursive(mux: StreamMux) -> None:
     unsubscribed log).
     """
     _arm(mux)
-    sub_t = mux.transformer_by_key("subgraphs")
-    if isinstance(sub_t, SubgraphTransformer):
-        for handle in sub_t._handles.values():
-            if handle._mux is not None:
-                _arm_recursive(handle._mux)
+    for handle in _subgraph_transformer(mux)._handles.values():
+        if handle._mux is not None:
+            _arm_recursive(handle._mux)
 
 
 def _build_root_mux(*, scope: tuple[str, ...] = ()) -> StreamMux:
@@ -157,10 +155,29 @@ def _build_root_mux(*, scope: tuple[str, ...] = ()) -> StreamMux:
     return mux
 
 
-def _drain_subgraphs(mux: StreamMux) -> list[SubgraphRunStream]:
+def _subgraph_transformer(mux: StreamMux) -> SubgraphTransformer:
     transformer = mux.transformer_by_key("subgraphs")
     assert isinstance(transformer, SubgraphTransformer)
-    return list(transformer._log._items)
+    return transformer
+
+
+def _drain_subgraphs(mux: StreamMux) -> list[SubgraphRunStream]:
+    return list(_subgraph_transformer(mux)._log._items)
+
+
+def _child_mux(handle: SubgraphRunStream | AsyncSubgraphRunStream) -> StreamMux:
+    assert handle._mux is not None
+    return handle._mux
+
+
+def _event_items(mux: StreamMux) -> list[ProtocolEvent]:
+    return list(mux._events._items)
+
+
+def _lifecycle_payloads(mux: StreamMux) -> list[dict[str, Any]]:
+    lifecycle_t = mux.transformer_by_key("lifecycle")
+    assert isinstance(lifecycle_t, LifecycleTransformer)
+    return list(lifecycle_t._channel._log._items)
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +194,7 @@ def test_handle_created_on_first_direct_child_task() -> None:
     assert handle.graph_name == "agent"
     assert handle.trigger_call_id == "abc"
     assert handle.status == "started"
-    assert handle._mux is not None  # mini-mux backed
+    _child_mux(handle)  # mini-mux backed
 
 
 def test_handle_status_completes_on_parent_result() -> None:
@@ -265,16 +282,12 @@ def test_fail_marks_open_handles_failed_for_other_errors() -> None:
     assert handle.error == "boom"
 
 
-def test_make_child_raises_without_factories() -> None:
+def test_child_mux_requires_factories() -> None:
     """A mux constructed only from `transformers=` can't clone factories."""
     transformer = SubgraphTransformer()
     mux = StreamMux(transformers=[transformer], is_async=False)
-    try:
-        mux.make_child(("anything",))
-    except RuntimeError as exc:
-        assert "factories" in str(exc)
-    else:  # pragma: no cover
-        raise AssertionError("expected RuntimeError")
+    with pytest.raises(RuntimeError, match="factories"):
+        mux._make_child(("anything",))
 
 
 def test_subgraph_and_lifecycle_agree_on_terminal_status() -> None:
@@ -284,9 +297,7 @@ def test_subgraph_and_lifecycle_agree_on_terminal_status() -> None:
     mux.push(_tasks_result([], task_id="abc", name="agent", error="boom"))
 
     [handle] = _drain_subgraphs(mux)
-    lifecycle_t = mux.transformer_by_key("lifecycle")
-    assert isinstance(lifecycle_t, LifecycleTransformer)
-    payloads = list(lifecycle_t._channel._log._items)
+    payloads = _lifecycle_payloads(mux)
     assert handle.status == "failed"
     assert payloads[-1]["event"] == "failed"
     assert handle.error == payloads[-1]["error"]
@@ -302,7 +313,7 @@ def test_tasks_events_suppressed_from_main_log() -> None:
     mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
     mux.push(_tasks_result([], task_id="abc", name="agent"))
 
-    methods = [evt["method"] for evt in mux._events._items]
+    methods = [evt["method"] for evt in _event_items(mux)]
     assert "tasks" not in methods
 
 
@@ -354,7 +365,7 @@ def test_child_forwarding_reuses_event_without_assigning_seq() -> None:
     mux.push(event)
 
     assert _ChildEventObserver.records == [(("agent:abc",), id(event), id(data), False)]
-    [root_event] = [evt for evt in mux._events._items if evt["method"] == "values"]
+    [root_event] = [evt for evt in _event_items(mux) if evt["method"] == "values"]
     assert root_event is event
     assert "seq" in root_event
 
@@ -398,12 +409,9 @@ async def test_async_child_mini_mux_uses_async_lane() -> None:
     )
     await mux.apush(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
 
-    sub_t = mux.transformer_by_key("subgraphs")
-    assert isinstance(sub_t, SubgraphTransformer)
-    handle = sub_t._handles[("agent:abc",)]
+    handle = _subgraph_transformer(mux)._handles[("agent:abc",)]
     assert isinstance(handle, AsyncSubgraphRunStream)
-    assert handle._mux is not None
-    probe = handle._mux.transformer_by_key("async_probe")
+    probe = _child_mux(handle).transformer_by_key("async_probe")
     assert isinstance(probe, _AsyncProbeTransformer)
     assert probe.seen == [("agent:abc",)]
 
@@ -425,11 +433,8 @@ async def test_async_child_mini_mux_fail_uses_async_lane() -> None:
     )
     await mux.apush(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
 
-    sub_t = mux.transformer_by_key("subgraphs")
-    assert isinstance(sub_t, SubgraphTransformer)
-    handle = sub_t._handles[("agent:abc",)]
-    assert handle._mux is not None
-    probe = handle._mux.transformer_by_key("async_probe")
+    handle = _subgraph_transformer(mux)._handles[("agent:abc",)]
+    probe = _child_mux(handle).transformer_by_key("async_probe")
     assert isinstance(probe, _AsyncProbeTransformer)
 
     err = RuntimeError("boom")
@@ -503,8 +508,10 @@ class _ChildFinalizeExploder(StreamTransformer):
             raise RuntimeError("child afinalize boom")
 
 
-def test_split_user_transformers_supports_scoped_classes() -> None:
-    factories = _split_user_transformers([_StandardCtorTransformer, _ScopedTransformer])
+def test_normalize_transformer_factories_supports_scoped_classes() -> None:
+    factories = _normalize_stream_transformer_factories(
+        [_StandardCtorTransformer, _ScopedTransformer]
+    )
 
     standard_ctor = factories[0](("child",))
     scoped = factories[1](("child",))
@@ -514,8 +521,8 @@ def test_split_user_transformers_supports_scoped_classes() -> None:
     assert scoped.scope == ("child",)
 
 
-def test_split_user_transformers_supports_configured_factories() -> None:
-    factories = _split_user_transformers(
+def test_normalize_transformer_factories_supports_configured_factories() -> None:
+    factories = _normalize_stream_transformer_factories(
         [partial(_ConfigurableFactoryTransformer, label="configured")]
     )
 
@@ -525,9 +532,9 @@ def test_split_user_transformers_supports_configured_factories() -> None:
     assert built.scope == ("child",)
 
 
-def test_split_user_transformers_rejects_instances() -> None:
+def test_normalize_transformer_factories_rejects_instances() -> None:
     with pytest.raises(TypeError, match="pre-built instance"):
-        _split_user_transformers([_StandardCtorTransformer()])
+        _normalize_stream_transformer_factories([_StandardCtorTransformer()])
 
 
 def test_child_forwarding_errors_fail_sync_run() -> None:

@@ -126,7 +126,7 @@ class StreamTransformer(ABC):
 
         Default is a no-op. Override to capture a reference to the
         owning mux — needed for transformers that build mini-muxes
-        via `mux.make_child(...)` (e.g. `SubgraphTransformer`).
+        via `mux._make_child(...)` (e.g. `SubgraphTransformer`).
         """
 
     def process(self, event: ProtocolEvent) -> bool:
