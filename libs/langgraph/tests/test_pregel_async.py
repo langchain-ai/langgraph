@@ -2086,8 +2086,11 @@ async def test_run_from_checkpoint_id_retains_previous_writes(
         )
     ]
 
-    assert len(new_history) == len(history) + 1
-    for original, new in zip(history, new_history[1:]):
+    # +2: one fork checkpoint from time travel, one from the new execution
+    assert len(new_history) == len(history) + 2
+    # new_history[0] is the new execution result, new_history[1] is the fork
+    assert new_history[1].metadata["source"] == "fork"
+    for original, new in zip(history, new_history[2:]):
         assert original.values == new.values
         assert original.next == new.next
         assert original.metadata["step"] == new.metadata["step"]
@@ -2095,7 +2098,7 @@ async def test_run_from_checkpoint_id_retains_previous_writes(
     def _get_tasks(hist: list, start: int):
         return [h.tasks for h in hist[start:]]
 
-    assert _get_tasks(new_history, 1) == _get_tasks(history, 0)
+    assert _get_tasks(new_history, 2) == _get_tasks(history, 0)
 
 
 async def test_cond_edge_after_send() -> None:
