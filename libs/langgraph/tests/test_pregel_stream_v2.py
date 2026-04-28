@@ -440,15 +440,18 @@ class TestStreamV2Sync:
         assert custom_events[0]["params"]["data"] == {"step": "start"}
         assert custom_events[1]["params"]["data"] == {"step": "end"}
 
-    def test_custom_events_flow_by_default(self) -> None:
-        """CustomTransformer is a default builtin, so custom events flow
-        without an explicit opt-in transformer.
+    def test_custom_events_suppressed_without_transformer(self) -> None:
+        """Without a transformer declaring `"custom"`, no custom events flow.
+
+        `stream_v2` asks the graph only for the modes that registered
+        transformers require. Built-ins cover `values` / `messages`;
+        consumers that want raw custom events surface them by
+        registering a transformer whose `required_stream_modes`
+        includes `"custom"`.
         """
         run = _build_custom_stream_graph().stream_v2({"value": "x", "items": []})
         custom_events = [e for e in run if e["method"] == "custom"]
-        assert len(custom_events) == 2
-        assert custom_events[0]["params"]["data"] == {"step": "start"}
-        assert custom_events[1]["params"]["data"] == {"step": "end"}
+        assert custom_events == []
 
     def test_interleave_values_and_messages(self) -> None:
         run = _build_simple_graph().stream_v2({"value": "x", "items": []})

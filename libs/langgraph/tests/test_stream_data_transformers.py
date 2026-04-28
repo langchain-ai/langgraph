@@ -497,10 +497,12 @@ def _make_simple_graph() -> Any:
     return builder.compile()
 
 
-def test_stream_v2_custom_projection() -> None:
-    """run.custom surfaces get_stream_writer() payloads."""
+def test_stream_v2_custom_projection_opt_in() -> None:
+    """run.custom surfaces get_stream_writer() payloads when opted in."""
     graph = _make_simple_graph()
-    run = graph.stream_v2({"value": "hello", "items": []})
+    run = graph.stream_v2(
+        {"value": "hello", "items": []}, transformers=[CustomTransformer]
+    )
 
     custom_events = list(run.custom)
     assert len(custom_events) >= 1
@@ -510,7 +512,9 @@ def test_stream_v2_custom_projection() -> None:
 def test_stream_v2_custom_and_values_coexist() -> None:
     """Both run.custom and run.values work in the same run."""
     graph = _make_simple_graph()
-    run = graph.stream_v2({"value": "hello", "items": []})
+    run = graph.stream_v2(
+        {"value": "hello", "items": []}, transformers=[CustomTransformer]
+    )
 
     custom_events = list(run.custom)
     assert run.output is not None
@@ -551,3 +555,69 @@ def test_stream_v2_updates_projection_opt_in() -> None:
     assert len(updates) >= 1
     node_names = {k for u in updates for k in u if k != "__interrupt__"}
     assert "my_node" in node_names
+
+
+def test_stream_v2_all_transformers_no_conflict() -> None:
+    """All five transformers can be registered together without conflict.
+
+    Each projection is verified in a separate run since projections are
+    single-consumer and lazy-subscribe — iterating one drives the pump
+    to completion before others can subscribe.
+    """
+    all_transformers = [
+        CustomTransformer,
+        UpdatesTransformer,
+        CheckpointsTransformer,
+        DebugTransformer,
+        TasksTransformer,
+    ]
+    graph = _make_simple_graph()
+
+    run = graph.stream_v2({"value": "x", "items": []}, transformers=all_transformers)
+    assert len(list(run.custom)) >= 1
+
+    run = graph.stream_v2({"value": "x", "items": []}, transformers=all_transformers)
+    updates = list(run.updates)
+    assert len(updates) >= 1
+    node_names = {k for u in updates for k in u if k != "__interrupt__"}
+    assert "my_node" in node_names
+
+    run = graph.stream_v2({"value": "x", "items": []}, transformers=all_transformers)
+    assert len(list(run.tasks)) >= 1
+
+    run = graph.stream_v2({"value": "x", "items": []}, transformers=all_transformers)
+    debug_events = list(run.debug)
+    assert len(debug_events) >= 1
+    types = {d.get("type") for d in debug_events}
+    assert types & {"checkpoint", "task", "task_result"}
+
+    run = graph.stream_v2({"value": "x", "items": []}, transformers=all_transformers)
+    assert run.output is not None
+    assert run.output["value"] == "x!"
+
+
+def test_stream_v2_all_transformers_with_checkpointer() -> None:
+    """All transformers work with a checkpointer — run.checkpoints populated."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    builder = StateGraph(_State, input_schema=_State)
+    builder.add_node("my_node", _my_node)
+    builder.add_edge(START, "my_node")
+    builder.add_edge("my_node", END)
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    all_transformers = [
+        CustomTransformer,
+        UpdatesTransformer,
+        CheckpointsTransformer,
+        DebugTransformer,
+        TasksTransformer,
+    ]
+
+    run = graph.stream_v2(
+        {"value": "x", "items": []},
+        config={"configurable": {"thread_id": "test-all"}},
+        transformers=all_transformers,
+    )
+    checkpoints = list(run.checkpoints)
+    assert len(checkpoints) >= 1
