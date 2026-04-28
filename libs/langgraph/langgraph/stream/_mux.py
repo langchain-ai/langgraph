@@ -5,7 +5,6 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from langgraph.stream._event_log import EventLog
 from langgraph.stream._types import (
     ProtocolEvent,
     StreamTransformer,
@@ -28,14 +27,15 @@ class StreamMux:
     """Central event dispatcher for the streaming infrastructure.
 
     Owns the main event log and routes events through a transformer
-    pipeline. StreamChannels discovered in transformer projections are
-    auto-wired so that every `push()` also injects a `ProtocolEvent`
-    into the main log.
+    pipeline. StreamChannels with a name discovered in transformer
+    projections are auto-wired so that every `push()` also injects a
+    `ProtocolEvent` into the main log. StreamChannels without a name
+    are local-only.
 
     Pass `is_async=True` when the mux will be consumed via async
-    iteration (`handler.astream()`). All EventLog and StreamChannel
-    instances discovered during registration are automatically bound
-    to the matching mode.
+    iteration (`handler.astream()`). All StreamChannel instances
+    discovered during registration are automatically bound to the
+    matching mode.
 
     Attributes:
         extensions: Merged projection dict across all registered
@@ -60,7 +60,7 @@ class StreamMux:
         `factories` (callables producing fresh instances per mux). Each
         transformer's `init()` is called, projections are merged into
         `extensions`, `_native` keys are recorded in `native_keys`, and
-        any EventLog / StreamChannel instances are bound and wired.
+        any StreamChannel instances are bound and (if named) wired.
 
         Args:
             transformers: Already-built transformer instances. Registered
@@ -89,11 +89,10 @@ class StreamMux:
         self.is_async = is_async
         self.scope: tuple[str, ...] = scope
         self._assign_seq = _assign_seq
-        self._events: EventLog[ProtocolEvent] = EventLog()
+        self._events: StreamChannel[ProtocolEvent] = StreamChannel()
         self._events._bind(is_async=is_async)
         self._transformers: list[StreamTransformer] = []
         self._channels: list[StreamChannel[Any]] = []
-        self._logs: list[EventLog[Any]] = []
         self._seq = 0
 
         self.extensions: dict[str, Any] = {}
@@ -135,18 +134,15 @@ class StreamMux:
         Records the pump on the mux so child mini-muxes built by
         `_make_child` can inherit it. Propagates to:
         - the main event log (`self._events`)
-        - every projection EventLog and StreamChannel in `extensions`
+        - every projection StreamChannel in `extensions`
         - any registered transformer that exposes `_bind_pump` (e.g.
           `MessagesTransformer` so `ChatModelStream` instances drive the
           shared pump from their cursors)
         """
         self._pump_fn = fn
         self._events._request_more = fn
-        for value in self.extensions.values():
-            if isinstance(value, EventLog):
-                value._request_more = fn
-            elif isinstance(value, StreamChannel):
-                value._log._request_more = fn
+        for ch in self._channels:
+            ch._request_more = fn
         for transformer in self._transformers:
             bind = getattr(transformer, "_bind_pump", None)
             if bind is not None:
@@ -156,11 +152,8 @@ class StreamMux:
         """Async counterpart to `bind_pump`."""
         self._apump_fn = fn
         self._events._arequest_more = fn
-        for value in self.extensions.values():
-            if isinstance(value, EventLog):
-                value._arequest_more = fn
-            elif isinstance(value, StreamChannel):
-                value._log._arequest_more = fn
+        for ch in self._channels:
+            ch._arequest_more = fn
         for transformer in self._transformers:
             abind = getattr(transformer, "_bind_apump", None)
             if abind is not None:
@@ -204,8 +197,8 @@ class StreamMux:
         """Register a single transformer.
 
         Calls `transformer.init()`, stores the transformer for event
-        processing, binds any EventLog or StreamChannel instances in
-        the projection, and merges the projection into `extensions`.
+        processing, binds any StreamChannel instances in the projection,
+        and merges the projection into `extensions`.
         """
         if transformer_requires_async(transformer) and not self.is_async:
             raise RuntimeError(
@@ -274,12 +267,12 @@ class StreamMux:
     def close(self) -> None:
         """Finalize all transformers, close all projections and the main log.
 
-        EventLogs and StreamChannels discovered in transformer
-        projections are auto-closed after `finalize()` runs —
-        transformers don't need to close them manually. If any
-        transformer's `finalize()` raises, the remaining transformers,
-        projections, and the main log are still closed; the first error
-        is re-raised after cleanup completes.
+        StreamChannels discovered in transformer projections are
+        auto-closed after `finalize()` runs — transformers don't need
+        to close them manually. If any transformer's `finalize()` raises,
+        the remaining transformers, projections, and the main log are
+        still closed; the first error is re-raised after cleanup
+        completes.
 
         Raises:
             BaseException: The first error raised by a transformer's
@@ -292,12 +285,9 @@ class StreamMux:
             except BaseException as e:
                 if first_error is None:
                     first_error = e
-        for log in self._logs:
-            if not log._closed:
-                log.close()
         for ch in self._channels:
-            if not ch._log._closed:
-                ch._close()
+            if not ch._closed:
+                ch.close()
         self._events.close()
         if first_error is not None:
             raise first_error
@@ -305,11 +295,10 @@ class StreamMux:
     def fail(self, err: BaseException) -> None:
         """Fail all transformers, projections, and the main log.
 
-        EventLogs and StreamChannels discovered in transformer
-        projections are auto-failed — transformers don't need to fail
-        them manually. If any transformer's `fail()` raises, the
-        remaining transformers, projections, and the main log are still
-        failed.
+        StreamChannels discovered in transformer projections are
+        auto-failed — transformers don't need to fail them manually.
+        If any transformer's `fail()` raises, the remaining
+        transformers, projections, and the main log are still failed.
 
         Args:
             err: The exception that ended the run.
@@ -319,12 +308,9 @@ class StreamMux:
                 transformer.fail(err)
             except BaseException:
                 pass
-        for log in self._logs:
-            if not log._closed:
-                log.fail(err)
         for ch in self._channels:
-            if not ch._log._closed:
-                ch._fail(err)
+            if not ch._closed:
+                ch.fail(err)
         self._events.fail(err)
 
     # ------------------------------------------------------------------
@@ -345,7 +331,7 @@ class StreamMux:
         `put_nowait` shape. The root mux assigns `seq`; child muxes do
         not, so forwarded subgraph events can be shared without copying.
         Memory is bounded by caller pace via the caller-driven pump; see
-        `EventLog` for the full tradeoff story.
+        `StreamChannel` for the full tradeoff story.
 
         Args:
             event: The protocol event to dispatch.
@@ -365,7 +351,7 @@ class StreamMux:
 
         Awaits every task started via `StreamTransformer.schedule()`
         across all transformers, then calls `afinalize()` on each,
-        then auto-closes logs, channels, and the main event log.
+        then auto-closes channels and the main event log.
 
         If any scheduled task raised under `on_error="raise"`, or any
         transformer's `afinalize` raises, the exception propagates.
@@ -397,12 +383,9 @@ class StreamMux:
             except BaseException as e:
                 if first_error is None:
                     first_error = e
-        for log in self._logs:
-            if not log._closed:
-                log.close()
         for ch in self._channels:
-            if not ch._log._closed:
-                ch._close()
+            if not ch._closed:
+                ch.close()
         self._events.close()
         if first_error is not None:
             raise first_error
@@ -412,7 +395,7 @@ class StreamMux:
 
         Cancels every scheduled task across all transformers, awaits
         them to completion, then runs each transformer's `afail` hook
-        and auto-fails logs, channels, and the main event log.
+        and auto-fails channels and the main event log.
 
         Args:
             err: The exception that ended the run.
@@ -428,12 +411,9 @@ class StreamMux:
                 await transformer.afail(err)
             except BaseException:
                 pass
-        for log in self._logs:
-            if not log._closed:
-                log.fail(err)
         for ch in self._channels:
-            if not ch._log._closed:
-                ch._fail(err)
+            if not ch._closed:
+                ch.fail(err)
         if not self._events._closed:
             self._events.fail(err)
 
@@ -453,32 +433,33 @@ class StreamMux:
     def _bind_and_wire(
         self, projection: dict[str, Any], *, native: bool = False
     ) -> None:
-        """Bind and wire EventLog / StreamChannel instances in a projection.
+        """Bind and optionally wire StreamChannel instances in a projection.
+
+        All StreamChannels are bound and tracked. Channels with a name
+        are additionally wired for protocol auto-forwarding.
 
         Args:
             projection: The projection dict returned by a transformer's
                 `init()`.
             native: True when the owning transformer is `_native`.
-                Channels owned by a native transformer use the channel
-                name directly as the protocol method; user-defined
-                channels are prefixed with `custom:`.
+                Named channels owned by a native transformer use the
+                channel name directly as the protocol method;
+                user-defined channels are prefixed with `custom:`.
         """
         for value in projection.values():
             if isinstance(value, StreamChannel):
                 value._bind(is_async=self.is_async)
                 self._channels.append(value)
-                method = value.name if native else f"custom:{value.name}"
+                if value.name is not None:
+                    method = value.name if native else f"custom:{value.name}"
 
-                def _make_forward(method_name: str) -> Callable[[Any], None]:
-                    def _forward(item: Any) -> None:
-                        self._forward(method_name, item)
+                    def _make_forward(method_name: str) -> Callable[[Any], None]:
+                        def _forward(item: Any) -> None:
+                            self._forward(method_name, item)
 
-                    return _forward
+                        return _forward
 
-                value._wire(_make_forward(method))
-            elif isinstance(value, EventLog):
-                value._bind(is_async=self.is_async)
-                self._logs.append(value)
+                    value._wire(_make_forward(method))
 
     def _forward(self, method: str, item: Any) -> None:
         """Inject a ProtocolEvent for a StreamChannel push.
