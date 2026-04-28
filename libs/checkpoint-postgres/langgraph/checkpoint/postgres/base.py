@@ -291,13 +291,18 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                             # Step-based snapshot: collect this ancestor's
                             # pending_writes first (they encode the NEXT step's
                             # transition, not subsumed by the snapshot blob).
-                            for type_tag, write_blob, task_id, _idx in writes_by_cid.get(
-                                cid, []
-                            ):
+                            for (
+                                type_tag,
+                                write_blob,
+                                task_id,
+                                _idx,
+                            ) in writes_by_cid.get(cid, []):
                                 val = self.serde.loads_typed((type_tag, write_blob))
                                 collected.append((task_id, channel, val))
                             collected.reverse()
-                            return _ChannelWritesHistory(seed=blob_value, writes=collected)
+                            return _ChannelWritesHistory(
+                                seed=blob_value, writes=collected
+                            )
                         # Pre-delta blob: subsumes this ancestor's writes.
                         collected.reverse()
                         return _ChannelWritesHistory(seed=blob_value, writes=collected)

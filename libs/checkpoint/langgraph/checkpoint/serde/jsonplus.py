@@ -33,7 +33,11 @@ from langchain_core.load.load import Reviver
 from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.event_hooks import emit_serde_event
-from langgraph.checkpoint.serde.types import DELTA_SENTINEL, SendProtocol, _DeltaSnapshot
+from langgraph.checkpoint.serde.types import (
+    DELTA_SENTINEL,
+    SendProtocol,
+    _DeltaSnapshot,
+)
 from langgraph.store.base import Item
 
 if TYPE_CHECKING:
