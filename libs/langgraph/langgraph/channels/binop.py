@@ -37,6 +37,17 @@ def _get_overwrite(value: Any) -> tuple[bool, Any]:
     return False, None
 
 
+def _operators_equal(a: Callable, b: Callable) -> bool:
+    """Return True if two reducer operators should be considered equal.
+
+    Lambdas all share the name '<lambda>' so identity comparison is
+    unreliable; treat any pairing that includes a lambda as equal.
+    """
+    if a.__name__ == "<lambda>" or b.__name__ == "<lambda>":
+        return True
+    return a is b
+
+
 class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the result of applying a binary operator to the current value and each new value.
 
@@ -67,11 +78,8 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
             self.value = MISSING
 
     def __eq__(self, value: object) -> bool:
-        return isinstance(value, BinaryOperatorAggregate) and (
-            value.operator is self.operator
-            if value.operator.__name__ != "<lambda>"
-            and self.operator.__name__ != "<lambda>"
-            else True
+        return isinstance(value, BinaryOperatorAggregate) and _operators_equal(
+            self.operator, value.operator
         )
 
     @property

@@ -8,16 +8,15 @@ from langgraph.checkpoint.base import DELTA_SENTINEL, PendingWrite
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import Self
 
-from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
+from langgraph.channels.binop import _get_overwrite, _operators_equal
 from langgraph.errors import (
     EmptyChannelError,
     ErrorCode,
     InvalidUpdateError,
     create_error_message,
 )
-from langgraph.types import Overwrite
 
 __all__ = ("DeltaChannel",)
 
@@ -27,14 +26,6 @@ def _empty(typ: Any) -> Any:
         return typ()
     except Exception:
         return []
-
-
-def _get_overwrite(value: Any) -> tuple[bool, Any]:
-    if isinstance(value, Overwrite):
-        return True, value.value
-    if isinstance(value, dict) and set(value.keys()) == {OVERWRITE}:
-        return True, value[OVERWRITE]
-    return False, None
 
 
 class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
@@ -74,12 +65,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
             return False
         if self.snapshot_frequency != other.snapshot_frequency:
             return False
-        if (
-            self.operator.__name__ != "<lambda>"
-            and other.operator.__name__ != "<lambda>"
-        ):
-            return self.operator is other.operator
-        return True
+        return _operators_equal(self.operator, other.operator)
 
     @property
     def ValueType(self) -> Any:
