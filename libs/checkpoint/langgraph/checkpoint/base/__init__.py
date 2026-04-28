@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextvars
 import copy
 import logging
 from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
@@ -33,14 +32,6 @@ from langgraph.checkpoint.serde.types import (
 
 V = TypeVar("V", int, float, str)
 PendingWrite = tuple[str, str, Any]
-
-# Task-local guard: ContextVar is copied per asyncio Task, so concurrent
-# requests on the same event-loop thread do not share this flag. A plain
-# `threading.local()` would leak across tasks and let one in-flight
-# reconstruction silently short-circuit another.
-_DELTA_RECONSTRUCTION: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "_DELTA_RECONSTRUCTION", default=False
-)
 
 
 logger = logging.getLogger(__name__)
@@ -496,6 +487,26 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
+    def _get_tuple_raw(self, config: RunnableConfig) -> CheckpointTuple | None:
+        """Pure storage read used by `_get_channel_writes_history`.
+
+        Must return the same value as `get_tuple` but must NOT trigger channel
+        reconstruction (i.e., must not call `channels_from_checkpoint`). The
+        default implementation delegates to `get_tuple`, which is correct for
+        savers whose `get_tuple` is a pure storage query (the common case).
+
+        Override this if your saver performs channel hydration inside `get_tuple`.
+        Doing so structurally breaks the otherwise-possible cycle:
+            _get_channel_writes_history -> _get_tuple_raw -> get_tuple
+                                        -> channels_from_checkpoint
+                                        -> _get_channel_writes_history (cycle!)
+        """
+        return self.get_tuple(config)
+
+    async def _aget_tuple_raw(self, config: RunnableConfig) -> CheckpointTuple | None:
+        """Async version of `_get_tuple_raw`. See docstring there."""
+        return await self.aget_tuple(config)
+
     def _get_channel_writes_history(
         self, config: RunnableConfig, channel: str
     ) -> _ChannelWritesHistory:
@@ -524,92 +535,61 @@ class BaseCheckpointSaver(Generic[V]):
 
         Underscore-prefixed because the method surface is experimental.
         """
-        # Guard against re-entrant calls: when get_tuple() triggers
-        # reconstruction which calls get_tuple() again, the inner call
-        # short-circuits here.
-        if _DELTA_RECONSTRUCTION.get():
-            return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
-
-        token = _DELTA_RECONSTRUCTION.set(True)
-        try:
-            collected: list[PendingWrite] = []  # newest first; reversed at the end
-            target_tuple = self.get_tuple(config)
-            cursor_config: RunnableConfig | None = (
-                target_tuple.parent_config if target_tuple else None
-            )
-            while cursor_config is not None:
-                tup = self.get_tuple(cursor_config)
-                if tup is None:
-                    break
-                # Pre-delta seed terminator: if the ancestor has a stored
-                # (non-sentinel) value for this channel, that snapshot
-                # subsumes any earlier writes on the chain. Stop here.
-                ancestor_value = tup.checkpoint["channel_values"].get(channel)
-                if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
-                    if isinstance(ancestor_value, _DeltaSnapshot):
-                        # Step-based snapshot: the blob is state AT this ancestor,
-                        # but pending_writes encode the NEXT step's transition and
-                        # are NOT subsumed — collect them before terminating.
-                        if tup.pending_writes:
-                            for write in reversed(tup.pending_writes):
-                                if write[1] != channel:
-                                    continue
-                                collected.append(write)
-                    # Pre-delta blob: subsumes its own writes — stop immediately.
-                    collected.reverse()
-                    return _ChannelWritesHistory(seed=ancestor_value, writes=collected)
-                if tup.pending_writes:
-                    # Within a superstep, pending_writes are oldest→newest;
-                    # reverse to scan newest-first.
-                    for write in reversed(tup.pending_writes):
-                        if write[1] != channel:
-                            continue
-                        collected.append(write)
-                cursor_config = tup.parent_config
-            collected.reverse()
-            return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)
-        finally:
-            _DELTA_RECONSTRUCTION.reset(token)
+        collected: list[PendingWrite] = []  # newest first; reversed at the end
+        target_tuple = self._get_tuple_raw(config)
+        cursor_config: RunnableConfig | None = (
+            target_tuple.parent_config if target_tuple else None
+        )
+        while cursor_config is not None:
+            tup = self._get_tuple_raw(cursor_config)
+            if tup is None:
+                break
+            # Collect this ancestor's writes FIRST — they encode the
+            # transition from this ancestor's state to its child's, so
+            # they must be included whether or not this ancestor is the
+            # seed terminator.
+            if tup.pending_writes:
+                # Within a superstep, pending_writes are oldest→newest;
+                # reverse to scan newest-first.
+                for write in reversed(tup.pending_writes):
+                    if write[1] != channel:
+                        continue
+                    collected.append(write)
+            # Seed terminator: any non-sentinel blob on an ancestor
+            # establishes the reconstruction base. Stop here.
+            ancestor_value = tup.checkpoint["channel_values"].get(channel)
+            if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
+                collected.reverse()
+                return _ChannelWritesHistory(seed=ancestor_value, writes=collected)
+            cursor_config = tup.parent_config
+        collected.reverse()
+        return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)
 
     async def _aget_channel_writes_history(
         self, config: RunnableConfig, channel: str
     ) -> _ChannelWritesHistory:
         """Async version of `_get_channel_writes_history`. See docstring there."""
-        if _DELTA_RECONSTRUCTION.get():
-            return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
-
-        token = _DELTA_RECONSTRUCTION.set(True)
-        try:
-            collected: list[PendingWrite] = []
-            target_tuple = await self.aget_tuple(config)
-            cursor_config: RunnableConfig | None = (
-                target_tuple.parent_config if target_tuple else None
-            )
-            while cursor_config is not None:
-                tup = await self.aget_tuple(cursor_config)
-                if tup is None:
-                    break
-                # See sync variant for rationale.
-                ancestor_value = tup.checkpoint["channel_values"].get(channel)
-                if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
-                    if isinstance(ancestor_value, _DeltaSnapshot):
-                        if tup.pending_writes:
-                            for write in reversed(tup.pending_writes):
-                                if write[1] != channel:
-                                    continue
-                                collected.append(write)
-                    collected.reverse()
-                    return _ChannelWritesHistory(seed=ancestor_value, writes=collected)
-                if tup.pending_writes:
-                    for write in reversed(tup.pending_writes):
-                        if write[1] != channel:
-                            continue
-                        collected.append(write)
-                cursor_config = tup.parent_config
-            collected.reverse()
-            return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)
-        finally:
-            _DELTA_RECONSTRUCTION.reset(token)
+        collected: list[PendingWrite] = []
+        target_tuple = await self._aget_tuple_raw(config)
+        cursor_config: RunnableConfig | None = (
+            target_tuple.parent_config if target_tuple else None
+        )
+        while cursor_config is not None:
+            tup = await self._aget_tuple_raw(cursor_config)
+            if tup is None:
+                break
+            if tup.pending_writes:
+                for write in reversed(tup.pending_writes):
+                    if write[1] != channel:
+                        continue
+                    collected.append(write)
+            ancestor_value = tup.checkpoint["channel_values"].get(channel)
+            if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
+                collected.reverse()
+                return _ChannelWritesHistory(seed=ancestor_value, writes=collected)
+            cursor_config = tup.parent_config
+        collected.reverse()
+        return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)
 
     def get_next_version(self, current: V | None, channel: None) -> V:
         """Generate the next version ID for a channel.
