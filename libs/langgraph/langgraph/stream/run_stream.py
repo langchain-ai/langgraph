@@ -8,10 +8,9 @@ from typing import TYPE_CHECKING, Any
 from langgraph.stream._convert import convert_to_protocol_event
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
-from langgraph.stream.transformers import ValuesTransformer
 
 if TYPE_CHECKING:
-    from langgraph.stream.transformers import SubgraphStatus
+    from langgraph.stream.transformers import SubgraphStatus, ValuesTransformer
 
 
 def _drive_until_done(pump: Callable[[], bool]) -> None:
@@ -60,7 +59,7 @@ class GraphRunStream:
                 providing `output` / `interrupted` / `interrupts`.
             wire_pump: When True (default), bind `_pump_next` as the
                 mux's pump callable. Subclasses that inherit a parent
-                pump via `StreamMux.make_child` should pass False to
+                pump via `StreamMux._make_child` should pass False to
                 preserve the parent binding.
         """
         self._graph_iter = graph_iter
@@ -78,7 +77,7 @@ class GraphRunStream:
 
         Routing through `mux.bind_pump` (rather than walking
         projections directly here) lets child mini-muxes built by
-        `mux.make_child(...)` inherit the same pump callable, so
+        `mux._make_child(...)` inherit the same pump callable, so
         cursors on a subgraph handle's projections drive the root
         pump just like cursors on `run.values` do.
         """
@@ -263,7 +262,7 @@ class AsyncGraphRunStream:
                 providing `output` / `interrupted` / `interrupts`.
             wire_pump: When True (default), bind `_apump_next` as the
                 mux's async pump callable. Subclasses that inherit a
-                parent pump via `StreamMux.make_child` should pass
+                parent pump via `StreamMux._make_child` should pass
                 False to preserve the parent binding.
         """
         self._graph_aiter = graph_aiter
@@ -416,7 +415,7 @@ class _SubgraphRunStreamMixin:
 
     Inherits from `GraphRunStream` (or `AsyncGraphRunStream`) with
     `graph_iter=None` + `wire_pump=False` — the mini-mux is driven
-    by the parent's pump (inherited via `StreamMux.make_child`), and
+    by the parent's pump (inherited via `StreamMux._make_child`), and
     the handle never pulls upstream itself. Pump-driving methods
     delegate to the parent pump so `handle.output` and friends drive
     the root run.

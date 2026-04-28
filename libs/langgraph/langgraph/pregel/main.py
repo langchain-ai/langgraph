@@ -153,6 +153,15 @@ from langgraph.runtime import (
     Runtime,
     ServerInfo,
 )
+from langgraph.stream._mux import StreamMux
+from langgraph.stream._types import StreamTransformer
+from langgraph.stream.run_stream import AsyncGraphRunStream, GraphRunStream
+from langgraph.stream.transformers import (
+    LifecycleTransformer,
+    MessagesTransformer,
+    SubgraphTransformer,
+    ValuesTransformer,
+)
 from langgraph.types import (
     All,
     CachePolicy,
@@ -364,30 +373,29 @@ def _collect_stream_modes(mux: Any) -> list[StreamMode]:
     return list(modes)
 
 
-def _split_user_transformers(
+def _normalize_stream_transformer_factories(
     specs: Sequence[Callable[[tuple[str, ...]], Any]] | None,
 ) -> list[Callable[[tuple[str, ...]], Any]]:
-    """Normalize user-supplied transformers to scoped factories.
+    """Normalize stream transformer specs to scoped factories.
 
-    Each item must be a transformer class or configured factory called
-    as `spec(scope)`. Factories propagate through `StreamMux.make_child`,
-    so each graph/subgraph scope receives a fresh transformer instance.
-    Pre-built transformer instances are intentionally rejected because
-    they cannot be safely cloned into child scopes.
+    A stream transformer spec is a callable that accepts
+    `scope: tuple[str, ...]` and returns a fresh `StreamTransformer`.
+    Transformer classes work when their constructor follows the same
+    shape. Pre-built instances are rejected because they cannot be
+    cloned into subgraph scopes.
     """
-    from langgraph.stream._types import StreamTransformer
-
     factories: list[Callable[[tuple[str, ...]], Any]] = []
     for spec in specs or ():
         if isinstance(spec, StreamTransformer):
             raise TypeError(
-                "stream_v2 transformers must be transformer classes or factories, "
-                f"got pre-built instance {type(spec).__name__}. Pass the class "
-                "or a factory like `lambda scope: MyTransformer(scope, ...)`."
+                "stream_v2 transformers must be scope-aware callables, "
+                f"got pre-built instance {type(spec).__name__}. Pass the "
+                "transformer class or a factory like "
+                "`lambda scope: MyTransformer(scope, ...)`."
             )
         if not callable(spec):
             raise TypeError(
-                "stream_v2 transformers must be transformer classes or factories, "
+                "stream_v2 transformers must be scope-aware callables, "
                 f"got {type(spec).__name__}."
             )
 
@@ -776,7 +784,7 @@ class Pregel(
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.name = name
-        self._stream_transformers: tuple[Callable[[tuple[str, ...]], Any], ...] = tuple(
+        self.stream_transformers: tuple[Callable[[tuple[str, ...]], Any], ...] = tuple(
             stream_transformers or ()
         )
         self._serde_allowlist: set[tuple[str, ...]] | None = None
@@ -3419,18 +3427,11 @@ class Pregel(
         Returns:
             A `GraphRunStream` the caller iterates to drive the run.
         """
-        from langgraph.stream._mux import StreamMux
-        from langgraph.stream.run_stream import GraphRunStream
-        from langgraph.stream.transformers import (
-            LifecycleTransformer,
-            MessagesTransformer,
-            SubgraphTransformer,
-            ValuesTransformer,
-        )
-
         parent_ns = _resolve_parent_ns(self.config, config)
-        compiled_factories = _split_user_transformers(self._stream_transformers)
-        extra_factories = _split_user_transformers(transformers)
+        compiled_factories = _normalize_stream_transformer_factories(
+            self.stream_transformers
+        )
+        extra_factories = _normalize_stream_transformer_factories(transformers)
         mux = StreamMux(
             factories=[
                 ValuesTransformer,
@@ -3493,18 +3494,11 @@ class Pregel(
                 are called as `factory(scope)` so they can propagate to
                 subgraph scopes.
         """
-        from langgraph.stream._mux import StreamMux
-        from langgraph.stream.run_stream import AsyncGraphRunStream
-        from langgraph.stream.transformers import (
-            LifecycleTransformer,
-            MessagesTransformer,
-            SubgraphTransformer,
-            ValuesTransformer,
-        )
-
         parent_ns = _resolve_parent_ns(self.config, config)
-        compiled_factories = _split_user_transformers(self._stream_transformers)
-        extra_factories = _split_user_transformers(transformers)
+        compiled_factories = _normalize_stream_transformer_factories(
+            self.stream_transformers
+        )
+        extra_factories = _normalize_stream_transformer_factories(transformers)
         mux = StreamMux(
             factories=[
                 ValuesTransformer,

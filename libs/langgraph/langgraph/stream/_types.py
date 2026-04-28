@@ -29,8 +29,8 @@ class ProtocolEvent(TypedDict):
     """A protocol event emitted by the streaming infrastructure.
 
     Wraps a raw stream part (values, messages, custom, etc.) in a uniform
-    envelope with a monotonic sequence number assigned by the StreamMux.
-    Consumers that need a total order across events should use `seq`, not
+    envelope with a monotonic sequence number assigned by the root StreamMux.
+    Consumers that need a total order across root events should use `seq`, not
     `params.timestamp` (which is wall-clock and not monotonic).
     """
 
@@ -126,7 +126,7 @@ class StreamTransformer(ABC):
 
         Default is a no-op. Override to capture a reference to the
         owning mux — needed for transformers that build mini-muxes
-        via `mux.make_child(...)` (e.g. `SubgraphTransformer`).
+        via `mux._make_child(...)` (e.g. `SubgraphTransformer`).
         """
 
     def process(self, event: ProtocolEvent) -> bool:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from langchain_core.language_models._compat_bridge import message_to_events
@@ -16,16 +15,13 @@ from typing_extensions import NotRequired, TypedDict
 from langgraph.errors import GraphInterrupt
 from langgraph.stream._event_log import EventLog
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
+from langgraph.stream.run_stream import AsyncSubgraphRunStream, SubgraphRunStream
 from langgraph.stream.stream_channel import StreamChannel
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from langgraph.stream._mux import StreamMux
-    from langgraph.stream.run_stream import (
-        AsyncSubgraphRunStream,
-        SubgraphRunStream,
-    )
 
 _logger = logging.getLogger(__name__)
 
@@ -381,16 +377,25 @@ class _TasksLifecycleBase(StreamTransformer):
         if trigger_call_id is not None:
             self._open[ns] = trigger_call_id
 
-    def _handle_task_result(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
+    def _pop_terminal_transitions(
+        self, ns: tuple[str, ...], data: dict[str, Any]
+    ) -> list[tuple[tuple[str, ...], SubgraphStatus, str | None]]:
+        """Return and remove tracked children closed by this task result."""
         result_id = data.get("id")
         if not result_id:
-            return
+            return []
+        transitions: list[tuple[tuple[str, ...], SubgraphStatus, str | None]] = []
         for child_ns, parent_task_id in list(self._open.items()):
             if child_ns[:-1] != ns or parent_task_id != result_id:
                 continue
             status, error = _terminal_from_result(data)
-            self._on_terminal(child_ns, status, error)
+            transitions.append((child_ns, status, error))
             del self._open[child_ns]
+        return transitions
+
+    def _handle_task_result(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
+        for child_ns, status, error in self._pop_terminal_transitions(ns, data):
+            self._on_terminal(child_ns, status, error)
 
     def finalize(self) -> None:
         """Emit `completed` for any tracked namespace still open at run end."""
@@ -406,6 +411,13 @@ class _TasksLifecycleBase(StreamTransformer):
         for ns in list(self._open):
             self._on_terminal(ns, status, error_str)
         self._open.clear()
+
+
+def _status_from_exception(err: BaseException) -> tuple[SubgraphStatus, str | None]:
+    """Map a run exception to a subgraph terminal status and error string."""
+    if isinstance(err, GraphInterrupt):
+        return "interrupted", None
+    return "failed", str(err)
 
 
 def _terminal_from_result(
@@ -496,8 +508,8 @@ class SubgraphTransformer(_TasksLifecycleBase):
     Each mini-mux owns its own scope and uses its own
     `SubgraphTransformer` to discover its direct children, so
     grandchildren live on the child handle — never on the root's
-    `subgraphs` log. Forwarding non-tasks events into the matching
-    child mini-mux is what keeps the child's projections populated.
+    `subgraphs` log. Forwarding events into the matching child mini-mux
+    is what keeps the child's projections populated.
 
     Native transformer — `subgraphs` is exposed as `run.subgraphs`.
     """
@@ -534,18 +546,12 @@ class SubgraphTransformer(_TasksLifecycleBase):
         if self._mux is None:
             return
         try:
-            child_mux = self._mux.make_child(ns)
+            child_mux = self._mux._make_child(ns)
         except RuntimeError:
             # Mux wasn't built from factories — no mini-mux navigation
             # available. Skip; LifecycleTransformer still tracks the
             # subgraph via the flat event stream.
             return
-        # Late import dodges the run_stream → transformers cycle.
-        from langgraph.stream.run_stream import (
-            AsyncSubgraphRunStream,
-            SubgraphRunStream,
-        )
-
         values_t = child_mux.transformer_by_key("values")
         if not isinstance(values_t, ValuesTransformer):
             return
@@ -567,26 +573,80 @@ class SubgraphTransformer(_TasksLifecycleBase):
         error: str | None,
     ) -> None:
         handle = self._handles.get(ns)
-        if handle is None or handle._seen_terminal:
+        if handle is None or not self._mark_terminal(handle, status, error):
             return
+        self._close_or_fail_handle(handle, status, error)
+
+    async def _aon_terminal(
+        self,
+        ns: tuple[str, ...],
+        status: SubgraphStatus,
+        error: str | None,
+    ) -> None:
+        handle = self._handles.get(ns)
+        if handle is None or not self._mark_terminal(handle, status, error):
+            return
+        await self._aclose_or_fail_handle(handle, status, error)
+
+    def _mark_terminal(
+        self,
+        handle: SubgraphRunStream | AsyncSubgraphRunStream,
+        status: SubgraphStatus,
+        error: str | None,
+    ) -> bool:
+        """Mark a handle terminal once. Returns True on first transition."""
+        if handle._seen_terminal:
+            return False
         handle.status = status
         if error is not None and handle.error is None:
             handle.error = error
         handle._seen_terminal = True
+        return True
+
+    def _close_or_fail_handle(
+        self,
+        handle: SubgraphRunStream | AsyncSubgraphRunStream,
+        status: SubgraphStatus,
+        error: str | None,
+    ) -> None:
+        if handle._mux is None or handle._mux._events._closed:
+            return
         if status == "failed":
-            self._fail_handle_mux(handle, RuntimeError(error or "Subgraph failed"))
+            handle._mux.fail(RuntimeError(error or "Subgraph failed"))
         else:
-            self._close_handle_mux(handle)
+            handle._mux.close()
+
+    async def _aclose_or_fail_handle(
+        self,
+        handle: SubgraphRunStream | AsyncSubgraphRunStream,
+        status: SubgraphStatus,
+        error: str | None,
+    ) -> None:
+        if handle._mux is None or handle._mux._events._closed:
+            return
+        if status == "failed":
+            await handle._mux.afail(RuntimeError(error or "Subgraph failed"))
+        else:
+            await handle._mux.aclose()
+
+    def _child_mux_for_event(self, event: ProtocolEvent) -> StreamMux | None:
+        ns = tuple(event["params"]["namespace"])
+        depth = len(self.scope)
+        if len(ns) < depth + 1:
+            return None
+        handle = self._handles.get(ns[: depth + 1])
+        if handle is None or handle._mux is None or handle._mux._events._closed:
+            return None
+        return handle._mux
 
     def process(self, event: ProtocolEvent) -> bool:
         # Discover / update terminal status before forwarding so a
         # `started` handle exists by the time the child mini-mux sees
         # its own first event.
         keep = super().process(event)
-        # Forward every event (tasks included) into the matching
-        # direct-child mini-mux so the child's own transformers
-        # populate its projections — including grandchild discovery.
-        self._forward_to_children(event)
+        child_mux = self._child_mux_for_event(event)
+        if child_mux is not None:
+            child_mux.push(event)
         return keep
 
     async def aprocess(self, event: ProtocolEvent) -> bool:
@@ -597,130 +657,19 @@ class SubgraphTransformer(_TasksLifecycleBase):
             ns = tuple(event["params"]["namespace"])
             data = event["params"]["data"]
             if "result" in data:
-                await self._ahandle_task_result(ns, data)
+                for child_ns, status, error in self._pop_terminal_transitions(ns, data):
+                    await self._aon_terminal(child_ns, status, error)
             else:
                 self._handle_task_start(ns)
             keep = False
         else:
             keep = True
-        await self._aforward_to_children(event)
+        child_mux = self._child_mux_for_event(event)
+        if child_mux is not None:
+            await child_mux.apush(event)
         return keep
 
-    async def _ahandle_task_result(
-        self, ns: tuple[str, ...], data: dict[str, Any]
-    ) -> None:
-        result_id = data.get("id")
-        if not result_id:
-            return
-        for child_ns, parent_task_id in list(self._open.items()):
-            if child_ns[:-1] != ns or parent_task_id != result_id:
-                continue
-            status, error = _terminal_from_result(data)
-            await self._aon_terminal(child_ns, status, error)
-            del self._open[child_ns]
-
-    async def _aon_terminal(
-        self,
-        ns: tuple[str, ...],
-        status: SubgraphStatus,
-        error: str | None,
-    ) -> None:
-        handle = self._handles.get(ns)
-        if handle is None or handle._seen_terminal:
-            return
-        handle.status = status
-        if error is not None and handle.error is None:
-            handle.error = error
-        handle._seen_terminal = True
-        if status == "failed":
-            await self._afail_handle_mux(
-                handle, RuntimeError(error or "Subgraph failed")
-            )
-        else:
-            await self._aclose_handle_mux(handle)
-
-    def _forward_to_children(self, event: ProtocolEvent) -> None:
-        """Push the event into the matching direct-child mini-mux, if any.
-
-        Events at a child's exact level (length `depth + 1`) and below
-        (length `> depth + 1`) are routed into the child whose path
-        matches the event's first `depth + 1` segments.
-        """
-        ns = tuple(event["params"]["namespace"])
-        depth = len(self.scope)
-        if len(ns) < depth + 1:
-            return
-        candidate_path = ns[: depth + 1]
-        handle = self._handles.get(candidate_path)
-        if handle is None or handle._mux is None or handle._mux._events._closed:
-            return
-        child_event: ProtocolEvent = {
-            **event,
-            "params": {
-                **event["params"],
-                "namespace": list(event["params"]["namespace"]),
-                "data": deepcopy(event["params"]["data"]),
-            },
-        }
-        if "interrupts" in event["params"]:
-            child_event["params"]["interrupts"] = deepcopy(
-                event["params"]["interrupts"]
-            )
-        handle._mux.push(child_event)
-
-    async def _aforward_to_children(self, event: ProtocolEvent) -> None:
-        """Async counterpart to `_forward_to_children`."""
-        ns = tuple(event["params"]["namespace"])
-        depth = len(self.scope)
-        if len(ns) < depth + 1:
-            return
-        candidate_path = ns[: depth + 1]
-        handle = self._handles.get(candidate_path)
-        if handle is None or handle._mux is None or handle._mux._events._closed:
-            return
-        child_event: ProtocolEvent = {
-            **event,
-            "params": {
-                **event["params"],
-                "namespace": list(event["params"]["namespace"]),
-                "data": deepcopy(event["params"]["data"]),
-            },
-        }
-        if "interrupts" in event["params"]:
-            child_event["params"]["interrupts"] = deepcopy(
-                event["params"]["interrupts"]
-            )
-        await handle._mux.apush(child_event)
-
-    def _close_handle_mux(
-        self, handle: SubgraphRunStream | AsyncSubgraphRunStream
-    ) -> None:
-        if handle._mux is None or handle._mux._events._closed:
-            return
-        handle._mux.close()
-
-    async def _aclose_handle_mux(
-        self, handle: SubgraphRunStream | AsyncSubgraphRunStream
-    ) -> None:
-        if handle._mux is None or handle._mux._events._closed:
-            return
-        await handle._mux.aclose()
-
-    def _fail_handle_mux(
-        self, handle: SubgraphRunStream | AsyncSubgraphRunStream, err: BaseException
-    ) -> None:
-        if handle._mux is None or handle._mux._events._closed:
-            return
-        handle._mux.fail(err)
-
-    async def _afail_handle_mux(
-        self, handle: SubgraphRunStream | AsyncSubgraphRunStream, err: BaseException
-    ) -> None:
-        if handle._mux is None or handle._mux._events._closed:
-            return
-        await handle._mux.afail(err)
-
-    def finalize(self) -> None:
+    def _complete_open_handles(self) -> BaseException | None:
         first_error: BaseException | None = None
         for ns in list(self._open):
             try:
@@ -729,22 +678,16 @@ class SubgraphTransformer(_TasksLifecycleBase):
                 if first_error is None:
                     first_error = e
         self._open.clear()
-        # Close any handles whose started fired without a trigger_call_id
-        # (so `_open` never tracked them) — they finish implicitly at
-        # run end with status `completed`.
         for handle in self._handles.values():
-            if not handle._seen_terminal:
-                handle.status = "completed"
-                handle._seen_terminal = True
+            if self._mark_terminal(handle, "completed", None):
                 try:
-                    self._close_handle_mux(handle)
+                    self._close_or_fail_handle(handle, "completed", None)
                 except BaseException as e:
                     if first_error is None:
                         first_error = e
-        if first_error is not None:
-            raise first_error
+        return first_error
 
-    async def afinalize(self) -> None:
+    async def _acomplete_open_handles(self) -> BaseException | None:
         first_error: BaseException | None = None
         for ns in list(self._open):
             try:
@@ -753,32 +696,30 @@ class SubgraphTransformer(_TasksLifecycleBase):
                 if first_error is None:
                     first_error = e
         self._open.clear()
-        # Close any handles whose started fired without a trigger_call_id
-        # (so `_open` never tracked them) — they finish implicitly at
-        # run end with status `completed`.
         for handle in self._handles.values():
-            if not handle._seen_terminal:
-                handle.status = "completed"
-                handle._seen_terminal = True
+            if self._mark_terminal(handle, "completed", None):
                 try:
-                    await self._aclose_handle_mux(handle)
+                    await self._aclose_or_fail_handle(handle, "completed", None)
                 except BaseException as e:
                     if first_error is None:
                         first_error = e
+        return first_error
+
+    def finalize(self) -> None:
+        first_error = self._complete_open_handles()
+        if first_error is not None:
+            raise first_error
+
+    async def afinalize(self) -> None:
+        first_error = await self._acomplete_open_handles()
         if first_error is not None:
             raise first_error
 
     def fail(self, err: BaseException) -> None:
-        is_interrupt = isinstance(err, GraphInterrupt)
-        status: SubgraphStatus = "interrupted" if is_interrupt else "failed"
-        error_str = None if is_interrupt else str(err)
+        status, error_str = _status_from_exception(err)
         self._open.clear()
         for handle in self._handles.values():
-            if not handle._seen_terminal:
-                handle.status = status
-                if error_str is not None and handle.error is None:
-                    handle.error = error_str
-                handle._seen_terminal = True
+            self._mark_terminal(handle, status, error_str)
             if handle._mux is not None and not handle._mux._events._closed:
                 try:
                     handle._mux.fail(err)
@@ -791,16 +732,10 @@ class SubgraphTransformer(_TasksLifecycleBase):
                     )
 
     async def afail(self, err: BaseException) -> None:
-        is_interrupt = isinstance(err, GraphInterrupt)
-        status: SubgraphStatus = "interrupted" if is_interrupt else "failed"
-        error_str = None if is_interrupt else str(err)
+        status, error_str = _status_from_exception(err)
         self._open.clear()
         for handle in self._handles.values():
-            if not handle._seen_terminal:
-                handle.status = status
-                if error_str is not None and handle.error is None:
-                    handle.error = error_str
-                handle._seen_terminal = True
+            self._mark_terminal(handle, status, error_str)
             if handle._mux is not None and not handle._mux._events._closed:
                 try:
                     await handle._mux.afail(err)
