@@ -145,19 +145,21 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     def update(self, values: Sequence[Any]) -> bool:
         if not values:
             return False
-        seen_overwrite = False
-        for value in values:
-            is_overwrite, _ = _get_overwrite(value)
-            if is_overwrite:
-                if seen_overwrite:
+        overwrite_idx: int | None = None
+        for i, v in enumerate(values):
+            is_ow, _ = _get_overwrite(v)
+            if is_ow:
+                if overwrite_idx is not None:
                     msg = create_error_message(
                         message="Can receive only one Overwrite value per super-step.",
                         error_code=ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE,
                     )
                     raise InvalidUpdateError(msg)
-                seen_overwrite = True
-            elif seen_overwrite:
-                continue
+                overwrite_idx = i
+        if overwrite_idx is not None:
+            self.value = self._apply_write(self.value, values[overwrite_idx])
+            return True
+        for value in values:
             self.value = self._apply_write(self.value, value)
         return True
 
