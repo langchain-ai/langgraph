@@ -289,7 +289,7 @@ def test_tool_node_error_handling_default_invocation() -> None:
     assert all(m.type == "tool" for m in result["messages"])
     assert all(m.status == "error" for m in result["messages"])
     assert (
-        "Error invoking tool 'tool1' with kwargs {'invalid': 0, 'args': 'foo'} with error:\n"
+        "Error invoking tool 'tool1' with error:\n"
         in result["messages"][0].content
     )
 

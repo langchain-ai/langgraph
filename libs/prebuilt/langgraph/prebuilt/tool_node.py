@@ -114,7 +114,7 @@ TOOL_EXECUTION_ERROR_TEMPLATE = (
     " Please fix the error and try again."
 )
 TOOL_INVOCATION_ERROR_TEMPLATE = (
-    "Error invoking tool '{tool_name}' with kwargs {tool_kwargs} with error:\n"
+    "Error invoking tool '{tool_name}' with error:\n"
     " {error}\n"
     " Please fix the error and try again."
 )
@@ -370,7 +370,7 @@ class ToolInvocationError(ToolException):
             error_display_str = str(source)
 
         self.message = TOOL_INVOCATION_ERROR_TEMPLATE.format(
-            tool_name=tool_name, tool_kwargs=tool_kwargs, error=error_display_str
+            tool_name=tool_name, error=error_display_str
         )
         self.tool_name = tool_name
         self.tool_kwargs = tool_kwargs
