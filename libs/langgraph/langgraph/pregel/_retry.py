@@ -50,6 +50,30 @@ def _timeout_secs(value: float | timedelta) -> float:
     return value.total_seconds() if isinstance(value, timedelta) else value
 
 
+@dataclass(frozen=True, slots=True)
+class _ResolvedTimeout:
+    run_timeout_secs: float | None
+    idle_timeout_secs: float | None
+    refresh_on: Literal["auto", "heartbeat"] | None
+
+
+def _resolve_timeout(timeout: TimeoutPolicy) -> _ResolvedTimeout:
+    idle_timeout_secs = (
+        _timeout_secs(timeout.idle_timeout)
+        if timeout.idle_timeout is not None
+        else None
+    )
+    return _ResolvedTimeout(
+        run_timeout_secs=(
+            _timeout_secs(timeout.run_timeout)
+            if timeout.run_timeout is not None
+            else None
+        ),
+        idle_timeout_secs=idle_timeout_secs,
+        refresh_on=timeout.refresh_on if idle_timeout_secs is not None else None,
+    )
+
+
 class _AttemptContext(NamedTuple):
     """Immutable per-attempt metadata shared across start/progress/finish events.
 
@@ -154,7 +178,7 @@ class _TimedAttemptScope:
         new_config = patch_configurable(config, patch) if patch else config
         if self._refresh_on == "auto":
             return merge_configs(
-                new_config, {"callbacks": [_IdleHeartbeatCallbackHandler(self)]}
+                new_config, {"callbacks": [_IdleProgressCallbackHandler(self)]}
             )
         return new_config
 
@@ -201,23 +225,24 @@ class _TimedAttemptScope:
         return guarded_send
 
     def _guard_stream(self, stream: StreamProtocol) -> StreamProtocol:
+        # No lock: stream callbacks fire from the event loop only, so the
+        # active-check + write happen atomically between awaits.
         def guarded_stream(chunk: tuple[tuple[str, ...], str, Any]) -> None:
-            with self._lock:
-                if not self._active:
-                    return
-                if self._refresh_on == "auto":
-                    self._last_progress = time.monotonic()
+            if not self._active:
+                return
+            if self._refresh_on == "auto":
+                self._last_progress = time.monotonic()
             stream(chunk)
 
         return StreamProtocol(guarded_stream, stream.modes)
 
     def _guard_call(self, call: Callable[..., Any]) -> Callable[..., Any]:
+        # No lock: child-task scheduling happens from the event loop only.
         def guarded_call(*args: Any, **kwargs: Any) -> Any:
-            with self._lock:
-                if not self._active:
-                    raise asyncio.CancelledError
-                if self._refresh_on == "auto":
-                    self._last_progress = time.monotonic()
+            if not self._active:
+                raise asyncio.CancelledError
+            if self._refresh_on == "auto":
+                self._last_progress = time.monotonic()
             return call(*args, **kwargs)
 
         return guarded_call
@@ -236,8 +261,8 @@ class _TimedAttemptScope:
         return guarded_stream_writer
 
 
-class _IdleHeartbeatCallbackHandler(BaseCallbackHandler):
-    """Resets the idle_timeout clock on any LangChain callback event.
+class _IdleProgressCallbackHandler(BaseCallbackHandler):
+    """Resets the idle timeout clock on any LangChain callback event.
 
     Inherits via `config["callbacks"]`, so it sees only events emitted by
     runs descended from the node's attempt — sibling nodes do not bleed
@@ -284,7 +309,7 @@ def _drain_cancelled(task: asyncio.Task[Any]) -> None:
 
 
 def _start_timed_attempt(
-    task: PregelExecutableTask, config: RunnableConfig, timeout: TimeoutPolicy
+    task: PregelExecutableTask, config: RunnableConfig, timeout: _ResolvedTimeout
 ) -> _AttemptContext | None:
     configurable = config.get(CONF, {})
     callback = configurable.get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER)
@@ -302,17 +327,9 @@ def _start_timed_attempt(
             execution_info.checkpoint_ns if execution_info is not None else None
         ),
         started_at=datetime.now(timezone.utc),
-        run_timeout_secs=(
-            _timeout_secs(timeout.run_timeout)
-            if timeout.run_timeout is not None
-            else None
-        ),
-        idle_timeout_secs=(
-            _timeout_secs(timeout.idle_timeout)
-            if timeout.idle_timeout is not None
-            else None
-        ),
-        refresh_on=timeout.refresh_on if timeout.idle_timeout is not None else None,
+        run_timeout_secs=timeout.run_timeout_secs,
+        idle_timeout_secs=timeout.idle_timeout_secs,
+        refresh_on=timeout.refresh_on,
     )
     _dispatch_observer(callback, _AttemptEvent(context=context, event="start"))
     return context
@@ -373,19 +390,13 @@ async def _run_timeout_watchdog(run_timeout_s: float) -> None:
 async def _arun_with_timeout(
     task: PregelExecutableTask,
     config: RunnableConfig,
-    timeout: TimeoutPolicy,
+    timeout: _ResolvedTimeout,
     attempt_ctx: _AttemptContext | None,
     *,
     stream: bool,
 ) -> Any:
-    run_timeout_s = (
-        _timeout_secs(timeout.run_timeout) if timeout.run_timeout is not None else None
-    )
-    idle_timeout_s = (
-        _timeout_secs(timeout.idle_timeout)
-        if timeout.idle_timeout is not None
-        else None
-    )
+    run_timeout_s = timeout.run_timeout_secs
+    idle_timeout_s = timeout.idle_timeout_secs
     on_progress: Callable[[], None] | None = None
     if attempt_ctx is not None:
         callback = config.get(CONF, {}).get(CONFIG_KEY_TIMED_ATTEMPT_OBSERVER)
@@ -396,7 +407,7 @@ async def _arun_with_timeout(
         # Cap progress emission at ~4 events per idle window so token-rate
         # callbacks don't flood the observer.
         progress_min_interval=idle_timeout_s / 4 if idle_timeout_s is not None else 0.0,
-        refresh_on=timeout.refresh_on if idle_timeout_s is not None else None,
+        refresh_on=timeout.refresh_on,
     )
     scoped_config = scope.wrap_config(config)
     start = time.monotonic()
@@ -406,7 +417,7 @@ async def _arun_with_timeout(
         # `runtime.heartbeat()` calls reset the idle clock.
         async def run() -> Any:
             async for _ in task.proc.astream(task.input, scoped_config):
-                if timeout.refresh_on == "auto" and idle_timeout_s is not None:
+                if timeout.refresh_on == "auto":
                     scope.touch()
 
     else:
@@ -643,7 +654,9 @@ async def arun_with_retry(
 ) -> None:
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
-    timeout = task.timeout
+    resolved_timeout = (
+        _resolve_timeout(task.timeout) if task.timeout is not None else None
+    )
     attempts = 0
     node_first_attempt_time = time.time()
     config = task.config
@@ -679,18 +692,20 @@ async def arun_with_retry(
                 },
             )
         attempt_ctx = (
-            _start_timed_attempt(task, config, timeout) if timeout is not None else None
+            _start_timed_attempt(task, config, resolved_timeout)
+            if resolved_timeout is not None
+            else None
         )
         try:
             task.writes.clear()
-            if timeout is None:
+            if resolved_timeout is None:
                 if stream:
                     async for _ in task.proc.astream(task.input, config):
                         pass
                     break
                 return await task.proc.ainvoke(task.input, config)
             result = await _arun_with_timeout(
-                task, config, timeout, attempt_ctx, stream=stream
+                task, config, resolved_timeout, attempt_ctx, stream=stream
             )
             _finish_timed_attempt(config, attempt_ctx)
             if stream:

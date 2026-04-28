@@ -427,16 +427,28 @@ class RetryPolicy(NamedTuple):
 
 @dataclass(**_DC_KWARGS)
 class TimeoutPolicy:
-    """Configuration for timing out node attempts."""
+    """Configuration for timing out node attempts.
+
+    !!! note "Cooperative cancellation"
+
+        Timeouts rely on asyncio cancellation. If your node uses synchronous
+        time.sleep() or other CPU-bound work that blocks the GIL, the timeout will not
+        be fired until after the event loop has been released.
+
+    !!! note "Inline callback dispatch"
+
+        Under `refresh_on="auto"`, an internal handler refreshes the timeout on any
+        callback event that occurs in the execution of the node or its nested descendants.
+    """
 
     run_timeout: float | timedelta | None = None
-    """Hard wall-clock cap for a single node attempt.
+    """Hard wall-clock cap (in seconds) for a single node attempt.
 
     This timeout is never refreshed by progress signals or `runtime.heartbeat()`.
     """
 
     idle_timeout: float | timedelta | None = None
-    """Maximum time a single node attempt may go without observable progress."""
+    """Maximum time (in seconds) a single node attempt may go without observable progress."""
 
     refresh_on: Literal["auto", "heartbeat"] = "auto"
     """Which signals refresh `idle_timeout`.

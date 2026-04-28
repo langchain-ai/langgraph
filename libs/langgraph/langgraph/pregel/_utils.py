@@ -120,21 +120,15 @@ def _runnable_has_native_async(runnable: Runnable) -> bool:
 
     while isinstance(runnable, RunnableBindingBase):
         runnable = runnable.bound
-    if (steps := _sequence_steps(runnable)) is not None:
-        for step in steps:
-            if not _runnable_has_native_async(step):
-                return False
-        return True
-    if (steps := _parallel_steps(runnable)) is not None:
-        for step in steps:
-            if not _runnable_has_native_async(step):
-                return False
-        return True
-    # This check intentionally covers raw callables and the common composition
-    # wrappers created by graph builders. We do not exhaustively unwrap every
-    # Runnable wrapper because most timed nodes are raw functions, and broader
-    # wrapper introspection adds validation cost for low-value edge cases.
-    # Wrappers that provide `ainvoke` are treated as owning the async contract.
+    steps = _sequence_steps(runnable)
+    if steps is None:
+        steps = _parallel_steps(runnable)
+    if steps is not None:
+        return all(_runnable_has_native_async(step) for step in steps)
+    # Raw callables and the common composition wrappers created by graph
+    # builders fall through here. We do not exhaustively unwrap every Runnable
+    # wrapper — wrappers that provide `ainvoke` are treated as owning the async
+    # contract.
     return _has_native_async(runnable)
 
 
