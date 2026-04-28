@@ -3,14 +3,14 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from types import MappingProxyType, TracebackType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from langgraph.stream._convert import convert_to_protocol_event
-from langgraph.stream._event_log import EventLog
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
-from langgraph.stream.stream_channel import StreamChannel
-from langgraph.stream.transformers import ValuesTransformer
+
+if TYPE_CHECKING:
+    from langgraph.stream.transformers import SubgraphStatus, ValuesTransformer
 
 
 def _drive_until_done(pump: Callable[[], bool]) -> None:
@@ -42,17 +42,25 @@ class GraphRunStream:
 
     def __init__(
         self,
-        graph_iter: Iterator[Any],
+        graph_iter: Iterator[Any] | None,
         mux: StreamMux,
         values_transformer: ValuesTransformer,
+        *,
+        wire_pump: bool = True,
     ) -> None:
         """Initialize the run stream.
 
         Args:
-            graph_iter: Pull-based iterator over the graph's stream.
+            graph_iter: Pull-based iterator over the graph's stream,
+                or `None` for nested run streams whose pump is driven
+                by an outer run (e.g. `SubgraphRunStream`).
             mux: The StreamMux owning projections and the main log.
             values_transformer: The built-in values transformer
                 providing `output` / `interrupted` / `interrupts`.
+            wire_pump: When True (default), bind `_pump_next` as the
+                mux's pump callable. Subclasses that inherit a parent
+                pump via `StreamMux._make_child` should pass False to
+                preserve the parent binding.
         """
         self._graph_iter = graph_iter
         self._mux = mux
@@ -61,38 +69,34 @@ class GraphRunStream:
         self._exhausted = False
         for key in mux.native_keys:
             setattr(self, key, mux.extensions[key])
-        self._wire_request_more(mux)
+        if wire_pump:
+            self._wire_request_more(mux)
 
     def _wire_request_more(self, mux: StreamMux) -> None:
-        """Install `_request_more` on every sync EventLog so cursors can
-        drive the pump when their buffer catches up.
+        """Wire the sync pull callback through the mux.
 
-        Also calls `_bind_pump` on any transformer that exposes it, so
-        transformers producing ChatModelStream objects (e.g.
-        MessagesTransformer) can wire the pull callback on each stream
-        as it's created.
+        Routing through `mux.bind_pump` (rather than walking
+        projections directly here) lets child mini-muxes built by
+        `mux._make_child(...)` inherit the same pump callable, so
+        cursors on a subgraph handle's projections drive the root
+        pump just like cursors on `run.values` do.
         """
-        mux._events._request_more = self._pump_next
-        for value in mux.extensions.values():
-            if isinstance(value, EventLog):
-                value._request_more = self._pump_next
-            elif isinstance(value, StreamChannel):
-                value._log._request_more = self._pump_next
-        for transformer in mux._transformers:
-            if hasattr(transformer, "_bind_pump"):
-                transformer._bind_pump(self._pump_next)
+        mux.bind_pump(self._pump_next)
 
     def _pump_next(self) -> bool:
         """Pull one event from the graph and push it through the mux.
 
         Returns:
             True if an event was pulled, False if the graph is exhausted
-            or has raised.
+            or has raised. Always False when constructed with
+            `graph_iter=None` (the run is driven by an outer pump).
         """
-        if self._exhausted:
+        if self._exhausted or self._graph_iter is None:
             return False
         try:
             part = next(self._graph_iter)
+            self._mux.push(convert_to_protocol_event(part))
+            return True
         except StopIteration:
             self._mux.close()
             self._exhausted = True
@@ -101,8 +105,6 @@ class GraphRunStream:
             self._mux.fail(e)
             self._exhausted = True
             return False
-        self._mux.push(convert_to_protocol_event(part))
-        return True
 
     def abort(self) -> None:
         """Stop the run early.
@@ -243,17 +245,25 @@ class AsyncGraphRunStream:
 
     def __init__(
         self,
-        graph_aiter: AsyncIterator[Any],
+        graph_aiter: AsyncIterator[Any] | None,
         mux: StreamMux,
         values_transformer: ValuesTransformer,
+        *,
+        wire_pump: bool = True,
     ) -> None:
         """Initialize the async run stream.
 
         Args:
-            graph_aiter: Async iterator over the graph's stream.
+            graph_aiter: Async iterator over the graph's stream, or
+                `None` for nested run streams whose pump is driven by
+                an outer run (e.g. `AsyncSubgraphRunStream`).
             mux: The StreamMux owning projections and the main log.
             values_transformer: The built-in values transformer
                 providing `output` / `interrupted` / `interrupts`.
+            wire_pump: When True (default), bind `_apump_next` as the
+                mux's async pump callable. Subclasses that inherit a
+                parent pump via `StreamMux._make_child` should pass
+                False to preserve the parent binding.
         """
         self._graph_aiter = graph_aiter
         self._mux = mux
@@ -264,27 +274,18 @@ class AsyncGraphRunStream:
         self._pumping = False
         for key in mux.native_keys:
             setattr(self, key, mux.extensions[key])
-        self._wire_arequest_more(mux)
+        if wire_pump:
+            self._wire_arequest_more(mux)
 
     def _wire_arequest_more(self, mux: StreamMux) -> None:
-        """Install `_arequest_more` on every async EventLog so cursors
-        can drive the pump when their buffer catches up.
+        """Wire the async pull callback through the mux.
 
-        Also calls `_bind_apump` on any transformer that exposes it,
-        so transformers producing `AsyncChatModelStream` objects (e.g.
-        `MessagesTransformer`) can fan the pull callback out to each
-        stream's projections. Mirrors the sync `_wire_request_more`
-        plumbing.
+        Mirrors `_wire_request_more`: routing through
+        `mux.bind_apump` lets child mini-muxes inherit the pump
+        callable so cursors on subgraph handles drive the root
+        pump.
         """
-        mux._events._arequest_more = self._apump_next
-        for value in mux.extensions.values():
-            if isinstance(value, EventLog):
-                value._arequest_more = self._apump_next
-            elif isinstance(value, StreamChannel):
-                value._log._arequest_more = self._apump_next
-        for transformer in mux._transformers:
-            if hasattr(transformer, "_bind_apump"):
-                transformer._bind_apump(self._apump_next)
+        mux.bind_apump(self._apump_next)
 
     async def _apump_next(self) -> bool:
         """Drive one pump step, or wait for the active pumper to drive one.
@@ -307,7 +308,7 @@ class AsyncGraphRunStream:
             False if the graph is exhausted.
         """
         async with self._pump_cond:
-            if self._exhausted:
+            if self._exhausted or self._graph_aiter is None:
                 return False
             if self._pumping:
                 # Another task is pumping; wait for its progress signal.
@@ -318,6 +319,8 @@ class AsyncGraphRunStream:
         try:
             try:
                 part = await self._graph_aiter.__anext__()
+                await self._mux.apush(convert_to_protocol_event(part))
+                return True
             except StopAsyncIteration:
                 self._exhausted = True
                 await self._mux.aclose()
@@ -326,8 +329,6 @@ class AsyncGraphRunStream:
                 self._exhausted = True
                 await self._mux.afail(e)
                 return False
-            await self._mux.apush(convert_to_protocol_event(part))
-            return True
         finally:
             async with self._pump_cond:
                 self._pumping = False
@@ -407,3 +408,114 @@ class AsyncGraphRunStream:
     def __aiter__(self) -> AsyncIterator[ProtocolEvent]:
         """Subscribe to the main event log and iterate protocol events."""
         return self._mux._events.__aiter__()
+
+
+class _SubgraphRunStreamMixin:
+    """Subgraph metadata + parent-pump delegation shared by both lanes.
+
+    Inherits from `GraphRunStream` (or `AsyncGraphRunStream`) with
+    `graph_iter=None` + `wire_pump=False` — the mini-mux is driven
+    by the parent's pump (inherited via `StreamMux._make_child`), and
+    the handle never pulls upstream itself. Pump-driving methods
+    delegate to the parent pump so `handle.output` and friends drive
+    the root run.
+
+    Subclasses set the parent pump function captured at construction
+    (`_parent_pump_fn` / `_parent_apump_fn`) and override
+    `_pump_next` / `_apump_next` to delegate to it.
+
+    Status is updated in place by `SubgraphTransformer`. Iterate
+    `run.subgraphs` to receive handles as subgraphs spawn, then
+    drill into projections inside the loop body **before** the next
+    pump cycle — same lazy-subscribe constraint as root projections.
+    """
+
+    path: tuple[str, ...]
+    graph_name: str | None
+    trigger_call_id: str | None
+    status: SubgraphStatus
+    error: str | None
+    _seen_terminal: bool
+
+
+class SubgraphRunStream(GraphRunStream, _SubgraphRunStreamMixin):
+    """Sync handle for a discovered subgraph (extends `GraphRunStream`)."""
+
+    def __init__(
+        self,
+        mux: StreamMux,
+        values_transformer: ValuesTransformer,
+        *,
+        path: tuple[str, ...],
+        graph_name: str | None = None,
+        trigger_call_id: str | None = None,
+    ) -> None:
+        # Capture the parent-inherited pump before super().__init__
+        # touches anything; we delegate to it from `_pump_next`.
+        self._parent_pump_fn: Callable[[], bool] | None = mux._pump_fn
+        super().__init__(
+            graph_iter=None,
+            mux=mux,
+            values_transformer=values_transformer,
+            wire_pump=False,
+        )
+        self.path = path
+        self.graph_name = graph_name
+        self.trigger_call_id = trigger_call_id
+        self.status = "started"
+        self.error = None
+        self._seen_terminal = False
+
+    def _pump_next(self) -> bool:
+        """Delegate to the parent's pump.
+
+        Cursors on this handle's projections call here when their
+        buffers empty. Driving the parent fans events into our
+        mini-mux, transparently advancing the whole run.
+        """
+        if (
+            self._exhausted
+            or self._seen_terminal
+            or self._mux._events._closed
+            or self._parent_pump_fn is None
+        ):
+            return False
+        return self._parent_pump_fn()
+
+
+class AsyncSubgraphRunStream(AsyncGraphRunStream, _SubgraphRunStreamMixin):
+    """Async handle for a discovered subgraph (extends `AsyncGraphRunStream`)."""
+
+    def __init__(
+        self,
+        mux: StreamMux,
+        values_transformer: ValuesTransformer,
+        *,
+        path: tuple[str, ...],
+        graph_name: str | None = None,
+        trigger_call_id: str | None = None,
+    ) -> None:
+        self._parent_apump_fn: Callable[[], Awaitable[bool]] | None = mux._apump_fn
+        super().__init__(
+            graph_aiter=None,
+            mux=mux,
+            values_transformer=values_transformer,
+            wire_pump=False,
+        )
+        self.path = path
+        self.graph_name = graph_name
+        self.trigger_call_id = trigger_call_id
+        self.status = "started"
+        self.error = None
+        self._seen_terminal = False
+
+    async def _apump_next(self) -> bool:
+        """Delegate to the parent's async pump."""
+        if (
+            self._exhausted
+            or self._seen_terminal
+            or self._mux._events._closed
+            or self._parent_apump_fn is None
+        ):
+            return False
+        return await self._parent_apump_fn()
