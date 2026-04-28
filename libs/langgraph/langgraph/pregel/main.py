@@ -157,6 +157,7 @@ from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import StreamTransformer
 from langgraph.stream.run_stream import AsyncGraphRunStream, GraphRunStream
 from langgraph.stream.transformers import (
+    CustomTransformer,
     LifecycleTransformer,
     MessagesTransformer,
     SubgraphTransformer,
@@ -3436,6 +3437,7 @@ class Pregel(
             factories=[
                 ValuesTransformer,
                 MessagesTransformer,
+                CustomTransformer,
                 LifecycleTransformer,
                 SubgraphTransformer,
                 *compiled_factories,
@@ -3503,6 +3505,7 @@ class Pregel(
             factories=[
                 ValuesTransformer,
                 MessagesTransformer,
+                CustomTransformer,
                 LifecycleTransformer,
                 SubgraphTransformer,
                 *compiled_factories,

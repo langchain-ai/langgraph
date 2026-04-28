@@ -15,15 +15,23 @@ from langgraph.stream.run_stream import (
 )
 from langgraph.stream.stream_channel import StreamChannel
 from langgraph.stream.transformers import (
+    CheckpointsTransformer,
+    CustomTransformer,
+    DebugTransformer,
     LifecyclePayload,
     LifecycleTransformer,
     SubgraphStatus,
     SubgraphTransformer,
+    TasksTransformer,
+    UpdatesTransformer,
 )
 
 __all__ = [
     "AsyncGraphRunStream",
     "AsyncSubgraphRunStream",
+    "CheckpointsTransformer",
+    "CustomTransformer",
+    "DebugTransformer",
     "EventLog",
     "GraphRunStream",
     "LifecyclePayload",
@@ -34,4 +42,6 @@ __all__ = [
     "SubgraphRunStream",
     "SubgraphStatus",
     "SubgraphTransformer",
+    "TasksTransformer",
+    "UpdatesTransformer",
 ]
