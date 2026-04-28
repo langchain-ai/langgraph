@@ -1,5 +1,10 @@
-"""Tests for MessagesTransformer: protocol event routing, whole-message fallback,
-legacy v1 chunk filtering, and end-to-end via stream_v2 / astream_v2."""
+"""Tests for the MessagesTransformer content-block upgrade (B2).
+
+Verifies that `MessagesTransformer` routes protocol events (emitted by
+`stream_v2` via `on_stream_event`) to `ChatModelStream` objects keyed by
+run_id, and replays whole `AIMessage` payloads via `message_to_events`.
+Legacy v1 `AIMessageChunk` tuples (from `on_llm_new_token`) are ignored.
+"""
 
 from __future__ import annotations
 
@@ -13,8 +18,6 @@ from langchain_core.language_models.chat_model_stream import (
     ChatModelStream,
 )
 from langchain_core.messages import AIMessage, AIMessageChunk
-from langchain_core.runnables import RunnableConfig
-from typing_extensions import TypedDict
 
 from langgraph.constants import END, START
 from langgraph.graph import MessagesState, StateGraph
@@ -38,13 +41,14 @@ def _proto_event(
     node: str = "llm",
 ) -> dict[str, Any]:
     """Build a messages ProtocolEvent carrying a protocol event dict (v2 path)."""
+    metadata: dict[str, Any] = {"langgraph_node": node, "run_id": run_id}
     return {
         "type": "event",
         "method": "messages",
         "params": {
             "namespace": [],
             "timestamp": TS,
-            "data": (event, {"langgraph_node": node, "run_id": run_id}),
+            "data": (event, metadata),
         },
     }
 
@@ -57,17 +61,18 @@ def _v1_chunk(
     node: str = "llm",
 ) -> dict[str, Any]:
     """Build a messages ProtocolEvent carrying a v1 AIMessageChunk tuple."""
-    rm: dict[str, Any] = {"finish_reason": "stop"} if finish else {}
+    rm: dict[str, Any] = {}
+    if finish:
+        rm["finish_reason"] = "stop"
+    message = AIMessageChunk(content=text, id=msg_id, response_metadata=rm)
+    metadata: dict[str, Any] = {"langgraph_node": node}
     return {
         "type": "event",
         "method": "messages",
         "params": {
             "namespace": [],
             "timestamp": TS,
-            "data": (
-                AIMessageChunk(content=text, id=msg_id, response_metadata=rm),
-                {"langgraph_node": node},
-            ),
+            "data": (message, metadata),
         },
     }
 
@@ -79,22 +84,27 @@ def _whole_msg(
     node: str = "node",
 ) -> dict[str, Any]:
     """Build a messages ProtocolEvent carrying a completed AIMessage."""
+    message = AIMessage(content=text, id=msg_id)
+    metadata: dict[str, Any] = {"langgraph_node": node}
     return {
         "type": "event",
         "method": "messages",
         "params": {
             "namespace": [],
             "timestamp": TS,
-            "data": (AIMessage(content=text, id=msg_id), {"langgraph_node": node}),
+            "data": (message, metadata),
         },
     }
 
 
 def _make_sync_transformer() -> tuple[MessagesTransformer, EventLog[ChatModelStream]]:
     t = MessagesTransformer()
-    log: EventLog[ChatModelStream] = t.init()["messages"]
+    proj = t.init()
+    log: EventLog[ChatModelStream] = proj["messages"]
     log._bind(is_async=False)
-    # Subscribe up front so pushes during process() are retained.
+    # Production subscribes via `iter(log)` from the graph consumer — do that
+    # up front so `push` during `process` isn't a no-op. Tests read buffered
+    # items via `log._items` directly rather than re-iterating.
     log._subscribed = True
     t._bind_pump(lambda: False)
     return t, log
@@ -102,16 +112,21 @@ def _make_sync_transformer() -> tuple[MessagesTransformer, EventLog[ChatModelStr
 
 def _make_async_transformer() -> tuple[MessagesTransformer, EventLog[ChatModelStream]]:
     t = MessagesTransformer()
-    log: EventLog[ChatModelStream] = t.init()["messages"]
+    proj = t.init()
+    log: EventLog[ChatModelStream] = proj["messages"]
     log._bind(is_async=True)
     log._subscribed = True
     return t, log
 
 
+# Standard lifecycle events for one streaming LLM call.
 def _lifecycle(
-    *, text: str = "hello world", message_id: str = "run-1"
+    *,
+    text: str = "hello world",
+    message_id: str = "run-1",
 ) -> list[dict[str, Any]]:
-    """Produce a valid protocol event lifecycle: start, delta, finish."""
+    """Produce a valid protocol event lifecycle: start, delta, finish, end."""
+    # Split text into two deltas to exercise delta accumulation.
     half = len(text) // 2
     first, second = text[:half], text[half:]
     return [
@@ -140,23 +155,8 @@ def _lifecycle(
     ]
 
 
-def _simple_graph():
-    def call_model(state: MessagesState) -> dict[str, Any]:
-        model = GenericFakeChatModel(messages=iter(["hello world"]))
-        stream = model.stream_v2(state["messages"])
-        return {"messages": stream.output}
-
-    return (
-        StateGraph(MessagesState)
-        .add_node("call_model", call_model)
-        .add_edge(START, "call_model")
-        .add_edge("call_model", END)
-        .compile()
-    )
-
-
 # ---------------------------------------------------------------------------
-# Protocol event routing
+# Primary path: protocol event routing
 # ---------------------------------------------------------------------------
 
 
@@ -169,10 +169,12 @@ class TestProtocolEventRouting:
                 run_id="run-1",
             )
         )
+        # Stream is in the log immediately.
         log.close()
-        (stream,) = list(log._items)
-        assert isinstance(stream, ChatModelStream)
-        assert stream.message_id == "run-1"
+        streams = list(log._items)
+        assert len(streams) == 1
+        assert isinstance(streams[0], ChatModelStream)
+        assert streams[0].message_id == "run-1"
 
     def test_full_lifecycle_yields_done_stream(self) -> None:
         t, log = _make_sync_transformer()
@@ -190,6 +192,7 @@ class TestProtocolEventRouting:
         assert t._by_run == {}
 
     def test_events_without_prior_start_are_ignored(self) -> None:
+        """Orphan delta events (no preceding message-start) are dropped silently."""
         t, log = _make_sync_transformer()
         t.process(
             _proto_event(
@@ -205,7 +208,9 @@ class TestProtocolEventRouting:
         assert list(log._items) == []
 
     def test_concurrent_streams_routed_by_run_id(self) -> None:
+        """Two interleaved LLM calls each produce their own stream."""
         t, log = _make_sync_transformer()
+        # Interleave events from two different run_ids.
         life_a = _lifecycle(text="aaaa", message_id="run-a")
         life_b = _lifecycle(text="bbbb", message_id="run-b")
         for a, b in zip(life_a, life_b):
@@ -224,10 +229,11 @@ class TestProtocolEventRouting:
             t.process(_proto_event(evt))
         log.close()
         (stream,) = list(log._items)
-        assert "".join(stream._text_proj._deltas) == "abcdef"
+        deltas = list(stream._text_proj._deltas)
+        assert "".join(deltas) == "abcdef"
 
     def test_stream_pushed_on_message_start_not_finish(self) -> None:
-        # Consumer can see the stream before message-finish arrives.
+        """Consumer can see the stream before it finishes."""
         t, log = _make_sync_transformer()
         t.process(
             _proto_event(
@@ -235,6 +241,8 @@ class TestProtocolEventRouting:
                 run_id="run-1",
             )
         )
+        # The log has the stream immediately — even though message-finish
+        # hasn't arrived yet.
         assert len(log._items) == 1
 
     def test_node_metadata_set_on_stream(self) -> None:
@@ -246,12 +254,12 @@ class TestProtocolEventRouting:
                 node="my_llm",
             )
         )
-        (stream,) = list(log._items)
+        (stream,) = [*log._items]
         assert stream.node == "my_llm"
 
 
 # ---------------------------------------------------------------------------
-# Whole-message fallback
+# Non-streaming (whole AIMessage) fallback
 # ---------------------------------------------------------------------------
 
 
@@ -269,7 +277,8 @@ class TestWholeMessageFallback:
         t.process(_whole_msg("full"))
         log.close()
         (stream,) = list(log._items)
-        assert [e["event"] for e in stream._events] == [
+        event_types = [e["event"] for e in stream._events]
+        assert event_types == [
             "message-start",
             "content-block-start",
             "content-block-delta",
@@ -279,27 +288,45 @@ class TestWholeMessageFallback:
 
 
 # ---------------------------------------------------------------------------
-# Filtering
+# Legacy v1 chunks are ignored (users must migrate to stream_v2)
+# ---------------------------------------------------------------------------
+
+
+class TestLegacyChunksIgnored:
+    def test_aimessage_chunk_tuple_is_dropped(self) -> None:
+        t, log = _make_sync_transformer()
+        t.process(_v1_chunk("hello"))
+        t.process(_v1_chunk(" world", finish=True))
+        log.close()
+        assert list(log._items) == []
+
+
+# ---------------------------------------------------------------------------
+# Filtering behaviors
 # ---------------------------------------------------------------------------
 
 
 class TestFiltering:
     def test_non_messages_events_pass_through(self) -> None:
         t, _ = _make_sync_transformer()
-        assert (
-            t.process(
-                {
-                    "type": "event",
-                    "method": "values",
-                    "params": {"namespace": [], "timestamp": TS, "data": {"x": 1}},
-                }
-            )
-            is True
-        )
+        values_event = {
+            "type": "event",
+            "method": "values",
+            "params": {"namespace": [], "timestamp": TS, "data": {"x": 1}},
+        }
+        assert t.process(values_event) is True
 
     def test_subgraph_namespace_dropped(self) -> None:
-        t, log = _make_sync_transformer()
-        t.process(
+        """Root MessagesTransformer (via the mux) ignores non-root events."""
+        from langgraph.stream._mux import StreamMux
+
+        mux = StreamMux([MessagesTransformer()], is_async=False)
+        t = mux.transformer_by_key("messages")
+        assert isinstance(t, MessagesTransformer)
+        t._log._subscribed = True
+        t._bind_pump(lambda: False)
+
+        mux.push(
             {
                 "type": "event",
                 "method": "messages",
@@ -313,21 +340,12 @@ class TestFiltering:
                 },
             }
         )
-        log.close()
-        assert list(log._items) == []
-
-    def test_legacy_v1_chunks_ignored(self) -> None:
-        # v1 AIMessageChunk tuples (from on_llm_new_token) are not streamed
-        # into this projection; callers must migrate to stream_v2.
-        t, log = _make_sync_transformer()
-        t.process(_v1_chunk("hello"))
-        t.process(_v1_chunk(" world", finish=True))
-        log.close()
-        assert list(log._items) == []
+        t._log.close()
+        assert list(t._log._items) == []
 
 
 # ---------------------------------------------------------------------------
-# Lifecycle: fail / finalize
+# Lifecycle: finalize / fail
 # ---------------------------------------------------------------------------
 
 
@@ -336,7 +354,8 @@ class TestLifecycle:
         t, log = _make_sync_transformer()
         t.process(
             _proto_event(
-                {"event": "message-start", "message_id": "run-1"}, run_id="run-1"
+                {"event": "message-start", "message_id": "run-1"},
+                run_id="run-1",
             )
         )
         streams = list(log._items)
@@ -349,7 +368,8 @@ class TestLifecycle:
         t, _ = _make_sync_transformer()
         t.process(
             _proto_event(
-                {"event": "message-start", "message_id": "run-1"}, run_id="run-1"
+                {"event": "message-start", "message_id": "run-1"},
+                run_id="run-1",
             )
         )
         assert "run-1" in t._by_run
@@ -358,7 +378,7 @@ class TestLifecycle:
 
 
 # ---------------------------------------------------------------------------
-# Async mode
+# Async mode (AsyncChatModelStream)
 # ---------------------------------------------------------------------------
 
 
@@ -367,24 +387,30 @@ class TestAsyncMode:
         t, log = _make_async_transformer()
         for evt in _lifecycle(text="async stream"):
             t.process(_proto_event(evt))
-        assert isinstance(list(log._items)[0], AsyncChatModelStream)
+        streams = list(log._items)
+        assert len(streams) == 1
+        assert isinstance(streams[0], AsyncChatModelStream)
 
     @pytest.mark.anyio
-    async def test_text_projection_yields_deltas(self) -> None:
+    async def test_async_text_projection_yields_deltas(self) -> None:
         t, log = _make_async_transformer()
         for evt in _lifecycle(text="hello world"):
             t.process(_proto_event(evt))
         (stream,) = list(log._items)
         assert isinstance(stream, AsyncChatModelStream)
-        assert "".join([d async for d in stream.text]) == "hello world"
+        collected = []
+        async for delta in stream.text:
+            collected.append(delta)
+        assert "".join(collected) == "hello world"
 
     @pytest.mark.anyio
-    async def test_output_awaitable(self) -> None:
+    async def test_async_output_awaitable(self) -> None:
         t, log = _make_async_transformer()
         for evt in _lifecycle(text="async"):
             t.process(_proto_event(evt))
         (stream,) = list(log._items)
-        assert (await stream.output).text == "async"
+        msg = await stream.output
+        assert msg.text == "async"
 
 
 # ---------------------------------------------------------------------------
@@ -399,8 +425,11 @@ class TestWireRequestMore:
         mux = StreamMux([values_t, messages_t], is_async=False)
 
         assert messages_t._pump_fn is None
-        run = GraphRunStream(iter([]), mux, values_t)
+        run = GraphRunStream(iter([]), mux)
+        # After wire, the transformer's pump callback is set.
         assert messages_t._pump_fn is not None
+        # And calling it invokes GraphRunStream._pump_next (drains an empty
+        # graph_iter, returns False).
         assert messages_t._pump_fn() is False
         assert run._exhausted
 
@@ -408,14 +437,17 @@ class TestWireRequestMore:
         values_t = ValuesTransformer()
         messages_t = MessagesTransformer()
         mux = StreamMux([values_t, messages_t], is_async=False)
-        GraphRunStream(iter([]), mux, values_t)
 
+        GraphRunStream(iter([]), mux)
         log: EventLog[ChatModelStream] = mux.extensions["messages"]
         log._subscribed = True
+
         for evt in _lifecycle():
             messages_t.process(_proto_event(evt))
 
         (stream,) = list(log._items)
+        # Pump was threaded through: the stream's _request_more points at
+        # the same callable the transformer was bound with.
         assert stream._request_more is messages_t._pump_fn
 
 
@@ -425,29 +457,33 @@ class TestWireRequestMore:
 
 
 class TestViaMux:
-    def _make_mux(
-        self,
-    ) -> tuple[MessagesTransformer, StreamMux, EventLog[ChatModelStream]]:
+    def test_streaming_via_mux(self) -> None:
+        t = MessagesTransformer()
+        v = ValuesTransformer()
+        mux = StreamMux([v, t], is_async=False)
+        t._bind_pump(lambda: False)
+        log: EventLog[ChatModelStream] = mux.extensions["messages"]
+        # Simulate a consumer subscribing (as `run.messages` iteration would).
+        log._subscribed = True
+
+        for evt in _lifecycle(text="mux stream"):
+            mux.push(_proto_event(evt))
+        mux.close()
+
+        (stream,) = list(log._items)
+        assert stream.output.text == "mux stream"
+
+    def test_whole_message_via_mux(self) -> None:
         t = MessagesTransformer()
         v = ValuesTransformer()
         mux = StreamMux([v, t], is_async=False)
         t._bind_pump(lambda: False)
         log: EventLog[ChatModelStream] = mux.extensions["messages"]
         log._subscribed = True
-        return t, mux, log
 
-    def test_streaming_via_mux(self) -> None:
-        t, mux, log = self._make_mux()
-        for evt in _lifecycle(text="mux stream"):
-            mux.push(_proto_event(evt))
-        mux.close()
-        (stream,) = list(log._items)
-        assert stream.output.text == "mux stream"
-
-    def test_whole_message_via_mux(self) -> None:
-        t, mux, log = self._make_mux()
         mux.push(_whole_msg("result"))
         mux.close()
+
         (stream,) = list(log._items)
         assert stream.output.text == "result"
 
@@ -462,18 +498,32 @@ class TestViaMux:
         for evt in _lifecycle(text="async mux"):
             await mux.apush(_proto_event(evt))
 
-        (stream,) = list(log._items)
-        assert (await stream.output).text == "async mux"
+        streams = list(log._items)
+        assert len(streams) == 1
+        msg = await streams[0].output
+        assert msg.text == "async mux"
         await mux.aclose()
 
 
 # ---------------------------------------------------------------------------
-# End-to-end: graph → stream_v2 → run.messages (node calls stream_v2)
+# End-to-end: full graph → stream_v2 → run.messages
 # ---------------------------------------------------------------------------
 
 
 class TestEndToEnd:
-    """stream_v2 path: node calls model.stream_v2() explicitly."""
+    """Prove the full pipeline works when a node calls `model.stream_v2()`.
+
+    These tests exercise the path that the new messages projection is
+    designed for: a user node invokes `stream_v2` on a chat model,
+    `on_stream_event` fires on `StreamMessagesHandler`, the handler
+    forwards to the mux, and the transformer routes events into a
+    `ChatModelStream` exposed on `run.messages`.
+
+    Nothing in Pregel calls `stream_v2` automatically yet; the planned
+    `graph.stream_v2()` API (B4) and the `create_react_agent`
+    integration (C2) will wire that up. Until then, populating the
+    messages projection is opt-in at the node level.
+    """
 
     def test_node_calling_stream_v2_populates_messages(self) -> None:
         model = GenericFakeChatModel(messages=iter(["hello world"]))
@@ -491,9 +541,11 @@ class TestEndToEnd:
         )
 
         run = graph.stream_v2({"messages": "hi"})
-        (stream,) = list(run.messages)
-        assert isinstance(stream, ChatModelStream)
-        assert stream.output.text == "hello world"
+        streams = list(run.messages)
+
+        assert len(streams) == 1
+        assert isinstance(streams[0], ChatModelStream)
+        assert streams[0].output.text == "hello world"
 
     def test_node_stream_v2_text_deltas_iterate(self) -> None:
         """Consumer can iterate `.text` on the streamed message in real time."""
@@ -512,11 +564,14 @@ class TestEndToEnd:
         )
 
         run = graph.stream_v2({"messages": "go"})
+
+        # Pull the stream handle out, then iterate its text deltas.
         (stream,) = list(run.messages)
-        assert "".join(stream.text) == "streamed answer"
+        text = "".join(stream.text)
+        assert text == "streamed answer"
 
     def test_non_llm_message_returned_from_node(self) -> None:
-        """Whole-message fallback: node returns a finalized AIMessage directly."""
+        """Node returns a finalized AIMessage directly — whole-message fallback."""
 
         def return_message(state: MessagesState) -> dict[str, Any]:
             return {"messages": AIMessage(content="hardcoded", id="msg-abc")}
@@ -530,8 +585,10 @@ class TestEndToEnd:
         )
 
         run = graph.stream_v2({"messages": "hi"})
-        (stream,) = list(run.messages)
-        assert stream.output.text == "hardcoded"
+        streams = list(run.messages)
+
+        assert len(streams) == 1
+        assert streams[0].output.text == "hardcoded"
 
     @pytest.mark.anyio
     async def test_async_node_calling_astream_v2(self) -> None:
@@ -539,7 +596,8 @@ class TestEndToEnd:
 
         async def call_model(state: MessagesState) -> dict[str, Any]:
             stream = await model.astream_v2(state["messages"])
-            return {"messages": await stream}
+            msg = await stream
+            return {"messages": msg}
 
         graph = (
             StateGraph(MessagesState)
@@ -550,21 +608,33 @@ class TestEndToEnd:
         )
 
         run = await graph.astream_v2({"messages": "hi"})
-        streams = [s async for s in run.messages]
+
+        streams = []
+        async for stream in run.messages:
+            streams.append(stream)
+
         assert len(streams) == 1
         assert isinstance(streams[0], AsyncChatModelStream)
-        assert (await streams[0].output).text == "async answer"
+        msg = await streams[0].output
+        assert msg.text == "async answer"
 
     @pytest.mark.anyio
     async def test_nested_async_iteration_yields_text_deltas(self) -> None:
-        """Inner stream.text drives the shared graph pump via the async pump binding."""
+        """Iterate `stream.text` inside `async for stream in run.messages`.
+
+        The inner `stream.text` cursor drives the shared graph pump via
+        `AsyncProjection._arequest_more`, wired by
+        `MessagesTransformer._bind_apump` and
+        `AsyncGraphRunStream._wire_arequest_more`.
+        """
         import asyncio
 
         model = GenericFakeChatModel(messages=iter(["hello world"]))
 
         async def call_model(state: MessagesState) -> dict[str, Any]:
             stream = await model.astream_v2(state["messages"])
-            return {"messages": await stream}
+            msg = await stream
+            return {"messages": msg}
 
         graph = (
             StateGraph(MessagesState)
@@ -576,31 +646,37 @@ class TestEndToEnd:
 
         run = await graph.astream_v2({"messages": "hi"})
 
-        async def consume() -> list[str]:
+        async def consume_nested() -> list[str]:
             collected: list[str] = []
             async for stream in run.messages:
                 async for delta in stream.text:
                     collected.append(delta)
             return collected
 
-        assert "".join(await asyncio.wait_for(consume(), timeout=2.0)) == "hello world"
-
-
-# ---------------------------------------------------------------------------
-# End-to-end: graph → stream_v2 → run.messages (node calls invoke)
-# ---------------------------------------------------------------------------
+        deltas = await asyncio.wait_for(consume_nested(), timeout=2.0)
+        assert "".join(deltas) == "hello world"
 
 
 class TestEndToEndV2Invoke:
-    """Auto-routing path: stream_v2 injects CONFIG_KEY_STREAM_MESSAGES_V2,
-    causing BaseChatModel to drive the v2 protocol event generator even for
-    model.invoke()."""
+    """Nodes call `model.invoke()`; `stream_v2` routes through v2.
 
-    def _graph(self, model):
+    Exercises the auto-routing path added in
+    `feat(core): route invoke through v2 event path for
+    _V2StreamingCallbackHandler`: `stream_v2` injects
+    `CONFIG_KEY_STREAM_MESSAGES_V2` into the config, pregel attaches
+    `StreamMessagesHandlerV2`, `BaseChatModel._should_stream_v2` sees the
+    v2 marker and drives the protocol event generator, and
+    `on_stream_event` forwards each event onto the messages channel.
+    """
+
+    def test_invoke_with_v2_marker_populates_messages(self) -> None:
+        """Node calling `model.invoke()` produces one ChatModelStream with v2 events."""
+        model = GenericFakeChatModel(messages=iter(["hello world"]))
+
         def call_model(state: MessagesState) -> dict[str, Any]:
             return {"messages": model.invoke(state["messages"])}
 
-        return (
+        graph = (
             StateGraph(MessagesState)
             .add_node("call_model", call_model)
             .add_edge(START, "call_model")
@@ -608,19 +684,33 @@ class TestEndToEndV2Invoke:
             .compile()
         )
 
-    def test_invoke_populates_messages(self) -> None:
-        run = self._graph(
-            GenericFakeChatModel(messages=iter(["hello world"]))
-        ).stream_v2({"messages": "hi"})
-        (stream,) = list(run.messages)
+        run = graph.stream_v2({"messages": "hi"})
+        streams = list(run.messages)
+
+        assert len(streams) == 1, (
+            "Expected exactly one ChatModelStream — the streamed invoke and "
+            "the node's return of the same AIMessage must dedupe."
+        )
+        stream = streams[0]
         assert isinstance(stream, ChatModelStream)
         assert stream.output.text == "hello world"
 
-    def test_invoke_emits_protocol_events(self) -> None:
-        """Iterating the stream yields the full v2 lifecycle, not v1 chunks."""
-        run = self._graph(
-            GenericFakeChatModel(messages=iter(["streamed answer"]))
-        ).stream_v2({"messages": "go"})
+    def test_invoke_v2_emits_protocol_events(self) -> None:
+        """Iterating the stream yields the full v2 lifecycle (not v1 chunks)."""
+        model = GenericFakeChatModel(messages=iter(["streamed answer"]))
+
+        def call_model(state: MessagesState) -> dict[str, Any]:
+            return {"messages": model.invoke(state["messages"])}
+
+        graph = (
+            StateGraph(MessagesState)
+            .add_node("call_model", call_model)
+            .add_edge(START, "call_model")
+            .add_edge("call_model", END)
+            .compile()
+        )
+
+        run = graph.stream_v2({"messages": "go"})
         (stream,) = list(run.messages)
 
         events = list(stream)
@@ -638,14 +728,29 @@ class TestEndToEndV2Invoke:
         # Typed projection still assembles the final text.
         assert stream.output.text == "streamed answer"
 
-    def test_invoke_text_deltas_iterate(self) -> None:
-        run = self._graph(
-            GenericFakeChatModel(messages=iter(["delta streaming works"]))
-        ).stream_v2({"messages": "hi"})
-        (stream,) = list(run.messages)
-        assert "".join(stream.text) == "delta streaming works"
+    def test_invoke_text_deltas_iterate_live(self) -> None:
+        """`.text` projection yields deltas in order."""
+        model = GenericFakeChatModel(messages=iter(["delta streaming works"]))
 
-    def test_invoke_two_nodes_two_streams(self) -> None:
+        def call_model(state: MessagesState) -> dict[str, Any]:
+            return {"messages": model.invoke(state["messages"])}
+
+        graph = (
+            StateGraph(MessagesState)
+            .add_node("call_model", call_model)
+            .add_edge(START, "call_model")
+            .add_edge("call_model", END)
+            .compile()
+        )
+
+        run = graph.stream_v2({"messages": "hi"})
+        (stream,) = list(run.messages)
+
+        assembled = "".join(stream.text)
+        assert assembled == "delta streaming works"
+
+    def test_invoke_dedupe_survives_multi_node_graph(self) -> None:
+        """Two model-invoking nodes produce exactly two streams, each once."""
         model_a = GenericFakeChatModel(messages=iter(["alpha"]))
         model_b = GenericFakeChatModel(messages=iter(["beta"]))
 
@@ -665,12 +770,18 @@ class TestEndToEndV2Invoke:
             .compile()
         )
 
-        streams = list(graph.stream_v2({"messages": "hi"}).messages)
+        run = graph.stream_v2({"messages": "hi"})
+        streams = list(run.messages)
+
         assert len(streams) == 2
-        assert {s.output.text for s in streams} == {"alpha", "beta"}
+        contents = {s.output.text for s in streams}
+        assert contents == {"alpha", "beta"}
 
     def test_invoke_plus_constructed_message_two_streams(self) -> None:
-        """Live-streamed node + constructed-message node → two ChatModelStreams."""
+        """A v2-streamed node + a node that returns a constructed AIMessage
+        produces two ChatModelStreams — one from the live event lifecycle,
+        one synthesized from the constructed message via `message_to_events`.
+        """
         model = GenericFakeChatModel(messages=iter(["live stream"]))
 
         def streaming_node(state: MessagesState) -> dict[str, Any]:
@@ -691,6 +802,7 @@ class TestEndToEndV2Invoke:
 
         run = graph.stream_v2({"messages": "hi"})
         streams = list(run.messages)
+
         assert len(streams) == 2
         assert streams[0].node == "streaming_node"
         assert streams[0].output.text == "live stream"
@@ -699,7 +811,8 @@ class TestEndToEndV2Invoke:
         assert streams[1].message_id == "constructed-1"
 
     @pytest.mark.anyio
-    async def test_ainvoke_populates_messages(self) -> None:
+    async def test_ainvoke_with_v2_marker_populates_messages(self) -> None:
+        """Async mirror: `model.ainvoke()` + `astream_v2`."""
         model = GenericFakeChatModel(messages=iter(["async invoke"]))
 
         async def call_model(state: MessagesState) -> dict[str, Any]:
@@ -714,21 +827,24 @@ class TestEndToEndV2Invoke:
         )
 
         run = await graph.astream_v2({"messages": "hi"})
-        streams = [s async for s in run.messages]
+
+        streams = []
+        async for stream in run.messages:
+            streams.append(stream)
+
         assert len(streams) == 1
         assert isinstance(streams[0], AsyncChatModelStream)
-        assert (await streams[0].output).text == "async invoke"
-
-
-# ---------------------------------------------------------------------------
-# Regression: direct stream_mode="messages" must stay v1
-# ---------------------------------------------------------------------------
+        msg = await streams[0].output
+        assert msg.text == "async invoke"
 
 
 class TestDirectMessagesModeStaysV1:
+    """Regression guard: direct `graph.stream(stream_mode="messages")`
+    (no `stream_v2`) must keep the v1 `(AIMessageChunk, metadata)`
+    tuple shape. The v2 flag is only injected by `stream_v2` / `astream_v2`.
+    """
+
     def test_direct_graph_stream_messages_yields_ai_message_chunks(self) -> None:
-        """graph.stream(stream_mode="messages") must not leak v2 event dicts —
-        the v2 flag is only injected by stream_v2 / astream_v2."""
         model = GenericFakeChatModel(messages=iter(["legacy path"]))
 
         def call_model(state: MessagesState) -> dict[str, Any]:
@@ -743,82 +859,28 @@ class TestDirectMessagesModeStaysV1:
         )
 
         parts = list(graph.stream({"messages": "hi"}, stream_mode="messages"))
+        # Should have at least one streamed chunk; each part is
+        # (AIMessageChunk, metadata) — not a v2 event dict.
         assert parts, "expected stream_mode='messages' to emit tuples"
-        for payload, _metadata in parts:
-            assert isinstance(payload, AIMessageChunk)
-        assert (
-            "".join(p[0].content for p in parts if isinstance(p[0].content, str))
-            == "legacy path"
-        )
-
-    def test_nested_graph_stream_messages_stays_v1_under_outer_stream_v2(self) -> None:
-        """An outer `stream_v2()` run must not flip an inner direct
-        `stream_mode="messages"` call onto the v2 event protocol."""
-        model = GenericFakeChatModel(messages=iter(["nested legacy path"]))
-
-        def call_model(state: MessagesState) -> dict[str, Any]:
-            return {"messages": model.invoke(state["messages"])}
-
-        inner = (
-            StateGraph(MessagesState)
-            .add_node("call_model", call_model)
-            .add_edge(START, "call_model")
-            .add_edge("call_model", END)
-            .compile()
-        )
-
-        class OuterState(TypedDict, total=False):
-            saw_only_chunks: bool
-            first_payload_type: str
-            text: str
-
-        def call_subgraph(state: OuterState, config: RunnableConfig) -> dict[str, Any]:
-            parts = list(
-                inner.stream(
-                    {"messages": "hi"},
-                    config,
-                    stream_mode="messages",
-                )
+        for part in parts:
+            payload, _metadata = part
+            assert isinstance(payload, AIMessageChunk), (
+                "direct graph.stream(stream_mode='messages') leaked v2 "
+                "event dicts — stream_v2 flag bled through."
             )
-            assert parts
-            payloads = [payload for payload, _metadata in parts]
-            return {
-                "saw_only_chunks": all(
-                    isinstance(payload, AIMessageChunk) for payload in payloads
-                ),
-                "first_payload_type": type(payloads[0]).__name__,
-                "text": "".join(
-                    payload.content
-                    for payload in payloads
-                    if isinstance(payload, AIMessageChunk)
-                    and isinstance(payload.content, str)
-                ),
-            }
-
-        outer = (
-            StateGraph(OuterState)
-            .add_node("call_subgraph", call_subgraph)
-            .add_edge(START, "call_subgraph")
-            .add_edge("call_subgraph", END)
-            .compile()
+        assembled = "".join(
+            p[0].content for p in parts if isinstance(p[0].content, str)
         )
-
-        result = outer.stream_v2({}).output
-
-        assert result is not None
-        assert result["saw_only_chunks"] is True
-        assert result["first_payload_type"] == "AIMessageChunk"
-        assert result["text"] == "nested legacy path"
-
-
-# ---------------------------------------------------------------------------
-# StreamMessagesHandlerV2 unit
-# ---------------------------------------------------------------------------
+        assert assembled == "legacy path"
 
 
 class TestStreamMessagesHandlerV2Unit:
+    """Unit tests on the handler class itself."""
+
     def test_on_llm_new_token_is_noop(self) -> None:
-        """v2 handler must not emit v1 chunks even when on_llm_new_token fires."""
+        """v2 handler must not emit v1 chunks even if `on_llm_new_token` fires
+        (e.g. from a node calling `model.stream()` directly on a v2-flagged run).
+        """
         from uuid import uuid4
 
         from langchain_core.outputs import ChatGenerationChunk
@@ -828,6 +890,9 @@ class TestStreamMessagesHandlerV2Unit:
         emitted: list[Any] = []
         handler = StreamMessagesHandlerV2(emitted.append, subgraphs=False)
         run_id = uuid4()
+        # Register a fake run so `self.metadata.get(run_id)` would succeed for
+        # other callbacks — this makes sure the no-op is unconditional, not a
+        # side effect of missing metadata.
         handler.metadata[run_id] = ((), {"langgraph_node": "x"})
 
         handler.on_llm_new_token(
@@ -836,37 +901,7 @@ class TestStreamMessagesHandlerV2Unit:
             run_id=run_id,
         )
 
-        assert emitted == []
-
-    def test_on_llm_end_dedupes_when_final_message_id_differs(self) -> None:
-        """A streamed v2 message should not be emitted again from the final
-        AIMessage fallback when its final id does not match `message-start`."""
-        from uuid import uuid4
-
-        from langchain_core.outputs import ChatGeneration, LLMResult
-
-        from langgraph.pregel._messages import StreamMessagesHandlerV2
-
-        emitted: list[Any] = []
-        handler = StreamMessagesHandlerV2(emitted.append, subgraphs=False)
-        run_id = uuid4()
-        handler.metadata[run_id] = ((), {"langgraph_node": "x"})
-
-        handler.on_stream_event(
-            {"event": "message-start", "message_id": "stream-msg-1"},
-            run_id=run_id,
+        assert emitted == [], (
+            "StreamMessagesHandlerV2.on_llm_new_token must not push to the "
+            "messages stream — it's the v2 marker's guarantee."
         )
-        handler.on_llm_end(
-            LLMResult(
-                generations=[
-                    [
-                        ChatGeneration(
-                            message=AIMessage(content="hello", id="final-msg-1")
-                        )
-                    ]
-                ]
-            ),
-            run_id=run_id,
-        )
-
-        assert len(emitted) == 1

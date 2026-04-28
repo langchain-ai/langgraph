@@ -653,10 +653,11 @@ class RemoteGraph(PregelProtocol):
         # coerce to list, or add default stream mode
         if stream_mode:
             if isinstance(stream_mode, str):
-                updated_stream_modes.append(stream_mode)
+                updated_stream_modes.append(cast(StreamModeSDK, stream_mode))
             else:
                 req_single = False
-                updated_stream_modes.extend(stream_mode)
+                for m in stream_mode:
+                    updated_stream_modes.append(cast(StreamModeSDK, m))
         else:
             updated_stream_modes.append(default)
         requested_stream_modes = updated_stream_modes.copy()
@@ -665,7 +666,8 @@ class RemoteGraph(PregelProtocol):
             (config or {}).get(CONF, {}).get(CONFIG_KEY_STREAM)
         )
         if stream:
-            updated_stream_modes.extend(stream.modes)
+            for m in stream.modes:
+                updated_stream_modes.append(cast(StreamModeSDK, m))
         # map "messages" to "messages-tuple"
         if "messages" in updated_stream_modes:
             updated_stream_modes.remove("messages")

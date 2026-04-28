@@ -39,13 +39,20 @@ class EventLog(Generic[T]):
     skipped.
     """
 
-    def __init__(self, maxlen: int | None = None) -> None:
+    def __init__(self, maxlen: int | None = None, *, retain: bool = False) -> None:
         """Initialize an empty, unbound log.
 
         Args:
             maxlen: Accepted for forward compatibility; currently unused.
                 The caller-driven pump bounds memory naturally for
                 single-consumer use.
+            retain: If True, `push()` retains items regardless of whether
+                a consumer has subscribed yet. Used for projections
+                whose consumer only becomes visible after events have
+                already flowed (e.g. mini-mux logs inside dynamically
+                discovered subgraph handles, or the `lifecycle` channel
+                iterated after draining `values`). Subscription
+                exclusivity on `__iter__` is unchanged.
 
         Raises:
             ValueError: If `maxlen` is not a positive integer or `None`.
@@ -61,8 +68,9 @@ class EventLog(Generic[T]):
         self._is_async: bool | None = None
 
         # Flipped on first __iter__ / __aiter__. Pre-subscription
-        # pushes are silent no-ops.
+        # pushes are silent no-ops unless `_retain` is True.
         self._subscribed = False
+        self._retain = retain
 
         # Pump wiring set by the run stream after bind.
         self._request_more: Callable[[], bool] | None = None
@@ -99,10 +107,14 @@ class EventLog(Generic[T]):
         `put_nowait` producer shape. Memory is bounded by caller pace
         via the caller-driven pump.
 
+        When `retain=True` was set at construction, items are appended
+        regardless of subscription — for projections whose consumer
+        only reaches them after events have already flowed.
+
         Raises:
             RuntimeError: If the log is closed (and subscribed).
         """
-        if not self._subscribed:
+        if not self._subscribed and not self._retain:
             return
         if self._closed:
             raise RuntimeError("Cannot push to a closed EventLog")

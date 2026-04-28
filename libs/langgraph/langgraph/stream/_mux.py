@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langgraph.stream._event_log import EventLog
@@ -12,6 +12,17 @@ from langgraph.stream._types import (
     transformer_requires_async,
 )
 from langgraph.stream.stream_channel import StreamChannel
+
+TransformerFactory = Callable[["tuple[str, ...]"], StreamTransformer]
+"""Factory that builds a scoped transformer for a mux.
+
+Called once per `StreamMux` (root or mini-mux) with the mux's scope
+— typically a subgraph's namespace or `()` for the root. Standard
+transformer classes (`ValuesTransformer`, `MessagesTransformer`,
+`SubgraphTransformer`) accept a single positional scope argument, so
+the class itself is a valid factory. User transformers can close over
+their config: `lambda scope: MyTransformer(scope, foo=...)`.
+"""
 
 
 class StreamMux:
@@ -40,28 +51,50 @@ class StreamMux:
         transformers: list[StreamTransformer] | None = None,
         *,
         is_async: bool = False,
+        factories: list[TransformerFactory] | None = None,
+        scope: tuple[str, ...] = (),
     ) -> None:
         """Initialize the mux and register transformers in order.
 
-        Transformers are fixed at construction time — there is no
-        post-init `register()`. Each transformer's `init()` is called,
+        Callers pass either `transformers` (pre-built instances) or
+        `factories` (callables producing fresh instances per mux). A
+        factory list is preferred — mini-muxes built by `make_child()`
+        inherit the factory list, so transformers propagate naturally
+        into every subgraph's scope. `transformers` is kept for
+        back-compat tests that exercise the mux directly.
+
+        Each transformer's `init()` is called once during registration,
         projections are merged into `extensions`, `_native` keys are
         recorded in `native_keys`, and any EventLog / StreamChannel
         instances are bound and wired.
 
         Args:
-            transformers: Transformers to register, in dispatch order.
-                `None` or empty gives a mux with no projections.
+            transformers: Already-built transformer instances. Mutually
+                exclusive with `factories`.
             is_async: True for async dispatch (`apush` / `aclose` /
                 `afail`), False for the sync path.
+            factories: Zero-or-one-argument callables producing
+                transformers. Called with this mux's `scope`.
+            scope: The namespace the mux operates within. The root mux
+                is `()`; mini-muxes for subgraphs use the subgraph's
+                namespace tuple.
 
         Raises:
             RuntimeError: If any transformer requires an async run but
                 the mux is in sync mode.
             TypeError: If a transformer's `init()` doesn't return a dict.
-            ValueError: If transformers' projection keys collide.
+            ValueError: If transformers' projection keys collide, or if
+                both `transformers` and `factories` are supplied.
         """
+        if transformers is not None and factories is not None:
+            raise ValueError("Pass either `transformers` or `factories`, not both.")
+
         self._is_async = is_async
+        self._factories: list[TransformerFactory] = list(factories or ())
+        self.scope: tuple[str, ...] = scope
+        self._pump_fn: Callable[[], bool] | None = None
+        self._apump_fn: Callable[[], Awaitable[bool]] | None = None
+
         self._events: EventLog[ProtocolEvent] = EventLog()
         self._events._bind(is_async=is_async)
         self._transformers: list[StreamTransformer] = []
@@ -72,9 +105,92 @@ class StreamMux:
         self.extensions: dict[str, Any] = {}
         self.native_keys: set[str] = set()
         self._projection_owners: dict[str, str] = {}
+        self._transformer_by_key: dict[str, StreamTransformer] = {}
 
-        for transformer in transformers or ():
-            self._register(transformer)
+        if factories is not None:
+            for factory in factories:
+                self._register(factory(scope))
+        else:
+            for transformer in transformers or ():
+                self._register(transformer)
+
+    def make_child(self, scope: tuple[str, ...]) -> StreamMux:
+        """Build a mini-mux with the same factories scoped to `scope`.
+
+        Used by `SubgraphTransformer` to attach a fresh transformer
+        pipeline to each discovered subgraph handle. The child mux
+        inherits the current pump binding (so cursors on its projection
+        logs drive the root pump) and carries the same factory list
+        forward to any grandchild subgraphs.
+
+        Raises:
+            RuntimeError: If the mux was not built from a factory list
+                (i.e., constructed with `transformers=`). Mini-muxes
+                require factories so each scope gets its own fresh
+                transformer instances.
+        """
+        if not self._factories:
+            raise RuntimeError(
+                "StreamMux.make_child requires the mux to be constructed "
+                "with factories; pre-built transformers can't be cloned "
+                "to a new scope."
+            )
+        child = StreamMux(
+            factories=self._factories,
+            is_async=self._is_async,
+            scope=scope,
+        )
+        # Mini-muxes are created during the pump, after the first
+        # event at the child's scope has already been dispatched.
+        # Consumers reach child projections via the parent's
+        # `subgraphs` handle — necessarily after that first event.
+        # Flip retain on every log and channel so pushes are buffered
+        # until the consumer subscribes.
+        child._events._retain = True
+        for value in child.extensions.values():
+            if isinstance(value, EventLog):
+                value._retain = True
+            elif isinstance(value, StreamChannel):
+                value._log._retain = True
+        if self._pump_fn is not None:
+            child.bind_pump(self._pump_fn)
+        if self._apump_fn is not None:
+            child.bind_apump(self._apump_fn)
+        return child
+
+    def bind_pump(self, fn: Callable[[], bool]) -> None:
+        """Wire the sync pull callback onto every EventLog in the mux.
+
+        Also propagates to transformers that expose `_bind_pump` so
+        nested handles (e.g., `ChatModelStream` instances produced by
+        `MessagesTransformer`) can drive the graph pump from their
+        projection cursors.
+        """
+        self._pump_fn = fn
+        self._events._request_more = fn
+        for value in self.extensions.values():
+            if isinstance(value, EventLog):
+                value._request_more = fn
+            elif isinstance(value, StreamChannel):
+                value._log._request_more = fn
+        for transformer in self._transformers:
+            bind = getattr(transformer, "_bind_pump", None)
+            if bind is not None:
+                bind(fn)
+
+    def bind_apump(self, fn: Callable[[], Awaitable[bool]]) -> None:
+        """Async counterpart to `bind_pump`."""
+        self._apump_fn = fn
+        self._events._arequest_more = fn
+        for value in self.extensions.values():
+            if isinstance(value, EventLog):
+                value._arequest_more = fn
+            elif isinstance(value, StreamChannel):
+                value._log._arequest_more = fn
+        for transformer in self._transformers:
+            abind = getattr(transformer, "_bind_apump", None)
+            if abind is not None:
+                abind(fn)
 
     def _register(self, transformer: StreamTransformer) -> None:
         """Register a single transformer.
@@ -107,18 +223,33 @@ class StreamMux:
                 f"keys: {attributions}"
             )
         self._transformers.append(transformer)
-        self._bind_and_wire(projection)
+        is_native = bool(getattr(transformer, "_native", False))
+        self._bind_and_wire(projection, is_native=is_native)
         self.extensions.update(projection)
         owner_name = type(transformer).__name__
         for key in projection:
             self._projection_owners[key] = owner_name
-        if getattr(transformer, "_native", False):
+            self._transformer_by_key[key] = transformer
+        if is_native:
             self.native_keys.update(projection.keys())
+        on_register = getattr(transformer, "_on_register", None)
+        if on_register is not None:
+            on_register(self)
+
+    def transformer_by_key(self, key: str) -> StreamTransformer | None:
+        """Return the transformer that owns the projection at `key`, if any."""
+        return self._transformer_by_key.get(key)
 
     def push(self, event: ProtocolEvent) -> None:
         """Route an event through all transformers, then append to the main log.
 
-        Each transformer's `process()` is called in registration order.
+        Each transformer's `process()` is called in registration order
+        — except when the transformer has `scope_exact = True` (the
+        default) and the event's namespace differs from the mux's
+        `scope`, in which case the transformer is skipped. Transformers
+        that need to see cross-scope events opt out by setting
+        `scope_exact = False` (e.g. `SubgraphTransformer`).
+
         If any transformer returns False, the event is suppressed from
         the main log, but transformers that already saw it keep their
         side effects.
@@ -132,8 +263,12 @@ class StreamMux:
         Args:
             event: The protocol event to dispatch.
         """
+        ns = tuple(event["params"]["namespace"])
+        in_scope = ns == self.scope
         keep = True
         for transformer in self._transformers:
+            if transformer.scope_exact and not in_scope:
+                continue
             if not transformer.process(event):
                 keep = False
         if keep:
@@ -205,11 +340,13 @@ class StreamMux:
         """Dispatch an event on the async lane.
 
         Awaits each transformer's `aprocess` in registration order
-        before appending to the main log. A slow `aprocess` serializes
-        the pipeline by design — that's the guarantee that lets a later
-        transformer (or a synchronous consumer) see the result of the
-        async work. For decoupled work, use `schedule()` from inside
-        `process` / `aprocess` instead.
+        before appending to the main log — except when the transformer
+        has `scope_exact = True` and the event's namespace differs from
+        `self.scope`, in which case it is skipped. A slow `aprocess`
+        serializes the pipeline by design — that's the guarantee that
+        lets a later transformer (or a synchronous consumer) see the
+        result of the async work. For decoupled work, use `schedule()`
+        from inside `process` / `aprocess` instead.
 
         The main log append is a non-blocking `push` — matching v1's
         `put_nowait` shape. Memory is bounded by caller pace via the
@@ -218,8 +355,12 @@ class StreamMux:
         Args:
             event: The protocol event to dispatch.
         """
+        ns = tuple(event["params"]["namespace"])
+        in_scope = ns == self.scope
         keep = True
         for transformer in self._transformers:
+            if transformer.scope_exact and not in_scope:
+                continue
             if not await transformer.aprocess(event):
                 keep = False
         if keep:
@@ -317,26 +458,34 @@ class StreamMux:
     # Binding and StreamChannel auto-wiring
     # ------------------------------------------------------------------
 
-    def _bind_and_wire(self, projection: dict[str, Any]) -> None:
-        """Bind and wire EventLog / StreamChannel instances in a projection."""
+    def _bind_and_wire(
+        self, projection: dict[str, Any], *, is_native: bool = False
+    ) -> None:
+        """Bind and wire EventLog / StreamChannel instances in a projection.
+
+        `is_native` controls wire naming: native transformer channels
+        emit events with `method` equal to the channel name, while
+        non-native channels get a `custom:` prefix to keep user-defined
+        projections from colliding with built-in method names.
+        """
         for value in projection.values():
             if isinstance(value, StreamChannel):
                 value._bind(is_async=self._is_async)
                 self._channels.append(value)
                 channel_name = value.name
 
-                def _make_forward(name: str) -> Callable[[Any], None]:
+                def _make_forward(name: str, native: bool) -> Callable[[Any], None]:
                     def _forward(item: Any) -> None:
-                        self._forward(name, item)
+                        self._forward(name, item, native=native)
 
                     return _forward
 
-                value._wire(_make_forward(channel_name))
+                value._wire(_make_forward(channel_name, is_native))
             elif isinstance(value, EventLog):
                 value._bind(is_async=self._is_async)
                 self._logs.append(value)
 
-    def _forward(self, channel_name: str, item: Any) -> None:
+    def _forward(self, channel_name: str, item: Any, *, native: bool) -> None:
         """Inject a ProtocolEvent for a StreamChannel push.
 
         Forwarded events bypass the transformer pipeline to avoid
@@ -344,12 +493,18 @@ class StreamMux:
         during `process()` would re-trigger itself). These events are
         visible in the main event log but are not passed through
         transformers' `process()` methods.
+
+        Native transformers emit with `method` equal to the channel
+        name (e.g. `"lifecycle"`); non-native transformers get a
+        `custom:` prefix so user-defined projections can't collide
+        with built-in method names.
         """
         self._seq += 1
+        method = channel_name if native else f"custom:{channel_name}"
         event: ProtocolEvent = {
             "type": "event",
             "seq": self._seq,
-            "method": f"custom:{channel_name}",
+            "method": method,
             "params": {
                 "namespace": [],
                 "timestamp": int(time.time() * 1000),
