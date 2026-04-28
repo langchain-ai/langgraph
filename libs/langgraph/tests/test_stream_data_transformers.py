@@ -557,47 +557,44 @@ def test_stream_v2_updates_projection_opt_in() -> None:
     assert "my_node" in node_names
 
 
-def test_stream_v2_all_transformers_no_conflict() -> None:
-    """All five transformers can be registered together without conflict.
-
-    Each projection is verified in a separate run since projections are
-    single-consumer and lazy-subscribe — iterating one drives the pump
-    to completion before others can subscribe.
-    """
-    all_transformers = [
-        CustomTransformer,
-        UpdatesTransformer,
-        CheckpointsTransformer,
-        DebugTransformer,
-        TasksTransformer,
-    ]
+def test_stream_v2_all_transformers_interleaved() -> None:
+    """All five transformers registered together, consumed via interleave."""
     graph = _make_simple_graph()
+    run = graph.stream_v2(
+        {"value": "x", "items": []},
+        transformers=[
+            CustomTransformer,
+            UpdatesTransformer,
+            CheckpointsTransformer,
+            DebugTransformer,
+            TasksTransformer,
+        ],
+    )
 
-    run = graph.stream_v2({"value": "x", "items": []}, transformers=all_transformers)
-    assert len(list(run.custom)) >= 1
+    collected: dict[str, list[Any]] = {
+        "custom": [],
+        "updates": [],
+        "debug": [],
+        "tasks": [],
+    }
+    for name, item in run.interleave("custom", "updates", "debug", "tasks"):
+        collected[name].append(item)
 
-    run = graph.stream_v2({"value": "x", "items": []}, transformers=all_transformers)
-    updates = list(run.updates)
-    assert len(updates) >= 1
-    node_names = {k for u in updates for k in u if k != "__interrupt__"}
+    assert len(collected["custom"]) >= 1
+    assert len(collected["updates"]) >= 1
+    assert len(collected["tasks"]) >= 1
+    assert len(collected["debug"]) >= 1
+    types = {d.get("type") for d in collected["debug"]}
+    assert types & {"checkpoint", "task", "task_result"}
+    node_names = {k for u in collected["updates"] for k in u if k != "__interrupt__"}
     assert "my_node" in node_names
 
-    run = graph.stream_v2({"value": "x", "items": []}, transformers=all_transformers)
-    assert len(list(run.tasks)) >= 1
-
-    run = graph.stream_v2({"value": "x", "items": []}, transformers=all_transformers)
-    debug_events = list(run.debug)
-    assert len(debug_events) >= 1
-    types = {d.get("type") for d in debug_events}
-    assert types & {"checkpoint", "task", "task_result"}
-
-    run = graph.stream_v2({"value": "x", "items": []}, transformers=all_transformers)
     assert run.output is not None
     assert run.output["value"] == "x!"
 
 
 def test_stream_v2_all_transformers_with_checkpointer() -> None:
-    """All transformers work with a checkpointer — run.checkpoints populated."""
+    """All transformers with a checkpointer — run.checkpoints populated."""
     from langgraph.checkpoint.memory import InMemorySaver
 
     builder = StateGraph(_State, input_schema=_State)
@@ -606,18 +603,29 @@ def test_stream_v2_all_transformers_with_checkpointer() -> None:
     builder.add_edge("my_node", END)
     graph = builder.compile(checkpointer=InMemorySaver())
 
-    all_transformers = [
-        CustomTransformer,
-        UpdatesTransformer,
-        CheckpointsTransformer,
-        DebugTransformer,
-        TasksTransformer,
-    ]
-
     run = graph.stream_v2(
         {"value": "x", "items": []},
         config={"configurable": {"thread_id": "test-all"}},
-        transformers=all_transformers,
+        transformers=[
+            CustomTransformer,
+            UpdatesTransformer,
+            CheckpointsTransformer,
+            DebugTransformer,
+            TasksTransformer,
+        ],
     )
-    checkpoints = list(run.checkpoints)
-    assert len(checkpoints) >= 1
+
+    collected: dict[str, list[Any]] = {
+        "custom": [],
+        "updates": [],
+        "checkpoints": [],
+        "debug": [],
+        "tasks": [],
+    }
+    for name, item in run.interleave(
+        "custom", "updates", "checkpoints", "debug", "tasks"
+    ):
+        collected[name].append(item)
+
+    assert len(collected["checkpoints"]) >= 1
+    assert len(collected["custom"]) >= 1
