@@ -158,6 +158,7 @@ class PregelLoop:
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, BaseChannel | ManagedValueSpec]
     input_keys: str | Sequence[str]
+    input_alias_map: dict[str, str] | None
     output_keys: str | Sequence[str]
     stream_keys: str | Sequence[str]
     is_replaying: bool
@@ -226,6 +227,7 @@ class PregelLoop:
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, BaseChannel | ManagedValueSpec],
         input_keys: str | Sequence[str],
+        input_alias_map: dict[str, str] | None,
         output_keys: str | Sequence[str],
         stream_keys: str | Sequence[str],
         trigger_to_nodes: Mapping[str, Sequence[str]],
@@ -249,6 +251,7 @@ class PregelLoop:
         self.nodes = nodes
         self.specs = specs
         self.input_keys = input_keys
+        self.input_alias_map = input_alias_map
         self.output_keys = output_keys
         self.stream_keys = stream_keys
         self.interrupt_after = interrupt_after
@@ -791,7 +794,9 @@ class PregelLoop:
                 "values", map_output_values, self.output_keys, True, self.channels
             )
         # map inputs to channel updates
-        elif input_writes := deque(map_input(input_keys, self.input)):
+        elif input_writes := deque(
+            map_input(input_keys, self.input, alias_map=self.input_alias_map)
+        ):
             # discard any unfinished tasks from previous checkpoint
             discard_tasks = prepare_next_tasks(
                 self.checkpoint,
@@ -1118,6 +1123,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         interrupt_after: All | Sequence[str] = EMPTY_SEQ,
         interrupt_before: All | Sequence[str] = EMPTY_SEQ,
         input_keys: str | Sequence[str] = EMPTY_SEQ,
+        input_alias_map: dict[str, str] | None = None,
         output_keys: str | Sequence[str] = EMPTY_SEQ,
         stream_keys: str | Sequence[str] = EMPTY_SEQ,
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
@@ -1135,6 +1141,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             nodes=nodes,
             specs=specs,
             input_keys=input_keys,
+            input_alias_map=input_alias_map,
             output_keys=output_keys,
             stream_keys=stream_keys,
             interrupt_after=interrupt_after,
@@ -1317,6 +1324,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         interrupt_before: All | Sequence[str] = EMPTY_SEQ,
         manager: None | AsyncParentRunManager | ParentRunManager = None,
         input_keys: str | Sequence[str] = EMPTY_SEQ,
+        input_alias_map: dict[str, str] | None = None,
         output_keys: str | Sequence[str] = EMPTY_SEQ,
         stream_keys: str | Sequence[str] = EMPTY_SEQ,
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
@@ -1334,6 +1342,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             nodes=nodes,
             specs=specs,
             input_keys=input_keys,
+            input_alias_map=input_alias_map,
             output_keys=output_keys,
             stream_keys=stream_keys,
             interrupt_after=interrupt_after,
