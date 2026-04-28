@@ -1065,7 +1065,7 @@ class TestCustomTransformer:
 
 
 class TestStreamChannelAutoLifecycle:
-    def test_mux_auto_closes_event_logs(self) -> None:
+    def test_mux_auto_closes_channels(self) -> None:
         class SimpleTransformer(StreamTransformer):
             def __init__(self) -> None:
                 super().__init__()
@@ -1084,7 +1084,7 @@ class TestStreamChannelAutoLifecycle:
         mux.close()
         assert len(list(it)) == 1
 
-    def test_mux_auto_fails_event_logs(self) -> None:
+    def test_mux_auto_fails_channels(self) -> None:
         class SimpleTransformer(StreamTransformer):
             def __init__(self) -> None:
                 super().__init__()
