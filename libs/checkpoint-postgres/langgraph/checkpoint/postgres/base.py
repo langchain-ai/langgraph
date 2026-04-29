@@ -178,12 +178,9 @@ class _DeltaCombinedRow(TypedDict, total=False):
     version: str | None
 
 
-# DeltaChannel reconstruction: one combined CTE+UNION ALL query per channel.
-# Bench (notes/delta_channel_query_bench.md) showed the prior recursive CTE
-# carried a hidden O(ancestors x blobs_in_thread) join; plain SELECTs are
-# 3x-100x faster in the realistic depth range and the Python walk is O(n).
-# The three plain SELECTs are further collapsed into one UNION ALL query so
-# that only one roundtrip is needed per channel reconstruction.
+# DeltaChannel reconstruction: one UNION ALL query fetches checkpoints,
+# writes, and blobs for `channel` in one roundtrip; the ancestor walk runs
+# in Python in `_build_delta_channel_writes_history`.
 #
 # Parameter order: (channel, thread_id, checkpoint_ns,
 #                   thread_id, checkpoint_ns, channel,
@@ -301,8 +298,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                     "tuple[str, bytes]", (r["type"], r["blob"])
                 )
 
-        # Sort writes within each checkpoint (task_id DESC, idx DESC) to match
-        # the prior CTE ordering — newest write first per ancestor.
+        # newest write first per ancestor (task_id DESC, idx DESC)
         for ws in writes_by_cid.values():
             ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
 

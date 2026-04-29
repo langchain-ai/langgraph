@@ -404,9 +404,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
         One combined UNION ALL query (`SELECT_DELTA_COMBINED_SQL`) fetches rows
         from `checkpoints`, `checkpoint_writes`, and `checkpoint_blobs` in a
-        single roundtrip; rows assembled by the shared pure helper on
-        `BasePostgresSaver`. Rationale + benchmark in
-        `notes/delta_channel_query_bench.md`.
+        single roundtrip; rows are assembled by the shared pure helper on
+        `BasePostgresSaver`.
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
