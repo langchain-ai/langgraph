@@ -83,14 +83,10 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
             and step % self.snapshot_frequency == 0
         )
 
-    def _clone_empty(self) -> Self:
+    def copy(self) -> Self:
         new = self.__class__(self.operator, snapshot_frequency=self.snapshot_frequency)
         new.typ = self.typ  # typ may differ from list when set via Annotated injection
         new.key = self.key  # key is injected externally by the graph builder
-        return new
-
-    def copy(self) -> Self:
-        new = self._clone_empty()
         new.value = self.value if self.value is MISSING else _copy.copy(self.value)
         return new
 
@@ -113,7 +109,9 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
           * `_DeltaSnapshot(value)`: restore value directly from snapshot.
           * plain value (migration from old BinOp blobs): use directly.
         """
-        new = self._clone_empty()
+        new = self.__class__(self.operator, snapshot_frequency=self.snapshot_frequency)
+        new.typ = self.typ  # typ may differ from list when set via Annotated injection
+        new.key = self.key  # key is injected externally by the graph builder
         if checkpoint is MISSING or checkpoint is DELTA_SENTINEL:
             new.value = _empty(new.typ)
         elif isinstance(checkpoint, _DeltaSnapshot):
