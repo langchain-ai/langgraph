@@ -571,7 +571,10 @@ class InMemorySaver(
                 sentinel_channels: set[str] = set()
                 for ch, ver in latest_cp.get("channel_versions", {}).items():
                     blob = self.blobs.get((thread_id, checkpoint_ns, ch, ver))
-                    if blob is not None and blob[0] == "delta":
+                    if (
+                        blob is not None
+                        and self.serde.loads_typed(blob) is DELTA_SENTINEL
+                    ):
                         sentinel_channels.add(ch)
 
                 # Walk the parent chain to find the oldest ancestor still needed.
@@ -594,7 +597,11 @@ class InMemorySaver(
                             if ver is None:
                                 continue
                             blob = self.blobs.get((thread_id, checkpoint_ns, ch, ver))
-                            if blob is not None and blob[0] not in ("delta", "empty"):
+                            if (
+                                blob is not None
+                                and blob[0] != "empty"
+                                and self.serde.loads_typed(blob) is not DELTA_SENTINEL
+                            ):
                                 resolved.add(ch)
                         remaining -= resolved
                         parent_id = grandparent_id

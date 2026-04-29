@@ -1056,8 +1056,7 @@ def test_delta_sentinel_serde_round_trip() -> None:
 
     serde = JsonPlusSerializer()
     type_tag, blob = serde.dumps_typed(DELTA_SENTINEL)
-    # Zero-byte "delta" tag — no allowlist change needed.
-    assert type_tag == "delta"
-    assert blob == b""
+    assert type_tag == "msgpack"
+    assert blob  # non-empty ext envelope
     loaded = serde.loads_typed((type_tag, blob))
     assert loaded is DELTA_SENTINEL

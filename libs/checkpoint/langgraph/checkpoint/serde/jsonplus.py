@@ -36,6 +36,7 @@ from langgraph.checkpoint.serde.event_hooks import emit_serde_event
 from langgraph.checkpoint.serde.types import (
     DELTA_SENTINEL,
     SendProtocol,
+    _DeltaSentinel,
     _DeltaSnapshot,
 )
 from langgraph.store.base import Item
@@ -279,8 +280,6 @@ class JsonPlusSerializer(SerializerProtocol):
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         if obj is None:
             return "null", EMPTY_BYTES
-        elif obj is DELTA_SENTINEL:
-            return "delta", EMPTY_BYTES
         elif isinstance(obj, bytes):
             return "bytes", obj
         elif isinstance(obj, bytearray):
@@ -307,8 +306,6 @@ class JsonPlusSerializer(SerializerProtocol):
             return ormsgpack.unpackb(
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
-        elif type_ == "delta":
-            return DELTA_SENTINEL
         elif self.pickle_fallback and type_ == "pickle":
             return pickle.loads(data_)
         else:
@@ -325,11 +322,14 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
+EXT_DELTA_SENTINEL = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if isinstance(obj, _DeltaSnapshot):
         return ormsgpack.Ext(EXT_DELTA_SNAPSHOT, _msgpack_enc(obj.value))
+    elif isinstance(obj, _DeltaSentinel):
+        return ormsgpack.Ext(EXT_DELTA_SENTINEL, b"")
     elif hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
         return ormsgpack.Ext(
             EXT_PYDANTIC_V2,
@@ -644,7 +644,9 @@ def _create_msgpack_ext_hook(
         return False
 
     def ext_hook(code: int, data: bytes) -> Any:
-        if code == EXT_DELTA_SNAPSHOT:
+        if code == EXT_DELTA_SENTINEL:
+            return DELTA_SENTINEL
+        elif code == EXT_DELTA_SNAPSHOT:
             return _DeltaSnapshot(
                 ormsgpack.unpackb(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
