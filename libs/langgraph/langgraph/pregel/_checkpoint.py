@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import DELTA_SENTINEL, BaseCheckpointSaver, Checkpoint
@@ -126,12 +126,9 @@ def channels_from_checkpoint(
         ch: BaseChannel
         stored = checkpoint["channel_values"].get(k, MISSING)
         if _needs_replay(spec, stored) and saver is not None and config is not None:
-            if not isinstance(spec, DeltaChannel):
-                raise TypeError(
-                    f"Expected DeltaChannel for channel requiring replay, got {type(spec)}"
-                )
+            delta_spec = cast(DeltaChannel, spec)
             history = saver._get_channel_writes_history(config, k)
-            replay_ch = spec.from_checkpoint(history.seed)
+            replay_ch = delta_spec.from_checkpoint(history.seed)
             replay_ch.replay_writes(history.writes)
             ch = replay_ch
         else:
@@ -161,12 +158,9 @@ async def achannels_from_checkpoint(
         ch: BaseChannel
         stored = checkpoint["channel_values"].get(k, MISSING)
         if _needs_replay(spec, stored) and saver is not None and config is not None:
-            if not isinstance(spec, DeltaChannel):
-                raise TypeError(
-                    f"Expected DeltaChannel for channel requiring replay, got {type(spec)}"
-                )
+            delta_spec = cast(DeltaChannel, spec)
             history = await saver._aget_channel_writes_history(config, k)
-            replay_ch = spec.from_checkpoint(history.seed)
+            replay_ch = delta_spec.from_checkpoint(history.seed)
             replay_ch.replay_writes(history.writes)
             ch = replay_ch
         else:
