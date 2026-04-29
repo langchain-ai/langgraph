@@ -210,7 +210,7 @@ def local_read(
     return values
 
 
-def increment(current: int | None, channel: None = None) -> int:
+def increment(current: int | None, channel: None) -> int:
     """Default channel versioning function, increments the current int version."""
     return current + 1 if current is not None else 1
 
