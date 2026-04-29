@@ -1,10 +1,10 @@
-"""Tests for CustomTransformer, CheckpointsTransformer, DebugTransformer, TasksTransformer.
+"""Tests for CustomTransformer, UpdatesTransformer, CheckpointsTransformer, DebugTransformer, TasksTransformer.
 
 These transformers capture raw protocol events for their respective stream
 modes and expose them as native projections on the run stream (run.custom,
-run.checkpoints, run.debug, run.tasks). Tests dispatch synthetic protocol
-events through a StreamMux to isolate transformer logic; the final group
-exercises real graphs through stream_v2.
+run.updates, run.checkpoints, run.debug, run.tasks). Tests dispatch synthetic
+protocol events through a StreamMux to isolate transformer logic; the final
+group exercises real graphs through stream_v2.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from langgraph.stream.transformers import (
     CheckpointsTransformer,
     CustomTransformer,
     DebugTransformer,
+    LifecycleTransformer,
     TasksTransformer,
     UpdatesTransformer,
 )
@@ -629,3 +630,65 @@ def test_stream_v2_all_transformers_with_checkpointer() -> None:
 
     assert len(collected["checkpoints"]) >= 1
     assert len(collected["custom"]) >= 1
+
+
+def test_stream_v2_checkpoints_projection_opt_in() -> None:
+    """run.checkpoints surfaces checkpoint data when opted in with a checkpointer."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    builder = StateGraph(_State, input_schema=_State)
+    builder.add_node("my_node", _my_node)
+    builder.add_edge(START, "my_node")
+    builder.add_edge("my_node", END)
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    run = graph.stream_v2(
+        {"value": "x", "items": []},
+        config={"configurable": {"thread_id": "test-ckpt-standalone"}},
+        transformers=[CheckpointsTransformer],
+    )
+
+    checkpoints = list(run.checkpoints)
+    assert len(checkpoints) >= 1
+
+
+# ---------------------------------------------------------------------------
+# TasksTransformer + LifecycleTransformer co-registration
+# ---------------------------------------------------------------------------
+
+
+def test_tasks_and_lifecycle_coregistration() -> None:
+    """When both are in the same StreamMux, LifecycleTransformer suppresses
+    tasks events from the main log (returns False) while TasksTransformer
+    still captures them into its own log.
+    """
+    lifecycle = LifecycleTransformer()
+    tasks = TasksTransformer()
+    mux = StreamMux([lifecycle, tasks], is_async=False)
+    mux._events._subscribed = True
+    tasks._log._subscribed = True
+    lifecycle._channel._subscribed = True
+
+    task_data = {"id": "t1", "name": "my_node", "input": None, "triggers": []}
+    mux.push(_tasks_event([], task_data))
+
+    assert _drain(tasks) == [task_data]
+
+    methods = [evt["method"] for evt in mux._events._items]
+    assert "tasks" not in methods
+
+
+def test_tasks_and_lifecycle_coregistration_e2e() -> None:
+    """E2e: TasksTransformer captures task events even when LifecycleTransformer
+    is present and suppressing them from the main log.
+    """
+    graph = _make_simple_graph()
+    run = graph.stream_v2(
+        {"value": "x", "items": []},
+        transformers=[TasksTransformer],
+    )
+
+    tasks_events = list(run.tasks)
+    assert len(tasks_events) >= 1
+    names = [t.get("name") for t in tasks_events if "name" in t]
+    assert "my_node" in names
