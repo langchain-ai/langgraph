@@ -899,6 +899,7 @@ class PregelLoop:
             get_next_version=self.checkpointer_get_next_version
             if do_checkpoint
             else None,
+            force_delta_snapshot=exiting and self.durability == "exit",
         )
         # sanitize TASK channel in the checkpoint before saving (durability=="exit")
         if TASKS in self.checkpoint["channel_values"] and any(

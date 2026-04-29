@@ -247,13 +247,16 @@ def add_messages(
 def _messages_delta_reducer(
     state: list[AnyMessage], writes: list[list[AnyMessage]]
 ) -> list[AnyMessage]:
-    """**Experimental.** Batch reducer for use with ``DeltaChannel``.
+    """**Experimental.** Batch reducer for use with `DeltaChannel`.
 
-    Processes all writes for a step in one pass — dedup by ID, ``RemoveMessage``
-    tombstoning — without calling ``add_messages``. Assumes writes contain
-    already-typed ``BaseMessage`` objects (no raw-dict coercion).
+    Processes all writes in one pass — dedup by ID, `RemoveMessage`
+    tombstoning — without calling `add_messages`. Assumes writes contain
+    already-typed `BaseMessage` objects (no raw-dict coercion).
 
-    Use ``add_messages`` as the reducer for ``BinaryOperatorAggregate`` or
+    This reducer is batching-invariant, as required by `DeltaChannel`:
+    `reducer(reducer(state, xs), ys) == reducer(state, xs + ys)`.
+
+    Use `add_messages` as the reducer for `BinaryOperatorAggregate` or
     anywhere raw message dicts / strings need to be coerced first.
 
     Example::

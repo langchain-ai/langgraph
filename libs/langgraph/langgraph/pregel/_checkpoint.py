@@ -38,6 +38,7 @@ def create_checkpoint(
     id: str | None = None,
     updated_channels: set[str] | None = None,
     get_next_version: GetNextVersion | None = None,
+    force_delta_snapshot: bool = False,
 ) -> Checkpoint:
     """Create a checkpoint for the given channels.
 
@@ -47,6 +48,10 @@ def create_checkpoint(
     write this step, a version bump is forced (via `get_next_version`) so the
     blob is stored by `put()`. Without `get_next_version` (e.g. static
     contexts), snapshot steps gracefully fall back to sentinel.
+
+    `force_delta_snapshot` writes available `DeltaChannel` values as snapshots
+    regardless of `snapshot_frequency`. This is used by `durability="exit"`,
+    where intermediate writes are not stored as ancestor `checkpoint_writes`.
     """
     ts = datetime.now(timezone.utc).isoformat()
     if channels is None:
@@ -61,7 +66,7 @@ def create_checkpoint(
             ch = channels[k]
             if (
                 isinstance(ch, DeltaChannel)
-                and ch.is_snapshot_step(step)
+                and (force_delta_snapshot or ch.is_snapshot_step(step))
                 and ch.is_available()
             ):
                 # Eager snapshot: bump version if not already written this step

@@ -26,23 +26,31 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     """Reducer channel that stores only a sentinel in checkpoint blobs and
     reconstructs state by replaying ancestor writes through the reducer.
 
-    The reducer receives the current accumulated value and the full list of
-    new writes for that step in one call:
-    ``reducer(state, [write1, write2, ...]) -> new_state``.
+    The reducer receives the current accumulated value and a batch of writes
+    in one call: `reducer(state, [write1, write2, ...]) -> new_state`.
 
-    ``snapshot_frequency=None`` (default): pure delta — stores only
-    ``DELTA_SENTINEL`` in checkpoint blobs; reads replay all ancestor writes.
+    Reducers must be deterministic and batching-invariant (associative across
+    folds): applying two consecutive write batches separately must produce the
+    same state as applying their concatenation once:
 
-    ``snapshot_frequency=N``: ``create_checkpoint`` writes a full
-    ``_DeltaSnapshot`` blob every N steps, bounding replay depth to N.
+        reducer(reducer(state, xs), ys) == reducer(state, xs + ys)
+
+    This lets LangGraph replay checkpointed writes in larger batches than they
+    were originally produced without changing reconstructed state.
+
+    `snapshot_frequency=None` (default): pure delta; stores only
+    `DELTA_SENTINEL` in checkpoint blobs; reads replay all ancestor writes.
+
+    `snapshot_frequency=N`: `create_checkpoint` writes a full `_DeltaSnapshot`
+    blob every N steps, bounding replay depth to N.
 
     Parameters:
-        reducer: ``(state, list[writes]) -> new_state``. Receives the current
-            accumulated value and the list of all writes for this step.
-        typ: The value type (e.g. ``list``, ``dict``). Inferred automatically
-            from the outer type when used inside ``Annotated[T, DeltaChannel(...)]``.
+        reducer: `(state, list[writes]) -> new_state`. Must be deterministic
+            and batching-invariant as described above.
+        typ: The value type (e.g. `list`, `dict`). Inferred automatically
+            from the outer type when used inside `Annotated[T, DeltaChannel(...)]`.
         snapshot_frequency: Every Nth pregel step writes a snapshot blob.
-            ``None`` (default) = pure delta, never snapshot.
+            `None` (default) = pure delta, never snapshot.
     """
 
     __slots__ = ("value", "reducer", "snapshot_frequency")
@@ -105,8 +113,8 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         """Initialize from a stored blob or sentinel.
 
         Blob types (dispatched via serde ext code, not dict key inspection):
-          * ``DELTA_SENTINEL`` / ``MISSING``: start empty; caller replays writes.
-          * ``_DeltaSnapshot(value)``: restore value directly from snapshot.
+          * `DELTA_SENTINEL` / `MISSING`: start empty; caller replays writes.
+          * `_DeltaSnapshot(value)`: restore value directly from snapshot.
           * plain value (migration from old BinOp blobs): use directly.
         """
         new = self.__class__(
@@ -122,7 +130,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         return new
 
     def replay_writes(self, writes: Sequence[PendingWrite]) -> None:
-        """Apply ancestor writes oldest→newest via a single reducer call.
+        """Apply ancestor writes oldest-to-newest via a single reducer call.
 
         If any write is an Overwrite, the last one in the sequence acts as
         the reset point: its value becomes the new base and only writes
@@ -178,10 +186,10 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         return self.value is not MISSING
 
     def checkpoint(self) -> Any:
-        """Return stored representation: always ``DELTA_SENTINEL``.
+        """Return stored representation: always `DELTA_SENTINEL`.
 
-        Snapshot decisions are made by ``create_checkpoint`` in pregel (which
-        has the step number) via ``is_snapshot_step``. ``checkpoint()`` is only
+        Snapshot decisions are made by `create_checkpoint` in pregel (which
+        has the step number) via `is_snapshot_step`. `checkpoint()` is only
         called for non-snapshot steps or when no checkpointer is available.
         """
         if self.value is MISSING:
