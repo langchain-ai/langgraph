@@ -33,14 +33,18 @@ from langchain_core.load.load import Reviver
 from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.event_hooks import emit_serde_event
-from langgraph.checkpoint.serde.types import SendProtocol
+from langgraph.checkpoint.serde.types import (
+    DELTA_SENTINEL,
+    SendProtocol,
+    _DeltaSentinel,
+    _DeltaSnapshot,
+)
 from langgraph.store.base import Item
 
 if TYPE_CHECKING:
     from langgraph.checkpoint.serde._msgpack import (
         AllowedMsgpackModules,
     )
-    from langgraph.checkpoint.serde.types import SendProtocol
 
 LC_REVIVER = Reviver()
 EMPTY_BYTES = b""
@@ -317,10 +321,16 @@ EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
+EXT_DELTA_SNAPSHOT = 7
+EXT_DELTA_SENTINEL = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
-    if hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
+    if isinstance(obj, _DeltaSnapshot):
+        return ormsgpack.Ext(EXT_DELTA_SNAPSHOT, _msgpack_enc(obj.value))
+    elif isinstance(obj, _DeltaSentinel):
+        return ormsgpack.Ext(EXT_DELTA_SENTINEL, b"")
+    elif hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
         return ormsgpack.Ext(
             EXT_PYDANTIC_V2,
             _msgpack_enc(
@@ -646,7 +656,15 @@ def _create_msgpack_ext_hook(
         return False
 
     def ext_hook(code: int, data: bytes) -> Any:
-        if code == EXT_CONSTRUCTOR_SINGLE_ARG:
+        if code == EXT_DELTA_SENTINEL:
+            return DELTA_SENTINEL
+        elif code == EXT_DELTA_SNAPSHOT:
+            return _DeltaSnapshot(
+                ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+            )
+        elif code == EXT_CONSTRUCTOR_SINGLE_ARG:
             try:
                 tup = ormsgpack.unpackb(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS

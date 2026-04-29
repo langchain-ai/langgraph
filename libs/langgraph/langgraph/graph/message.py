@@ -244,6 +244,52 @@ def add_messages(
     return merged
 
 
+def _messages_delta_reducer(
+    state: list[AnyMessage], writes: list[list[AnyMessage]]
+) -> list[AnyMessage]:
+    """**Experimental.** Batch reducer for use with `DeltaChannel`.
+
+    Processes all writes in one pass — dedup by ID, `RemoveMessage`
+    tombstoning — without calling `add_messages`. Assumes writes contain
+    already-typed `BaseMessage` objects (no raw-dict coercion).
+
+    This reducer is batching-invariant, as required by `DeltaChannel`:
+    `reducer(reducer(state, xs), ys) == reducer(state, xs + ys)`.
+
+    Use `add_messages` as the reducer for `BinaryOperatorAggregate` or
+    anywhere raw message dicts / strings need to be coerced first.
+
+    Example::
+
+        from typing import Annotated
+        from langgraph.channels.delta import DeltaChannel
+        from langgraph.graph.message import _messages_delta_reducer
+
+        class State(TypedDict):
+            messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+    """
+    from itertools import chain
+
+    index: dict[str, int] = {m.id: i for i, m in enumerate(state) if m.id is not None}
+    result: list[AnyMessage | None] = list(state)
+    for msg in chain.from_iterable(
+        [w] if isinstance(w, BaseMessage) else w for w in writes
+    ):
+        mid = msg.id
+        if mid is None:
+            result.append(msg)
+        elif isinstance(msg, RemoveMessage):
+            if mid in index:
+                result[index[mid]] = None
+                del index[mid]
+        elif mid in index:
+            result[index[mid]] = msg
+        else:
+            index[mid] = len(result)
+            result.append(msg)
+    return [m for m in result if m is not None]
+
+
 @deprecated(
     "MessageGraph is deprecated in langgraph 1.0.0, to be removed in 2.0.0. Please use StateGraph with a `messages` key instead.",
     category=None,

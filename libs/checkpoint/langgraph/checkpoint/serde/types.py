@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import (
     Any,
+    NamedTuple,
     Protocol,
     TypeVar,
     runtime_checkable,
@@ -13,6 +14,39 @@ SCHEDULED = "__scheduled__"
 INTERRUPT = "__interrupt__"
 RESUME = "__resume__"
 TASKS = "__pregel_tasks"
+
+
+class _DeltaSentinel:
+    """Singleton marker stored (as zero bytes) in checkpoint_blobs for a
+    DeltaChannel field. The actual per-step writes live in checkpoint_writes
+    and are replayed through the reducer at load time.
+
+    Compare with `is DELTA_SENTINEL` — `loads_typed` always returns the same
+    module-level instance.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "DELTA_SENTINEL"
+
+
+DELTA_SENTINEL = _DeltaSentinel()
+
+
+class _DeltaSnapshot(NamedTuple):
+    """Snapshot blob for a DeltaChannel with finite snapshot_frequency.
+
+    Stored in checkpoint_blobs via the `EXT_DELTA_SNAPSHOT` msgpack ext code.
+    The ancestor walk in `_get_channel_writes_history` terminates when it
+    encounters this type (any non-sentinel blob stops the walk).
+
+    `from_checkpoint` reconstructs the channel value directly from `.value`
+    without replaying writes — the snapshot IS the accumulated state.
+    """
+
+    value: Any
+
 
 Value = TypeVar("Value", covariant=True)
 Update = TypeVar("Update", contravariant=True)

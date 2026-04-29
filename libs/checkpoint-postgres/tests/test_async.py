@@ -361,9 +361,9 @@ async def test_get_checkpoint_no_channel_values(
 
         load_checkpoint_tuple = saver._load_checkpoint_tuple
 
-        def patched_load_checkpoint_tuple(value):
+        async def patched_load_checkpoint_tuple(value):
             value["checkpoint"].pop("channel_values", None)
-            return load_checkpoint_tuple(value)
+            return await load_checkpoint_tuple(value)
 
         monkeypatch.setattr(
             saver, "_load_checkpoint_tuple", patched_load_checkpoint_tuple
@@ -371,3 +371,47 @@ async def test_get_checkpoint_no_channel_values(
 
         checkpoint = await saver.aget_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+async def test_delta_channel_chain_reconstruction(saver_name: str) -> None:
+    """AsyncPostgresSaver reconstructs DeltaChannel chain via point-lookup traversal."""
+    pytest.importorskip(
+        "langgraph.channels.delta", reason="langgraph core not installed"
+    )
+
+    from typing import Annotated
+
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import _messages_delta_reducer
+    from typing_extensions import TypedDict
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        n = len(state["messages"])
+        return {"messages": [AIMessage(content=f"reply-{n}", id=f"ai-{n}")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+
+    async with _saver(saver_name) as saver:
+        graph = builder.compile(checkpointer=saver)
+        config = {"configurable": {"thread_id": "diff-channel-test-1"}}
+
+        await graph.ainvoke({"messages": [HumanMessage(content="hi", id="h1")]}, config)
+        await graph.ainvoke(
+            {"messages": [HumanMessage(content="there", id="h2")]}, config
+        )
+
+        state = await graph.aget_state(config)
+        msgs = state.values["messages"]
+        assert len(msgs) == 4, f"expected 4, got {len(msgs)}: {msgs}"
+        assert msgs[0].content == "hi"
+        assert msgs[1].content == "reply-1"
+        assert msgs[2].content == "there"
+        assert msgs[3].content == "reply-3"

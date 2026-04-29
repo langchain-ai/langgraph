@@ -68,6 +68,7 @@ from langgraph.callbacks import (
     GraphResumeEvent,
 )
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
@@ -92,6 +93,7 @@ from langgraph.pregel._algo import (
     task_path_str,
 )
 from langgraph.pregel._checkpoint import (
+    achannels_from_checkpoint,
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
@@ -188,6 +190,8 @@ class PregelLoop:
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
+    # Only set on AsyncPregelLoop; sync loops keep this as None.
+    _delta_write_futs: list[Any] | None = None
     managed: ManagedValueMapping
     checkpoint: Checkpoint
     checkpoint_id_saved: str
@@ -406,7 +410,7 @@ class PregelLoop:
                     task = self.tasks.get(task_id)
                 else:
                     task = None
-                self.submit(
+                fut = self.submit(
                     self.checkpointer_put_writes,
                     config,
                     writes_to_save,
@@ -414,12 +418,16 @@ class PregelLoop:
                     task_path_str(task.path) if task else "",
                 )
             else:
-                self.submit(
+                fut = self.submit(
                     self.checkpointer_put_writes,
                     config,
                     writes_to_save,
                     task_id,
                 )
+            if self._delta_write_futs is not None and any(
+                isinstance(self.specs.get(c), DeltaChannel) for c, _ in writes_to_save
+            ):
+                self._delta_write_futs.append(fut)
         # output writes
         if hasattr(self, "tasks"):
             self.output_writes(task_id, writes)
@@ -890,6 +898,10 @@ class PregelLoop:
             self.step,
             id=self.checkpoint["id"] if exiting else None,
             updated_channels=self.updated_channels,
+            get_next_version=self.checkpointer_get_next_version
+            if do_checkpoint
+            else None,
+            force_delta_snapshot=exiting and self.durability == "exit",
         )
         # sanitize TASK channel in the checkpoint before saving (durability=="exit")
         if TASKS in self.checkpoint["channel_values"] and any(
@@ -1273,7 +1285,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         )
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = channels_from_checkpoint(
-            self.specs, self.checkpoint
+            self.specs,
+            self.checkpoint,
+            saver=self.checkpointer,
+            config=self.checkpoint_config,
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "input"
@@ -1368,6 +1383,11 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
+        # Drain DeltaChannel write futures before committing the checkpoint so
+        # DELTA_SENTINEL blobs are never saved ahead of their backing writes.
+        if self._delta_write_futs:
+            futs, self._delta_write_futs = self._delta_write_futs, []
+            await asyncio.gather(*futs)
         try:
             if prev is not None:
                 await prev
@@ -1473,11 +1493,15 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if saved.pending_writes is not None
             else []
         )
+        self._delta_write_futs = []
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )
-        self.channels, self.managed = channels_from_checkpoint(
-            self.specs, self.checkpoint
+        self.channels, self.managed = await achannels_from_checkpoint(
+            self.specs,
+            self.checkpoint,
+            saver=self.checkpointer,
+            config=self.checkpoint_config,
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "input"

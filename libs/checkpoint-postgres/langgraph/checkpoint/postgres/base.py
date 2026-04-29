@@ -4,13 +4,16 @@ import random
 import warnings
 from collections.abc import Sequence
 from importlib.metadata import version as get_version
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
+    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
+    PendingWrite,
+    _ChannelWritesHistory,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS
@@ -153,6 +156,62 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 """
 
 
+class _DeltaCombinedRow(TypedDict, total=False):
+    """One row from `SELECT_DELTA_COMBINED_SQL` (a UNION ALL of three tables).
+
+    Every row carries `_kind` ("p" / "w" / "b") plus whichever columns are
+    relevant for that kind; irrelevant columns are NULL and typed as `None`.
+    """
+
+    _kind: str  # always present: "p", "w", or "b"
+    # checkpoint row ("p")
+    checkpoint_id: str | None
+    parent_checkpoint_id: str | None
+    ver: str | None
+    # write / blob rows ("w", "b")
+    type: str | None
+    blob: bytes | None
+    # write row only ("w")
+    task_id: str | None
+    idx: int | None
+    # blob row only ("b")
+    version: str | None
+
+
+# DeltaChannel reconstruction: one UNION ALL query fetches checkpoints,
+# writes, and blobs for `channel` in one roundtrip; the ancestor walk runs
+# in Python in `_build_delta_channel_writes_history`.
+#
+# Parameter order: (channel, thread_id, checkpoint_ns,
+#                   thread_id, checkpoint_ns, channel,
+#                   thread_id, checkpoint_ns, channel)
+SELECT_DELTA_COMBINED_SQL = """
+    SELECT 'p'::text       AS _kind,
+           checkpoint_id,
+           parent_checkpoint_id,
+           checkpoint -> 'channel_versions' ->> %s AS ver,
+           NULL::text       AS type,
+           NULL::bytea      AS blob,
+           NULL::text       AS task_id,
+           NULL::int        AS idx,
+           NULL::text       AS version
+    FROM checkpoints
+    WHERE thread_id = %s AND checkpoint_ns = %s
+    UNION ALL
+    SELECT 'w',
+           checkpoint_id, NULL, NULL,
+           type, blob, task_id, idx, NULL
+    FROM checkpoint_writes
+    WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s
+    UNION ALL
+    SELECT 'b',
+           NULL, NULL, NULL,
+           type, blob, NULL, NULL, version
+    FROM checkpoint_blobs
+    WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s
+"""
+
+
 class BasePostgresSaver(BaseCheckpointSaver[str]):
     SELECT_SQL = SELECT_SQL
     SELECT_PENDING_SENDS_SQL = SELECT_PENDING_SENDS_SQL
@@ -194,6 +253,83 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             for k, t, v in blob_values
             if t.decode() != "empty"
         }
+
+    def _build_delta_channel_writes_history(
+        self,
+        *,
+        channel: str,
+        target_id: str,
+        rows: Sequence[_DeltaCombinedRow],
+    ) -> _ChannelWritesHistory:
+        """Reconstruct one delta channel's history from the combined UNION ALL rows.
+
+        Pure data transform shared by sync (`PostgresSaver`) and async
+        (`AsyncPostgresSaver`); both paths run `SELECT_DELTA_COMBINED_SQL`
+        and feed the tagged rows here.
+
+        Walk is newest → oldest from the target's parent. A non-sentinel
+        blob in `checkpoint_blobs` (a pre-delta snapshot) terminates the
+        walk and is returned as the seed so replay starts from it.
+
+        Writes stored at `target_id` itself are pending writes for the next
+        step and are excluded — the walk begins at the target's parent.
+        """
+        parent_of: dict[str, str | None] = {}
+        ver_of: dict[str, str | None] = {}
+        writes_by_cid: dict[str, list[tuple[str, bytes, str, int]]] = {}
+        blob_by_ver: dict[str, tuple[str, bytes]] = {}
+
+        for r in rows:
+            kind = r["_kind"]
+            if kind == "p":
+                cid = cast(str, r["checkpoint_id"])
+                parent_of[cid] = r["parent_checkpoint_id"]
+                ver_of[cid] = r["ver"]
+            elif kind == "w":
+                cid = cast(str, r["checkpoint_id"])
+                writes_by_cid.setdefault(cid, []).append(
+                    cast(
+                        "tuple[str, bytes, str, int]",
+                        (r["type"], r["blob"], r["task_id"], r["idx"]),
+                    )
+                )
+            else:  # kind == "b"
+                blob_by_ver[cast(str, r["version"])] = cast(
+                    "tuple[str, bytes]", (r["type"], r["blob"])
+                )
+
+        # newest write first per ancestor (task_id DESC, idx DESC)
+        for ws in writes_by_cid.values():
+            ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
+
+        ancestors: list[str] = []
+        cur_cid: str | None = parent_of.get(target_id)
+        while cur_cid is not None:
+            ancestors.append(cur_cid)
+            cur_cid = parent_of.get(cur_cid)
+        if not ancestors:
+            return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
+
+        collected: list[PendingWrite] = []  # newest first; reversed at the end
+        for cid in ancestors:
+            # Collect writes first — they encode the transition FROM this
+            # ancestor's state to its child's and must be included even if
+            # this ancestor is also the seed checkpoint.
+            for type_tag, write_blob, task_id, _idx in writes_by_cid.get(cid, []):
+                val = self.serde.loads_typed((type_tag, write_blob))
+                collected.append((task_id, channel, val))
+            # Then check seed terminator.
+            ver = ver_of.get(cid)
+            if ver is not None:
+                seed_blob = blob_by_ver.get(ver)
+                if seed_blob is not None and seed_blob[0] != "empty":
+                    blob_value = self.serde.loads_typed(seed_blob)
+                    if blob_value is not DELTA_SENTINEL:
+                        collected.reverse()
+                        return _ChannelWritesHistory(seed=blob_value, writes=collected)
+
+        collected.reverse()  # oldest → newest
+        return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)
 
     def _dump_blobs(
         self,
