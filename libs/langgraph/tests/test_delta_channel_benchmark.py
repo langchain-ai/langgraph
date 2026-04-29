@@ -114,12 +114,12 @@ class BinaryState(TypedDict):
 
 
 class DeltaState(TypedDict):
-    messages: Annotated[list, DeltaChannel(add_messages)]
+    messages: Annotated[list, DeltaChannel(list, add_messages)]
 
 
 def _make_delta_state(snapshot_frequency: int | float) -> type:
     """Create a TypedDict with DeltaChannel at the given snapshot_frequency."""
-    channel = DeltaChannel(add_messages, snapshot_frequency=snapshot_frequency)
+    channel = DeltaChannel(list, add_messages, snapshot_frequency=snapshot_frequency)
     # Use the functional TypedDict form so the Annotated type is stored as an
     # already-evaluated object rather than a forward-reference string (which
     # would fail when get_type_hints tries to resolve 'snapshot_frequency').

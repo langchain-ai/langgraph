@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import collections.abc
 import inspect
 import logging
 import typing
@@ -48,7 +47,7 @@ from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
 from langgraph.channels.base import BaseChannel
-from langgraph.channels.binop import BinaryOperatorAggregate, _strip_extras
+from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue, LastValueAfterFinish
@@ -1679,27 +1678,11 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
                         NotRequired,
                     ):
                         origin = origin.__args__[0]
-                    outer = _strip_extras(origin)
-                    if outer in (
-                        collections.abc.Sequence,
-                        collections.abc.MutableSequence,
-                    ):
-                        outer = list
-                    elif outer in (
-                        collections.abc.Mapping,
-                        collections.abc.MutableMapping,
-                    ):
-                        outer = dict
-                    elif outer in (
-                        collections.abc.Set,
-                        collections.abc.MutableSet,
-                    ):
-                        outer = set
-                    item.typ = outer
-                    try:
-                        item.value = outer()
-                    except Exception:
-                        item.value = []
+                    item = item.__class__(
+                        origin,
+                        item.operator,
+                        snapshot_frequency=item.snapshot_frequency,
+                    )
                 return item
             elif isclass(item) and issubclass(item, BaseChannel):
                 # ex, Annotated[int, EphemeralValue, SomeOtherAnnotation]

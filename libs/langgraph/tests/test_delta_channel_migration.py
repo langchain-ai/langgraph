@@ -85,7 +85,7 @@ def _binop_graph(checkpointer: Any) -> Any:
 
 def _delta_graph(checkpointer: Any) -> Any:
     class DeltaState(TypedDict):
-        items: Annotated[list, DeltaChannel(operator.add)]
+        items: Annotated[list, DeltaChannel(list, operator.add)]
 
     return (
         StateGraph(DeltaState)
