@@ -1,5 +1,6 @@
 import operator
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import pytest
 
@@ -9,6 +10,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph.types import Overwrite
 
 pytestmark = pytest.mark.anyio
 
@@ -88,6 +90,98 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+@dataclass
+class _Metrics:
+    """Helper dataclass with no zero-arg constructor for MISSING path tests."""
+
+    count: int
+
+    def __add__(self, other: "_Metrics") -> "_Metrics":
+        return _Metrics(self.count + other.count)
+
+
+def test_binop_overwrite_on_missing_unwraps_value() -> None:
+    """Overwrite() on a MISSING channel must store the unwrapped payload, not the wrapper.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6909.
+    _Metrics has no zero-arg constructor so the channel starts as MISSING.
+    """
+    channel = BinaryOperatorAggregate(_Metrics, operator.add)
+    assert channel.value is MISSING
+
+    channel.update([Overwrite(_Metrics(count=42))])
+
+    result = channel.get()
+    assert isinstance(result, _Metrics), f"Expected _Metrics, got {type(result)}"
+    assert result.count == 42
+
+
+def test_binop_overwrite_on_missing_raises_on_duplicate() -> None:
+    """Two Overwrite() values in the same super-step must raise InvalidUpdateError
+    even when the channel starts as MISSING.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6909.
+    """
+    channel = BinaryOperatorAggregate(_Metrics, operator.add)
+    assert channel.value is MISSING
+
+    with pytest.raises(InvalidUpdateError, match="Can receive only one Overwrite"):
+        channel.update([Overwrite(_Metrics(1)), Overwrite(_Metrics(2))])
+
+
+def test_binop_overwrite_dict_form_on_missing_unwraps_value() -> None:
+    """Dict-form overwrite {OVERWRITE_KEY: x} on a MISSING channel must also unwrap.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6909.
+    """
+    channel = BinaryOperatorAggregate(_Metrics, operator.add).from_checkpoint(MISSING)
+    assert channel.value is MISSING
+
+    # Dict form: {"__overwrite__": value}
+    channel.update([{"__overwrite__": _Metrics(count=7)}])
+
+    result = channel.get()
+    assert isinstance(result, _Metrics), f"Expected _Metrics, got {type(result)}"
+    assert result.count == 7
+
+
+def test_binop_overwrite_on_missing_followed_by_normal_value() -> None:
+    """Overwrite() as first value on MISSING channel, followed by a normal value,
+    must discard the normal value (existing seen_overwrite semantics: normal updates
+    after an Overwrite in the same super-step are silently dropped).
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6909.
+    """
+    channel = BinaryOperatorAggregate(_Metrics, operator.add).from_checkpoint(MISSING)
+    assert channel.value is MISSING
+
+    # Overwrite sets value to _Metrics(10); subsequent normal value is dropped
+    # because seen_overwrite=True causes the `if not seen_overwrite` guard to skip it.
+    channel.update([Overwrite(_Metrics(count=10)), _Metrics(count=5)])
+
+    result = channel.get()
+    assert isinstance(result, _Metrics), f"Expected _Metrics, got {type(result)}"
+    assert result.count == 10
+
+
+def test_binop_overwrite_from_checkpoint_on_missing() -> None:
+    """from_checkpoint(MISSING) + Overwrite() must behave identically to a fresh
+    MISSING channel: unwrap the value and set the duplicate guard.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6909.
+    """
+    channel = BinaryOperatorAggregate(_Metrics, operator.add).from_checkpoint(MISSING)
+    assert channel.value is MISSING
+
+    channel.update([Overwrite(_Metrics(count=99))])
+
+    assert channel.get() == _Metrics(count=99)
+
+    channel2 = BinaryOperatorAggregate(_Metrics, operator.add).from_checkpoint(MISSING)
+    with pytest.raises(InvalidUpdateError, match="Can receive only one Overwrite"):
+        channel2.update([Overwrite(_Metrics(1)), Overwrite(_Metrics(2))])
 
 
 def test_untracked_value() -> None:
