@@ -101,3 +101,4 @@ dmypy.json
 .editorconfig
 .scratch
 .worktrees/
+new_pr_desc.md

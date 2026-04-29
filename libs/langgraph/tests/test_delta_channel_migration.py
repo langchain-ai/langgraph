@@ -70,6 +70,13 @@ def _noop(_state: Any) -> dict:
     return {}
 
 
+def _list_concat(state: list, writes: list) -> list:
+    result = list(state)
+    for w in writes:
+        result.extend(w if isinstance(w, list) else [w])
+    return result
+
+
 def _binop_graph(checkpointer: Any) -> Any:
     class BinopState(TypedDict):
         items: Annotated[list, BinaryOperatorAggregate(list, operator.add)]
@@ -85,7 +92,7 @@ def _binop_graph(checkpointer: Any) -> Any:
 
 def _delta_graph(checkpointer: Any) -> Any:
     class DeltaState(TypedDict):
-        items: Annotated[list, DeltaChannel(list, operator.add)]
+        items: Annotated[list, DeltaChannel(_list_concat)]
 
     return (
         StateGraph(DeltaState)

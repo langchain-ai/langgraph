@@ -385,11 +385,11 @@ async def test_delta_channel_chain_reconstruction(saver_name: str) -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import add_messages
+    from langgraph.graph.message import _messages_delta_reducer
     from typing_extensions import TypedDict
 
     class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(list, add_messages)]
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
 
     def respond(state: State) -> dict:
         n = len(state["messages"])
