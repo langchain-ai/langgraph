@@ -333,6 +333,57 @@ def test_serde_jsonplus_bytes() -> None:
     assert serde.loads_typed(dumped) == some_bytes
 
 
+def test_lc2_json_safe_type_revives_without_allowlist() -> None:
+    """Old 'json' blobs with lc=2 for safe types must revive without an explicit allowlist.
+
+    Regression test for: https://github.com/langchain-ai/langgraph/issues/7498
+    Threads checkpointed before v1.0.1 (pre-msgpack) stored messages as lc=2 JSON
+    constructor dicts. Resuming those threads must reconstruct proper BaseMessage objects
+    rather than returning raw dicts that cause MESSAGE_COERCION_FAILURE in add_messages.
+    """
+    from langchain_core.messages import AIMessage
+
+    serde = JsonPlusSerializer()  # default: _allowed_json_modules=None
+
+    human_blob = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["langchain_core", "messages", "human", "HumanMessage"],
+        "kwargs": {"content": "hello", "type": "human"},
+    }
+    ai_blob = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["langchain_core", "messages", "ai", "AIMessage"],
+        "kwargs": {"content": "hi there", "type": "ai"},
+    }
+    result = serde.loads_typed(("json", json.dumps([human_blob, ai_blob]).encode()))
+
+    assert len(result) == 2
+    assert isinstance(result[0], HumanMessage), (
+        f"Expected HumanMessage, got {type(result[0])}: {result[0]!r}\n"
+        "lc=2 JSON blobs for safe types must deserialize without an explicit allowlist"
+    )
+    assert result[0].content == "hello"
+    assert isinstance(result[1], AIMessage)
+    assert result[1].content == "hi there"
+
+
+def test_lc2_json_unknown_type_stays_blocked_without_allowlist() -> None:
+    """lc=2 JSON blobs for types NOT in SAFE_MSGPACK_TYPES still require an allowlist."""
+    serde = JsonPlusSerializer()
+    load = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["pprint", "pprint"],
+        "kwargs": {"object": "HELLO"},
+    }
+    # No allowlist configured → raw dict returned (not raised, not reconstructed)
+    result = serde.loads_typed(("json", json.dumps(load).encode()))
+    assert isinstance(result, dict), "Unknown lc=2 type must stay as raw dict"
+    assert result.get("lc") == 2
+
+
 def test_deserde_invalid_module() -> None:
     serde = JsonPlusSerializer()
     load = {
