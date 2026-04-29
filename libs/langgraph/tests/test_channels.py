@@ -9,6 +9,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph.types import Overwrite
 
 pytestmark = pytest.mark.anyio
 
@@ -88,6 +89,15 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_binop_applies_values_after_overwrite() -> None:
+    channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(MISSING)
+
+    channel.update([1])
+    channel.update([Overwrite(10), 5])
+
+    assert channel.get() == 15
 
 
 def test_untracked_value() -> None:

@@ -9320,8 +9320,8 @@ def test_overwrite_parallel(
     graph = builder.compile(checkpointer=sync_checkpointer)
     config = {"configurable": {"thread_id": "1"}}
     result = graph.invoke({"messages": ["START"]}, config)
-    # a, c are overwritten by b, then d is written
-    assert result == {"messages": ["b", "d"]}
+    # a is overwritten by b; c is retained and then d is written
+    assert result == {"messages": ["b", "c", "d"]}
 
 
 @pytest.mark.parametrize("as_json", [False, True])
