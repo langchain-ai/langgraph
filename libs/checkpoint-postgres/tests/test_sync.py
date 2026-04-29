@@ -20,6 +20,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
+from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
@@ -358,3 +359,28 @@ def test_get_checkpoint_no_channel_values(
 
         checkpoint = saver.get_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+def test_load_checkpoint_tuple_invalid_schema_fails_closed() -> None:
+    saver = object.__new__(PostgresSaver)
+    BasePostgresSaver.__init__(saver)
+
+    with pytest.raises(ValueError, match="Invalid postgres checkpoint schema"):
+        saver._load_checkpoint_tuple(
+            {
+                "thread_id": "thread-invalid",
+                "checkpoint_ns": "",
+                "checkpoint_id": "bad-checkpoint",
+                "parent_checkpoint_id": None,
+                "metadata": {},
+                "checkpoint": {
+                    "v": 1,
+                    "id": "bad-checkpoint",
+                    "ts": "2026-01-01T00:00:00+00:00",
+                    "channel_versions": {},
+                    "channel_values": {},
+                },
+                "channel_values": [],
+                "pending_writes": [],
+            }
+        )
