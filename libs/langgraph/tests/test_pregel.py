@@ -54,6 +54,11 @@ from langgraph.pregel import (
     NodeBuilder,
     Pregel,
 )
+from langgraph.pregel._checkpoint_writer import (
+    CHECKPOINT_BACKLOG_ENV_VAR,
+    DEFAULT_CHECKPOINT_BACKLOG,
+    _resolve_checkpoint_backlog,
+)
 from langgraph.pregel._loop import SyncPregelLoop
 from langgraph.pregel._runner import PregelRunner
 from langgraph.types import (
@@ -3729,6 +3734,7 @@ def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
             "end": END,
         },
     )
+
     workflow.add_conditional_edges(
         "Chart Generator",
         router,
@@ -3750,6 +3756,90 @@ def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
 
     app = workflow.compile()
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+
+
+def test_sync_durability_applies_checkpoint_backpressure() -> None:
+    first_put_started = threading.Event()
+    release_first_put = threading.Event()
+    put_calls = 0
+    visited: list[int] = []
+    result: dict[str, Any] = {}
+    error: dict[str, BaseException] = {}
+
+    class SlowFirstPutCheckpointer(InMemorySaver):
+        def put(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: Any,
+        ) -> RunnableConfig:
+            nonlocal put_calls
+            put_calls += 1
+            if put_calls == 1:
+                first_put_started.set()
+                release_first_put.wait()
+            return super().put(config, checkpoint, metadata, new_versions)
+
+    class State(TypedDict):
+        counter: int
+
+    def increment(state: State) -> State:
+        visited.append(state["counter"])
+        return {"counter": state["counter"] + 1}
+
+    def should_continue(state: State) -> str:
+        return "loop" if state["counter"] < 4 else "done"
+
+    builder = StateGraph(State)
+    builder.add_node("increment", increment)
+    builder.add_edge(START, "increment")
+    builder.add_conditional_edges(
+        "increment", should_continue, {"loop": "increment", "done": END}
+    )
+
+    graph = builder.compile(checkpointer=SlowFirstPutCheckpointer())
+
+    def invoke() -> None:
+        try:
+            result["value"] = graph.invoke(
+                {"counter": 0},
+                {"configurable": {"thread_id": "1"}},
+                durability="async",
+            )
+        except BaseException as exc:
+            error["value"] = exc
+
+    thread = threading.Thread(target=invoke)
+    thread.start()
+
+    assert first_put_started.wait(timeout=1)
+    time.sleep(0.05)
+
+    assert thread.is_alive()
+    assert len(visited) <= DEFAULT_CHECKPOINT_BACKLOG + 1
+
+    release_first_put.set()
+    thread.join(timeout=1)
+
+    assert not thread.is_alive()
+    assert "value" not in error
+    assert result["value"] == {"counter": 4}
+
+
+def test_checkpoint_backlog_uses_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(CHECKPOINT_BACKLOG_ENV_VAR, "7")
+    assert _resolve_checkpoint_backlog() == 7
+
+
+def test_checkpoint_backlog_invalid_env_uses_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(CHECKPOINT_BACKLOG_ENV_VAR, "not-an-int")
+    assert _resolve_checkpoint_backlog() == DEFAULT_CHECKPOINT_BACKLOG
+
+    monkeypatch.setenv(CHECKPOINT_BACKLOG_ENV_VAR, "0")
+    assert _resolve_checkpoint_backlog() == DEFAULT_CHECKPOINT_BACKLOG
 
 
 def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:

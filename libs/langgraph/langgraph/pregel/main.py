@@ -2882,9 +2882,6 @@ class Pregel(
                         )
                     loop.after_tick()
                     emit_graph_lifecycle_events(loop)
-                    # wait for checkpoint
-                    if durability_ == "sync":
-                        loop._put_checkpoint_fut.result()
             emit_graph_lifecycle_events(loop)
             # emit output
             yield from _output(
@@ -3341,11 +3338,8 @@ class Pregel(
                                 _state_mapper,
                             ):
                                 yield o
-                        loop.after_tick()
+                        await loop.aafter_tick()
                         await aemit_graph_lifecycle_events(loop)
-                        # wait for checkpoint
-                        if durability_ == "sync":
-                            await cast(asyncio.Future, loop._put_checkpoint_fut)
                 finally:
                     # ensure waiter doesn't remain pending on cancel/shutdown
                     if _cleanup_waiter is not None:
