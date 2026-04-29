@@ -252,12 +252,11 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
     ) -> dict[str, Any]:
         if not blob_values:
             return {}
-        result: dict[str, Any] = {}
-        for k, t, v in blob_values:
-            type_tag = t.decode()
-            if type_tag != "empty":
-                result[k.decode()] = self.serde.loads_typed((type_tag, v))
-        return result
+        return {
+            k.decode(): self.serde.loads_typed((t.decode(), v))
+            for k, t, v in blob_values
+            if t.decode() != "empty"
+        }
 
     def _build_delta_channel_writes_history(
         self,
