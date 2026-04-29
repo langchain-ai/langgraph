@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections.abc
 import copy as _copy
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
@@ -10,7 +11,7 @@ from typing_extensions import Self
 
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.channels.binop import _get_overwrite, _operators_equal
+from langgraph.channels.binop import _get_overwrite, _operators_equal, _strip_extras
 from langgraph.errors import (
     EmptyChannelError,
     ErrorCode,
@@ -19,13 +20,6 @@ from langgraph.errors import (
 )
 
 __all__ = ("DeltaChannel",)
-
-
-def _empty(typ: Any) -> Any:
-    try:
-        return typ()
-    except Exception:
-        return []
 
 
 class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
@@ -41,6 +35,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     length.
 
     Parameters:
+        typ: The value type (e.g. `list`, `dict`).
         operator: Binary reducer `(Value, Value) -> Value`.
         snapshot_frequency: Every Nth pregel step writes a snapshot blob.
             `None` (default) = pure delta, never snapshot.
@@ -51,13 +46,23 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
 
     def __init__(
         self,
+        typ: type[Value],
         operator: Callable[[Any, Any], Any],
         *,
         snapshot_frequency: int | None = None,
     ) -> None:
-        super().__init__(list)
+        super().__init__(typ)
         self.operator = operator
         self.snapshot_frequency = snapshot_frequency
+        # Normalize abstract / parameterized types to their concrete counterparts.
+        typ = _strip_extras(typ)
+        if typ in (collections.abc.Sequence, collections.abc.MutableSequence):
+            typ = list
+        if typ in (collections.abc.Set, collections.abc.MutableSet):
+            typ = set
+        if typ in (collections.abc.Mapping, collections.abc.MutableMapping):
+            typ = dict
+        self.typ = typ
         self.value: Any = MISSING
 
     def __eq__(self, other: object) -> bool:
@@ -84,9 +89,10 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         )
 
     def copy(self) -> Self:
-        new = self.__class__(self.operator, snapshot_frequency=self.snapshot_frequency)
-        new.typ = self.typ  # typ may differ from list when set via Annotated injection
-        new.key = self.key  # key is injected externally by the graph builder
+        new = self.__class__(
+            self.typ, self.operator, snapshot_frequency=self.snapshot_frequency
+        )
+        new.key = self.key
         new.value = self.value if self.value is MISSING else _copy.copy(self.value)
         return new
 
@@ -96,9 +102,9 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
             return (
                 _copy.copy(overwrite_value)
                 if overwrite_value is not None
-                else _empty(self.typ)
+                else self.typ()
             )
-        base = _empty(self.typ) if value is MISSING else value
+        base = self.typ() if value is MISSING else value
         return self.operator(base, write)
 
     def from_checkpoint(self, checkpoint: Any) -> Self:
@@ -109,11 +115,12 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
           * `_DeltaSnapshot(value)`: restore value directly from snapshot.
           * plain value (migration from old BinOp blobs): use directly.
         """
-        new = self.__class__(self.operator, snapshot_frequency=self.snapshot_frequency)
-        new.typ = self.typ  # typ may differ from list when set via Annotated injection
-        new.key = self.key  # key is injected externally by the graph builder
+        new = self.__class__(
+            self.typ, self.operator, snapshot_frequency=self.snapshot_frequency
+        )
+        new.key = self.key
         if checkpoint is MISSING or checkpoint is DELTA_SENTINEL:
-            new.value = _empty(new.typ)
+            new.value = self.typ()
         elif isinstance(checkpoint, _DeltaSnapshot):
             new.value = checkpoint.value
         else:

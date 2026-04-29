@@ -9412,7 +9412,7 @@ async def test_delta_channel_end_to_end_inmemory() -> None:
     from langgraph.graph.message import add_messages
 
     class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(list, add_messages)]
 
     def respond(state: State) -> dict:
         n = len(state["messages"])
@@ -9453,7 +9453,7 @@ async def test_delta_channel_time_travel() -> None:
     from langgraph.graph.message import add_messages
 
     class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(list, add_messages)]
 
     counter = {"n": 0}
 
@@ -9510,7 +9510,7 @@ async def test_delta_channel_remove_message_end_to_end() -> None:
     from langgraph.graph.message import add_messages
 
     class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(list, add_messages)]
 
     def respond(state: State) -> dict:
         return {"messages": [AIMessage(content="reply", id="ai-1")]}
@@ -9556,7 +9556,7 @@ async def test_delta_channel_update_by_id_end_to_end() -> None:
     from langgraph.graph.message import add_messages
 
     class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(list, add_messages)]
 
     def update_msg(state: State) -> dict:
         # re-send h1 with updated content
@@ -9604,7 +9604,7 @@ async def test_delta_channel_write_flushed_before_put() -> None:
     from langgraph.graph.message import add_messages
 
     class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(list, add_messages)]
 
     def respond(state: State) -> dict:
         i = len(state["messages"])

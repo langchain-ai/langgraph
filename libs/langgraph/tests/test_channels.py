@@ -129,7 +129,7 @@ def test_delta_channel_basic_two_steps() -> None:
 
     from langgraph.graph.message import add_messages
 
-    ch = DeltaChannel(add_messages).from_checkpoint(MISSING)
+    ch = DeltaChannel(list, add_messages).from_checkpoint(MISSING)
 
     # Step 1: one message added
     ch.update([HumanMessage(content="hi", id="h1")])
@@ -153,7 +153,7 @@ def test_delta_channel_from_checkpoint_writes_list() -> None:
 
     from langgraph.graph.message import add_messages
 
-    spec = DeltaChannel(add_messages)
+    spec = DeltaChannel(list, add_messages)
     ch = spec.from_checkpoint(DELTA_SENTINEL)
     ch.replay_writes(
         [
@@ -175,7 +175,7 @@ def test_delta_channel_from_checkpoint_backwards_compat() -> None:
     from langgraph.graph.message import add_messages
 
     # Old BinaryOperatorAggregate checkpoint: plain list treated as backward compat
-    spec = DeltaChannel(add_messages)
+    spec = DeltaChannel(list, add_messages)
     old_value = [HumanMessage(content="old", id="h1")]
     ch = spec.from_checkpoint(old_value)
     assert ch.get() == old_value
@@ -188,7 +188,7 @@ def test_delta_channel_overwrite() -> None:
     from langgraph.graph.message import add_messages
     from langgraph.types import Overwrite
 
-    ch = DeltaChannel(add_messages).from_checkpoint(MISSING)
+    ch = DeltaChannel(list, add_messages).from_checkpoint(MISSING)
     ch.update([HumanMessage(content="old", id="h1")])
 
     ch.update([Overwrite([HumanMessage(content="new", id="h2")])])
@@ -205,7 +205,7 @@ def test_delta_channel_remove_message_and_replay() -> None:
 
     from langgraph.graph.message import add_messages
 
-    spec = DeltaChannel(add_messages)
+    spec = DeltaChannel(list, add_messages)
     ch = spec.from_checkpoint(MISSING)
 
     # Step 1: add two messages
@@ -238,7 +238,7 @@ def test_delta_channel_update_by_id_and_replay() -> None:
 
     from langgraph.graph.message import add_messages
 
-    spec = DeltaChannel(add_messages)
+    spec = DeltaChannel(list, add_messages)
     ch = spec.from_checkpoint(MISSING)
 
     # Step 1: add a message
@@ -266,7 +266,7 @@ def test_delta_channel_checkpoint_returns_sentinel() -> None:
 
     from langgraph.graph.message import add_messages
 
-    ch = DeltaChannel(add_messages).from_checkpoint(MISSING)
+    ch = DeltaChannel(list, add_messages).from_checkpoint(MISSING)
     assert ch.checkpoint() is DELTA_SENTINEL
 
     from langchain_core.messages import HumanMessage
@@ -294,7 +294,9 @@ def test_delta_channel_snapshot_step_based() -> None:
 
     # snapshot_frequency=5: snapshot every 5 pregel steps
     class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(add_messages, snapshot_frequency=5)]
+        messages: Annotated[
+            list, DeltaChannel(list, add_messages, snapshot_frequency=5)
+        ]
         other: str
 
     def node_a(state: State) -> dict:
@@ -350,7 +352,9 @@ def test_delta_channel_snapshot_fires_even_when_not_written() -> None:
     from langgraph.graph.message import add_messages
 
     class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(add_messages, snapshot_frequency=3)]
+        messages: Annotated[
+            list, DeltaChannel(list, add_messages, snapshot_frequency=3)
+        ]
         tick: int
 
     def writer(state: State) -> dict:
@@ -405,7 +409,7 @@ def test_delta_channel_inmemory_saver_assembles_writes() -> None:
     from langgraph.graph.message import add_messages
 
     class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(list, add_messages)]
 
     n = {"v": 0}
 
@@ -447,7 +451,7 @@ def _delta_channel_with_type(operator, typ):
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.state import _get_channel
 
-    return _get_channel("_test", Annotated[typ, DeltaChannel(operator)])
+    return _get_channel("_test", Annotated[typ, DeltaChannel(typ, operator)])
 
 
 def test_delta_channel_dict_reducer_fresh_channel() -> None:
@@ -574,7 +578,7 @@ def test_delta_channel_dict_reducer_with_notrequired_annotation() -> None:
             return dict(right)
         return {**left, **right}
 
-    annotation = Annotated[NotRequired[dict[str, int]], DeltaChannel(merge_dicts)]
+    annotation = Annotated[NotRequired[dict[str, int]], DeltaChannel(dict, merge_dicts)]
     ch = _get_channel("files", annotation).from_checkpoint(MISSING)
     assert ch.get() == {}
     ch.update([{"a": 1}])
@@ -604,7 +608,7 @@ def test_delta_channel_dict_reducer_end_to_end_filesystem() -> None:
         return result
 
     class State(TypedDict):
-        files: Annotated[dict[str, str], DeltaChannel(merge_files)]
+        files: Annotated[dict[str, str], DeltaChannel(dict, merge_files)]
 
     turn = {"v": 0}
 
@@ -674,7 +678,7 @@ def test_delta_channel_from_checkpoint_honors_seed() -> None:
     a pre-DeltaChannel blob it passes it as `seed` so replay reconstructs
     the post-migration state correctly rather than replaying from empty.
     """
-    spec = DeltaChannel(add_messages)
+    spec = DeltaChannel(list, add_messages)
     seed = [HumanMessage(content="pre-delta", id="p1")]
     ch = spec.from_checkpoint(seed)
     ch.replay_writes(
@@ -690,7 +694,7 @@ def test_delta_channel_from_checkpoint_honors_seed() -> None:
 def test_delta_channel_from_checkpoint_seed_without_writes() -> None:
     """Reconstruction at a pre-delta ancestor with no newer deltas returns
     just the seed — the saver's terminator fired immediately."""
-    spec = DeltaChannel(add_messages)
+    spec = DeltaChannel(list, add_messages)
     seed = [HumanMessage(content="only-snap", id="s1")]
     ch = spec.from_checkpoint(seed)
     ch.replay_writes([])
@@ -707,7 +711,7 @@ def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_sentinel() -> 
     def replace(left, right):
         return right
 
-    spec = DeltaChannel(replace)
+    spec = DeltaChannel(list, replace)
     ch = spec.from_checkpoint(None)
     ch.replay_writes([("t0", "x", "after")])
     # Reducer replaces; seed=None → first write produces "after".
