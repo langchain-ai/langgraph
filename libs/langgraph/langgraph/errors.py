@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from warnings import warn
 
 # EmptyChannelError is re-exported from langgraph.channels.base
@@ -21,6 +21,7 @@ __all__ = (
     "GraphBubbleUp",
     "GraphInterrupt",
     "NodeInterrupt",
+    "NodeTimeoutError",
     "ParentCommand",
     "EmptyInputError",
     "TaskNotFound",
@@ -139,3 +140,58 @@ class TaskNotFound(Exception):
     """Raised when the executor is unable to find a task (for distributed mode)."""
 
     pass
+
+
+class NodeTimeoutError(TimeoutError):
+    """Raised when a node invocation exceeds one of its configured timeouts.
+
+    Subclasses the built-in `TimeoutError`, so existing `except TimeoutError`
+    handlers keep working. If the node has a `retry_policy` whose `retry_on`
+    permits `TimeoutError`, the attempt will be retried.
+
+    Both `idle_timeout` and `run_timeout` reflect the configured policy at the
+    time of the failure (each is `None` if not configured). `kind` and
+    `timeout` identify which one fired.
+    """
+
+    node: str
+    timeout: float
+    run_timeout: float | None
+    idle_timeout: float | None
+    elapsed: float
+    kind: Literal["idle", "run"]
+
+    def __init__(
+        self,
+        node: str,
+        elapsed: float,
+        *,
+        kind: Literal["idle", "run"],
+        idle_timeout: float | None = None,
+        run_timeout: float | None = None,
+    ) -> None:
+        if kind == "idle":
+            if idle_timeout is None:
+                raise ValueError("idle_timeout is required when kind='idle'")
+            message = (
+                f"Node '{node}' exceeded its idle timeout of "
+                f"{idle_timeout:.3f}s without making progress "
+                f"(elapsed: {elapsed:.3f}s)."
+            )
+            self.timeout = idle_timeout
+        elif kind == "run":
+            if run_timeout is None:
+                raise ValueError("run_timeout is required when kind='run'")
+            message = (
+                f"Node '{node}' exceeded its run timeout of "
+                f"{run_timeout:.3f}s (elapsed: {elapsed:.3f}s)."
+            )
+            self.timeout = run_timeout
+        else:
+            raise ValueError("kind must be 'idle' or 'run'")
+        super().__init__(message)
+        self.node = node
+        self.elapsed = elapsed
+        self.kind = kind
+        self.idle_timeout = idle_timeout
+        self.run_timeout = run_timeout

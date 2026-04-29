@@ -8,6 +8,7 @@ import inspect
 import sys
 import types
 from collections.abc import Awaitable, Callable, Generator, Sequence
+from datetime import timedelta
 from typing import Any, Generic, TypeVar, cast
 
 from langchain_core.runnables import Runnable
@@ -20,9 +21,13 @@ from langgraph._internal._runnable import (
     is_async_callable,
     run_in_executor,
 )
+from langgraph._internal._timeout import (
+    coerce_timeout_policy,
+    sync_timeout_unsupported,
+)
 from langgraph.config import get_config
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
-from langgraph.types import CachePolicy, RetryPolicy
+from langgraph.types import CachePolicy, RetryPolicy, TimeoutPolicy
 
 ##
 # Utilities borrowed from cloudpickle.
@@ -255,8 +260,31 @@ def call(
     *args: Any,
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
+    timeout: float | timedelta | TimeoutPolicy | None = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
+    return _call_with_options(
+        func,
+        args,
+        kwargs,
+        retry_policy=retry_policy,
+        cache_policy=cache_policy,
+        timeout=coerce_timeout_policy(timeout),
+    )
+
+
+def _call_with_options(
+    func: Callable[P, Awaitable[T]] | Callable[P, T],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    retry_policy: Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy | None = None,
+    timeout: TimeoutPolicy | None = None,
+) -> SyncAsyncFuture[T]:
+    if timeout is not None and not is_async_callable(func):
+        name = getattr(func, "__name__", func.__class__.__name__)
+        raise sync_timeout_unsupported(name, kind="Task")
     config = get_config()
     impl = config[CONF][CONFIG_KEY_CALL]
     fut = impl(
@@ -265,5 +293,6 @@ def call(
         retry_policy=retry_policy,
         cache_policy=cache_policy,
         callbacks=config["callbacks"],
+        timeout=timeout,
     )
     return fut
