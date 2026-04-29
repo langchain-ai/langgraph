@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import ast
+import functools
 import inspect
 import re
 import textwrap
+import types
 from collections.abc import Callable
 from typing import Any
 
@@ -64,8 +66,35 @@ def find_subgraph_pregel(candidate: Runnable) -> PregelProtocol | None:
     return None
 
 
+@functools.lru_cache(maxsize=256)
+def _get_nonlocal_names(code: types.CodeType) -> frozenset[str]:
+    """Return the set of nonlocal variable names referenced by a function.
+
+    Cached by code object so the expensive source fetch + AST parse only
+    happens once per unique function definition across repeated graph compiles.
+
+    Args:
+        code: The code object of the function to analyse.
+
+    Returns:
+        Frozenset of variable names that the function reads from its enclosing
+        scope (free variables and globals referenced in function bodies).
+    """
+    try:
+        source = inspect.getsource(code)
+        tree = ast.parse(textwrap.dedent(source))
+        visitor = FunctionNonLocals()
+        visitor.visit(tree)
+        return frozenset(visitor.nonlocals)
+    except (SyntaxError, TypeError, OSError, SystemError):
+        return frozenset()
+
+
 def get_function_nonlocals(func: Callable) -> list[Any]:
     """Get the nonlocal variables accessed by a function.
+
+    The expensive source-parsing step is cached by code object; only the
+    cheap closure-variable lookup runs on every call.
 
     Args:
         func: The function to check.
@@ -73,37 +102,38 @@ def get_function_nonlocals(func: Callable) -> list[Any]:
     Returns:
         List[Any]: The nonlocal variables accessed by the function.
     """
-    try:
-        code = inspect.getsource(func)
-        tree = ast.parse(textwrap.dedent(code))
-        visitor = FunctionNonLocals()
-        visitor.visit(tree)
-        values: list[Any] = []
-        closure = (
-            inspect.getclosurevars(func.__wrapped__)
-            if hasattr(func, "__wrapped__") and callable(func.__wrapped__)
-            else inspect.getclosurevars(func)
-        )
-        candidates = {**closure.globals, **closure.nonlocals}
-        for k, v in candidates.items():
-            if k in visitor.nonlocals:
-                values.append(v)
-            for kk in visitor.nonlocals:
-                if "." in kk and kk.startswith(k):
-                    vv = v
-                    for part in kk.split(".")[1:]:
-                        if vv is None:
-                            break
-                        else:
-                            try:
-                                vv = getattr(vv, part)
-                            except AttributeError:
-                                break
-                    else:
-                        values.append(vv)
-    except (SyntaxError, TypeError, OSError, SystemError):
+    actual_func = (
+        func.__wrapped__
+        if hasattr(func, "__wrapped__") and callable(func.__wrapped__)
+        else func
+    )
+    # Fast path: no free variables means nothing to scan.
+    if not actual_func.__code__.co_freevars:
         return []
 
+    nonlocal_names = _get_nonlocal_names(actual_func.__code__)
+    if not nonlocal_names:
+        return []
+
+    closure = inspect.getclosurevars(actual_func)
+    candidates = {**closure.globals, **closure.nonlocals}
+    values: list[Any] = []
+    for k, v in candidates.items():
+        if k in nonlocal_names:
+            values.append(v)
+        for kk in nonlocal_names:
+            if "." in kk and kk.startswith(k):
+                vv = v
+                for part in kk.split(".")[1:]:
+                    if vv is None:
+                        break
+                    else:
+                        try:
+                            vv = getattr(vv, part)
+                        except AttributeError:
+                            break
+                else:
+                    values.append(vv)
     return values
 
 

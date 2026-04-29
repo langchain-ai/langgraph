@@ -1964,8 +1964,16 @@ def _get_injection_from_type(
     return None
 
 
+# Cache keyed by tool object identity. Stores (tool, result) to keep a strong
+# reference that prevents GC from reusing the id for a different object.
+_INJECTED_ARGS_CACHE: dict[int, tuple[BaseTool, _InjectedArgs]] = {}
+
+
 def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
     """Extract all injected arguments from tool in a single pass.
+
+    Results are cached by tool identity so the expensive type-hint and schema
+    inspection only runs once per unique tool object across ToolNode instances.
 
     This function analyzes both the tool's input schema and function signature
     to identify all arguments that should be injected (state, store, runtime).
@@ -1976,6 +1984,11 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
     Returns:
         _InjectedArgs structure containing all detected injections.
     """
+    tool_id = id(tool)
+    entry = _INJECTED_ARGS_CACHE.get(tool_id)
+    if entry is not None and entry[0] is tool:
+        return entry[1]
+
     # Get annotations from both schema and function signature
     full_schema = tool.get_input_schema()
     schema_annotations = get_all_basemodel_annotations(full_schema)
@@ -2021,10 +2034,12 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
         if _get_injection_from_type(type_, ToolRuntime):
             runtime_arg = name
 
-    return _InjectedArgs(
+    result = _InjectedArgs(
         state=state_args,
         store=store_arg,
         runtime=runtime_arg,
         all_injected_keys=all_injected_keys,
         _optional_state_args=_optional_state_args,
     )
+    _INJECTED_ARGS_CACHE[tool_id] = (tool, result)
+    return result

@@ -427,3 +427,49 @@ def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
         "thread_id": "th-123",
         "user_id": "uid-1",
     }
+
+
+def test_get_nonlocal_names_cached_by_code_object() -> None:
+    """_get_nonlocal_names caches by code object so repeated calls are cheap."""
+    from langgraph.pregel._utils import _get_nonlocal_names
+
+    x = 1
+
+    def my_func() -> int:
+        return x
+
+    result1 = _get_nonlocal_names(my_func.__code__)
+    result2 = _get_nonlocal_names(my_func.__code__)
+
+    # Same frozenset instance returned (cache hit)
+    assert result1 is result2
+    assert "x" in result1
+
+
+def test_get_function_nonlocals_fast_path_no_freevars() -> None:
+    """Functions with no free variables return [] without AST parsing."""
+    from langgraph.pregel._utils import _get_nonlocal_names, get_function_nonlocals
+
+    cache_info_before = _get_nonlocal_names.cache_info()
+
+    def pure_func(a: int, b: int) -> int:
+        return a + b
+
+    result = get_function_nonlocals(pure_func)
+
+    # Should have returned early without touching the cache
+    assert result == []
+    assert _get_nonlocal_names.cache_info().misses == cache_info_before.misses
+
+
+def test_get_function_nonlocals_returns_closure_values() -> None:
+    """get_function_nonlocals correctly extracts values from closures."""
+    from langgraph.pregel._utils import get_function_nonlocals
+
+    sentinel = object()
+
+    def my_func() -> object:
+        return sentinel
+
+    result = get_function_nonlocals(my_func)
+    assert sentinel in result
