@@ -450,18 +450,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
             including its configuration, metadata, parent checkpoint (if any),
             and pending writes.
         """
-        thread_id = value["thread_id"]
-        checkpoint_ns = value["checkpoint_ns"]
-        blob_values = value["channel_values"]
-        channel_values: dict[str, Any] = {}
-        if blob_values:
-            channel_values = self._load_blobs(blob_values)
-
         return CheckpointTuple(
             {
                 "configurable": {
-                    "thread_id": thread_id,
-                    "checkpoint_ns": checkpoint_ns,
+                    "thread_id": value["thread_id"],
+                    "checkpoint_ns": value["checkpoint_ns"],
                     "checkpoint_id": value["checkpoint_id"],
                 }
             },
@@ -469,15 +462,15 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 **value["checkpoint"],
                 "channel_values": {
                     **(value["checkpoint"].get("channel_values") or {}),
-                    **channel_values,
+                    **self._load_blobs(value["channel_values"]),
                 },
             },
             value["metadata"],
             (
                 {
                     "configurable": {
-                        "thread_id": thread_id,
-                        "checkpoint_ns": checkpoint_ns,
+                        "thread_id": value["thread_id"],
+                        "checkpoint_ns": value["checkpoint_ns"],
                         "checkpoint_id": value["parent_checkpoint_id"],
                     }
                 }

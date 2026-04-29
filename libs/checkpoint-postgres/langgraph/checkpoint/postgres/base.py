@@ -247,8 +247,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         )
 
     def _load_blobs(
-        self,
-        blob_values: Sequence[tuple[bytes, bytes, bytes]],
+        self, blob_values: list[tuple[bytes, bytes, bytes]]
     ) -> dict[str, Any]:
         if not blob_values:
             return {}

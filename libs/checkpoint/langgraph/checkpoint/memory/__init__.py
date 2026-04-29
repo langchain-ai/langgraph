@@ -9,7 +9,7 @@ from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from types import TracebackType
-from typing import Any, cast
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
@@ -255,16 +255,13 @@ class InMemorySaver(
                 checkpoint, metadata, parent_checkpoint_id = saved
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
-                channel_values = self._load_blobs(
-                    thread_id,
-                    checkpoint_ns,
-                    checkpoint_["channel_versions"],
-                )
                 return CheckpointTuple(
                     config=config,
                     checkpoint={
                         **checkpoint_,
-                        "channel_values": channel_values,
+                        "channel_values": self._load_blobs(
+                            thread_id, checkpoint_ns, checkpoint_["channel_versions"]
+                        ),
                     },
                     metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
@@ -288,26 +285,19 @@ class InMemorySaver(
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 checkpoint_ = self.serde.loads_typed(checkpoint)
-                resolved_config = cast(
-                    RunnableConfig,
-                    {
+                return CheckpointTuple(
+                    config={
                         "configurable": {
                             "thread_id": thread_id,
                             "checkpoint_ns": checkpoint_ns,
                             "checkpoint_id": checkpoint_id,
                         }
                     },
-                )
-                channel_values = self._load_blobs(
-                    thread_id,
-                    checkpoint_ns,
-                    checkpoint_["channel_versions"],
-                )
-                return CheckpointTuple(
-                    config=resolved_config,
                     checkpoint={
                         **checkpoint_,
-                        "channel_values": channel_values,
+                        "channel_values": self._load_blobs(
+                            thread_id, checkpoint_ns, checkpoint_["channel_versions"]
+                        ),
                     },
                     metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
@@ -402,27 +392,21 @@ class InMemorySaver(
 
                     checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
 
-                    list_config = cast(
-                        RunnableConfig,
-                        {
+                    yield CheckpointTuple(
+                        config={
                             "configurable": {
                                 "thread_id": thread_id,
                                 "checkpoint_ns": checkpoint_ns,
                                 "checkpoint_id": checkpoint_id,
                             }
                         },
-                    )
-                    channel_values = self._load_blobs(
-                        thread_id,
-                        checkpoint_ns,
-                        checkpoint_["channel_versions"],
-                    )
-
-                    yield CheckpointTuple(
-                        config=list_config,
                         checkpoint={
                             **checkpoint_,
-                            "channel_values": channel_values,
+                            "channel_values": self._load_blobs(
+                                thread_id,
+                                checkpoint_ns,
+                                checkpoint_["channel_versions"],
+                            ),
                         },
                         metadata=metadata,
                         parent_config=(
