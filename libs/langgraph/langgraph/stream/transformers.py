@@ -28,18 +28,18 @@ _logger = logging.getLogger(__name__)
 class ValuesTransformer(StreamTransformer):
     """Capture values events as a drainable stream of state snapshots.
 
-    Provides the ``run.values`` projection. ``run.output``,
-    ``run.interrupted`` and ``run.interrupts`` are tracked directly
+    Provides the `run.values` projection. `run.output`,
+    `run.interrupted` and `run.interrupts` are tracked directly
     by the run stream and do not depend on this transformer.
 
     Native transformer — projection keys are exposed as direct
-    attributes on the run stream (e.g. ``run.values``).
+    attributes on the run stream (e.g. `run.values`).
 
     Only values events at the run's own level are captured; snapshots
     from deeper subgraphs are left in the main event log but excluded
-    from the projection. "Own level" is defined by ``scope``, which
-    ``stream_v2`` / ``astream_v2`` populate from the caller's
-    checkpoint namespace so that a nested ``stream_v2`` call still
+    from the projection. "Own level" is defined by `scope`, which
+    `stream_v2` / `astream_v2` populate from the caller's
+    checkpoint namespace so that a nested `stream_v2` call still
     sees its own root snapshots.
     """
 

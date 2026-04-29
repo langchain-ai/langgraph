@@ -3400,18 +3400,18 @@ class Pregel(
         `GraphRunStream` that the caller drives by iterating any
         projection — no background thread.
 
-        ``run.output``, ``run.interrupted`` and ``run.interrupts`` work
+        `run.output`, `run.interrupted` and `run.interrupts` work
         regardless of which transformers are registered.
 
         Note:
-            Nesting v1 ``stream(stream_mode="messages")`` inside a node
-            of a ``stream_v2`` run is not fully supported. The outer v2
-            messages handler reroutes ``BaseChatModel.invoke`` through
+            Nesting v1 `stream(stream_mode="messages")` inside a node
+            of a `stream_v2` run is not fully supported. The outer v2
+            messages handler reroutes `BaseChatModel.invoke` through
             the v2 event protocol, so the inner v1 handler does not see
-            ``on_llm_new_token`` chunks. The inner stream still yields a
-            finalized message via ``on_llm_end``. Use ``stream_v2`` for
+            `on_llm_new_token` chunks. The inner stream still yields a
+            finalized message via `on_llm_end`. Use `stream_v2` for
             the inner graph as well, or call
-            ``chat_model.stream(...)`` explicitly, to get token-level
+            `chat_model.stream(...)` explicitly, to get token-level
             streaming.
 
         Args:
@@ -3474,11 +3474,11 @@ class Pregel(
 
         Note:
             Same nesting limitation as `stream_v2`: nesting v1
-            ``astream(stream_mode="messages")`` inside a node of an
-            ``astream_v2`` run drops ``on_llm_new_token`` chunks because
-            the outer v2 handler reroutes ``BaseChatModel.invoke``
-            through the v2 event protocol. Use ``astream_v2`` for the
-            inner graph as well, or call ``chat_model.astream(...)``
+            `astream(stream_mode="messages")` inside a node of an
+            `astream_v2` run drops `on_llm_new_token` chunks because
+            the outer v2 handler reroutes `BaseChatModel.invoke`
+            through the v2 event protocol. Use `astream_v2` for the
+            inner graph as well, or call `chat_model.astream(...)`
             explicitly, to get token-level streaming.
 
         Args:

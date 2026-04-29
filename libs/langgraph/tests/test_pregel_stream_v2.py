@@ -799,18 +799,12 @@ class TestOutputWithoutValuesTransformer:
         assert run.output == {"v": "final"}
 
     def test_interrupts_without_values_transformer(self) -> None:
+        part = self._stream_part("values", {"v": 1})
+        part["interrupts"] = ({"value": "pause"},)
         mux = StreamMux(factories=[MessagesTransformer], is_async=False)
-        run = GraphRunStream(
-            iter(
-                [
-                    self._stream_part("values", {"v": 1}),
-                ]
-            ),
-            mux,
-        )
-        run._observe_event(_event("values", {"v": 1}, interrupts=({"value": "pause"},)))
-        assert run._interrupted is True
-        assert len(run._interrupts) == 1
+        run = GraphRunStream(iter([part]), mux)
+        assert run.interrupted is True
+        assert len(run.interrupts) == 1
 
     @pytest.mark.anyio
     async def test_async_output_without_values_transformer(self) -> None:
