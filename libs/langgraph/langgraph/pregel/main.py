@@ -17,6 +17,7 @@ from collections.abc import (
     Sequence,
 )
 from dataclasses import is_dataclass, replace
+from datetime import timedelta
 from functools import partial
 from inspect import isclass
 from typing import (
@@ -96,6 +97,7 @@ from langgraph._internal._runnable import (
     RunnableSeq,
     coerce_to_runnable,
 )
+from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.callbacks import (
     GraphInterruptEvent,
@@ -143,7 +145,10 @@ from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
 from langgraph.pregel._tools import StreamToolCallHandler
-from langgraph.pregel._utils import get_new_channel_versions
+from langgraph.pregel._utils import (
+    get_new_channel_versions,
+    validate_timeout_supported,
+)
 from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
@@ -176,6 +181,7 @@ from langgraph.types import (
     StateUpdate,
     StreamMode,
     StreamPart,
+    TimeoutPolicy,
     ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
@@ -201,6 +207,7 @@ class NodeBuilder:
         "_bound",
         "_retry_policy",
         "_cache_policy",
+        "_timeout",
     )
 
     _channels: str | list[str]
@@ -211,6 +218,7 @@ class NodeBuilder:
     _bound: Runnable
     _retry_policy: list[RetryPolicy]
     _cache_policy: CachePolicy | None
+    _timeout: TimeoutPolicy | None
 
     def __init__(
         self,
@@ -223,6 +231,7 @@ class NodeBuilder:
         self._bound = DEFAULT_BOUND
         self._retry_policy = []
         self._cache_policy = None
+        self._timeout = None
 
     def subscribe_only(
         self,
@@ -341,6 +350,11 @@ class NodeBuilder:
         self._cache_policy = policy
         return self
 
+    def set_timeout(self, timeout: float | timedelta | TimeoutPolicy | None) -> Self:
+        """Set the per-attempt timeout policy for this node."""
+        self._timeout = coerce_timeout_policy(timeout)
+        return self
+
     def build(self) -> PregelNode:
         """Builds the node."""
         return PregelNode(
@@ -352,6 +366,7 @@ class NodeBuilder:
             bound=self._bound,
             retry_policy=self._retry_policy,
             cache_policy=self._cache_policy,
+            timeout=self._timeout,
         )
 
 
@@ -888,6 +903,9 @@ class Pregel(
         )
 
     def validate(self) -> Self:
+        for name, node in self.nodes.items():
+            if node.timeout is not None:
+                validate_timeout_supported(node.node or node.bound, name=name)
         validate_graph(
             self.nodes,
             {k: v for k, v in self.channels.items() if isinstance(v, BaseChannel)},

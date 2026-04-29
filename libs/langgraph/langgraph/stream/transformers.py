@@ -82,6 +82,76 @@ class ValuesTransformer(StreamTransformer):
         return True
 
 
+class CustomTransformer(StreamTransformer):
+    """Capture custom events as a drainable stream of arbitrary payloads.
+
+    Nodes emit custom data via `get_stream_writer()`. This transformer
+    surfaces those events on `run.custom` as a `StreamChannel[Any]`,
+    preserving payloads in arrival order.
+
+    Only events at the run's own scope are captured; custom data from
+    deeper subgraphs is available on the respective subgraph handle's
+    `.custom` projection.
+
+    Native transformer — `run.custom` is a direct attribute.
+    """
+
+    _native = True
+    required_stream_modes = ("custom",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._log: StreamChannel[Any] = StreamChannel()
+        self._scope_list: list[str] = list(scope)
+
+    def init(self) -> dict[str, Any]:
+        return {"custom": self._log}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] != "custom":
+            return True
+        params = event["params"]
+        if params["namespace"] != self._scope_list:
+            return True
+        self._log.push(params["data"])
+        return True
+
+
+class UpdatesTransformer(StreamTransformer):
+    """Capture updates events as a drainable stream of node outputs.
+
+    Surfaces `stream_mode="updates"` data on `run.updates` as a
+    `StreamChannel[dict[str, Any]]`. Each item is a dict mapping a node
+    (or task) name to the update it returned after a step.
+
+    Only events at the run's own scope are captured; updates from deeper
+    subgraphs are available on the respective subgraph handle's
+    `.updates` projection.
+
+    Native transformer — `run.updates` is a direct attribute.
+    """
+
+    _native = True
+    required_stream_modes = ("updates",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._log: StreamChannel[dict[str, Any]] = StreamChannel()
+        self._scope_list: list[str] = list(scope)
+
+    def init(self) -> dict[str, Any]:
+        return {"updates": self._log}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] != "updates":
+            return True
+        params = event["params"]
+        if params["namespace"] != self._scope_list:
+            return True
+        self._log.push(params["data"])
+        return True
+
+
 class MessagesTransformer(StreamTransformer):
     """Capture messages events as ChatModelStream objects.
 
@@ -741,3 +811,118 @@ class SubgraphTransformer(_TasksLifecycleBase):
                         handle.path,
                         exc_info=True,
                     )
+
+
+class CheckpointsTransformer(StreamTransformer):
+    """Capture checkpoint events as a drainable stream.
+
+    Surfaces `stream_mode="checkpoints"` data on `run.checkpoints` as
+    a `StreamChannel[dict[str, Any]]`. Each item is in the same format
+    as returned by `get_state()`.
+
+    Checkpoint events are only emitted when a checkpointer is configured
+    on the graph. When no checkpointer is present, the projection exists
+    but receives no events.
+
+    Only events at the run's own scope are captured; checkpoint data from
+    deeper subgraphs is available on the respective subgraph handle's
+    `.checkpoints` projection.
+
+    Native transformer — `run.checkpoints` is a direct attribute.
+    """
+
+    _native = True
+    required_stream_modes = ("checkpoints",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._log: StreamChannel[dict[str, Any]] = StreamChannel()
+        self._scope_list: list[str] = list(scope)
+
+    def init(self) -> dict[str, Any]:
+        return {"checkpoints": self._log}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] != "checkpoints":
+            return True
+        params = event["params"]
+        if params["namespace"] != self._scope_list:
+            return True
+        self._log.push(params["data"])
+        return True
+
+
+class DebugTransformer(StreamTransformer):
+    """Capture debug events as a drainable stream.
+
+    Surfaces `stream_mode="debug"` data on `run.debug` as a
+    `StreamChannel[dict[str, Any]]`. Each item is a debug event with
+    step-level detail (checkpoint snapshots, task payloads, and
+    task results wrapped with step number and timestamp).
+
+    Only events at the run's own scope are captured; debug data from
+    deeper subgraphs is available on the respective subgraph handle's
+    `.debug` projection.
+
+    Native transformer — `run.debug` is a direct attribute.
+    """
+
+    _native = True
+    required_stream_modes = ("debug",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._log: StreamChannel[dict[str, Any]] = StreamChannel()
+        self._scope_list: list[str] = list(scope)
+
+    def init(self) -> dict[str, Any]:
+        return {"debug": self._log}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] != "debug":
+            return True
+        params = event["params"]
+        if params["namespace"] != self._scope_list:
+            return True
+        self._log.push(params["data"])
+        return True
+
+
+class TasksTransformer(StreamTransformer):
+    """Capture raw task events as a drainable stream.
+
+    Surfaces `stream_mode="tasks"` data on `run.tasks` as a
+    `StreamChannel[dict[str, Any]]`. Each item is a task payload
+    (start or result).
+
+    `LifecycleTransformer` and `SubgraphTransformer` also consume
+    `tasks` events for subgraph discovery and lifecycle tracking.
+    This transformer captures the raw payloads independently for
+    consumers who need task-level detail.
+
+    Only events at the run's own scope are captured; task data from
+    deeper subgraphs is available on the respective subgraph handle's
+    `.tasks` projection.
+
+    Native transformer — `run.tasks` is a direct attribute.
+    """
+
+    _native = True
+    required_stream_modes = ("tasks",)
+
+    def __init__(self, scope: tuple[str, ...] = ()) -> None:
+        super().__init__(scope)
+        self._log: StreamChannel[dict[str, Any]] = StreamChannel()
+        self._scope_list: list[str] = list(scope)
+
+    def init(self) -> dict[str, Any]:
+        return {"tasks": self._log}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        if event["method"] != "tasks":
+            return True
+        params = event["params"]
+        if params["namespace"] != self._scope_list:
+            return True
+        self._log.push(params["data"])
+        return True

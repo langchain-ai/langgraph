@@ -18,7 +18,7 @@
   <a href="https://pypi.org/project/langgraph/" target="_blank"><img src="https://img.shields.io/pypi/v/langgraph.svg?label=%20" alt="Version"></a>
   <a href="https://github.com/langchain-ai/langgraph/issues" target="_blank"><img src="https://img.shields.io/github/issues-raw/langchain-ai/langgraph" alt="Open Issues"></a>
   <a href="https://docs.langchain.com/oss/python/langgraph/overview" target="_blank"><img src="https://img.shields.io/badge/docs-latest-blue" alt="Docs"></a>
-  <a href="https://x.com/langchain" target="_blank"><img src="https://img.shields.io/twitter/url/https/twitter.com/langchain.svg?style=social&label=Follow%20%40LangChain" alt="Twitter / X"></a>
+  <a href="https://x.com/langchain_oss" target="_blank"><img src="https://img.shields.io/twitter/url/https/twitter.com/langchain_oss.svg?style=social&label=Follow%20%40LangChain" alt="Twitter / X"></a>
 </div>
 
 <br>
