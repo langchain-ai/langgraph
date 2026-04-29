@@ -389,7 +389,7 @@ async def test_delta_channel_chain_reconstruction(saver_name: str) -> None:
     from typing_extensions import TypedDict
 
     class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(add_messages)]
+        messages: Annotated[list, DeltaChannel(list, add_messages)]
 
     def respond(state: State) -> dict:
         n = len(state["messages"])

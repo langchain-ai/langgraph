@@ -56,10 +56,11 @@ checkpoint-loaded clones.
 
 ### Serializer support (`libs/checkpoint/langgraph/checkpoint/serde/jsonplus.py`)
 
-- `dumps_typed`: `DELTA_SENTINEL → ("delta", b"")` (zero bytes, no payload).
-- `loads_typed`: `"delta"` tag → `DELTA_SENTINEL`.
-- `_DeltaSnapshot` → msgpack ext code 7 (value packed as nested msgpack).
-- `loads_typed` ext hook: ext 7 → `_DeltaSnapshot(unpacked_value)`.
+Both delta types serialize through msgpack, keeping them in the same codec path with no special string type tags:
+
+- `DELTA_SENTINEL` → msgpack ext code 8 (`EXT_DELTA_SENTINEL`, zero data bytes).
+- `_DeltaSnapshot` → msgpack ext code 7 (`EXT_DELTA_SNAPSHOT`, value packed as nested msgpack).
+- Ext hooks decode both back to their singleton / NamedTuple counterparts.
 
 ### Ancestor-walk API on `BaseCheckpointSaver` (`libs/checkpoint/langgraph/checkpoint/base/__init__.py`)
 
@@ -131,12 +132,16 @@ is 3–100× faster in the realistic depth range.
 - `SyncPregelLoop.__enter__` passes `saver` + `config` to
   `channels_from_checkpoint`.
 - `AsyncPregelLoop.__aenter__` calls `achannels_from_checkpoint`.
-- **Write-ordering safety**: `_pending_write_futs` tracks in-flight
-  `put_writes` futures. Before committing a checkpoint that contains any
-  `DELTA_SENTINEL` blob, the loop flushes all pending write futures
-  synchronously. This ensures checkpoint_writes are durable before the
-  sentinel blob is stored — a sentinel backed by missing writes would cause
-  silent data loss on replay.
+- **Async write-ordering safety**: `AsyncPregelLoop` maintains
+  `_delta_write_futs`, a list of in-flight `aput_writes` futures for
+  DeltaChannel channels. In `accept_writes`, any write to a `DeltaChannel`
+  appends its future to this list. In `_checkpointer_put_after_previous`,
+  the list is drained via `await asyncio.gather()` before `aput()` is
+  called. This ensures checkpoint_writes are durable before the sentinel
+  blob is stored — a sentinel backed by missing writes would cause silent
+  data loss on replay. The sync loop does not need this guard: all
+  background tasks complete before `invoke()` returns via
+  `BackgroundExecutor.__exit__`.
 
 ### `binop.py` refactoring
 
@@ -157,3 +162,6 @@ is 3–100× faster in the realistic depth range.
   ancestor walk collecting writes for all sentinel channels at once would
   reduce roundtrips proportionally to the number of DeltaChannel fields in a
   state schema.
+- **Store delta epoch ids in writes table**: this would allow for more targeted
+reads of the writes table when reconstructing delta channels (especialy valuable
+for postgres).
