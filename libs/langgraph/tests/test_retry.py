@@ -663,6 +663,12 @@ def test_coerce_timeout_policy_scalar_is_run_timeout():
         coerce_timeout_policy(0)
 
 
+def test_coerce_timeout_policy_returns_same_instance_for_already_coerced():
+    policy = coerce_timeout_policy(TimeoutPolicy(run_timeout=1.0, idle_timeout=2.0))
+    assert coerce_timeout_policy(policy) is policy
+    assert TimeoutPolicy.coerce(policy) is policy
+
+
 def test_send_timeout_round_trips_through_msgpack_serde():
     serde = JsonPlusSerializer(allowed_msgpack_modules=None)
     packet = Send(
@@ -670,6 +676,13 @@ def test_send_timeout_round_trips_through_msgpack_serde():
         {"x": 1},
         timeout=TimeoutPolicy(run_timeout=1, idle_timeout=2),
     )
+
+    assert serde.loads_typed(serde.dumps_typed(packet)) == packet
+
+
+def test_send_without_timeout_round_trips_through_msgpack_serde():
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    packet = Send("worker", {"x": 1})
 
     assert serde.loads_typed(serde.dumps_typed(packet)) == packet
 

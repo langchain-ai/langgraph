@@ -550,16 +550,12 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
 
 
 def _send_from_args(args: Sequence[Any]) -> Any:
-    from langgraph.types import Send, TimeoutPolicy  # type: ignore
+    # ya we have a cyclic import here ¯\_(ツ)_/¯
+    from langgraph.types import Send  # type: ignore
 
     if len(args) == 2:
         return Send(*args)
-    timeout = args[2]
-    # When TimeoutPolicy is excluded from allowed_msgpack_modules, the kw_args
-    # ext-hook returns the raw kwargs dict instead of a reconstructed instance.
-    if isinstance(timeout, dict):
-        timeout = TimeoutPolicy(**timeout)
-    return Send(args[0], args[1], timeout=timeout)
+    return Send(args[0], args[1], timeout=args[2])
 
 
 def _create_msgpack_ext_hook(
