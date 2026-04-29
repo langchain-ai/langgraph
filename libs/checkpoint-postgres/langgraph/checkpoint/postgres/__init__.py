@@ -491,7 +491,6 @@ class PostgresSaver(BasePostgresSaver):
             including its configuration, metadata, parent checkpoint (if any),
             and pending writes.
         """
-        channel_values = self._load_blobs(value["channel_values"])
         return CheckpointTuple(
             {
                 "configurable": {
@@ -504,7 +503,7 @@ class PostgresSaver(BasePostgresSaver):
                 **value["checkpoint"],
                 "channel_values": {
                     **(value["checkpoint"].get("channel_values") or {}),
-                    **channel_values,
+                    **self._load_blobs(value["channel_values"]),
                 },
             },
             value["metadata"],
