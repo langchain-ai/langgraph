@@ -492,10 +492,13 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             ),
         )
     elif isinstance(obj, SendProtocol):
+        args: tuple[Any, ...] = (obj.node, obj.arg)
+        if (timeout := getattr(obj, "timeout", None)) is not None:
+            args = (obj.node, obj.arg, timeout)
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, (obj.node, obj.arg)),
+                (obj.__class__.__module__, obj.__class__.__name__, args),
             ),
         )
     elif dataclasses.is_dataclass(obj):
@@ -544,6 +547,15 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         return repr(obj)
     else:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
+
+
+def _send_from_args(args: Sequence[Any]) -> Any:
+    # ya we have a cyclic import here ¯\_(ツ)_/¯
+    from langgraph.types import Send  # type: ignore
+
+    if len(args) == 2:
+        return Send(*args)
+    return Send(args[0], args[1], timeout=args[2])
 
 
 def _create_msgpack_ext_hook(
@@ -655,6 +667,8 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
+                if tup[0] == "langgraph.types" and tup[1] == "Send":
+                    return _send_from_args(tup[2])
                 # module, name, args
                 return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
             except Exception:
@@ -768,9 +782,7 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
                 option=ormsgpack.OPT_NON_STR_KEYS,
             )
             if tup[0] == "langgraph.types" and tup[1] == "Send":
-                from langgraph.types import Send  # type: ignore
-
-                return Send(*tup[2])
+                return _send_from_args(tup[2])
             # module, name, args
             return tup[2]
         except Exception:
