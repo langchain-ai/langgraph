@@ -32,7 +32,7 @@ def _get_overwrite(value: Any) -> tuple[bool, Any]:
     """Inspects the given value and returns (is_overwrite, overwrite_value)."""
     if isinstance(value, Overwrite):
         return True, value.value
-    if isinstance(value, dict) and set(value.keys()) == {OVERWRITE}:
+    if isinstance(value, dict) and len(value) == 1 and OVERWRITE in value:
         return True, value[OVERWRITE]
     return False, None
 

@@ -126,7 +126,10 @@ def channels_from_checkpoint(
         ch: BaseChannel
         stored = checkpoint["channel_values"].get(k, MISSING)
         if _needs_replay(spec, stored) and saver is not None and config is not None:
-            assert isinstance(spec, DeltaChannel)
+            if not isinstance(spec, DeltaChannel):
+                raise TypeError(
+                    f"Expected DeltaChannel for channel requiring replay, got {type(spec)}"
+                )
             history = saver._get_channel_writes_history(config, k)
             replay_ch = spec.from_checkpoint(history.seed)
             replay_ch.replay_writes(history.writes)
@@ -158,7 +161,10 @@ async def achannels_from_checkpoint(
         ch: BaseChannel
         stored = checkpoint["channel_values"].get(k, MISSING)
         if _needs_replay(spec, stored) and saver is not None and config is not None:
-            assert isinstance(spec, DeltaChannel)
+            if not isinstance(spec, DeltaChannel):
+                raise TypeError(
+                    f"Expected DeltaChannel for channel requiring replay, got {type(spec)}"
+                )
             history = await saver._aget_channel_writes_history(config, k)
             replay_ch = spec.from_checkpoint(history.seed)
             replay_ch.replay_writes(history.writes)

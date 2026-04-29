@@ -4,7 +4,7 @@ import random
 import warnings
 from collections.abc import Sequence
 from importlib.metadata import version as get_version
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -155,6 +155,29 @@ INSERT_CHECKPOINT_WRITES_SQL = """
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
 """
 
+
+class _DeltaCombinedRow(TypedDict, total=False):
+    """One row from `SELECT_DELTA_COMBINED_SQL` (a UNION ALL of three tables).
+
+    Every row carries `_kind` ("p" / "w" / "b") plus whichever columns are
+    relevant for that kind; irrelevant columns are NULL and typed as `None`.
+    """
+
+    _kind: str  # always present: "p", "w", or "b"
+    # checkpoint row ("p")
+    checkpoint_id: str | None
+    parent_checkpoint_id: str | None
+    ver: str | None
+    # write / blob rows ("w", "b")
+    type: str | None
+    blob: bytes | None
+    # write row only ("w")
+    task_id: str | None
+    idx: int | None
+    # blob row only ("b")
+    version: str | None
+
+
 # DeltaChannel reconstruction: one combined CTE+UNION ALL query per channel.
 # Bench (notes/delta_channel_query_bench.md) showed the prior recursive CTE
 # carried a hidden O(ancestors x blobs_in_thread) join; plain SELECTs are
@@ -241,7 +264,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         *,
         channel: str,
         target_id: str,
-        rows: Sequence[Any],
+        rows: Sequence[_DeltaCombinedRow],
     ) -> _ChannelWritesHistory:
         """Reconstruct one delta channel's history from the combined UNION ALL rows.
 
@@ -264,16 +287,21 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         for r in rows:
             kind = r["_kind"]
             if kind == "p":
-                cid = r["checkpoint_id"]
+                cid = cast(str, r["checkpoint_id"])
                 parent_of[cid] = r["parent_checkpoint_id"]
                 ver_of[cid] = r["ver"]
             elif kind == "w":
-                cid = r["checkpoint_id"]
+                cid = cast(str, r["checkpoint_id"])
                 writes_by_cid.setdefault(cid, []).append(
-                    (r["type"], r["blob"], r["task_id"], r["idx"])
+                    cast(
+                        "tuple[str, bytes, str, int]",
+                        (r["type"], r["blob"], r["task_id"], r["idx"]),
+                    )
                 )
             else:  # kind == "b"
-                blob_by_ver[r["version"]] = (r["type"], r["blob"])
+                blob_by_ver[cast(str, r["version"])] = cast(
+                    "tuple[str, bytes]", (r["type"], r["blob"])
+                )
 
         # Sort writes within each checkpoint (task_id DESC, idx DESC) to match
         # the prior CTE ordering — newest write first per ancestor.
@@ -281,10 +309,10 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
 
         ancestors: list[str] = []
-        cid = parent_of.get(target_id)
-        while cid is not None:
-            ancestors.append(cid)
-            cid = parent_of.get(cid)
+        cur_cid: str | None = parent_of.get(target_id)
+        while cur_cid is not None:
+            ancestors.append(cur_cid)
+            cur_cid = parent_of.get(cur_cid)
         if not ancestors:
             return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
 
