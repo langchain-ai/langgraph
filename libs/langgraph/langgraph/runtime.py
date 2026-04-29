@@ -79,8 +79,12 @@ class ServerInfo:
 class RunControl:
     """Run-scoped control surface for cooperative draining.
 
+    Intended for a single graph run. Create a fresh `RunControl` per run;
+    reusing a control after `request_drain()` leaves it drained.
+
     Safe to call from any thread: the drain request is represented by a
     single attribute write, so no lock is needed for this signal.
+    If more mutable state is added here, add synchronization.
     """
 
     __slots__ = ("_drain_reason",)
@@ -227,7 +231,11 @@ class Runtime(Generic[ContextT]):
     """Metadata injected by LangGraph Server. None when running open-source LangGraph without LangSmith deployments."""
 
     control: RunControl | None = field(default=None)
-    """Run-scoped control plane for cooperative draining."""
+    """Run-scoped control plane for cooperative draining.
+
+    Populated automatically during graph runs. None outside an active
+    graph runtime.
+    """
 
     def merge(self, other: Runtime[ContextT]) -> Runtime[ContextT]:
         """Merge two runtimes together.

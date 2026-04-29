@@ -590,7 +590,7 @@ def test_external_drain_concurrent_sync() -> None:
 
     def first_node(state: State) -> dict[str, str]:
         started.set()
-        time.sleep(0.5)
+        time.sleep(0.05)
         return {"first": "done"}
 
     def second_node(state: State) -> dict[str, str]:
@@ -639,7 +639,7 @@ async def test_external_drain_concurrent_async() -> None:
 
     async def first_node(state: State) -> dict[str, str]:
         started.set()
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.05)
         return {"first": "done"}
 
     async def second_node(state: State) -> dict[str, str]:

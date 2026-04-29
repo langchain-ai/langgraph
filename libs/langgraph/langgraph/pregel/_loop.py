@@ -66,7 +66,6 @@ from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.callbacks import (
     GraphInterruptEvent,
     GraphLifecycleEvent,
-    GraphLifecycleStatus,
     GraphResumeEvent,
 )
 from langgraph.channels.base import BaseChannel
@@ -329,7 +328,9 @@ class PregelLoop:
     ) -> None:
         # drain status never reaches lifecycle events: tick() returns False
         # before pushing, and interrupts are raised through GraphInterrupt
-        status = cast(GraphLifecycleStatus, self.status)
+        if self.status == "draining":
+            raise RuntimeError("Draining status cannot emit lifecycle events")
+        status = self.status
         if kind == "resume":
             self._graph_lifecycle_events.append(
                 GraphResumeEvent(

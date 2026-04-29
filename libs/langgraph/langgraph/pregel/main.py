@@ -2637,6 +2637,7 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
+            control: Optional run control used to request cooperative drain.
             subgraphs: Whether to stream events from inside subgraphs, defaults to `False`.
 
                 If `True`, the events will be emitted as tuples `(namespace, data)`,
@@ -2933,8 +2934,9 @@ class Pregel(
                 )
                 raise GraphRecursionError(msg)
             elif loop.status == "draining":
-                reason = loop.control.drain_reason if loop.control else None
-                raise GraphDrained(reason or "shutdown")
+                if loop.control is None:
+                    raise RuntimeError("Draining status requires run control")
+                raise GraphDrained(loop.control.drain_reason or "shutdown")
             # set final channel values as run output
             run_manager.on_chain_end(loop.output)
         except BaseException as e:
@@ -3039,6 +3041,7 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
+            control: Optional run control used to request cooperative drain.
             subgraphs: Whether to stream events from inside subgraphs, defaults to `False`.
 
                 If `True`, the events will be emitted as tuples `(namespace, data)`,
@@ -3408,8 +3411,9 @@ class Pregel(
                 )
                 raise GraphRecursionError(msg)
             elif loop.status == "draining":
-                reason = loop.control.drain_reason if loop.control else None
-                raise GraphDrained(reason or "shutdown")
+                if loop.control is None:
+                    raise RuntimeError("Draining status requires run control")
+                raise GraphDrained(loop.control.drain_reason or "shutdown")
             # set final channel values as run output
             await run_manager.on_chain_end(loop.output)
         except BaseException as e:
@@ -3650,6 +3654,7 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
+            control: Optional run control used to request cooperative drain.
             version: The streaming format version. `"v1"` (default) returns the
                 traditional format, `"v2"` returns `StreamPart` typed dicts when
                 `stream_mode` is not `"values"`.
@@ -3826,6 +3831,7 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
+            control: Optional run control used to request cooperative drain.
             version: The streaming format version. `"v1"` (default) returns the
                 traditional format, `"v2"` returns `StreamPart` typed dicts when
                 `stream_mode` is not `"values"`.
