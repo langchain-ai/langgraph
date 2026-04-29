@@ -141,9 +141,7 @@ class TestInterleaveArrivalOrder:
         )
         alpha = mux.extensions["alpha"]
         beta = mux.extensions["beta"]
-        values_t = mux.transformer_by_key("values")
-
-        run = GraphRunStream(None, mux, values_t, wire_pump=False)
+        run = GraphRunStream(None, mux, wire_pump=False)
 
         # interleave() subscribes channels directly and reads _items
         # for stamp-ordered iteration. We simulate the pump by wiring
@@ -182,9 +180,7 @@ class TestInterleaveArrivalOrder:
             is_async=False,
         )
         alpha = mux.extensions["alpha"]
-        values_t = mux.transformer_by_key("values")
-
-        run = GraphRunStream(None, mux, values_t, wire_pump=False)
+        run = GraphRunStream(None, mux, wire_pump=False)
 
         push_script = [("alpha", "a1"), ("alpha", "a2")]
         push_iter = iter(push_script)
@@ -209,9 +205,7 @@ class TestInterleaveArrivalOrder:
             is_async=False,
         )
         alpha = mux.extensions["alpha"]
-        values_t = mux.transformer_by_key("values")
-
-        run = GraphRunStream(None, mux, values_t, wire_pump=False)
+        run = GraphRunStream(None, mux, wire_pump=False)
 
         push_script = [("alpha", "a1"), ("alpha", "a2")]
         push_iter = iter(push_script)
@@ -236,8 +230,7 @@ class TestInterleaveArrivalOrder:
             factories=[ValuesTransformer, _TwoChannelTransformer],
             is_async=False,
         )
-        values_t = mux.transformer_by_key("values")
-        run = GraphRunStream(None, mux, values_t, wire_pump=False)
+        run = GraphRunStream(None, mux, wire_pump=False)
         mux.close()
         with pytest.raises((KeyError, AttributeError)):
             list(run.interleave("alpha", "does_not_exist"))
@@ -247,8 +240,7 @@ class TestInterleaveArrivalOrder:
             factories=[ValuesTransformer, _TwoChannelTransformer],
             is_async=False,
         )
-        values_t = mux.transformer_by_key("values")
-        run = GraphRunStream(None, mux, values_t, wire_pump=False)
+        run = GraphRunStream(None, mux, wire_pump=False)
 
         def fake_pump() -> bool:
             mux.close()
@@ -266,9 +258,7 @@ class TestInterleaveArrivalOrder:
         )
         alpha = mux.extensions["alpha"]
         beta = mux.extensions["beta"]
-        values_t = mux.transformer_by_key("values")
-
-        run = GraphRunStream(None, mux, values_t, wire_pump=False)
+        run = GraphRunStream(None, mux, wire_pump=False)
 
         err = RuntimeError("boom")
 
@@ -319,8 +309,7 @@ class TestInterleaveIntegration:
             is_async=False,
         )
         alpha = mux.extensions["alpha"]
-        values_t = mux.transformer_by_key("values")
-        run = GraphRunStream(None, mux, values_t, wire_pump=False)
+        run = GraphRunStream(None, mux, wire_pump=False)
 
         # Subscribe alpha via iter first
         _ = iter(alpha)

@@ -77,8 +77,13 @@ def _arm(mux: StreamMux, transformer: Any) -> None:
     transformer._log._subscribed = True
 
 
+def _unstamped(items):
+    """Strip push stamps from a StreamChannel's internal buffer."""
+    return [item for _stamp, item in items]
+
+
 def _drain(transformer: Any) -> list[Any]:
-    return list(transformer._log._items)
+    return _unstamped(transformer._log._items)
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +145,7 @@ def test_custom_does_not_suppress_from_main_log() -> None:
 
     mux.push(_custom_event([], "data"))
 
-    methods = [evt["method"] for evt in mux._events._items]
+    methods = [evt["method"] for evt in _unstamped(mux._events._items)]
     assert "custom" in methods
 
 
@@ -219,7 +224,7 @@ def test_checkpoints_does_not_suppress_from_main_log() -> None:
 
     mux.push(_checkpoints_event([], {"values": {}}))
 
-    methods = [evt["method"] for evt in mux._events._items]
+    methods = [evt["method"] for evt in _unstamped(mux._events._items)]
     assert "checkpoints" in methods
 
 
@@ -284,7 +289,7 @@ def test_debug_does_not_suppress_from_main_log() -> None:
 
     mux.push(_debug_event([], {"step": 0}))
 
-    methods = [evt["method"] for evt in mux._events._items]
+    methods = [evt["method"] for evt in _unstamped(mux._events._items)]
     assert "debug" in methods
 
 
@@ -360,7 +365,7 @@ def test_tasks_does_not_suppress_from_main_log() -> None:
 
     mux.push(_tasks_event([], {"id": "t1"}))
 
-    methods = [evt["method"] for evt in mux._events._items]
+    methods = [evt["method"] for evt in _unstamped(mux._events._items)]
     assert "tasks" in methods
 
 
@@ -429,7 +434,7 @@ def test_updates_does_not_suppress_from_main_log() -> None:
 
     mux.push(_updates_event([], {"n": {}}))
 
-    methods = [evt["method"] for evt in mux._events._items]
+    methods = [evt["method"] for evt in _unstamped(mux._events._items)]
     assert "updates" in methods
 
 
@@ -469,7 +474,7 @@ def test_unrelated_events_ignored_by_all() -> None:
     )
 
     for t in transformers:
-        assert list(t._log._items) == []
+        assert _unstamped(t._log._items) == []
 
 
 # ---------------------------------------------------------------------------
@@ -674,7 +679,7 @@ def test_tasks_and_lifecycle_coregistration() -> None:
 
     assert _drain(tasks) == [task_data]
 
-    methods = [evt["method"] for evt in mux._events._items]
+    methods = [evt["method"] for evt in _unstamped(mux._events._items)]
     assert "tasks" not in methods
 
 
