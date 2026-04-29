@@ -16,6 +16,7 @@ from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, Huma
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableLambda, RunnableParallel
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from typing_extensions import TypedDict
 
 from langgraph._internal._constants import (
@@ -48,7 +49,13 @@ from langgraph.pregel._retry import (
 )
 from langgraph.pregel.protocol import StreamProtocol
 from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
-from langgraph.types import Command, PregelExecutableTask, RetryPolicy, TimeoutPolicy
+from langgraph.types import (
+    Command,
+    PregelExecutableTask,
+    RetryPolicy,
+    Send,
+    TimeoutPolicy,
+)
 
 NEEDS_CONTEXTVARS = pytest.mark.skipif(
     sys.version_info < (3, 11),
@@ -647,12 +654,24 @@ def test_coerce_timeout_policy_scalar_is_run_timeout():
     assert coerce_timeout_policy(None) is None
     policy = coerce_timeout_policy(timedelta(milliseconds=250))
     assert policy == TimeoutPolicy(run_timeout=0.25)
+    assert Send("node", None, timeout=timedelta(milliseconds=250)).timeout == policy
 
     idle_policy = coerce_timeout_policy(TimeoutPolicy(idle_timeout=1.5))
     assert idle_policy == TimeoutPolicy(idle_timeout=1.5)
 
     with pytest.raises(ValueError, match="run_timeout must be greater than 0"):
         coerce_timeout_policy(0)
+
+
+def test_send_timeout_round_trips_through_msgpack_serde():
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    packet = Send(
+        "worker",
+        {"x": 1},
+        timeout=TimeoutPolicy(run_timeout=1, idle_timeout=2),
+    )
+
+    assert serde.loads_typed(serde.dumps_typed(packet)) == packet
 
 
 def test_run_with_retry_rejects_sync_timeout_without_starting_proc():
@@ -1155,6 +1174,9 @@ def test_timeout_validation_is_eager_across_apis():
     with pytest.raises(ValueError, match="greater than 0"):
         PregelNode(channels="x", triggers=["x"], timeout=0)
 
+    with pytest.raises(ValueError, match="greater than 0"):
+        Send("slow", {}, timeout=0)
+
     builder = StateGraph(_TimeoutState)
     with pytest.raises(ValueError, match="greater than 0"):
         builder.add_node("slow", lambda state: state, timeout=0)
@@ -1387,6 +1409,28 @@ async def test_state_graph_add_node_timeout_e2e():
     graph = builder.compile()
     with pytest.raises(NodeTimeoutError):
         await graph.ainvoke({"x": 1})
+
+
+@pytest.mark.anyio
+async def test_send_timeout_overrides_target_node_timeout():
+    async def slow(state: _TimeoutState) -> _TimeoutState:
+        await asyncio.sleep(0.2)
+        return {"x": state["x"] + 1}
+
+    def route(state: _TimeoutState) -> list[Send]:
+        return [Send("slow", state, timeout=TimeoutPolicy(idle_timeout=0.05))]
+
+    builder = StateGraph(_TimeoutState)
+    builder.add_node("slow", slow, timeout=TimeoutPolicy(idle_timeout=1.0))
+    builder.add_conditional_edges(START, route)
+    builder.add_edge("slow", END)
+    graph = builder.compile()
+
+    with pytest.raises(NodeTimeoutError) as excinfo:
+        await graph.ainvoke({"x": 1})
+    assert excinfo.value.node == "slow"
+    assert excinfo.value.kind == "idle"
+    assert excinfo.value.idle_timeout == 0.05
 
 
 @pytest.mark.anyio

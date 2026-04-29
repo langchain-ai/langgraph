@@ -73,6 +73,7 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
         ("langchain_core.documents.base", "Document"),
         # langgraph
         ("langgraph.types", "Send"),
+        ("langgraph.types", "TimeoutPolicy"),
         ("langgraph.types", "Interrupt"),
         ("langgraph.types", "Command"),
         ("langgraph.types", "StateSnapshot"),

@@ -1054,7 +1054,7 @@ def prepare_push_task_send(
             translated_task_path,
             writers=proc.flat_writers,
             subgraphs=proc.subgraphs,
-            timeout=proc.timeout,
+            timeout=packet.timeout if packet.timeout is not None else proc.timeout,
         )
     else:
         return PregelTask(task_id, packet.node, translated_task_path)
@@ -1269,4 +1269,4 @@ def sanitize_untracked_values_in_send(
         for k, v in packet.arg.items()
         if not isinstance(channels.get(k), UntrackedValue)
     }
-    return Send(node=packet.node, arg=sanitized_arg)
+    return Send(node=packet.node, arg=sanitized_arg, timeout=packet.timeout)
