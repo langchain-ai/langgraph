@@ -49,6 +49,7 @@ from langgraph.channels.topic import Topic
 from langgraph.errors import (
     GraphRecursionError,
     InvalidUpdateError,
+    NodeError,
     ParentCommand,
 )
 from langgraph.func import entrypoint, task
@@ -57,7 +58,6 @@ from langgraph.graph.message import MessagesState, add_messages
 from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.pregel._loop import AsyncPregelLoop
 from langgraph.pregel._runner import PregelRunner
-from langgraph.runtime import Runtime
 from langgraph.types import (
     CachePolicy,
     Command,
@@ -9725,9 +9725,9 @@ async def test_graph_error_handler_async_runtime_info() -> None:
         attempts += 1
         raise ValueError("Always fails async")
 
-    async def err_handler_node(state: State, runtime: Runtime) -> State:
-        captured["from_node_name"] = runtime.execution_info.from_node_name
-        captured["from_node_error"] = runtime.execution_info.from_node_error
+    async def err_handler_node(state: State, error: NodeError) -> State:
+        captured["from_node_name"] = error.node
+        captured["from_node_error"] = error.error
         return {"foo": "handled_async"}
 
     graph = (
@@ -9797,3 +9797,40 @@ async def test_graph_error_handler_does_not_swallow_interrupt_concurrent() -> No
         "GraphInterrupt was swallowed — interrupt() in node_a "
         "should have paused execution"
     )
+
+
+async def test_node_error_handler_handles_subgraph_internal_failure_async() -> None:
+    class SubState(TypedDict):
+        foo: str
+
+    class ParentState(TypedDict):
+        foo: str
+
+    captured: dict[str, object] = {}
+
+    async def sub_fail_node(state: SubState) -> SubState:
+        raise ValueError("async subgraph boom")
+
+    async def parent_handler(state: ParentState, error: NodeError) -> ParentState:
+        captured["from_node_name"] = error.node
+        captured["from_node_error"] = error.error
+        return {"foo": "handled_async_subgraph"}
+
+    subgraph = (
+        StateGraph(SubState)
+        .add_node("sub_fail_node", sub_fail_node)
+        .add_edge(START, "sub_fail_node")
+        .compile()
+    )
+
+    parent_graph = (
+        StateGraph(ParentState)
+        .add_node("subgraph_node", subgraph, error_handler=parent_handler)
+        .add_edge(START, "subgraph_node")
+        .compile()
+    )
+
+    result = await parent_graph.ainvoke({"foo": ""})
+    assert result["foo"] == "handled_async_subgraph"
+    assert captured["from_node_name"] == "subgraph_node"
+    assert isinstance(captured["from_node_error"], BaseException)

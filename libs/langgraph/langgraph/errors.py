@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal
 from warnings import warn
@@ -19,6 +20,7 @@ __all__ = (
     "InvalidUpdateError",
     "GraphBubbleUp",
     "GraphInterrupt",
+    "NodeError",
     "NodeInterrupt",
     "NodeTimeoutError",
     "ParentCommand",
@@ -126,6 +128,26 @@ class TaskNotFound(Exception):
     """Raised when the executor is unable to find a task (for distributed mode)."""
 
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class NodeError:
+    """Failure context passed to a node-level error handler.
+
+    Inject by adding a parameter typed `NodeError` to a handler registered via
+    `StateGraph.add_node(..., error_handler=...)`:
+
+    ```python
+    def handler(state: State, error: NodeError) -> Command:
+        return Command(update={"status": f"recovered from {error.node}: {error.error}"})
+    ```
+    """
+
+    node: str
+    """Name of the node whose execution failed."""
+
+    error: BaseException
+    """Exception raised by the failed node."""
 
 
 class NodeTimeoutError(TimeoutError):

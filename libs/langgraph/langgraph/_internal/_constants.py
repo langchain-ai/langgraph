@@ -74,6 +74,10 @@ CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 CONFIG_KEY_STREAM_MESSAGES_V2 = sys.intern("__pregel_stream_messages_v2")
 # when True, attach StreamMessagesHandlerV2 so content-block (v2) events
 # flow through stream_mode="messages"; set by StreamingHandler only.
+CONFIG_KEY_NODE_ERROR = sys.intern("__pregel_node_error")
+# holds a `NodeError` (failed source node + exception) for the current
+# node-level error handler invocation, injected when handler signature
+# requests `error: NodeError`
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")

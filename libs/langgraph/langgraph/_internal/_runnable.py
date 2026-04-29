@@ -51,9 +51,11 @@ from langgraph._internal._config import (
 )
 from langgraph._internal._constants import (
     CONF,
+    CONFIG_KEY_NODE_ERROR,
     CONFIG_KEY_RUNTIME,
 )
 from langgraph._internal._typing import MISSING
+from langgraph.errors import NodeError
 from langgraph.types import StreamWriter
 
 try:
@@ -193,6 +195,15 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
         # we never hit this block, we just inject runtime directly
         "N/A",
         inspect.Parameter.empty,
+    ),
+    (
+        "error",
+        (NodeError, "NodeError"),
+        # we never hit this block, we read directly from configurable
+        "N/A",
+        # default to None so non-handler nodes that happen to type a parameter
+        # `error: NodeError` don't blow up; handlers always receive a NodeError.
+        None,
     ),
 )
 """List of kwargs that can be passed to functions, and their corresponding
@@ -367,6 +378,8 @@ class RunnableCallable(Runnable):
             kw_value: Any = MISSING
             if kw == "config":
                 kw_value = config
+            elif kw == "error":
+                kw_value = config.get(CONF, {}).get(CONFIG_KEY_NODE_ERROR, MISSING)
             elif runtime:
                 if kw == "runtime":
                     kw_value = runtime
@@ -439,6 +452,8 @@ class RunnableCallable(Runnable):
             kw_value: Any = MISSING
             if kw == "config":
                 kw_value = config
+            elif kw == "error":
+                kw_value = config.get(CONF, {}).get(CONFIG_KEY_NODE_ERROR, MISSING)
             elif runtime:
                 if kw == "runtime":
                     kw_value = runtime

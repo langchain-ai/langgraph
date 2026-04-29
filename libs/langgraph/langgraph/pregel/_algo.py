@@ -39,6 +39,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_NODE_ERROR,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RUNTIME,
@@ -67,6 +68,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
+from langgraph.errors import NodeError
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
@@ -697,10 +699,6 @@ def prepare_single_task(
                             run_id=str(rid) if (rid := config.get("run_id")) else None,
                         ),
                     )
-                    runtime = runtime.patch_execution_info(
-                        from_node_name=None,
-                        from_node_error=None,
-                    )
                     additional_config = {
                         "metadata": metadata,
                         "tags": proc.tags,
@@ -1196,10 +1194,6 @@ def prepare_node_error_handler_task(
     runtime = runtime.override(
         store=store, previous=checkpoint["channel_values"].get(PREVIOUS, None)
     )
-    runtime = runtime.patch_execution_info(
-        from_node_name=failed_task.name,
-        from_node_error=failed_error,
-    )
     additional_config: RunnableConfig = {
         "metadata": metadata,
         "tags": proc.tags,
@@ -1239,6 +1233,9 @@ def prepare_node_error_handler_task(
                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                 CONFIG_KEY_SCRATCHPAD: scratchpad,
                 CONFIG_KEY_RUNTIME: runtime,
+                CONFIG_KEY_NODE_ERROR: NodeError(
+                    node=failed_task.name, error=failed_error
+                ),
             },
         ),
         PUSH_TRIGGER,

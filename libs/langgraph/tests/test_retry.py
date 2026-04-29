@@ -1,4 +1,5 @@
 import asyncio
+import operator
 import sys
 import threading
 import time
@@ -34,7 +35,7 @@ from langgraph._internal._runnable import RunnableCallable
 from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
-from langgraph.errors import GraphInterrupt, NodeTimeoutError, ParentCommand
+from langgraph.errors import GraphInterrupt, NodeError, NodeTimeoutError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph, add_messages
 from langgraph.pregel import NodeBuilder, Pregel
@@ -1769,9 +1770,9 @@ def test_graph_error_handler_runs_after_retry_exhaustion():
         attempts += 1
         raise ValueError("Always fails")
 
-    def err_handler_node(state: State, runtime: Runtime) -> Command:
-        captured["from_node_name"] = runtime.execution_info.from_node_name
-        captured["from_node_error"] = runtime.execution_info.from_node_error
+    def err_handler_node(state: State, error: NodeError) -> Command:
+        captured["from_node_name"] = error.node
+        captured["from_node_error"] = error.error
         return Command(update={"foo": "handled"}, goto="after_handler")
 
     def after_handler(state: State) -> State:
@@ -1882,11 +1883,11 @@ def test_graph_error_handler_handles_subgraph_internal_failure():
     def sub_fail_node(state: SubState) -> SubState:
         raise ValueError("subgraph boom")
 
-    def parent_handler(state: ParentState, runtime: Runtime) -> ParentState:
+    def parent_handler(state: ParentState, error: NodeError) -> ParentState:
         nonlocal parent_handler_called
         parent_handler_called = True
-        captured["from_node_name"] = runtime.execution_info.from_node_name
-        captured["from_node_error"] = runtime.execution_info.from_node_error
+        captured["from_node_name"] = error.node
+        captured["from_node_error"] = error.error
         return {"foo": "handled_by_parent"}
 
     subgraph = (
@@ -1919,9 +1920,9 @@ def test_graph_error_handler_error_context_survives_checkpoint_resume():
     def always_failing_node(state: State) -> State:
         raise RuntimeError("failed before handler")
 
-    def err_handler_node(state: State, runtime: Runtime) -> State:
-        captured["from_node_name"] = runtime.execution_info.from_node_name
-        captured["from_node_error"] = runtime.execution_info.from_node_error
+    def err_handler_node(state: State, error: NodeError) -> State:
+        captured["from_node_name"] = error.node
+        captured["from_node_error"] = error.error
         return {"foo": "handled_after_resume"}
 
     checkpointer = InMemorySaver()
@@ -1992,3 +1993,64 @@ def test_graph_error_handler_does_not_swallow_interrupt_concurrent():
         "GraphInterrupt was swallowed — interrupt() in node_a "
         "should have paused execution"
     )
+
+
+
+def test_node_error_handlers_route_to_matching_handler():
+    class State(TypedDict):
+        route: str
+        foo: Annotated[list[str], operator.add]
+
+    def route_node(state: State) -> State:
+        return {"foo": []}
+
+    def choose_node(state: State) -> str:
+        return state["route"]
+
+    def fail_a(state: State) -> State:
+        raise ValueError("a failed")
+
+    def fail_b(state: State) -> State:
+        raise RuntimeError("b failed")
+
+    def handler_a(state: State, error: NodeError) -> State:
+        assert error.node == "fail_a"
+        return {"foo": ["handled_a"]}
+
+    def handler_b(state: State, error: NodeError) -> State:
+        assert error.node == "fail_b"
+        return {"foo": ["handled_b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("route_node", route_node)
+        .add_node("fail_a", fail_a, error_handler=handler_a)
+        .add_node("fail_b", fail_b, error_handler=handler_b)
+        .add_edge(START, "route_node")
+        .add_conditional_edges("route_node", choose_node, path_map=["fail_a", "fail_b"])
+        .compile()
+    )
+
+    result_a = graph.invoke({"route": "fail_a", "foo": []})
+    result_b = graph.invoke({"route": "fail_b", "foo": []})
+    assert result_a["foo"] == ["handled_a"]
+    assert result_b["foo"] == ["handled_b"]
+
+
+def test_node_without_error_handler_still_fails_run():
+    class State(TypedDict):
+        foo: str
+
+    def fail_without_handler(state: State) -> State:
+        raise ValueError("no handler")
+
+    graph = (
+        StateGraph(State)
+        .add_node("fail_without_handler", fail_without_handler)
+        .add_edge(START, "fail_without_handler")
+        .compile()
+    )
+
+    with pytest.raises(ValueError, match="no handler"):
+        graph.invoke({"foo": ""})
+
