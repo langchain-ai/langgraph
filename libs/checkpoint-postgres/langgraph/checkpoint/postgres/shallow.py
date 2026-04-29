@@ -279,6 +279,11 @@ class ShallowPostgresSaver(BasePostgresSaver):
         with self._cursor() as cur:
             cur.execute(query, params, binary=True)
             for value in cur:
+                # Ensure thread_id is a string (psycopg3 may return bytes/memoryview in some cases)
+                thread_id = value["thread_id"]
+                if isinstance(thread_id, (bytes, memoryview)):
+                    thread_id = bytes(thread_id).decode("utf-8")
+
                 checkpoint: Checkpoint = {
                     **value["checkpoint"],
                     "channel_values": self._load_blobs(value["channel_values"]),
@@ -292,7 +297,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                 yield CheckpointTuple(
                     config={
                         "configurable": {
-                            "thread_id": value["thread_id"],
+                            "thread_id": thread_id,
                             "checkpoint_ns": value["checkpoint_ns"],
                             "checkpoint_id": checkpoint["id"],
                         }
@@ -645,6 +650,11 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         async with self._cursor() as cur:
             await cur.execute(query, params, binary=True)
             async for value in cur:
+                # Ensure thread_id is a string (psycopg3 may return bytes/memoryview in some cases)
+                thread_id = value["thread_id"]
+                if isinstance(thread_id, (bytes, memoryview)):
+                    thread_id = bytes(thread_id).decode("utf-8")
+
                 checkpoint: Checkpoint = {
                     **value["checkpoint"],
                     "channel_values": self._load_blobs(value["channel_values"]),
@@ -658,7 +668,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                 yield CheckpointTuple(
                     config={
                         "configurable": {
-                            "thread_id": value["thread_id"],
+                            "thread_id": thread_id,
                             "checkpoint_ns": value["checkpoint_ns"],
                             "checkpoint_id": checkpoint["id"],
                         }
