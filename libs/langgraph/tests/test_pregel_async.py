@@ -9709,3 +9709,76 @@ async def test_fork_does_not_apply_pending_writes(
 
     # 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+async def test_update_state_preserves_additional_data_in_history(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that update_state preserves parent metadata so checkpoints remain discoverable via get_state_history filters."""
+
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    class State(TypedDict):
+        messages: list
+
+    workflow = StateGraph(State)
+    workflow.add_node("echo", lambda s: {"messages": [AIMessage(content="foo")]})
+    workflow.add_edge(START, "echo")
+    workflow.add_edge("echo", END)
+    app = workflow.compile(checkpointer=async_checkpointer)
+
+    thread_id = str(uuid.uuid4())
+    assistant_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+
+    config: RunnableConfig = {
+        "configurable": {
+            "thread_id": thread_id,
+            "assistant_id": assistant_id,
+            "user_id": user_id,
+        }
+    }
+
+    # 1. Invoke to create checkpoint with metadata
+    await app.ainvoke({"messages": [HumanMessage(content="bar")]}, config)
+
+    # 2. Update state with minimal config
+    state_before_update = await app.aget_state(config)
+    update_config: RunnableConfig = {
+        "configurable": {
+            "thread_id": thread_id,
+            "checkpoint_id": state_before_update.config["configurable"]["checkpoint_id"],
+            "checkpoint_ns": "",
+        }
+    }
+    await app.aupdate_state(
+        update_config,
+        {"messages": [AIMessage(content="baz", additional_kwargs={"feedback": "positive"})]},
+        as_node="echo",
+    )
+
+    # 3. Get history with metadata filter
+    full_history = [s async for s in app.aget_state_history(config, limit=10)]
+    found_update = False
+    for snapshot in full_history:
+        for msg in snapshot.values.get("messages", []):
+            if msg.content == "baz":
+                found_update = True
+                assert msg.additional_kwargs == {"feedback": "positive"}, (
+                    f"Expected additional_kwargs={{'feedback': 'positive'}}, "
+                    f"but got {msg.additional_kwargs}"
+                )
+    assert found_update, "Could not find the update message 'baz' in history"
+
+    history_filter = {"assistant_id": assistant_id, "user_id": user_id}
+    history = [s async for s in app.aget_state_history(config, filter=history_filter, limit=10)]
+
+    assert len(history) >= 2, (
+        "Expected at least 2 checkpoints (invoke + update_state). "
+        "update_state checkpoint may be missing assistant_id/user_id in metadata. "
+    )
+    sources = [h.metadata.get("source") for h in history]
+    assert "update" in sources, (
+        "Expected 'update' checkpoint in history. "
+        "update_state creates checkpoints without inheriting parent metadata."
+    )
