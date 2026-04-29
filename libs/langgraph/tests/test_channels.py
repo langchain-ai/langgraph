@@ -12,7 +12,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
-from langgraph.graph.message import add_messages
+from langgraph.graph.message import _messages_delta_reducer
 
 pytestmark = pytest.mark.anyio
 
@@ -127,9 +127,9 @@ def test_delta_channel_basic_two_steps() -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.checkpoint.base import DELTA_SENTINEL
 
-    from langgraph.graph.message import add_messages
+    from langgraph.graph.message import _messages_delta_reducer
 
-    ch = DeltaChannel(list, add_messages).from_checkpoint(MISSING)
+    ch = DeltaChannel(_messages_delta_reducer, list).from_checkpoint(MISSING)
 
     # Step 1: one message added
     ch.update([HumanMessage(content="hi", id="h1")])
@@ -151,9 +151,9 @@ def test_delta_channel_from_checkpoint_writes_list() -> None:
     """replay_writes on a fresh channel replays through the operator."""
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from langgraph.graph.message import add_messages
+    from langgraph.graph.message import _messages_delta_reducer
 
-    spec = DeltaChannel(list, add_messages)
+    spec = DeltaChannel(_messages_delta_reducer, list)
     ch = spec.from_checkpoint(DELTA_SENTINEL)
     ch.replay_writes(
         [
@@ -172,10 +172,10 @@ def test_delta_channel_from_checkpoint_writes_list() -> None:
 def test_delta_channel_from_checkpoint_backwards_compat() -> None:
     from langchain_core.messages import HumanMessage
 
-    from langgraph.graph.message import add_messages
+    from langgraph.graph.message import _messages_delta_reducer
 
     # Old BinaryOperatorAggregate checkpoint: plain list treated as backward compat
-    spec = DeltaChannel(list, add_messages)
+    spec = DeltaChannel(_messages_delta_reducer, list)
     old_value = [HumanMessage(content="old", id="h1")]
     ch = spec.from_checkpoint(old_value)
     assert ch.get() == old_value
@@ -185,10 +185,10 @@ def test_delta_channel_overwrite() -> None:
     from langchain_core.messages import HumanMessage
     from langgraph.checkpoint.base import DELTA_SENTINEL
 
-    from langgraph.graph.message import add_messages
+    from langgraph.graph.message import _messages_delta_reducer
     from langgraph.types import Overwrite
 
-    ch = DeltaChannel(list, add_messages).from_checkpoint(MISSING)
+    ch = DeltaChannel(_messages_delta_reducer, list).from_checkpoint(MISSING)
     ch.update([HumanMessage(content="old", id="h1")])
 
     ch.update([Overwrite([HumanMessage(content="new", id="h2")])])
@@ -203,9 +203,9 @@ def test_delta_channel_remove_message_and_replay() -> None:
     """RemoveMessage must round-trip correctly when writes are replayed."""
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    from langgraph.graph.message import add_messages
+    from langgraph.graph.message import _messages_delta_reducer
 
-    spec = DeltaChannel(list, add_messages)
+    spec = DeltaChannel(_messages_delta_reducer, list)
     ch = spec.from_checkpoint(MISSING)
 
     # Step 1: add two messages
@@ -236,9 +236,9 @@ def test_delta_channel_update_by_id_and_replay() -> None:
     """Updating a message by ID must round-trip correctly through writes replay."""
     from langchain_core.messages import HumanMessage
 
-    from langgraph.graph.message import add_messages
+    from langgraph.graph.message import _messages_delta_reducer
 
-    spec = DeltaChannel(list, add_messages)
+    spec = DeltaChannel(_messages_delta_reducer, list)
     ch = spec.from_checkpoint(MISSING)
 
     # Step 1: add a message
@@ -264,9 +264,9 @@ def test_delta_channel_checkpoint_returns_sentinel() -> None:
     """checkpoint() always returns DELTA_SENTINEL regardless of state."""
     from langgraph.checkpoint.base import DELTA_SENTINEL
 
-    from langgraph.graph.message import add_messages
+    from langgraph.graph.message import _messages_delta_reducer
 
-    ch = DeltaChannel(list, add_messages).from_checkpoint(MISSING)
+    ch = DeltaChannel(_messages_delta_reducer, list).from_checkpoint(MISSING)
     assert ch.checkpoint() is DELTA_SENTINEL
 
     from langchain_core.messages import HumanMessage
@@ -290,12 +290,12 @@ def test_delta_channel_snapshot_step_based() -> None:
     from typing_extensions import TypedDict
 
     from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import add_messages
+    from langgraph.graph.message import _messages_delta_reducer
 
     # snapshot_frequency=5: snapshot every 5 pregel steps
     class State(TypedDict):
         messages: Annotated[
-            list, DeltaChannel(list, add_messages, snapshot_frequency=5)
+            list, DeltaChannel(_messages_delta_reducer, snapshot_frequency=5)
         ]
         other: str
 
@@ -349,11 +349,11 @@ def test_delta_channel_snapshot_fires_even_when_not_written() -> None:
     from typing_extensions import TypedDict
 
     from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import add_messages
+    from langgraph.graph.message import _messages_delta_reducer
 
     class State(TypedDict):
         messages: Annotated[
-            list, DeltaChannel(list, add_messages, snapshot_frequency=3)
+            list, DeltaChannel(_messages_delta_reducer, snapshot_frequency=3)
         ]
         tick: int
 
@@ -406,10 +406,10 @@ def test_delta_channel_inmemory_saver_assembles_writes() -> None:
     from typing_extensions import TypedDict
 
     from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import add_messages
+    from langgraph.graph.message import _messages_delta_reducer
 
     class State(TypedDict):
-        messages: Annotated[list, DeltaChannel(list, add_messages)]
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer, list)]
 
     n = {"v": 0}
 
@@ -451,14 +451,17 @@ def _delta_channel_with_type(operator, typ):
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.state import _get_channel
 
-    return _get_channel("_test", Annotated[typ, DeltaChannel(typ, operator)])
+    return _get_channel("_test", Annotated[typ, DeltaChannel(operator)])
 
 
 def test_delta_channel_dict_reducer_fresh_channel() -> None:
     """DeltaChannel with a dict reducer starts as empty dict on MISSING checkpoint."""
 
-    def merge_dicts(left: dict, right: dict) -> dict:
-        return {**left, **right}
+    def merge_dicts(state: dict, writes: list) -> dict:
+        result = dict(state)
+        for w in writes:
+            result.update(w)
+        return result
 
     ch = _delta_channel_with_type(merge_dicts, dict).from_checkpoint(MISSING)
     assert ch.is_available()
@@ -468,8 +471,11 @@ def test_delta_channel_dict_reducer_fresh_channel() -> None:
 def test_delta_channel_dict_reducer_basic_updates() -> None:
     """DeltaChannel with a dict reducer accumulates key/value pairs across steps."""
 
-    def merge_dicts(left: dict, right: dict) -> dict:
-        return {**left, **right}
+    def merge_dicts(state: dict, writes: list) -> dict:
+        result = dict(state)
+        for w in writes:
+            result.update(w)
+        return result
 
     ch = _delta_channel_with_type(merge_dicts, dict).from_checkpoint(MISSING)
 
@@ -487,8 +493,11 @@ def test_delta_channel_dict_reducer_basic_updates() -> None:
 def test_delta_channel_dict_reducer_writes_reconstruction() -> None:
     """replay_writes on a fresh channel replays through a dict merge reducer."""
 
-    def merge_dicts(left: dict, right: dict) -> dict:
-        return {**left, **right}
+    def merge_dicts(state: dict, writes: list) -> dict:
+        result = dict(state)
+        for w in writes:
+            result.update(w)
+        return result
 
     spec = _delta_channel_with_type(merge_dicts, dict)
     ch = spec.from_checkpoint(DELTA_SENTINEL)
@@ -505,15 +514,14 @@ def test_delta_channel_dict_reducer_writes_reconstruction() -> None:
 def test_delta_channel_dict_reducer_with_deletions() -> None:
     """Dict reducer that treats None values as deletions works end-to-end."""
 
-    def merge_files(left: dict | None, right: dict) -> dict:
-        if left is None:
-            return {k: v for k, v in right.items() if v is not None}
-        result = {**left}
-        for k, v in right.items():
-            if v is None:
-                result.pop(k, None)
-            else:
-                result[k] = v
+    def merge_files(state: dict, writes: list) -> dict:
+        result = dict(state)
+        for w in writes:
+            for k, v in w.items():
+                if v is None:
+                    result.pop(k, None)
+                else:
+                    result[k] = v
         return result
 
     ch = _delta_channel_with_type(merge_files, dict).from_checkpoint(MISSING)
@@ -536,8 +544,11 @@ def test_delta_channel_dict_reducer_overwrite_in_update() -> None:
     """Overwrite(dict) in update() must preserve dict shape, not coerce to list."""
     from langgraph.types import Overwrite
 
-    def merge_dicts(left: dict, right: dict) -> dict:
-        return {**left, **right}
+    def merge_dicts(state: dict, writes: list) -> dict:
+        result = dict(state)
+        for w in writes:
+            result.update(w)
+        return result
 
     ch = _delta_channel_with_type(merge_dicts, dict).from_checkpoint(MISSING)
     ch.update([{"a": 1}])
@@ -549,8 +560,11 @@ def test_delta_channel_dict_reducer_overwrite_in_writes_replay() -> None:
     """Overwrite(dict) embedded in replayed writes must reconstruct as dict."""
     from langgraph.types import Overwrite
 
-    def merge_dicts(left: dict, right: dict) -> dict:
-        return {**left, **right}
+    def merge_dicts(state: dict, writes: list) -> dict:
+        result = dict(state)
+        for w in writes:
+            result.update(w)
+        return result
 
     spec = _delta_channel_with_type(merge_dicts, dict)
     ch = spec.from_checkpoint(DELTA_SENTINEL)
@@ -573,12 +587,13 @@ def test_delta_channel_dict_reducer_with_notrequired_annotation() -> None:
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph.state import _get_channel
 
-    def merge_dicts(left: dict | None, right: dict) -> dict:
-        if left is None:
-            return dict(right)
-        return {**left, **right}
+    def merge_dicts(state: dict, writes: list) -> dict:
+        result = dict(state)
+        for w in writes:
+            result.update(w)
+        return result
 
-    annotation = Annotated[NotRequired[dict[str, int]], DeltaChannel(dict, merge_dicts)]
+    annotation = Annotated[NotRequired[dict[str, int]], DeltaChannel(merge_dicts)]
     ch = _get_channel("files", annotation).from_checkpoint(MISSING)
     assert ch.get() == {}
     ch.update([{"a": 1}])
@@ -596,19 +611,18 @@ def test_delta_channel_dict_reducer_end_to_end_filesystem() -> None:
     from langgraph.channels.delta import DeltaChannel
     from langgraph.graph import START, StateGraph
 
-    def merge_files(left: dict | None, right: dict) -> dict:
-        if left is None:
-            return {k: v for k, v in right.items() if v is not None}
-        result = {**left}
-        for k, v in right.items():
-            if v is None:
-                result.pop(k, None)
-            else:
-                result[k] = v
+    def merge_files(state: dict, writes: list) -> dict:
+        result = dict(state)
+        for w in writes:
+            for k, v in w.items():
+                if v is None:
+                    result.pop(k, None)
+                else:
+                    result[k] = v
         return result
 
     class State(TypedDict):
-        files: Annotated[dict[str, str], DeltaChannel(dict, merge_files)]
+        files: Annotated[dict[str, str], DeltaChannel(merge_files)]
 
     turn = {"v": 0}
 
@@ -657,8 +671,11 @@ def test_delta_channel_dict_reducer_end_to_end_filesystem() -> None:
 def test_delta_channel_dict_reducer_backwards_compat() -> None:
     """A pre-DeltaChannel dict checkpoint must load as a dict, not be listified."""
 
-    def merge_dicts(left: dict, right: dict) -> dict:
-        return {**left, **right}
+    def merge_dicts(state: dict, writes: list) -> dict:
+        result = dict(state)
+        for w in writes:
+            result.update(w)
+        return result
 
     spec = _delta_channel_with_type(merge_dicts, dict)
     old_value = {"a": 1, "b": 2}
@@ -678,7 +695,7 @@ def test_delta_channel_from_checkpoint_honors_seed() -> None:
     a pre-DeltaChannel blob it passes it as `seed` so replay reconstructs
     the post-migration state correctly rather than replaying from empty.
     """
-    spec = DeltaChannel(list, add_messages)
+    spec = DeltaChannel(_messages_delta_reducer, list)
     seed = [HumanMessage(content="pre-delta", id="p1")]
     ch = spec.from_checkpoint(seed)
     ch.replay_writes(
@@ -694,7 +711,7 @@ def test_delta_channel_from_checkpoint_honors_seed() -> None:
 def test_delta_channel_from_checkpoint_seed_without_writes() -> None:
     """Reconstruction at a pre-delta ancestor with no newer deltas returns
     just the seed — the saver's terminator fired immediately."""
-    spec = DeltaChannel(list, add_messages)
+    spec = DeltaChannel(_messages_delta_reducer, list)
     seed = [HumanMessage(content="only-snap", id="s1")]
     ch = spec.from_checkpoint(seed)
     ch.replay_writes([])
@@ -708,10 +725,10 @@ def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_sentinel() -> 
     explicitly should feed None to the reducer as the left operand.
     """
 
-    def replace(left, right):
-        return right
+    def replace(state, writes):
+        return writes[-1] if writes else state
 
-    spec = DeltaChannel(list, replace)
+    spec = DeltaChannel(replace, list)
     ch = spec.from_checkpoint(None)
     ch.replay_writes([("t0", "x", "after")])
     # Reducer replaces; seed=None → first write produces "after".

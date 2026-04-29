@@ -23,38 +23,43 @@ __all__ = ("DeltaChannel",)
 
 
 class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
-    """Fold-reducer channel with configurable snapshot cadence.
+    """Reducer channel that stores only a sentinel in checkpoint blobs and
+    reconstructs state by replaying ancestor writes through the reducer.
 
-    `snapshot_frequency=None` (default): pure delta — stores only
-    `DELTA_SENTINEL` in checkpoint blobs; reads replay all ancestor writes.
+    The reducer receives the current accumulated value and the full list of
+    new writes for that step in one call:
+    ``reducer(state, [write1, write2, ...]) -> new_state``.
 
-    `snapshot_frequency=N`: pregel's `create_checkpoint` writes a full
-    `_DeltaSnapshot` blob every N steps (eagerly, even if the channel had
-    no write that step). Reads walk at most N ancestor checkpoints before
-    hitting the snapshot, bounding replay depth to N regardless of thread
-    length.
+    ``snapshot_frequency=None`` (default): pure delta — stores only
+    ``DELTA_SENTINEL`` in checkpoint blobs; reads replay all ancestor writes.
+
+    ``snapshot_frequency=N``: ``create_checkpoint`` writes a full
+    ``_DeltaSnapshot`` blob every N steps, bounding replay depth to N.
 
     Parameters:
-        typ: The value type (e.g. `list`, `dict`).
-        operator: Binary reducer `(Value, Value) -> Value`.
+        reducer: ``(state, list[writes]) -> new_state``. Receives the current
+            accumulated value and the list of all writes for this step.
+        typ: The value type (e.g. ``list``, ``dict``). Inferred automatically
+            from the outer type when used inside ``Annotated[T, DeltaChannel(...)]``.
         snapshot_frequency: Every Nth pregel step writes a snapshot blob.
-            `None` (default) = pure delta, never snapshot.
+            ``None`` (default) = pure delta, never snapshot.
     """
 
-    __slots__ = ("value", "operator", "snapshot_frequency")
+    __slots__ = ("value", "reducer", "snapshot_frequency")
     value: Value | Any
 
     def __init__(
         self,
-        typ: type[Value],
-        operator: Callable[[Any, Any], Any],
+        reducer: Callable[[Any, Sequence[Any]], Any],
+        typ: type[Value] | None = None,
         *,
         snapshot_frequency: int | None = None,
     ) -> None:
+        if typ is None:
+            typ = list  # type: ignore[assignment]  # placeholder; overridden by _is_field_channel
         super().__init__(typ)
-        self.operator = operator
+        self.reducer = reducer
         self.snapshot_frequency = snapshot_frequency
-        # Normalize abstract / parameterized types to their concrete counterparts.
         typ = _strip_extras(typ)
         if typ in (collections.abc.Sequence, collections.abc.MutableSequence):
             typ = list
@@ -70,7 +75,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
             return False
         if self.snapshot_frequency != other.snapshot_frequency:
             return False
-        return _operators_equal(self.operator, other.operator)
+        return _operators_equal(self.reducer, other.reducer)
 
     @property
     def ValueType(self) -> Any:
@@ -90,33 +95,22 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
 
     def copy(self) -> Self:
         new = self.__class__(
-            self.typ, self.operator, snapshot_frequency=self.snapshot_frequency
+            self.reducer, self.typ, snapshot_frequency=self.snapshot_frequency
         )
         new.key = self.key
         new.value = self.value if self.value is MISSING else _copy.copy(self.value)
         return new
 
-    def _apply_write(self, value: Any, write: Any) -> Any:
-        is_overwrite, overwrite_value = _get_overwrite(write)
-        if is_overwrite:
-            return (
-                _copy.copy(overwrite_value)
-                if overwrite_value is not None
-                else self.typ()
-            )
-        base = self.typ() if value is MISSING else value
-        return self.operator(base, write)
-
     def from_checkpoint(self, checkpoint: Any) -> Self:
         """Initialize from a stored blob or sentinel.
 
         Blob types (dispatched via serde ext code, not dict key inspection):
-          * `DELTA_SENTINEL` / `MISSING`: start empty; caller replays writes.
-          * `_DeltaSnapshot(value)`: restore value directly from snapshot.
+          * ``DELTA_SENTINEL`` / ``MISSING``: start empty; caller replays writes.
+          * ``_DeltaSnapshot(value)``: restore value directly from snapshot.
           * plain value (migration from old BinOp blobs): use directly.
         """
         new = self.__class__(
-            self.typ, self.operator, snapshot_frequency=self.snapshot_frequency
+            self.reducer, self.typ, snapshot_frequency=self.snapshot_frequency
         )
         new.key = self.key
         if checkpoint is MISSING or checkpoint is DELTA_SENTINEL:
@@ -128,9 +122,24 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         return new
 
     def replay_writes(self, writes: Sequence[PendingWrite]) -> None:
-        """Fold ancestor writes oldest→newest into current value."""
-        for _, _, value in writes:
-            self.value = self._apply_write(self.value, value)
+        """Apply ancestor writes oldest→newest via a single reducer call.
+
+        If any write is an Overwrite, the last one in the sequence acts as
+        the reset point: its value becomes the new base and only writes
+        after it are passed to the reducer.
+        """
+        values = [v for _, _, v in writes]
+        if not values:
+            return
+        base = self.value
+        start = 0
+        for i, v in enumerate(values):
+            is_ow, ow_value = _get_overwrite(v)
+            if is_ow:
+                base = _copy.copy(ow_value) if ow_value is not None else self.typ()
+                start = i + 1
+        remaining = values[start:]
+        self.value = self.reducer(base, remaining) if remaining else base
 
     def update(self, values: Sequence[Any]) -> bool:
         if not values:
@@ -147,10 +156,17 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
                     raise InvalidUpdateError(msg)
                 overwrite_idx = i
         if overwrite_idx is not None:
-            self.value = self._apply_write(self.value, values[overwrite_idx])
+            _, overwrite_value = _get_overwrite(values[overwrite_idx])
+            base = (
+                _copy.copy(overwrite_value)
+                if overwrite_value is not None
+                else self.typ()
+            )
+            remaining = [v for i, v in enumerate(values) if i != overwrite_idx]
+            self.value = self.reducer(base, remaining) if remaining else base
             return True
-        for value in values:
-            self.value = self._apply_write(self.value, value)
+        base = self.typ() if self.value is MISSING else self.value
+        self.value = self.reducer(base, list(values))
         return True
 
     def get(self) -> Any:
@@ -162,10 +178,10 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         return self.value is not MISSING
 
     def checkpoint(self) -> Any:
-        """Return stored representation: always `DELTA_SENTINEL`.
+        """Return stored representation: always ``DELTA_SENTINEL``.
 
-        Snapshot decisions are made by `create_checkpoint` in pregel (which
-        has the step number) via `is_snapshot_step`. `checkpoint()` is only
+        Snapshot decisions are made by ``create_checkpoint`` in pregel (which
+        has the step number) via ``is_snapshot_step``. ``checkpoint()`` is only
         called for non-snapshot steps or when no checkpointer is available.
         """
         if self.value is MISSING:

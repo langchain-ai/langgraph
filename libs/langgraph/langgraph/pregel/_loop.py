@@ -1312,6 +1312,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
 
 class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
+    _delta_write_futs: list[asyncio.Future[Any]]
+
     def __init__(
         self,
         input: Any | None,
@@ -1490,7 +1492,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if saved.pending_writes is not None
             else []
         )
-        self._delta_write_futs: list[asyncio.Future[Any]] = []
+        self._delta_write_futs = []
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )

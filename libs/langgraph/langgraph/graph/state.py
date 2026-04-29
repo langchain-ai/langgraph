@@ -1679,8 +1679,8 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
                     ):
                         origin = origin.__args__[0]
                     item = item.__class__(
+                        item.reducer,
                         origin,
-                        item.operator,
                         snapshot_frequency=item.snapshot_frequency,
                     )
                 return item
