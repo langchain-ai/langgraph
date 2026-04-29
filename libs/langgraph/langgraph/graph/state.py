@@ -50,6 +50,7 @@ from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.named_barrier_value import (
@@ -1110,6 +1111,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             CompiledStateGraph: The compiled `StateGraph`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
+
         serde_allowlist: set[tuple[str, ...]] | None = None
         if _serde.STRICT_MSGPACK_ENABLED:
             schema_types: list[type[Any]] = [
@@ -1697,6 +1699,20 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
         # Search through all annotated medata to find channel annotations
         for item in meta:
             if isinstance(item, BaseChannel):
+                if isinstance(item, DeltaChannel) and hasattr(typ, "__origin__"):
+                    origin = typ.__origin__
+                    # Unwrap parameterized Required[X]/NotRequired[X] to X
+                    # (e.g. Annotated[NotRequired[dict[...]], ...]).
+                    if hasattr(origin, "__origin__") and origin.__origin__ in (
+                        Required,
+                        NotRequired,
+                    ):
+                        origin = origin.__args__[0]
+                    item = item.__class__(
+                        item.reducer,
+                        origin,
+                        snapshot_frequency=item.snapshot_frequency,
+                    )
                 return item
             elif isclass(item) and issubclass(item, BaseChannel):
                 # ex, Annotated[int, EphemeralValue, SomeOtherAnnotation]

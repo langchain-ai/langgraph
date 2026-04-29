@@ -1048,3 +1048,15 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_delta_sentinel_serde_round_trip() -> None:
+    from langgraph.checkpoint.base import DELTA_SENTINEL
+    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+    serde = JsonPlusSerializer()
+    type_tag, blob = serde.dumps_typed(DELTA_SENTINEL)
+    assert type_tag == "msgpack"
+    assert blob  # non-empty ext envelope
+    loaded = serde.loads_typed((type_tag, blob))
+    assert loaded is DELTA_SENTINEL

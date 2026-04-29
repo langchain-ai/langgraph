@@ -125,6 +125,7 @@ from langgraph.pregel._algo import (
 )
 from langgraph.pregel._call import identifier
 from langgraph.pregel._checkpoint import (
+    achannels_from_checkpoint,
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
@@ -1140,6 +1141,10 @@ class Pregel(
         channels, managed = channels_from_checkpoint(
             self.channels,
             saved.checkpoint,
+            saver=self.checkpointer
+            if isinstance(self.checkpointer, BaseCheckpointSaver)
+            else None,
+            config=saved.config,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
@@ -1256,9 +1261,13 @@ class Pregel(
 
         step = saved.metadata.get("step", -1) + 1
         stop = step + 2
-        channels, managed = channels_from_checkpoint(
+        channels, managed = await achannels_from_checkpoint(
             self.channels,
             saved.checkpoint,
+            saver=self.checkpointer
+            if isinstance(self.checkpointer, BaseCheckpointSaver)
+            else None,
+            config=saved.config,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
@@ -1629,6 +1638,11 @@ class Pregel(
             channels, managed = channels_from_checkpoint(
                 self.channels,
                 checkpoint,
+                saver=self.checkpointer
+                if saved is not None
+                and isinstance(self.checkpointer, BaseCheckpointSaver)
+                else None,
+                config=saved.config if saved is not None else None,
             )
             values, as_node = updates[0][:2]
 
@@ -2072,9 +2086,14 @@ class Pregel(
             )
             if saved:
                 checkpoint_config = patch_configurable(config, saved.config[CONF])
-            channels, managed = channels_from_checkpoint(
+            channels, managed = await achannels_from_checkpoint(
                 self.channels,
                 checkpoint,
+                saver=self.checkpointer
+                if saved is not None
+                and isinstance(self.checkpointer, BaseCheckpointSaver)
+                else None,
+                config=saved.config if saved is not None else None,
             )
             values, as_node = updates[0][:2]
             # no values, just clear all tasks
