@@ -66,6 +66,7 @@ from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.callbacks import (
     GraphInterruptEvent,
     GraphLifecycleEvent,
+    GraphLifecycleStatus,
     GraphResumeEvent,
 )
 from langgraph.channels.base import BaseChannel
@@ -118,7 +119,7 @@ from langgraph.pregel.debug import (
     map_debug_tasks,
 )
 from langgraph.pregel.protocol import StreamChunk, StreamProtocol
-from langgraph.runtime import Runtime
+from langgraph.runtime import RunControl, Runtime
 from langgraph.types import (
     All,
     CachePolicy,
@@ -209,6 +210,7 @@ class PregelLoop:
         "interrupt_after",
         "out_of_steps",
     ]
+    control: RunControl | None
     tasks: dict[str, PregelExecutableTask]
     output: None | dict[str, Any] | Any = None
     updated_channels: set[str] | None = None
@@ -316,6 +318,8 @@ class PregelLoop:
             else ()
         )
         self.prev_checkpoint_config = None
+        runtime = self.config[CONF].get(CONFIG_KEY_RUNTIME)
+        self.control = runtime.control if isinstance(runtime, Runtime) else None
 
     def _push_graph_lifecycle_event(
         self,
@@ -323,11 +327,14 @@ class PregelLoop:
         *,
         interrupts: tuple[Interrupt, ...] = (),
     ) -> None:
+        # drain status never reaches lifecycle events: tick() returns False
+        # before pushing, and interrupts are raised through GraphInterrupt
+        status = cast(GraphLifecycleStatus, self.status)
         if kind == "resume":
             self._graph_lifecycle_events.append(
                 GraphResumeEvent(
                     run_id=None,
-                    status=self.status,
+                    status=status,
                     checkpoint_id=self.checkpoint["id"],
                     checkpoint_ns=self.checkpoint_ns,
                 )
@@ -336,7 +343,7 @@ class PregelLoop:
             self._graph_lifecycle_events.append(
                 GraphInterruptEvent(
                     run_id=None,
-                    status=self.status,
+                    status=status,
                     checkpoint_id=self.checkpoint["id"],
                     checkpoint_ns=self.checkpoint_ns,
                     interrupts=interrupts,
@@ -471,8 +478,6 @@ class PregelLoop:
         self, task: PregelExecutableTask, write_idx: int, call: Call | None = None
     ) -> PregelExecutableTask | None:
         """Accept a PUSH from a task, potentially returning a new task to start."""
-        if self._drain_requested():
-            return None
         checkpoint_id_bytes = binascii.unhexlify(self.checkpoint["id"].replace("-", ""))
         null_version = checkpoint_null_version(self.checkpoint)
         if pushed := cast(
@@ -520,10 +525,6 @@ class PregelLoop:
             self.status = "out_of_steps"
             return False
 
-        if self._drain_requested():
-            self.status = "draining"
-            return False
-
         # prepare next tasks
         self.tasks = prepare_next_tasks(
             self.checkpoint,
@@ -568,6 +569,10 @@ class PregelLoop:
         # if no more tasks, we're done
         if not self.tasks:
             self.status = "done"
+            return False
+
+        if self.control is not None and self.control.drain_requested:
+            self.status = "draining"
             return False
 
         # if there are pending writes from a previous loop, apply them
@@ -640,10 +645,6 @@ class PregelLoop:
                 continue
             if task := tasks.get(tid):
                 task.writes.append((k, v))
-
-    def _drain_requested(self) -> bool:
-        runtime = self.config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
-        return isinstance(runtime, Runtime) and runtime.drain_requested
 
     def _pending_interrupts(self) -> set[str]:
         """Return the set of interrupt ids that are pending without corresponding resume values."""

@@ -2933,9 +2933,8 @@ class Pregel(
                 )
                 raise GraphRecursionError(msg)
             elif loop.status == "draining":
-                _rt = config[CONF].get(CONFIG_KEY_RUNTIME)
-                _reason = _rt.drain_reason if isinstance(_rt, Runtime) else None
-                raise GraphDrained(_reason or "shutdown")
+                reason = loop.control.drain_reason if loop.control else None
+                raise GraphDrained(reason or "shutdown")
             # set final channel values as run output
             run_manager.on_chain_end(loop.output)
         except BaseException as e:
@@ -3409,9 +3408,8 @@ class Pregel(
                 )
                 raise GraphRecursionError(msg)
             elif loop.status == "draining":
-                _rt = config[CONF].get(CONFIG_KEY_RUNTIME)
-                _reason = _rt.drain_reason if isinstance(_rt, Runtime) else None
-                raise GraphDrained(_reason or "shutdown")
+                reason = loop.control.drain_reason if loop.control else None
+                raise GraphDrained(reason or "shutdown")
             # set final channel values as run output
             await run_manager.on_chain_end(loop.output)
         except BaseException as e:
@@ -3426,6 +3424,7 @@ class Pregel(
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> Any:
         """Start a sync v2 streaming run driven by transformer projections.
@@ -3455,6 +3454,7 @@ class Pregel(
             config: Optional runnable config forwarded to the graph.
             interrupt_before: Nodes to interrupt before, if any.
             interrupt_after: Nodes to interrupt after, if any.
+            control: Optional run control used to request cooperative drain.
             transformers: Extra transformer classes or configured factories
                 appended after compile-time `stream_transformers`. Factories
                 are called as `factory(scope)` so they can propagate to
@@ -3489,6 +3489,7 @@ class Pregel(
                 version="v2",
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
+                control=control,
             )
         )
         return GraphRunStream(graph_iter, mux)
@@ -3500,6 +3501,7 @@ class Pregel(
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> Any:
         """Async counterpart to `stream_v2`.
@@ -3522,6 +3524,7 @@ class Pregel(
             config: Optional runnable config forwarded to the graph.
             interrupt_before: Nodes to interrupt before, if any.
             interrupt_after: Nodes to interrupt after, if any.
+            control: Optional run control used to request cooperative drain.
             transformers: Extra transformer classes or configured factories
                 appended after compile-time `stream_transformers`. Factories
                 are called as `factory(scope)` so they can propagate to
@@ -3552,6 +3555,7 @@ class Pregel(
             version="v2",
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            control=control,
         ).__aiter__()
         return AsyncGraphRunStream(graph_aiter, mux)
 

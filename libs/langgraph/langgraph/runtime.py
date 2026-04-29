@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, Generic, cast
@@ -80,31 +79,25 @@ class ServerInfo:
 class RunControl:
     """Run-scoped control surface for cooperative draining.
 
-    The API is synchronous on purpose so the same control object can be used
-    from both sync and async runtimes.
+    Safe to call from any thread: the drain request is represented by a
+    single attribute write, so no lock is needed for this signal.
     """
 
-    __slots__ = ("_drain_reason", "_drain_requested", "_lock")
+    __slots__ = ("_drain_reason",)
 
     def __init__(self) -> None:
-        self._drain_requested = False
         self._drain_reason: str | None = None
-        self._lock = threading.Lock()
 
     def request_drain(self, reason: str = "shutdown") -> None:
-        with self._lock:
-            self._drain_requested = True
-            self._drain_reason = reason
+        self._drain_reason = reason
 
     @property
     def drain_requested(self) -> bool:
-        with self._lock:
-            return self._drain_requested
+        return self._drain_reason is not None
 
     @property
     def drain_reason(self) -> str | None:
-        with self._lock:
-            return self._drain_reason
+        return self._drain_reason
 
 
 def _no_op_stream_writer(_: Any) -> None: ...
@@ -279,14 +272,6 @@ class Runtime(Generic[ContextT]):
     @property
     def drain_reason(self) -> str | None:
         return self.control.drain_reason if self.control is not None else None
-
-    def request_drain(self, reason: str = "shutdown") -> None:
-        if self.control is None:
-            raise RuntimeError(
-                "No run control is attached to this runtime. "
-                "Request drain from an active graph runtime."
-            )
-        self.control.request_drain(reason)
 
 
 DEFAULT_RUNTIME = Runtime(

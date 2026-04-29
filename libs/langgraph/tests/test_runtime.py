@@ -97,13 +97,15 @@ def test_merge_runtime_preserves_run_control() -> None:
     assert runtime1.merge(runtime2).control is control
 
 
-def test_runtime_request_drain_stops_future_steps() -> None:
+def test_run_control_request_drain_stops_future_steps() -> None:
     class State(TypedDict, total=False):
         first: str
         second: str
 
-    def first_node(state: State, runtime: Runtime) -> dict[str, str]:
-        runtime.request_drain()
+    control = RunControl()
+
+    def first_node(state: State) -> dict[str, str]:
+        control.request_drain()
         return {"first": "done"}
 
     def second_node(state: State) -> dict[str, str]:
@@ -117,17 +119,19 @@ def test_runtime_request_drain_stops_future_steps() -> None:
     graph.add_edge("second", END)
 
     with pytest.raises(GraphDrained, match="shutdown"):
-        graph.compile().invoke({})
+        graph.compile().invoke({}, control=control)
 
 
 @pytest.mark.anyio
-async def test_runtime_request_drain_stops_future_steps_async() -> None:
+async def test_run_control_request_drain_stops_future_steps_async() -> None:
     class State(TypedDict, total=False):
         first: str
         second: str
 
-    async def first_node(state: State, runtime: Runtime) -> dict[str, str]:
-        runtime.request_drain()
+    control = RunControl()
+
+    async def first_node(state: State) -> dict[str, str]:
+        control.request_drain()
         return {"first": "done"}
 
     async def second_node(state: State) -> dict[str, str]:
@@ -141,7 +145,125 @@ async def test_runtime_request_drain_stops_future_steps_async() -> None:
     graph.add_edge("second", END)
 
     with pytest.raises(GraphDrained, match="shutdown"):
-        await graph.compile().ainvoke({})
+        await graph.compile().ainvoke({}, control=control)
+
+
+def test_drain_requested_in_terminal_step_finishes_normally() -> None:
+    class State(TypedDict, total=False):
+        value: str
+
+    control = RunControl()
+
+    def node(state: State) -> dict[str, str]:
+        control.request_drain()
+        return {"value": "done"}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.add_edge(START, "node")
+    graph.add_edge("node", END)
+
+    assert graph.compile().invoke({}, control=control) == {"value": "done"}
+    assert control.drain_requested
+
+
+def test_drain_with_exit_durability_persists_resume_checkpoint() -> None:
+    class State(TypedDict, total=False):
+        first: str
+        second: str
+
+    control = RunControl()
+
+    def first_node(state: State) -> dict[str, str]:
+        control.request_drain("sigterm")
+        return {"first": "done"}
+
+    def second_node(state: State) -> dict[str, str]:
+        return {"second": "done"}
+
+    graph = StateGraph(State)
+    graph.add_node("first", first_node)
+    graph.add_node("second", second_node)
+    graph.add_edge(START, "first")
+    graph.add_edge("first", "second")
+    graph.add_edge("second", END)
+
+    compiled = graph.compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "drain-exit"}}
+
+    with pytest.raises(GraphDrained, match="sigterm"):
+        compiled.invoke({}, config, durability="exit", control=control)
+
+    assert compiled.invoke(None, config, durability="exit") == {
+        "first": "done",
+        "second": "done",
+    }
+
+
+def test_drain_from_subgraph_can_resume_parent() -> None:
+    class State(TypedDict, total=False):
+        child_first: str
+        child_second: str
+        parent_second: str
+
+    control = RunControl()
+
+    def child_first(state: State) -> dict[str, str]:
+        control.request_drain("sigterm")
+        return {"child_first": "done"}
+
+    def child_second(state: State) -> dict[str, str]:
+        return {"child_second": "done"}
+
+    child_builder = StateGraph(State)
+    child_builder.add_node("child_first", child_first)
+    child_builder.add_node("child_second", child_second)
+    child_builder.add_edge(START, "child_first")
+    child_builder.add_edge("child_first", "child_second")
+    child_builder.add_edge("child_second", END)
+    child_graph = child_builder.compile(checkpointer=True)
+
+    def parent_second(state: State) -> dict[str, str]:
+        return {"parent_second": "done"}
+
+    parent_builder = StateGraph(State)
+    parent_builder.add_node("child", child_graph)
+    parent_builder.add_node("parent_second", parent_second)
+    parent_builder.add_edge(START, "child")
+    parent_builder.add_edge("child", "parent_second")
+    parent_builder.add_edge("parent_second", END)
+
+    compiled = parent_builder.compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "drain-subgraph"}}
+
+    with pytest.raises(GraphDrained, match="sigterm"):
+        compiled.invoke({}, config, control=control)
+
+    assert compiled.invoke(None, config) == {
+        "child_first": "done",
+        "child_second": "done",
+        "parent_second": "done",
+    }
+
+
+@pytest.mark.anyio
+async def test_drain_requested_in_terminal_step_finishes_normally_async() -> None:
+    class State(TypedDict, total=False):
+        value: str
+
+    control = RunControl()
+
+    async def node(state: State) -> dict[str, str]:
+        control.request_drain()
+        return {"value": "done"}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.add_edge(START, "node")
+    graph.add_edge("node", END)
+
+    assert await graph.compile().ainvoke({}, control=control) == {"value": "done"}
+    assert control.drain_requested
 
 
 def test_runtime_propogated_to_subgraph() -> None:
@@ -764,7 +886,11 @@ def test_drain_with_control_parameter_sync() -> None:
     class State(TypedDict, total=False):
         value: str
 
+    ran = False
+
     def node(state: State) -> dict[str, str]:
+        nonlocal ran
+        ran = True
         return {"value": "done"}
 
     graph = StateGraph(State)
@@ -772,14 +898,13 @@ def test_drain_with_control_parameter_sync() -> None:
     graph.add_edge(START, "node")
     graph.add_edge("node", END)
 
-    # Pre-drained control should immediately stop after first step
+    # Pre-drained control stops before executing the first pending task.
     control = RunControl()
     control.request_drain("pre-drained")
 
-    # Graph has only one node in first step, so it completes that step
-    # then drain prevents any further steps
     with pytest.raises(GraphDrained, match="pre-drained"):
         graph.compile().invoke({}, control=control)
+    assert not ran
 
 
 # --- ExecutionInfo unit tests ---

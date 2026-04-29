@@ -44,7 +44,11 @@ def create_error_message(*, message: str, error_code: ErrorCode) -> str:
     )
 
 
-class GraphDrained(Exception):
+class GraphBubbleUp(Exception):
+    pass
+
+
+class GraphDrained(GraphBubbleUp):
     """Raised when a graph run exits early due to a drain request.
 
     This indicates the graph stopped cooperatively at a superstep boundary
@@ -89,10 +93,6 @@ class InvalidUpdateError(Exception):
     - [`INVALID_GRAPH_NODE_RETURN_VALUE`](https://docs.langchain.com/oss/python/langgraph/INVALID_GRAPH_NODE_RETURN_VALUE)
     """
 
-    pass
-
-
-class GraphBubbleUp(Exception):
     pass
 
 
