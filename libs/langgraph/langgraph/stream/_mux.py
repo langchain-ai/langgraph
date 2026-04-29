@@ -91,9 +91,11 @@ class StreamMux:
         self._assign_seq = _assign_seq
         self._events: StreamChannel[ProtocolEvent] = StreamChannel()
         self._events._bind(is_async=is_async)
+        self._events._bind_mux(self)
         self._transformers: list[StreamTransformer] = []
         self._channels: list[StreamChannel[Any]] = []
         self._seq = 0
+        self._push_seq = 0
 
         self.extensions: dict[str, Any] = {}
         self.native_keys: set[str] = set()
@@ -123,6 +125,10 @@ class StreamMux:
     def transformer_by_key(self, key: str) -> StreamTransformer | None:
         """Return the transformer that contributed `key` to the projection."""
         return self._transformer_by_key.get(key)
+
+    def _next_push_seq(self) -> int:
+        self._push_seq += 1
+        return self._push_seq
 
     # ------------------------------------------------------------------
     # Pump wiring + mini-mux nesting
@@ -449,6 +455,7 @@ class StreamMux:
         for value in projection.values():
             if isinstance(value, StreamChannel):
                 value._bind(is_async=self.is_async)
+                value._bind_mux(self)
                 self._channels.append(value)
                 if value.name is not None:
                     method = value.name if native else f"custom:{value.name}"

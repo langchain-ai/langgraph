@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
+
+if TYPE_CHECKING:
+    from langgraph.stream._mux import StreamMux
 
 T = TypeVar("T")
 
@@ -64,7 +67,7 @@ class StreamChannel(Generic[T]):
         if maxlen is not None and maxlen <= 0:
             raise ValueError("StreamChannel maxlen must be a positive int or None")
         self.name = name
-        self._items: deque[T] = deque()
+        self._items: deque[tuple[int, T]] = deque()
         self._maxlen: int | None = maxlen
         self._closed = False
         self._error: BaseException | None = None
@@ -77,10 +80,14 @@ class StreamChannel(Generic[T]):
         self._arequest_more: Callable[[], Awaitable[bool]] | None = None
 
         self._wire_fn: Callable[[T], None] | None = None
+        self._mux: StreamMux | None = None
 
     # ------------------------------------------------------------------
     # Binding
     # ------------------------------------------------------------------
+
+    def _bind_mux(self, mux: StreamMux) -> None:
+        self._mux = mux
 
     def _bind(self, *, is_async: bool) -> None:
         """Bind this channel to sync or async mode.
@@ -117,13 +124,18 @@ class StreamChannel(Generic[T]):
         registered, but auto-forwarding always fires so wired events
         reach the main event log regardless of subscription state.
 
+        Items are stored as `(stamp, item)` tuples where stamp is a
+        monotonic counter from the owning mux. Stamps are stripped by
+        the default cursors; raw stamped tuples are visible on `_items`.
+
         Raises:
             RuntimeError: If the channel is closed (and subscribed).
         """
         if self._subscribed:
             if self._closed:
                 raise RuntimeError("Cannot push to a closed StreamChannel")
-            self._items.append(item)
+            stamp = self._mux._next_push_seq() if self._mux is not None else 0
+            self._items.append((stamp, item))
         if self._wire_fn is not None:
             self._wire_fn(item)
 
@@ -170,7 +182,8 @@ class StreamChannel(Generic[T]):
     def _sync_cursor(self) -> Iterator[T]:
         while True:
             if self._items:
-                yield self._items.popleft()
+                _stamp, item = self._items.popleft()
+                yield item
             elif self._closed:
                 if self._error is not None:
                     raise self._error
@@ -212,7 +225,8 @@ class StreamChannel(Generic[T]):
     async def _async_cursor(self) -> AsyncIterator[T]:
         while True:
             if self._items:
-                yield self._items.popleft()
+                _stamp, item = self._items.popleft()
+                yield item
             elif self._closed:
                 if self._error is not None:
                     raise self._error
