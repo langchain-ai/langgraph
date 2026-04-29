@@ -663,4 +663,3 @@ class TestPreDeltaBlobTerminator:
         assert "PRE-DELTA-WRITE" not in values
         # And the pending write at the target is never folded in.
         assert "PENDING-AT-TARGET" not in values
-

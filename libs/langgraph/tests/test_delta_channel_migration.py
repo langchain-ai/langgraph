@@ -593,7 +593,9 @@ def test_add_messages_to_delta_migration_preserves_message_history() -> None:
     )
 
 
-async def test_add_messages_to_delta_migration_preserves_message_history_async() -> None:
+async def test_add_messages_to_delta_migration_preserves_message_history_async() -> (
+    None
+):
     """Async variant of the add_messages migration test."""
     checkpointer = InMemorySaver()
     config = {"configurable": {"thread_id": "add-messages-migration-async"}}
@@ -602,9 +604,7 @@ async def test_add_messages_to_delta_migration_preserves_message_history_async()
     await pre_graph.ainvoke(
         {"messages": [HumanMessage(content="hello", id="h1")]}, config
     )
-    await pre_graph.ainvoke(
-        {"messages": [AIMessage(content="hi", id="a1")]}, config
-    )
+    await pre_graph.ainvoke({"messages": [AIMessage(content="hi", id="a1")]}, config)
 
     delta_graph = _delta_messages_graph(checkpointer)
     snap = await delta_graph.aget_state(config)
