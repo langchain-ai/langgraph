@@ -6,7 +6,6 @@ import typing
 import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
-from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
@@ -15,7 +14,6 @@ from typing import (
     Any,
     Generic,
     Literal,
-    TypeVar,
     Union,
     cast,
     get_args,
@@ -44,7 +42,7 @@ from langgraph._internal._fields import (
     get_update_as_tuples,
 )
 from langgraph._internal._pydantic import create_model
-from langgraph._internal._runnable import coerce_to_runnable
+from langgraph._internal._runnable import RunnableCallable, coerce_to_runnable
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -91,6 +89,50 @@ __all__ = ("StateGraph", "CompiledStateGraph")
 logger = logging.getLogger(__name__)
 
 _CHANNEL_BRANCH_TO = "branch:to:{}"
+
+
+def _get_state_value_by_keys(input: Any, keys: Sequence[str]) -> dict[str, Any]:
+    if input is None:
+        return {}
+    if isinstance(input, dict):
+        return {k: v for k, v in input.items() if k in keys}
+    if (t := type(input)) and get_cached_annotated_keys(t):
+        return {k: v for k, v in get_update_as_tuples(input, keys)}
+    return {}
+
+
+def _get_updates_from_subgraph_result(
+    input: Any,
+    output: Any,
+    output_keys: Sequence[str],
+) -> dict[str, Any]:
+    previous = _get_state_value_by_keys(input, output_keys)
+    current = _get_state_value_by_keys(output, output_keys)
+    return {
+        key: value
+        for key, value in current.items()
+        if previous.get(key, MISSING) != value
+    }
+
+
+def _wrap_subgraph_node(
+    runnable: Pregel[Any, Any, Any, Any],
+    output_keys: Sequence[str],
+) -> RunnableCallable:
+    def _invoke(input: Any, config=None) -> dict[str, Any]:
+        output = runnable.invoke(input, config)
+        return _get_updates_from_subgraph_result(input, output, output_keys)
+
+    async def _ainvoke(input: Any, config=None) -> dict[str, Any]:
+        output = await runnable.ainvoke(input, config)
+        return _get_updates_from_subgraph_result(input, output, output_keys)
+
+    return RunnableCallable(
+        _invoke,
+        _ainvoke,
+        name=runnable.get_name(),
+        trace=False,
+    )
 
 
 def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
@@ -1175,20 +1217,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
 
-        # Record output/state mappers for v2 stream coercion (pydantic/dataclass only)
-        compiled._output_mapper = _pick_mapper(
-            list(output_channels)
-            if isinstance(output_channels, list)
-            else [output_channels],
-            self.output_schema,
-        )
-        compiled._state_mapper = _pick_mapper(
-            list(stream_channels)
-            if isinstance(stream_channels, list)
-            else [stream_channels],
-            self.state_schema,
-        )
-
         for start, end in self.edges:
             compiled.attach_edge(start, end)
 
@@ -1208,8 +1236,6 @@ class CompiledStateGraph(
 ):
     builder: StateGraph[StateT, ContextT, InputT, OutputT]
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
-    _output_mapper: Callable[[Any], Any] | None
-    _state_mapper: Callable[[Any], Any] | None
 
     def __init__(
         self,
@@ -1329,6 +1355,11 @@ class CompiledStateGraph(
                 if node.defer
                 else EphemeralValue(Any, guard=False)
             )
+            bound = (
+                _wrap_subgraph_node(node.runnable, output_keys)
+                if isinstance(node.runnable, Pregel)
+                else node.runnable
+            )
             self.nodes[key] = PregelNode(
                 triggers=[branch_channel],
                 # read state keys and managed values
@@ -1340,7 +1371,7 @@ class CompiledStateGraph(
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
-                bound=node.runnable,  # type: ignore[arg-type]
+                bound=bound,  # type: ignore[arg-type]
             )
         else:
             raise RuntimeError
@@ -1531,15 +1562,12 @@ def _pick_mapper(
 ) -> Callable[[Any], Any] | None:
     if state_keys == ["__root__"]:
         return None
-    if isclass(schema) and (issubclass(schema, BaseModel) or is_dataclass(schema)):
-        return partial(_coerce_state, schema)
-    return None
+    if isclass(schema) and issubclass(schema, dict):
+        return None
+    return partial(_coerce_state, schema)
 
 
-_S = TypeVar("_S")
-
-
-def _coerce_state(schema: type[_S], input: dict[str, Any]) -> _S:
+def _coerce_state(schema: type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
