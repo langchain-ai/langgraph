@@ -46,12 +46,14 @@ import operator
 from typing import Annotated, Any
 
 import pytest
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import _messages_delta_reducer, add_messages
 
 pytestmark = pytest.mark.anyio
 
@@ -509,3 +511,103 @@ def test_fork_from_update_state_checkpoint() -> None:
         f"fork lost update_state base: base={base_items}, forked={forked_items}"
     )
     assert forked_items[-1] == "fork0", f"fork delta not appended: {forked_items}"
+
+
+# ---------------------------------------------------------------------------
+# 9. Migration from `add_messages` → `DeltaChannel(_messages_delta_reducer)`
+#
+# `add_messages` is the primary real-world use case: it creates a
+# BinaryOperatorAggregate with dedup-by-ID and RemoveMessage semantics.
+# After swapping the annotation to DeltaChannel, pre-migration blobs
+# (plain lists of Message objects) must be used directly as the seed.
+# ---------------------------------------------------------------------------
+
+
+def _add_messages_graph(checkpointer: Any) -> Any:
+    class MessagesState(TypedDict):
+        messages: Annotated[list, add_messages]
+
+    return (
+        StateGraph(MessagesState)
+        .add_node("noop", _noop)
+        .add_edge(START, "noop")
+        .add_edge("noop", END)
+        .compile(checkpointer=checkpointer)
+    )
+
+
+def _delta_messages_graph(checkpointer: Any) -> Any:
+    class DeltaMessagesState(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    return (
+        StateGraph(DeltaMessagesState)
+        .add_node("noop", _noop)
+        .add_edge(START, "noop")
+        .add_edge("noop", END)
+        .compile(checkpointer=checkpointer)
+    )
+
+
+def test_add_messages_to_delta_migration_preserves_message_history() -> None:
+    """Migration from `add_messages` to `DeltaChannel(_messages_delta_reducer)`
+    preserves message ordering and IDs at both the tip and settled ancestor
+    boundaries.
+
+    The pre-migration blob is a plain list of Message objects; DeltaChannel
+    must use it directly as the seed without walking ancestors past it.
+    """
+    checkpointer = InMemorySaver()
+    config = {"configurable": {"thread_id": "add-messages-migration"}}
+
+    pre_graph = _add_messages_graph(checkpointer)
+    pre_graph.invoke({"messages": [HumanMessage(content="hello", id="h1")]}, config)
+    pre_graph.invoke({"messages": [AIMessage(content="hi", id="a1")]}, config)
+    pre_graph.invoke({"messages": [HumanMessage(content="thanks", id="h2")]}, config)
+
+    pre_tip = pre_graph.get_state(config)
+    assert [m.id for m in pre_tip.values["messages"]] == ["h1", "a1", "h2"]
+
+    delta_graph = _delta_messages_graph(checkpointer)
+
+    # Tip: latest checkpoint has a full list blob — must use it directly.
+    snap = delta_graph.get_state(config)
+    assert [m.id for m in snap.values["messages"]] == ["h1", "a1", "h2"], (
+        f"tip hydration mismatch: got {[m.id for m in snap.values['messages']]}"
+    )
+
+    # Settled ancestor boundaries must also match.
+    pre_settled = [
+        [m.id for m in s.values.get("messages", [])]
+        for s in pre_graph.get_state_history(config)
+        if s.next == ("__start__",)
+    ]
+    delta_settled = [
+        [m.id for m in s.values.get("messages", [])]
+        for s in delta_graph.get_state_history(config)
+        if s.next == ("__start__",)
+    ]
+    assert delta_settled == pre_settled, (
+        f"settled boundary mismatch after migration: "
+        f"pre={pre_settled}, delta={delta_settled}"
+    )
+
+
+async def test_add_messages_to_delta_migration_preserves_message_history_async() -> None:
+    """Async variant of the add_messages migration test."""
+    checkpointer = InMemorySaver()
+    config = {"configurable": {"thread_id": "add-messages-migration-async"}}
+
+    pre_graph = _add_messages_graph(checkpointer)
+    await pre_graph.ainvoke(
+        {"messages": [HumanMessage(content="hello", id="h1")]}, config
+    )
+    await pre_graph.ainvoke(
+        {"messages": [AIMessage(content="hi", id="a1")]}, config
+    )
+
+    delta_graph = _delta_messages_graph(checkpointer)
+    snap = await delta_graph.aget_state(config)
+    assert [m.id for m in snap.values["messages"]] == ["h1", "a1"], (
+        f"async tip hydration mismatch: got {[m.id for m in snap.values['messages']]}"
+    )
