@@ -45,6 +45,9 @@ dev = [
   "pycryptodome>=3.23.0",
 ]
 
+[tool.uv.sources]
+langchain-core = { git = "https://github.com/langchain-ai/langchain", branch = "cb/chat-model-updates", subdirectory = "libs/core" }
+
 [tool.hatch.build.targets.wheel]
 include = ["langgraph"]
 

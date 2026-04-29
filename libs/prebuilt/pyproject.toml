@@ -62,6 +62,7 @@ dev = [
 default-groups = ['dev']
 
 [tool.uv.sources]
+langchain-core = { git = "https://github.com/langchain-ai/langchain", branch = "cb/chat-model-updates", subdirectory = "libs/core" }
 langgraph = { path = "../langgraph", editable = true }
 langgraph-checkpoint = { path = "../checkpoint", editable = true }
 langgraph-checkpoint-sqlite = { path = "../checkpoint-sqlite", editable = true }
