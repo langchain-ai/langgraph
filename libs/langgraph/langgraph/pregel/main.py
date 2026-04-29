@@ -82,6 +82,7 @@ from langgraph._internal._constants import (
     NS_END,
     NS_SEP,
     NULL_TASK_ID,
+    PREVIOUS,
     PUSH,
     TASKS,
 )
@@ -1909,6 +1910,21 @@ class Pregel(
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
                 run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
+                # set up runtime with store for writers
+                if CONFIG_KEY_RUNTIME in config.get(CONF, {}):
+                    store: BaseStore | None = config[CONF][CONFIG_KEY_RUNTIME].store
+                else:
+                    store = self.store
+                parent_runtime = config.get(CONF, {}).get(
+                    CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME
+                )
+                runtime = Runtime(
+                    context=parent_runtime.context,
+                    store=store,
+                    stream_writer=parent_runtime.stream_writer,
+                    previous=checkpoint["channel_values"].get(PREVIOUS, None),
+                )
+                runtime = parent_runtime.merge(runtime)
                 # execute task
                 run.invoke(
                     values,
@@ -1934,6 +1950,7 @@ class Pregel(
                                 managed,
                                 task,
                             ),
+                            CONFIG_KEY_RUNTIME: runtime,
                         },
                     ),
                 )
@@ -2349,6 +2366,21 @@ class Pregel(
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
                 run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
+                # set up runtime with store for writers
+                if CONFIG_KEY_RUNTIME in config.get(CONF, {}):
+                    store: BaseStore | None = config[CONF][CONFIG_KEY_RUNTIME].store
+                else:
+                    store = self.store
+                parent_runtime = config.get(CONF, {}).get(
+                    CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME
+                )
+                runtime = Runtime(
+                    context=parent_runtime.context,
+                    store=store,
+                    stream_writer=parent_runtime.stream_writer,
+                    previous=checkpoint["channel_values"].get(PREVIOUS, None),
+                )
+                runtime = parent_runtime.merge(runtime)
                 # execute task
                 await run.ainvoke(
                     values,
@@ -2374,6 +2406,7 @@ class Pregel(
                                 managed,
                                 task,
                             ),
+                            CONFIG_KEY_RUNTIME: runtime,
                         },
                     ),
                 )
