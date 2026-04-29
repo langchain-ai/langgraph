@@ -45,6 +45,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_REPLAY_STATE,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
@@ -119,6 +120,7 @@ from langgraph.pregel.debug import (
     map_debug_tasks,
 )
 from langgraph.pregel.protocol import StreamChunk, StreamProtocol
+from langgraph.runtime import RunControl, Runtime
 from langgraph.types import (
     All,
     CachePolicy,
@@ -206,10 +208,12 @@ class PregelLoop:
         "input",
         "pending",
         "done",
+        "draining",
         "interrupt_before",
         "interrupt_after",
         "out_of_steps",
     ]
+    control: RunControl | None
     tasks: dict[str, PregelExecutableTask]
     output: None | dict[str, Any] | Any = None
     updated_channels: set[str] | None = None
@@ -317,6 +321,8 @@ class PregelLoop:
             else ()
         )
         self.prev_checkpoint_config = None
+        runtime = self.config[CONF].get(CONFIG_KEY_RUNTIME)
+        self.control = runtime.control if isinstance(runtime, Runtime) else None
 
     def _push_graph_lifecycle_event(
         self,
@@ -324,11 +330,16 @@ class PregelLoop:
         *,
         interrupts: tuple[Interrupt, ...] = (),
     ) -> None:
+        # drain status never reaches lifecycle events: tick() returns False
+        # before pushing, and interrupts are raised through GraphInterrupt
+        if self.status == "draining":
+            raise RuntimeError("Draining status cannot emit lifecycle events")
+        status = self.status
         if kind == "resume":
             self._graph_lifecycle_events.append(
                 GraphResumeEvent(
                     run_id=None,
-                    status=self.status,
+                    status=status,
                     checkpoint_id=self.checkpoint["id"],
                     checkpoint_ns=self.checkpoint_ns,
                 )
@@ -337,7 +348,7 @@ class PregelLoop:
             self._graph_lifecycle_events.append(
                 GraphInterruptEvent(
                     run_id=None,
-                    status=self.status,
+                    status=status,
                     checkpoint_id=self.checkpoint["id"],
                     checkpoint_ns=self.checkpoint_ns,
                     interrupts=interrupts,
@@ -567,6 +578,10 @@ class PregelLoop:
         # if no more tasks, we're done
         if not self.tasks:
             self.status = "done"
+            return False
+
+        if self.control is not None and self.control.drain_requested:
+            self.status = "draining"
             return False
 
         # if there are pending writes from a previous loop, apply them

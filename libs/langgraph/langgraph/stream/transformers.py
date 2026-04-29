@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessageChunk, BaseMessage
 from langchain_protocol.protocol import MessagesData
 from typing_extensions import NotRequired, TypedDict
 
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphDrained, GraphInterrupt
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from langgraph.stream.run_stream import AsyncSubgraphRunStream, SubgraphRunStream
 from langgraph.stream.stream_channel import StreamChannel
@@ -327,7 +327,7 @@ class MessagesTransformer(StreamTransformer):
         self._by_run.clear()
 
 
-SubgraphStatus = Literal["started", "completed", "failed", "interrupted"]
+SubgraphStatus = Literal["started", "completed", "failed", "interrupted", "drained"]
 
 
 def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
@@ -472,10 +472,8 @@ class _TasksLifecycleBase(StreamTransformer):
         self._open.clear()
 
     def fail(self, err: BaseException) -> None:
-        """Emit `failed` / `interrupted` for any tracked namespace still open."""
-        is_interrupt = isinstance(err, GraphInterrupt)
-        status: SubgraphStatus = "interrupted" if is_interrupt else "failed"
-        error_str = None if is_interrupt else str(err)
+        """Emit terminal status for any tracked namespace still open."""
+        status, error_str = _status_from_exception(err)
         for ns in list(self._open):
             self._on_terminal(ns, status, error_str)
         self._open.clear()
@@ -483,6 +481,8 @@ class _TasksLifecycleBase(StreamTransformer):
 
 def _status_from_exception(err: BaseException) -> tuple[SubgraphStatus, str | None]:
     """Map a run exception to a subgraph terminal status and error string."""
+    if isinstance(err, GraphDrained):
+        return "drained", None
     if isinstance(err, GraphInterrupt):
         return "interrupted", None
     return "failed", str(err)
