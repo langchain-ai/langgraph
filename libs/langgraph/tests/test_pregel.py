@@ -9586,6 +9586,37 @@ async def test_delta_channel_update_by_id_end_to_end() -> None:
     assert ids.count("h1") == 1, "h1 must not be duplicated"
 
 
+async def test_delta_channel_durability_exit_stores_snapshot() -> None:
+    """DeltaChannel must reload from a durability='exit' checkpoint."""
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import _messages_delta_reducer
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        return {"messages": [AIMessage(content="reply", id="ai1")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    graph = builder.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "delta-exit-test"}}
+
+    result = graph.invoke(
+        {"messages": [HumanMessage(content="hello", id="h1")]},
+        config,
+        durability="exit",
+    )
+    assert [m.content for m in result["messages"]] == ["hello", "reply"]
+
+    state = graph.get_state(config)
+    assert [m.content for m in state.values["messages"]] == ["hello", "reply"]
+
+
 async def test_delta_channel_async_write_ordering() -> None:
     """In async mode, DeltaChannel write futures are awaited before the checkpoint
     is committed, so aput_writes always precedes aput for sentinel checkpoints."""

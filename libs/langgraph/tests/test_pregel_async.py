@@ -6101,6 +6101,36 @@ async def test_parent_command(
     )
 
 
+async def test_delta_channel_durability_exit_stores_snapshot_async() -> None:
+    """DeltaChannel must reload from an async durability='exit' checkpoint."""
+    from langchain_core.messages import AIMessage
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph.message import _messages_delta_reducer
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    async def respond(state: State) -> dict:
+        return {"messages": [AIMessage(content="reply", id="ai1")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    graph = builder.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "delta-exit-async-test"}}
+
+    result = await graph.ainvoke(
+        {"messages": [HumanMessage(content="hello", id="h1")]},
+        config,
+        durability="exit",
+    )
+    assert [m.content for m in result["messages"]] == ["hello", "reply"]
+
+    state = await graph.aget_state(config)
+    assert [m.content for m in state.values["messages"]] == ["hello", "reply"]
+
+
 @NEEDS_CONTEXTVARS
 async def test_interrupt_subgraph(async_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):
