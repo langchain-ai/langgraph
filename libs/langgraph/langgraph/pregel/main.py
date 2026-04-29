@@ -2880,6 +2880,12 @@ class Pregel(
                             _output_mapper,
                             _state_mapper,
                         )
+                    if (
+                        durability_ == "async"
+                        and getattr(loop, "_put_checkpoint_fut", None) is not None
+                        and not loop._put_checkpoint_fut.done()
+                    ):
+                        loop._put_checkpoint_fut.result()
                     loop.after_tick()
                     emit_graph_lifecycle_events(loop)
                     # wait for checkpoint
@@ -3341,6 +3347,12 @@ class Pregel(
                                 _state_mapper,
                             ):
                                 yield o
+                        if (
+                            durability_ == "async"
+                            and getattr(loop, "_put_checkpoint_fut", None) is not None
+                            and not loop._put_checkpoint_fut.done()
+                        ):
+                            await cast(asyncio.Future, loop._put_checkpoint_fut)
                         loop.after_tick()
                         await aemit_graph_lifecycle_events(loop)
                         # wait for checkpoint
