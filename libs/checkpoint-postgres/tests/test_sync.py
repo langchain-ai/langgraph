@@ -358,3 +358,99 @@ def test_get_checkpoint_no_channel_values(
 
         checkpoint = saver.get_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+def test_prepare_threshold_default():
+    """Test that default prepare_threshold=0 works."""
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        with PostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database
+        ) as checkpointer:
+            checkpointer.setup()
+            config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+            metadata = {"source": "test", "step": 1}
+            checkpointer.put(config, checkpoint, metadata, {})
+            retrieved = checkpointer.get_tuple(config)
+            assert retrieved is not None
+            assert retrieved.metadata["source"] == "test"
+    finally:
+        # drop unique db
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
+def test_prepare_threshold_none():
+    """Test that prepare_threshold=None works (for connection poolers)."""
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        with PostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database, prepare_threshold=None
+        ) as checkpointer:
+            checkpointer.setup()
+            config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+            metadata = {"source": "test", "step": 1}
+            checkpointer.put(config, checkpoint, metadata, {})
+            retrieved = checkpointer.get_tuple(config)
+            assert retrieved is not None
+            assert retrieved.metadata["source"] == "test"
+    finally:
+        # drop unique db
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
+def test_prepare_threshold_custom_value():
+    """Test that custom prepare_threshold value works."""
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        with PostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database, prepare_threshold=5
+        ) as checkpointer:
+            checkpointer.setup()
+            config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+            metadata = {"source": "test", "step": 1}
+            checkpointer.put(config, checkpoint, metadata, {})
+            retrieved = checkpointer.get_tuple(config)
+            assert retrieved is not None
+            assert retrieved.metadata["source"] == "test"
+    finally:
+        # drop unique db
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
+def test_shallow_prepare_threshold_none():
+    """Test that ShallowPostgresSaver works with prepare_threshold=None."""
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        with ShallowPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database, prepare_threshold=None
+        ) as checkpointer:
+            checkpointer.setup()
+            config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+            metadata = {"source": "test", "step": 1}
+            checkpointer.put(config, checkpoint, metadata, {})
+            retrieved = checkpointer.get_tuple(config)
+            assert retrieved is not None
+            assert retrieved.metadata["source"] == "test"
+    finally:
+        # drop unique db
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
