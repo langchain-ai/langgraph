@@ -490,15 +490,9 @@ class BaseCheckpointSaver(Generic[V]):
         """Pure storage read used by `_get_channel_writes_history`.
 
         Must return the same value as `get_tuple` but must NOT trigger channel
-        reconstruction (i.e., must not call `channels_from_checkpoint`). The
-        default implementation delegates to `get_tuple`, which is correct for
-        savers whose `get_tuple` is a pure storage query (the common case).
-
-        Override this if your saver performs channel hydration inside `get_tuple`.
-        Doing so structurally breaks the otherwise-possible cycle:
-            _get_channel_writes_history -> _get_tuple_raw -> get_tuple
-                                        -> channels_from_checkpoint
-                                        -> _get_channel_writes_history (cycle!)
+        reconstruction; otherwise the channel-hydration path would re-enter
+        `_get_channel_writes_history`. Override only if `get_tuple` itself
+        performs channel hydration.
         """
         return self.get_tuple(config)
 

@@ -16,7 +16,7 @@ from typing import Annotated, Any, Literal, get_type_hints
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -25,6 +25,7 @@ from langchain_core.runnables import (
 from langchain_core.runnables.graph import Edge
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
+    DELTA_SENTINEL,
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
@@ -50,7 +51,7 @@ from langgraph.config import get_stream_writer
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import MessagesState, add_messages
+from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
 from langgraph.pregel import (
     NodeBuilder,
     Pregel,
@@ -9405,11 +9406,6 @@ def test_fork_does_not_apply_pending_writes(
 
 async def test_delta_channel_end_to_end_inmemory() -> None:
     """Full graph run: DeltaChannel accumulates correctly across multiple turns."""
-    from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.checkpoint.memory import InMemorySaver
-
-    from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import _messages_delta_reducer
 
     class State(TypedDict):
         messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
@@ -9446,11 +9442,6 @@ async def test_delta_channel_end_to_end_inmemory() -> None:
 
 async def test_delta_channel_time_travel() -> None:
     """Time-travel back to turn-1 checkpoint and resume; continuation must not include turn-2 deltas."""
-    from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.checkpoint.memory import InMemorySaver
-
-    from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import _messages_delta_reducer
 
     class State(TypedDict):
         messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
@@ -9503,11 +9494,6 @@ async def test_delta_channel_time_travel() -> None:
 
 async def test_delta_channel_remove_message_end_to_end() -> None:
     """RemoveMessage inside a DeltaChannel graph must persist and reload correctly."""
-    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
-    from langgraph.checkpoint.memory import InMemorySaver
-
-    from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import _messages_delta_reducer
 
     class State(TypedDict):
         messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
@@ -9549,11 +9535,6 @@ async def test_delta_channel_remove_message_end_to_end() -> None:
 
 async def test_delta_channel_update_by_id_end_to_end() -> None:
     """Updating a message by ID via DeltaChannel must persist and reload correctly."""
-    from langchain_core.messages import HumanMessage
-    from langgraph.checkpoint.memory import InMemorySaver
-
-    from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import _messages_delta_reducer
 
     class State(TypedDict):
         messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
@@ -9588,11 +9569,6 @@ async def test_delta_channel_update_by_id_end_to_end() -> None:
 
 async def test_delta_channel_durability_exit_stores_snapshot() -> None:
     """DeltaChannel must reload from a durability='exit' checkpoint."""
-    from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.checkpoint.memory import InMemorySaver
-
-    from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import _messages_delta_reducer
 
     class State(TypedDict):
         messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
@@ -9620,14 +9596,6 @@ async def test_delta_channel_durability_exit_stores_snapshot() -> None:
 async def test_delta_channel_async_write_ordering() -> None:
     """In async mode, DeltaChannel write futures are awaited before the checkpoint
     is committed, so aput_writes always precedes aput for sentinel checkpoints."""
-    from typing import Annotated
-
-    from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.checkpoint.base import DELTA_SENTINEL
-    from langgraph.checkpoint.memory import InMemorySaver
-
-    from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import _messages_delta_reducer
 
     class State(TypedDict):
         messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]

@@ -443,8 +443,7 @@ class PostgresSaver(BasePostgresSaver):
 
         One combined UNION ALL query (`SELECT_DELTA_COMBINED_SQL`) fetches rows
         from `checkpoints`, `checkpoint_writes`, and `checkpoint_blobs` in a
-        single roundtrip. Rationale + benchmark in
-        `notes/delta_channel_query_bench.md`.
+        single roundtrip; the ancestor walk runs in Python.
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")

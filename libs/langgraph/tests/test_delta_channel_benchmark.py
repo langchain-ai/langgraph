@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import math
+import os
 import sys
 import time
 from typing import Annotated, Any
@@ -34,7 +35,10 @@ try:
     from langgraph.checkpoint.postgres import PostgresSaver
 
     _POSTGRES_AVAILABLE = True
-    _POSTGRES_URI = "postgres://sydney_runkle@localhost:5441/postgres?sslmode=disable"
+    _POSTGRES_URI = os.environ.get(
+        "LANGGRAPH_BENCH_POSTGRES_URI",
+        "postgres://postgres@localhost:5432/postgres?sslmode=disable",
+    )
 except ImportError:
     _POSTGRES_AVAILABLE = False
 

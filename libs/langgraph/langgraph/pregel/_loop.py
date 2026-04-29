@@ -190,6 +190,8 @@ class PregelLoop:
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
+    # Only set on AsyncPregelLoop; sync loops keep this as None.
+    _delta_write_futs: list[Any] | None = None
     managed: ManagedValueMapping
     checkpoint: Checkpoint
     checkpoint_id_saved: str
@@ -422,7 +424,7 @@ class PregelLoop:
                     writes_to_save,
                     task_id,
                 )
-            if hasattr(self, "_delta_write_futs") and any(
+            if self._delta_write_futs is not None and any(
                 isinstance(self.specs.get(c), DeltaChannel) for c, _ in writes_to_save
             ):
                 self._delta_write_futs.append(fut)
@@ -1313,8 +1315,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
 
 class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
-    _delta_write_futs: list[asyncio.Future[Any]]
-
     def __init__(
         self,
         input: Any | None,
