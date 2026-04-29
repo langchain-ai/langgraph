@@ -546,8 +546,6 @@ def test_child_forwarding_errors_fail_sync_run() -> None:
         ],
         is_async=False,
     )
-    values_t = mux.transformer_by_key("values")
-    assert isinstance(values_t, ValuesTransformer)
     run = GraphRunStream(
         iter(
             [
@@ -565,7 +563,6 @@ def test_child_forwarding_errors_fail_sync_run() -> None:
             ]
         ),
         mux,
-        values_t,
     )
 
     handle = next(iter(run.subgraphs))
@@ -587,8 +584,6 @@ async def test_child_forwarding_errors_fail_async_run() -> None:
         ],
         is_async=True,
     )
-    values_t = mux.transformer_by_key("values")
-    assert isinstance(values_t, ValuesTransformer)
     run = AsyncGraphRunStream(
         _astream_parts(
             _stream_part(
@@ -604,7 +599,6 @@ async def test_child_forwarding_errors_fail_async_run() -> None:
             _stream_part("values", ("agent:abc",), {"x": 1}),
         ),
         mux,
-        values_t,
     )
 
     handle = await run.subgraphs.__aiter__().__anext__()
@@ -625,8 +619,6 @@ def test_child_finalize_errors_propagate_to_sync_run() -> None:
         ],
         is_async=False,
     )
-    values_t = mux.transformer_by_key("values")
-    assert isinstance(values_t, ValuesTransformer)
     run = GraphRunStream(
         iter(
             [
@@ -643,7 +635,6 @@ def test_child_finalize_errors_propagate_to_sync_run() -> None:
             ]
         ),
         mux,
-        values_t,
     )
 
     with pytest.raises(RuntimeError, match="child finalize boom"):
@@ -662,8 +653,6 @@ async def test_child_finalize_errors_propagate_to_async_run() -> None:
         ],
         is_async=True,
     )
-    values_t = mux.transformer_by_key("values")
-    assert isinstance(values_t, ValuesTransformer)
     run = AsyncGraphRunStream(
         _astream_parts(
             _stream_part(
@@ -678,7 +667,6 @@ async def test_child_finalize_errors_propagate_to_async_run() -> None:
             )
         ),
         mux,
-        values_t,
     )
 
     with pytest.raises(RuntimeError, match="child afinalize boom"):

@@ -21,6 +21,7 @@ from langgraph.stream import (
 from langgraph.stream._convert import convert_to_protocol_event
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
+from langgraph.stream.run_stream import AsyncGraphRunStream, GraphRunStream
 from langgraph.stream.transformers import MessagesTransformer, ValuesTransformer
 from langgraph.types import StreamWriter, interrupt
 
@@ -777,6 +778,43 @@ class TestValuesTransformer:
         )
         assert t._interrupted is True
         assert len(t._interrupts) == 2
+
+
+class TestOutputWithoutValuesTransformer:
+    """run.output / run.interrupted / run.interrupts must work even when
+    ValuesTransformer is not registered."""
+
+    def _stream_part(
+        self, method: str, data: Any, namespace: tuple[str, ...] = ()
+    ) -> dict[str, Any]:
+        return {"type": method, "ns": namespace, "data": data}
+
+    def test_output_without_values_transformer(self) -> None:
+        mux = StreamMux(factories=[MessagesTransformer], is_async=False)
+        run = GraphRunStream(
+            iter([self._stream_part("values", {"v": "final"})]),
+            mux,
+        )
+        assert "values" not in run.extensions
+        assert run.output == {"v": "final"}
+
+    def test_interrupts_without_values_transformer(self) -> None:
+        part = self._stream_part("values", {"v": 1})
+        part["interrupts"] = ({"value": "pause"},)
+        mux = StreamMux(factories=[MessagesTransformer], is_async=False)
+        run = GraphRunStream(iter([part]), mux)
+        assert run.interrupted is True
+        assert len(run.interrupts) == 1
+
+    @pytest.mark.anyio
+    async def test_async_output_without_values_transformer(self) -> None:
+        async def _parts() -> Any:
+            yield {"type": "values", "ns": (), "data": {"v": "async_final"}}
+
+        mux = StreamMux(factories=[MessagesTransformer], is_async=True)
+        run = AsyncGraphRunStream(_parts(), mux)
+        assert "values" not in run.extensions
+        assert await run.output() == {"v": "async_final"}
 
 
 class TestMessagesTransformer:
