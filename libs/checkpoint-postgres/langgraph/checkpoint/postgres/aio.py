@@ -4,7 +4,7 @@ import asyncio
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -28,6 +28,7 @@ from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import (
     SELECT_DELTA_COMBINED_SQL,
     BasePostgresSaver,
+    _DeltaCombinedRow,
 )
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 
@@ -434,7 +435,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         return self._build_delta_channel_writes_history(
             channel=channel,
             target_id=checkpoint_id,
-            rows=rows,
+            rows=cast("list[_DeltaCombinedRow]", rows),
         )
 
     async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:

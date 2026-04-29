@@ -58,7 +58,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         super().__init__(list)
         self.operator = operator
         self.snapshot_frequency = snapshot_frequency
-        self.value: Any = []
+        self.value: Any = MISSING
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, DeltaChannel):
@@ -78,16 +78,15 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     def is_snapshot_step(self, step: int) -> bool:
         """True if pregel should write a snapshot blob at this step."""
         return (
-            self.snapshot_frequency is not None and step % self.snapshot_frequency == 0
+            self.snapshot_frequency is not None
+            and step > 0
+            and step % self.snapshot_frequency == 0
         )
 
     def _clone_empty(self) -> Self:
-        new = self.__class__.__new__(self.__class__)
-        new.typ = self.typ
-        new.key = self.key
-        new.operator = self.operator
-        new.snapshot_frequency = self.snapshot_frequency
-        new.value = MISSING
+        new = self.__class__(self.operator, snapshot_frequency=self.snapshot_frequency)
+        new.typ = self.typ  # typ may differ from list when set via Annotated injection
+        new.key = self.key  # key is injected externally by the graph builder
         return new
 
     def copy(self) -> Self:
