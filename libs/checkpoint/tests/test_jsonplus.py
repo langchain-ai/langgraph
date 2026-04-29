@@ -1,9 +1,12 @@
 import dataclasses
+import importlib
 import json
 import logging
+import os
 import pathlib
 import re
 import sys
+import tempfile
 import uuid
 from collections import deque
 from datetime import date, datetime, time, timezone
@@ -717,6 +720,39 @@ def test_msgpack_none_blocks_unregistered(caplog: pytest.LogCaptureFixture) -> N
     assert "blocked" in caplog.text.lower()
     expected = obj.model_dump()
     assert result == expected
+
+
+def test_msgpack_missing_module_falls_back_to_payload_dict() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        module_path = pathlib.Path(temp_dir) / "temp_model.py"
+        module_path.write_text(
+            "from dataclasses import dataclass\n"
+            "@dataclass\n"
+            "class SavedObject:\n"
+            "    value: int\n"
+        )
+
+        sys.path.insert(0, temp_dir)
+        try:
+            module = importlib.import_module("temp_model")
+            SavedObject = module.SavedObject
+
+            serde = JsonPlusSerializer(
+                allowed_msgpack_modules=[("temp_model", "SavedObject")]
+            )
+
+            dumped = serde.dumps_typed(SavedObject(123))
+
+            sys.modules.pop("temp_model", None)
+            os.remove(module_path)
+            importlib.invalidate_caches()
+
+            result = serde.loads_typed(dumped)
+
+            assert result == {"value": 123}
+        finally:
+            if temp_dir in sys.path:
+                sys.path.remove(temp_dir)
 
 
 def test_msgpack_allowlist_blocks_non_listed(
