@@ -3394,25 +3394,25 @@ class Pregel(
     ) -> Any:
         """Start a sync v2 streaming run driven by transformer projections.
 
-        Builds a `StreamMux` from the built-in `ValuesTransformer` /
-        `MessagesTransformer`, this graph's compile-time
-        `stream_transformers`, and any additional `transformers=`
-        supplied at the call site. Returns a `GraphRunStream` that the
-        caller drives by iterating any projection — no background
-        thread.
+        Builds a `StreamMux` from the built-in transformers, this
+        graph's compile-time `stream_transformers`, and any additional
+        `transformers=` supplied at the call site. Returns a
+        `GraphRunStream` that the caller drives by iterating any
+        projection — no background thread.
+
+        `run.output`, `run.interrupted` and `run.interrupts` work
+        regardless of which transformers are registered.
 
         Note:
             Nesting v1 `stream(stream_mode="messages")` inside a node
             of a `stream_v2` run is not fully supported. The outer v2
-            messages handler is inheritable, so it sits in the inner
-            chat model's callback chain; `BaseChatModel.invoke` then
-            routes through the v2 event protocol and the inner v1
-            messages handler does not see `on_llm_new_token` chunks.
-            The inner stream still yields a finalized message via
-            `on_llm_end`, but token-by-token output is lost. Use
-            `stream_v2` for the inner graph as well, or call
-            `chat_model.stream(...)` explicitly inside the node, to
-            get token-level streaming.
+            messages handler reroutes `BaseChatModel.invoke` through
+            the v2 event protocol, so the inner v1 handler does not see
+            `on_llm_new_token` chunks. The inner stream still yields a
+            finalized message via `on_llm_end`. Use `stream_v2` for
+            the inner graph as well, or call
+            `chat_model.stream(...)` explicitly, to get token-level
+            streaming.
 
         Args:
             input: Graph input.
@@ -3444,7 +3444,6 @@ class Pregel(
             scope=parent_ns,
             is_async=False,
         )
-        values_t = cast(ValuesTransformer, mux.transformer_by_key("values"))
         graph_iter = iter(
             self.stream(
                 input,
@@ -3456,7 +3455,7 @@ class Pregel(
                 interrupt_after=interrupt_after,
             )
         )
-        return GraphRunStream(graph_iter, mux, values_t)
+        return GraphRunStream(graph_iter, mux)
 
     async def astream_v2(
         self,
@@ -3478,11 +3477,9 @@ class Pregel(
             `astream(stream_mode="messages")` inside a node of an
             `astream_v2` run drops `on_llm_new_token` chunks because
             the outer v2 handler reroutes `BaseChatModel.invoke`
-            through the v2 event protocol. The inner stream still
-            yields a finalized message at end-of-call. Use
-            `astream_v2` for the inner graph as well, or call
-            `chat_model.astream(...)` explicitly inside the node, to
-            get token-level streaming.
+            through the v2 event protocol. Use `astream_v2` for the
+            inner graph as well, or call `chat_model.astream(...)`
+            explicitly, to get token-level streaming.
 
         Args:
             input: Graph input.
@@ -3511,7 +3508,6 @@ class Pregel(
             scope=parent_ns,
             is_async=True,
         )
-        values_t = cast(ValuesTransformer, mux.transformer_by_key("values"))
         graph_aiter = self.astream(
             input,
             patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
@@ -3521,7 +3517,7 @@ class Pregel(
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
         ).__aiter__()
-        return AsyncGraphRunStream(graph_aiter, mux, values_t)
+        return AsyncGraphRunStream(graph_aiter, mux)
 
     @overload
     def invoke(

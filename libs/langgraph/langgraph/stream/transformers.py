@@ -28,10 +28,9 @@ _logger = logging.getLogger(__name__)
 class ValuesTransformer(StreamTransformer):
     """Capture values events as a drainable stream of state snapshots.
 
-    Keeps `_latest` / `_interrupted` / `_interrupts` as scalar state
-    regardless of whether the log has a subscriber — so `run.output()`
-    and `run.interrupted` work without forcing the caller to iterate
-    `run.values`. Log pushes are silent no-ops when unsubscribed.
+    Provides the `run.values` projection. `run.output`,
+    `run.interrupted` and `run.interrupts` are tracked directly
+    by the run stream and do not depend on this transformer.
 
     Native transformer — projection keys are exposed as direct
     attributes on the run stream (e.g. `run.values`).
@@ -39,9 +38,9 @@ class ValuesTransformer(StreamTransformer):
     Only values events at the run's own level are captured; snapshots
     from deeper subgraphs are left in the main event log but excluded
     from the projection. "Own level" is defined by `scope`, which
-    `stream_v2` / `astream_v2` populate from the caller's checkpoint
-    namespace so that a nested `stream_v2` call still sees its own
-    root snapshots.
+    `stream_v2` / `astream_v2` populate from the caller's
+    checkpoint namespace so that a nested `stream_v2` call still
+    sees its own root snapshots.
     """
 
     _native = True
@@ -619,17 +618,10 @@ class SubgraphTransformer(_TasksLifecycleBase):
         try:
             child_mux = self._mux._make_child(ns)
         except RuntimeError:
-            # Mux wasn't built from factories — no mini-mux navigation
-            # available. Skip; LifecycleTransformer still tracks the
-            # subgraph via the flat event stream.
-            return
-        values_t = child_mux.transformer_by_key("values")
-        if not isinstance(values_t, ValuesTransformer):
             return
         handle_cls = AsyncSubgraphRunStream if child_mux.is_async else SubgraphRunStream
         handle = handle_cls(
             mux=child_mux,
-            values_transformer=values_t,
             path=ns,
             graph_name=graph_name,
             trigger_call_id=trigger_call_id,
@@ -700,7 +692,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
         else:
             await handle._mux.aclose()
 
-    def _child_mux_for_event(self, event: ProtocolEvent) -> StreamMux | None:
+    def _handle_for_event(
+        self, event: ProtocolEvent
+    ) -> SubgraphRunStream | AsyncSubgraphRunStream | None:
         ns = tuple(event["params"]["namespace"])
         depth = len(self.scope)
         if len(ns) < depth + 1:
@@ -708,22 +702,21 @@ class SubgraphTransformer(_TasksLifecycleBase):
         handle = self._handles.get(ns[: depth + 1])
         if handle is None or handle._mux is None or handle._mux._events._closed:
             return None
-        return handle._mux
+        return handle
 
     def process(self, event: ProtocolEvent) -> bool:
-        # Discover / update terminal status before forwarding so a
-        # `started` handle exists by the time the child mini-mux sees
-        # its own first event.
+        # Run tasks bookkeeping first so a `started` handle exists
+        # by the time we forward the event to the child mini-mux.
         keep = super().process(event)
-        child_mux = self._child_mux_for_event(event)
-        if child_mux is not None:
-            child_mux.push(event)
+        handle = self._handle_for_event(event)
+        if handle is not None:
+            handle._observe_event(event)
+            handle._mux.push(event)
         return keep
 
     async def aprocess(self, event: ProtocolEvent) -> bool:
-        # Async counterpart to `process`: repeat the tasks bookkeeping
-        # here instead of delegating to `process`, so child mini-muxes
-        # receive events through their async lane.
+        # Async counterpart: repeats the tasks bookkeeping here so
+        # child mini-muxes receive events through their async lane.
         if event["method"] == "tasks":
             ns = tuple(event["params"]["namespace"])
             data = event["params"]["data"]
@@ -735,9 +728,10 @@ class SubgraphTransformer(_TasksLifecycleBase):
             keep = False
         else:
             keep = True
-        child_mux = self._child_mux_for_event(event)
-        if child_mux is not None:
-            await child_mux.apush(event)
+        handle = self._handle_for_event(event)
+        if handle is not None:
+            handle._observe_event(event)
+            await handle._mux.apush(event)
         return keep
 
     def _complete_open_handles(self) -> BaseException | None:
