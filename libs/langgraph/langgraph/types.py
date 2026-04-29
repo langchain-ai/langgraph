@@ -4,6 +4,7 @@ import sys
 from collections import deque
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import asdict, dataclass
+from datetime import timedelta
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -67,6 +68,7 @@ __all__ = (
     "CheckpointPayload",
     "DebugPayload",
     "RetryPolicy",
+    "TimeoutPolicy",
     "CachePolicy",
     "Interrupt",
     "StateUpdate",
@@ -423,6 +425,39 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns `True` for exceptions that should trigger a retry."""
 
 
+@dataclass(**_DC_KWARGS)
+class TimeoutPolicy:
+    """Configuration for timing out node attempts.
+
+    !!! note "Cooperative cancellation"
+
+        Timeouts rely on asyncio cancellation. If your node uses synchronous
+        time.sleep() or other CPU-bound work that blocks the GIL, the timeout will not
+        be fired until after the event loop has been released.
+
+    !!! note "Inline callback dispatch"
+
+        Under `refresh_on="auto"`, an internal handler refreshes the timeout on any
+        callback event that occurs in the execution of the node or its nested descendants.
+    """
+
+    run_timeout: float | timedelta | None = None
+    """Hard wall-clock cap (in seconds) for a single node attempt.
+
+    This timeout is never refreshed by progress signals or `runtime.heartbeat()`.
+    """
+
+    idle_timeout: float | timedelta | None = None
+    """Maximum time (in seconds) a single node attempt may go without observable progress."""
+
+    refresh_on: Literal["auto", "heartbeat"] = "auto"
+    """Which signals refresh `idle_timeout`.
+
+    `"auto"` refreshes on standard graph progress signals and explicit heartbeats.
+    `"heartbeat"` refreshes only on explicit `runtime.heartbeat()` calls.
+    """
+
+
 KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., str | bytes])
 
 
@@ -548,6 +583,7 @@ class PregelExecutableTask:
     path: tuple[str | int | tuple, ...]
     writers: Sequence[Runnable] = ()
     subgraphs: Sequence[PregelProtocol] = ()
+    timeout: TimeoutPolicy | None = None
 
 
 class StateSnapshot(NamedTuple):

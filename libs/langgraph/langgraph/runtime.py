@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, Generic, cast
 
@@ -77,10 +78,14 @@ class ServerInfo:
 def _no_op_stream_writer(_: Any) -> None: ...
 
 
+def _no_op_heartbeat() -> None: ...
+
+
 class _RuntimeOverrides(TypedDict, Generic[ContextT], total=False):
     context: ContextT
     store: BaseStore | None
     stream_writer: StreamWriter
+    heartbeat: Callable[[], None]
     previous: Any
     execution_info: ExecutionInfo
     server_info: ServerInfo | None
@@ -171,6 +176,16 @@ class Runtime(Generic[ContextT]):
     stream_writer: StreamWriter = field(default=_no_op_stream_writer)
     """Function that writes to the custom stream."""
 
+    heartbeat: Callable[[], None] = field(default=_no_op_heartbeat)
+    """Record progress for the current node's `idle_timeout`.
+
+    Call this from inside long-running work that does not naturally emit
+    writes, stream chunks, child tasks, or LangChain callback events, to
+    prevent the node from being treated as idle. It is also the only
+    progress signal honored under `TimeoutPolicy(refresh_on="heartbeat")`.
+    Outside an idle-timed attempt this is a no-op.
+    """
+
     previous: Any = field(default=None)
     """The previous return value for the given thread.
     
@@ -196,6 +211,9 @@ class Runtime(Generic[ContextT]):
             stream_writer=other.stream_writer
             if other.stream_writer is not _no_op_stream_writer
             else self.stream_writer,
+            heartbeat=other.heartbeat
+            if other.heartbeat is not _no_op_heartbeat
+            else self.heartbeat,
             previous=self.previous if other.previous is None else other.previous,
             execution_info=other.execution_info or self.execution_info,
             server_info=other.server_info or self.server_info,
@@ -222,6 +240,7 @@ DEFAULT_RUNTIME = Runtime(
     context=None,
     store=None,
     stream_writer=_no_op_stream_writer,
+    heartbeat=_no_op_heartbeat,
     previous=None,
     execution_info=None,
 )
