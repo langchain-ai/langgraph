@@ -29,6 +29,26 @@ def _exclude_keys(config: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in config.items() if k not in EXCLUDED_METADATA_KEYS}
 
 
+class _ExplodingAsyncLock:
+    async def __aenter__(self):
+        raise AssertionError("instance lock should not be used in pool mode")
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _TrackingAsyncLock:
+    def __init__(self) -> None:
+        self.enter_count = 0
+
+    async def __aenter__(self):
+        self.enter_count += 1
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 @asynccontextmanager
 async def _pool_saver():
     """Fixture for pool mode testing."""
@@ -129,6 +149,32 @@ async def _shallow_saver():
             row_factory=dict_row,
         ) as conn:
             checkpointer = AsyncShallowPostgresSaver(conn)
+            await checkpointer.setup()
+            yield checkpointer
+    finally:
+        # drop unique db
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+@asynccontextmanager
+async def _shallow_pool_saver():
+    """Fixture for shallow saver pool mode testing."""
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncConnectionPool(
+            DEFAULT_POSTGRES_URI + database,
+            max_size=10,
+            kwargs={"autocommit": True, "row_factory": dict_row},
+        ) as pool:
+            checkpointer = AsyncShallowPostgresSaver(pool)
             await checkpointer.setup()
             yield checkpointer
     finally:
@@ -371,3 +417,44 @@ async def test_get_checkpoint_no_channel_values(
 
         checkpoint = await saver.aget_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+async def test_pool_saver_does_not_use_instance_lock(test_data) -> None:
+    async with _pool_saver() as saver:
+        saver.lock = _ExplodingAsyncLock()  # type: ignore[assignment]
+        config = await saver.aput(
+            test_data["configs"][0],
+            test_data["checkpoints"][0],
+            test_data["metadata"][0],
+            {},
+        )
+        checkpoint = await saver.aget_tuple(config)
+        assert checkpoint is not None
+
+
+async def test_base_saver_uses_instance_lock(test_data) -> None:
+    async with _base_saver() as saver:
+        tracking_lock = _TrackingAsyncLock()
+        saver.lock = tracking_lock  # type: ignore[assignment]
+        config = await saver.aput(
+            test_data["configs"][0],
+            test_data["checkpoints"][0],
+            test_data["metadata"][0],
+            {},
+        )
+        checkpoint = await saver.aget_tuple(config)
+        assert checkpoint is not None
+        assert tracking_lock.enter_count >= 2
+
+
+async def test_shallow_pool_saver_does_not_use_instance_lock(test_data) -> None:
+    async with _shallow_pool_saver() as saver:
+        saver.lock = _ExplodingAsyncLock()  # type: ignore[assignment]
+        config = await saver.aput(
+            test_data["configs"][0],
+            test_data["checkpoints"][0],
+            test_data["metadata"][0],
+            {},
+        )
+        checkpoint = await saver.aget_tuple(config)
+        assert checkpoint is not None
