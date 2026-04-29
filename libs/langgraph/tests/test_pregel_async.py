@@ -215,6 +215,7 @@ async def test_checkpoint_errors() -> None:
             pass
 
 
+@NEEDS_CONTEXTVARS
 async def test_request_drain_allows_inflight_acall_scheduling(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
