@@ -129,6 +129,10 @@ class _Emitter:
     def __init__(self, json_mode: bool) -> None:
         self._json = json_mode
 
+    @property
+    def json_mode(self) -> bool:
+        return self._json
+
     # -- Structured event helpers ------------------------------------------
 
     def step(self, step: int, message: str, **extra: object) -> None:
@@ -677,7 +681,7 @@ def _poll_revision_status(
     deadline = time.time() + timeout_seconds
     start_time = time.monotonic()
     last_heartbeat = start_time
-    json_mode = em._json
+    json_mode = em.json_mode
     with Progress(
         message=progress_message, elapsed=True, json_mode=json_mode
     ) as set_progress:
@@ -788,11 +792,12 @@ _BYTES_PER_MIB = 1_048_576
 
 
 class _ProgressReader:
-    """File-like wrapper that displays upload progress via click."""
+    """File-like wrapper that reports upload progress via the emitter."""
 
-    def __init__(self, fobj, file_size: int):
+    def __init__(self, fobj, file_size: int, emitter: "_Emitter"):
         self._fobj = fobj
         self._file_size = file_size
+        self._emitter = emitter
         self._uploaded = 0
 
     def read(self, size=-1):
@@ -800,11 +805,12 @@ class _ProgressReader:
         if data:
             self._uploaded += len(data)
             pct = (
-                int(self._uploaded * 100 / self._file_size) if self._file_size else 100
+                int(self._uploaded * 100 / self._file_size)
+                if self._file_size
+                else 100
             )
-            click.echo(
-                f"\r   Uploading ({self._file_size / _BYTES_PER_MIB:.1f} MB)... {pct}%",
-                nl=False,
+            self._emitter.upload_progress(
+                self._file_size / _BYTES_PER_MIB, pct
             )
         return data
 
@@ -818,22 +824,9 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
     import urllib.request
 
     em = _get_emitter()
-    size_mb = file_size / _BYTES_PER_MIB
 
     with open(file_path, "rb") as f:
-        reader = _ProgressReader(f, file_size)
-        if em._json:
-
-            def _json_read(sz=-1):
-                data = f.read(sz)
-                if data:
-                    reader._uploaded += len(data)
-                    pct = int(reader._uploaded * 100 / file_size) if file_size else 100
-                    em.upload_progress(size_mb, pct)
-                return data
-
-            reader.read = _json_read
-
+        reader = _ProgressReader(f, file_size, em)
         req = urllib.request.Request(
             signed_url,
             data=reader,
@@ -851,7 +844,7 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
             raise click.ClickException(
                 f"Upload failed with status {err.code}: {detail}"
             ) from None
-    if not em._json:
+    if not em.json_mode:
         click.echo()
 
 
@@ -1507,7 +1500,7 @@ def _deploy_cmd(
     # -- 1. Preflight --
     validate_deploy_commands(install_command, build_command)
     config_json = langgraph_cli.config.validate_config_file(config)
-    warn_non_wolfi_distro(config_json)
+    warn_non_wolfi_distro(config_json, emit=em.note)
 
     env_vars = _parse_env_from_config(config_json, config)
 
@@ -1519,12 +1512,13 @@ def _deploy_cmd(
             name = default_name
         else:
             name = click.prompt("Deployment name", default=default_name)
+    if name and not deployment_id:
+        name = normalize_name(name)
+        if not no_input:
             env_path = _resolve_env_path(config_json, config)
             if env_path is not None:
                 set_key(str(env_path), _DEPLOYMENT_NAME_ENV, name)
-                click.echo(f"Saved deployment name to {env_path}")
-    if name and not deployment_id:
-        name = normalize_name(name)
+                em.info(f"Saved deployment name to {env_path}")
 
     secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 
