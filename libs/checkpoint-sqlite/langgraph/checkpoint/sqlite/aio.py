@@ -589,6 +589,51 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             )
             await self.conn.commit()
 
+    def delete_for_runs(self, run_ids: Sequence[str]) -> None:
+        """Delete all checkpoints and writes associated with the given run IDs.
+
+        Args:
+            run_ids: The run IDs whose checkpoints should be deleted.
+        """
+        try:
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface. "
+                    "For example, use `await checkpointer.adelete_for_runs(...)`."
+                )
+        except RuntimeError:
+            pass
+        return asyncio.run_coroutine_threadsafe(
+            self.adelete_for_runs(run_ids), self.loop
+        ).result()
+
+    async def adelete_for_runs(self, run_ids: Sequence[str]) -> None:
+        """Delete all checkpoints and writes associated with the given run IDs.
+
+        Args:
+            run_ids: The run IDs whose checkpoints should be deleted.
+        """
+        if not run_ids:
+            return
+        await self.setup()
+        placeholders = ",".join("?" * len(run_ids))
+        params = list(run_ids)
+        async with self.lock, self.conn.cursor() as cur:
+            await cur.execute(
+                f"""DELETE FROM writes
+                WHERE (thread_id, checkpoint_ns, checkpoint_id) IN (
+                    SELECT thread_id, checkpoint_ns, checkpoint_id FROM checkpoints
+                    WHERE json_extract(CAST(metadata AS TEXT), '$.run_id') IN ({placeholders})
+                )""",
+                params,
+            )
+            await cur.execute(
+                f"DELETE FROM checkpoints WHERE json_extract(CAST(metadata AS TEXT), '$.run_id') IN ({placeholders})",
+                params,
+            )
+            await self.conn.commit()
+
     def get_next_version(self, current: str | None, channel: None) -> str:
         """Generate the next version ID for a channel.
 

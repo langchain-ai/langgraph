@@ -493,6 +493,30 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 (str(thread_id),),
             )
 
+    def delete_for_runs(self, run_ids: Sequence[str]) -> None:
+        """Delete all checkpoints and writes associated with the given run IDs.
+
+        Args:
+            run_ids: The run IDs whose checkpoints should be deleted.
+        """
+        if not run_ids:
+            return
+        placeholders = ",".join("?" * len(run_ids))
+        params = list(run_ids)
+        with self.cursor() as cur:
+            cur.execute(
+                f"""DELETE FROM writes
+                WHERE (thread_id, checkpoint_ns, checkpoint_id) IN (
+                    SELECT thread_id, checkpoint_ns, checkpoint_id FROM checkpoints
+                    WHERE json_extract(CAST(metadata AS TEXT), '$.run_id') IN ({placeholders})
+                )""",
+                params,
+            )
+            cur.execute(
+                f"DELETE FROM checkpoints WHERE json_extract(CAST(metadata AS TEXT), '$.run_id') IN ({placeholders})",
+                params,
+            )
+
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database asynchronously.
 

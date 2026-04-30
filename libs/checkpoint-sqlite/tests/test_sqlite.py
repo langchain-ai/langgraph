@@ -1,4 +1,5 @@
 from typing import Any, cast
+from uuid import uuid4
 
 import pytest
 from langchain_core.runnables import RunnableConfig
@@ -307,3 +308,104 @@ class TestSqliteSaver:
             # Nested digit-starting key via dotted path
             results = list(saver.list(None, filter={"user.123abc": "ok2"}))
             assert len(results) == 1
+
+    def test_delete_for_runs_removes_target_run(self) -> None:
+        """delete_for_runs removes checkpoints for the specified run_id."""
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            run1, run2 = str(uuid4()), str(uuid4())
+            tid = "thread-dfr-1"
+
+            cfg1: RunnableConfig = {
+                "configurable": {"thread_id": tid, "checkpoint_ns": ""},
+                "metadata": {"run_id": run1},
+            }
+            cfg2: RunnableConfig = {
+                "configurable": {"thread_id": tid, "checkpoint_ns": ""},
+                "metadata": {"run_id": run2},
+            }
+            cp1 = empty_checkpoint()
+            cp2 = empty_checkpoint()
+            saver.put(cfg1, cp1, {"source": "input", "step": 0}, {})
+            saver.put(cfg2, cp2, {"source": "input", "step": 0}, {})
+
+            saver.delete_for_runs([run1])
+
+            remaining = list(saver.list({"configurable": {"thread_id": tid}}))
+            run_ids = {t.metadata.get("run_id") for t in remaining}
+            assert run1 not in run_ids
+            assert run2 in run_ids
+
+    def test_delete_for_runs_removes_writes(self) -> None:
+        """delete_for_runs also removes pending writes for deleted checkpoints."""
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            run1 = str(uuid4())
+            tid = "thread-dfr-2"
+
+            cfg: RunnableConfig = {
+                "configurable": {"thread_id": tid, "checkpoint_ns": ""},
+                "metadata": {"run_id": run1},
+            }
+            cp = empty_checkpoint()
+            stored = saver.put(cfg, cp, {"source": "input", "step": 0}, {})
+            saver.put_writes(stored, [("channel", "value")], str(uuid4()))
+
+            pre = saver.get_tuple(stored)
+            assert pre is not None and len(pre.pending_writes) == 1
+
+            saver.delete_for_runs([run1])
+
+            post = saver.get_tuple(stored)
+            assert post is None
+
+    def test_delete_for_runs_empty_noop(self) -> None:
+        """delete_for_runs with an empty list does nothing."""
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            saver.delete_for_runs([])
+
+    def test_delete_for_runs_nonexistent_noop(self) -> None:
+        """delete_for_runs with unknown run_ids does nothing."""
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            saver.delete_for_runs([str(uuid4())])
+
+    def test_delete_for_runs_multiple(self) -> None:
+        """delete_for_runs removes all checkpoints for each run_id in the list."""
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            run1, run2, run3 = str(uuid4()), str(uuid4()), str(uuid4())
+            tid = "thread-dfr-3"
+
+            for run_id in (run1, run2, run3):
+                cfg: RunnableConfig = {
+                    "configurable": {"thread_id": tid, "checkpoint_ns": ""},
+                    "metadata": {"run_id": run_id},
+                }
+                saver.put(cfg, empty_checkpoint(), {"source": "input", "step": 0}, {})
+
+            saver.delete_for_runs([run1, run2])
+
+            remaining = list(saver.list({"configurable": {"thread_id": tid}}))
+            run_ids = {t.metadata.get("run_id") for t in remaining}
+            assert run1 not in run_ids
+            assert run2 not in run_ids
+            assert run3 in run_ids
+
+    def test_delete_for_runs_across_namespaces(self) -> None:
+        """delete_for_runs deletes across all checkpoint namespaces."""
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            run1 = str(uuid4())
+            tid = "thread-dfr-4"
+
+            for ns in ("", "child:1"):
+                cfg: RunnableConfig = {
+                    "configurable": {"thread_id": tid, "checkpoint_ns": ns},
+                    "metadata": {"run_id": run1},
+                }
+                saver.put(cfg, empty_checkpoint(), {"source": "input", "step": 0}, {})
+
+            saver.delete_for_runs([run1])
+
+            for ns in ("", "child:1"):
+                results = list(
+                    saver.list({"configurable": {"thread_id": tid, "checkpoint_ns": ns}})
+                )
+                run_ids = {t.metadata.get("run_id") for t in results}
+                assert run1 not in run_ids

@@ -188,3 +188,107 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    @pytest.mark.asyncio
+    async def test_adelete_for_runs_removes_target_run(self) -> None:
+        """adelete_for_runs removes checkpoints for the specified run_id."""
+        from uuid import uuid4
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            run1, run2 = str(uuid4()), str(uuid4())
+            tid = "thread-adfr-1"
+
+            for run_id in (run1, run2):
+                cfg: RunnableConfig = {
+                    "configurable": {"thread_id": tid, "checkpoint_ns": ""},
+                    "metadata": {"run_id": run_id},
+                }
+                await saver.aput(cfg, empty_checkpoint(), {"source": "input", "step": 0}, {})
+
+            await saver.adelete_for_runs([run1])
+
+            remaining = [
+                t async for t in saver.alist({"configurable": {"thread_id": tid}})
+            ]
+            run_ids = {t.metadata.get("run_id") for t in remaining}
+            assert run1 not in run_ids
+            assert run2 in run_ids
+
+    @pytest.mark.asyncio
+    async def test_adelete_for_runs_removes_writes(self) -> None:
+        """adelete_for_runs also removes pending writes for deleted checkpoints."""
+        from uuid import uuid4
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            run1 = str(uuid4())
+            tid = "thread-adfr-2"
+
+            cfg: RunnableConfig = {
+                "configurable": {"thread_id": tid, "checkpoint_ns": ""},
+                "metadata": {"run_id": run1},
+            }
+            stored = await saver.aput(cfg, empty_checkpoint(), {"source": "input", "step": 0}, {})
+            await saver.aput_writes(stored, [("channel", "value")], str(uuid4()))
+
+            pre = await saver.aget_tuple(stored)
+            assert pre is not None and len(pre.pending_writes) == 1
+
+            await saver.adelete_for_runs([run1])
+
+            post = await saver.aget_tuple(stored)
+            assert post is None
+
+    @pytest.mark.asyncio
+    async def test_adelete_for_runs_empty_noop(self) -> None:
+        """adelete_for_runs with an empty list does nothing."""
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            await saver.adelete_for_runs([])
+
+    @pytest.mark.asyncio
+    async def test_adelete_for_runs_multiple(self) -> None:
+        """adelete_for_runs removes all checkpoints for each run_id in the list."""
+        from uuid import uuid4
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            run1, run2, run3 = str(uuid4()), str(uuid4()), str(uuid4())
+            tid = "thread-adfr-3"
+
+            for run_id in (run1, run2, run3):
+                cfg: RunnableConfig = {
+                    "configurable": {"thread_id": tid, "checkpoint_ns": ""},
+                    "metadata": {"run_id": run_id},
+                }
+                await saver.aput(cfg, empty_checkpoint(), {"source": "input", "step": 0}, {})
+
+            await saver.adelete_for_runs([run1, run2])
+
+            remaining = [
+                t async for t in saver.alist({"configurable": {"thread_id": tid}})
+            ]
+            run_ids = {t.metadata.get("run_id") for t in remaining}
+            assert run1 not in run_ids
+            assert run2 not in run_ids
+            assert run3 in run_ids
+
+    @pytest.mark.asyncio
+    async def test_adelete_for_runs_across_namespaces(self) -> None:
+        """adelete_for_runs deletes across all checkpoint namespaces."""
+        from uuid import uuid4
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            run1 = str(uuid4())
+            tid = "thread-adfr-4"
+
+            for ns in ("", "child:1"):
+                cfg: RunnableConfig = {
+                    "configurable": {"thread_id": tid, "checkpoint_ns": ns},
+                    "metadata": {"run_id": run1},
+                }
+                await saver.aput(cfg, empty_checkpoint(), {"source": "input", "step": 0}, {})
+
+            await saver.adelete_for_runs([run1])
+
+            for ns in ("", "child:1"):
+                results = [
+                    t async for t in saver.alist(
+                        {"configurable": {"thread_id": tid, "checkpoint_ns": ns}}
+                    )
+                ]
+                run_ids = {t.metadata.get("run_id") for t in results}
+                assert run1 not in run_ids
