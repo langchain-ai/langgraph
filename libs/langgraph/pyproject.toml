@@ -81,6 +81,7 @@ dev = [
 
 
 [tool.uv.sources]
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", branch = "nh/streaming-for-alpha-release", subdirectory = "libs/core" }
 langgraph-prebuilt = { path = "../prebuilt", editable = true }
 langgraph-checkpoint = { path = "../checkpoint", editable = true }
 langgraph-checkpoint-sqlite = { path = "../checkpoint-sqlite", editable = true }
