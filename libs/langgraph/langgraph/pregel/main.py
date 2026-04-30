@@ -40,7 +40,9 @@ from langchain_core.runnables.config import (
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
 )
+from langchain_core._event_streaming import _AsyncEventsResult
 from langchain_core.runnables.graph import Graph
+from langchain_core.runnables.schema import StreamEvent
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -3447,7 +3449,7 @@ class Pregel(
                 await asyncio.shield(run_manager.on_chain_error(e))
             raise
 
-    def stream_v2(
+    def _pregel_stream_v3(
         self,
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
@@ -3457,42 +3459,7 @@ class Pregel(
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> Any:
-        """Start a sync v2 streaming run driven by transformer projections.
-
-        Builds a `StreamMux` from the built-in transformers, this
-        graph's compile-time `stream_transformers`, and any additional
-        `transformers=` supplied at the call site. Returns a
-        `GraphRunStream` that the caller drives by iterating any
-        projection — no background thread.
-
-        `run.output`, `run.interrupted` and `run.interrupts` work
-        regardless of which transformers are registered.
-
-        Note:
-            Nesting v1 `stream(stream_mode="messages")` inside a node
-            of a `stream_v2` run is not fully supported. The outer v2
-            messages handler reroutes `BaseChatModel.invoke` through
-            the v2 event protocol, so the inner v1 handler does not see
-            `on_llm_new_token` chunks. The inner stream still yields a
-            finalized message via `on_llm_end`. Use `stream_v2` for
-            the inner graph as well, or call
-            `chat_model.stream(...)` explicitly, to get token-level
-            streaming.
-
-        Args:
-            input: Graph input.
-            config: Optional runnable config forwarded to the graph.
-            interrupt_before: Nodes to interrupt before, if any.
-            interrupt_after: Nodes to interrupt after, if any.
-            control: Optional run control used to request cooperative drain.
-            transformers: Extra transformer classes or configured factories
-                appended after compile-time `stream_transformers`. Factories
-                are called as `factory(scope)` so they can propagate to
-                subgraph scopes.
-
-        Returns:
-            A `GraphRunStream` the caller iterates to drive the run.
-        """
+        """Internal v3 sync streaming implementation. Public entry: stream_events(version='v3')."""
         parent_ns = _resolve_parent_ns(self.config, config)
         compiled_factories = _normalize_stream_transformer_factories(
             self.stream_transformers
@@ -3524,7 +3491,7 @@ class Pregel(
         )
         return GraphRunStream(graph_iter, mux)
 
-    async def astream_v2(
+    async def _apregel_stream_v3(
         self,
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
@@ -3534,32 +3501,7 @@ class Pregel(
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> Any:
-        """Async counterpart to `stream_v2`.
-
-        Returns an `AsyncGraphRunStream` whose projections can be awaited
-        concurrently; each subscribed cursor drives the pump when its
-        buffer is empty.
-
-        Note:
-            Same nesting limitation as `stream_v2`: nesting v1
-            `astream(stream_mode="messages")` inside a node of an
-            `astream_v2` run drops `on_llm_new_token` chunks because
-            the outer v2 handler reroutes `BaseChatModel.invoke`
-            through the v2 event protocol. Use `astream_v2` for the
-            inner graph as well, or call `chat_model.astream(...)`
-            explicitly, to get token-level streaming.
-
-        Args:
-            input: Graph input.
-            config: Optional runnable config forwarded to the graph.
-            interrupt_before: Nodes to interrupt before, if any.
-            interrupt_after: Nodes to interrupt after, if any.
-            control: Optional run control used to request cooperative drain.
-            transformers: Extra transformer classes or configured factories
-                appended after compile-time `stream_transformers`. Factories
-                are called as `factory(scope)` so they can propagate to
-                subgraph scopes.
-        """
+        """Internal v3 async streaming implementation. Public entry: astream_events(version='v3')."""
         parent_ns = _resolve_parent_ns(self.config, config)
         compiled_factories = _normalize_stream_transformer_factories(
             self.stream_transformers
@@ -3588,6 +3530,126 @@ class Pregel(
             control=control,
         ).__aiter__()
         return AsyncGraphRunStream(graph_aiter, mux)
+
+    @overload
+    def stream_events(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v1", "v2"] = "v2",
+        **kwargs: Any,
+    ) -> Iterator[StreamEvent]: ...
+
+    @overload
+    def stream_events(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v3"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+    ) -> Any: ...
+
+    def stream_events(  # type: ignore[override]
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v1", "v2", "v3"] = "v2",
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Stream events from this graph.
+
+        For `version="v1"` / `"v2"`, yields `StreamEvent` dicts (see
+        `Runnable.stream_events`). For `version="v3"`, returns a
+        `GraphRunStream` exposing typed projections.
+
+        Args:
+            input: Graph input.
+            config: Optional runnable config.
+            version: Streaming-event schema version. `"v3"` selects the
+                content-block-centric streaming protocol.
+            interrupt_before: Nodes to interrupt before, if any. Only used
+                for `version="v3"`.
+            interrupt_after: Nodes to interrupt after, if any. Only used
+                for `version="v3"`.
+            control: Optional run control. Only used for `version="v3"`.
+            transformers: Extra transformer factories. Only used for
+                `version="v3"`.
+            **kwargs: Forwarded to the v1/v2 path.
+
+        Returns:
+            For `version="v3"`, a `GraphRunStream`. Otherwise an
+            `Iterator[StreamEvent]`.
+        """
+        if version == "v3":
+            return self._pregel_stream_v3(
+                input,
+                config,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                control=control,
+                transformers=transformers,
+            )
+        return super().stream_events(input, config, version=version, **kwargs)
+
+    @overload
+    def astream_events(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v1", "v2"] = "v2",
+        **kwargs: Any,
+    ) -> _AsyncEventsResult: ...
+
+    @overload
+    def astream_events(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v3"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+    ) -> _AsyncEventsResult: ...
+
+    def astream_events(  # type: ignore[override]
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v1", "v2", "v3"] = "v2",
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
+    ) -> _AsyncEventsResult:
+        """Async variant of `stream_events`. See `stream_events` for full docs."""
+        if version == "v3":
+            return _AsyncEventsResult(
+                awaitable=self._apregel_stream_v3(
+                    input,
+                    config,
+                    interrupt_before=interrupt_before,
+                    interrupt_after=interrupt_after,
+                    control=control,
+                    transformers=transformers,
+                )
+            )
+        iterator = super().astream_events(input, config, version=version, **kwargs)
+        return _AsyncEventsResult(iterator=iterator)
 
     @overload
     def invoke(
