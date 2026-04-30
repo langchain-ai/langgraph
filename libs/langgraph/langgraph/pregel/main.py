@@ -378,7 +378,7 @@ def _collect_stream_modes(mux: Any) -> list[StreamMode]:
     """Return the union of `required_stream_modes` across registered transformers.
 
     Transformers declare the stream modes they need to function, and
-    `stream_v2` asks the graph for exactly that union — no hardcoded
+    `stream_events(version="v3")` asks the graph for exactly that union — no hardcoded
     default set. If zero transformers declare a given mode, the graph
     does not stream events for it.
     """
@@ -408,14 +408,14 @@ def _normalize_stream_transformer_factories(
     for spec in specs or ():
         if isinstance(spec, StreamTransformer):
             raise TypeError(
-                "stream_v2 transformers must be scope-aware callables, "
+                "stream_events(version='v3') transformers must be scope-aware callables, "
                 f"got pre-built instance {type(spec).__name__}. Pass the "
                 "transformer class or a factory like "
                 "`lambda scope: MyTransformer(scope, ...)`."
             )
         if not callable(spec):
             raise TypeError(
-                "stream_v2 transformers must be scope-aware callables, "
+                "stream_events(version='v3') transformers must be scope-aware callables, "
                 f"got {type(spec).__name__}."
             )
 
@@ -4145,7 +4145,7 @@ def _resolve_parent_ns(
 ) -> tuple[str, ...]:
     """Return the checkpoint namespace the caller is running under.
 
-    `stream_v2` uses this to scope its native projections
+    `stream_events(version="v3")` uses this to scope its native projections
     (`ValuesTransformer`, `MessagesTransformer`) to events emitted at
     the run's own level. A root call resolves to `()`; a call made
     from inside a node carries the outer graph's task namespace so the

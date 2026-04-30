@@ -349,7 +349,7 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
         tags: list[str] | None = None,
         **kwargs: Any,
     ) -> Any:
-        """Forward a protocol event from `stream_v2` as a messages stream part.
+        """Forward a protocol event from `stream_events(version="v3")` as a messages stream part.
 
         Fires once per `MessagesData` event (`message-start`, per-block
         `content-block-*`, `message-finish`). The transformer layer

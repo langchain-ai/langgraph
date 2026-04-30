@@ -1,7 +1,7 @@
 """Streaming infrastructure for LangGraph.
 
-Compile a graph with `transformers=[...]` and call `graph.stream_v2()` /
-`graph.astream_v2()` to drive a transformer pipeline that projects the
+Compile a graph with `transformers=[...]` and call `graph.stream_events(version="v3")` /
+`graph.astream_events(version="v3")` to drive a transformer pipeline that projects the
 graph's raw events into ergonomic per-channel streams.
 """
 
