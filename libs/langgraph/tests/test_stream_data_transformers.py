@@ -4,7 +4,7 @@ These transformers capture raw protocol events for their respective stream
 modes and expose them as native projections on the run stream (run.custom,
 run.updates, run.checkpoints, run.debug, run.tasks). Tests dispatch synthetic
 protocol events through a StreamMux to isolate transformer logic; the final
-group exercises real graphs through stream_v2.
+group exercises real graphs through stream_events(version="v3").
 """
 
 from __future__ import annotations
@@ -478,7 +478,7 @@ def test_unrelated_events_ignored_by_all() -> None:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end: real graphs through stream_v2
+# End-to-end: real graphs through stream_events(version="v3")
 # ---------------------------------------------------------------------------
 
 
@@ -503,11 +503,10 @@ def _make_simple_graph() -> Any:
     return builder.compile()
 
 
-def test_stream_v2_custom_projection_opt_in() -> None:
+def test_stream_events_v3_custom_projection_opt_in() -> None:
     """run.custom surfaces get_stream_writer() payloads when opted in."""
     graph = _make_simple_graph()
-    run = graph.stream_v2(
-        {"value": "hello", "items": []}, transformers=[CustomTransformer]
+    run = graph.stream_events({"value": "hello", "items": []}, version="v3", transformers=[CustomTransformer]
     )
 
     custom_events = list(run.custom)
@@ -515,11 +514,10 @@ def test_stream_v2_custom_projection_opt_in() -> None:
     assert any(e.get("status") == "working" for e in custom_events)
 
 
-def test_stream_v2_custom_and_values_coexist() -> None:
+def test_stream_events_v3_custom_and_values_coexist() -> None:
     """Both run.custom and run.values work in the same run."""
     graph = _make_simple_graph()
-    run = graph.stream_v2(
-        {"value": "hello", "items": []}, transformers=[CustomTransformer]
+    run = graph.stream_events({"value": "hello", "items": []}, version="v3", transformers=[CustomTransformer]
     )
 
     custom_events = list(run.custom)
@@ -528,10 +526,10 @@ def test_stream_v2_custom_and_values_coexist() -> None:
     assert len(custom_events) >= 1
 
 
-def test_stream_v2_tasks_projection_opt_in() -> None:
+def test_stream_events_v3_tasks_projection_opt_in() -> None:
     """run.tasks surfaces raw task events when opted in via transformers=."""
     graph = _make_simple_graph()
-    run = graph.stream_v2({"value": "x", "items": []}, transformers=[TasksTransformer])
+    run = graph.stream_events({"value": "x", "items": []}, transformers=[TasksTransformer], version="v3")
 
     tasks_events = list(run.tasks)
     assert len(tasks_events) >= 1
@@ -539,10 +537,10 @@ def test_stream_v2_tasks_projection_opt_in() -> None:
     assert "my_node" in names
 
 
-def test_stream_v2_debug_projection_opt_in() -> None:
+def test_stream_events_v3_debug_projection_opt_in() -> None:
     """run.debug surfaces debug events when opted in via transformers=."""
     graph = _make_simple_graph()
-    run = graph.stream_v2({"value": "x", "items": []}, transformers=[DebugTransformer])
+    run = graph.stream_events({"value": "x", "items": []}, transformers=[DebugTransformer], version="v3")
 
     debug_events = list(run.debug)
     assert len(debug_events) >= 1
@@ -550,11 +548,10 @@ def test_stream_v2_debug_projection_opt_in() -> None:
     assert types & {"checkpoint", "task", "task_result"}
 
 
-def test_stream_v2_updates_projection_opt_in() -> None:
+def test_stream_events_v3_updates_projection_opt_in() -> None:
     """run.updates surfaces node output dicts when opted in via transformers=."""
     graph = _make_simple_graph()
-    run = graph.stream_v2(
-        {"value": "x", "items": []}, transformers=[UpdatesTransformer]
+    run = graph.stream_events({"value": "x", "items": []}, version="v3", transformers=[UpdatesTransformer]
     )
 
     updates = list(run.updates)
@@ -563,12 +560,10 @@ def test_stream_v2_updates_projection_opt_in() -> None:
     assert "my_node" in node_names
 
 
-def test_stream_v2_all_transformers_interleaved() -> None:
+def test_stream_events_v3_all_transformers_interleaved() -> None:
     """All five transformers registered together, consumed via interleave."""
     graph = _make_simple_graph()
-    run = graph.stream_v2(
-        {"value": "x", "items": []},
-        transformers=[
+    run = graph.stream_events({"value": "x", "items": []}, version="v3", transformers=[
             CustomTransformer,
             UpdatesTransformer,
             CheckpointsTransformer,
@@ -599,7 +594,7 @@ def test_stream_v2_all_transformers_interleaved() -> None:
     assert run.output["value"] == "x!"
 
 
-def test_stream_v2_all_transformers_with_checkpointer() -> None:
+def test_stream_events_v3_all_transformers_with_checkpointer() -> None:
     """All transformers with a checkpointer — run.checkpoints populated."""
     from langgraph.checkpoint.memory import InMemorySaver
 
@@ -609,9 +604,7 @@ def test_stream_v2_all_transformers_with_checkpointer() -> None:
     builder.add_edge("my_node", END)
     graph = builder.compile(checkpointer=InMemorySaver())
 
-    run = graph.stream_v2(
-        {"value": "x", "items": []},
-        config={"configurable": {"thread_id": "test-all"}},
+    run = graph.stream_events({"value": "x", "items": []}, version="v3", config={"configurable": {"thread_id": "test-all"}},
         transformers=[
             CustomTransformer,
             UpdatesTransformer,
@@ -637,7 +630,7 @@ def test_stream_v2_all_transformers_with_checkpointer() -> None:
     assert len(collected["custom"]) >= 1
 
 
-def test_stream_v2_checkpoints_projection_opt_in() -> None:
+def test_stream_events_v3_checkpoints_projection_opt_in() -> None:
     """run.checkpoints surfaces checkpoint data when opted in with a checkpointer."""
     from langgraph.checkpoint.memory import InMemorySaver
 
@@ -647,9 +640,7 @@ def test_stream_v2_checkpoints_projection_opt_in() -> None:
     builder.add_edge("my_node", END)
     graph = builder.compile(checkpointer=InMemorySaver())
 
-    run = graph.stream_v2(
-        {"value": "x", "items": []},
-        config={"configurable": {"thread_id": "test-ckpt-standalone"}},
+    run = graph.stream_events({"value": "x", "items": []}, version="v3", config={"configurable": {"thread_id": "test-ckpt-standalone"}},
         transformers=[CheckpointsTransformer],
     )
 
@@ -688,9 +679,7 @@ def test_tasks_and_lifecycle_coregistration_e2e() -> None:
     is present and suppressing them from the main log.
     """
     graph = _make_simple_graph()
-    run = graph.stream_v2(
-        {"value": "x", "items": []},
-        transformers=[TasksTransformer],
+    run = graph.stream_events({"value": "x", "items": []}, version="v3", transformers=[TasksTransformer],
     )
 
     tasks_events = list(run.tasks)

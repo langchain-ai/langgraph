@@ -199,7 +199,7 @@ class TestToolCallTransformerEndToEnd:
             }
 
         graph = _build_graph(caller, [streamer])
-        run = graph.stream_v2({"messages": []}, transformers=[ToolCallTransformer])
+        run = graph.stream_events({"messages": []}, transformers=[ToolCallTransformer], version="v3")
 
         tool_calls: list[ToolCallStream] = []
         for tc in run.tool_calls:
@@ -235,11 +235,11 @@ class TestToolCallTransformerEndToEnd:
         # Without ToolCallTransformer, no tool_calls projection is
         # exposed and no `tools` events flow through (required_stream_modes
         # omits it).
-        run_no_tc = graph.stream_v2({"messages": []})
+        run_no_tc = graph.stream_events({"messages": []}, version="v3")
         assert "tool_calls" not in run_no_tc._mux.extensions  # type: ignore[attr-defined]
 
         # With ToolCallTransformer, the projection is present.
-        run = graph.stream_v2({"messages": []}, transformers=[ToolCallTransformer])
+        run = graph.stream_events({"messages": []}, transformers=[ToolCallTransformer], version="v3")
         assert "tool_calls" in run._mux.extensions  # type: ignore[attr-defined]
         # Drain so the run closes cleanly.
         list(run.tool_calls)
@@ -266,8 +266,7 @@ class TestToolCallTransformerEndToEnd:
             }
 
         graph = _build_graph(caller, [astreamer])
-        run = await graph.astream_v2(
-            {"messages": []}, transformers=[ToolCallTransformer]
+        run = await graph.astream_events({"messages": []}, version="v3", transformers=[ToolCallTransformer]
         )
 
         collected: list[ToolCallStream] = []
@@ -296,7 +295,7 @@ class TestToolCallTransformerEndToEnd:
             }
 
         graph = _build_graph(caller, [boom])
-        run = graph.stream_v2({"messages": []}, transformers=[ToolCallTransformer])
+        run = graph.stream_events({"messages": []}, transformers=[ToolCallTransformer], version="v3")
 
         collected: list[ToolCallStream] = []
         with pytest.raises(ValueError, match="nope"):

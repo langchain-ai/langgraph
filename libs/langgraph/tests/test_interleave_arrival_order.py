@@ -291,13 +291,13 @@ class TestInterleaveArrivalOrder:
 
 
 # ---------------------------------------------------------------------------
-# Integration test: interleave with stream_v2
+# Integration test: interleave with stream_events(version="v3")
 # ---------------------------------------------------------------------------
 
 
 class TestInterleaveIntegration:
     def test_interleave_values_and_messages(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events({"value": "x", "items": []}, version="v3")
         tagged = list(run.interleave("values", "messages"))
         names = [name for name, _ in tagged]
         assert set(names).issubset({"values", "messages"})
@@ -319,7 +319,7 @@ class TestInterleaveIntegration:
             list(run.interleave("alpha"))
 
     def test_interleave_releases_projections_on_completion(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events({"value": "x", "items": []}, version="v3")
         list(run.interleave("values", "messages"))
         # Subscriptions should be released after the generator completes,
         # so the channels can be re-iterated (they'll be empty / closed).
@@ -327,7 +327,7 @@ class TestInterleaveIntegration:
         assert run.extensions["messages"]._subscribed is False
 
     def test_interleave_releases_projections_on_early_break(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events({"value": "x", "items": []}, version="v3")
         gen = run.interleave("values", "messages")
         next(gen)
         gen.close()

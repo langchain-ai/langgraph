@@ -4,7 +4,7 @@ Subscribes to `tasks` events and produces in-process `SubgraphRunStream`
 handles backed by mini-muxes (built via `StreamMux._make_child`). The
 synthetic-event tests isolate the inference / mini-mux wiring; the
 real-graph tests exercise the end-to-end navigation path through
-`stream_v2`.
+`stream_events(version="v3")`.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def _tasks_result(
 
 
 def _native_factories() -> list[Any]:
-    """Mirror the factory list `Pregel.stream_v2` registers."""
+    """Mirror the factory list `Pregel.stream_events(version="v3")` registers."""
     return [
         ValuesTransformer,
         MessagesTransformer,
@@ -761,10 +761,10 @@ def _make_failing_nested() -> Any:
     return outer_b.compile()
 
 
-def test_stream_v2_real_graph_yields_subgraph_handles() -> None:
+def test_stream_events_v3_real_graph_yields_subgraph_handles() -> None:
     """Iterating `run.subgraphs` yields handles for direct-child subgraphs."""
     graph = _make_two_level_nested()
-    run = graph.stream_v2({"value": "x", "items": []})
+    run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
     handle_paths: list[tuple[str, ...]] = []
     final_status: dict[tuple[str, ...], str] = {}
@@ -780,10 +780,10 @@ def test_stream_v2_real_graph_yields_subgraph_handles() -> None:
     assert final_status[handle_paths[0]] == "completed"
 
 
-def test_stream_v2_grandchild_visible_on_child_handle() -> None:
+def test_stream_events_v3_grandchild_visible_on_child_handle() -> None:
     """Drilling into `handle.subgraphs` surfaces nested grandchildren."""
     graph = _make_two_level_nested()
-    run = graph.stream_v2({"value": "x", "items": []})
+    run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
     grandchild_paths: list[tuple[str, ...]] = []
     middle_path: tuple[str, ...] | None = None
@@ -810,7 +810,7 @@ def test_subgraph_output_stops_at_own_terminal_without_draining_siblings() -> No
     inside the loop body misses its events.
     """
     graph = _make_two_sibling_subgraphs()
-    run = graph.stream_v2({"value": "x", "items": []})
+    run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
     paths: list[tuple[str, ...]] = []
     second_values: list[dict[str, Any]] = []
@@ -829,7 +829,7 @@ def test_subgraph_output_stops_at_own_terminal_without_draining_siblings() -> No
 
 def test_aborted_subgraph_handle_does_not_fail_parent_forwarding() -> None:
     graph = _make_two_sibling_subgraphs()
-    run = graph.stream_v2({"value": "x", "items": []})
+    run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
     seen: list[str | None] = []
     for handle in run.subgraphs:
@@ -847,7 +847,7 @@ def test_aborted_subgraph_handle_does_not_fail_parent_forwarding() -> None:
 
 def test_failed_subgraph_output_raises_terminal_error() -> None:
     graph = _make_failing_nested()
-    run = graph.stream_v2({"value": "x", "items": []})
+    run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
     handle = next(iter(run.subgraphs))
     with pytest.raises(RuntimeError, match="child boom"):
