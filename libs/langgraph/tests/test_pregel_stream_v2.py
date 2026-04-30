@@ -460,8 +460,9 @@ class TestStreamV2Sync:
         names = [name for name, _ in tagged]
         assert set(names).issubset({"values", "messages"})
         assert names.count("values") >= 1
-        with pytest.raises(RuntimeError, match="already has a subscriber"):
-            list(run.values)
+        # interleave releases its subscription on completion.
+        assert run.extensions["values"]._subscribed is False
+        assert run.extensions["messages"]._subscribed is False
 
     def test_abort_marks_exhausted_and_closes_mux(self) -> None:
         run = _build_simple_graph().stream_v2({"value": "x", "items": []})
