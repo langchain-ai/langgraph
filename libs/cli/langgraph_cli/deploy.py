@@ -805,13 +805,9 @@ class _ProgressReader:
         if data:
             self._uploaded += len(data)
             pct = (
-                int(self._uploaded * 100 / self._file_size)
-                if self._file_size
-                else 100
+                int(self._uploaded * 100 / self._file_size) if self._file_size else 100
             )
-            self._emitter.upload_progress(
-                self._file_size / _BYTES_PER_MIB, pct
-            )
+            self._emitter.upload_progress(self._file_size / _BYTES_PER_MIB, pct)
         return data
 
     def __len__(self):
