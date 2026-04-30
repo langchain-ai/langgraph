@@ -117,6 +117,19 @@ def set_config_context(
         ctx.run(_unset_config_context, config_token, run)
 
 
+def create_task_in_config_context(
+    coro_factory: Callable[[], Coroutine[Any, Any, Any]], config: RunnableConfig
+) -> asyncio.Task[Any]:
+    """Create an asyncio.Task that inherits `config` as the child runnable context.
+
+    `asyncio.create_task` snapshots the current contextvars onto the new task,
+    so calling `create_task` while the config context is set ensures the task
+    sees `config` via `var_child_runnable_config` and any tracing parent.
+    """
+    with set_config_context(config) as context:
+        return context.run(lambda: asyncio.create_task(coro_factory()))
+
+
 # Before Python 3.11 native StrEnum is not available
 class StrEnum(str, enum.Enum):
     """A string enum."""

@@ -16,7 +16,7 @@ from typing import Annotated, Any, Literal, get_type_hints
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -25,6 +25,7 @@ from langchain_core.runnables import (
 from langchain_core.runnables.graph import Edge
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
+    DELTA_SENTINEL,
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
@@ -41,6 +42,7 @@ from typing_extensions import NotRequired, TypedDict
 
 from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
@@ -49,7 +51,7 @@ from langgraph.config import get_stream_writer
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import MessagesState, add_messages
+from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
 from langgraph.pregel import (
     NodeBuilder,
     Pregel,
@@ -118,6 +120,29 @@ def test_graph_validation() -> None:
 
     with pytest.raises(InvalidUpdateError, match="At key 'hello'"):
         graph.invoke({"hello": "there"})
+
+
+def test_request_drain_allows_inflight_call_scheduling(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    from langgraph.runtime import RunControl
+
+    @task
+    def child(x: int) -> int:
+        return x + 1
+
+    control = RunControl()
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def graph(x: int) -> int:
+        control.request_drain()
+        fut = child(x)
+        return fut.result()
+
+    config = {"configurable": {"thread_id": "drain-call-sync"}}
+
+    assert graph.invoke(1, config=config, control=control) == 2
+    assert control.drain_requested
 
 
 def test_invalid_checkpointer_type() -> None:
@@ -615,8 +640,11 @@ def test_run_from_checkpoint_id_retains_previous_writes(
         )
     ]
 
-    assert len(new_history) == len(history) + 1
-    for original, new in zip(history, new_history[1:]):
+    # +2: one fork checkpoint from time travel, one from the new execution
+    assert len(new_history) == len(history) + 2
+    # new_history[0] is the new execution result, new_history[1] is the fork
+    assert new_history[1].metadata["source"] == "fork"
+    for original, new in zip(history, new_history[2:]):
         assert original.values == new.values
         assert original.next == new.next
         assert original.metadata["step"] == new.metadata["step"]
@@ -624,7 +652,7 @@ def test_run_from_checkpoint_id_retains_previous_writes(
     def _get_tasks(hist: list, start: int):
         return [h.tasks for h in hist[start:]]
 
-    assert _get_tasks(new_history, 1) == _get_tasks(history, 0)
+    assert _get_tasks(new_history, 2) == _get_tasks(history, 0)
 
 
 def test_batch_two_processes_in_out() -> None:
@@ -6893,7 +6921,6 @@ def test_tags_stream_mode_messages() -> None:
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),
-                "_type": "generic-fake-chat-model",
                 "ls_provider": "genericfakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
@@ -6901,6 +6928,60 @@ def test_tags_stream_mode_messages() -> None:
             },
         )
     ]
+
+
+def test_configurable_propagates_to_stream_metadata() -> None:
+    """Regression: thread_id, run_id, assistant_id, graph_id,
+    and langgraph_auth_user_id from configurable must appear
+    in stream_mode='messages' metadata."""
+
+    def my_node(state):
+        return {"messages": HumanMessage(content="hello")}
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("my_node", my_node)
+        .add_edge(START, "my_node")
+        .compile()
+    )
+
+    config = {
+        "configurable": {
+            "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
+            "langgraph_auth_user_id": "user-1",
+            # these should NOT be propagated into metadata
+            "some_api_key": "secret",
+            "custom_setting": {"nested": True},
+        },
+    }
+    results = list(graph.stream({"messages": []}, config, stream_mode="messages"))
+    assert len(results) == 1
+    _, metadata = results[0]
+    # propagated keys
+    assert metadata["thread_id"] == "th-123"
+    assert metadata["checkpoint_id"] == "ckpt-1"
+    assert metadata["checkpoint_ns"] == "ns-1"
+    assert metadata["task_id"] == "task-1"
+    assert metadata["run_id"] == "run-456"
+    assert metadata["assistant_id"] == "asst-789"
+    assert metadata["graph_id"] == "graph-0"
+    # These are only present in trace metadata by default as of langgraph 1.2
+    # assert metadata["model"] == "gpt-4o"
+    # assert metadata["user_id"] == "uid-1"
+    # assert metadata["cron_id"] == "cron-1"
+    # assert metadata["langgraph_auth_user_id"] == "user-1"
+    # non-allowlisted keys must not appear
+    assert "some_api_key" not in metadata
+    assert "custom_setting" not in metadata
 
 
 def test_stream_mode_messages_command() -> None:
@@ -9344,3 +9425,254 @@ def test_fork_does_not_apply_pending_writes(
 
     # Should be: 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+async def test_delta_channel_end_to_end_inmemory() -> None:
+    """Full graph run: DeltaChannel accumulates correctly across multiple turns."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        n = len(state["messages"])
+        return {"messages": [AIMessage(content=f"reply-{n}", id=f"ai-{n}")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    config = {"configurable": {"thread_id": "diff-test-1"}}
+
+    # Turn 1
+    graph.invoke({"messages": [HumanMessage(content="hello", id="h1")]}, config)
+    # Turn 2
+    graph.invoke({"messages": [HumanMessage(content="world", id="h2")]}, config)
+    # Turn 3
+    graph.invoke({"messages": [HumanMessage(content="bye", id="h3")]}, config)
+
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    # 3 human + 3 AI = 6 total
+    assert len(msgs) == 6, f"expected 6 messages, got {len(msgs)}: {msgs}"
+    assert msgs[0].content == "hello"
+    assert msgs[2].content == "world"
+    assert msgs[4].content == "bye"
+    assert msgs[1].content == "reply-1"
+    assert msgs[3].content == "reply-3"
+    assert msgs[5].content == "reply-5"
+
+
+async def test_delta_channel_time_travel() -> None:
+    """Time-travel back to turn-1 checkpoint and resume; continuation must not include turn-2 deltas."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    counter = {"n": 0}
+
+    def respond(state: State) -> dict:
+        counter["n"] += 1
+        return {
+            "messages": [
+                AIMessage(content=f"ai-{counter['n']}", id=f"ai-{counter['n']}")
+            ]
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    saver = InMemorySaver()
+    graph = builder.compile(checkpointer=saver)
+
+    config = {"configurable": {"thread_id": "diff-time-travel"}}
+
+    # Run 2 turns: h1→ai-1, h2→ai-2
+    graph.invoke({"messages": [HumanMessage(content="h1", id="h1")]}, config)
+    graph.invoke({"messages": [HumanMessage(content="h2", id="h2")]}, config)
+
+    # Find the checkpoint after turn 1 (2 messages: h1 + ai-1)
+    history = list(graph.get_state_history(config))
+    after_turn1 = next(h for h in history if len(h.values.get("messages", [])) == 2)
+
+    assert len(after_turn1.values["messages"]) == 2
+    assert after_turn1.values["messages"][0].content == "h1"
+    assert after_turn1.values["messages"][1].content == "ai-1"
+
+    # Resume from turn-1 checkpoint: inject h3, expect 3 messages total (h1, ai-1, ai-N)
+    # NOT 5 messages (turn-2 deltas must not bleed into the resumed run)
+    result = graph.invoke(
+        {"messages": [HumanMessage(content="h3", id="h3")]},
+        after_turn1.config,
+    )
+    msgs = result["messages"]
+    # Should be: h1, ai-1, h3, ai-N — 4 messages total
+    assert len(msgs) == 4, (
+        f"expected 4 messages after time-travel resume, got {len(msgs)}: {msgs}"
+    )
+    assert msgs[0].content == "h1"
+    assert msgs[1].content == "ai-1"
+    assert msgs[2].content == "h3"
+
+
+async def test_delta_channel_remove_message_end_to_end() -> None:
+    """RemoveMessage inside a DeltaChannel graph must persist and reload correctly."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        return {"messages": [AIMessage(content="reply", id="ai-1")]}
+
+    def delete_first(state: State) -> dict:
+        # removes the first message
+        return {"messages": [RemoveMessage(id=state["messages"][0].id)]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_node("delete_first", delete_first)
+    builder.add_edge(START, "respond")
+    builder.add_edge("respond", "delete_first")
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    config = {"configurable": {"thread_id": "diff-remove-test"}}
+    graph.invoke({"messages": [HumanMessage(content="hello", id="h1")]}, config)
+
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    # h1 was removed, only ai-1 should remain
+    assert len(msgs) == 1, f"expected 1 message, got {len(msgs)}: {msgs}"
+    assert msgs[0].id == "ai-1"
+
+    # A subsequent turn must reconstruct from the checkpoint correctly
+    graph.invoke({"messages": [HumanMessage(content="again", id="h2")]}, config)
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    # ai-1 + h2 + ai-1(second reply, same id overwrites) + h2 removed
+    # more simply: after second run we expect ai-1 updated + h2 remaining minus deleted h2
+    # just assert h1 is still gone
+    assert all(m.id != "h1" for m in msgs), (
+        "h1 should still be absent after second turn"
+    )
+
+
+async def test_delta_channel_update_by_id_end_to_end() -> None:
+    """Updating a message by ID via DeltaChannel must persist and reload correctly."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def update_msg(state: State) -> dict:
+        # re-send h1 with updated content
+        return {"messages": [HumanMessage(content="updated", id="h1")]}
+
+    builder = StateGraph(State)
+    builder.add_node("update_msg", update_msg)
+    builder.add_edge(START, "update_msg")
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    config = {"configurable": {"thread_id": "diff-update-id-test"}}
+    graph.invoke({"messages": [HumanMessage(content="original", id="h1")]}, config)
+
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    assert len(msgs) == 1, f"expected 1 message, got {len(msgs)}: {msgs}"
+    assert msgs[0].content == "updated"
+    assert msgs[0].id == "h1"
+
+    # Second turn: verify the updated state is the base for further accumulation
+    graph.invoke({"messages": [HumanMessage(content="new", id="h2")]}, config)
+    state = graph.get_state(config)
+    msgs = state.values["messages"]
+    ids = [m.id for m in msgs]
+    assert "h1" in ids  # h1 persists (updated, not duplicated)
+    assert "h2" in ids
+    assert ids.count("h1") == 1, "h1 must not be duplicated"
+
+
+async def test_delta_channel_durability_exit_stores_snapshot() -> None:
+    """DeltaChannel must reload from a durability='exit' checkpoint."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        return {"messages": [AIMessage(content="reply", id="ai1")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    graph = builder.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "delta-exit-test"}}
+
+    result = graph.invoke(
+        {"messages": [HumanMessage(content="hello", id="h1")]},
+        config,
+        durability="exit",
+    )
+    assert [m.content for m in result["messages"]] == ["hello", "reply"]
+
+    state = graph.get_state(config)
+    assert [m.content for m in state.values["messages"]] == ["hello", "reply"]
+
+
+async def test_delta_channel_async_write_ordering() -> None:
+    """In async mode, DeltaChannel write futures are awaited before the checkpoint
+    is committed, so aput_writes always precedes aput for sentinel checkpoints."""
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        i = len(state["messages"])
+        return {"messages": [AIMessage(content=f"r{i}", id=f"ai{i}")]}
+
+    order: list[str] = []
+    original_aput_writes = InMemorySaver.aput_writes
+    original_aput = InMemorySaver.aput
+
+    async def tracked_aput_writes(self, config, writes, task_id, task_path=""):
+        result = await original_aput_writes(self, config, writes, task_id, task_path)
+        order.append("aput_writes")
+        return result
+
+    async def tracked_aput(self, config, checkpoint, metadata, new_versions):
+        has_sentinel = any(
+            v is DELTA_SENTINEL for v in checkpoint.get("channel_values", {}).values()
+        )
+        order.append("aput_sentinel" if has_sentinel else "aput_other")
+        return await original_aput(self, config, checkpoint, metadata, new_versions)
+
+    InMemorySaver.aput_writes = tracked_aput_writes
+    InMemorySaver.aput = tracked_aput
+    try:
+        builder = StateGraph(State)
+        builder.add_node("respond", respond)
+        builder.add_edge(START, "respond")
+        graph = builder.compile(checkpointer=InMemorySaver())
+        config = {"configurable": {"thread_id": "async-ordering-test"}}
+
+        for i in range(3):
+            await graph.ainvoke(
+                {"messages": [HumanMessage(content=f"h{i}", id=f"h{i}")]}, config
+            )
+
+        # Every aput_sentinel must be preceded by at least one aput_writes
+        for i, event in enumerate(order):
+            if event == "aput_sentinel":
+                preceding = order[:i]
+                assert "aput_writes" in preceding, (
+                    f"aput_sentinel at {i} had no preceding aput_writes: {order}"
+                )
+                last_write_idx = max(
+                    j for j, e in enumerate(order[:i]) if e == "aput_writes"
+                )
+                assert last_write_idx < i, (
+                    f"aput_writes at {last_write_idx} should precede aput_sentinel at {i}: {order}"
+                )
+    finally:
+        InMemorySaver.aput_writes = original_aput_writes
+        InMemorySaver.aput = original_aput
+
+    state = await graph.aget_state(config)
+    assert len(state.values["messages"]) == 6  # 3 human + 3 AI

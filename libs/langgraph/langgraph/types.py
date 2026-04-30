@@ -4,6 +4,7 @@ import sys
 from collections import deque
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import asdict, dataclass
+from datetime import timedelta
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -67,6 +68,7 @@ __all__ = (
     "CheckpointPayload",
     "DebugPayload",
     "RetryPolicy",
+    "TimeoutPolicy",
     "CachePolicy",
     "Interrupt",
     "StateUpdate",
@@ -423,6 +425,83 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns `True` for exceptions that should trigger a retry."""
 
 
+def _coerce_timeout_seconds(
+    value: float | timedelta | None, *, field: str
+) -> float | None:
+    if value is None:
+        return None
+    seconds = value.total_seconds() if isinstance(value, timedelta) else float(value)
+    if seconds <= 0:
+        raise ValueError(f"{field} must be greater than 0")
+    return seconds
+
+
+@dataclass(**_DC_KWARGS)
+class TimeoutPolicy:
+    """Configuration for timing out node attempts.
+
+    !!! note "Cooperative cancellation"
+
+        Timeouts rely on asyncio cancellation. If your node uses synchronous
+        time.sleep() or other CPU-bound work that blocks the GIL, the timeout will not
+        be fired until after the event loop has been released.
+
+    !!! note "Inline callback dispatch"
+
+        Under `refresh_on="auto"`, an internal handler refreshes the timeout on any
+        callback event that occurs in the execution of the node or its nested descendants.
+    """
+
+    run_timeout: float | timedelta | None = None
+    """Hard wall-clock cap (in seconds) for a single node attempt.
+
+    This timeout is never refreshed by progress signals or `runtime.heartbeat()`.
+    """
+
+    idle_timeout: float | timedelta | None = None
+    """Maximum time (in seconds) a single node attempt may go without observable progress."""
+
+    refresh_on: Literal["auto", "heartbeat"] = "auto"
+    """Which signals refresh `idle_timeout`.
+
+    `"auto"` refreshes on standard graph progress signals and explicit heartbeats.
+    `"heartbeat"` refreshes only on explicit `runtime.heartbeat()` calls.
+    """
+
+    @classmethod
+    def coerce(
+        cls, value: float | timedelta | TimeoutPolicy | None
+    ) -> TimeoutPolicy | None:
+        """Normalize a timeout value to positive-second policy fields."""
+        if value is None:
+            return None
+        if isinstance(value, TimeoutPolicy):
+            # Fast path: a policy already produced by coerce() has float
+            # timeouts and a validated refresh_on, so we can return it as-is.
+            # `frozen=True` makes this safe to share.
+            rt, it = value.run_timeout, value.idle_timeout
+            if (
+                value.refresh_on in ("auto", "heartbeat")
+                and (rt is None or (type(rt) is float and rt > 0))
+                and (it is None or (type(it) is float and it > 0))
+                and (rt is not None or it is not None)
+            ):
+                return value
+        else:
+            value = cls(run_timeout=value)
+        if value.refresh_on not in ("auto", "heartbeat"):
+            raise ValueError("refresh_on must be 'auto' or 'heartbeat'")
+        run_timeout = _coerce_timeout_seconds(value.run_timeout, field="run_timeout")
+        idle_timeout = _coerce_timeout_seconds(value.idle_timeout, field="idle_timeout")
+        if run_timeout is None and idle_timeout is None:
+            return None
+        return cls(
+            run_timeout=run_timeout,
+            idle_timeout=idle_timeout,
+            refresh_on=value.refresh_on,
+        )
+
+
 KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., str | bytes])
 
 
@@ -548,6 +627,7 @@ class PregelExecutableTask:
     path: tuple[str | int | tuple, ...]
     writers: Sequence[Runnable] = ()
     subgraphs: Sequence[PregelProtocol] = ()
+    timeout: TimeoutPolicy | None = None
 
 
 class StateSnapshot(NamedTuple):
@@ -587,6 +667,8 @@ class Send:
     Attributes:
         node (str): The name of the target node to send the message to.
         arg (Any): The state or message to send to the target node.
+        timeout (TimeoutPolicy | None): Optional timeout policy for this specific
+            pushed task. If omitted, the target node's timeout policy is used.
 
     !!! example
 
@@ -616,33 +698,47 @@ class Send:
         ```
     """
 
-    __slots__ = ("node", "arg")
+    __slots__ = ("node", "arg", "timeout")
 
     node: str
     arg: Any
+    timeout: TimeoutPolicy | None
 
-    def __init__(self, /, node: str, arg: Any) -> None:
+    def __init__(
+        self,
+        /,
+        node: str,
+        arg: Any,
+        *,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
+    ) -> None:
         """
         Initialize a new instance of the `Send` class.
 
         Args:
             node: The name of the target node to send the message to.
             arg: The state or message to send to the target node.
+            timeout: Optional timeout policy for this specific pushed task. A
+                number or `timedelta` is treated as a hard `run_timeout`.
         """
         self.node = node
         self.arg = arg
+        self.timeout = TimeoutPolicy.coerce(timeout)
 
     def __hash__(self) -> int:
-        return hash((self.node, self.arg))
+        return hash((self.node, self.arg, self.timeout))
 
     def __repr__(self) -> str:
-        return f"Send(node={self.node!r}, arg={self.arg!r})"
+        if self.timeout is None:
+            return f"Send(node={self.node!r}, arg={self.arg!r})"
+        return f"Send(node={self.node!r}, arg={self.arg!r}, timeout={self.timeout!r})"
 
     def __eq__(self, value: object) -> bool:
         return (
             isinstance(value, Send)
             and self.node == value.node
             and self.arg == value.arg
+            and self.timeout == value.timeout
         )
 
 

@@ -23,13 +23,13 @@ dependencies = [
 path = "langgraph_cli/__init__.py"
 [project.optional-dependencies]
 inmem = [
-    "langgraph-api>=0.5.35,<0.8.0 ; python_version >= '3.11'",
+    "langgraph-api>=0.5.35,<0.9.0 ; python_version >= '3.11'",
     "langgraph-runtime-inmem>=0.7 ; python_version >= '3.11'",
 ]
 
 [project.urls]
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/cli"
-Twitter = "https://x.com/LangChain"
+Twitter = "https://x.com/langchain_oss"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 

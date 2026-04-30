@@ -29,6 +29,8 @@ from langgraph.checkpoint.serde.jsonplus import (
     EXT_METHOD_SINGLE_ARG,
     JsonPlusSerializer,
     _msgpack_enc,
+    _warned_blocked_types,
+    _warned_unregistered_types,
 )
 
 
@@ -101,6 +103,13 @@ def test_msgpack_method_pathlib_blocked_encrypted_strict(
 
 class TestEncryptedSerializerMsgpackAllowlist:
     """Test msgpack allowlist behavior through EncryptedSerializer."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_warned_types(self) -> None:
+        # Warning dedup state is process-global; reset per-test so each case
+        # sees a fresh slate and assertions about warning emission are stable.
+        _warned_unregistered_types.clear()
+        _warned_blocked_types.clear()
 
     def test_safe_types_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """Test safe types deserialize without warnings through encryption."""

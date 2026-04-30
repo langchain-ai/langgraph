@@ -4,15 +4,17 @@ import asyncio
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
+    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    _ChannelWritesHistory,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
@@ -23,7 +25,11 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
 from langgraph.checkpoint.postgres import _ainternal
-from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.base import (
+    SELECT_DELTA_COMBINED_SQL,
+    BasePostgresSaver,
+    _DeltaCombinedRow,
+)
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 
 Conn = _ainternal.Conn  # For backward compatibility
@@ -390,6 +396,46 @@ class AsyncPostgresSaver(BasePostgresSaver):
             else:
                 async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
+
+    async def _aget_channel_writes_history(
+        self, config: RunnableConfig, channel: str
+    ) -> _ChannelWritesHistory:
+        """Fast-path override of `BaseCheckpointSaver._aget_channel_writes_history`.
+
+        One combined UNION ALL query (`SELECT_DELTA_COMBINED_SQL`) fetches rows
+        from `checkpoints`, `checkpoint_writes`, and `checkpoint_blobs` in a
+        single roundtrip; rows are assembled by the shared pure helper on
+        `BasePostgresSaver`.
+        """
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = get_checkpoint_id(config)
+        if checkpoint_id is None:
+            target = await self.aget_tuple(config)
+            if target is None:
+                return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
+            checkpoint_id = target.config["configurable"]["checkpoint_id"]
+        async with self._cursor() as cur:
+            await cur.execute(
+                SELECT_DELTA_COMBINED_SQL,
+                (
+                    channel,
+                    thread_id,
+                    checkpoint_ns,
+                    thread_id,
+                    checkpoint_ns,
+                    channel,
+                    thread_id,
+                    checkpoint_ns,
+                    channel,
+                ),
+            )
+            rows = await cur.fetchall()
+        return self._build_delta_channel_writes_history(
+            channel=channel,
+            target_id=checkpoint_id,
+            rows=cast("list[_DeltaCombinedRow]", rows),
+        )
 
     async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
         """

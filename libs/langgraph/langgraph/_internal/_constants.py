@@ -56,6 +56,8 @@ CONFIG_KEY_CHECKPOINT_NS = sys.intern("checkpoint_ns")
 # holds the current checkpoint_ns, "" for root graph
 CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
 # holds a callback to be called when a node is finished
+CONFIG_KEY_TIMED_ATTEMPT_OBSERVER = sys.intern("__pregel_timed_attempt_observer")
+# holds a callback to be called when an idle-timed node attempt starts or finishes
 CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
 # holds a mutable dict for temporary storage scoped to the current task
 CONFIG_KEY_RUNNER_SUBMIT = sys.intern("__pregel_runner_submit")
@@ -66,6 +68,9 @@ CONFIG_KEY_RUNTIME = sys.intern("__pregel_runtime")
 # holds a `Runtime` instance with context, store, stream writer, etc.
 CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 # holds a mapping of task ns -> resume value for resuming tasks
+CONFIG_KEY_STREAM_MESSAGES_V2 = sys.intern("__pregel_stream_messages_v2")
+# when True, attach StreamMessagesHandlerV2 so content-block (v2) events
+# flow through stream_mode="messages"; set by StreamingHandler only.
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
@@ -106,7 +111,9 @@ RESERVED = {
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_TIMED_ATTEMPT_OBSERVER,
     CONFIG_KEY_RESUME_MAP,
+    CONFIG_KEY_STREAM_MESSAGES_V2,
     # other constants
     PUSH,
     PULL,

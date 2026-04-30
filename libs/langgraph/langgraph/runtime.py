@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, Generic, cast
 
@@ -15,6 +16,7 @@ from langgraph.typing import ContextT
 __all__ = (
     "BaseUser",
     "ExecutionInfo",
+    "RunControl",
     "Runtime",
     "ServerInfo",
     "get_runtime",
@@ -74,16 +76,49 @@ class ServerInfo:
     """
 
 
+class RunControl:
+    """Run-scoped control surface for cooperative draining.
+
+    Intended for a single graph run. Create a fresh `RunControl` per run;
+    reusing a control after `request_drain()` leaves it drained.
+
+    Safe to call from any thread: the drain request is represented by a
+    single attribute write, so no lock is needed for this signal.
+    If more mutable state is added here, add synchronization.
+    """
+
+    __slots__ = ("_drain_reason",)
+
+    def __init__(self) -> None:
+        self._drain_reason: str | None = None
+
+    def request_drain(self, reason: str = "shutdown") -> None:
+        self._drain_reason = reason
+
+    @property
+    def drain_requested(self) -> bool:
+        return self._drain_reason is not None
+
+    @property
+    def drain_reason(self) -> str | None:
+        return self._drain_reason
+
+
 def _no_op_stream_writer(_: Any) -> None: ...
+
+
+def _no_op_heartbeat() -> None: ...
 
 
 class _RuntimeOverrides(TypedDict, Generic[ContextT], total=False):
     context: ContextT
     store: BaseStore | None
     stream_writer: StreamWriter
+    heartbeat: Callable[[], None]
     previous: Any
     execution_info: ExecutionInfo
     server_info: ServerInfo | None
+    control: RunControl | None
 
 
 @dataclass(**_DC_KWARGS)
@@ -162,7 +197,7 @@ class Runtime(Generic[ContextT]):
 
     context: ContextT = field(default=None)  # type: ignore[assignment]
     """Static context for the graph run, like `user_id`, `db_conn`, etc.
-    
+
     Can also be thought of as 'run dependencies'."""
 
     store: BaseStore | None = field(default=None)
@@ -171,9 +206,19 @@ class Runtime(Generic[ContextT]):
     stream_writer: StreamWriter = field(default=_no_op_stream_writer)
     """Function that writes to the custom stream."""
 
+    heartbeat: Callable[[], None] = field(default=_no_op_heartbeat)
+    """Record progress for the current node's `idle_timeout`.
+
+    Call this from inside long-running work that does not naturally emit
+    writes, stream chunks, child tasks, or LangChain callback events, to
+    prevent the node from being treated as idle. It is also the only
+    progress signal honored under `TimeoutPolicy(refresh_on="heartbeat")`.
+    Outside an idle-timed attempt this is a no-op.
+    """
+
     previous: Any = field(default=None)
     """The previous return value for the given thread.
-    
+
     Only available with the functional API when a checkpointer is provided.
     """
 
@@ -184,6 +229,13 @@ class Runtime(Generic[ContextT]):
 
     server_info: ServerInfo | None = field(default=None)
     """Metadata injected by LangGraph Server. None when running open-source LangGraph without LangSmith deployments."""
+
+    control: RunControl | None = field(default=None)
+    """Run-scoped control plane for cooperative draining.
+
+    Populated automatically during graph runs. None outside an active
+    graph runtime.
+    """
 
     def merge(self, other: Runtime[ContextT]) -> Runtime[ContextT]:
         """Merge two runtimes together.
@@ -196,9 +248,13 @@ class Runtime(Generic[ContextT]):
             stream_writer=other.stream_writer
             if other.stream_writer is not _no_op_stream_writer
             else self.stream_writer,
+            heartbeat=other.heartbeat
+            if other.heartbeat is not _no_op_heartbeat
+            else self.heartbeat,
             previous=self.previous if other.previous is None else other.previous,
             execution_info=other.execution_info or self.execution_info,
             server_info=other.server_info or self.server_info,
+            control=other.control or self.control,
         )
 
     def override(
@@ -217,13 +273,23 @@ class Runtime(Generic[ContextT]):
             execution_info=self.execution_info.patch(**overrides),
         )
 
+    @property
+    def drain_requested(self) -> bool:
+        return self.control.drain_requested if self.control is not None else False
+
+    @property
+    def drain_reason(self) -> str | None:
+        return self.control.drain_reason if self.control is not None else None
+
 
 DEFAULT_RUNTIME = Runtime(
     context=None,
     store=None,
     stream_writer=_no_op_stream_writer,
+    heartbeat=_no_op_heartbeat,
     previous=None,
     execution_info=None,
+    control=None,
 )
 
 

@@ -7,6 +7,7 @@ import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
 from dataclasses import is_dataclass
+from datetime import timedelta
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
@@ -45,9 +46,11 @@ from langgraph._internal._fields import (
 )
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
+from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.named_barrier_value import (
@@ -81,6 +84,7 @@ from langgraph.types import (
     Command,
     RetryPolicy,
     Send,
+    TimeoutPolicy,
     ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
@@ -300,6 +304,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -367,6 +372,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph` where input schema is specified.
@@ -439,6 +445,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -506,6 +513,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is specified.
@@ -580,6 +588,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`.
@@ -609,6 +618,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 !!! warning
 
                     This is only used for graph rendering and doesn't have any effect on the graph execution.
+            timeout: Timeout for each node attempt. A number or `timedelta` is
+                a hard wall-clock cap and is not refreshed. Use `TimeoutPolicy`
+                to configure both a wall-clock `run_timeout` and an
+                `idle_timeout` refreshed by progress signals. When exceeded, a
+                [`NodeTimeoutError`][langgraph.errors.NodeTimeoutError] is raised
+                and the retry policy (if any) decides whether to retry. Timeouts
+                are supported only for async nodes; sync nodes cannot be safely
+                cancelled in-process.
 
         Example:
             ```python
@@ -662,6 +679,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
             if input_schema is None:
                 input_schema = cast(type[NodeInputT] | None, input_)
+        timeout = coerce_timeout_policy(timeout)
 
         if not isinstance(node, str):
             action = node
@@ -757,6 +775,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 cache_policy=cache_policy,
                 ends=ends,
                 defer=defer,
+                timeout=timeout,
             )
         elif inferred_input_schema is not None:
             self.nodes[node] = StateNodeSpec(
@@ -767,6 +786,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 cache_policy=cache_policy,
                 ends=ends,
                 defer=defer,
+                timeout=timeout,
             )
         else:
             self.nodes[node] = StateNodeSpec[StateT, ContextT](
@@ -777,6 +797,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 cache_policy=cache_policy,
                 ends=ends,
                 defer=defer,
+                timeout=timeout,
             )
 
         input_schema = input_schema or inferred_input_schema
@@ -1045,6 +1066,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1077,11 +1099,19 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
+            transformers: Optional sequence of `StreamTransformer` classes or
+                configured factories. Classes and factories are instantiated
+                per run whenever `stream_v2` / `astream_v2` is called and are
+                propagated to subgraph scopes. Custom factories should follow
+                the standard `StreamTransformer` constructor shape by
+                accepting `scope` as their first argument. Appended after the
+                built-in stream transformers.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
+
         serde_allowlist: set[tuple[str, ...]] | None = None
         if _serde.STRICT_MSGPACK_ENABLED:
             schema_types: list[type[Any]] = [
@@ -1159,6 +1189,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             store=store,
             cache=cache,
             name=name or "LangGraph",
+            stream_transformers=transformers,
         )
         compiled._serde_allowlist = serde_allowlist
 
@@ -1332,6 +1363,7 @@ class CompiledStateGraph(
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
                 bound=node.runnable,  # type: ignore[arg-type]
+                timeout=node.timeout,
             )
         else:
             raise RuntimeError
@@ -1667,6 +1699,20 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
         # Search through all annotated medata to find channel annotations
         for item in meta:
             if isinstance(item, BaseChannel):
+                if isinstance(item, DeltaChannel) and hasattr(typ, "__origin__"):
+                    origin = typ.__origin__
+                    # Unwrap parameterized Required[X]/NotRequired[X] to X
+                    # (e.g. Annotated[NotRequired[dict[...]], ...]).
+                    if hasattr(origin, "__origin__") and origin.__origin__ in (
+                        Required,
+                        NotRequired,
+                    ):
+                        origin = origin.__args__[0]
+                    item = item.__class__(
+                        item.reducer,
+                        origin,
+                        snapshot_frequency=item.snapshot_frequency,
+                    )
                 return item
             elif isclass(item) and issubclass(item, BaseChannel):
                 # ex, Annotated[int, EphemeralValue, SomeOtherAnnotation]

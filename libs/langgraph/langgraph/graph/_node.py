@@ -9,7 +9,7 @@ from langgraph.store.base import BaseStore
 
 from langgraph._internal._typing import EMPTY_SEQ
 from langgraph.runtime import Runtime
-from langgraph.types import CachePolicy, RetryPolicy, StreamWriter
+from langgraph.types import CachePolicy, RetryPolicy, StreamWriter, TimeoutPolicy
 from langgraph.typing import ContextT, NodeInputT, NodeInputT_contra
 
 
@@ -90,3 +90,4 @@ class StateNodeSpec(Generic[NodeInputT, ContextT]):
     cache_policy: CachePolicy | None
     ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
     defer: bool = False
+    timeout: TimeoutPolicy | None = None
