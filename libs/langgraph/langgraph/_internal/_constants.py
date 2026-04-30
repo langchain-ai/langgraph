@@ -12,6 +12,9 @@ RESUME = sys.intern("__resume__")
 # for values passed to resume a node after an interrupt
 ERROR = sys.intern("__error__")
 # for errors raised by nodes
+ERROR_SOURCE_NODE = sys.intern("__error_source_node__")
+# failed source node name for node-level error handlers
+# value format in pending writes: `(task_id, ERROR_SOURCE_NODE, node_name: str)`
 NO_WRITES = sys.intern("__no_writes__")
 # marker to signal node didn't write anything
 TASKS = sys.intern("__pregel_tasks")
@@ -71,6 +74,10 @@ CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 CONFIG_KEY_STREAM_MESSAGES_V2 = sys.intern("__pregel_stream_messages_v2")
 # when True, attach StreamMessagesHandlerV2 so content-block (v2) events
 # flow through stream_mode="messages"; set by StreamingHandler only.
+CONFIG_KEY_NODE_ERROR = sys.intern("__pregel_node_error")
+# holds a `NodeError` (failed source node + exception) for the current
+# node-level error handler invocation, injected when handler signature
+# requests `error: NodeError`
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
@@ -98,6 +105,7 @@ RESERVED = {
     INTERRUPT,
     RESUME,
     ERROR,
+    ERROR_SOURCE_NODE,
     NO_WRITES,
     # reserved config.configurable keys
     CONFIG_KEY_SEND,

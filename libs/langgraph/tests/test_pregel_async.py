@@ -16,6 +16,7 @@ from typing import (
     Literal,
     Optional,
 )
+from unittest.mock import patch
 from uuid import UUID
 
 import pytest
@@ -48,6 +49,7 @@ from langgraph.channels.topic import Topic
 from langgraph.errors import (
     GraphRecursionError,
     InvalidUpdateError,
+    NodeError,
     ParentCommand,
 )
 from langgraph.func import entrypoint, task
@@ -9763,3 +9765,126 @@ async def test_fork_does_not_apply_pending_writes(
 
     # 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+async def test_graph_error_handler_async_runtime_info() -> None:
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+    captured: dict[str, object] = {}
+
+    async def always_failing_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("Always fails async")
+
+    async def err_handler_node(state: State, error: NodeError) -> State:
+        captured["from_node_name"] = error.node
+        captured["from_node_error"] = error.error
+        return {"foo": "handled_async"}
+
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "always_failing",
+            always_failing_node,
+            retry_policy=RetryPolicy(
+                max_attempts=2,
+                initial_interval=0.01,
+                jitter=False,
+                retry_on=ValueError,
+            ),
+            error_handler=err_handler_node,
+        )
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    with patch("asyncio.sleep"):
+        result = await graph.ainvoke({"foo": ""})
+
+    assert attempts == 2
+    assert result["foo"] == "handled_async"
+    assert captured["from_node_name"] == "always_failing"
+    assert isinstance(captured["from_node_error"], BaseException)
+
+
+@NEEDS_CONTEXTVARS
+async def test_graph_error_handler_does_not_swallow_interrupt_concurrent() -> None:
+    """When a graph error handler is configured and a node calls interrupt()
+    concurrently with other nodes, the interrupt must still be raised — not
+    silently swallowed."""
+
+    class State(TypedDict):
+        foo: str
+
+    async def node_a(state: State) -> State:
+        val = interrupt("need human input")
+        return {"foo": f"a_{val}"}
+
+    async def node_b(state: State) -> State:
+        return {}
+
+    async def err_handler(state: State) -> State:
+        return {"foo": "handled"}
+
+    checkpointer = InMemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a, error_handler=err_handler)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge(START, "node_b")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "test-interrupt-concurrent-async"}}
+
+    await graph.ainvoke({"foo": ""}, config)
+
+    state = await graph.aget_state(config)
+    assert len(state.tasks) > 0
+
+    interrupts = [t for t in state.tasks if hasattr(t, "interrupts") and t.interrupts]
+    assert len(interrupts) > 0, (
+        "GraphInterrupt was swallowed — interrupt() in node_a "
+        "should have paused execution"
+    )
+
+
+async def test_node_error_handler_handles_subgraph_internal_failure_async() -> None:
+    class SubState(TypedDict):
+        foo: str
+
+    class ParentState(TypedDict):
+        foo: str
+
+    captured: dict[str, object] = {}
+
+    async def sub_fail_node(state: SubState) -> SubState:
+        raise ValueError("async subgraph boom")
+
+    async def parent_handler(state: ParentState, error: NodeError) -> ParentState:
+        captured["from_node_name"] = error.node
+        captured["from_node_error"] = error.error
+        return {"foo": "handled_async_subgraph"}
+
+    subgraph = (
+        StateGraph(SubState)
+        .add_node("sub_fail_node", sub_fail_node)
+        .add_edge(START, "sub_fail_node")
+        .compile()
+    )
+
+    parent_graph = (
+        StateGraph(ParentState)
+        .add_node("subgraph_node", subgraph, error_handler=parent_handler)
+        .add_edge(START, "subgraph_node")
+        .compile()
+    )
+
+    result = await parent_graph.ainvoke({"foo": ""})
+    assert result["foo"] == "handled_async_subgraph"
+    assert captured["from_node_name"] == "subgraph_node"
+    assert isinstance(captured["from_node_error"], BaseException)

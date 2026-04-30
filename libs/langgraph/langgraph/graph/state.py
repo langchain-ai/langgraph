@@ -303,6 +303,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
@@ -371,6 +372,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
@@ -444,6 +446,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
@@ -512,6 +515,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
@@ -587,6 +591,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
@@ -607,6 +612,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
                 If a sequence is provided, the first matching policy will be applied.
             cache_policy: The cache policy for the node.
+            error_handler: Optional node-level error handler callable for this node.
             destinations: Destinations that indicate where a node can route to.
 
                 Useful for edgeless graphs with nodes that return `Command` objects.
@@ -766,6 +772,25 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         if destinations is not None:
             ends = destinations
 
+        resolved_input_schema: type[Any] = (
+            input_schema or inferred_input_schema or self.state_schema
+        )
+        handler_node_name: str | None = None
+        if error_handler is not None:
+            handler_node_name = f"__error_handler__{node}"
+            if handler_node_name in self.nodes:
+                raise ValueError(
+                    f"Auto-generated error handler node `{handler_node_name}` already exists."
+                )
+            self.nodes[handler_node_name] = StateNodeSpec[Any, ContextT](
+                coerce_to_runnable(error_handler, name=handler_node_name, trace=False),  # type: ignore[arg-type]
+                metadata=None,
+                input_schema=resolved_input_schema,
+                retry_policy=None,
+                cache_policy=None,
+                is_error_handler=True,
+            )
+
         if input_schema is not None:
             self.nodes[node] = StateNodeSpec[NodeInputT, ContextT](
                 coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
@@ -773,6 +798,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=input_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
@@ -784,6 +810,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=inferred_input_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
@@ -795,6 +822,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=self.state_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
@@ -1052,7 +1080,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             for node in interrupt:
                 if node not in self.nodes:
                     raise ValueError(f"Interrupt node `{node}` not found")
-
         self.compiled = True
         return self
 
@@ -1166,6 +1193,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 key for key, val in self.channels.items() if not is_managed_value(val)
             ]
         )
+        node_error_handler_map = {
+            node_name: spec.error_handler_node
+            for node_name, spec in self.nodes.items()
+            if spec.error_handler_node is not None
+        }
 
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
@@ -1188,6 +1220,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             debug=debug,
             store=store,
             cache=cache,
+            node_error_handler_map=node_error_handler_map,
             name=name or "LangGraph",
             stream_transformers=transformers,
         )
@@ -1362,6 +1395,8 @@ class CompiledStateGraph(
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
+                is_error_handler=node.is_error_handler,
+                error_handler_node=node.error_handler_node,
                 bound=node.runnable,  # type: ignore[arg-type]
                 timeout=node.timeout,
             )

@@ -730,6 +730,7 @@ class Pregel(
     name: str = "LangGraph"
 
     trigger_to_nodes: Mapping[str, Sequence[str]]
+    node_error_handler_map: Mapping[str, str]
 
     def __init__(
         self,
@@ -754,6 +755,7 @@ class Pregel(
         context_schema: type[ContextT] | None = None,
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
+        node_error_handler_map: Mapping[str, str] | None = None,
         name: str = "LangGraph",
         stream_transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
@@ -801,6 +803,7 @@ class Pregel(
         self.context_schema = context_schema
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
+        self.node_error_handler_map = node_error_handler_map or {}
         self.name = name
         self.stream_transformers: tuple[Callable[[tuple[str, ...]], Any], ...] = tuple(
             stream_transformers or ()
@@ -2871,6 +2874,8 @@ class Pregel(
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
+                    node_error_handler_map=self.node_error_handler_map,
+                    schedule_error_handler=loop.schedule_error_handler,
                 )
                 # enable subgraph streaming
                 if subgraphs:
@@ -3322,6 +3327,8 @@ class Pregel(
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     use_astream=do_stream,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
+                    node_error_handler_map=self.node_error_handler_map,
+                    aschedule_error_handler=loop.aschedule_error_handler,
                 )
                 # enable subgraph streaming
                 if subgraphs:
