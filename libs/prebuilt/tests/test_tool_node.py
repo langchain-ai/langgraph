@@ -2016,6 +2016,19 @@ async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() 
     assert tool_message.tool_call_id == "call_dynamic_2"
 
 
+def test_tool_runtime_defaults_tools_to_empty_list() -> None:
+    runtime = ToolRuntime(
+        state={},
+        context=None,
+        config={},
+        stream_writer=lambda *args, **kwargs: None,
+        tool_call_id=None,
+        store=None,
+    )
+
+    assert runtime.tools == []
+
+
 def test_tool_runtime_forwards_execution_info_server_info_and_tools() -> None:
     """Test that execution_info, server_info, and tools are forwarded from Runtime to ToolRuntime."""
     from langgraph.runtime import ExecutionInfo, ServerInfo
