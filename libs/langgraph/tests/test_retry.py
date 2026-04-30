@@ -210,6 +210,15 @@ def test_should_retry_default_retry_on():
     req_error_no_resp.response = None
     assert _should_retry_on(policy, req_error_no_resp) is True
 
+    # NodeTimeoutError should be retryable by default
+    assert (
+        _should_retry_on(
+            policy,
+            NodeTimeoutError("node", 1.0, kind="run", run_timeout=0.5),
+        )
+        is True
+    )
+
     # Should retry on other exceptions by default
     class CustomException(Exception):
         pass
@@ -1456,14 +1465,14 @@ async def test_state_graph_add_node_timeout_composes_with_retry():
     async def flaky(state: _TimeoutState) -> _TimeoutState:
         attempts.append(len(attempts))
         if len(attempts) < 2:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
         return {"x": state["x"] + 1}
 
     builder = StateGraph(_TimeoutState)
     builder.add_node(
         "flaky",
         flaky,
-        timeout=TimeoutPolicy(idle_timeout=0.1),
+        timeout=TimeoutPolicy(idle_timeout=0.3),
         retry_policy=RetryPolicy(
             max_attempts=3,
             initial_interval=0.0,
@@ -1756,6 +1765,212 @@ async def test_arun_with_retry_timeout_observer_treats_bubble_up_as_non_error():
     assert finish.status == "success"
     assert finish.error_type is None
     assert finish.error_message is None
+
+
+# ---------------------------------------------------------------------------
+# Watcher invariant: any timeout that retry/error_handler can recover from
+# MUST emit `finish=error` BEFORE the in-process recovery work happens. The
+# external watchdog (langgraph-api) relies on this so it only kills a worker
+# when no `finish` arrives within the deadline. The tests below pin down the
+# three recovery paths so a refactor that moves `_finish_timed_attempt` past
+# an `await` (or past the final `raise`) trips CI.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_arun_with_retry_observer_emits_finish_before_retry_backoff():
+    """`finish=error` of attempt N must arrive before the retry backoff sleep."""
+    timeline: list[tuple[float, Any]] = []
+
+    class TimingOutOnceProc:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def ainvoke(self, input, config):
+            self.calls += 1
+            if self.calls == 1:
+                await asyncio.sleep(1.0)
+            return "ok"
+
+    backoff = 0.25
+    policy = RetryPolicy(
+        max_attempts=2,
+        initial_interval=backoff,
+        backoff_factor=1.0,
+        max_interval=backoff,
+        jitter=False,
+        retry_on=NodeTimeoutError,
+    )
+    task = _make_task(
+        TimingOutOnceProc(),
+        timeout=_idle_timeout(0.05),
+        retry_policy=(policy,),
+        name="backoff_watcher",
+    )
+    task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = lambda ev: timeline.append(
+        (time.monotonic(), ev)
+    )
+
+    assert await arun_with_retry(task, retry_policy=None) == "ok"
+
+    starts = [(t, ev) for t, ev in timeline if ev.event == "start"]
+    finishes = [(t, ev) for t, ev in timeline if ev.event == "finish"]
+    assert [ev.context.attempt for _, ev in starts] == [1, 2]
+    assert [ev.status for _, ev in finishes] == ["error", "success"]
+
+    first_finish_t = finishes[0][0]
+    second_start_t = starts[1][0]
+
+    # The watcher relies on this gap: `finish=error` for attempt 1 must arrive
+    # before `arun_with_retry` enters `await asyncio.sleep(backoff)`. We give a
+    # generous slack to keep this stable on slow CI; the structural invariant
+    # is "finish lands first", not "the gap equals exactly backoff".
+    assert second_start_t - first_finish_t >= backoff * 0.5, (
+        f"finish=error appears to be emitted after retry backoff sleep; "
+        f"gap was {second_start_t - first_finish_t:.3f}s, expected >= {backoff * 0.5:.3f}s"
+    )
+
+
+@pytest.mark.anyio
+async def test_state_graph_observer_emits_finish_before_error_handler_start():
+    """Original task's `finish=error` must arrive before the error_handler task's `start`."""
+
+    class State(TypedDict):
+        foo: str
+
+    async def slow_node(state: State) -> State:
+        await asyncio.sleep(1.0)
+        return {"foo": "should-not-happen"}
+
+    async def handler_node(state: State, error: NodeError) -> State:
+        return {"foo": "handled"}
+
+    events: list = []
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "slow",
+            slow_node,
+            timeout=TimeoutPolicy(idle_timeout=0.05),
+            error_handler=handler_node,
+        )
+        .add_edge(START, "slow")
+        .compile()
+    )
+
+    result = await graph.ainvoke(
+        {"foo": ""},
+        config={
+            "configurable": {CONFIG_KEY_TIMED_ATTEMPT_OBSERVER: events.append},
+        },
+    )
+    assert result["foo"] == "handled"
+
+    # Filter to events from the failing node only — the handler node has no
+    # timeout configured here, so it doesn't appear in the observer stream.
+    slow_events = [ev for ev in events if ev.context.task_name == "slow"]
+    starts = [ev for ev in slow_events if ev.event == "start"]
+    finishes = [ev for ev in slow_events if ev.event == "finish"]
+    assert len(starts) == 1
+    assert len(finishes) == 1
+    assert finishes[0].status == "error"
+    assert finishes[0].error_type == "NodeTimeoutError"
+    # The slow task's finish-error event must precede every event for any
+    # follow-up task in the same observer stream.
+    slow_finish_index = events.index(finishes[0])
+    for ev in events[slow_finish_index + 1 :]:
+        assert ev.context.task_name == "slow" or ev.event == "start", (
+            f"unexpected event {ev.event} for {ev.context.task_name} "
+            f"after slow's finish=error"
+        )
+
+
+@pytest.mark.anyio
+async def test_arun_with_retry_observer_emits_finish_before_final_raise_on_exhaustion():
+    """When retry exhausts and the timeout propagates, the final `finish=error` must
+    be emitted before `arun_with_retry` re-raises."""
+    events: list = []
+
+    class AlwaysTimingOutProc:
+        async def ainvoke(self, input, config):
+            await asyncio.sleep(1.0)
+            return "never"
+
+    policy = RetryPolicy(
+        max_attempts=2,
+        initial_interval=0.0,
+        jitter=False,
+        retry_on=NodeTimeoutError,
+    )
+    task = _make_task(
+        AlwaysTimingOutProc(),
+        timeout=_idle_timeout(0.05),
+        retry_policy=(policy,),
+        name="never_succeeds",
+    )
+    task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
+
+    with pytest.raises(NodeTimeoutError):
+        await arun_with_retry(task, retry_policy=None)
+
+    starts = [ev for ev in events if ev.event == "start"]
+    finishes = [ev for ev in events if ev.event == "finish"]
+    assert [ev.context.attempt for ev in starts] == [1, 2]
+    assert [ev.context.attempt for ev in finishes] == [1, 2]
+    assert [ev.status for ev in finishes] == ["error", "error"]
+    assert all(ev.error_type == "NodeTimeoutError" for ev in finishes)
+    # Both finish events were observed BEFORE arun_with_retry raised, otherwise
+    # the `with pytest.raises` block would have exited before `events` got
+    # populated with the second finish.
+
+
+@pytest.mark.anyio
+async def test_sync_sleep_in_async_node_bypasses_timeout_and_emits_finish_success():
+    """Sync `time.sleep` inside an async node blocks the event loop so the
+    in-process watchdog cannot fire. We document the resulting behavior here:
+
+    1. `NodeTimeoutError` is NOT raised, even though the sync sleep exceeds
+       `idle_timeout`.
+    2. The node's normal return value flows through.
+    3. `finish=success` is emitted to the observer.
+
+    This is the canonical case where the in-process timeout is defeated and
+    the only safety net is the external watcher (langgraph-api), which
+    SIGKILLs the worker when no `finish` arrives within its deadline. The
+    catch is that with a *short* sync sleep the event loop unblocks before
+    the watcher's deadline expires, so the watcher legitimately does not
+    kill — meaning the configured `idle_timeout` is silently honored at the
+    process level only when the block is long enough to outlast the
+    watcher's grace.
+
+    This is the documented "Cooperative cancellation" caveat on
+    `TimeoutPolicy`. The test pins the behavior so any future change that
+    starts raising `NodeTimeoutError` for sync-blocked async nodes (or stops
+    emitting `finish=success`) is caught.
+    """
+    events: list = []
+
+    class SyncSleepingProc:
+        async def ainvoke(self, input, config):
+            time.sleep(0.1)
+            return "completed_despite_timeout"
+
+    task = _make_task(
+        SyncSleepingProc(),
+        timeout=_idle_timeout(0.05),
+        name="sync_sleeper",
+    )
+    task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
+
+    result = await arun_with_retry(task, retry_policy=None)
+
+    assert result == "completed_despite_timeout"
+    starts = [ev for ev in events if ev.event == "start"]
+    finishes = [ev for ev in events if ev.event == "finish"]
+    assert len(starts) == 1
+    assert len(finishes) == 1
+    assert finishes[0].status == "success"
+    assert finishes[0].error_type is None
 
 
 def test_graph_error_handler_runs_after_retry_exhaustion():
