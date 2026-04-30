@@ -44,7 +44,7 @@ import inspect
 import json
 from collections.abc import Awaitable, Callable
 from copy import copy, deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from types import UnionType
 from typing import (
     TYPE_CHECKING,
@@ -1723,9 +1723,9 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     context: ContextT
     config: RunnableConfig
     stream_writer: StreamWriter
-    tools: list[BaseTool]
     tool_call_id: str | None
     store: BaseStore | None
+    tools: list[BaseTool] = field(default_factory=list)
     execution_info: ExecutionInfo | None = None
     server_info: ServerInfo | None = None
 
