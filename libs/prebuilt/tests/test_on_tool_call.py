@@ -206,7 +206,7 @@ def test_handler_validation_no_return() -> None:
 
 
 def test_handler_validation_no_yield() -> None:
-    """Test that handler that doesn't call execute returns None (bad behavior)."""
+    """Test that handler that doesn't call execute returns an error."""
 
     def bad_handler(
         _request: ToolCallRequest,
@@ -218,7 +218,37 @@ def test_handler_validation_no_yield() -> None:
 
     tool_node = ToolNode([add], wrap_tool_call=bad_handler)
 
-    # This will return None wrapped in messages
+    with pytest.raises(TypeError, match="unexpected type"):
+        tool_node.invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "adding",
+                        tool_calls=[
+                            {
+                                "name": "add",
+                                "args": {"a": 1, "b": 2},
+                                "id": "call_7",
+                            }
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        )
+
+
+def test_handler_validation_no_yield_can_be_handled() -> None:
+    """Test that invalid handler returns can be converted to error messages."""
+
+    def bad_handler(
+        _request: ToolCallRequest,
+        _execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        return None  # type: ignore[return-value]
+
+    tool_node = ToolNode([add], wrap_tool_call=bad_handler, handle_tool_errors=True)
+
     result = tool_node.invoke(
         {
             "messages": [
@@ -228,7 +258,7 @@ def test_handler_validation_no_yield() -> None:
                         {
                             "name": "add",
                             "args": {"a": 1, "b": 2},
-                            "id": "call_7",
+                            "id": "call_7_handled",
                         }
                     ],
                 )
@@ -237,10 +267,39 @@ def test_handler_validation_no_yield() -> None:
         config=_create_config_with_runtime(),
     )
 
-    # Result contains None in messages (bad handler behavior)
-    assert isinstance(result, dict)
-    assert result["messages"][0] is None
+    message = result["messages"][0]
+    assert isinstance(message, ToolMessage)
+    assert message.status == "error"
+    assert "unexpected type" in message.content
+    assert "NoneType" in message.content
 
+
+async def test_async_handler_validation_no_yield() -> None:
+    """Test that async handlers must return ToolMessage or Command."""
+
+    async def bad_handler(_request, _execute):  # type: ignore[no-untyped-def]
+        return None
+
+    tool_node = ToolNode([add], awrap_tool_call=bad_handler)
+
+    with pytest.raises(TypeError, match="unexpected type"):
+        await tool_node.ainvoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "adding",
+                        tool_calls=[
+                            {
+                                "name": "add",
+                                "args": {"a": 1, "b": 2},
+                                "id": "call_7_async",
+                            }
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        )
 
 def test_handler_with_handle_tool_errors_true() -> None:
     """Test that handle_tool_errors=True works with on_tool_call handler."""

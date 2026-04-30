@@ -1052,7 +1052,8 @@ class ToolNode(RunnableCallable):
 
         # Call wrapper with request and execute callable
         try:
-            return self._wrap_tool_call(tool_request, execute)
+            response = self._wrap_tool_call(tool_request, execute)
+            return self._normalize_tool_response(response, call, input_type)
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
@@ -1204,10 +1205,12 @@ class ToolNode(RunnableCallable):
         # Call wrapper with request and execute callable
         try:
             if self._awrap_tool_call is not None:
-                return await self._awrap_tool_call(tool_request, execute)
+                response = await self._awrap_tool_call(tool_request, execute)
+                return self._normalize_tool_response(response, call, input_type)
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
-            return self._wrap_tool_call(tool_request, _sync_execute)
+            response = self._wrap_tool_call(tool_request, _sync_execute)
+            return self._normalize_tool_response(response, call, input_type)
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
