@@ -159,8 +159,13 @@ def _subgraph_transformer(mux: StreamMux) -> SubgraphTransformer:
     return transformer
 
 
+def _unstamped(items):
+    """Strip push stamps from a StreamChannel's internal buffer."""
+    return [item for _stamp, item in items]
+
+
 def _drain_subgraphs(mux: StreamMux) -> list[SubgraphRunStream]:
-    return list(_subgraph_transformer(mux)._log._items)
+    return _unstamped(_subgraph_transformer(mux)._log._items)
 
 
 def _child_mux(handle: SubgraphRunStream | AsyncSubgraphRunStream) -> StreamMux:
@@ -169,13 +174,13 @@ def _child_mux(handle: SubgraphRunStream | AsyncSubgraphRunStream) -> StreamMux:
 
 
 def _event_items(mux: StreamMux) -> list[ProtocolEvent]:
-    return list(mux._events._items)
+    return _unstamped(mux._events._items)
 
 
 def _lifecycle_payloads(mux: StreamMux) -> list[dict[str, Any]]:
     lifecycle_t = mux.transformer_by_key("lifecycle")
     assert isinstance(lifecycle_t, LifecycleTransformer)
-    return list(lifecycle_t._channel._items)
+    return _unstamped(lifecycle_t._channel._items)
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +252,7 @@ def test_grandchild_discovered_via_child_mini_mux() -> None:
     [child_handle] = _drain_subgraphs(mux)
     assert child_handle.path == ("agent:abc",)
     # The grandchild appears on the CHILD'S subgraphs projection.
-    grandchildren = list(child_handle.subgraphs._items)
+    grandchildren = _unstamped(child_handle.subgraphs._items)
     assert len(grandchildren) == 1
     assert grandchildren[0].path == ("agent:abc", "tool:def")
 

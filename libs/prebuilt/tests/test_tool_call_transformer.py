@@ -30,6 +30,11 @@ from langgraph.prebuilt._tool_call_stream import ToolCallStream
 TS = int(time.time() * 1000)
 
 
+def _unstamped(items):
+    """Strip push stamps from a StreamChannel's internal buffer."""
+    return [item for _stamp, item in items]
+
+
 def _tool_event(
     event: str,
     tool_call_id: str,
@@ -95,7 +100,7 @@ class TestToolCallTransformerUnit:
                 input={"text": "hi"},
             )
         )
-        handles = list(transformer._log._items)
+        handles = _unstamped(transformer._log._items)
         assert len(handles) == 1
         h = handles[0]
         assert isinstance(h, ToolCallStream)
@@ -111,7 +116,7 @@ class TestToolCallTransformerUnit:
         mux.push(_tool_event("tool-output-delta", "tc1", delta="a"))
         mux.push(_tool_event("tool-output-delta", "tc1", delta="b"))
         stream = transformer._active["tc1"]
-        assert list(stream._output_deltas._items) == ["a", "b"]
+        assert _unstamped(stream._output_deltas._items) == ["a", "b"]
 
     def test_finish_closes_stream(self) -> None:
         mux, transformer = _mux()
@@ -142,14 +147,14 @@ class TestToolCallTransformerUnit:
         mux.push(_tool_event("tool-output-delta", "a", delta="A1"))
         mux.push(_tool_event("tool-output-delta", "b", delta="B1"))
         mux.push(_tool_event("tool-output-delta", "a", delta="A2"))
-        assert list(transformer._active["a"]._output_deltas._items) == ["A1", "A2"]
-        assert list(transformer._active["b"]._output_deltas._items) == ["B1"]
+        assert _unstamped(transformer._active["a"]._output_deltas._items) == ["A1", "A2"]
+        assert _unstamped(transformer._active["b"]._output_deltas._items) == ["B1"]
 
     def test_tools_event_passes_through_main_log(self) -> None:
         mux, transformer = _mux()
         _subscribe(mux._events)
         mux.push(_tool_event("tool-started", "tc1", tool_name="echo"))
-        kept = [e for e in mux._events._items if e["method"] == "tools"]
+        kept = [e for e in _unstamped(mux._events._items) if e["method"] == "tools"]
         assert len(kept) == 1
 
 

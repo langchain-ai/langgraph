@@ -92,11 +92,16 @@ def _arm(mux: StreamMux) -> None:
             transformer._channel._subscribed = True
 
 
+def _unstamped(items):
+    """Strip push stamps from a StreamChannel's internal buffer."""
+    return [item for _stamp, item in items]
+
+
 def _drain_lifecycle(mux: StreamMux) -> list[LifecyclePayload]:
     """Snapshot the lifecycle channel's buffer."""
     transformer = mux.transformer_by_key("lifecycle")
     assert isinstance(transformer, LifecycleTransformer)
-    return list(transformer._channel._items)
+    return _unstamped(transformer._channel._items)
 
 
 def _build_lifecycle_mux(*, scope: tuple[str, ...] = ()) -> StreamMux:
@@ -301,7 +306,7 @@ def test_protocol_event_method_is_native() -> None:
     mux = _build_lifecycle_mux()
     mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
 
-    methods = {evt["method"] for evt in mux._events._items}
+    methods = {evt["method"] for evt in _unstamped(mux._events._items)}
     assert "lifecycle" in methods
     assert "custom:lifecycle" not in methods
 
@@ -312,7 +317,7 @@ def test_tasks_events_suppressed_from_main_log() -> None:
     mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
     mux.push(_tasks_result([], task_id="abc", name="agent"))
 
-    methods = [evt["method"] for evt in mux._events._items]
+    methods = [evt["method"] for evt in _unstamped(mux._events._items)]
     assert "tasks" not in methods
     # Lifecycle events did make it through, though.
     assert "lifecycle" in methods

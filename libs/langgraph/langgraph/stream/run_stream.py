@@ -185,27 +185,24 @@ class GraphRunStream:
         return iter(self._mux._events)
 
     def interleave(self, *names: str) -> Iterator[tuple[str, Any]]:
-        """Iterate multiple projections round-robin, yielding ``(name, item)``.
+        """Iterate multiple projections in arrival order, yielding ``(name, item)``.
 
-        Each turn advances one projection's cursor; when a cursor's buffer
-        is empty, pulling from it drives the pump once, which fans out to
-        every subscribed projection log. Projections whose items aren't
-        consumed on this turn sit in their own buffers only until the next
-        turn reaches them, bounding memory by the skew between projection
-        rates rather than letting any single log grow to the full run
-        length.
-
-        Projections are exhausted independently; a projection that finishes
-        early drops out of the rotation while others continue. The overall
-        iterator ends once all named projections are done.
+        Items are ordered by a monotonic push stamp assigned when each
+        transformer pushes into its `StreamChannel`. This gives strict
+        arrival ordering across projections, unlike round-robin.
 
         Args:
             *names: Projection keys to interleave. Must match keys in
                 ``extensions``.
 
         Yields:
-            ``(name, item)`` tuples in round-robin order across the named
+            ``(name, item)`` tuples in arrival order across the named
             projections.
+
+        Each named channel is locked for the duration of iteration and
+        released when the generator completes, is closed, or raises.
+        Channels cannot be subscribed concurrently — use `.tee(n)` if
+        you need fan-out.
 
         Raises:
             KeyError: If a name doesn't match a registered projection.
@@ -219,20 +216,70 @@ class GraphRunStream:
                     print("val:", item)
             ```
         """
-        cursors: dict[str, Iterator[Any]] = {
-            name: iter(self.extensions[name]) for name in names
-        }
-        done: set[str] = set()
-        while len(done) < len(cursors):
-            for name, cursor in cursors.items():
-                if name in done:
-                    continue
-                try:
-                    item = next(cursor)
-                except StopIteration:
-                    done.add(name)
-                    continue
-                yield (name, item)
+        from langgraph.stream.stream_channel import StreamChannel
+
+        channels: dict[str, StreamChannel[Any]] = {}
+        try:
+            for name in names:
+                ch = self.extensions[name]
+                if not isinstance(ch, StreamChannel):
+                    raise TypeError(
+                        f"interleave() requires StreamChannel projections, "
+                        f"got {type(ch).__name__} for {name!r}"
+                    )
+                if ch._is_async is None:
+                    raise TypeError(
+                        f"StreamChannel {name!r} has not been bound yet. "
+                        "Register the transformer with a StreamMux first."
+                    )
+                if ch._is_async:
+                    raise TypeError(
+                        f"StreamChannel {name!r} is bound to async mode — "
+                        "sync interleave() cannot consume async channels."
+                    )
+                if ch._subscribed:
+                    raise RuntimeError(
+                        f"StreamChannel {name!r} already has a subscriber; "
+                        "use .tee(n) for fan-out."
+                    )
+                ch._subscribed = True
+                channels[name] = ch
+
+            done: set[str] = set()
+
+            while len(done) < len(channels):
+                best: tuple[int, str] | None = None
+                for name, ch in channels.items():
+                    if name in done:
+                        continue
+                    if ch._closed and not ch._items:
+                        if ch._error is not None:
+                            raise ch._error
+                        done.add(name)
+                        continue
+                    if ch._items:
+                        stamp = ch._items[0][0]
+                        if best is None or stamp < best[0]:
+                            best = (stamp, name)
+
+                if best is not None:
+                    _stamp, item = channels[best[1]]._items.popleft()
+                    yield (best[1], item)
+                else:
+                    pump = self._mux._pump_fn
+                    if pump is None or not pump():
+                        before = len(done)
+                        for name, ch in channels.items():
+                            if name not in done and not ch._items:
+                                if ch._closed:
+                                    if ch._error is not None:
+                                        raise ch._error
+                                    done.add(name)
+                        if len(done) == before:
+                            break
+        finally:
+            for ch in channels.values():
+                ch._subscribed = False
 
 
 class AsyncGraphRunStream:

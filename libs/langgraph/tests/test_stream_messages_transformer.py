@@ -26,6 +26,11 @@ from langgraph.stream.transformers import MessagesTransformer, ValuesTransformer
 TS = int(time.time() * 1000)
 
 
+def _unstamped(items):
+    """Strip push stamps from a StreamChannel's internal buffer."""
+    return [item for _stamp, item in items]
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -174,7 +179,7 @@ class TestProtocolEventRouting:
             )
         )
         log.close()
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert isinstance(stream, ChatModelStream)
         assert stream.message_id == "run-1"
 
@@ -183,7 +188,7 @@ class TestProtocolEventRouting:
         for evt in _lifecycle(text="hello world"):
             t.process(_proto_event(evt, run_id="run-1"))
         log.close()
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert stream.done
         assert stream.output.text == "hello world"
 
@@ -206,7 +211,7 @@ class TestProtocolEventRouting:
             )
         )
         log.close()
-        assert list(log._items) == []
+        assert _unstamped(log._items) == []
 
     def test_concurrent_streams_routed_by_run_id(self) -> None:
         t, log = _make_sync_transformer()
@@ -216,7 +221,7 @@ class TestProtocolEventRouting:
             t.process(_proto_event(a, run_id="run-a"))
             t.process(_proto_event(b, run_id="run-b"))
         log.close()
-        streams = list(log._items)
+        streams = _unstamped(log._items)
         assert len(streams) == 2
         by_id = {s.message_id: s for s in streams}
         assert by_id["run-a"].output.text == "aaaa"
@@ -227,7 +232,7 @@ class TestProtocolEventRouting:
         for evt in _lifecycle(text="abcdef"):
             t.process(_proto_event(evt))
         log.close()
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert "".join(stream._text_proj._deltas) == "abcdef"
 
     def test_stream_pushed_on_message_start_not_finish(self) -> None:
@@ -250,7 +255,7 @@ class TestProtocolEventRouting:
                 node="my_llm",
             )
         )
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert stream.node == "my_llm"
 
 
@@ -264,7 +269,7 @@ class TestWholeMessageFallback:
         t, log = _make_sync_transformer()
         t.process(_whole_msg("the full answer"))
         log.close()
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert stream.done
         assert stream.output.text == "the full answer"
 
@@ -272,7 +277,7 @@ class TestWholeMessageFallback:
         t, log = _make_sync_transformer()
         t.process(_whole_msg("full"))
         log.close()
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert [e["event"] for e in stream._events] == [
             "message-start",
             "content-block-start",
@@ -318,7 +323,7 @@ class TestFiltering:
             }
         )
         log.close()
-        assert list(log._items) == []
+        assert _unstamped(log._items) == []
 
     def test_legacy_v1_chunks_ignored(self) -> None:
         # v1 AIMessageChunk tuples (from on_llm_new_token) are not streamed
@@ -327,7 +332,7 @@ class TestFiltering:
         t.process(_v1_chunk("hello"))
         t.process(_v1_chunk(" world", finish=True))
         log.close()
-        assert list(log._items) == []
+        assert _unstamped(log._items) == []
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +348,7 @@ class TestLifecycle:
                 {"event": "message-start", "message_id": "run-1"}, run_id="run-1"
             )
         )
-        streams = list(log._items)
+        streams = _unstamped(log._items)
         err = RuntimeError("graph died")
         t.fail(err)
         assert t._by_run == {}
@@ -371,14 +376,14 @@ class TestAsyncMode:
         t, log = _make_async_transformer()
         for evt in _lifecycle(text="async stream"):
             t.process(_proto_event(evt))
-        assert isinstance(list(log._items)[0], AsyncChatModelStream)
+        assert isinstance(_unstamped(log._items)[0], AsyncChatModelStream)
 
     @pytest.mark.anyio
     async def test_text_projection_yields_deltas(self) -> None:
         t, log = _make_async_transformer()
         for evt in _lifecycle(text="hello world"):
             t.process(_proto_event(evt))
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert isinstance(stream, AsyncChatModelStream)
         assert "".join([d async for d in stream.text]) == "hello world"
 
@@ -387,7 +392,7 @@ class TestAsyncMode:
         t, log = _make_async_transformer()
         for evt in _lifecycle(text="async"):
             t.process(_proto_event(evt))
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert (await stream.output).text == "async"
 
 
@@ -419,7 +424,7 @@ class TestWireRequestMore:
         for evt in _lifecycle():
             messages_t.process(_proto_event(evt))
 
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert stream._request_more is messages_t._pump_fn
 
 
@@ -445,14 +450,14 @@ class TestViaMux:
         for evt in _lifecycle(text="mux stream"):
             mux.push(_proto_event(evt))
         mux.close()
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert stream.output.text == "mux stream"
 
     def test_whole_message_via_mux(self) -> None:
         t, mux, log = self._make_mux()
         mux.push(_whole_msg("result"))
         mux.close()
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert stream.output.text == "result"
 
     @pytest.mark.anyio
@@ -466,7 +471,7 @@ class TestViaMux:
         for evt in _lifecycle(text="async mux"):
             await mux.apush(_proto_event(evt))
 
-        (stream,) = list(log._items)
+        (stream,) = _unstamped(log._items)
         assert (await stream.output).text == "async mux"
         await mux.aclose()
 
