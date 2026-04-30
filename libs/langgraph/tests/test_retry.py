@@ -1465,14 +1465,14 @@ async def test_state_graph_add_node_timeout_composes_with_retry():
     async def flaky(state: _TimeoutState) -> _TimeoutState:
         attempts.append(len(attempts))
         if len(attempts) < 2:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
         return {"x": state["x"] + 1}
 
     builder = StateGraph(_TimeoutState)
     builder.add_node(
         "flaky",
         flaky,
-        timeout=TimeoutPolicy(idle_timeout=0.1),
+        timeout=TimeoutPolicy(idle_timeout=0.3),
         retry_policy=RetryPolicy(
             max_attempts=3,
             initial_interval=0.0,
