@@ -164,12 +164,11 @@ class NodeError:
     """Exception raised by the failed node."""
 
 
-class NodeTimeoutError(TimeoutError):
+class NodeTimeoutError(Exception):
     """Raised when a node invocation exceeds one of its configured timeouts.
 
-    Subclasses the built-in `TimeoutError`, so existing `except TimeoutError`
-    handlers keep working. If the node has a `retry_policy` whose `retry_on`
-    permits `TimeoutError`, the attempt will be retried.
+    Does **not** inherit from the built-in `TimeoutError` (a subclass of
+    `OSError`) so that the default `RetryPolicy` treats it as retryable.
 
     Both `idle_timeout` and `run_timeout` reflect the configured policy at the
     time of the failure (each is `None` if not configured). `kind` and
