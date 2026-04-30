@@ -318,8 +318,36 @@ class TestInterleaveIntegration:
         with pytest.raises(RuntimeError, match="already has a subscriber"):
             list(run.interleave("alpha"))
 
-    def test_interleave_subscribes_projections(self) -> None:
+    def test_interleave_releases_projections_on_completion(self) -> None:
         run = _build_simple_graph().stream_v2({"value": "x", "items": []})
         list(run.interleave("values", "messages"))
+        # Subscriptions should be released after the generator completes,
+        # so the channels can be re-iterated (they'll be empty / closed).
+        assert run.extensions["values"]._subscribed is False
+        assert run.extensions["messages"]._subscribed is False
+
+    def test_interleave_releases_projections_on_early_break(self) -> None:
+        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        gen = run.interleave("values", "messages")
+        next(gen)
+        gen.close()
+        assert run.extensions["values"]._subscribed is False
+        assert run.extensions["messages"]._subscribed is False
+
+    def test_interleave_releases_projections_on_validation_failure(self) -> None:
+        mux = StreamMux(
+            factories=[ValuesTransformer, _TwoChannelTransformer],
+            is_async=False,
+        )
+        alpha = mux.extensions["alpha"]
+        # Pre-subscribe alpha so that interleave will fail validation when
+        # it gets to the second name. The first (already-validated) channel
+        # should still be released.
+        run = GraphRunStream(None, mux, wire_pump=False)
+        mux.close()
+        alpha._subscribed = True
+
         with pytest.raises(RuntimeError, match="already has a subscriber"):
-            list(run.values)
+            list(run.interleave("values", "alpha"))
+
+        assert mux.extensions["values"]._subscribed is False

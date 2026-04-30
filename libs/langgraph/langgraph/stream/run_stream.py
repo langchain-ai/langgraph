@@ -199,6 +199,11 @@ class GraphRunStream:
             ``(name, item)`` tuples in arrival order across the named
             projections.
 
+        Each named channel is locked for the duration of iteration and
+        released when the generator completes, is closed, or raises.
+        Channels cannot be subscribed concurrently — use `.tee(n)` if
+        you need fan-out.
+
         Raises:
             KeyError: If a name doesn't match a registered projection.
 
@@ -214,63 +219,67 @@ class GraphRunStream:
         from langgraph.stream.stream_channel import StreamChannel
 
         channels: dict[str, StreamChannel[Any]] = {}
-        for name in names:
-            ch = self.extensions[name]
-            if not isinstance(ch, StreamChannel):
-                raise TypeError(
-                    f"interleave() requires StreamChannel projections, "
-                    f"got {type(ch).__name__} for {name!r}"
-                )
-            if ch._is_async is None:
-                raise TypeError(
-                    f"StreamChannel {name!r} has not been bound yet. "
-                    "Register the transformer with a StreamMux first."
-                )
-            if ch._is_async:
-                raise TypeError(
-                    f"StreamChannel {name!r} is bound to async mode — "
-                    "sync interleave() cannot consume async channels."
-                )
-            if ch._subscribed:
-                raise RuntimeError(
-                    f"StreamChannel {name!r} already has a subscriber; "
-                    "use .tee(n) for fan-out."
-                )
-            ch._subscribed = True
-            channels[name] = ch
+        try:
+            for name in names:
+                ch = self.extensions[name]
+                if not isinstance(ch, StreamChannel):
+                    raise TypeError(
+                        f"interleave() requires StreamChannel projections, "
+                        f"got {type(ch).__name__} for {name!r}"
+                    )
+                if ch._is_async is None:
+                    raise TypeError(
+                        f"StreamChannel {name!r} has not been bound yet. "
+                        "Register the transformer with a StreamMux first."
+                    )
+                if ch._is_async:
+                    raise TypeError(
+                        f"StreamChannel {name!r} is bound to async mode — "
+                        "sync interleave() cannot consume async channels."
+                    )
+                if ch._subscribed:
+                    raise RuntimeError(
+                        f"StreamChannel {name!r} already has a subscriber; "
+                        "use .tee(n) for fan-out."
+                    )
+                ch._subscribed = True
+                channels[name] = ch
 
-        done: set[str] = set()
+            done: set[str] = set()
 
-        while len(done) < len(channels):
-            best: tuple[int, str] | None = None
-            for name, ch in channels.items():
-                if name in done:
-                    continue
-                if ch._closed and not ch._items:
-                    if ch._error is not None:
-                        raise ch._error
-                    done.add(name)
-                    continue
-                if ch._items:
-                    stamp = ch._items[0][0]
-                    if best is None or stamp < best[0]:
-                        best = (stamp, name)
+            while len(done) < len(channels):
+                best: tuple[int, str] | None = None
+                for name, ch in channels.items():
+                    if name in done:
+                        continue
+                    if ch._closed and not ch._items:
+                        if ch._error is not None:
+                            raise ch._error
+                        done.add(name)
+                        continue
+                    if ch._items:
+                        stamp = ch._items[0][0]
+                        if best is None or stamp < best[0]:
+                            best = (stamp, name)
 
-            if best is not None:
-                _stamp, item = channels[best[1]]._items.popleft()
-                yield (best[1], item)
-            else:
-                pump = self._mux._pump_fn
-                if pump is None or not pump():
-                    before = len(done)
-                    for name, ch in channels.items():
-                        if name not in done and not ch._items:
-                            if ch._closed:
-                                if ch._error is not None:
-                                    raise ch._error
-                                done.add(name)
-                    if len(done) == before:
-                        break
+                if best is not None:
+                    _stamp, item = channels[best[1]]._items.popleft()
+                    yield (best[1], item)
+                else:
+                    pump = self._mux._pump_fn
+                    if pump is None or not pump():
+                        before = len(done)
+                        for name, ch in channels.items():
+                            if name not in done and not ch._items:
+                                if ch._closed:
+                                    if ch._error is not None:
+                                        raise ch._error
+                                    done.add(name)
+                        if len(done) == before:
+                            break
+        finally:
+            for ch in channels.values():
+                ch._subscribed = False
 
 
 class AsyncGraphRunStream:
