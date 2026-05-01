@@ -5830,6 +5830,30 @@ def test_multiple_interrupts_functional_cache(
     assert counter == 6
 
 
+def test_sync_functional_cache_does_not_cache_task_errors(
+    sync_checkpointer: BaseCheckpointSaver, cache: BaseCache
+) -> None:
+    counter = 0
+
+    @task(cache_policy=CachePolicy())
+    def fails(x: int) -> int:
+        nonlocal counter
+        counter += 1
+        raise RuntimeError(f"boom {counter}")
+
+    @entrypoint(checkpointer=sync_checkpointer, cache=cache)
+    def graph(x: int) -> int:
+        return fails(x).result()
+
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    with pytest.raises(RuntimeError, match="boom 1"):
+        graph.invoke(1, config)
+    with pytest.raises(RuntimeError, match="boom 2"):
+        graph.invoke(1, config)
+
+    assert counter == 2
+
+
 def test_task_before_interrupt_resume(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
