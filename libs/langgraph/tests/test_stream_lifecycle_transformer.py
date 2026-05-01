@@ -6,7 +6,7 @@ on the `lifecycle` channel for both in-process iteration via
 events. Most tests dispatch synthetic protocol events through a
 `StreamMux` to keep the inference logic isolated; the end-of-file
 group exercises the path through real graphs (multi-depth
-discovery, nested `stream_v2` calls with non-empty `parent_ns`).
+discovery, nested `stream_events(version="v3")` calls with non-empty `parent_ns`).
 """
 
 from __future__ import annotations
@@ -324,7 +324,7 @@ def test_tasks_events_suppressed_from_main_log() -> None:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end: real graphs through stream_v2
+# End-to-end: real graphs through stream_events(version="v3")
 # ---------------------------------------------------------------------------
 
 
@@ -358,10 +358,10 @@ def _make_two_level_nested() -> Any:
     return outer_b.compile()
 
 
-def test_stream_v2_real_graph_emits_lifecycle_at_each_depth() -> None:
+def test_stream_events_v3_real_graph_emits_lifecycle_at_each_depth() -> None:
     """Outer graph with two nested subgraphs surfaces lifecycle for both."""
     graph = _make_two_level_nested()
-    run = graph.stream_v2({"value": "x", "items": []})
+    run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
     # Iterating the projection drives the pump and drains synthesized
     # lifecycle events at the same time.
@@ -384,17 +384,17 @@ def test_stream_v2_real_graph_emits_lifecycle_at_each_depth() -> None:
         )
 
 
-def test_stream_v2_with_nested_parent_ns_scopes_lifecycle() -> None:
-    """When `stream_v2` is called with a non-empty checkpoint_ns in config,
+def test_stream_events_v3_with_nested_parent_ns_scopes_lifecycle() -> None:
+    """When `stream_events(version="v3")` is called with a non-empty checkpoint_ns in config,
     `_resolve_parent_ns` returns that namespace and the registered
     `LifecycleTransformer` is constructed with `scope=parent_ns`. This
-    exercises the path that exists today purely for nested-stream_v2
+    exercises the path that exists today purely for nested-stream_events(version="v3")
     callers; the test simulates such a caller by injecting a
     checkpoint_ns into the config.
     """
     graph = _make_two_level_nested()
     config = {CONF: {CONFIG_KEY_CHECKPOINT_NS: "outer:abc"}}
-    run = graph.stream_v2({"value": "x", "items": []}, config=config)
+    run = graph.stream_events({"value": "x", "items": []}, config=config, version="v3")
 
     payloads = list(run.lifecycle)
     # Every emitted lifecycle namespace must extend the caller's scope —

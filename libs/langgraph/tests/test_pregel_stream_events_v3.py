@@ -1,4 +1,4 @@
-"""Tests for Pregel.stream_v2 / astream_v2 and the transformer pipeline."""
+"""Tests for Pregel.stream_events(version="v3") / astream_events(version="v3") and the transformer pipeline."""
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ def _build_custom_stream_graph():
 class _CustomPassthroughTransformer(StreamTransformer):
     """Opts a run into the `custom` stream mode without building a projection.
 
-    `stream_v2` requests only the modes that registered transformers
+    `stream_events(version="v3")` requests only the modes that registered transformers
     declare via `required_stream_modes`. Custom events are raw user
     emissions from `StreamWriter`, so tests that want them visible on
     the main event log register this pass-through transformer.
@@ -390,25 +390,31 @@ class TestStreamChannelNamed:
 
 
 # ---------------------------------------------------------------------------
-# stream_v2 sync tests
+# stream_events(version="v3") sync tests
 # ---------------------------------------------------------------------------
 
 
 class TestStreamV2Sync:
     def test_values_projection(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         snapshots = list(run.values)
         assert len(snapshots) >= 1
         last = snapshots[-1]
         assert "A" in last["value"] and "B" in last["value"]
 
     def test_output(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         output = run.output
         assert output == {"value": "xAB", "items": ["a", "b"]}
 
     def test_raw_event_iteration(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         events = list(run)
         assert len(events) > 0
         for event in events:
@@ -418,22 +424,27 @@ class TestStreamV2Sync:
             assert isinstance(event["params"]["timestamp"], int)
 
     def test_extensions_has_native_keys(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         _ = run.output
         assert "values" in run.extensions and "messages" in run.extensions
         assert run.values is run.extensions["values"]
         assert run.messages is run.extensions["messages"]
 
     def test_extensions_is_read_only(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(TypeError):
             run.extensions["new_key"] = object()  # type: ignore[index]
         with pytest.raises(TypeError):
             del run.extensions["values"]  # type: ignore[attr-defined]
 
     def test_custom_stream_events(self) -> None:
-        run = _build_custom_stream_graph().stream_v2(
+        run = _build_custom_stream_graph().stream_events(
             {"value": "x", "items": []},
+            version="v3",
             transformers=[_CustomPassthroughTransformer],
         )
         custom_events = [e for e in run if e["method"] == "custom"]
@@ -444,18 +455,22 @@ class TestStreamV2Sync:
     def test_custom_events_suppressed_without_transformer(self) -> None:
         """Without a transformer declaring `"custom"`, no custom events flow.
 
-        `stream_v2` asks the graph only for the modes that registered
+        `stream_events(version="v3")` asks the graph only for the modes that registered
         transformers require. Built-ins cover `values` / `messages`;
         consumers that want raw custom events surface them by
         registering a transformer whose `required_stream_modes`
         includes `"custom"`.
         """
-        run = _build_custom_stream_graph().stream_v2({"value": "x", "items": []})
+        run = _build_custom_stream_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         custom_events = [e for e in run if e["method"] == "custom"]
         assert custom_events == []
 
     def test_interleave_values_and_messages(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         tagged = list(run.interleave("values", "messages"))
         names = [name for name, _ in tagged]
         assert set(names).issubset({"values", "messages"})
@@ -465,7 +480,9 @@ class TestStreamV2Sync:
         assert run.extensions["messages"]._subscribed is False
 
     def test_abort_marks_exhausted_and_closes_mux(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         values_iter = iter(run.values)
         _ = next(values_iter)
         run.abort()
@@ -474,48 +491,63 @@ class TestStreamV2Sync:
         run.abort()  # idempotent
 
     def test_context_manager_calls_abort_on_exit(self) -> None:
-        with _build_simple_graph().stream_v2({"value": "x", "items": []}) as run:
+        with _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        ) as run:
             _ = next(iter(run.values))
         assert run._exhausted is True
 
     def test_interleave_unknown_projection(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(KeyError):
             list(run.interleave("values", "does_not_exist"))
 
 
 class TestStreamV2SyncErrors:
     def test_error_propagation_output(self) -> None:
-        run = _build_error_graph().stream_v2({"value": "x", "items": []})
+        run = _build_error_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(ValueError, match="boom"):
             _ = run.output
 
     def test_error_propagation_values(self) -> None:
-        run = _build_error_graph().stream_v2({"value": "x", "items": []})
+        run = _build_error_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(ValueError, match="boom"):
             list(run.values)
 
     def test_error_propagation_raw_events(self) -> None:
-        run = _build_error_graph().stream_v2({"value": "x", "items": []})
+        run = _build_error_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(ValueError, match="boom"):
             list(run)
 
     def test_error_propagation_interrupted(self) -> None:
-        run = _build_error_graph().stream_v2({"value": "x", "items": []})
+        run = _build_error_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(ValueError, match="boom"):
             _ = run.interrupted
 
     def test_error_propagation_interrupts(self) -> None:
-        run = _build_error_graph().stream_v2({"value": "x", "items": []})
+        run = _build_error_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(ValueError, match="boom"):
             _ = run.interrupts
 
 
 class TestStreamV2SyncInterrupt:
     def test_interrupted(self) -> None:
-        run = _build_interrupt_graph().stream_v2(
+        run = _build_interrupt_graph().stream_events(
             {"value": "x", "items": []},
             {"configurable": {"thread_id": "t1"}},
+            version="v3",
         )
         _ = run.output
         assert run.interrupted is True
@@ -523,7 +555,7 @@ class TestStreamV2SyncInterrupt:
 
 
 # ---------------------------------------------------------------------------
-# astream_v2 async tests
+# astream_events(version="v3") async tests
 # ---------------------------------------------------------------------------
 
 
@@ -531,26 +563,34 @@ class TestStreamV2SyncInterrupt:
 @NEEDS_CONTEXTVARS
 class TestStreamV2Async:
     async def test_values_projection(self) -> None:
-        run = await _build_simple_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         snapshots = [s async for s in run.values]
         assert len(snapshots) >= 1
         last = snapshots[-1]
         assert "A" in last["value"] and "B" in last["value"]
 
     async def test_output(self) -> None:
-        run = await _build_simple_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         output = await run.output()
         assert output == {"value": "xAB", "items": ["a", "b"]}
 
     async def test_raw_event_iteration(self) -> None:
-        run = await _build_simple_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         events = [e async for e in run]
         assert len(events) > 0
         for event in events:
             assert event["type"] == "event"
 
     async def test_abort_marks_exhausted_and_closes_mux(self) -> None:
-        run = await _build_simple_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         values_iter = aiter(run.values)
         _ = await anext(values_iter)
         await run.abort()
@@ -560,21 +600,26 @@ class TestStreamV2Async:
         await run.abort()  # idempotent
 
     async def test_context_manager_calls_abort_on_exit(self) -> None:
-        run = await _build_simple_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         async with run:
             _ = await anext(aiter(run.values))
         assert run._exhausted is True
 
     async def test_extensions_has_native_keys(self) -> None:
-        run = await _build_simple_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         _ = await run.output()
         assert "values" in run.extensions and "messages" in run.extensions
         assert run.values is run.extensions["values"]
         assert run.messages is run.extensions["messages"]
 
     async def test_custom_stream_events(self) -> None:
-        run = await _build_custom_stream_graph().astream_v2(
+        run = await _build_custom_stream_graph().astream_events(
             {"value": "x", "items": []},
+            version="v3",
             transformers=[_CustomPassthroughTransformer],
         )
         events = [e async for e in run]
@@ -588,29 +633,39 @@ class TestStreamV2Async:
 @NEEDS_CONTEXTVARS
 class TestStreamV2AsyncErrors:
     async def test_error_propagation_output(self) -> None:
-        run = await _build_error_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_error_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(ValueError, match="boom"):
             await run.output()
 
     async def test_error_propagation_values(self) -> None:
-        run = await _build_error_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_error_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(ValueError, match="boom"):
             async for _ in run.values:
                 pass
 
     async def test_error_propagation_raw_events(self) -> None:
-        run = await _build_error_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_error_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(ValueError, match="boom"):
             async for _ in run:
                 pass
 
     async def test_error_propagation_interrupted(self) -> None:
-        run = await _build_error_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_error_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(ValueError, match="boom"):
             await run.interrupted()
 
     async def test_error_propagation_interrupts(self) -> None:
-        run = await _build_error_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_error_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         with pytest.raises(ValueError, match="boom"):
             await run.interrupts()
 
@@ -619,9 +674,10 @@ class TestStreamV2AsyncErrors:
 @NEEDS_CONTEXTVARS
 class TestStreamV2AsyncInterrupt:
     async def test_interrupted(self) -> None:
-        run = await _build_interrupt_graph().astream_v2(
+        run = await _build_interrupt_graph().astream_events(
             {"value": "x", "items": []},
             {"configurable": {"thread_id": "t2"}},
+            version="v3",
         )
         _ = await run.output()
         assert await run.interrupted() is True
@@ -985,8 +1041,8 @@ class TestCustomTransformer:
                     self._channel.push(self._count)
                 return True
 
-        run = _build_simple_graph().stream_v2(
-            {"value": "x", "items": []}, transformers=[CounterTransformer]
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3", transformers=[CounterTransformer]
         )
         assert "counter" in run.extensions
         counter_iter = iter(run.extensions["counter"])
@@ -1011,15 +1067,15 @@ class TestCustomTransformer:
                     self._log.push("saw_values")
                 return True
 
-        run = _build_simple_graph().stream_v2(
-            {"value": "x", "items": []}, transformers=[FooTransformer]
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3", transformers=[FooTransformer]
         )
         foo_iter = iter(run.foo)
         _ = run.output
         assert "foo" in run.extensions and run.foo is run.extensions["foo"]
         assert "saw_values" in list(foo_iter)
 
-    def test_stream_v2_rejects_transformer_instances(self) -> None:
+    def test_stream_events_v3_rejects_transformer_instances(self) -> None:
         class InstanceTransformer(StreamTransformer):
             def init(self) -> dict[str, Any]:
                 return {}
@@ -1028,8 +1084,10 @@ class TestCustomTransformer:
                 return True
 
         with pytest.raises(TypeError, match="pre-built instance"):
-            _build_simple_graph().stream_v2(
-                {"value": "x", "items": []}, transformers=[InstanceTransformer()]
+            _build_simple_graph().stream_events(
+                {"value": "x", "items": []},
+                version="v3",
+                transformers=[InstanceTransformer()],
             )
 
     def test_stream_channel_auto_forward(self) -> None:
@@ -1048,8 +1106,8 @@ class TestCustomTransformer:
                     self._channel.push("emitted")
                 return True
 
-        run = _build_simple_graph().stream_v2(
-            {"value": "x", "items": []}, transformers=[EmitterTransformer]
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3", transformers=[EmitterTransformer]
         )
         custom_events = [e for e in run if e["method"] == "custom:emitter"]
         assert len(custom_events) > 0
@@ -1093,8 +1151,10 @@ class TestCustomTransformer:
                 return True
 
         with pytest.raises(ValueError, match=r"conflict.*'values'.*ValuesTransformer"):
-            _build_simple_graph().stream_v2(
-                {"value": "x", "items": []}, transformers=[ConflictTransformer]
+            _build_simple_graph().stream_events(
+                {"value": "x", "items": []},
+                version="v3",
+                transformers=[ConflictTransformer],
             )
 
 
@@ -1176,8 +1236,8 @@ class TestStreamChannelAutoLifecycle:
                     self._log.push("got_it")
                 return True
 
-        run = _build_simple_graph().stream_v2(
-            {"value": "x", "items": []}, transformers=[MinimalTransformer]
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3", transformers=[MinimalTransformer]
         )
         minimal_iter = iter(run.extensions["minimal"])
         _ = run.output
@@ -1437,8 +1497,8 @@ class TestAsyncTransformerLane:
             async def afinalize(self) -> None:
                 self._log.close()
 
-        run = await _build_simple_graph().astream_v2(
-            {"value": "x", "items": []}, transformers=[Scorer]
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3", transformers=[Scorer]
         )
         scores_cursor = aiter(run.extensions["scores"])
         _ = await run.output()
@@ -1454,7 +1514,9 @@ class TestAsyncTransformerLane:
 @NEEDS_CONTEXTVARS
 class TestMemoryBounds:
     def test_sync_subscribed_buffer_stays_at_most_one_between_yields(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         events_iter = iter(run)
         max_buffered = 0
         count = 0
@@ -1467,7 +1529,9 @@ class TestMemoryBounds:
         )
 
     def test_unsubscribed_projections_never_accumulate(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         list(run)
         values_log = run.extensions["values"]
         messages_log = run.extensions["messages"]
@@ -1475,19 +1539,25 @@ class TestMemoryBounds:
         assert len(messages_log._items) == 0 and not messages_log._subscribed
 
     def test_output_path_does_not_retain_values(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         _ = run.output
         values_log = run.extensions["values"]
         assert len(values_log._items) == 0 and not values_log._subscribed
 
     def test_drained_subscriber_buffer_returns_to_empty(self) -> None:
-        run = _build_simple_graph().stream_v2({"value": "x", "items": []})
+        run = _build_simple_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         list(run.values)
         assert len(run.extensions["values"]._items) == 0
 
     @pytest.mark.anyio
     async def test_async_single_consumer_buffer_stays_at_most_one(self) -> None:
-        run = await _build_simple_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         max_buffered = 0
         count = 0
         async for _ in run:
@@ -1498,7 +1568,9 @@ class TestMemoryBounds:
 
     @pytest.mark.anyio
     async def test_async_unsubscribed_projections_never_accumulate(self) -> None:
-        run = await _build_simple_graph().astream_v2({"value": "x", "items": []})
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         _ = await run.output()
         values_log = run.extensions["values"]
         messages_log = run.extensions["messages"]

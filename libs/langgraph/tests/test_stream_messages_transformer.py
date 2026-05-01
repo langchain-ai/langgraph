@@ -1,5 +1,5 @@
 """Tests for MessagesTransformer: protocol event routing, whole-message fallback,
-legacy v1 chunk filtering, and end-to-end via stream_v2 / astream_v2."""
+legacy v1 chunk filtering, and end-to-end via stream_events(version="v3") / astream_events(version="v3")."""
 
 from __future__ import annotations
 
@@ -152,7 +152,7 @@ def _lifecycle(
 def _simple_graph():
     def call_model(state: MessagesState) -> dict[str, Any]:
         model = GenericFakeChatModel(messages=iter(["hello world"]))
-        stream = model.stream_v2(state["messages"])
+        stream = model.stream_events(state["messages"], version="v3")
         return {"messages": stream.output}
 
     return (
@@ -327,7 +327,7 @@ class TestFiltering:
 
     def test_legacy_v1_chunks_ignored(self) -> None:
         # v1 AIMessageChunk tuples (from on_llm_new_token) are not streamed
-        # into this projection; callers must migrate to stream_v2.
+        # into this projection; callers must migrate to stream_events(version="v3").
         t, log = _make_sync_transformer()
         t.process(_v1_chunk("hello"))
         t.process(_v1_chunk(" world", finish=True))
@@ -477,18 +477,18 @@ class TestViaMux:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end: graph → stream_v2 → run.messages (node calls stream_v2)
+# End-to-end: graph → stream_events(version="v3") → run.messages (node calls stream_events)
 # ---------------------------------------------------------------------------
 
 
 class TestEndToEnd:
-    """stream_v2 path: node calls model.stream_v2() explicitly."""
+    """stream_events(version="v3") path: node calls model.stream_events() explicitly."""
 
     def test_node_calling_stream_v2_populates_messages(self) -> None:
         model = GenericFakeChatModel(messages=iter(["hello world"]))
 
         def call_model(state: MessagesState) -> dict[str, Any]:
-            stream = model.stream_v2(state["messages"])
+            stream = model.stream_events(state["messages"], version="v3")
             return {"messages": stream.output}
 
         graph = (
@@ -499,7 +499,7 @@ class TestEndToEnd:
             .compile()
         )
 
-        run = graph.stream_v2({"messages": "hi"})
+        run = graph.stream_events({"messages": "hi"}, version="v3")
         (stream,) = list(run.messages)
         assert isinstance(stream, ChatModelStream)
         assert stream.output.text == "hello world"
@@ -509,7 +509,7 @@ class TestEndToEnd:
         model = GenericFakeChatModel(messages=iter(["streamed answer"]))
 
         def call_model(state: MessagesState) -> dict[str, Any]:
-            stream = model.stream_v2(state["messages"])
+            stream = model.stream_events(state["messages"], version="v3")
             return {"messages": stream.output}
 
         graph = (
@@ -520,7 +520,7 @@ class TestEndToEnd:
             .compile()
         )
 
-        run = graph.stream_v2({"messages": "go"})
+        run = graph.stream_events({"messages": "go"}, version="v3")
         (stream,) = list(run.messages)
         assert "".join(stream.text) == "streamed answer"
 
@@ -538,7 +538,7 @@ class TestEndToEnd:
             .compile()
         )
 
-        run = graph.stream_v2({"messages": "hi"})
+        run = graph.stream_events({"messages": "hi"}, version="v3")
         (stream,) = list(run.messages)
         assert stream.output.text == "hardcoded"
 
@@ -547,7 +547,7 @@ class TestEndToEnd:
         model = GenericFakeChatModel(messages=iter(["async answer"]))
 
         async def call_model(state: MessagesState) -> dict[str, Any]:
-            stream = await model.astream_v2(state["messages"])
+            stream = await model.astream_events(state["messages"], version="v3")
             return {"messages": await stream}
 
         graph = (
@@ -558,7 +558,7 @@ class TestEndToEnd:
             .compile()
         )
 
-        run = await graph.astream_v2({"messages": "hi"})
+        run = await graph.astream_events({"messages": "hi"}, version="v3")
         streams = [s async for s in run.messages]
         assert len(streams) == 1
         assert isinstance(streams[0], AsyncChatModelStream)
@@ -572,7 +572,7 @@ class TestEndToEnd:
         model = GenericFakeChatModel(messages=iter(["hello world"]))
 
         async def call_model(state: MessagesState) -> dict[str, Any]:
-            stream = await model.astream_v2(state["messages"])
+            stream = await model.astream_events(state["messages"], version="v3")
             return {"messages": await stream}
 
         graph = (
@@ -583,7 +583,7 @@ class TestEndToEnd:
             .compile()
         )
 
-        run = await graph.astream_v2({"messages": "hi"})
+        run = await graph.astream_events({"messages": "hi"}, version="v3")
 
         async def consume() -> list[str]:
             collected: list[str] = []
@@ -596,12 +596,12 @@ class TestEndToEnd:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end: graph → stream_v2 → run.messages (node calls invoke)
+# End-to-end: graph → stream_events(version="v3") → run.messages (node calls invoke)
 # ---------------------------------------------------------------------------
 
 
 class TestEndToEndV2Invoke:
-    """Auto-routing path: stream_v2 injects CONFIG_KEY_STREAM_MESSAGES_V2,
+    """Auto-routing path: stream_events(version="v3") injects CONFIG_KEY_STREAM_MESSAGES_V2,
     causing BaseChatModel to drive the v2 protocol event generator even for
     model.invoke()."""
 
@@ -620,7 +620,7 @@ class TestEndToEndV2Invoke:
     def test_invoke_populates_messages(self) -> None:
         run = self._graph(
             GenericFakeChatModel(messages=iter(["hello world"]))
-        ).stream_v2({"messages": "hi"})
+        ).stream_events({"messages": "hi"}, version="v3")
         (stream,) = list(run.messages)
         assert isinstance(stream, ChatModelStream)
         assert stream.output.text == "hello world"
@@ -629,7 +629,7 @@ class TestEndToEndV2Invoke:
         """Iterating the stream yields the full v2 lifecycle, not v1 chunks."""
         run = self._graph(
             GenericFakeChatModel(messages=iter(["streamed answer"]))
-        ).stream_v2({"messages": "go"})
+        ).stream_events({"messages": "go"}, version="v3")
         (stream,) = list(run.messages)
 
         events = list(stream)
@@ -650,7 +650,7 @@ class TestEndToEndV2Invoke:
     def test_invoke_text_deltas_iterate(self) -> None:
         run = self._graph(
             GenericFakeChatModel(messages=iter(["delta streaming works"]))
-        ).stream_v2({"messages": "hi"})
+        ).stream_events({"messages": "hi"}, version="v3")
         (stream,) = list(run.messages)
         assert "".join(stream.text) == "delta streaming works"
 
@@ -674,7 +674,7 @@ class TestEndToEndV2Invoke:
             .compile()
         )
 
-        streams = list(graph.stream_v2({"messages": "hi"}).messages)
+        streams = list(graph.stream_events({"messages": "hi"}, version="v3").messages)
         assert len(streams) == 2
         assert {s.output.text for s in streams} == {"alpha", "beta"}
 
@@ -698,7 +698,7 @@ class TestEndToEndV2Invoke:
             .compile()
         )
 
-        run = graph.stream_v2({"messages": "hi"})
+        run = graph.stream_events({"messages": "hi"}, version="v3")
         streams = list(run.messages)
         assert len(streams) == 2
         assert streams[0].node == "streaming_node"
@@ -722,7 +722,7 @@ class TestEndToEndV2Invoke:
             .compile()
         )
 
-        run = await graph.astream_v2({"messages": "hi"})
+        run = await graph.astream_events({"messages": "hi"}, version="v3")
         streams = [s async for s in run.messages]
         assert len(streams) == 1
         assert isinstance(streams[0], AsyncChatModelStream)
@@ -737,7 +737,7 @@ class TestEndToEndV2Invoke:
 class TestDirectMessagesModeStaysV1:
     def test_direct_graph_stream_messages_yields_ai_message_chunks(self) -> None:
         """graph.stream(stream_mode="messages") must not leak v2 event dicts —
-        the v2 flag is only injected by stream_v2 / astream_v2."""
+        the v2 flag is only injected by stream_events(version="v3") / astream_events(version="v3")."""
         model = GenericFakeChatModel(messages=iter(["legacy path"]))
 
         def call_model(state: MessagesState) -> dict[str, Any]:
@@ -760,8 +760,10 @@ class TestDirectMessagesModeStaysV1:
             == "legacy path"
         )
 
-    def test_nested_graph_stream_messages_stays_v1_under_outer_stream_v2(self) -> None:
-        """An outer `stream_v2()` run must not flip an inner direct
+    def test_nested_graph_stream_messages_stays_v1_under_outer_stream_events_v3(
+        self,
+    ) -> None:
+        """An outer `stream_events(version="v3")` run must not flip an inner direct
         `stream_mode="messages"` call onto the v2 event protocol."""
         model = GenericFakeChatModel(messages=iter(["nested legacy path"]))
 
@@ -812,7 +814,7 @@ class TestDirectMessagesModeStaysV1:
             .compile()
         )
 
-        result = outer.stream_v2({}).output
+        result = outer.stream_events({}, version="v3").output
 
         assert result is not None
         assert result["saw_only_chunks"] is True

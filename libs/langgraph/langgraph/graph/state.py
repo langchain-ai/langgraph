@@ -1128,7 +1128,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             name: The name to use for the compiled graph.
             transformers: Optional sequence of `StreamTransformer` classes or
                 configured factories. Classes and factories are instantiated
-                per run whenever `stream_v2` / `astream_v2` is called and are
+                per run whenever `stream_events(version="v3")` / `astream_events(version="v3")` is called and are
                 propagated to subgraph scopes. Custom factories should follow
                 the standard `StreamTransformer` constructor shape by
                 accepting `scope` as their first argument. Appended after the

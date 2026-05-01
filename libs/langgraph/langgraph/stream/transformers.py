@@ -38,8 +38,8 @@ class ValuesTransformer(StreamTransformer):
     Only values events at the run's own level are captured; snapshots
     from deeper subgraphs are left in the main event log but excluded
     from the projection. "Own level" is defined by `scope`, which
-    `stream_v2` / `astream_v2` populate from the caller's
-    checkpoint namespace so that a nested `stream_v2` call still
+    `stream_events(version="v3")` / `astream_events(version="v3")` populate from the caller's
+    checkpoint namespace so that a nested `stream_events(version="v3")` call still
     sees its own root snapshots.
     """
 
@@ -165,7 +165,7 @@ class MessagesTransformer(StreamTransformer):
     metadata)` from `StreamMessagesHandler`):
 
     1. Protocol event (dict with `"event"` key) — emitted by
-       `stream_v2()` / `astream_v2()` via the `on_stream_event`
+       `stream_events(version="v3")` / `astream_events(version="v3")` via the `on_stream_event`
        callback. Routed to an existing `ChatModelStream` by
        `metadata["run_id"]`. A `message-start` event creates a new
        stream; `message-finish` closes it.
@@ -177,15 +177,15 @@ class MessagesTransformer(StreamTransformer):
     V1 `AIMessageChunk` tuples (from `on_llm_new_token`) are not
     streamed into this projection: chat models that want to populate
     `run.messages` with content-block streaming must use
-    `stream_v2()` / `astream_v2()`. Models called via the legacy
+    `stream_events(version="v3")` / `astream_events(version="v3")`. Models called via the legacy
     `stream()` method still surface their final `AIMessage` via
     `on_chain_end` when a node returns it as state.
 
     Only events at the run's own level are projected; tokens from
     deeper subgraphs are left in the main event log but excluded from
     `.messages`. "Own level" is defined by `scope`, which
-    `stream_v2` / `astream_v2` populate from the caller's checkpoint
-    namespace so that a `stream_v2` call inside a node still sees its
+    `stream_events(version="v3")` / `astream_events(version="v3")` populate from the caller's checkpoint
+    namespace so that a `stream_events(version="v3")` call inside a node still sees its
     own root chat model streams on `.messages`. Consumers that need
     subgraph tokens should iterate the raw event stream or register a
     custom transformer.
@@ -281,7 +281,7 @@ class MessagesTransformer(StreamTransformer):
         ):
             self._route_whole_message(payload, node=node)
         # Legacy AIMessageChunk tuples (from on_llm_new_token) are ignored;
-        # v1 streaming callers must switch to stream_v2() to populate this
+        # v1 streaming callers must switch to stream_events(version="v3") to populate this
         # projection.
 
         return True

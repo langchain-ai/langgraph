@@ -5,6 +5,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mappin
 from types import MappingProxyType, TracebackType
 from typing import TYPE_CHECKING, Any
 
+from langchain_core._api import beta
+
 from langgraph.stream._convert import convert_to_protocol_event
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
@@ -25,6 +27,7 @@ async def _adrive_until_done(pump: Callable[[], Awaitable[bool]]) -> None:
         pass
 
 
+@beta(message="The v3 streaming protocol on Pregel is experimental.")
 class GraphRunStream:
     """Sync run stream with caller-driven pumping.
 
@@ -38,6 +41,11 @@ class GraphRunStream:
     All transformer projections live in `extensions`. Native transformer
     projections (those with `_native = True`) are also set as direct
     attributes on this instance (e.g. `run.values`, `run.messages`).
+
+    !!! warning
+
+        Returned by `Pregel.stream_events(version="v3")`, which is
+        experimental and may change.
     """
 
     def __init__(
@@ -282,6 +290,7 @@ class GraphRunStream:
                 ch._subscribed = False
 
 
+@beta(message="The v3 streaming protocol on Pregel is experimental.")
 class AsyncGraphRunStream:
     """Async run stream with caller-driven pumping.
 
@@ -303,6 +312,11 @@ class AsyncGraphRunStream:
         async for msg in run.messages:
             ...
     ```
+
+    !!! warning
+
+        Awaited from `Pregel.astream_events(version="v3")`, which is
+        experimental and may change.
     """
 
     def __init__(
