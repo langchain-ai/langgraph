@@ -233,6 +233,58 @@ def test_delta_channel_update_by_id_and_replay() -> None:
     assert ch2.get()[0].content == "updated"
 
 
+def test_delta_channel_dict_coercion() -> None:
+    """_messages_delta_reducer coerces dict writes to BaseMessage objects.
+
+    HTTP-driven input always arrives as JSON dicts.  The reducer must coerce
+    them (same contract as add_messages) so graphs work without a separate
+    coercion step.
+    """
+    ch = DeltaChannel(_messages_delta_reducer, list).from_checkpoint(MISSING)
+
+    # dict input — simulates what arrives from the HTTP API
+    ch.update([{"role": "human", "content": "hello", "id": "h1"}])
+    assert len(ch.get()) == 1
+    assert isinstance(ch.get()[0], HumanMessage)
+    assert ch.get()[0].content == "hello"
+    assert ch.get()[0].id == "h1"
+
+    # update by ID via dict
+    ch.update([{"role": "ai", "content": "world", "id": "h1"}])
+    assert len(ch.get()) == 1
+    assert ch.get()[0].content == "world"
+
+    # remove via RemoveMessage instance (same contract as add_messages)
+    ch.update([RemoveMessage(id="h1")])
+    assert ch.get() == []
+
+
+def test_messages_delta_reducer_coerces_state() -> None:
+    """State (left side) is coerced when raw — supports raw initial input
+    and deserialized blobs. The steady-state path (state already typed)
+    short-circuits and skips coercion.
+    """
+    state = [{"role": "human", "content": "hello", "id": "h1"}]
+    writes = [[{"role": "ai", "content": "world", "id": "h1"}]]
+    result = _messages_delta_reducer(state, writes)  # type: ignore[arg-type]
+    assert len(result) == 1
+    assert isinstance(result[0], AIMessage)
+    assert result[0].content == "world"
+    assert result[0].id == "h1"
+
+
+def test_messages_delta_reducer_tuple_write_is_one_message() -> None:
+    """A top-level tuple write is one message-like, not a sequence to flatten.
+
+    `("user", "hi")` is a valid `MessageLikeRepresentation`; flattening it
+    would produce two HumanMessages ("user", "hi") instead of one.
+    """
+    result = _messages_delta_reducer([], [("user", "hi")])  # type: ignore[arg-type]
+    assert len(result) == 1
+    assert isinstance(result[0], HumanMessage)
+    assert result[0].content == "hi"
+
+
 def test_delta_channel_checkpoint_returns_sentinel() -> None:
     """checkpoint() always returns DELTA_SENTINEL regardless of state."""
     ch = DeltaChannel(_messages_delta_reducer, list).from_checkpoint(MISSING)
