@@ -160,6 +160,76 @@ class TestToolCallTransformerUnit:
         kept = [e for e in _unstamped(mux._events._items) if e["method"] == "tools"]
         assert len(kept) == 1
 
+    def test_out_of_scope_event_skipped(self) -> None:
+        """Subgraph-scoped `tools` events must not project into a parent
+        transformer's `tool_calls` log.
+
+        The parent's main event log keeps the event (so wire consumers
+        still see it) but the parent's `ToolCallTransformer` only owns
+        the projection at its own scope. Per-scope `ToolCallTransformer`
+        instances on child mini-muxes are responsible for projecting
+        events at their own depth.
+        """
+        # Root-scope transformer (`scope == ()`).
+        mux, transformer = _mux()
+        _subscribe(mux._events)
+        mux.push(
+            _tool_event(
+                "tool-started",
+                "tc1",
+                tool_name="inner_echo",
+                namespace=["child:abc"],
+            )
+        )
+        # No `ToolCallStream` was projected into the root's log.
+        assert _unstamped(transformer._log._items) == []
+        assert "tc1" not in transformer._active
+        # The event still passes through the main event log so consumers
+        # of the raw `tools` channel see it untouched.
+        kept = [e for e in _unstamped(mux._events._items) if e["method"] == "tools"]
+        assert len(kept) == 1
+
+    def test_in_scope_event_projected_when_scope_set(self) -> None:
+        """A non-root transformer projects only events at its own scope."""
+        scope: tuple[str, ...] = ("child:abc",)
+        transformer = ToolCallTransformer(scope=scope)
+        mux = StreamMux(
+            [ValuesTransformer(), MessagesTransformer(), transformer],
+            scope=scope,
+            is_async=False,
+        )
+        _subscribe(transformer._log)
+        # Event at this scope: projected.
+        mux.push(
+            _tool_event(
+                "tool-started",
+                "tc1",
+                tool_name="echo",
+                namespace=list(scope),
+            )
+        )
+        assert len(_unstamped(transformer._log._items)) == 1
+        # Event at a deeper scope: ignored.
+        mux.push(
+            _tool_event(
+                "tool-started",
+                "tc2",
+                tool_name="grandchild",
+                namespace=[*scope, "grand:xyz"],
+            )
+        )
+        assert len(_unstamped(transformer._log._items)) == 1
+        # Event at root (above this scope): ignored.
+        mux.push(
+            _tool_event(
+                "tool-started",
+                "tc3",
+                tool_name="root_tool",
+                namespace=[],
+            )
+        )
+        assert len(_unstamped(transformer._log._items)) == 1
+
 
 # ---------------------------------------------------------------------------
 # End-to-end tests with a real graph

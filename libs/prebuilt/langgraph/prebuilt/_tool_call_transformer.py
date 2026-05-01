@@ -77,8 +77,14 @@ class ToolCallTransformer(StreamTransformer):
         return stream
 
     def process(self, event: ProtocolEvent) -> bool:
-        # Namespace filtering is handled by the mux via `scope_exact`.
         if event["method"] != "tools":
+            return True
+
+        # Only project events emitted at this transformer's scope. Subgraph
+        # events still flow through the parent's mux (the parent's main
+        # event log keeps them) but they belong to the child mini-mux's
+        # `tool_calls` projection, not the parent's.
+        if tuple(event["params"]["namespace"]) != self.scope:
             return True
 
         data = event["params"]["data"]
