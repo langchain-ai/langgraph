@@ -284,7 +284,7 @@ def _messages_delta_reducer(
     # `convert_to_messages` on state when the first element is a BaseMessage.
     # Only raw input (initial dicts, deserialized blobs) hits the slow path.
     if state and isinstance(state[0], BaseMessage):
-        state_msgs = cast("list[AnyMessage]", state)
+        state_msgs = state
     else:
         state_msgs = cast("list[AnyMessage]", convert_to_messages(state))
     msgs = cast("list[AnyMessage]", convert_to_messages(flat))
