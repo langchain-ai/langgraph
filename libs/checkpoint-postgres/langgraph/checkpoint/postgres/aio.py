@@ -18,6 +18,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
+from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
 from psycopg.rows import DictRow, dict_row
@@ -27,8 +28,11 @@ from psycopg_pool import AsyncConnectionPool
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import (
     SELECT_DELTA_COMBINED_SQL,
+    SELECT_DELTA_STAGE1_SQL,
+    SELECT_DELTA_STAGE2_SQL,
     BasePostgresSaver,
     _DeltaCombinedRow,
+    _two_stage_enabled,
 )
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 
@@ -267,7 +271,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
         # others are stored in blobs table
         blob_values = {}
         for k, v in checkpoint["channel_values"].items():
-            if v is None or isinstance(v, (str, int, float, bool)):
+            if v is DELTA_SENTINEL:
+                copy["channel_values"].pop(k)
+            elif isinstance(v, _DeltaSnapshot):
+                blob_values[k] = copy["channel_values"].pop(k)
+                copy["channel_values"][k] = True
+            elif v is None or isinstance(v, (str, int, float, bool)):
                 pass
             else:
                 blob_values[k] = copy["channel_values"].pop(k)
@@ -406,6 +415,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
         from `checkpoints`, `checkpoint_writes`, and `checkpoint_blobs` in a
         single roundtrip; rows are assembled by the shared pure helper on
         `BasePostgresSaver`.
+
+        When `LG_DELTA_TWO_STAGE_QUERY=1`, uses a two-stage path that avoids
+        fetching unused snapshot blobs.
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -415,6 +427,40 @@ class AsyncPostgresSaver(BasePostgresSaver):
             if target is None:
                 return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
             checkpoint_id = target.config["configurable"]["checkpoint_id"]
+
+        if _two_stage_enabled():
+            async with self._cursor() as cur:
+                await cur.execute(
+                    SELECT_DELTA_STAGE1_SQL,
+                    (channel, channel, thread_id, checkpoint_ns),
+                )
+                stage1_rows = await cur.fetchall()
+            chain_cids, seed_version = self._walk_stage1(
+                stage1_rows, checkpoint_id
+            )
+            seed_versions = [seed_version] if seed_version else []
+            async with self._cursor() as cur:
+                await cur.execute(
+                    SELECT_DELTA_STAGE2_SQL,
+                    (
+                        thread_id,
+                        checkpoint_ns,
+                        channel,
+                        chain_cids,
+                        thread_id,
+                        checkpoint_ns,
+                        channel,
+                        seed_versions,
+                    ),
+                )
+                stage2_rows = await cur.fetchall()
+            return self._build_delta_channel_writes_history_two_stage(
+                channel=channel,
+                chain_cids=chain_cids,
+                seed_version=seed_version,
+                stage2_rows=cast("list[_DeltaCombinedRow]", stage2_rows),
+            )
+
         async with self._cursor() as cur:
             await cur.execute(
                 SELECT_DELTA_COMBINED_SQL,
