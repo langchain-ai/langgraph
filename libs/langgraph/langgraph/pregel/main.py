@@ -30,7 +30,6 @@ from typing import (
 )
 from uuid import UUID, uuid5
 
-from langchain_core._event_streaming import _AsyncEventsResult
 from langchain_core.globals import get_debug
 from langchain_core.runnables import (
     RunnableSequence,
@@ -3631,7 +3630,7 @@ class Pregel(
         *,
         version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
-    ) -> _AsyncEventsResult: ...
+    ) -> AsyncIterator[StreamEvent]: ...
 
     @overload
     def astream_events(
@@ -3644,7 +3643,7 @@ class Pregel(
         interrupt_after: All | Sequence[str] | None = None,
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
-    ) -> _AsyncEventsResult: ...
+    ) -> Awaitable[Any]: ...
 
     def astream_events(
         self,
@@ -3657,7 +3656,7 @@ class Pregel(
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **kwargs: Any,
-    ) -> _AsyncEventsResult:
+    ) -> AsyncIterator[StreamEvent] | Awaitable[Any]:
         """Async variant of `stream_events`.
 
         For `version="v3"`, returns an `AsyncGraphRunStream` whose
@@ -3669,18 +3668,15 @@ class Pregel(
         See `stream_events` for full argument and return documentation.
         """
         if version == "v3":
-            return _AsyncEventsResult(
-                awaitable=self._apregel_stream_v3(
-                    input,
-                    config,
-                    interrupt_before=interrupt_before,
-                    interrupt_after=interrupt_after,
-                    control=control,
-                    transformers=transformers,
-                )
+            return self._apregel_stream_v3(
+                input,
+                config,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                control=control,
+                transformers=transformers,
             )
-        iterator = super().astream_events(input, config, version=version, **kwargs)
-        return _AsyncEventsResult(iterator=iterator)
+        return super().astream_events(input, config, version=version, **kwargs)
 
     @overload
     def invoke(

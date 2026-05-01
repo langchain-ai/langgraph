@@ -2,6 +2,9 @@ version = 1
 revision = 3
 requires-python = ">=3.10"
 
+[options]
+prerelease-mode = "allow"
+
 [[package]]
 name = "aiosqlite"
 version = "0.22.1"
@@ -249,7 +252,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.4.0a1"
+version = "1.4.0a2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -262,9 +265,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cc/34/8fd2320a66363a9ab4404229c5007eff06c70835088e4de72ddecf0bc2bc/langchain_core-1.4.0a1.tar.gz", hash = "sha256:d4cdeb828d111d0873c73cb99478b9c4f6caf48acb41b380ec4d47209990d3a4", size = 917148, upload-time = "2026-05-01T13:39:54.952Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3c/93/68bafa047f8e1770d0cf0f61d6c70889f1dec42ef6bd263540d916c421b9/langchain_core-1.4.0a2.tar.gz", hash = "sha256:b723c7961b615c7f2180ce2bcf352fdad8247bc51a60adecd3d97088235c120d", size = 916486, upload-time = "2026-05-01T15:02:19.029Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/43/c6/7b0ec93983affc6c40e3831bb692d9154f5bae9bc07864561b9811693035/langchain_core-1.4.0a1-py3-none-any.whl", hash = "sha256:8081a201b677bccb4f046133751f67ef4d5ca137f76920b9b67729dfe140d1ec", size = 547214, upload-time = "2026-05-01T13:39:53.135Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/8e/933e0ba7ba0430ce264e36b178d581b255239ad45093872483142d93478c/langchain_core-1.4.0a2-py3-none-any.whl", hash = "sha256:a5c689f8404357df797120c012da7704144a953b2ae18f258df263301e7badd5", size = 546297, upload-time = "2026-05-01T15:02:17.731Z" },
 ]
 
 [[package]]
@@ -294,7 +297,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=1.4.0a1,<2" },
+    { name = "langchain-core", specifier = ">=1.4.0a2,<2" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-prebuilt", editable = "." },
     { name = "langgraph-sdk", editable = "../sdk-py" },
