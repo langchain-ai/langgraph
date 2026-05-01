@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import uuid
 import warnings
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from functools import partial
-from itertools import chain
 from typing import (
     Annotated,
     Any,
@@ -270,20 +269,16 @@ def _messages_delta_reducer(
             messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
     """
 
-    def _flatten(w: Any) -> Iterable[Any]:
-        # Each write is either a single message-like (BaseMessage / dict / str)
-        # or a sequence of message-likes.
+    # Each write is either a single message-like (BaseMessage / dict / str)
+    # or a sequence of message-likes. Flatten, then coerce in one pass —
+    # same contract as `add_messages`.
+    flat: list[Any] = []
+    for w in writes:
         if isinstance(w, (BaseMessage, dict, str)):
-            yield w
+            flat.append(w)
         else:
-            yield from w
-
-    # Single coercion pass — same contract as `add_messages`, applied once
-    # over all writes rather than per-item.
-    msgs = cast(
-        "list[AnyMessage]",
-        convert_to_messages(list(chain.from_iterable(_flatten(w) for w in writes))),
-    )
+            flat.extend(w)
+    msgs = cast("list[AnyMessage]", convert_to_messages(flat))
 
     index: dict[str, int] = {m.id: i for i, m in enumerate(state) if m.id is not None}
     result: list[AnyMessage | None] = list(state)
