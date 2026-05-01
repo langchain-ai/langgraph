@@ -623,14 +623,16 @@ class BasePostgresStore(Generic[C]):
         """Helper to generate filter conditions."""
         if op == "$eq":
             return "value->%s = %s::jsonb", [key, json.dumps(value)]
-        elif op == "$gt":
-            return "value->>%s > %s", [key, str(value)]
-        elif op == "$gte":
-            return "value->>%s >= %s", [key, str(value)]
-        elif op == "$lt":
-            return "value->>%s < %s", [key, str(value)]
-        elif op == "$lte":
-            return "value->>%s <= %s", [key, str(value)]
+        elif op in {"$gt", "$gte", "$lt", "$lte"}:
+            sql_op = {"$gt": ">", "$gte": ">=", "$lt": "<", "$lte": "<="}[op]
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return (
+                    "CASE WHEN jsonb_typeof(value->%s) = 'number' "
+                    f"THEN (value->>%s)::double precision {sql_op} %s "
+                    "ELSE false END",
+                    [key, key, float(value)],
+                )
+            return f"value->>%s {sql_op} %s", [key, str(value)]
         elif op == "$ne":
             return "value->%s != %s::jsonb", [key, json.dumps(value)]
         else:

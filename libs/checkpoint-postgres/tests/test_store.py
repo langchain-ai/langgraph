@@ -217,6 +217,26 @@ def test_batch_search_ops(store: PostgresStore) -> None:
     assert results[2][0].namespace == ("test", "foo")
 
 
+def test_numeric_filter_comparisons_are_numeric(store: PostgresStore) -> None:
+    store.put(("items",), "item2", {"score": 2})
+    store.put(("items",), "item9", {"score": 9})
+    store.put(("items",), "item10", {"score": 10})
+    store.put(("items",), "item11", {"score": 11})
+    store.put(("items",), "item_text", {"score": "11"})
+
+    gte_results = store.search(("items",), filter={"score": {"$gte": 10}})
+    assert {item.key for item in gte_results} == {"item10", "item11"}
+
+    gt_results = store.search(("items",), filter={"score": {"$gt": 10}})
+    assert {item.key for item in gt_results} == {"item11"}
+
+    lt_results = store.search(("items",), filter={"score": {"$lt": 10}})
+    assert {item.key for item in lt_results} == {"item2", "item9"}
+
+    lte_results = store.search(("items",), filter={"score": {"$lte": 10}})
+    assert {item.key for item in lte_results} == {"item2", "item9", "item10"}
+
+
 def test_batch_list_namespaces_ops(store: PostgresStore) -> None:
     # Setup test data with various namespaces
     test_data = [
