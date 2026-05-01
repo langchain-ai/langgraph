@@ -233,6 +233,32 @@ def test_delta_channel_update_by_id_and_replay() -> None:
     assert ch2.get()[0].content == "updated"
 
 
+def test_delta_channel_dict_coercion() -> None:
+    """_messages_delta_reducer coerces dict writes to BaseMessage objects.
+
+    HTTP-driven input always arrives as JSON dicts.  The reducer must coerce
+    them (same contract as add_messages) so graphs work without a separate
+    coercion step.
+    """
+    ch = DeltaChannel(_messages_delta_reducer, list).from_checkpoint(MISSING)
+
+    # dict input — simulates what arrives from the HTTP API
+    ch.update([{"role": "human", "content": "hello", "id": "h1"}])
+    assert len(ch.get()) == 1
+    assert isinstance(ch.get()[0], HumanMessage)
+    assert ch.get()[0].content == "hello"
+    assert ch.get()[0].id == "h1"
+
+    # update by ID via dict
+    ch.update([{"role": "ai", "content": "world", "id": "h1"}])
+    assert len(ch.get()) == 1
+    assert ch.get()[0].content == "world"
+
+    # RemoveMessage via dict
+    ch.update([{"type": "remove", "id": "h1"}])
+    assert ch.get() == []
+
+
 def test_delta_channel_checkpoint_returns_sentinel() -> None:
     """checkpoint() always returns DELTA_SENTINEL regardless of state."""
     ch = DeltaChannel(_messages_delta_reducer, list).from_checkpoint(MISSING)

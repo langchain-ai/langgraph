@@ -250,14 +250,14 @@ def _messages_delta_reducer(
     """**Experimental.** Batch reducer for use with `DeltaChannel`.
 
     Processes all writes in one pass — dedup by ID, `RemoveMessage`
-    tombstoning — without calling `add_messages`. Assumes writes contain
-    already-typed `BaseMessage` objects (no raw-dict coercion).
+    tombstoning — without calling `add_messages`.
 
     This reducer is batching-invariant, as required by `DeltaChannel`:
     `reducer(reducer(state, xs), ys) == reducer(state, xs + ys)`.
 
-    Use `add_messages` as the reducer for `BinaryOperatorAggregate` or
-    anywhere raw message dicts / strings need to be coerced first.
+    Raw-dict and string inputs are coerced to typed `BaseMessage` objects
+    (same contract as `add_messages`) so that HTTP-driven graphs work
+    correctly without a separate coercion step.
 
     Example::
 
@@ -270,11 +270,33 @@ def _messages_delta_reducer(
     """
     from itertools import chain
 
+    from langchain_core.messages.utils import convert_to_messages
+
+    def _coerce_one(item: Any) -> AnyMessage:
+        """Coerce a single item to a BaseMessage."""
+        if isinstance(item, BaseMessage):
+            return item
+        if isinstance(item, dict) and item.get("type") == "remove":
+            return RemoveMessage(id=item["id"])
+        return convert_to_messages([item])[0]
+
+    def _to_msgs(w: Any) -> list[AnyMessage]:
+        """Normalize one write entry to a flat list of BaseMessage objects.
+
+        Handles the three forms that arrive in practice:
+          - a single BaseMessage (direct write)
+          - a single dict/str (HTTP-driven input, coerce to BaseMessage)
+          - a sequence that may itself contain dicts/strs
+        """
+        if isinstance(w, BaseMessage):
+            return [w]
+        if isinstance(w, (dict, str)):
+            return [_coerce_one(w)]
+        return [_coerce_one(item) for item in w]
+
     index: dict[str, int] = {m.id: i for i, m in enumerate(state) if m.id is not None}
     result: list[AnyMessage | None] = list(state)
-    for msg in chain.from_iterable(
-        [w] if isinstance(w, BaseMessage) else w for w in writes
-    ):
+    for msg in chain.from_iterable(_to_msgs(w) for w in writes):
         mid = msg.id
         if mid is None:
             result.append(msg)
