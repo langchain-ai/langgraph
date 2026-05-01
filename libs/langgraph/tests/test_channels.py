@@ -260,10 +260,9 @@ def test_delta_channel_dict_coercion() -> None:
 
 
 def test_messages_delta_reducer_coerces_state() -> None:
-    """State (left side) is coerced too — same contract as add_messages.
-
-    State arrives as raw dicts after checkpoint deserialization or initial
-    HTTP input; the reducer must accept that shape and dedup against it.
+    """State (left side) is coerced when raw — supports raw initial input
+    and deserialized blobs. The steady-state path (state already typed)
+    short-circuits and skips coercion.
     """
     state = [{"role": "human", "content": "hello", "id": "h1"}]
     writes = [[{"role": "ai", "content": "world", "id": "h1"}]]
@@ -272,6 +271,18 @@ def test_messages_delta_reducer_coerces_state() -> None:
     assert isinstance(result[0], AIMessage)
     assert result[0].content == "world"
     assert result[0].id == "h1"
+
+
+def test_messages_delta_reducer_tuple_write_is_one_message() -> None:
+    """A top-level tuple write is one message-like, not a sequence to flatten.
+
+    `("user", "hi")` is a valid `MessageLikeRepresentation`; flattening it
+    would produce two HumanMessages ("user", "hi") instead of one.
+    """
+    result = _messages_delta_reducer([], [("user", "hi")])  # type: ignore[arg-type]
+    assert len(result) == 1
+    assert isinstance(result[0], HumanMessage)
+    assert result[0].content == "hi"
 
 
 def test_delta_channel_checkpoint_returns_sentinel() -> None:

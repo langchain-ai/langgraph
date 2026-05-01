@@ -255,9 +255,11 @@ def _messages_delta_reducer(
     This reducer is batching-invariant, as required by `DeltaChannel`:
     `reducer(reducer(state, xs), ys) == reducer(state, xs + ys)`.
 
-    Raw-dict and string inputs are coerced to typed `BaseMessage` objects
-    (same contract as `add_messages`) so that HTTP-driven graphs work
-    correctly without a separate coercion step.
+    Raw dict / string / tuple inputs are coerced to typed `BaseMessage`
+    objects so that HTTP-driven graphs work without a separate coercion
+    step. This is not full `add_messages` parity — `REMOVE_ALL_MESSAGES`,
+    unknown-id `RemoveMessage` errors, missing-id UUID assignment, and
+    `BaseMessageChunk` conversion are not handled here.
 
     Example::
 
@@ -269,16 +271,22 @@ def _messages_delta_reducer(
             messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
     """
 
-    # Each write is either a single message-like (BaseMessage / dict / str)
-    # or a sequence of message-likes. Flatten, then coerce state and writes
-    # in single passes — same contract as `add_messages`.
+    # Each write is either a list of message-likes or a single message-like
+    # (BaseMessage / dict / str / tuple). Only lists flatten; everything
+    # else is one message.
     flat: list[Any] = []
     for w in writes:
-        if isinstance(w, (BaseMessage, dict, str)):
-            flat.append(w)
-        else:
+        if isinstance(w, list):
             flat.extend(w)
-    state_msgs = cast("list[AnyMessage]", convert_to_messages(state))
+        else:
+            flat.append(w)
+    # Steady state: the reducer's own output is already typed, so skip
+    # `convert_to_messages` on state when the first element is a BaseMessage.
+    # Only raw input (initial dicts, deserialized blobs) hits the slow path.
+    if state and isinstance(state[0], BaseMessage):
+        state_msgs = cast("list[AnyMessage]", state)
+    else:
+        state_msgs = cast("list[AnyMessage]", convert_to_messages(state))
     msgs = cast("list[AnyMessage]", convert_to_messages(flat))
 
     index: dict[str, int] = {
