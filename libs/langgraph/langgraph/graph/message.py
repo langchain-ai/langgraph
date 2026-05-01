@@ -4,6 +4,7 @@ import uuid
 import warnings
 from collections.abc import Callable, Iterable, Sequence
 from functools import partial
+from itertools import chain
 from typing import (
     Annotated,
     Any,
@@ -268,9 +269,6 @@ def _messages_delta_reducer(
         class State(TypedDict):
             messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
     """
-    from itertools import chain
-
-    from langchain_core.messages.utils import convert_to_messages
 
     def _flatten(w: Any) -> Iterable[Any]:
         # Each write is either a single message-like (BaseMessage / dict / str)
