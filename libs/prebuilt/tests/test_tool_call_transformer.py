@@ -147,7 +147,10 @@ class TestToolCallTransformerUnit:
         mux.push(_tool_event("tool-output-delta", "a", delta="A1"))
         mux.push(_tool_event("tool-output-delta", "b", delta="B1"))
         mux.push(_tool_event("tool-output-delta", "a", delta="A2"))
-        assert _unstamped(transformer._active["a"]._output_deltas._items) == ["A1", "A2"]
+        assert _unstamped(transformer._active["a"]._output_deltas._items) == [
+            "A1",
+            "A2",
+        ]
         assert _unstamped(transformer._active["b"]._output_deltas._items) == ["B1"]
 
     def test_tools_event_passes_through_main_log(self) -> None:
