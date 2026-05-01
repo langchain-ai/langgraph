@@ -88,7 +88,7 @@ class StreamTransformer(ABC):
         required_stream_modes: Stream modes the graph must emit for
             this transformer to have anything to process. Computed as
             the union across all registered transformers to determine
-            which modes a `stream_v2` run requests from the graph.
+            which modes a `stream_events(version="v3")` run requests from the graph.
             Empty tuple means the transformer consumes only synthetic
             events (or is purely passive).
     """

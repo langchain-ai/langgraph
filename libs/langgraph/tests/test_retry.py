@@ -2210,7 +2210,6 @@ def test_graph_error_handler_does_not_swallow_interrupt_concurrent():
     )
 
 
-
 def test_node_error_handlers_route_to_matching_handler():
     class State(TypedDict):
         route: str
@@ -2268,4 +2267,3 @@ def test_node_without_error_handler_still_fails_run():
 
     with pytest.raises(ValueError, match="no handler"):
         graph.invoke({"foo": ""})
-

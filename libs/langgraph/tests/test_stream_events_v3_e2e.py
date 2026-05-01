@@ -1,9 +1,9 @@
-"""End-to-end tests exercising all stream_v2 projections together.
+"""End-to-end tests exercising all stream_events(version="v3") projections together.
 
 Each test builds a realistic graph (subgraphs, LLM calls, custom writers,
 interrupts) and verifies that every projection — values, messages, lifecycle,
 subgraphs, raw events, output, interleave — produces correct, consistent
-results through a single stream_v2 / astream_v2 run.
+results through a single stream_events(version="v3") / astream_events(version="v3") run.
 """
 
 from __future__ import annotations
@@ -218,9 +218,9 @@ class _CounterTransformer(StreamTransformer):
 
 class TestStreamV2E2ESync:
     def test_all_projections_nested_graph(self) -> None:
-        """Run a nested graph through stream_v2 and verify values + lifecycle."""
+        """Run a nested graph through stream_events(version="v3") and verify values + lifecycle."""
         graph = _make_nested_graph()
-        run = graph.stream_v2({"value": "x", "items": []})
+        run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
         values_snapshots: list[dict[str, Any]] = []
         lifecycle_events: list[dict[str, Any]] = []
@@ -246,7 +246,7 @@ class TestStreamV2E2ESync:
     def test_subgraph_handles_with_drill_down(self) -> None:
         """Subgraph handles yield and support values drill-down."""
         graph = _make_nested_graph()
-        run = graph.stream_v2({"value": "x", "items": []})
+        run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
         handles = []
         for handle in run.subgraphs:
@@ -270,7 +270,7 @@ class TestStreamV2E2ESync:
     def test_raw_events_have_monotonic_seq(self) -> None:
         """Raw protocol events have monotonically increasing seq numbers."""
         graph = _make_nested_graph()
-        run = graph.stream_v2({"value": "x", "items": []})
+        run = graph.stream_events({"value": "x", "items": []}, version="v3")
         events = list(run)
         assert len(events) > 0
 
@@ -285,11 +285,15 @@ class TestStreamV2E2ESync:
 
     def test_output_matches_final_values_snapshot(self) -> None:
         """output property returns the same state as the last values snapshot."""
-        run1 = _make_nested_graph().stream_v2({"value": "x", "items": []})
+        run1 = _make_nested_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         snapshots = list(run1.values)
         final_via_values = snapshots[-1]
 
-        run2 = _make_nested_graph().stream_v2({"value": "x", "items": []})
+        run2 = _make_nested_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         final_via_output = run2.output
 
         assert final_via_values == final_via_output
@@ -297,7 +301,7 @@ class TestStreamV2E2ESync:
     def test_context_manager_and_abort(self) -> None:
         """Context manager calls abort, marking the stream exhausted."""
         graph = _make_nested_graph()
-        with graph.stream_v2({"value": "x", "items": []}) as run:
+        with graph.stream_events({"value": "x", "items": []}, version="v3") as run:
             first_val = next(iter(run.values))
             assert isinstance(first_val, dict)
         assert run._exhausted is True
@@ -305,7 +309,7 @@ class TestStreamV2E2ESync:
     def test_extensions_has_all_native_keys(self) -> None:
         """Extensions dict exposes all native projection keys."""
         graph = _make_nested_graph()
-        run = graph.stream_v2({"value": "x", "items": []})
+        run = graph.stream_events({"value": "x", "items": []}, version="v3")
         _ = run.output
 
         assert "values" in run.extensions
@@ -327,7 +331,7 @@ class TestStreamV2E2EMessages:
     def test_messages_projection_from_invoke(self) -> None:
         """Messages projection captures LLM calls via model.invoke() auto-routing."""
         graph = _make_messages_graph()
-        run = graph.stream_v2({"messages": "hi"})
+        run = graph.stream_events({"messages": "hi"}, version="v3")
         streams = list(run.messages)
 
         assert len(streams) >= 1
@@ -350,7 +354,7 @@ class TestStreamV2E2EMessages:
             .compile()
         )
 
-        run = graph.stream_v2({"messages": "go"})
+        run = graph.stream_events({"messages": "go"}, version="v3")
         (stream,) = list(run.messages)
         assert "".join(stream.text) == "streamed answer"
 
@@ -368,7 +372,7 @@ class TestStreamV2E2EMessages:
             .compile()
         )
 
-        run = graph.stream_v2({"messages": "hi"})
+        run = graph.stream_events({"messages": "hi"}, version="v3")
         (stream,) = list(run.messages)
         assert stream.output.text == "hardcoded"
         assert stream.message_id == "msg-1"
@@ -376,7 +380,7 @@ class TestStreamV2E2EMessages:
     def test_root_messages_only_shows_root_scope(self) -> None:
         """Root messages projection doesn't surface subgraph-scoped messages."""
         graph = _make_messages_subgraph()
-        run = graph.stream_v2({"messages": ["hi"], "done": False})
+        run = graph.stream_events({"messages": ["hi"], "done": False}, version="v3")
         root_streams = list(run.messages)
         # The message is emitted inside the subgraph, so the root
         # messages projection (scoped to root namespace) doesn't see it.
@@ -385,7 +389,7 @@ class TestStreamV2E2EMessages:
     def test_subgraph_handle_messages_drill_down(self) -> None:
         """Drilling into subgraph handle's messages surfaces subgraph messages."""
         graph = _make_messages_subgraph()
-        run = graph.stream_v2({"messages": ["hi"], "done": False})
+        run = graph.stream_events({"messages": ["hi"], "done": False}, version="v3")
 
         found_messages = False
         for handle in run.subgraphs:
@@ -407,8 +411,9 @@ class TestStreamV2E2ECustom:
         """Custom StreamWriter events appear on the main log when a
         transformer declares the custom mode."""
         graph = _make_custom_writer_graph()
-        run = graph.stream_v2(
+        run = graph.stream_events(
             {"value": "x", "items": []},
+            version="v3",
             transformers=[_CustomPassthroughTransformer],
         )
         events = list(run)
@@ -420,7 +425,7 @@ class TestStreamV2E2ECustom:
     def test_custom_events_suppressed_without_transformer(self) -> None:
         """Without a custom-mode transformer, custom events don't flow."""
         graph = _make_custom_writer_graph()
-        run = graph.stream_v2({"value": "x", "items": []})
+        run = graph.stream_events({"value": "x", "items": []}, version="v3")
         events = list(run)
         custom = [e for e in events if e["method"] == "custom"]
         assert custom == []
@@ -428,8 +433,9 @@ class TestStreamV2E2ECustom:
     def test_custom_transformer_with_stream_channel(self) -> None:
         """A custom transformer with a StreamChannel produces extension data."""
         graph = _make_nested_graph()
-        run = graph.stream_v2(
+        run = graph.stream_events(
             {"value": "x", "items": []},
+            version="v3",
             transformers=[_CounterTransformer],
         )
 
@@ -444,8 +450,9 @@ class TestStreamV2E2ECustom:
     def test_custom_channel_events_on_main_log(self) -> None:
         """StreamChannel auto-forward injects custom:<name> events into the main log."""
         graph = _make_nested_graph()
-        run = graph.stream_v2(
+        run = graph.stream_events(
             {"value": "x", "items": []},
+            version="v3",
             transformers=[_CounterTransformer],
         )
         events = list(run)
@@ -464,7 +471,7 @@ class TestStreamV2E2EInterrupt:
         """Interrupted run has correct flags and interrupt payloads."""
         graph = _make_interrupt_graph()
         config: dict[str, Any] = {"configurable": {"thread_id": "int-1"}}
-        run = graph.stream_v2({"value": "x", "items": []}, config)
+        run = graph.stream_events({"value": "x", "items": []}, config, version="v3")
 
         output = run.output
         assert output is not None
@@ -477,7 +484,7 @@ class TestStreamV2E2EInterrupt:
         """Values snapshots captured before the interrupt reflect partial state."""
         graph = _make_interrupt_graph()
         config: dict[str, Any] = {"configurable": {"thread_id": "int-2"}}
-        run = graph.stream_v2({"value": "x", "items": []}, config)
+        run = graph.stream_events({"value": "x", "items": []}, config, version="v3")
 
         snapshots = list(run.values)
         assert len(snapshots) >= 1
@@ -494,14 +501,14 @@ class TestStreamV2E2EErrors:
     def test_subgraph_error_propagates_through_output(self) -> None:
         """Error in a subgraph propagates through output."""
         graph = _make_error_subgraph()
-        run = graph.stream_v2({"value": "x", "items": []})
+        run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
         with pytest.raises(ValueError, match="subgraph explosion"):
             _ = run.output
 
     def test_subgraph_error_propagates_through_raw_events(self) -> None:
         graph = _make_error_subgraph()
-        run = graph.stream_v2({"value": "x", "items": []})
+        run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
         with pytest.raises(ValueError, match="subgraph explosion"):
             list(run)
@@ -509,7 +516,7 @@ class TestStreamV2E2EErrors:
     def test_error_subgraph_handle_status(self) -> None:
         """Subgraph handle surfaces the error status."""
         graph = _make_error_subgraph()
-        run = graph.stream_v2({"value": "x", "items": []})
+        run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
         handle = next(iter(run.subgraphs))
         with pytest.raises(RuntimeError, match="subgraph explosion"):
@@ -529,7 +536,7 @@ class TestStreamV2E2EAsync:
     async def test_all_projections_async(self) -> None:
         """Async run exercises values projection."""
         graph = _make_nested_graph()
-        run = await graph.astream_v2({"value": "x", "items": []})
+        run = await graph.astream_events({"value": "x", "items": []}, version="v3")
 
         values_snapshots = [s async for s in run.values]
         assert len(values_snapshots) >= 1
@@ -540,7 +547,7 @@ class TestStreamV2E2EAsync:
     async def test_async_output(self) -> None:
         """Async output returns the final state."""
         graph = _make_nested_graph()
-        run = await graph.astream_v2({"value": "x", "items": []})
+        run = await graph.astream_events({"value": "x", "items": []}, version="v3")
         output = await run.output()
         assert output is not None
         assert output["value"] == "x_routed_processed"
@@ -550,7 +557,7 @@ class TestStreamV2E2EAsync:
     async def test_async_raw_events(self) -> None:
         """Async raw event iteration yields well-formed ProtocolEvents."""
         graph = _make_nested_graph()
-        run = await graph.astream_v2({"value": "x", "items": []})
+        run = await graph.astream_events({"value": "x", "items": []}, version="v3")
         events = [e async for e in run]
         assert len(events) > 0
         seqs = [e["seq"] for e in events]
@@ -572,7 +579,7 @@ class TestStreamV2E2EAsync:
             .compile()
         )
 
-        run = await graph.astream_v2({"messages": "hi"})
+        run = await graph.astream_events({"messages": "hi"}, version="v3")
         streams = [s async for s in run.messages]
         assert len(streams) >= 1
         for s in streams:
@@ -583,7 +590,9 @@ class TestStreamV2E2EAsync:
         """Async interrupted run has correct flags."""
         graph = _make_interrupt_graph()
         config: dict[str, Any] = {"configurable": {"thread_id": "async-int-1"}}
-        run = await graph.astream_v2({"value": "x", "items": []}, config)
+        run = await graph.astream_events(
+            {"value": "x", "items": []}, config, version="v3"
+        )
 
         output = await run.output()
         assert output is not None
@@ -593,14 +602,14 @@ class TestStreamV2E2EAsync:
     async def test_async_error_propagation(self) -> None:
         """Async error from subgraph propagates through output."""
         graph = _make_error_subgraph()
-        run = await graph.astream_v2({"value": "x", "items": []})
+        run = await graph.astream_events({"value": "x", "items": []}, version="v3")
         with pytest.raises(ValueError, match="subgraph explosion"):
             await run.output()
 
     async def test_async_context_manager(self) -> None:
         """Async context manager calls abort on exit."""
         graph = _make_nested_graph()
-        run = await graph.astream_v2({"value": "x", "items": []})
+        run = await graph.astream_events({"value": "x", "items": []}, version="v3")
         async with run:
             _ = await anext(aiter(run.values))
         assert run._exhausted is True
@@ -608,7 +617,7 @@ class TestStreamV2E2EAsync:
     async def test_async_extensions_present(self) -> None:
         """Async run has all native extensions."""
         graph = _make_nested_graph()
-        run = await graph.astream_v2({"value": "x", "items": []})
+        run = await graph.astream_events({"value": "x", "items": []}, version="v3")
         _ = await run.output()
         assert "values" in run.extensions
         assert "messages" in run.extensions
@@ -618,8 +627,9 @@ class TestStreamV2E2EAsync:
     async def test_async_custom_transformer(self) -> None:
         """Async custom transformer with StreamChannel works."""
         graph = _make_nested_graph()
-        run = await graph.astream_v2(
+        run = await graph.astream_events(
             {"value": "x", "items": []},
+            version="v3",
             transformers=[_CounterTransformer],
         )
         assert "counter" in run.extensions
@@ -639,7 +649,7 @@ class TestStreamV2E2ECombined:
     def test_interleave_all_native_projections(self) -> None:
         """Interleave values + messages + lifecycle without deadlock."""
         graph = _make_nested_graph()
-        run = graph.stream_v2({"value": "x", "items": []})
+        run = graph.stream_events({"value": "x", "items": []}, version="v3")
 
         seen_names: set[str] = set()
         for name, _item in run.interleave("values", "messages", "lifecycle"):
@@ -667,8 +677,9 @@ class TestStreamV2E2ECombined:
                 return True
 
         graph = _make_nested_graph()
-        run = graph.stream_v2(
+        run = graph.stream_events(
             {"value": "x", "items": []},
+            version="v3",
             transformers=[_CounterTransformer, TagTransformer],
         )
 
@@ -722,7 +733,7 @@ class TestStreamV2E2ECombined:
             .compile()
         )
 
-        run = outer.stream_v2({"items": []})
+        run = outer.stream_events({"items": []}, version="v3")
         handles = []
         for handle in run.subgraphs:
             list(handle.values)
@@ -740,13 +751,17 @@ class TestStreamV2E2ECombined:
 
     def test_lifecycle_matches_subgraph_handles(self) -> None:
         """Lifecycle events and subgraph handles agree on discovered subgraphs."""
-        run1 = _make_nested_graph().stream_v2({"value": "x", "items": []})
+        run1 = _make_nested_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         handle_paths: list[tuple[str, ...]] = []
         for handle in run1.subgraphs:
             list(handle.values)
             handle_paths.append(handle.path)
 
-        run2 = _make_nested_graph().stream_v2({"value": "x", "items": []})
+        run2 = _make_nested_graph().stream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
         lifecycle = list(run2.lifecycle)
 
         started_ns = [
@@ -773,8 +788,9 @@ class TestStreamV2E2ECombined:
             .compile()
         )
 
-        run = graph.stream_v2(
+        run = graph.stream_events(
             {"messages": "hi"},
+            version="v3",
             transformers=[_CounterTransformer],
         )
 

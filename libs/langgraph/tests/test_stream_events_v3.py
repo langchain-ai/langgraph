@@ -231,7 +231,7 @@ class TestV2Stream:
         for c in chunks:
             _assert_stream_part_shape(c)
 
-    def test_stream_v2_accepts_control_for_drain(self) -> None:
+    def test_stream_events_v3_accepts_control_for_drain(self) -> None:
         class DrainState(TypedDict, total=False):
             value: str
             skipped: str
@@ -253,7 +253,7 @@ class TestV2Stream:
         builder.add_edge("second", END)
         graph = builder.compile()
 
-        run = graph.stream_v2({}, control=control)
+        run = graph.stream_events({}, control=control, version="v3")
         with pytest.raises(GraphDrained, match="sigterm"):
             list(run.values)
 
@@ -1124,7 +1124,7 @@ class TestV2ValidationErrors:
 
     _INVALID_INPUT: dict[str, Any] = {"value": [1, 2, 3], "items": []}
 
-    def test_stream_v2_pydantic_validation_error(self) -> None:
+    def test_stream_events_v3_pydantic_validation_error(self) -> None:
         """Invalid input to stream with v2 + pydantic state raises ValidationError."""
         graph = _make_pydantic_graph()
         with pytest.raises(ValidationError):
