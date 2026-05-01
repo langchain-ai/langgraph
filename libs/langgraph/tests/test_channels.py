@@ -259,6 +259,21 @@ def test_delta_channel_dict_coercion() -> None:
     assert ch.get() == []
 
 
+def test_messages_delta_reducer_coerces_state() -> None:
+    """State (left side) is coerced too — same contract as add_messages.
+
+    State arrives as raw dicts after checkpoint deserialization or initial
+    HTTP input; the reducer must accept that shape and dedup against it.
+    """
+    state = [{"role": "human", "content": "hello", "id": "h1"}]
+    writes = [[{"role": "ai", "content": "world", "id": "h1"}]]
+    result = _messages_delta_reducer(state, writes)  # type: ignore[arg-type]
+    assert len(result) == 1
+    assert isinstance(result[0], AIMessage)
+    assert result[0].content == "world"
+    assert result[0].id == "h1"
+
+
 def test_delta_channel_checkpoint_returns_sentinel() -> None:
     """checkpoint() always returns DELTA_SENTINEL regardless of state."""
     ch = DeltaChannel(_messages_delta_reducer, list).from_checkpoint(MISSING)

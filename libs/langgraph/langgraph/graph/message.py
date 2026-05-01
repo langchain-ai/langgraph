@@ -270,18 +270,21 @@ def _messages_delta_reducer(
     """
 
     # Each write is either a single message-like (BaseMessage / dict / str)
-    # or a sequence of message-likes. Flatten, then coerce in one pass —
-    # same contract as `add_messages`.
+    # or a sequence of message-likes. Flatten, then coerce state and writes
+    # in single passes — same contract as `add_messages`.
     flat: list[Any] = []
     for w in writes:
         if isinstance(w, (BaseMessage, dict, str)):
             flat.append(w)
         else:
             flat.extend(w)
+    state_msgs = cast("list[AnyMessage]", convert_to_messages(state))
     msgs = cast("list[AnyMessage]", convert_to_messages(flat))
 
-    index: dict[str, int] = {m.id: i for i, m in enumerate(state) if m.id is not None}
-    result: list[AnyMessage | None] = list(state)
+    index: dict[str, int] = {
+        m.id: i for i, m in enumerate(state_msgs) if m.id is not None
+    }
+    result: list[AnyMessage | None] = list(state_msgs)
     for msg in msgs:
         mid = msg.id
         if mid is None:
