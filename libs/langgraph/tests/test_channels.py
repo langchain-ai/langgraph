@@ -254,8 +254,8 @@ def test_delta_channel_dict_coercion() -> None:
     assert len(ch.get()) == 1
     assert ch.get()[0].content == "world"
 
-    # RemoveMessage via dict
-    ch.update([{"type": "remove", "id": "h1"}])
+    # remove via RemoveMessage instance (same contract as add_messages)
+    ch.update([RemoveMessage(id="h1")])
     assert ch.get() == []
 
 

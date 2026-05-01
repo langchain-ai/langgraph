@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from functools import partial
 from typing import (
     Annotated,
@@ -272,31 +272,24 @@ def _messages_delta_reducer(
 
     from langchain_core.messages.utils import convert_to_messages
 
-    def _coerce_one(item: Any) -> AnyMessage:
-        """Coerce a single item to a BaseMessage."""
-        if isinstance(item, BaseMessage):
-            return item
-        if isinstance(item, dict) and item.get("type") == "remove":
-            return RemoveMessage(id=item["id"])
-        return convert_to_messages([item])[0]
+    def _flatten(w: Any) -> Iterable[Any]:
+        # Each write is either a single message-like (BaseMessage / dict / str)
+        # or a sequence of message-likes.
+        if isinstance(w, (BaseMessage, dict, str)):
+            yield w
+        else:
+            yield from w
 
-    def _to_msgs(w: Any) -> list[AnyMessage]:
-        """Normalize one write entry to a flat list of BaseMessage objects.
-
-        Handles the three forms that arrive in practice:
-          - a single BaseMessage (direct write)
-          - a single dict/str (HTTP-driven input, coerce to BaseMessage)
-          - a sequence that may itself contain dicts/strs
-        """
-        if isinstance(w, BaseMessage):
-            return [w]
-        if isinstance(w, (dict, str)):
-            return [_coerce_one(w)]
-        return [_coerce_one(item) for item in w]
+    # Single coercion pass — same contract as `add_messages`, applied once
+    # over all writes rather than per-item.
+    msgs = cast(
+        "list[AnyMessage]",
+        convert_to_messages(list(chain.from_iterable(_flatten(w) for w in writes))),
+    )
 
     index: dict[str, int] = {m.id: i for i, m in enumerate(state) if m.id is not None}
     result: list[AnyMessage | None] = list(state)
-    for msg in chain.from_iterable(_to_msgs(w) for w in writes):
+    for msg in msgs:
         mid = msg.id
         if mid is None:
             result.append(msg)
