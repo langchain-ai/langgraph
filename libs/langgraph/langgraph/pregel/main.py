@@ -30,6 +30,7 @@ from typing import (
 )
 from uuid import UUID, uuid5
 
+from langchain_core._api import beta
 from langchain_core.globals import get_debug
 from langchain_core.runnables import (
     RunnableSequence,
@@ -3448,6 +3449,7 @@ class Pregel(
                 await asyncio.shield(run_manager.on_chain_error(e))
             raise
 
+    @beta(message="The v3 streaming protocol on Pregel is experimental.")
     def _pregel_stream_v3(
         self,
         input: InputT | Command | None,
@@ -3458,7 +3460,12 @@ class Pregel(
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> Any:
-        """Internal v3 sync streaming implementation. Public entry: stream_events(version='v3')."""
+        """Internal v3 sync streaming implementation. Public entry: stream_events(version='v3').
+
+        !!! warning
+
+            The v3 streaming protocol is experimental and may change.
+        """
         parent_ns = _resolve_parent_ns(self.config, config)
         compiled_factories = _normalize_stream_transformer_factories(
             self.stream_transformers
@@ -3490,6 +3497,7 @@ class Pregel(
         )
         return GraphRunStream(graph_iter, mux)
 
+    @beta(message="The v3 streaming protocol on Pregel is experimental.")
     async def _apregel_stream_v3(
         self,
         input: InputT | Command | None,
@@ -3500,7 +3508,12 @@ class Pregel(
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> Any:
-        """Internal v3 async streaming implementation. Public entry: astream_events(version='v3')."""
+        """Internal v3 async streaming implementation. Public entry: astream_events(version='v3').
+
+        !!! warning
+
+            The v3 streaming protocol is experimental and may change.
+        """
         parent_ns = _resolve_parent_ns(self.config, config)
         compiled_factories = _normalize_stream_transformer_factories(
             self.stream_transformers
@@ -3571,6 +3584,10 @@ class Pregel(
         `Runnable.stream_events`). For `version="v3"`, returns a
         `GraphRunStream` whose typed projections the caller drives by
         iterating — no background thread.
+
+        !!! warning
+
+            The `version="v3"` API is experimental and may change.
 
         Builds a `StreamMux` from the built-in transformers, this
         graph's compile-time `stream_transformers`, and any additional
@@ -3664,6 +3681,10 @@ class Pregel(
         drives the pump when its buffer is empty. The same nesting
         limitation as the sync path applies — see `stream_events` for
         details.
+
+        !!! warning
+
+            The `version="v3"` API is experimental and may change.
 
         See `stream_events` for full argument and return documentation.
         """
