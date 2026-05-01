@@ -322,26 +322,17 @@ def test_memory_saver_with_allowlist_proxy_isolated() -> None:
 
 
 class TestInMemorySaverDeltaChannel:
-    def test_load_blobs_returns_sentinel_for_delta_channel(self) -> None:
-        """_load_blobs returns DELTA_SENTINEL for delta channels (reconstruction deferred)."""
+    def test_load_blobs_omits_delta_channel(self) -> None:
+        """_load_blobs omits delta channels (stored as 'empty'); reconstruction deferred."""
         saver = InMemorySaver()
-        serde = JsonPlusSerializer()
 
         thread_id, ns, channel = "t1", "", "messages"
         v1 = "00000000000000000000000000000001.0000000000000000"
 
-        saver.blobs[(thread_id, ns, channel, v1)] = serde.dumps_typed(DELTA_SENTINEL)
-
-        cp1 = empty_checkpoint()
-        cp1["id"] = "cp1"
-        cp1["channel_versions"][channel] = v1
-        saver.storage[thread_id][ns] = {
-            "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), None),
-        }
+        saver.blobs[(thread_id, ns, channel, v1)] = ("empty", b"")
 
         result = saver._load_blobs(thread_id, ns, {channel: v1})
-        assert channel in result
-        assert result[channel] is DELTA_SENTINEL
+        assert channel not in result
 
     def test_get_channel_writes_collects_ancestor_writes_only(self) -> None:
         """_get_channel_writes_history collects ancestor writes oldest→newest,
@@ -582,9 +573,9 @@ class TestPreDeltaBlobTerminator:
 
         # Pre-delta: cp1 stored a real blob for the channel.
         saver.blobs[(thread_id, ns, channel, v1)] = serde.dumps_typed(["A"])
-        # Delta-era: cp2 and cp3 store sentinels; real writes in checkpoint_writes.
-        saver.blobs[(thread_id, ns, channel, v2)] = serde.dumps_typed(DELTA_SENTINEL)
-        saver.blobs[(thread_id, ns, channel, v3)] = serde.dumps_typed(DELTA_SENTINEL)
+        # Delta-era: cp2 and cp3 store "empty"; real writes in checkpoint_writes.
+        saver.blobs[(thread_id, ns, channel, v2)] = ("empty", b"")
+        saver.blobs[(thread_id, ns, channel, v3)] = ("empty", b"")
 
         cp1 = empty_checkpoint()
         cp1["id"] = "cp1"
