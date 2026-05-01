@@ -156,60 +156,60 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 """
 
 
-class _DeltaCombinedRow(TypedDict, total=False):
-    """One row from `SELECT_DELTA_COMBINED_SQL` (a UNION ALL of three tables).
+class _DeltaStage2Row(TypedDict, total=False):
+    """One row from `SELECT_DELTA_STAGE2_SQL` (a UNION ALL of writes and blobs)."""
 
-    Every row carries `_kind` ("p" / "w" / "b") plus whichever columns are
-    relevant for that kind; irrelevant columns are NULL and typed as `None`.
-    """
-
-    _kind: str  # always present: "p", "w", or "b"
-    # checkpoint row ("p")
-    checkpoint_id: str | None
-    parent_checkpoint_id: str | None
-    ver: str | None
-    # write / blob rows ("w", "b")
+    _kind: str  # "w" or "b"
+    checkpoint_id: str | None  # "w" rows only
     type: str | None
     blob: bytes | None
-    # write row only ("w")
-    task_id: str | None
-    idx: int | None
-    # blob row only ("b")
-    version: str | None
+    task_id: str | None  # "w" rows only
+    idx: int | None  # "w" rows only
+    version: str | None  # "b" rows only
 
 
-# DeltaChannel reconstruction: one UNION ALL query fetches checkpoints,
-# writes, and blobs for `channel` in one roundtrip; the ancestor walk runs
-# in Python in `_build_delta_channel_writes_history`.
+# Two-stage DeltaChannel reconstruction.  Stage 1 scans checkpoint
+# metadata (no blob bytes) to walk the parent chain and locate the
+# nearest snapshot marker.  Stage 2 fetches only the chain-limited
+# writes and the single seed snapshot blob.
 #
-# Parameter order: (channel, thread_id, checkpoint_ns,
-#                   thread_id, checkpoint_ns, channel,
-#                   thread_id, checkpoint_ns, channel)
-SELECT_DELTA_COMBINED_SQL = """
-    SELECT 'p'::text       AS _kind,
-           checkpoint_id,
+# Parameter order:
+#   stage1: (channel, channel, thread_id, checkpoint_ns)
+#   stage2: (thread_id, checkpoint_ns, channel, chain_cids[],
+#            thread_id, checkpoint_ns, channel, seed_versions[])
+
+SELECT_DELTA_STAGE1_SQL = """
+    SELECT checkpoint_id,
            parent_checkpoint_id,
            checkpoint -> 'channel_versions' ->> %s AS ver,
-           NULL::text       AS type,
-           NULL::bytea      AS blob,
-           NULL::text       AS task_id,
-           NULL::int        AS idx,
-           NULL::text       AS version
+           (checkpoint -> 'channel_values' -> %s) IS NOT NULL AS has_snapshot
     FROM checkpoints
     WHERE thread_id = %s AND checkpoint_ns = %s
-    UNION ALL
-    SELECT 'w',
-           checkpoint_id, NULL, NULL,
-           type, blob, task_id, idx, NULL
+"""
+
+SELECT_DELTA_STAGE2_SQL = """
+    SELECT 'w'::text AS _kind,
+           checkpoint_id,
+           type, blob, task_id, idx, NULL::text AS version
     FROM checkpoint_writes
     WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s
+      AND checkpoint_id = ANY(%s)
     UNION ALL
-    SELECT 'b',
-           NULL, NULL, NULL,
+    SELECT 'b', NULL,
            type, blob, NULL, NULL, version
     FROM checkpoint_blobs
     WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s
+      AND version = ANY(%s)
 """
+
+
+class _DeltaStage1Row(TypedDict):
+    """One row from `SELECT_DELTA_STAGE1_SQL`."""
+
+    checkpoint_id: str
+    parent_checkpoint_id: str | None
+    ver: str | None
+    has_snapshot: bool
 
 
 class BasePostgresSaver(BaseCheckpointSaver[str]):
@@ -254,38 +254,59 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             if t.decode() != "empty"
         }
 
+    @staticmethod
+    def _walk_stage1(
+        stage1_rows: Sequence[_DeltaStage1Row],
+        target_id: str,
+    ) -> tuple[list[str], str | None]:
+        """Walk the parent chain from stage 1 metadata rows.
+
+        Returns (chain_cids, seed_version):
+          chain_cids: ancestor checkpoint IDs from target's parent down to
+                      the seed (or root), in newest-first order.
+          seed_version: the channel blob version at the nearest ancestor
+                        with has_snapshot=True, or None if pure delta.
+        """
+        parent_of: dict[str, str | None] = {}
+        ver_of: dict[str, str | None] = {}
+        snapshot_of: dict[str, bool] = {}
+        for r in stage1_rows:
+            cid = r["checkpoint_id"]
+            parent_of[cid] = r["parent_checkpoint_id"]
+            ver_of[cid] = r["ver"]
+            snapshot_of[cid] = r["has_snapshot"]
+
+        chain_cids: list[str] = []
+        seed_version: str | None = None
+        cur_cid: str | None = parent_of.get(target_id)
+        while cur_cid is not None:
+            chain_cids.append(cur_cid)
+            if snapshot_of.get(cur_cid, False):
+                seed_version = ver_of.get(cur_cid)
+                break
+            cur_cid = parent_of.get(cur_cid)
+        return chain_cids, seed_version
+
     def _build_delta_channel_writes_history(
         self,
         *,
         channel: str,
-        target_id: str,
-        rows: Sequence[_DeltaCombinedRow],
+        chain_cids: list[str],
+        seed_version: str | None,
+        stage2_rows: Sequence[_DeltaStage2Row],
     ) -> _ChannelWritesHistory:
-        """Reconstruct one delta channel's history from the combined UNION ALL rows.
+        """Reconstruct delta channel history from two-stage query results.
 
-        Pure data transform shared by sync (`PostgresSaver`) and async
-        (`AsyncPostgresSaver`); both paths run `SELECT_DELTA_COMBINED_SQL`
-        and feed the tagged rows here.
-
-        Walk is newest → oldest from the target's parent. A non-sentinel
-        blob in `checkpoint_blobs` (a pre-delta snapshot) terminates the
-        walk and is returned as the seed so replay starts from it.
-
-        Writes stored at `target_id` itself are pending writes for the next
-        step and are excluded — the walk begins at the target's parent.
+        chain_cids are in newest-first order (target's parent first).
+        stage2_rows contain only writes for chain_cids and the single
+        seed blob at seed_version.
         """
-        parent_of: dict[str, str | None] = {}
-        ver_of: dict[str, str | None] = {}
         writes_by_cid: dict[str, list[tuple[str, bytes, str, int]]] = {}
-        blob_by_ver: dict[str, tuple[str, bytes]] = {}
+        seed_blob: tuple[str, bytes] | None = None
 
-        for r in rows:
+        for r in stage2_rows:
             kind = r["_kind"]
-            if kind == "p":
-                cid = cast(str, r["checkpoint_id"])
-                parent_of[cid] = r["parent_checkpoint_id"]
-                ver_of[cid] = r["ver"]
-            elif kind == "w":
+            if kind == "w":
                 cid = cast(str, r["checkpoint_id"])
                 writes_by_cid.setdefault(cid, []).append(
                     cast(
@@ -294,42 +315,26 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                     )
                 )
             else:  # kind == "b"
-                blob_by_ver[cast(str, r["version"])] = cast(
-                    "tuple[str, bytes]", (r["type"], r["blob"])
-                )
+                seed_blob = cast("tuple[str, bytes]", (r["type"], r["blob"]))
 
-        # newest write first per ancestor (task_id DESC, idx DESC)
         for ws in writes_by_cid.values():
             ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
 
-        ancestors: list[str] = []
-        cur_cid: str | None = parent_of.get(target_id)
-        while cur_cid is not None:
-            ancestors.append(cur_cid)
-            cur_cid = parent_of.get(cur_cid)
-        if not ancestors:
+        if not chain_cids:
             return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
 
-        collected: list[PendingWrite] = []  # newest first; reversed at the end
-        for cid in ancestors:
-            # Collect writes first — they encode the transition FROM this
-            # ancestor's state to its child's and must be included even if
-            # this ancestor is also the seed checkpoint.
+        collected: list[PendingWrite] = []
+        for cid in chain_cids:
             for type_tag, write_blob, task_id, _idx in writes_by_cid.get(cid, []):
                 val = self.serde.loads_typed((type_tag, write_blob))
                 collected.append((task_id, channel, val))
-            # Then check seed terminator.
-            ver = ver_of.get(cid)
-            if ver is not None:
-                seed_blob = blob_by_ver.get(ver)
-                if seed_blob is not None and seed_blob[0] != "empty":
-                    blob_value = self.serde.loads_typed(seed_blob)
-                    if blob_value is not DELTA_SENTINEL:
-                        collected.reverse()
-                        return _ChannelWritesHistory(seed=blob_value, writes=collected)
 
-        collected.reverse()  # oldest → newest
-        return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=collected)
+        seed: Any = DELTA_SENTINEL
+        if seed_blob is not None and seed_blob[0] != "empty":
+            seed = self.serde.loads_typed(seed_blob)
+
+        collected.reverse()
+        return _ChannelWritesHistory(seed=seed, writes=collected)
 
     def _dump_blobs(
         self,
