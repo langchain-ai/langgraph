@@ -30,6 +30,7 @@ from langgraph.checkpoint.postgres.base import (
     SELECT_DELTA_STAGE1_SQL,
     SELECT_DELTA_STAGE2_SQL,
     BasePostgresSaver,
+    _DeltaStage1Row,
     _DeltaStage2Row,
 )
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
@@ -428,7 +429,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 (channel, channel, thread_id, checkpoint_ns),
             )
             stage1_rows = await cur.fetchall()
-        chain_cids, seed_version = self._walk_stage1(stage1_rows, checkpoint_id)
+        chain_cids, seed_version = self._walk_stage1(
+            cast("list[_DeltaStage1Row]", stage1_rows), checkpoint_id
+        )
         seed_versions = [seed_version] if seed_version else []
         async with self._cursor() as cur:
             await cur.execute(
