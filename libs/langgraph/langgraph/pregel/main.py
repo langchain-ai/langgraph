@@ -3570,25 +3570,47 @@ class Pregel(
 
         For `version="v1"` / `"v2"`, yields `StreamEvent` dicts (see
         `Runnable.stream_events`). For `version="v3"`, returns a
-        `GraphRunStream` exposing typed projections.
+        `GraphRunStream` whose typed projections the caller drives by
+        iterating — no background thread.
+
+        Builds a `StreamMux` from the built-in transformers, this
+        graph's compile-time `stream_transformers`, and any additional
+        `transformers=` supplied at the call site. `run.output`,
+        `run.interrupted`, and `run.interrupts` work regardless of
+        which transformers are registered.
+
+        Note:
+            Nesting v1 `stream(stream_mode="messages")` inside a node
+            of a `stream_events(version="v3")` run is not fully
+            supported. The outer v3 messages handler reroutes
+            `BaseChatModel.invoke` through the v2 event protocol, so
+            the inner v1 handler does not see `on_llm_new_token`
+            chunks. The inner stream still yields a finalized message
+            via `on_llm_end`. Use `stream_events(version="v3")` for the
+            inner graph as well, or call `chat_model.stream(...)`
+            explicitly, to get token-level streaming.
 
         Args:
             input: Graph input.
             config: Optional runnable config.
             version: Streaming-event schema version. `"v3"` selects the
                 content-block-centric streaming protocol.
-            interrupt_before: Nodes to interrupt before, if any. Only used
-                for `version="v3"`.
-            interrupt_after: Nodes to interrupt after, if any. Only used
-                for `version="v3"`.
-            control: Optional run control. Only used for `version="v3"`.
-            transformers: Extra transformer factories. Only used for
-                `version="v3"`.
+            interrupt_before: Nodes to interrupt before, if any. Only
+                used for `version="v3"`.
+            interrupt_after: Nodes to interrupt after, if any. Only
+                used for `version="v3"`.
+            control: Optional run control used to request cooperative
+                drain. Only used for `version="v3"`.
+            transformers: Extra transformer classes or configured
+                factories appended after compile-time
+                `stream_transformers`. Factories are called as
+                `factory(scope)` so they can propagate to subgraph
+                scopes. Only used for `version="v3"`.
             **kwargs: Forwarded to the v1/v2 path.
 
         Returns:
-            For `version="v3"`, a `GraphRunStream`. Otherwise an
-            `Iterator[StreamEvent]`.
+            For `version="v3"`, a `GraphRunStream` the caller iterates
+            to drive the run. Otherwise an `Iterator[StreamEvent]`.
         """
         if version == "v3":
             return self._pregel_stream_v3(
@@ -3636,7 +3658,16 @@ class Pregel(
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **kwargs: Any,
     ) -> _AsyncEventsResult:
-        """Async variant of `stream_events`. See `stream_events` for full docs."""
+        """Async variant of `stream_events`.
+
+        For `version="v3"`, returns an `AsyncGraphRunStream` whose
+        projections can be awaited concurrently; each subscribed cursor
+        drives the pump when its buffer is empty. The same nesting
+        limitation as the sync path applies — see `stream_events` for
+        details.
+
+        See `stream_events` for full argument and return documentation.
+        """
         if version == "v3":
             return _AsyncEventsResult(
                 awaitable=self._apregel_stream_v3(
