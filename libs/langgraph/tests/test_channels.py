@@ -371,8 +371,7 @@ def test_delta_channel_inmemory_saver_assembles_writes() -> None:
 
     saved = saver.get_tuple(config)
     assert saved is not None
-    assert "messages" in saved.checkpoint["channel_values"]
-    assert saved.checkpoint["channel_values"]["messages"] is DELTA_SENTINEL
+    assert "messages" not in saved.checkpoint["channel_values"]
 
     state = graph.get_state(config)
     assert len(state.values["messages"]) == 4  # 2 human + 2 AI
@@ -562,7 +561,7 @@ def test_delta_channel_dict_reducer_end_to_end_filesystem() -> None:
 
     saved = saver.get_tuple(config)
     assert saved is not None
-    assert saved.checkpoint["channel_values"]["files"] is DELTA_SENTINEL
+    assert "files" not in saved.checkpoint["channel_values"]
     state = graph.get_state(config)
     assert state.values["files"] == {
         "/doc_1.txt": "content for turn 1",
