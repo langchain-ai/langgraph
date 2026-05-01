@@ -17,12 +17,10 @@ TASKS = "__pregel_tasks"
 
 
 class _DeltaSentinel:
-    """Singleton marker stored (as zero bytes) in checkpoint_blobs for a
-    DeltaChannel field. The actual per-step writes live in checkpoint_writes
-    and are replayed through the reducer at load time.
+    """In-memory marker for a DeltaChannel field with no snapshot.
 
-    Compare with `is DELTA_SENTINEL` — `loads_typed` always returns the same
-    module-level instance.
+    Never serialized to storage — checkpointers strip it before writing.
+    Compare with `is DELTA_SENTINEL`; always the same module-level instance.
     """
 
     __slots__ = ()

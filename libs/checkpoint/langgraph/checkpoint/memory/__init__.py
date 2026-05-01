@@ -452,7 +452,9 @@ class InMemorySaver(
         values: dict[str, Any] = c.pop("channel_values")  # type: ignore[misc]
         for k, v in new_versions.items():
             self.blobs[(thread_id, checkpoint_ns, k, v)] = (
-                self.serde.dumps_typed(values[k]) if k in values else ("empty", b"")
+                self.serde.dumps_typed(values[k])
+                if k in values and values[k] is not DELTA_SENTINEL
+                else ("empty", b"")
             )
         self.storage[thread_id][checkpoint_ns].update(
             {
