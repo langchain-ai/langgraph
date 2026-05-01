@@ -36,7 +36,7 @@ class _DeltaSnapshot(NamedTuple):
     """Snapshot blob for a DeltaChannel with finite snapshot_frequency.
 
     Stored in checkpoint_blobs via the `EXT_DELTA_SNAPSHOT` msgpack ext code.
-    The ancestor walk in `_get_channel_writes_history` terminates when it
+    The ancestor walk in `_get_all_delta_channels_writes_history` terminates when it
     encounters this type (any non-sentinel blob stops the walk).
 
     `from_checkpoint` reconstructs the channel value directly from `.value`

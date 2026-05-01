@@ -6,7 +6,7 @@ checkpointer — pre-migration state visible at each *settled* ancestor
 checkpoint is preserved, and post-migration writes fold on top through
 the reducer.
 
-Mechanism under test: the saver's `_get_channel_writes_history(config,
+Mechanism under test: the saver's `_get_all_delta_channels_writes_history(config,
 channel)` walks the parent chain; when it encounters an ancestor whose
 `channel_values[channel]` is a real value (not `DELTA_SENTINEL`), it
 returns that as the `seed`. `DeltaChannel.from_checkpoint(seed)` uses
@@ -29,7 +29,7 @@ Scenarios covered:
    pre-migration seed.
 4. **Base-saver fallback path**: a third-party-style subclass that
    removes the optimized `InMemorySaver` override and falls back to
-   `BaseCheckpointSaver._get_channel_writes_history` must produce the
+   `BaseCheckpointSaver._get_all_delta_channels_writes_history` must produce the
    same result as the optimized path.
 5. **Channel-type isolation across threads**: two threads on the same
    checkpointer under the delta-channel graph — one freshly-started,
@@ -266,7 +266,7 @@ def test_continuing_migrated_thread_folds_deltas_on_seed() -> None:
 
 class _ThirdPartyStyleSaver(InMemorySaver):
     """Simulates a third-party saver that inherits the reference
-    `_get_channel_writes_history` implementation from
+    `_get_all_delta_channels_writes_history` implementation from
     `BaseCheckpointSaver` rather than overriding it.
 
     We rebind the two methods to the base-class versions (via MRO) so
@@ -275,11 +275,11 @@ class _ThirdPartyStyleSaver(InMemorySaver):
     """
 
     # MRO: [_ThirdPartyStyleSaver, InMemorySaver, BaseCheckpointSaver, ...]
-    _get_channel_writes_history = (  # type: ignore[assignment]
-        InMemorySaver.__mro__[1]._get_channel_writes_history  # type: ignore[attr-defined]
+    _get_all_delta_channels_writes_history = (  # type: ignore[assignment]
+        InMemorySaver.__mro__[1]._get_all_delta_channels_writes_history  # type: ignore[attr-defined]
     )
-    _aget_channel_writes_history = (  # type: ignore[assignment]
-        InMemorySaver.__mro__[1]._aget_channel_writes_history  # type: ignore[attr-defined]
+    _aget_all_delta_channels_writes_history = (  # type: ignore[assignment]
+        InMemorySaver.__mro__[1]._aget_all_delta_channels_writes_history  # type: ignore[attr-defined]
     )
 
 
@@ -326,7 +326,7 @@ def test_delta_and_migrated_threads_do_not_cross_contaminate() -> None:
     """Two threads sharing a checkpointer — one migrated from
     pre-migration state, one freshly-started under DeltaChannel — must
     maintain independent state. The parent-chain walk in
-    `_get_channel_writes_history` must be scoped to the target thread.
+    `_get_all_delta_channels_writes_history` must be scoped to the target thread.
     """
 
     checkpointer = InMemorySaver()

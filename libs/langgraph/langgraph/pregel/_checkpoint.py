@@ -114,9 +114,12 @@ def channels_from_checkpoint(
 
     For most channels, `spec.from_checkpoint(checkpoint["channel_values"][k])`
     is sufficient. `DeltaChannel` is the exception: sentinel blobs require an
-    ancestor walk via `saver._get_channel_writes_history`. The walk terminates
-    at the nearest `_DeltaSnapshot` blob (step-based) or a pre-migration plain
-    value, so read depth is bounded by `snapshot_frequency`.
+    ancestor walk via `saver._get_all_delta_channels_writes_history`. All
+    delta channels needing replay are batched into a single saver call to
+    save K-1 redundant scans of `checkpoint_writes` (which has no channel
+    index). The walk terminates per-channel at the nearest `_DeltaSnapshot`
+    blob or pre-migration plain value, so read depth is bounded by
+    `snapshot_frequency`.
     """
     channel_specs: dict[str, BaseChannel] = {}
     managed_specs: dict[str, ManagedValueSpec] = {}
@@ -126,18 +129,28 @@ def channels_from_checkpoint(
         else:
             managed_specs[k] = v
 
+    delta_channels: list[str] = [
+        k
+        for k, spec in channel_specs.items()
+        if _needs_replay(spec, checkpoint["channel_values"].get(k, MISSING))
+    ]
+    histories: Mapping[str, Any] = {}
+    if delta_channels and saver is not None and config is not None:
+        histories = saver._get_all_delta_channels_writes_history(
+            config, delta_channels
+        )
+
     channels: dict[str, BaseChannel] = {}
     for k, spec in channel_specs.items():
         ch: BaseChannel
-        stored = checkpoint["channel_values"].get(k, MISSING)
-        if _needs_replay(spec, stored) and saver is not None and config is not None:
+        if k in histories:
             delta_spec = cast(DeltaChannel, spec)
-            history = saver._get_channel_writes_history(config, k)
+            history = histories[k]
             replay_ch = delta_spec.from_checkpoint(history.seed)
             replay_ch.replay_writes(history.writes)
             ch = replay_ch
         else:
-            ch = spec.from_checkpoint(stored)
+            ch = spec.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
         channels[k] = ch
     return channels, managed_specs
 
@@ -158,18 +171,28 @@ async def achannels_from_checkpoint(
         else:
             managed_specs[k] = v
 
+    delta_channels: list[str] = [
+        k
+        for k, spec in channel_specs.items()
+        if _needs_replay(spec, checkpoint["channel_values"].get(k, MISSING))
+    ]
+    histories: Mapping[str, Any] = {}
+    if delta_channels and saver is not None and config is not None:
+        histories = await saver._aget_all_delta_channels_writes_history(
+            config, delta_channels
+        )
+
     channels: dict[str, BaseChannel] = {}
     for k, spec in channel_specs.items():
         ch: BaseChannel
-        stored = checkpoint["channel_values"].get(k, MISSING)
-        if _needs_replay(spec, stored) and saver is not None and config is not None:
+        if k in histories:
             delta_spec = cast(DeltaChannel, spec)
-            history = await saver._aget_channel_writes_history(config, k)
+            history = histories[k]
             replay_ch = delta_spec.from_checkpoint(history.seed)
             replay_ch.replay_writes(history.writes)
             ch = replay_ch
         else:
-            ch = spec.from_checkpoint(stored)
+            ch = spec.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
         channels[k] = ch
     return channels, managed_specs
 
