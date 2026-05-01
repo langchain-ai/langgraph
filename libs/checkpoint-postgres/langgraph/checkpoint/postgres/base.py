@@ -357,9 +357,9 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         a `_ChannelWritesHistory` per requested channel.
         """
         # writes_by_ch_by_cid[channel][cid] = list of (type, blob, task_id, idx)
-        writes_by_ch_by_cid: dict[
-            str, dict[str, list[tuple[str, bytes, str, int]]]
-        ] = {ch: {} for ch in channels}
+        writes_by_ch_by_cid: dict[str, dict[str, list[tuple[str, bytes, str, int]]]] = {
+            ch: {} for ch in channels
+        }
         # seed_blob_by_ver[(channel, version)] = (type, blob)
         seed_blob_by_ver: dict[tuple[str, str], tuple[str, bytes]] = {}
 

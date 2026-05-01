@@ -189,9 +189,7 @@ class InMemorySaver(
                     ver = versions.get(ch)
                     if ver is None:
                         continue
-                    blob_entry = self.blobs.get(
-                        (thread_id, checkpoint_ns, ch, ver)
-                    )
+                    blob_entry = self.blobs.get((thread_id, checkpoint_ns, ch, ver))
                     if blob_entry is None or blob_entry[0] == "empty":
                         continue
                     blob_value = self.serde.loads_typed(blob_entry)

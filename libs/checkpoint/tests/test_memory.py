@@ -482,9 +482,9 @@ class TestBaseFallbackGetChannelWrites:
             }
         }
 
-        result = saver._get_all_delta_channels_writes_history(
-            config, ["messages"]
-        )["messages"]
+        result = saver._get_all_delta_channels_writes_history(config, ["messages"])[
+            "messages"
+        ]
 
         assert result.seed is DELTA_SENTINEL
         values = [v for _, _, v in result.writes]

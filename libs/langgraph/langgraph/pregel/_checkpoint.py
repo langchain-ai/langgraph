@@ -136,9 +136,7 @@ def channels_from_checkpoint(
     ]
     histories: Mapping[str, Any] = {}
     if delta_channels and saver is not None and config is not None:
-        histories = saver._get_all_delta_channels_writes_history(
-            config, delta_channels
-        )
+        histories = saver._get_all_delta_channels_writes_history(config, delta_channels)
 
     channels: dict[str, BaseChannel] = {}
     for k, spec in channel_specs.items():
