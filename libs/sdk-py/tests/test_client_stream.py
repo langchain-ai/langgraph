@@ -388,7 +388,7 @@ async def test_async_stream_v2_client_side_conversion() -> None:
             event="values", data={"messages": [{"role": "user", "content": "hi"}]}
         )
         yield StreamPart(event="updates|sub:abc", data={"node": {"out": 1}})
-        yield StreamPart(event="end", data=None)  # type: ignore[arg-type]
+        yield StreamPart(event="end", data=None)  # ty: ignore[invalid-argument-type]
 
     parts: list[StreamPartV2] = [part async for part in _wrap_stream_v2(mock_stream())]
     assert len(parts) == 3
@@ -420,7 +420,7 @@ def test_sync_stream_v2_client_side_conversion() -> None:
     def mock_stream() -> Any:
         yield StreamPart(event="metadata", data={"run_id": "r1"})
         yield StreamPart(event="values", data={"state": "full"})
-        yield StreamPart(event="end", data=None)  # type: ignore[arg-type]
+        yield StreamPart(event="end", data=None)  # ty: ignore[invalid-argument-type]
 
     parts: list[StreamPartV2] = list(_wrap_stream_v2_sync(mock_stream()))
     assert len(parts) == 2
