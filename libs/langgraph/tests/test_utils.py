@@ -344,6 +344,29 @@ def test_configurable_metadata() -> None:
     assert metadata["nooverride"] == 18
 
 
+def test_ensure_config_does_not_mutate_input_metadata() -> None:
+    config: RunnableConfig = {"metadata": {"source": "original"}}
+
+    merged = ensure_config(config, {"configurable": {"thread_id": "thread-1"}})
+
+    assert merged["metadata"] == {
+        "source": "original",
+        "thread_id": "thread-1",
+    }
+    assert config["metadata"] == {"source": "original"}
+
+
+def test_ensure_config_does_not_reuse_metadata_between_calls() -> None:
+    config: RunnableConfig = {"metadata": {"source": "original"}}
+
+    first = ensure_config(config, {"configurable": {"thread_id": "thread-1"}})
+    second = ensure_config(config, {"configurable": {"thread_id": "thread-2"}})
+
+    assert first["metadata"]["thread_id"] == "thread-1"
+    assert second["metadata"]["thread_id"] == "thread-2"
+    assert config["metadata"] == {"source": "original"}
+
+
 def test_callback_manager_copies_whitelisted_configurable_ids_to_metadata() -> None:
     config = {
         "configurable": {

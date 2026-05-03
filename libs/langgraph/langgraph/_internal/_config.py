@@ -305,10 +305,9 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
             continue
         for k, v in config.items():
             if _is_not_empty(v) and k in CONFIG_KEYS:
-                if k == CONF:
-                    empty[k] = cast(dict, v).copy()
-                else:
-                    empty[k] = v  # type: ignore[literal-required]
+                empty[k] = (
+                    cast(Any, v).copy() if k in COPIABLE_KEYS else v
+                )  # type: ignore[literal-required]
         for k, v in config.items():
             if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
