@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import abc
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
@@ -155,5 +156,13 @@ def test_collect_allowlist_typing_union_optional() -> None:
     typing_optional = Optional[InnerDataclass]  # noqa: UP045
     typing_union = Union[InnerDataclass, InnerModel]  # noqa: UP007
     allowlist = collect_allowlist_from_schemas(schemas=[typing_optional, typing_union])
+    assert (InnerDataclass.__module__, InnerDataclass.__name__) in allowlist
+    assert (InnerModel.__module__, InnerModel.__name__) in allowlist
+
+
+def test_collect_allowlist_collections_abc_generic_containers() -> None:
+    allowlist = collect_allowlist_from_schemas(
+        schemas=[abc.Sequence[InnerDataclass], abc.Mapping[str, InnerModel]]
+    )
     assert (InnerDataclass.__module__, InnerDataclass.__name__) in allowlist
     assert (InnerModel.__module__, InnerModel.__name__) in allowlist

@@ -4,6 +4,7 @@ import dataclasses
 import logging
 import sys
 import types
+from collections import abc
 from collections import deque
 from enum import Enum
 from typing import (
@@ -158,6 +159,13 @@ def _collect_from_type(
         return
 
     if origin in (list, set, tuple, dict, deque, frozenset):
+        for arg in get_args(typ):
+            _collect_from_type(arg, allowlist, seen, seen_ids)
+        return
+
+    if isinstance(origin, type) and issubclass(
+        origin, (abc.Collection, abc.Mapping)
+    ):
         for arg in get_args(typ):
             _collect_from_type(arg, allowlist, seen, seen_ids)
         return
