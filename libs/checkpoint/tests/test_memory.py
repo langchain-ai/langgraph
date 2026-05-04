@@ -335,9 +335,10 @@ class TestInMemorySaverDeltaChannel:
         assert channel not in result
 
     def test_get_channel_writes_collects_ancestor_writes_only(self) -> None:
-        """_get_channel_writes_history collects ancestor writes oldest→newest,
-        and excludes writes stored at the target checkpoint itself (those are
-        pending writes for the next step, applied separately by pregel)."""
+        """_get_all_delta_channels_writes_history collects ancestor writes
+        oldest→newest, and excludes writes stored at the target checkpoint
+        itself (those are pending writes for the next step, applied separately
+        by pregel)."""
         saver = InMemorySaver()
         serde = JsonPlusSerializer()
 
@@ -375,7 +376,9 @@ class TestInMemorySaverDeltaChannel:
                 "checkpoint_id": "cp2",
             }
         }
-        result = saver._get_channel_writes_history(config, channel)
+        result = saver._get_all_delta_channels_writes_history(config, [channel])[
+            channel
+        ]
         assert result.seed is DELTA_SENTINEL
         values = [v for _, _, v in result.writes]
         assert values == [{"content": "hi"}]
@@ -405,15 +408,17 @@ class TestInMemorySaverDeltaChannel:
                 "checkpoint_id": "cp1",
             }
         }
-        result = saver._get_channel_writes_history(config, channel)
+        result = saver._get_all_delta_channels_writes_history(config, [channel])[
+            channel
+        ]
         assert result.seed is DELTA_SENTINEL
         assert result.writes == []
 
 
 class TestBaseFallbackGetChannelWrites:
-    """Exercises the `BaseCheckpointSaver._get_channel_writes_history` default
-    implementation — the path third-party savers inherit when they don't
-    override `_get_channel_writes_history` themselves.
+    """Exercises the `BaseCheckpointSaver._get_all_delta_channels_writes_history`
+    default implementation — the path third-party savers inherit when they
+    don't override `_get_all_delta_channels_writes_history` themselves.
 
     Regression guard for a bug where the fallback passed the caller's config
     (with `checkpoint_id`) straight to `self.list()`, which most savers
@@ -429,11 +434,11 @@ class TestBaseFallbackGetChannelWrites:
         """
 
         class _ThirdPartyStyleSaver(InMemorySaver):
-            _get_channel_writes_history = (
-                InMemorySaver.__mro__[1]._get_channel_writes_history  # type: ignore[attr-defined]
+            _get_all_delta_channels_writes_history = (
+                InMemorySaver.__mro__[1]._get_all_delta_channels_writes_history  # type: ignore[attr-defined]
             )
-            _aget_channel_writes_history = (
-                InMemorySaver.__mro__[1]._aget_channel_writes_history  # type: ignore[attr-defined]
+            _aget_all_delta_channels_writes_history = (
+                InMemorySaver.__mro__[1]._aget_all_delta_channels_writes_history  # type: ignore[attr-defined]
             )
 
         saver = _ThirdPartyStyleSaver()
@@ -477,7 +482,9 @@ class TestBaseFallbackGetChannelWrites:
             }
         }
 
-        result = saver._get_channel_writes_history(config, "messages")
+        result = saver._get_all_delta_channels_writes_history(config, ["messages"])[
+            "messages"
+        ]
 
         assert result.seed is DELTA_SENTINEL
         values = [v for _, _, v in result.writes]
@@ -494,7 +501,9 @@ class TestBaseFallbackGetChannelWrites:
             }
         }
 
-        result = await saver._aget_channel_writes_history(config, "messages")
+        result = (
+            await saver._aget_all_delta_channels_writes_history(config, ["messages"])
+        )["messages"]
 
         assert result.seed is DELTA_SENTINEL
         values = [v for _, _, v in result.writes]
@@ -503,9 +512,9 @@ class TestBaseFallbackGetChannelWrites:
     async def test_async_fallback_concurrent_tasks_do_not_interfere(self) -> None:
         """Regression: the re-entrancy guard must be task-local, not thread-local.
 
-        Two concurrent `_aget_channel_writes_history` calls on the same
-        event-loop thread must each see their full reconstructed writes. A
-        `threading.local()` guard would let whichever task set it first
+        Two concurrent `_aget_all_delta_channels_writes_history` calls on the
+        same event-loop thread must each see their full reconstructed writes.
+        A `threading.local()` guard would let whichever task set it first
         short-circuit the other to `writes=[]`.
         """
         import asyncio
@@ -533,12 +542,13 @@ class TestBaseFallbackGetChannelWrites:
         }
 
         results = await asyncio.gather(
-            saver._aget_channel_writes_history(config, "messages"),
-            saver._aget_channel_writes_history(config, "messages"),
+            saver._aget_all_delta_channels_writes_history(config, ["messages"]),
+            saver._aget_all_delta_channels_writes_history(config, ["messages"]),
         )
 
         expected_values = [{"content": "first"}, {"content": "second"}]
-        for result in results:
+        for result_map in results:
+            result = result_map["messages"]
             assert result.seed is DELTA_SENTINEL
             values = [v for _, _, v in result.writes]
             assert values == expected_values
@@ -625,7 +635,9 @@ class TestPreDeltaBlobTerminator:
             }
         }
 
-        result = saver._get_channel_writes_history(config, channel)
+        result = saver._get_all_delta_channels_writes_history(config, [channel])[
+            channel
+        ]
 
         # Seed came from the pre-delta blob at cp1.
         assert result.seed == ["A"]
@@ -647,7 +659,9 @@ class TestPreDeltaBlobTerminator:
             }
         }
 
-        result = saver._get_channel_writes_history(config, channel)
+        result = saver._get_all_delta_channels_writes_history(config, [channel])[
+            channel
+        ]
 
         values = [v for _, _, v in result.writes]
         # The pre-delta write under cp1 must not appear (the blob subsumes it).

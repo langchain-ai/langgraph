@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, cast
 
@@ -27,10 +27,9 @@ from psycopg_pool import ConnectionPool
 
 from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import (
-    SELECT_DELTA_STAGE1_SQL,
     SELECT_DELTA_STAGE2_SQL,
     BasePostgresSaver,
-    _DeltaStage1Row,
+    _build_delta_stage1_sql,
     _DeltaStage2Row,
 )
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
@@ -444,53 +443,79 @@ class PostgresSaver(BasePostgresSaver):
                 with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    def _get_channel_writes_history(
-        self, config: RunnableConfig, channel: str
-    ) -> _ChannelWritesHistory:
-        """Fast-path override of `BaseCheckpointSaver._get_channel_writes_history`.
+    def _get_all_delta_channels_writes_history(
+        self, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, _ChannelWritesHistory]:
+        """Fast-path override of `BaseCheckpointSaver._get_all_delta_channels_writes_history`.
 
-        Two-stage query: stage 1 scans checkpoint metadata to walk the parent
-        chain and locate the nearest snapshot; stage 2 fetches only the
-        chain-limited writes and single seed blob.
+        Two-stage query, both stages cover ALL requested channels in a single
+        Postgres roundtrip each:
+
+        * Stage 1: dynamic SELECT over `checkpoints` with K parallel JSONB
+          key lookups (one column pair per channel) — no subquery, no
+          aggregation. Returns one row per checkpoint with versions and
+          snapshot flags for every requested channel.
+
+        * Stage 2: one UNION ALL over `checkpoint_writes` and
+          `checkpoint_blobs` filtered by `channel = ANY(?)` and per-channel
+          chain_cids / seed_versions (collapsed across channels).
         """
+        if not channels:
+            return {}
+        channels = list(channels)
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = get_checkpoint_id(config)
         if checkpoint_id is None:
             target = self.get_tuple(config)
             if target is None:
-                return _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
+                return {
+                    ch: _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
+                    for ch in channels
+                }
             checkpoint_id = target.config["configurable"]["checkpoint_id"]
 
+        # Stage 1: K parallel JSONB lookups per row, one query for all channels.
+        stage1_sql = _build_delta_stage1_sql(channels)
+        stage1_params: list[Any] = []
+        for ch in channels:
+            stage1_params.extend([ch, ch])
+        stage1_params.extend([thread_id, checkpoint_ns])
         with self._cursor() as cur:
-            cur.execute(
-                SELECT_DELTA_STAGE1_SQL,
-                (channel, channel, thread_id, checkpoint_ns),
-            )
+            cur.execute(stage1_sql, stage1_params)
             stage1_rows = cur.fetchall()
-        chain_cids, seed_version = self._walk_stage1(
-            cast("list[_DeltaStage1Row]", stage1_rows), checkpoint_id
+
+        chain_by_ch, seed_ver_by_ch = self._walk_stage1_multi(
+            cast("list[Mapping[str, Any]]", stage1_rows), checkpoint_id, channels
         )
-        seed_versions = [seed_version] if seed_version else []
+        # Union of chain cids and seed versions across all channels.
+        union_chain_cids: list[str] = sorted(
+            {cid for chain in chain_by_ch.values() for cid in chain}
+        )
+        union_seed_versions: list[str] = sorted(
+            {ver for ver in seed_ver_by_ch.values() if ver is not None}
+        )
+
+        # Stage 2: chain-limited writes + chain-limited seed blobs for all channels.
         with self._cursor() as cur:
             cur.execute(
                 SELECT_DELTA_STAGE2_SQL,
                 (
                     thread_id,
                     checkpoint_ns,
-                    channel,
-                    chain_cids,
+                    channels,
+                    union_chain_cids,
                     thread_id,
                     checkpoint_ns,
-                    channel,
-                    seed_versions,
+                    channels,
+                    union_seed_versions,
                 ),
             )
             stage2_rows = cur.fetchall()
-        return self._build_delta_channel_writes_history(
-            channel=channel,
-            chain_cids=chain_cids,
-            seed_version=seed_version,
+        return self._build_delta_channels_writes_history(
+            channels=channels,
+            chain_by_ch=chain_by_ch,
+            seed_ver_by_ch=seed_ver_by_ch,
             stage2_rows=cast("list[_DeltaStage2Row]", stage2_rows),
         )
 
