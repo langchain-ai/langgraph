@@ -200,7 +200,8 @@ class BranchSpec(NamedTuple):
             result = [result]
         if self.ends:
             destinations: Sequence[Send | str] = [
-                r if isinstance(r, Send) else self.ends[r] for r in result
+                r if isinstance(r, Send) or r == END else self.ends[r]
+                for r in result
             ]
         else:
             destinations = cast(Sequence[Send | str], result)
