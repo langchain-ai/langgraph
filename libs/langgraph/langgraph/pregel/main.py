@@ -2480,7 +2480,7 @@ class Pregel(
     async def aupdate_state(
         self,
         config: RunnableConfig,
-        values: dict[str, Any] | Any,
+        values: dict[str, Any] | Any | None,
         as_node: str | None = None,
         task_id: str | None = None,
     ) -> RunnableConfig:
