@@ -2974,6 +2974,37 @@ def test_function_in_conditional_edges_with_no_path_map() -> None:
     }
 
 
+def test_conditional_edges_with_end_not_in_path_map() -> None:
+    """Returning END from a conditional router should terminate the graph
+    even when path_map does not include an explicit END mapping.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6770
+    """
+
+    class State(TypedDict, total=False):
+        counter: int
+
+    def router(data: State) -> str:
+        if data.get("counter", 0) >= 2:
+            return END
+        return "worker"
+
+    def worker(data: State) -> State:
+        return {"counter": data.get("counter", 0) + 1}
+
+    workflow = StateGraph(State)
+    workflow.add_node("router", lambda s: dict(s))
+    workflow.add_node("worker", worker)
+    workflow.set_entry_point("router")
+    workflow.add_conditional_edges("router", router, {"worker": "worker"})
+    workflow.add_edge("worker", "router")
+
+    app = workflow.compile()
+
+    # Should loop twice (counter 0→1→2), then END — not crash with KeyError
+    assert app.invoke({"counter": 0}) == {"counter": 2}
+
+
 def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
     def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
