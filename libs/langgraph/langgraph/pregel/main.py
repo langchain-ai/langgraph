@@ -1065,31 +1065,43 @@ class Pregel(
         Returns:
             An iterator of the `(namespace, subgraph)` pairs.
         """
+        ns_parts: tuple[str, ...] | None = (
+            tuple(namespace.split(NS_SEP)) if namespace is not None else None
+        )
+
         for name, node in self.nodes.items():
-            # filter by prefix
-            if namespace is not None:
-                if not namespace.startswith(name):
-                    continue
-
-            # find the subgraph, if any
             graph = node.subgraphs[0] if node.subgraphs else None
+            if not graph:
+                continue
 
-            # if found, yield recursively
-            if graph:
-                if name == namespace:
-                    yield name, graph
-                    return  # we found it, stop searching
-                if namespace is None:
-                    yield name, graph
+            # No namespace filter: yield immediate subgraphs and optionally recurse
+            if ns_parts is None:
+                yield name, graph
                 if recurse and isinstance(graph, Pregel):
-                    if namespace is not None:
-                        namespace = namespace[len(name) + 1 :]
                     yield from (
                         (f"{name}{NS_SEP}{n}", s)
-                        for n, s in graph.get_subgraphs(
-                            namespace=namespace, recurse=recurse
-                        )
+                        for n, s in graph.get_subgraphs(recurse=True)
                     )
+                continue
+
+            # Namespace provided: match exact first segment, then recurse into remainder
+            if ns_parts[0] != name:
+                continue
+
+            if len(ns_parts) == 1:
+                yield name, graph
+                return  # fully matched requested namespace
+
+            if recurse and isinstance(graph, Pregel):
+                remainder = NS_SEP.join(ns_parts[1:])
+                yield from (
+                    (f"{name}{NS_SEP}{n}", s)
+                    for n, s in graph.get_subgraphs(namespace=remainder, recurse=True)
+                )
+                return  # processed the only matching branch
+
+            # namespace points to a deeper subgraph but recurse=False
+            return
 
     async def aget_subgraphs(
         self, *, namespace: str | None = None, recurse: bool = False
