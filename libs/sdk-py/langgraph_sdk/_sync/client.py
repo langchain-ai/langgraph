@@ -77,7 +77,7 @@ def get_sync_client(
         base_url=url,
         transport=transport,
         timeout=(
-            httpx.Timeout(timeout)  # type: ignore[arg-type]
+            httpx.Timeout(timeout)  # ty: ignore[invalid-argument-type]
             if timeout is not None
             else httpx.Timeout(connect=5, read=300, write=300, pool=5)
         ),

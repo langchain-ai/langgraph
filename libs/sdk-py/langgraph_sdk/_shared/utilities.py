@@ -144,8 +144,9 @@ def _resolve_timezone(tz: str | tzinfo | ZoneInfo | None) -> str | None:
         return tz
     if isinstance(tz, tzinfo):
         # ZoneInfo objects have a .key attribute with the IANA name
-        if hasattr(tz, "key"):
-            return tz.key  # type: ignore[union-attr]
+        key = getattr(tz, "key", None)
+        if isinstance(key, str):
+            return key
         # Fall back to tzname for fixed-offset timezones like datetime.timezone.utc
         name = tz.tzname(None)
         if name is not None:
@@ -209,7 +210,7 @@ def configure_loopback_transports(app: Any) -> None:
 @functools.lru_cache(maxsize=1)
 def get_asgi_transport() -> type[httpx.ASGITransport]:
     try:
-        from langgraph_api import asgi_transport  # type: ignore[unresolved-import]
+        from langgraph_api import asgi_transport  # ty: ignore[unresolved-import]
 
         return asgi_transport.ASGITransport
     except ImportError:

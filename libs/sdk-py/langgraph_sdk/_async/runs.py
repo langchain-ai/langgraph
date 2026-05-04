@@ -49,7 +49,7 @@ async def _wrap_stream_v2(
     async for part in raw:
         v2 = _sse_to_v2_dict(part.event, part.data)
         if v2 is not None:
-            yield v2
+            yield v2  # ty: ignore[invalid-yield]
 
 
 class RunsClient:
