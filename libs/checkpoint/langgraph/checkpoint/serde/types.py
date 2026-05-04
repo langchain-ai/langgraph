@@ -52,29 +52,76 @@ C = TypeVar("C")
 
 
 class ChannelProtocol(Protocol[Value, Update, C]):
-    # Mirrors langgraph.channels.base.BaseChannel
-    @property
-    def ValueType(self) -> Any: ...
+    """Protocol for channel state management in the checkpoint system.
+
+    Mirrors `langgraph.channels.base.BaseChannel`. Channels hold the state
+    values that are persisted in checkpoints and updated during graph execution.
+    """
 
     @property
-    def UpdateType(self) -> Any: ...
+    def ValueType(self) -> Any:
+        """The type of the value stored in the channel."""
+        ...
 
-    def checkpoint(self) -> C | None: ...
+    @property
+    def UpdateType(self) -> Any:
+        """The type of the update accepted by the channel."""
+        ...
 
-    def from_checkpoint(self, checkpoint: C | None) -> Self: ...
+    def checkpoint(self) -> C | None:
+        """Return the channel's current state for serialization into a checkpoint."""
+        ...
 
-    def update(self, values: Sequence[Update]) -> bool: ...
+    def from_checkpoint(self, checkpoint: C | None) -> Self:
+        """Restore the channel from a previously saved checkpoint value.
 
-    def get(self) -> Value: ...
+        Args:
+            checkpoint: The serialized state returned by a prior `checkpoint()` call,
+                or `None` if no prior state exists.
 
-    def consume(self) -> bool: ...
+        Returns:
+            A new channel instance initialized from the given checkpoint.
+        """
+        ...
+
+    def update(self, values: Sequence[Update]) -> bool:
+        """Apply a sequence of updates to the channel.
+
+        Args:
+            values: The updates to apply to the channel's current value.
+
+        Returns:
+            True if the channel's value was modified, False otherwise.
+        """
+        ...
+
+    def get(self) -> Value:
+        """Return the current value of the channel."""
+        ...
+
+    def consume(self) -> bool:
+        """Consume the channel's current value, resetting it to its empty state.
+
+        Returns:
+            True if the channel held a value that was consumed, False if it was
+            already empty.
+        """
+        ...
 
 
 @runtime_checkable
 class SendProtocol(Protocol):
-    # Mirrors langgraph.constants.Send
+    """Protocol for sending messages to specific graph nodes.
+
+    Mirrors `langgraph.constants.Send`. Used to route data to a named node
+    during graph execution.
+    """
+
     node: str
+    """The name of the target node."""
+
     arg: Any
+    """The data payload to send to the node."""
 
     def __hash__(self) -> int: ...
 
