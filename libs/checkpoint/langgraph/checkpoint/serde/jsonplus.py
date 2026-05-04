@@ -685,16 +685,13 @@ def _create_msgpack_ext_hook(
             except Exception:
                 return None
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
-            try:
-                tup = ormsgpack.unpackb(
-                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-                )
-                if not _check_allowed(tup[0], tup[1]):
-                    return tup[2]
-                # module, name, kwargs
-                return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
-            except Exception:
-                return None
+            tup = ormsgpack.unpackb(
+                data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+            if not _check_allowed(tup[0], tup[1]):
+                return tup[2]
+            # module, name, kwargs
+            return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
         elif code == EXT_METHOD_SINGLE_ARG:
             try:
                 tup = ormsgpack.unpackb(
@@ -709,45 +706,29 @@ def _create_msgpack_ext_hook(
             except Exception:
                 return None
         elif code == EXT_PYDANTIC_V1:
+            tup = ormsgpack.unpackb(
+                data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+            if not _check_allowed(tup[0], tup[1]):
+                return tup[2]
+            # module, name, kwargs
+            cls = getattr(importlib.import_module(tup[0]), tup[1])
             try:
-                tup = ormsgpack.unpackb(
-                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-                )
-                if not _check_allowed(tup[0], tup[1]):
-                    return tup[2]
-                # module, name, kwargs
-                cls = getattr(importlib.import_module(tup[0]), tup[1])
-                try:
-                    return cls(**tup[2])
-                except Exception:
-                    return cls.construct(**tup[2])
+                return cls(**tup[2])
             except Exception:
-                # for pydantic objects we can't find/reconstruct
-                # let's return the kwargs dict instead
-                try:
-                    return tup[2]
-                except NameError:
-                    return None
+                return cls.construct(**tup[2])
         elif code == EXT_PYDANTIC_V2:
+            tup = ormsgpack.unpackb(
+                data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+            if not _check_allowed(tup[0], tup[1]):
+                return tup[2]
+            # module, name, kwargs, method
+            cls = getattr(importlib.import_module(tup[0]), tup[1])
             try:
-                tup = ormsgpack.unpackb(
-                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-                )
-                if not _check_allowed(tup[0], tup[1]):
-                    return tup[2]
-                # module, name, kwargs, method
-                cls = getattr(importlib.import_module(tup[0]), tup[1])
-                try:
-                    return cls(**tup[2])
-                except Exception:
-                    return cls.model_construct(**tup[2])
+                return cls(**tup[2])
             except Exception:
-                # for pydantic objects we can't find/reconstruct
-                # let's return the kwargs dict instead
-                try:
-                    return tup[2]
-                except NameError:
-                    return None
+                return cls.model_construct(**tup[2])
         elif code == EXT_NUMPY_ARRAY:
             try:
                 import numpy as _np
