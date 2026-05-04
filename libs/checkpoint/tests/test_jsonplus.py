@@ -5,7 +5,7 @@ import pathlib
 import re
 import sys
 import uuid
-from collections import deque
+from collections import deque, namedtuple
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum
@@ -95,10 +95,19 @@ class MyEnum(Enum):
     BAR = "bar"
 
 
+class Priority(Enum):
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+
+
 @dataclasses_json.dataclass_json
 @dataclasses.dataclass
 class Person:
     name: str
+
+
+Point = namedtuple("Point", ["x", "y"])
 
 
 def test_serde_jsonplus() -> None:
@@ -321,6 +330,149 @@ def test_serde_jsonplus_json_mode() -> None:
         expected_result["my_secret_str_v1"] = "meow"
 
     assert result == expected_result
+
+
+def test_serde_jsonplus_none() -> None:
+    """Test that None is serialized as ('null', b'') and deserialized back to None."""
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(None)
+    assert dumped == ("null", b"")
+    assert serde.loads_typed(dumped) is None
+
+
+def test_serde_jsonplus_unknown_type_raises() -> None:
+    """Test that loading an unknown serialization type raises NotImplementedError."""
+    serde = JsonPlusSerializer()
+
+    with pytest.raises(NotImplementedError, match="Unknown serialization type"):
+        serde.loads_typed(("unknown_format", b"some data"))
+
+
+def test_serde_jsonplus_timedelta() -> None:
+    """Test round-trip serialization of timedelta objects."""
+    from datetime import timedelta
+
+    serde = JsonPlusSerializer()
+
+    test_cases = [
+        timedelta(days=1, seconds=3600, microseconds=500),
+        timedelta(0),
+        timedelta(days=-1),
+        timedelta(days=365, hours=23, minutes=59, seconds=59),
+    ]
+
+    for td in test_cases:
+        dumped = serde.dumps_typed(td)
+        result = serde.loads_typed(dumped)
+        assert result == td, f"timedelta mismatch: {result} != {td}"
+
+
+def test_serde_jsonplus_ipv6() -> None:
+    """Test round-trip serialization of IPv6 address types."""
+    from ipaddress import IPv6Address, IPv6Interface, IPv6Network
+
+    serde = JsonPlusSerializer()
+
+    test_cases = [
+        IPv6Address("::1"),
+        IPv6Address("2001:db8::1"),
+        IPv6Network("2001:db8::/32"),
+        IPv6Interface("2001:db8::1/64"),
+    ]
+
+    for obj in test_cases:
+        dumped = serde.dumps_typed(obj)
+        result = serde.loads_typed(dumped)
+        assert result == obj, (
+            f"IPv6 mismatch for {type(obj).__name__}: {result} != {obj}"
+        )
+
+
+def test_serde_jsonplus_namedtuple() -> None:
+    """Test round-trip serialization of namedtuple instances."""
+    pt = Point(x=10, y=20)
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=[Point])
+
+    dumped = serde.dumps_typed(pt)
+    result = serde.loads_typed(dumped)
+    # namedtuple deserialization reconstructs via kwargs
+    assert result.x == 10
+    assert result.y == 20
+
+
+def test_serde_jsonplus_enum_int_value() -> None:
+    """Test round-trip serialization of Enum with integer values."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=[Priority])
+
+    for member in Priority:
+        dumped = serde.dumps_typed(member)
+        result = serde.loads_typed(dumped)
+        assert result == member, f"Enum mismatch: {result} != {member}"
+
+
+def test_serde_jsonplus_empty_collections() -> None:
+    """Test round-trip serialization of empty collections."""
+    serde = JsonPlusSerializer()
+
+    test_cases: list[set | frozenset | deque] = [
+        set(),
+        frozenset(),
+        deque(),
+    ]
+
+    for obj in test_cases:
+        dumped = serde.dumps_typed(obj)
+        result = serde.loads_typed(dumped)
+        assert result == obj, f"Empty collection mismatch for {type(obj).__name__}"
+        assert type(result) is type(obj)
+
+
+def test_serde_jsonplus_nested_dict_with_special_types() -> None:
+    """Test round-trip serialization of deeply nested structures containing special types."""
+    serde = JsonPlusSerializer()
+
+    nested = {
+        "level1": {
+            "uuid": uuid.uuid4(),
+            "level2": {
+                "date": date(2025, 6, 15),
+                "set_val": {1, 2, 3},
+                "level3": {
+                    "decimal": Decimal("99.999"),
+                    "deque": deque([10, 20, 30]),
+                },
+            },
+        }
+    }
+
+    dumped = serde.dumps_typed(nested)
+    result = serde.loads_typed(dumped)
+    assert result == nested
+
+
+def test_serde_jsonplus_pickle_fallback_for_unserializable() -> None:
+    """Test that pickle_fallback=True handles objects that msgpack can't encode."""
+    serde = JsonPlusSerializer(pickle_fallback=True)
+
+    # Use a pandas DataFrame — a real-world object that can't be msgpack-encoded
+    # but can be pickled (this matches how the existing DataFrame tests work)
+    obj = pd.DataFrame({"col": [1, 2, 3]})
+
+    dumped = serde.dumps_typed(obj)
+    assert dumped[0] == "pickle"
+    result = serde.loads_typed(dumped)
+    assert result.equals(obj)
+
+
+def test_serde_jsonplus_no_pickle_fallback_raises() -> None:
+    """Test that without pickle_fallback, unserializable objects raise an error."""
+    serde = JsonPlusSerializer(pickle_fallback=False)
+
+    # A pandas DataFrame can't be msgpack-encoded and pickle_fallback is off
+    with pytest.raises((TypeError, Exception)):
+        serde.dumps_typed(pd.DataFrame({"col": [1, 2, 3]}))
 
 
 def test_serde_jsonplus_bytes() -> None:
