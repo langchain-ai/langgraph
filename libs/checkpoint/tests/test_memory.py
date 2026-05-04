@@ -152,7 +152,21 @@ class TestMemorySaver:
             search_results_5[1].config["configurable"]["checkpoint_ns"],
         } == {"", "inner"}
 
-        # TODO: test before and limit params
+        search_results_6 = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-2"}},
+                before=search_results_5[1].config,
+            )
+        )
+        assert len(search_results_6) == 1
+        assert search_results_6[0].config["configurable"]["thread_id"] == "thread-2"
+        assert search_results_6[0].config["configurable"]["checkpoint_ns"] == ""
+
+        search_results_7 = list(
+            self.memory_saver.list({"configurable": {"thread_id": "thread-2"}}, limit=1)
+        )
+        assert len(search_results_7) == 1
+        assert search_results_7[0].config["configurable"]["thread_id"] == "thread-2"
 
     async def test_asearch(self) -> None:
         # set up test
@@ -206,6 +220,38 @@ class TestMemorySaver:
             c async for c in self.memory_saver.alist(None, filter=query_4)
         ]
         assert len(search_results_4) == 0
+
+        search_results_5 = [
+            c
+            async for c in self.memory_saver.alist(
+                {"configurable": {"thread_id": "thread-2"}}
+            )
+        ]
+        assert len(search_results_5) == 2
+        assert {
+            search_results_5[0].config["configurable"]["checkpoint_ns"],
+            search_results_5[1].config["configurable"]["checkpoint_ns"],
+        } == {"", "inner"}
+
+        search_results_6 = [
+            c
+            async for c in self.memory_saver.alist(
+                {"configurable": {"thread_id": "thread-2"}},
+                before=search_results_5[1].config,
+            )
+        ]
+        assert len(search_results_6) == 1
+        assert search_results_6[0].config["configurable"]["thread_id"] == "thread-2"
+        assert search_results_6[0].config["configurable"]["checkpoint_ns"] == ""
+
+        search_results_7 = [
+            c
+            async for c in self.memory_saver.alist(
+                {"configurable": {"thread_id": "thread-2"}}, limit=1
+            )
+        ]
+        assert len(search_results_7) == 1
+        assert search_results_7[0].config["configurable"]["thread_id"] == "thread-2"
 
 
 async def test_memory_saver() -> None:
