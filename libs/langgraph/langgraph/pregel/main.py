@@ -85,6 +85,7 @@ from langgraph._internal._constants import (
     NS_END,
     NS_SEP,
     NULL_TASK_ID,
+    PULL,
     PUSH,
     TASKS,
 )
@@ -180,6 +181,7 @@ from langgraph.types import (
     Durability,
     GraphOutput,
     Interrupt,
+    PregelTask,
     Send,
     StateSnapshot,
     StateUpdate,
@@ -1121,6 +1123,76 @@ class Pregel(
                 checkpoint["channel_versions"].values()
             )
 
+    def _completed_subgraph_tasks(
+        self,
+        saved: CheckpointTuple,
+        recurse: BaseCheckpointSaver,
+        subgraphs: Mapping[str, PregelProtocol],
+        next_tasks: Mapping[str, PregelExecutableTask],
+    ) -> tuple[PregelTask, ...]:
+        active_subgraph_names = {task.name for task in next_tasks.values()}
+        parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        out: list[PregelTask] = []
+        for name, pregel in subgraphs.items():
+            if name in active_subgraph_names:
+                continue
+            checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
+            state = pregel.get_state(
+                {
+                    CONF: {
+                        CONFIG_KEY_CHECKPOINTER: recurse,
+                        CONFIG_KEY_THREAD_ID: saved.config[CONF][CONFIG_KEY_THREAD_ID],
+                        CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns,
+                    }
+                },
+                subgraphs=True,
+            )
+            if (
+                state.metadata is None
+                and not state.values
+                and not state.next
+                and not state.tasks
+                and not state.interrupts
+            ):
+                continue
+            out.append(PregelTask(name, name, (PULL, name), None, (), state, None))
+        return tuple(out)
+
+    async def _acompleted_subgraph_tasks(
+        self,
+        saved: CheckpointTuple,
+        recurse: BaseCheckpointSaver,
+        subgraphs: Mapping[str, PregelProtocol],
+        next_tasks: Mapping[str, PregelExecutableTask],
+    ) -> tuple[PregelTask, ...]:
+        active_subgraph_names = {task.name for task in next_tasks.values()}
+        parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        out: list[PregelTask] = []
+        for name, pregel in subgraphs.items():
+            if name in active_subgraph_names:
+                continue
+            checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
+            state = await pregel.aget_state(
+                {
+                    CONF: {
+                        CONFIG_KEY_CHECKPOINTER: recurse,
+                        CONFIG_KEY_THREAD_ID: saved.config[CONF][CONFIG_KEY_THREAD_ID],
+                        CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns,
+                    }
+                },
+                subgraphs=True,
+            )
+            if (
+                state.metadata is None
+                and not state.values
+                and not state.next
+                and not state.tasks
+                and not state.interrupts
+            ):
+                continue
+            out.append(PregelTask(name, name, (PULL, name), None, (), state, None))
+        return tuple(out)
+
     def _prepare_state_snapshot(
         self,
         config: RunnableConfig,
@@ -1232,6 +1304,10 @@ class Pregel(
             task_states,
             self.stream_channels_asis,
         )
+        if recurse:
+            tasks_with_writes = tasks_with_writes + self._completed_subgraph_tasks(
+                saved, recurse, subgraphs, next_tasks
+            )
         # assemble the state snapshot
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
@@ -1356,6 +1432,12 @@ class Pregel(
             task_states,
             self.stream_channels_asis,
         )
+        if recurse:
+            tasks_with_writes = tasks_with_writes + (
+                await self._acompleted_subgraph_tasks(
+                    saved, recurse, subgraphs, next_tasks
+                )
+            )
         # assemble the state snapshot
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
