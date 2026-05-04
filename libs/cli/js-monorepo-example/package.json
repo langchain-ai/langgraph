@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "turbo": "^2.9.7",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "@tsconfig/recommended": "^1.0.13",
     "@eslint/eslintrc": "^3.3.5",
     "@eslint/js": "^10.0.1",
