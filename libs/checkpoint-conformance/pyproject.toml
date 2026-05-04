@@ -31,9 +31,6 @@ dev = [
   {include-group = "lint"},
 ]
 
-[tool.uv.sources]
-langgraph-checkpoint = { path = "../checkpoint", editable = true }
-
 [tool.hatch.build.targets.wheel]
 include = ["langgraph"]
 
