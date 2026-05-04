@@ -48,7 +48,7 @@ jobs:
       - name: Check if contributor is external
         if: steps.app-token.outcome == 'success'
         id: check-membership
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -90,7 +90,7 @@ jobs:
       # event fires and triggers require_issue_link.yml.
       - name: Apply contributor tier label
         if: steps.check-membership.outputs.is-external == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           # Use App token so the "labeled" event propagates to downstream
           # workflows (e.g. require_issue_link.yml).
@@ -145,7 +145,7 @@ jobs:
 
       - name: Add external label
         if: steps.check-membership.outputs.is-external == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           # Use App token so the "labeled" event propagates to downstream
           # workflows (e.g. require_issue_link.yml). Events created by the
@@ -161,7 +161,7 @@ jobs:
 
       - name: Add internal label
         if: steps.check-membership.outputs.is-external == 'false'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

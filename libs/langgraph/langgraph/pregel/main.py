@@ -374,6 +374,25 @@ class NodeBuilder:
         )
 
 
+# Kwargs that ``stream_events(version="v3")`` / ``astream_events(version="v3")``
+# manage internally and must not be overridden by callers. ``stream_mode`` is
+# derived from the transformer mux; ``subgraphs`` is forced True so nested
+# namespaces flow through scoped muxes. Forwarding either to the inner
+# ``stream(...)`` would silently break v3's invariants, so we raise instead.
+_V3_INVARIANT_KWARGS: tuple[str, ...] = ("stream_mode", "subgraphs")
+
+
+def _reject_v3_invariant_kwargs(kwargs: dict[str, Any]) -> None:
+    collisions = [k for k in _V3_INVARIANT_KWARGS if k in kwargs]
+    if collisions:
+        raise TypeError(
+            "stream_events(version='v3') / astream_events(version='v3') do "
+            f"not accept {', '.join(collisions)}; v3 owns these "
+            "(stream_mode is built from the transformer mux, subgraphs is "
+            "forced True so nested namespaces flow through scoped muxes)."
+        )
+
+
 def _collect_stream_modes(mux: Any) -> list[StreamMode]:
     """Return the union of `required_stream_modes` across registered transformers.
 
@@ -3459,8 +3478,15 @@ class Pregel(
         interrupt_after: All | Sequence[str] | None = None,
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
     ) -> Any:
         """Internal v3 sync streaming implementation. Public entry: stream_events(version='v3').
+
+        Extra keyword arguments are forwarded to the underlying ``stream(...)``
+        call. The dispatcher in ``stream_events`` rejects ``stream_mode`` and
+        ``subgraphs`` since v3 owns them (``stream_mode`` is derived from the
+        transformer mux; ``subgraphs`` is always True so nested namespaces
+        flow through scoped muxes).
 
         !!! warning
 
@@ -3493,6 +3519,7 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 control=control,
+                **kwargs,
             )
         )
         return GraphRunStream(graph_iter, mux)
@@ -3507,8 +3534,15 @@ class Pregel(
         interrupt_after: All | Sequence[str] | None = None,
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
     ) -> Any:
         """Internal v3 async streaming implementation. Public entry: astream_events(version='v3').
+
+        Extra keyword arguments are forwarded to the underlying ``astream(...)``
+        call. The dispatcher in ``astream_events`` rejects ``stream_mode`` and
+        ``subgraphs`` since v3 owns them (``stream_mode`` is derived from the
+        transformer mux; ``subgraphs`` is always True so nested namespaces
+        flow through scoped muxes).
 
         !!! warning
 
@@ -3540,6 +3574,7 @@ class Pregel(
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             control=control,
+            **kwargs,
         ).__aiter__()
         return AsyncGraphRunStream(graph_aiter, mux)
 
@@ -3564,6 +3599,7 @@ class Pregel(
         interrupt_after: All | Sequence[str] | None = None,
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
     ) -> Any: ...
 
     def stream_events(
@@ -3622,13 +3658,20 @@ class Pregel(
                 `stream_transformers`. Factories are called as
                 `factory(scope)` so they can propagate to subgraph
                 scopes. Only used for `version="v3"`.
-            **kwargs: Forwarded to the v1/v2 path.
+            **kwargs: For `version="v1"`/`"v2"`, forwarded to
+                `Runnable.stream_events`. For `version="v3"`, forwarded
+                to the underlying `stream(...)` call (e.g. `context`,
+                `durability`, `output_keys`, `print_mode`, `debug`).
+                `stream_mode` and `subgraphs` are not accepted under
+                `version="v3"` and raise `TypeError` if supplied; v3
+                owns them.
 
         Returns:
             For `version="v3"`, a `GraphRunStream` the caller iterates
             to drive the run. Otherwise an `Iterator[StreamEvent]`.
         """
         if version == "v3":
+            _reject_v3_invariant_kwargs(kwargs)
             return self._pregel_stream_v3(
                 input,
                 config,
@@ -3636,6 +3679,7 @@ class Pregel(
                 interrupt_after=interrupt_after,
                 control=control,
                 transformers=transformers,
+                **kwargs,
             )
         return super().stream_events(input, config, version=version, **kwargs)
 
@@ -3660,6 +3704,7 @@ class Pregel(
         interrupt_after: All | Sequence[str] | None = None,
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
     ) -> Awaitable[Any]: ...
 
     def astream_events(
@@ -3689,6 +3734,7 @@ class Pregel(
         See `stream_events` for full argument and return documentation.
         """
         if version == "v3":
+            _reject_v3_invariant_kwargs(kwargs)
             return self._apregel_stream_v3(
                 input,
                 config,
@@ -3696,6 +3742,7 @@ class Pregel(
                 interrupt_after=interrupt_after,
                 control=control,
                 transformers=transformers,
+                **kwargs,
             )
         return super().astream_events(input, config, version=version, **kwargs)
 
