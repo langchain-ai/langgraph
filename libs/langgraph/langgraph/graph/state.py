@@ -193,6 +193,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     channels: dict[str, BaseChannel]
     managed: dict[str, ManagedValueSpec]
     schemas: dict[type[Any], dict[str, BaseChannel | ManagedValueSpec]]
+    type_hints: dict[type[Any], dict[str, type]]
     waiting_edges: set[tuple[tuple[str, ...], str]]
 
     compiled: bool
@@ -241,6 +242,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self.edges = set()
         self.branches = defaultdict(dict)
         self.schemas = {}
+        self.type_hints = {}
         self.channels = {}
         self.managed = {}
         self.compiled = False
@@ -273,6 +275,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                     " Managed channels are not permitted in Input/Output schema."
                 )
             self.schemas[schema] = {**channels, **managed}
+            self.type_hints[schema] = type_hints
             for key, channel in channels.items():
                 if key in self.channels:
                     if self.channels[key] != channel:
