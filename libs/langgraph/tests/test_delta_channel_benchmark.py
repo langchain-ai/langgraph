@@ -3,12 +3,12 @@
 Run directly:  python tests/test_delta_channel_benchmark.py
 Run via pytest: pytest tests/test_delta_channel_benchmark.py -s
 
-Part 1 — baseline (original): DeltaChannel(inf) vs add_messages (BinOp).
+Part 1 — baseline: `DeltaChannel` with the default snapshot frequency vs.
+  `add_messages` (BinOp).
 Part 2 — snapshot_frequency sweep: shows the storage/read-latency tradeoff
-  across frequencies [1, 5, 10, 50, inf] at scale.
+  across frequencies [1, 5, 10, 50] at scale.
 
 Key insight:
-  snapshot_frequency=inf  → O(N) storage, O(N) read depth (pure delta)
   snapshot_frequency=N    → O(N²/N) storage, O(N) read depth bounded by freq
   snapshot_frequency=1    → O(N²) storage, O(1) read depth (full snapshot)
 """
@@ -16,7 +16,6 @@ Key insight:
 from __future__ import annotations
 
 import contextlib
-import math
 import os
 import sys
 import time
@@ -293,7 +292,7 @@ def _run_baseline_for_checkpointer(cp_label: str, cp_hint: Any) -> None:
 
     print(f"\n  [{cp_label}] Storage (blob bytes)")
     print(
-        f"  {'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta(inf)':>12}  {'savings':>8}"
+        f"  {'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta':>12}  {'savings':>8}"
     )
     print("  " + "-" * (W - 2))
     for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
@@ -308,7 +307,7 @@ def _run_baseline_for_checkpointer(cp_label: str, cp_hint: Any) -> None:
         )
 
     print(f"\n  [{cp_label}] Read latency (avg of 5 get_state calls)")
-    print(f"  {'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta(inf)':>12}")
+    print(f"  {'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta':>12}")
     print("  " + "-" * (W - 2))
     for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
         print(
@@ -319,7 +318,7 @@ def _run_baseline_for_checkpointer(cp_label: str, cp_hint: Any) -> None:
 
 def run_baseline_benchmark() -> None:
     print()
-    print("Part 1 — DeltaChannel(inf) vs add_messages: storage & latency")
+    print("Part 1 — DeltaChannel (default freq) vs add_messages: storage & latency")
     print("=" * 72)
     for cp_label, cp_hint in _checkpointers():
         _run_baseline_for_checkpointer(cp_label, cp_hint)
@@ -330,16 +329,17 @@ def run_baseline_benchmark() -> None:
 # Part 2: snapshot_frequency sweep
 # ---------------------------------------------------------------------------
 
-# Frequencies to test. 1 = always snapshot (like BinOp), inf = pure delta.
-SNAPSHOT_FREQUENCIES: list[int | float] = [1, 5, 10, 50, math.inf]
+# Frequencies to test. `1` = snapshot every update (like add_messages / BinOp).
+# Higher values = fewer snapshots, deeper read replay. Values up to 50 keep
+# walk depth bounded; the default in this branch is `1000`, so freq=50 is
+# already conservative for typical workloads.
+SNAPSHOT_FREQUENCIES: list[int] = [1, 5, 10, 50]
 
 # Turn counts for the sweep — high enough to show storage divergence.
 SWEEP_TURN_COUNTS = [50, 100, 500]
 
 
-def _freq_label(freq: int | float) -> str:
-    if freq == math.inf:
-        return "inf"
+def _freq_label(freq: int) -> str:
     return str(int(freq))
 
 
@@ -412,7 +412,6 @@ def run_snapshot_freq_benchmark() -> None:
         "  freq=1    snapshot every write (full blob always — same as add_messages / BinOp)"
     )
     print("  freq=N    snapshot every N writes; read walks at most N ancestor writes")
-    print("  freq=inf  pure delta; read walks entire ancestor chain")
     print()
 
 
@@ -461,10 +460,11 @@ def test_snapshot_freq_benchmark(capsys: Any) -> None:
         state = graph.get_state(config)
         states[_freq_label(freq)] = [m.id for m in state.values["messages"]]
 
-    ref = states["inf"]
+    ref_label = _freq_label(SNAPSHOT_FREQUENCIES[-1])
+    ref = states[ref_label]
     for label, msg_ids in states.items():
         assert msg_ids == ref, (
-            f"freq={label} produced different message IDs than freq=inf"
+            f"freq={label} produced different message IDs than freq={ref_label}"
         )
 
 
