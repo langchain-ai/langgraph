@@ -180,6 +180,35 @@ def test_graph_validation_with_command() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": "bar", "bar": "baz"}
 
 
+def test_command_goto_with_static_edges_executes_both_routes() -> None:
+    class State(TypedDict):
+        executed_nodes: Annotated[list[str], operator.add]
+
+    def start_node(state: State) -> Command[Literal["goto_target"]]:
+        return Command(goto="goto_target", update={"executed_nodes": ["start_node"]})
+
+    def goto_target(state: State) -> dict[str, list[str]]:
+        return {"executed_nodes": ["goto_target"]}
+
+    def static_target(state: State) -> dict[str, list[str]]:
+        return {"executed_nodes": ["static_target"]}
+
+    builder = StateGraph(State)
+    builder.add_node("start_node", start_node)
+    builder.add_node("goto_target", goto_target)
+    builder.add_node("static_target", static_target)
+    builder.add_edge(START, "start_node")
+    builder.add_edge("start_node", "static_target")
+    builder.add_edge("goto_target", END)
+    builder.add_edge("static_target", END)
+
+    graph = builder.compile()
+    result = graph.invoke({"executed_nodes": []})
+
+    assert "goto_target" in result["executed_nodes"]
+    assert "static_target" in result["executed_nodes"]
+
+
 def test_checkpoint_errors() -> None:
     class FaultyGetCheckpointer(InMemorySaver):
         def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
