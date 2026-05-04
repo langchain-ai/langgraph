@@ -1046,6 +1046,88 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         results: list[Result],
         cur: Cursor[DictRow],
     ) -> None:
+        def _fetch_non_vector_backfill(
+            op: SearchOp,
+            existing_rows: list[Row],
+            limit: int,
+        ) -> list[Row]:
+            """Backfill semantic search with non-indexed docs from the base store."""
+            if limit <= 0:
+                return []
+
+            filter_params: list[Any] = []
+            filter_clauses: list[str] = []
+            if op.filter:
+                for key, value in op.filter.items():
+                    if isinstance(value, dict):
+                        for op_name, val in value.items():
+                            condition, params_ = self._get_filter_condition(
+                                key, op_name, val
+                            )
+                            filter_clauses.append(condition)
+                            filter_params.extend(params_)
+                    else:
+                        filter_clauses.append("value->%s = %s::jsonb")
+                        filter_params.extend([key, orjson.dumps(value).decode("utf-8")])
+
+            ns_condition = "TRUE"
+            ns_param: Sequence[str] = ()
+            if op.namespace_prefix:
+                ns_condition = "store.prefix LIKE %s"
+                ns_param = (f"{_namespace_to_text(op.namespace_prefix)}%",)
+
+            exclude_params: list[Any] = []
+            exclude_clause = ""
+            if existing_rows:
+                pair_placeholders = ", ".join("( %s, %s )" for _ in existing_rows)
+                exclude_clause = (
+                    f" AND (store.prefix, store.key) NOT IN ({pair_placeholders})"
+                )
+                for row in existing_rows:
+                    exclude_params.extend([row["prefix"], row["key"]])
+
+            extra_filters = (
+                " AND " + " AND ".join(filter_clauses) if filter_clauses else ""
+            )
+
+            search_results_sql = f"""
+                    SELECT store.prefix, store.key, store.value, store.created_at, store.updated_at, NULL AS score
+                    FROM store
+                    WHERE {ns_condition} {extra_filters}{exclude_clause}
+                    ORDER BY store.updated_at DESC
+                    LIMIT %s
+                    OFFSET %s
+                """
+            search_results_params: list[Any] = [
+                *ns_param,
+                *filter_params,
+                *exclude_params,
+                limit,
+                0,
+            ]
+
+            if op.refresh_ttl:
+                final_sql = f"""
+                        WITH search_results AS (
+                            {search_results_sql}
+                        ),
+                        updated AS (
+                            UPDATE store s
+                            SET expires_at = NOW() + (s.ttl_minutes || ' minutes')::interval
+                            FROM search_results sr
+                            WHERE s.prefix = sr.prefix
+                            AND s.key = sr.key
+                            AND s.ttl_minutes IS NOT NULL
+                        )
+                        SELECT sr.prefix, sr.key, sr.value, sr.created_at, sr.updated_at, sr.score
+                        FROM search_results sr
+                    """
+            else:
+                final_sql = search_results_sql
+
+            cur.execute(final_sql, search_results_params)
+            return cast(list[Row], cur.fetchall())
+
         queries, embedding_requests = self._prepare_batch_search_queries(search_ops)
 
         if embedding_requests and self.embeddings:
@@ -1060,9 +1142,20 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     if _paramslist[i] is PLACEHOLDER:
                         _paramslist[i] = embedding
 
-        for (idx, _), (query, params) in zip(search_ops, queries, strict=False):
+        for (idx, op), (query, params) in zip(search_ops, queries, strict=False):
             cur.execute(query, params)
             rows = cast(list[Row], cur.fetchall())
+
+            # Vector search only returns indexed rows. If the result set under-fills, backfill
+            # from the base store so `index=False` docs can still appear with score=None.
+            if (
+                op.query
+                and self.index_config
+                and op.offset == 0
+                and len(rows) < op.limit
+            ):
+                rows.extend(_fetch_non_vector_backfill(op, rows, op.limit - len(rows)))
+
             results[idx] = [
                 _row_to_search_item(
                     _decode_ns_bytes(row["prefix"]), row, loader=self._deserializer
