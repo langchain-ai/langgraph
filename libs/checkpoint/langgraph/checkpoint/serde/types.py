@@ -16,28 +16,13 @@ RESUME = "__resume__"
 TASKS = "__pregel_tasks"
 
 
-class _DeltaSentinel:
-    """In-memory marker for a DeltaChannel field with no snapshot.
-
-    Never serialized to storage — checkpointers strip it before writing.
-    Compare with `is DELTA_SENTINEL`; always the same module-level instance.
-    """
-
-    __slots__ = ()
-
-    def __repr__(self) -> str:
-        return "DELTA_SENTINEL"
-
-
-DELTA_SENTINEL = _DeltaSentinel()
-
-
 class _DeltaSnapshot(NamedTuple):
     """Snapshot blob for a DeltaChannel with finite snapshot_frequency.
 
     Stored in checkpoint_blobs via the `EXT_DELTA_SNAPSHOT` msgpack ext code.
-    The ancestor walk in `_get_all_delta_channels_writes_history` terminates when it
-    encounters this type (any non-sentinel blob stops the walk).
+    The ancestor walk in `BaseCheckpointSaver.get_writes_history` terminates
+    when it encounters this type (any non-empty channel_values entry stops
+    the walk for that channel).
 
     `from_checkpoint` reconstructs the channel value directly from `.value`
     without replaying writes — the snapshot IS the accumulated state.

@@ -6,11 +6,14 @@ checkpointer — pre-migration state visible at each *settled* ancestor
 checkpoint is preserved, and post-migration writes fold on top through
 the reducer.
 
-Mechanism under test: the saver's `_get_all_delta_channels_writes_history(config,
-channel)` walks the parent chain; when it encounters an ancestor whose
-`channel_values[channel]` is a real value (not `DELTA_SENTINEL`), it
-returns that as the `seed`. `DeltaChannel.from_checkpoint(seed)` uses
-it as the base value, and `replay_writes(writes)` folds on-path deltas.
+Mechanism under test: the saver's public `get_writes_history(config,
+channels)` walks the parent chain; when it encounters an ancestor whose
+`channel_values[channel]` is a real value, it populates that channel's
+`seed` in the returned `WritesHistory`. If the walk reaches the root
+without finding a stored value, the `seed` key is omitted (TypedDict
+absence indicates "start empty"). `DeltaChannel.from_checkpoint(seed)`
+uses it as the base value, and `replay_writes(writes)` folds on-path
+deltas.
 
 Scenarios covered:
 
@@ -29,8 +32,8 @@ Scenarios covered:
    pre-migration seed.
 4. **Base-saver fallback path**: a third-party-style subclass that
    removes the optimized `InMemorySaver` override and falls back to
-   `BaseCheckpointSaver._get_all_delta_channels_writes_history` must produce the
-   same result as the optimized path.
+   `BaseCheckpointSaver.get_writes_history` must produce the same
+   result as the optimized path.
 5. **Channel-type isolation across threads**: two threads on the same
    checkpointer under the delta-channel graph — one freshly-started,
    one migrated from pre-migration state — don't cross-contaminate.
@@ -266,8 +269,8 @@ def test_continuing_migrated_thread_folds_deltas_on_seed() -> None:
 
 class _ThirdPartyStyleSaver(InMemorySaver):
     """Simulates a third-party saver that inherits the reference
-    `_get_all_delta_channels_writes_history` implementation from
-    `BaseCheckpointSaver` rather than overriding it.
+    `get_writes_history` implementation from `BaseCheckpointSaver`
+    rather than overriding it.
 
     We rebind the two methods to the base-class versions (via MRO) so
     the fallback path is exercised even though the storage layer is
@@ -275,11 +278,11 @@ class _ThirdPartyStyleSaver(InMemorySaver):
     """
 
     # MRO: [_ThirdPartyStyleSaver, InMemorySaver, BaseCheckpointSaver, ...]
-    _get_all_delta_channels_writes_history = (  # type: ignore[assignment]
-        InMemorySaver.__mro__[1]._get_all_delta_channels_writes_history  # type: ignore[attr-defined]
+    get_writes_history = (  # type: ignore[assignment]
+        InMemorySaver.__mro__[1].get_writes_history  # type: ignore[attr-defined]
     )
-    _aget_all_delta_channels_writes_history = (  # type: ignore[assignment]
-        InMemorySaver.__mro__[1]._aget_all_delta_channels_writes_history  # type: ignore[attr-defined]
+    aget_writes_history = (  # type: ignore[assignment]
+        InMemorySaver.__mro__[1].aget_writes_history  # type: ignore[attr-defined]
     )
 
 
@@ -326,7 +329,7 @@ def test_delta_and_migrated_threads_do_not_cross_contaminate() -> None:
     """Two threads sharing a checkpointer — one migrated from
     pre-migration state, one freshly-started under DeltaChannel — must
     maintain independent state. The parent-chain walk in
-    `_get_all_delta_channels_writes_history` must be scoped to the target thread.
+    `get_writes_history` must be scoped to the target thread.
     """
 
     checkpointer = InMemorySaver()
@@ -429,9 +432,10 @@ async def test_tip_of_pre_migration_hydrates_directly_async() -> None:
 
 def test_update_state_after_migration_uses_written_value() -> None:
     """After migrating and running at least one post-migration super-step
-    (so the thread's tip has a `DELTA_SENTINEL`), `update_state` writes a
-    concrete value to a new checkpoint's `channel_values`. `get_state`
-    must reflect that concrete value."""
+    (so the thread's tip has its delta channel absent from `channel_values`,
+    or stored as a `_DeltaSnapshot` on a snapshot step), `update_state`
+    writes a concrete value into a new checkpoint's `channel_values`.
+    `get_state` must reflect that concrete value."""
 
     checkpointer = InMemorySaver()
     config = {"configurable": {"thread_id": "update-state"}}
@@ -441,7 +445,8 @@ def test_update_state_after_migration_uses_written_value() -> None:
     _drive(binop, config, "u", 2)
 
     # Migrate and run one more super-step so the tip is a post-migration
-    # checkpoint with `DELTA_SENTINEL` in its own `channel_values`.
+    # checkpoint where the delta channel is absent from `channel_values`
+    # (no snapshot fired this step).
     delta = _delta_graph(checkpointer)
     delta.invoke({"items": ["post"]}, config)
 

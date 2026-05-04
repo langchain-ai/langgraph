@@ -8,16 +8,19 @@ from typing import Any, TypedDict, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
-    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
     PendingWrite,
-    _ChannelWritesHistory,
+    WritesHistory,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
+
+# Page size for stage-1 paged scan in `get_writes_history`. Internal
+# constant — exposing this as a kwarg is left as a follow-up.
+_DELTA_PAGE_SIZE = 1024
 
 MetadataInput = dict[str, Any] | None
 
@@ -157,7 +160,7 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 
 
 class _DeltaStage2Row(TypedDict, total=False):
-    """One row from `SELECT_DELTA_STAGE2_SQL` (a UNION ALL of writes and blobs)."""
+    """One row from `_build_delta_stage2_sql` (a UNION ALL of writes and blobs)."""
 
     _kind: str  # "w" or "b"
     checkpoint_id: str | None  # "w" rows only
@@ -195,10 +198,10 @@ class _DeltaStage2Row(TypedDict, total=False):
 # still beats A end-to-end (4.2ms vs 6.8ms).
 
 
-def _build_delta_stage1_sql(channels: Sequence[str]) -> str:
+def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
     """Build stage 1 SQL with 2K parallel JSONB key lookups.
 
-    For channels=["messages", "files"] the result is::
+    For channels=["messages", "files"] (with `paged=True`) the result is::
 
         SELECT checkpoint_id, parent_checkpoint_id,
                checkpoint -> 'channel_versions' ->> %s AS ver_0,
@@ -207,13 +210,19 @@ def _build_delta_stage1_sql(channels: Sequence[str]) -> str:
                (checkpoint -> 'channel_values' -> %s) IS NOT NULL AS hs_1
         FROM checkpoints
         WHERE thread_id = %s AND checkpoint_ns = %s
+          AND (%s::text IS NULL OR checkpoint_id < %s)
+        ORDER BY checkpoint_id DESC
+        LIMIT %s
 
     Channel names are passed as `%s` parameters (safe from SQL injection).
     Only the column aliases `ver_i` / `hs_i` are interpolated into the
     SQL string (i is bounded by len(channels) and uses safe identifiers).
 
     Caller must extend params with `[ch_0, ch_0, ch_1, ch_1, ...,
-    thread_id, ns]`.
+    thread_id, ns, cursor, cursor, page_size]` when `paged=True`.
+
+    When `paged=False`, the WHERE has no cursor predicate and there's no
+    LIMIT/ORDER BY — kept as a non-public helper for tests/diagnostics.
     """
     cols = []
     for i in range(len(channels)):
@@ -221,27 +230,62 @@ def _build_delta_stage1_sql(channels: Sequence[str]) -> str:
             f"checkpoint -> 'channel_versions' ->> %s AS ver_{i}, "
             f"(checkpoint -> 'channel_values' -> %s) IS NOT NULL AS hs_{i}"
         )
-    return (
+    sql = (
         "SELECT checkpoint_id, parent_checkpoint_id, "
         + ", ".join(cols)
         + " FROM checkpoints WHERE thread_id = %s AND checkpoint_ns = %s"
     )
+    if paged:
+        sql += (
+            " AND (%s::text IS NULL OR checkpoint_id < %s)"
+            " ORDER BY checkpoint_id DESC LIMIT %s"
+        )
+    return sql
 
 
-SELECT_DELTA_STAGE2_SQL = """
-    SELECT 'w'::text AS _kind,
-           checkpoint_id, channel,
-           type, blob, task_id, idx, NULL::text AS version
-    FROM checkpoint_writes
-    WHERE thread_id = %s AND checkpoint_ns = %s AND channel = ANY(%s)
-      AND checkpoint_id = ANY(%s)
-    UNION ALL
-    SELECT 'b', NULL, channel,
-           type, blob, NULL, NULL, version
-    FROM checkpoint_blobs
-    WHERE thread_id = %s AND checkpoint_ns = %s AND channel = ANY(%s)
-      AND version = ANY(%s)
-"""
+def _build_delta_stage2_sql(
+    *,
+    channels_with_chain: Sequence[str],
+    channels_with_seed: Sequence[str],
+) -> str:
+    """Build stage 2 SQL as a per-channel UNION ALL.
+
+    For each channel with a non-empty chain, emit one branch reading
+    `checkpoint_writes` for that specific channel + chain_cids. For each
+    channel with a seed_version, emit one branch reading `checkpoint_blobs`
+    for that channel + version. This avoids the over-fetch of the prior
+    `channel = ANY(channels) AND checkpoint_id = ANY(union)` form when
+    channels have different chain depths.
+
+    The caller must pass parameters in matching order:
+
+        for ch in channels_with_chain:
+            params += [thread_id, checkpoint_ns, ch, chain_cids[ch]]
+        for ch in channels_with_seed:
+            params += [thread_id, checkpoint_ns, ch, seed_version[ch]]
+
+    Returns an empty SQL string if both channel lists are empty (caller
+    must skip executing in that case).
+    """
+    branches: list[str] = []
+    for _ in channels_with_chain:
+        branches.append(
+            "SELECT 'w'::text AS _kind, "
+            "checkpoint_id, channel, "
+            "type, blob, task_id, idx, NULL::text AS version "
+            "FROM checkpoint_writes "
+            "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
+            "AND checkpoint_id = ANY(%s)"
+        )
+    for _ in channels_with_seed:
+        branches.append(
+            "SELECT 'b'::text, NULL, channel, "
+            "type, blob, NULL, NULL, version "
+            "FROM checkpoint_blobs "
+            "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
+            "AND version = %s"
+        )
+    return " UNION ALL ".join(branches)
 
 
 # Stage 1 rows are dynamic-shape dicts: {checkpoint_id, parent_checkpoint_id,
@@ -293,68 +337,94 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         }
 
     @staticmethod
-    def _walk_stage1_multi(
+    def _ingest_stage1_page(
         stage1_rows: Sequence[Mapping[str, Any]],
-        target_id: str,
         channels: Sequence[str],
-    ) -> tuple[dict[str, list[str]], dict[str, str | None]]:
-        """Walk the parent chain once for all requested channels.
+        parent_of: dict[str, str | None],
+        ver_by_i_by_cid: list[dict[str, str | None]],
+        hs_by_i_by_cid: list[dict[str, bool]],
+    ) -> str | None:
+        """Fold one stage-1 page into the running walk-state mappings.
 
-        Each row carries `ver_i` / `hs_i` per channel index. We walk the
-        parent chain from target's parent toward the root; for each
-        channel we stop at the nearest ancestor where `hs_i` is true and
-        record that ancestor's `ver_i` as the seed version. All
-        ancestors visited up to (and including) a channel's seed are in
-        that channel's `chain_cids`.
-
-        Returns:
-          chain_cids_by_channel: per-channel list of ancestor cids in
-                                 newest-first order.
-          seed_version_by_channel: per-channel seed version (None if
-                                   walk reached root with no snapshot).
+        Returns the oldest checkpoint_id seen on this page (smallest, since
+        pages come back DESC). Caller uses it as the cursor for the next
+        page (`AND checkpoint_id < cursor`).
         """
-        parent_of: dict[str, str | None] = {}
-        # For each channel index, store ver and has_snapshot per cid.
-        ver_by_i_by_cid: list[dict[str, str | None]] = [
-            {} for _ in range(len(channels))
-        ]
-        hs_by_i_by_cid: list[dict[str, bool]] = [{} for _ in range(len(channels))]
-
+        oldest: str | None = None
         for r in stage1_rows:
             cid = cast(str, r["checkpoint_id"])
             parent_of[cid] = cast("str | None", r["parent_checkpoint_id"])
             for i in range(len(channels)):
                 ver_by_i_by_cid[i][cid] = cast("str | None", r.get(f"ver_{i}"))
                 hs_by_i_by_cid[i][cid] = bool(r.get(f"hs_{i}"))
+            # Rows are DESC; the last one is the smallest cid in the page.
+            oldest = cid
+        return oldest
 
-        chain_by_ch: dict[str, list[str]] = {ch: [] for ch in channels}
-        seed_ver_by_ch: dict[str, str | None] = {ch: None for ch in channels}
-        # For each channel, walk from target's parent until we hit a
-        # snapshot or the root. Walks share the parent_of mapping but
-        # are otherwise independent.
+    @staticmethod
+    def _try_advance_walks(
+        target_id: str,
+        channels: Sequence[str],
+        parent_of: Mapping[str, str | None],
+        ver_by_i_by_cid: Sequence[Mapping[str, str | None]],
+        hs_by_i_by_cid: Sequence[Mapping[str, bool]],
+        chain_by_ch: dict[str, list[str]],
+        seed_ver_by_ch: dict[str, str | None],
+        walk_cursor_by_ch: dict[str, str | None],
+        seeded: set[str],
+    ) -> None:
+        """Advance each not-yet-seeded channel's walk as far as possible.
+
+        Uses the partial `parent_of` map accumulated so far. A walk stops
+        either because:
+          (a) it found a snapshot for its channel (channel becomes seeded),
+          (b) it reached a real root (parent_of[cid] is None — fully
+              materialized at this point), or
+          (c) the next ancestor cid isn't in `parent_of` yet (waiting for
+              a later page; the cursor stays put).
+
+        Mutates `chain_by_ch`, `seed_ver_by_ch`, `walk_cursor_by_ch`, and
+        `seeded` in place.
+        """
         for i, ch in enumerate(channels):
-            cur_cid: str | None = parent_of.get(target_id)
+            if ch in seeded:
+                continue
+            # First-time entry: cursor starts at the target's parent.
+            if ch not in walk_cursor_by_ch:
+                walk_cursor_by_ch[ch] = parent_of.get(target_id)
+            cur_cid = walk_cursor_by_ch[ch]
+            ch_chain = chain_by_ch[ch]
+            hs_i = hs_by_i_by_cid[i]
+            ver_i = ver_by_i_by_cid[i]
             while cur_cid is not None:
-                chain_by_ch[ch].append(cur_cid)
-                if hs_by_i_by_cid[i].get(cur_cid, False):
-                    seed_ver_by_ch[ch] = ver_by_i_by_cid[i].get(cur_cid)
+                if cur_cid not in parent_of:
+                    # Need more pages to continue this walk.
                     break
-                cur_cid = parent_of.get(cur_cid)
-        return chain_by_ch, seed_ver_by_ch
+                ch_chain.append(cur_cid)
+                if hs_i.get(cur_cid, False):
+                    seed_ver_by_ch[ch] = ver_i.get(cur_cid)
+                    seeded.add(ch)
+                    cur_cid = None
+                    break
+                cur_cid = parent_of[cur_cid]
+            walk_cursor_by_ch[ch] = cur_cid
 
     def _build_delta_channels_writes_history(
         self,
         *,
         channels: Sequence[str],
-        chain_by_ch: dict[str, list[str]],
-        seed_ver_by_ch: dict[str, str | None],
+        chain_by_ch: Mapping[str, list[str]],
+        seed_ver_by_ch: Mapping[str, str | None],
         stage2_rows: Sequence[_DeltaStage2Row],
-    ) -> dict[str, _ChannelWritesHistory]:
+    ) -> dict[str, WritesHistory]:
         """Demux stage 2 rows per channel; produce per-channel histories.
 
         stage2_rows carry `channel` on every row. We build per-channel
         `writes_by_cid` and per-channel `seed_blob` dicts, then assemble
-        a `_ChannelWritesHistory` per requested channel.
+        a `WritesHistory` per requested channel. The `seed` key is omitted
+        when the walk reached root with no snapshot found, or when the
+        seed blob is sentinel "empty" — in both cases the consumer treats
+        absence as "start empty".
         """
         # writes_by_ch_by_cid[channel][cid] = list of (type, blob, task_id, idx)
         writes_by_ch_by_cid: dict[str, dict[str, list[tuple[str, bytes, str, int]]]] = {
@@ -385,7 +455,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             for ws in cid_map.values():
                 ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
 
-        result: dict[str, _ChannelWritesHistory] = {}
+        result: dict[str, WritesHistory] = {}
         for ch in channels:
             chain_cids = chain_by_ch.get(ch, [])
             seed_version = seed_ver_by_ch.get(ch)
@@ -396,15 +466,14 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                 for type_tag, write_blob, task_id, _idx in cid_writes.get(cid, []):
                     val = self.serde.loads_typed((type_tag, write_blob))
                     collected.append((task_id, ch, val))
+            collected.reverse()
 
-            seed: Any = DELTA_SENTINEL
+            entry: WritesHistory = {"writes": collected}
             if seed_version is not None:
                 blob = seed_blob_by_ver.get((ch, seed_version))
                 if blob is not None and blob[0] != "empty":
-                    seed = self.serde.loads_typed(blob)
-
-            collected.reverse()
-            result[ch] = _ChannelWritesHistory(seed=seed, writes=collected)
+                    entry["seed"] = self.serde.loads_typed(blob)
+            result[ch] = entry
         return result
 
     def _dump_blobs(

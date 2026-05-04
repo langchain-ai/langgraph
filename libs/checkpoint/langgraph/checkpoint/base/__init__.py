@@ -13,14 +13,12 @@ from typing import (
 )
 
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import NotRequired
 
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from langgraph.checkpoint.serde.types import (
-    DELTA_SENTINEL as DELTA_SENTINEL,
-)
 from langgraph.checkpoint.serde.types import (
     ERROR,
     INTERRUPT,
@@ -62,6 +60,16 @@ class CheckpointMetadata(TypedDict, total=False):
     """
     run_id: str
     """The ID of the run that created this checkpoint."""
+    delta_updates_since_snapshot: dict[str, int]
+    """Per-channel update count since the last `_DeltaSnapshot` was written.
+
+    Maps channel name → number of supersteps that wrote to this channel
+    since its last snapshot blob. Used by `pregel.create_checkpoint` to
+    decide when to write the next snapshot (when the count reaches the
+    channel's `snapshot_frequency`, snapshot fires and the count resets
+    to 0). Absent on threads that don't use delta channels. Version-format
+    independent — works for int, float, and string version schemes.
+    """
 
 
 ChannelVersions = dict[str, str | int | float]
@@ -124,29 +132,26 @@ class CheckpointTuple(NamedTuple):
     pending_writes: list[PendingWrite] | None = None
 
 
-class _ChannelWritesHistory(NamedTuple):
-    """Result of `BaseCheckpointSaver._get_all_delta_channels_writes_history`
-    (a per-channel entry from the returned mapping).
+class WritesHistory(TypedDict):
+    """Per-channel result entry from `BaseCheckpointSaver.get_writes_history`.
 
-    Storage-level view of what one channel wrote across the ancestor chain
-    of a target checkpoint:
+    Storage-level view of what one channel contributed across the ancestor
+    chain of a target checkpoint:
 
-      * `seed` — the nearest ancestor's stored blob value for this channel,
-        or `DELTA_SENTINEL` if the walk reached the root without finding a
-        stored value. A non-sentinel seed typically indicates a pre-delta
-        snapshot preserved across a channel-type migration (e.g.
-        `BinaryOperatorAggregate` storage extended under `DeltaChannel`).
-      * `writes` — on-path deltas oldest→newest, one `PendingWrite` per
-        step that wrote to this channel. Writes stored at the target
-        checkpoint itself are pending for the next super-step and are
-        excluded.
-
-    Experimental: method surface may change; the NamedTuple shape is the
-    contract.
+    * `writes` — on-path deltas oldest→newest as `PendingWrite` tuples.
+      Always present; possibly empty. Already filtered to one channel.
+      Writes stored at the target checkpoint itself are pending for the
+      next super-step and are excluded.
+    * `seed` — the stored value at the nearest ancestor whose
+      `channel_values[ch]` is populated. Omitted if the walk reached the
+      root without finding any stored value (consumer treats absence as
+      "start empty"). Typically a `_DeltaSnapshot` for delta channels with
+      finite snapshot frequency, or a plain value for threads migrated
+      from a pre-delta channel type.
     """
 
-    seed: Any
     writes: list[PendingWrite]
+    seed: NotRequired[Any]
 
 
 class BaseCheckpointSaver(Generic[V]):
@@ -487,103 +492,82 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
-    def _get_tuple_raw(self, config: RunnableConfig) -> CheckpointTuple | None:
-        """Pure storage read used by `_get_all_delta_channels_writes_history`.
-
-        Must return the same value as `get_tuple` but must NOT trigger channel
-        reconstruction; otherwise the channel-hydration path would re-enter
-        `_get_all_delta_channels_writes_history`. Override only if `get_tuple`
-        itself performs channel hydration.
-        """
-        return self.get_tuple(config)
-
-    async def _aget_tuple_raw(self, config: RunnableConfig) -> CheckpointTuple | None:
-        """Async version of `_get_tuple_raw`. See docstring there."""
-        return await self.aget_tuple(config)
-
-    def _get_all_delta_channels_writes_history(
+    def get_writes_history(
         self, config: RunnableConfig, channels: Sequence[str]
-    ) -> Mapping[str, _ChannelWritesHistory]:
-        """**Experimental.** Query multiple delta channels' writes along the parent chain.
+    ) -> Mapping[str, WritesHistory]:
+        """Walk the parent chain returning per-channel writes + seed.
 
-        Storage-level query, not channel semantics: returns a per-channel
-        `(seed, writes)` reflecting what storage knows about each channel
-        across the ancestor chain of the target checkpoint identified by
-        `config`.
-
-        For every channel in `channels`:
-
-        * `writes` — on-path deltas oldest→newest as `PendingWrite` tuples.
-          Writes stored at the target `checkpoint_id` itself are pending
-          for the next super-step and are excluded.
-        * `seed` — the nearest ancestor's stored blob value for this
-          channel; `DELTA_SENTINEL` if the walk reached the root without
-          finding a stored value. A non-sentinel seed typically indicates
-          a pre-delta snapshot preserved across a channel-type migration.
+        For each requested channel, walks ancestors of the checkpoint
+        identified by `config` (following `parent_config`) and accumulates
+        `pending_writes` for that channel. The walk terminates per-channel
+        at the nearest ancestor whose `channel_values[ch]` is populated;
+        that value is returned as `seed`. If the walk reaches the root
+        without finding a stored value, `seed` is omitted from that
+        channel's entry — the consumer treats the absence as "start
+        empty."
 
         Walks the **parent chain** (not `list(before=...)`): for forked
         threads, only on-path ancestors contribute.
 
-        Reference implementation walks `get_tuple` + `parent_config` ONCE
-        for all channels (each ancestor visited once, not once per channel),
-        inspecting each ancestor's `channel_values[channel]` for that
-        channel's seed terminator. Savers with direct storage access
-        (`InMemorySaver`, `PostgresSaver`) override for performance; the
-        return contract is fixed here.
+        The default implementation walks `get_tuple` + `parent_config`
+        once for all channels — each ancestor visited once, not once per
+        channel. Savers with direct storage access (`InMemorySaver`,
+        `PostgresSaver`) override for performance; the return contract is
+        fixed here.
 
-        Empty `channels` returns `{}`. Underscore-prefixed because the
-        method surface is experimental.
+        Args:
+            config: Configuration identifying the target checkpoint.
+            channels: Channel names to walk for. Empty → empty mapping.
+
+        Returns:
+            Per-channel `WritesHistory` for every name in `channels`.
         """
         if not channels:
             return {}
         collected_by_ch: dict[str, list[PendingWrite]] = {c: [] for c in channels}
-        seed_by_ch: dict[str, Any] = {c: DELTA_SENTINEL for c in channels}
+        seed_by_ch: dict[str, Any] = {}
         remaining: set[str] = set(channels)
-        target_tuple = self._get_tuple_raw(config)
+        target_tuple = self.get_tuple(config)
         cursor_config: RunnableConfig | None = (
             target_tuple.parent_config if target_tuple else None
         )
         while cursor_config is not None and remaining:
-            tup = self._get_tuple_raw(cursor_config)
+            tup = self.get_tuple(cursor_config)
             if tup is None:
                 break
-            # Collect each ancestor's writes for any channel still searching.
             if tup.pending_writes:
                 for write in reversed(tup.pending_writes):
                     ch = write[1]
                     if ch in remaining:
                         collected_by_ch[ch].append(write)
-            # Per-channel seed terminator: a non-sentinel blob value at this
-            # ancestor establishes that channel's reconstruction base.
             for ch in list(remaining):
-                ancestor_value = tup.checkpoint["channel_values"].get(ch)
-                if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
-                    seed_by_ch[ch] = ancestor_value
+                if ch in tup.checkpoint["channel_values"]:
+                    seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]
                     remaining.discard(ch)
             cursor_config = tup.parent_config
-        return {
-            ch: _ChannelWritesHistory(
-                seed=seed_by_ch[ch],
-                writes=list(reversed(collected_by_ch[ch])),
-            )
-            for ch in channels
-        }
+        result: dict[str, WritesHistory] = {}
+        for ch in channels:
+            entry: WritesHistory = {"writes": list(reversed(collected_by_ch[ch]))}
+            if ch in seed_by_ch:
+                entry["seed"] = seed_by_ch[ch]
+            result[ch] = entry
+        return result
 
-    async def _aget_all_delta_channels_writes_history(
+    async def aget_writes_history(
         self, config: RunnableConfig, channels: Sequence[str]
-    ) -> Mapping[str, _ChannelWritesHistory]:
-        """Async version of `_get_all_delta_channels_writes_history`."""
+    ) -> Mapping[str, WritesHistory]:
+        """Async version of `get_writes_history`."""
         if not channels:
             return {}
         collected_by_ch: dict[str, list[PendingWrite]] = {c: [] for c in channels}
-        seed_by_ch: dict[str, Any] = {c: DELTA_SENTINEL for c in channels}
+        seed_by_ch: dict[str, Any] = {}
         remaining: set[str] = set(channels)
-        target_tuple = await self._aget_tuple_raw(config)
+        target_tuple = await self.aget_tuple(config)
         cursor_config: RunnableConfig | None = (
             target_tuple.parent_config if target_tuple else None
         )
         while cursor_config is not None and remaining:
-            tup = await self._aget_tuple_raw(cursor_config)
+            tup = await self.aget_tuple(cursor_config)
             if tup is None:
                 break
             if tup.pending_writes:
@@ -592,18 +576,17 @@ class BaseCheckpointSaver(Generic[V]):
                     if ch in remaining:
                         collected_by_ch[ch].append(write)
             for ch in list(remaining):
-                ancestor_value = tup.checkpoint["channel_values"].get(ch)
-                if ancestor_value is not None and ancestor_value is not DELTA_SENTINEL:
-                    seed_by_ch[ch] = ancestor_value
+                if ch in tup.checkpoint["channel_values"]:
+                    seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]
                     remaining.discard(ch)
             cursor_config = tup.parent_config
-        return {
-            ch: _ChannelWritesHistory(
-                seed=seed_by_ch[ch],
-                writes=list(reversed(collected_by_ch[ch])),
-            )
-            for ch in channels
-        }
+        result: dict[str, WritesHistory] = {}
+        for ch in channels:
+            entry: WritesHistory = {"writes": list(reversed(collected_by_ch[ch]))}
+            if ch in seed_by_ch:
+                entry["seed"] = seed_by_ch[ch]
+            result[ch] = entry
+        return result
 
     def get_next_version(self, current: V | None, channel: None) -> V:
         """Generate the next version ID for a channel.

@@ -4,7 +4,6 @@ from typing import Annotated
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
-from langgraph.checkpoint.base import DELTA_SENTINEL
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import NotRequired, TypedDict
@@ -140,11 +139,11 @@ def test_delta_channel_basic_two_steps() -> None:
 
     ch.update([HumanMessage(content="hi", id="h1")])
     d1 = ch.checkpoint()
-    assert d1 is DELTA_SENTINEL
+    assert d1 is MISSING
 
     ch.update([AIMessage(content="hello", id="a1")])
     d2 = ch.checkpoint()
-    assert d2 is DELTA_SENTINEL
+    assert d2 is MISSING
 
     assert len(ch.get()) == 2
     assert ch.get()[0].content == "hi"
@@ -154,7 +153,7 @@ def test_delta_channel_basic_two_steps() -> None:
 def test_delta_channel_from_checkpoint_writes_list() -> None:
     """replay_writes on a fresh channel replays through the operator."""
     spec = DeltaChannel(_messages_delta_reducer, list)
-    ch = spec.from_checkpoint(DELTA_SENTINEL)
+    ch = spec.from_checkpoint(MISSING)
     ch.replay_writes(
         [
             ("t0", "messages", HumanMessage(content="hi", id="h1")),
@@ -182,7 +181,7 @@ def test_delta_channel_overwrite() -> None:
 
     ch.update([Overwrite([HumanMessage(content="new", id="h2")])])
     d = ch.checkpoint()
-    assert d is DELTA_SENTINEL
+    assert d is MISSING
     assert len(ch.get()) == 1
     assert ch.get()[0].content == "new"
 
@@ -202,7 +201,7 @@ def test_delta_channel_remove_message_and_replay() -> None:
     ch.update([RemoveMessage(id="a1")])
     assert ch.get() == [HumanMessage(content="hi", id="h1")]
 
-    ch2 = spec.from_checkpoint(DELTA_SENTINEL)
+    ch2 = spec.from_checkpoint(MISSING)
     ch2.replay_writes(
         [
             ("t0", "messages", HumanMessage(content="hi", id="h1")),
@@ -222,7 +221,7 @@ def test_delta_channel_update_by_id_and_replay() -> None:
     ch.update([HumanMessage(content="updated", id="h1")])
     assert ch.get() == [HumanMessage(content="updated", id="h1")]
 
-    ch2 = spec.from_checkpoint(DELTA_SENTINEL)
+    ch2 = spec.from_checkpoint(MISSING)
     ch2.replay_writes(
         [
             ("t0", "messages", HumanMessage(content="original", id="h1")),
@@ -233,13 +232,18 @@ def test_delta_channel_update_by_id_and_replay() -> None:
     assert ch2.get()[0].content == "updated"
 
 
-def test_delta_channel_checkpoint_returns_sentinel() -> None:
-    """checkpoint() always returns DELTA_SENTINEL regardless of state."""
+def test_delta_channel_checkpoint_returns_missing() -> None:
+    """checkpoint() always returns MISSING regardless of state.
+
+    Pregel writes `_DeltaSnapshot(ch.get())` directly into `channel_values`
+    on snapshot steps; the channel itself never participates in snapshot
+    serialization, so its `checkpoint()` is always the absence sentinel.
+    """
     ch = DeltaChannel(_messages_delta_reducer, list).from_checkpoint(MISSING)
-    assert ch.checkpoint() is DELTA_SENTINEL
+    assert ch.checkpoint() is MISSING
 
     ch.update([HumanMessage(content="hi", id="h1")])
-    assert ch.checkpoint() is DELTA_SENTINEL
+    assert ch.checkpoint() is MISSING
 
 
 # ---------------------------------------------------------------------------
@@ -247,12 +251,13 @@ def test_delta_channel_checkpoint_returns_sentinel() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_delta_channel_snapshot_step_based() -> None:
-    """Snapshots fire on every Nth step regardless of whether the channel was written.
+def test_delta_channel_snapshot_version_based() -> None:
+    """Snapshots fire when a channel accumulates `snapshot_frequency` updates.
 
-    With snapshot_frequency=N, every Nth pregel step produces a _DeltaSnapshot
-    blob — even if the channel had no write that step (eager snapshot). This
-    bounds the ancestor walk to at most N steps on any read.
+    Under the version-delta cadence, every time the channel's
+    `current_version - last_snapshot_version >= snapshot_frequency` a
+    `_DeltaSnapshot` blob is written. Bounds the ancestor walk to at most
+    `snapshot_frequency` steps on any read for that channel.
     """
 
     class State(TypedDict):
@@ -295,51 +300,14 @@ def test_delta_channel_snapshot_step_based() -> None:
     assert len(state.values["messages"]) == 12  # 6 human + 6 AI
 
 
-def test_delta_channel_snapshot_fires_even_when_not_written() -> None:
-    """Eager snapshot: _DeltaSnapshot stored at snapshot step even when the
-    channel had no write that step (node_b doesn't touch messages).
-    """
-
-    class State(TypedDict):
-        messages: Annotated[
-            list, DeltaChannel(_messages_delta_reducer, snapshot_frequency=3)
-        ]
-        tick: int
-
-    def writer(state: State) -> dict:
-        i = len(state["messages"]) // 2
-        return {"messages": [AIMessage(content=f"a{i}", id=f"a{i}")]}
-
-    def ticker(state: State) -> dict:
-        return {"tick": state["tick"] + 1}
-
-    g = StateGraph(State)
-    g.add_node("writer", writer)
-    g.add_node("ticker", ticker)
-    g.add_edge(START, "writer")
-    g.add_edge("writer", "ticker")
-    saver = InMemorySaver()
-    graph = g.compile(checkpointer=saver)
-
-    config = {"configurable": {"thread_id": "t1"}}
-    for i in range(5):
-        graph.invoke(
-            {"messages": [HumanMessage(content=f"h{i}", id=f"h{i}")], "tick": 0},
-            config,
-        )
-
-    msg_blobs = {
-        k: saver.serde.loads_typed((t, b))
-        for k, (t, b) in saver.blobs.items()
-        if k[2] == "messages" and t == "msgpack" and b
-    }
-    snapshots = {k: v for k, v in msg_blobs.items() if isinstance(v, _DeltaSnapshot)}
-    assert snapshots, (
-        "eager snapshots must fire even on steps where messages wasn't written"
-    )
-
-    state = graph.get_state(config)
-    assert len(state.values["messages"]) == 10  # 5 human + 5 AI
+# TODO(delta-channel-cadence): the previous "snapshot fires even when channel
+# was not written" test asserted eager step-based snapshotting; under the new
+# version-delta cadence (`should_snapshot` triggers on per-channel update
+# count, not superstep count), no snapshot fires for an unwritten channel.
+# Replace with a test that exercises the version-delta trigger plus the
+# durability="exit" force-snapshot branch — see
+# `docs/superpowers/specs/2026-05-04-delta-channel-batched-reads-design.md`
+# section "Snapshot cadence".
 
 
 # ---------------------------------------------------------------------------
@@ -414,11 +382,11 @@ def test_delta_channel_dict_reducer_basic_updates() -> None:
 
     ch.update([{"a": 1}])
     d1 = ch.checkpoint()
-    assert d1 is DELTA_SENTINEL
+    assert d1 is MISSING
 
     ch.update([{"b": 2}])
     d2 = ch.checkpoint()
-    assert d2 is DELTA_SENTINEL
+    assert d2 is MISSING
 
     assert ch.get() == {"a": 1, "b": 2}
 
@@ -433,7 +401,7 @@ def test_delta_channel_dict_reducer_writes_reconstruction() -> None:
         return result
 
     spec = _delta_channel_with_type(merge_dicts, dict)
-    ch = spec.from_checkpoint(DELTA_SENTINEL)
+    ch = spec.from_checkpoint(MISSING)
     ch.replay_writes(
         [
             ("t0", "files", {"a": 1}),
@@ -463,7 +431,7 @@ def test_delta_channel_dict_reducer_with_deletions() -> None:
     assert ch.get() == {"file2.py": "content2", "file3.py": "content3"}
 
     spec = _delta_channel_with_type(merge_files, dict)
-    ch2 = spec.from_checkpoint(DELTA_SENTINEL)
+    ch2 = spec.from_checkpoint(MISSING)
     ch2.replay_writes(
         [
             ("t0", "files", {"file1.py": "content1", "file2.py": "content2"}),
@@ -498,7 +466,7 @@ def test_delta_channel_dict_reducer_overwrite_in_writes_replay() -> None:
         return result
 
     spec = _delta_channel_with_type(merge_dicts, dict)
-    ch = spec.from_checkpoint(DELTA_SENTINEL)
+    ch = spec.from_checkpoint(MISSING)
     ch.replay_writes(
         [
             ("t0", "files", {"a": 1}),
@@ -639,7 +607,7 @@ def test_delta_channel_from_checkpoint_seed_without_writes() -> None:
 def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_sentinel() -> None:
     """`seed=None` must start replay from None, not from an empty channel.
 
-    The DELTA_SENTINEL / MISSING sentinels mean 'no seed'; passing `None`
+    The `MISSING` absence sentinel means 'no seed'; passing `None`
     explicitly should feed None to the reducer as the left operand.
     """
 

@@ -25,7 +25,6 @@ from langchain_core.runnables import (
 from langchain_core.runnables.graph import Edge
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
-    DELTA_SENTINEL,
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
@@ -9618,7 +9617,9 @@ async def test_delta_channel_durability_exit_stores_snapshot() -> None:
 
 async def test_delta_channel_async_write_ordering() -> None:
     """In async mode, DeltaChannel write futures are awaited before the checkpoint
-    is committed, so aput_writes always precedes aput for sentinel checkpoints."""
+    is committed, so aput_writes always precedes aput for delta-channel
+    checkpoints (those where the delta channel had a versioned write but
+    is absent from `channel_values`, i.e. no snapshot fired this step)."""
 
     class State(TypedDict):
         messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
@@ -9637,10 +9638,17 @@ async def test_delta_channel_async_write_ordering() -> None:
         return result
 
     async def tracked_aput(self, config, checkpoint, metadata, new_versions):
-        has_sentinel = any(
-            v is DELTA_SENTINEL for v in checkpoint.get("channel_values", {}).values()
+        # A "delta" checkpoint here = `messages` versioned but absent from
+        # `channel_values` (no snapshot fired). When a snapshot does fire,
+        # `channel_values["messages"]` is a `_DeltaSnapshot` — also a delta
+        # checkpoint shape, since the writes still have to be persisted
+        # before the parent checkpoint commits.
+        channel_values = checkpoint.get("channel_values", {})
+        is_delta_step = (
+            "messages" in checkpoint.get("channel_versions", {})
+            and "messages" not in channel_values
         )
-        order.append("aput_sentinel" if has_sentinel else "aput_other")
+        order.append("aput_delta" if is_delta_step else "aput_other")
         return await original_aput(self, config, checkpoint, metadata, new_versions)
 
     InMemorySaver.aput_writes = tracked_aput_writes
@@ -9657,18 +9665,18 @@ async def test_delta_channel_async_write_ordering() -> None:
                 {"messages": [HumanMessage(content=f"h{i}", id=f"h{i}")]}, config
             )
 
-        # Every aput_sentinel must be preceded by at least one aput_writes
+        # Every aput_delta must be preceded by at least one aput_writes
         for i, event in enumerate(order):
-            if event == "aput_sentinel":
+            if event == "aput_delta":
                 preceding = order[:i]
                 assert "aput_writes" in preceding, (
-                    f"aput_sentinel at {i} had no preceding aput_writes: {order}"
+                    f"aput_delta at {i} had no preceding aput_writes: {order}"
                 )
                 last_write_idx = max(
                     j for j, e in enumerate(order[:i]) if e == "aput_writes"
                 )
                 assert last_write_idx < i, (
-                    f"aput_writes at {last_write_idx} should precede aput_sentinel at {i}: {order}"
+                    f"aput_writes at {last_write_idx} should precede aput_delta at {i}: {order}"
                 )
     finally:
         InMemorySaver.aput_writes = original_aput_writes

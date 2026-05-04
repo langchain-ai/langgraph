@@ -8,13 +8,12 @@ from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
-    DELTA_SENTINEL,
     WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    _ChannelWritesHistory,
+    WritesHistory,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
@@ -27,9 +26,10 @@ from psycopg_pool import AsyncConnectionPool
 
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import (
-    SELECT_DELTA_STAGE2_SQL,
+    _DELTA_PAGE_SIZE,
     BasePostgresSaver,
     _build_delta_stage1_sql,
+    _build_delta_stage2_sql,
     _DeltaStage2Row,
 )
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
@@ -269,9 +269,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         # others are stored in blobs table
         blob_values = {}
         for k, v in checkpoint["channel_values"].items():
-            if v is DELTA_SENTINEL:
-                copy["channel_values"].pop(k)
-            elif isinstance(v, _DeltaSnapshot):
+            if isinstance(v, _DeltaSnapshot):
                 blob_values[k] = copy["channel_values"].pop(k)
                 copy["channel_values"][k] = True
             elif v is None or isinstance(v, (str, int, float, bool)):
@@ -404,14 +402,14 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    async def _aget_all_delta_channels_writes_history(
+    async def aget_writes_history(
         self, config: RunnableConfig, channels: Sequence[str]
-    ) -> Mapping[str, _ChannelWritesHistory]:
-        """Fast-path override of `BaseCheckpointSaver._aget_all_delta_channels_writes_history`.
+    ) -> Mapping[str, WritesHistory]:
+        """Fast-path override of `BaseCheckpointSaver.aget_writes_history`.
 
-        Two-stage query, both stages cover ALL requested channels in a single
-        Postgres roundtrip each. See `PostgresSaver._get_all_delta_channels_writes_history`
-        for design notes.
+        See `PostgresSaver.get_writes_history` for design notes; this is
+        the async equivalent with internal stage-1 paging and per-channel
+        UNION ALL stage-2.
         """
         if not channels:
             return {}
@@ -422,46 +420,72 @@ class AsyncPostgresSaver(BasePostgresSaver):
         if checkpoint_id is None:
             target = await self.aget_tuple(config)
             if target is None:
-                return {
-                    ch: _ChannelWritesHistory(seed=DELTA_SENTINEL, writes=[])
-                    for ch in channels
-                }
+                return {ch: {"writes": []} for ch in channels}
             checkpoint_id = target.config["configurable"]["checkpoint_id"]
 
-        stage1_sql = _build_delta_stage1_sql(channels)
-        stage1_params: list[Any] = []
-        for ch in channels:
-            stage1_params.extend([ch, ch])
-        stage1_params.extend([thread_id, checkpoint_ns])
-        async with self._cursor() as cur:
-            await cur.execute(stage1_sql, stage1_params)
-            stage1_rows = await cur.fetchall()
-
-        chain_by_ch, seed_ver_by_ch = self._walk_stage1_multi(
-            cast("list[Mapping[str, Any]]", stage1_rows), checkpoint_id, channels
-        )
-        union_chain_cids: list[str] = sorted(
-            {cid for chain in chain_by_ch.values() for cid in chain}
-        )
-        union_seed_versions: list[str] = sorted(
-            {ver for ver in seed_ver_by_ch.values() if ver is not None}
-        )
+        stage1_sql = _build_delta_stage1_sql(channels, paged=True)
+        parent_of: dict[str, str | None] = {}
+        ver_by_i_by_cid: list[dict[str, str | None]] = [{} for _ in channels]
+        hs_by_i_by_cid: list[dict[str, bool]] = [{} for _ in channels]
+        chain_by_ch: dict[str, list[str]] = {ch: [] for ch in channels}
+        seed_ver_by_ch: dict[str, str | None] = {ch: None for ch in channels}
+        walk_cursor_by_ch: dict[str, str | None] = {}
+        seeded: set[str] = set()
+        cursor: str | None = None
 
         async with self._cursor() as cur:
-            await cur.execute(
-                SELECT_DELTA_STAGE2_SQL,
-                (
-                    thread_id,
-                    checkpoint_ns,
+            while True:
+                stage1_params: list[Any] = []
+                for ch in channels:
+                    stage1_params.extend([ch, ch])
+                stage1_params.extend(
+                    [thread_id, checkpoint_ns, cursor, cursor, _DELTA_PAGE_SIZE]
+                )
+                await cur.execute(stage1_sql, stage1_params)
+                page = await cur.fetchall()
+                if not page:
+                    break
+                oldest = self._ingest_stage1_page(
+                    cast("list[Mapping[str, Any]]", page),
                     channels,
-                    union_chain_cids,
-                    thread_id,
-                    checkpoint_ns,
+                    parent_of,
+                    ver_by_i_by_cid,
+                    hs_by_i_by_cid,
+                )
+                self._try_advance_walks(
+                    checkpoint_id,
                     channels,
-                    union_seed_versions,
-                ),
-            )
-            stage2_rows = await cur.fetchall()
+                    parent_of,
+                    ver_by_i_by_cid,
+                    hs_by_i_by_cid,
+                    chain_by_ch,
+                    seed_ver_by_ch,
+                    walk_cursor_by_ch,
+                    seeded,
+                )
+                if len(seeded) == len(channels) or len(page) < _DELTA_PAGE_SIZE:
+                    break
+                cursor = oldest
+
+        channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
+        channels_with_seed = [ch for ch in channels if seed_ver_by_ch[ch] is not None]
+        stage2_sql = _build_delta_stage2_sql(
+            channels_with_chain=channels_with_chain,
+            channels_with_seed=channels_with_seed,
+        )
+
+        if stage2_sql:
+            stage2_params: list[Any] = []
+            for ch in channels_with_chain:
+                stage2_params.extend([thread_id, checkpoint_ns, ch, chain_by_ch[ch]])
+            for ch in channels_with_seed:
+                stage2_params.extend([thread_id, checkpoint_ns, ch, seed_ver_by_ch[ch]])
+            async with self._cursor() as cur:
+                await cur.execute(stage2_sql, stage2_params)
+                stage2_rows = await cur.fetchall()
+        else:
+            stage2_rows = []
+
         return self._build_delta_channels_writes_history(
             channels=channels,
             chain_by_ch=chain_by_ch,

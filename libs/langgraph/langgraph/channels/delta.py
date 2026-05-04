@@ -5,7 +5,7 @@ import copy as _copy
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
-from langgraph.checkpoint.base import DELTA_SENTINEL, PendingWrite
+from langgraph.checkpoint.base import PendingWrite
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import Self
 
@@ -38,19 +38,17 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     This lets LangGraph replay checkpointed writes in larger batches than they
     were originally produced without changing reconstructed state.
 
-    `snapshot_frequency=None` (default): pure delta; stores only
-    `DELTA_SENTINEL` in checkpoint blobs; reads replay all ancestor writes.
-
-    `snapshot_frequency=N`: `create_checkpoint` writes a full `_DeltaSnapshot`
-    blob every N steps, bounding replay depth to N.
+    Snapshot cadence is driven by per-channel update count. `create_checkpoint`
+    writes a full `_DeltaSnapshot` blob every `snapshot_frequency` updates to
+    this channel, bounding replay depth.
 
     Parameters:
         reducer: `(state, list[writes]) -> new_state`. Must be deterministic
             and batching-invariant as described above.
         typ: The value type (e.g. `list`, `dict`). Inferred automatically
             from the outer type when used inside `Annotated[T, DeltaChannel(...)]`.
-        snapshot_frequency: Every Nth pregel step writes a snapshot blob.
-            `None` (default) = pure delta, never snapshot.
+        snapshot_frequency: Every Nth update to this channel writes a snapshot
+            blob (default `1000`). Must be a positive int.
     """
 
     __slots__ = ("value", "reducer", "snapshot_frequency")
@@ -61,8 +59,12 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         reducer: Callable[[Any, Sequence[Any]], Any],
         typ: type[Value] | None = None,
         *,
-        snapshot_frequency: int | None = None,
+        snapshot_frequency: int = 1000,
     ) -> None:
+        if snapshot_frequency <= 0:
+            raise ValueError(
+                f"snapshot_frequency must be a positive int, got {snapshot_frequency}"
+            )
         if typ is None:
             typ = list  # type: ignore[assignment]  # placeholder; overridden by _is_field_channel
         super().__init__(typ)
@@ -93,14 +95,6 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     def UpdateType(self) -> Any:
         return self.typ
 
-    def is_snapshot_step(self, step: int) -> bool:
-        """True if pregel should write a snapshot blob at this step."""
-        return (
-            self.snapshot_frequency is not None
-            and step > 0
-            and step % self.snapshot_frequency == 0
-        )
-
     def copy(self) -> Self:
         new = self.__class__(
             self.reducer, self.typ, snapshot_frequency=self.snapshot_frequency
@@ -110,18 +104,19 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         return new
 
     def from_checkpoint(self, checkpoint: Any) -> Self:
-        """Initialize from a stored blob or sentinel.
+        """Initialize from a stored blob.
 
-        Blob types (dispatched via serde ext code, not dict key inspection):
-          * `DELTA_SENTINEL` / `MISSING`: start empty; caller replays writes.
+        Blob types:
+          * `MISSING`: start empty; caller replays writes.
           * `_DeltaSnapshot(value)`: restore value directly from snapshot.
-          * plain value (migration from old BinOp blobs): use directly.
+          * plain value (migration from old `BinaryOperatorAggregate` blobs):
+            use directly.
         """
         new = self.__class__(
             self.reducer, self.typ, snapshot_frequency=self.snapshot_frequency
         )
         new.key = self.key
-        if checkpoint is MISSING or checkpoint is DELTA_SENTINEL:
+        if checkpoint is MISSING:
             new.value = self.typ()
         elif isinstance(checkpoint, _DeltaSnapshot):
             new.value = checkpoint.value
@@ -186,12 +181,12 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         return self.value is not MISSING
 
     def checkpoint(self) -> Any:
-        """Return stored representation: always `DELTA_SENTINEL`.
+        """Return stored representation: always `MISSING`.
 
-        Snapshot decisions are made by `create_checkpoint` in pregel (which
-        has the step number) via `is_snapshot_step`. `checkpoint()` is only
-        called for non-snapshot steps or when no checkpointer is available.
+        Snapshot decisions live in `create_checkpoint` (which has the channel
+        version) and write `_DeltaSnapshot(ch.get())` directly into
+        `channel_values`. For non-snapshot steps the channel does not appear
+        in `channel_values`; reconstruction walks ancestor writes via the
+        saver's `get_writes_history`.
         """
-        if self.value is MISSING:
-            return MISSING
-        return DELTA_SENTINEL
+        return MISSING

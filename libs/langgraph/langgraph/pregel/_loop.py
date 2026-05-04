@@ -910,6 +910,22 @@ class PregelLoop:
         if exiting and self.checkpoint["id"] == self.checkpoint_id_saved:
             # checkpoint already saved
             return
+        # Carry per-delta-channel update bookkeeping forward across
+        # supersteps. Capture from the OLD metadata before potentially
+        # replacing it with a fresh dict that wouldn't contain it. Then
+        # increment for any delta channel updated this step (so the count
+        # reflects "supersteps that wrote to this channel since last
+        # snapshot"). create_checkpoint will reset entries to 0 for any
+        # channel that fires a snapshot this step.
+        prev_counts = dict(
+            self.checkpoint_metadata.get("delta_updates_since_snapshot", {}) or {}
+        )
+        new_counts = dict(prev_counts)
+        if self.updated_channels:
+            for ch_name in self.updated_channels:
+                ch_obj = self.channels.get(ch_name)
+                if isinstance(ch_obj, DeltaChannel):
+                    new_counts[ch_name] = new_counts.get(ch_name, 0) + 1
         if not exiting:
             metadata["step"] = self.step
             metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
@@ -929,7 +945,13 @@ class PregelLoop:
             if do_checkpoint
             else None,
             force_delta_snapshot=exiting and self.durability == "exit",
+            updates_since_snapshot=new_counts,
+            new_updates_since_snapshot=new_counts,
         )
+        if new_counts:
+            self.checkpoint_metadata["delta_updates_since_snapshot"] = new_counts
+        elif "delta_updates_since_snapshot" in self.checkpoint_metadata:
+            del self.checkpoint_metadata["delta_updates_since_snapshot"]
         # sanitize TASK channel in the checkpoint before saving (durability=="exit")
         if TASKS in self.checkpoint["channel_values"] and any(
             isinstance(channel, UntrackedValue) for channel in self.channels.values()
@@ -1450,7 +1472,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
         # Drain DeltaChannel write futures before committing the checkpoint so
-        # DELTA_SENTINEL blobs are never saved ahead of their backing writes.
+        # ancestor walks never see a checkpoint without its backing writes.
         if self._delta_write_futs:
             futs, self._delta_write_futs = self._delta_write_futs, []
             await asyncio.gather(*futs)
