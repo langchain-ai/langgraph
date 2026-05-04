@@ -281,7 +281,7 @@ class InMemorySaver(
                 )
         else:
             if checkpoints := self.storage[thread_id][checkpoint_ns]:
-                checkpoint_id = max(checkpoints.keys())
+                checkpoint_id = next(reversed(checkpoints))
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 checkpoint_ = self.serde.loads_typed(checkpoint)
@@ -351,24 +351,34 @@ class InMemorySaver(
                 ):
                     continue
 
-                for checkpoint_id, (
-                    checkpoint,
-                    metadata_b,
-                    parent_checkpoint_id,
-                ) in sorted(
-                    self.storage[thread_id][checkpoint_ns].items(),
-                    key=lambda x: x[0],
-                    reverse=True,
-                ):
+                ns_items = list(self.storage[thread_id][checkpoint_ns].items())
+                # Determine the insertion position of the 'before' checkpoint
+                # so we can filter by insertion order rather than string collation.
+                before_insert_pos: int | None = None
+                if before and (before_checkpoint_id := get_checkpoint_id(before)):
+                    ns_keys = [k for k, _ in ns_items]
+                    try:
+                        before_insert_pos = ns_keys.index(before_checkpoint_id)
+                    except ValueError:
+                        pass
+
+                for pos, (
+                    checkpoint_id,
+                    (
+                        checkpoint,
+                        metadata_b,
+                        parent_checkpoint_id,
+                    ),
+                ) in enumerate(reversed(ns_items)):
                     # filter by checkpoint ID from config
                     if config_checkpoint_id and checkpoint_id != config_checkpoint_id:
                         continue
 
-                    # filter by checkpoint ID from `before` config
+                    # filter by checkpoint ID from `before` config:
+                    # skip checkpoints inserted at or after the before checkpoint.
                     if (
-                        before
-                        and (before_checkpoint_id := get_checkpoint_id(before))
-                        and checkpoint_id >= before_checkpoint_id
+                        before_insert_pos is not None
+                        and (len(ns_items) - 1 - pos) >= before_insert_pos
                     ):
                         continue
 
