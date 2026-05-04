@@ -1,34 +1,41 @@
-"""Benchmark: DeltaChannel snapshot_frequency — storage vs. read-depth tradeoff.
+"""Benchmark: DeltaChannel — multi-channel reads, mixed snapshot frequencies.
 
 Run directly:  python tests/test_delta_channel_benchmark.py
 Run via pytest: pytest tests/test_delta_channel_benchmark.py -s
 
-Part 1 — baseline: `DeltaChannel` with the default snapshot frequency vs.
-  `add_messages` (BinOp).
-Part 2 — snapshot_frequency sweep: shows the storage/read-latency tradeoff
-  across frequencies [1, 5, 10, 50] at scale.
+Sweeps `(K delta channels, snapshot_frequency strategy, turn count)` and
+reports per-scenario read latency, write latency, storage, and peak Python
+heap usage during `get_state`.
 
-Key insight:
-  snapshot_frequency=N    → O(N²/N) storage, O(N) read depth bounded by freq
-  snapshot_frequency=1    → O(N²) storage, O(1) read depth (full snapshot)
+Scenarios cover the dimensions where this branch's optimizations matter:
+
+  * K-channel batching   — varying K (number of `DeltaChannel`s the graph
+                           reads on hydrate) shows the effect of merging
+                           per-channel reads into a single saver call.
+  * Mixed frequencies    — channels with very different snapshot cadences
+                           in one graph exercise the per-channel chain
+                           bound in stage-2.
+  * Turn count           — chain depth shows how paged stage-1 holds up.
 """
 
 from __future__ import annotations
 
 import contextlib
+import gc
 import os
 import sys
 import time
+import tracemalloc
 from typing import Annotated, Any
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, StateGraph
-from langgraph.graph.message import _messages_delta_reducer, add_messages
+from langgraph.graph.message import _messages_delta_reducer
 
 try:
     from langgraph.checkpoint.postgres import PostgresSaver
@@ -41,24 +48,16 @@ try:
 except ImportError:
     _POSTGRES_AVAILABLE = False
 
+
 # ---------------------------------------------------------------------------
 # Realistic message payload (~100 tokens / ~400 chars each)
 # ---------------------------------------------------------------------------
 
 _HUMAN_TEMPLATE = (
-    "I need help understanding the implications of {topic} on our system architecture. "
-    "Specifically, I'm concerned about how this interacts with our existing {concern} "
-    "and whether we need to refactor the {component} layer before proceeding. "
-    "We've had prior incidents in this area and want to be deliberate. "
-    "What should we prioritize first, and are there known failure modes we should design around from the start?"
-)
-
-_AI_TEMPLATE = (
-    "Great question about {topic}. The key insight here is that {concern} introduces "
-    "a subtle ordering dependency that most teams overlook until they hit it in production. "
-    "For your {component} layer specifically, I'd recommend starting with a careful audit "
-    "of the interface boundaries before making any structural changes. This will give you "
-    "a clear picture of the blast radius and let you sequence the migration safely."
+    "I need help understanding the implications of {topic} on our system "
+    "architecture. Specifically, I'm concerned about how this interacts with "
+    "our existing {concern} and whether we need to refactor the {component} "
+    "layer before proceeding."
 )
 
 _TOPICS = [
@@ -67,28 +66,9 @@ _TOPICS = [
     "schema migration",
     "backpressure handling",
     "idempotency guarantees",
-    "cache invalidation",
-    "connection pooling",
-    "rate limiting",
-    "circuit breaking",
-    "observability pipelines",
 ]
-
-_CONCERNS = [
-    "concurrency model",
-    "retry semantics",
-    "state management",
-    "error propagation",
-    "latency budget",
-]
-
-_COMPONENTS = [
-    "persistence",
-    "routing",
-    "ingestion",
-    "aggregation",
-    "serialization",
-]
+_CONCERNS = ["concurrency model", "retry semantics", "ordering guarantees"]
+_COMPONENTS = ["persistence", "ingestion", "routing"]
 
 
 def _human_content(i: int) -> str:
@@ -99,136 +79,132 @@ def _human_content(i: int) -> str:
     )
 
 
-def _ai_content(i: int) -> str:
-    return _AI_TEMPLATE.format(
-        topic=_TOPICS[i % len(_TOPICS)],
-        concern=_CONCERNS[i % len(_CONCERNS)],
-        component=_COMPONENTS[i % len(_COMPONENTS)],
-    )
-
-
 # ---------------------------------------------------------------------------
-# State definitions
+# State / graph factory: K DeltaChannel fields with per-channel freqs
 # ---------------------------------------------------------------------------
 
 
-class BinaryState(TypedDict):
-    messages: Annotated[list, add_messages]
-
-
-class DeltaState(TypedDict):
-    messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
-
-
-def _make_delta_state(snapshot_frequency: int | float) -> type:
-    """Create a TypedDict with DeltaChannel at the given snapshot_frequency."""
-    channel = DeltaChannel(
-        _messages_delta_reducer, snapshot_frequency=snapshot_frequency
-    )
-    # Use the functional TypedDict form so the Annotated type is stored as an
-    # already-evaluated object rather than a forward-reference string (which
-    # would fail when get_type_hints tries to resolve 'snapshot_frequency').
+def _make_state_cls(freqs: list[int]) -> type:
+    """Build a TypedDict with one DeltaChannel per entry in `freqs`."""
+    fields: dict[str, Any] = {}
+    for i, freq in enumerate(freqs):
+        ch = DeltaChannel(_messages_delta_reducer, snapshot_frequency=freq)
+        fields[f"ch{i}"] = Annotated[list, ch]
     return TypedDict(  # type: ignore[return-value]
-        f"DeltaState_freq{snapshot_frequency}",
-        {"messages": Annotated[list, channel]},
+        "_BenchState_" + "-".join(str(f) for f in freqs),
+        fields,
     )
 
 
-# ---------------------------------------------------------------------------
-# Graph factory
-# ---------------------------------------------------------------------------
+def _make_graph(state_cls: type, K: int, checkpointer: Any = None) -> Any:
+    """Graph: one node, writes a fresh message into every channel each turn."""
 
-
-def _make_graph(state_cls: type, checkpointer: Any = None) -> Any:
-    def human_node(state: Any) -> dict:
-        return {}
-
-    def ai_node(state: Any) -> dict:
-        i = len(state["messages"]) // 2
-        return {"messages": [AIMessage(content=_ai_content(i), id=f"a{i}")]}
+    def fanout(state: Any) -> dict[str, Any]:
+        i = max(len(state.get(f"ch{j}", [])) for j in range(K))
+        # Each channel gets its own copy with a unique id so the reducer
+        # does meaningful per-channel state accumulation.
+        return {
+            f"ch{j}": [HumanMessage(content=_human_content(i), id=f"c{j}_{i}")]
+            for j in range(K)
+        }
 
     g = StateGraph(state_cls)
-    g.add_node("human", human_node)
-    g.add_node("ai", ai_node)
-    g.add_edge("human", "ai")
-    g.add_edge("ai", END)
-    g.set_entry_point("human")
+    g.add_node("fanout", fanout)
+    g.set_entry_point("fanout")
+    g.add_edge("fanout", END)
     return g.compile(checkpointer=checkpointer or MemorySaver())
 
 
 # ---------------------------------------------------------------------------
-# Measurement helpers
+# Storage / memory measurement
 # ---------------------------------------------------------------------------
 
 
-def _total_blob_bytes(saver: MemorySaver) -> int:
-    total = 0
-    for (_, _, _, _), (type_tag, blob) in saver.blobs.items():
-        if blob is not None:
-            total += len(blob)
-    return total
+def _inmemory_blob_bytes(saver: MemorySaver) -> int:
+    return sum(
+        len(blob) for (_, _, _, _), (_, blob) in saver.blobs.items() if blob is not None
+    )
 
 
-def _run_turns(
-    n_turns: int,
-    state_cls: type,
-    checkpointer: Any = None,
-) -> tuple[float, float, int]:
-    """Run n_turns conversation turns.
-
-    Returns (write_elapsed_s, read_elapsed_s, total_blob_bytes).
-    Read latency is the average of 5 get_state calls after the full history
-    is built — forces state rehydration including ancestor replay if needed.
+def _postgres_storage_bytes(saver: Any, thread_id: str) -> int:
+    """Total bytes across checkpoints / checkpoint_blobs / checkpoint_writes
+    rows for this `thread_id`. Uses `pg_column_size` for an in-row payload
+    estimate; faster than full-table size and scoped to the thread."""
+    sql = """
+    SELECT COALESCE(SUM(pg_column_size(c.*)), 0)
+         + COALESCE((SELECT SUM(pg_column_size(b.*)) FROM checkpoint_blobs b
+                     WHERE b.thread_id = %s), 0)
+         + COALESCE((SELECT SUM(pg_column_size(w.*)) FROM checkpoint_writes w
+                     WHERE w.thread_id = %s), 0)
+         AS total
+    FROM checkpoints c
+    WHERE c.thread_id = %s
     """
-    graph = _make_graph(state_cls, checkpointer)
-    config = {"configurable": {"thread_id": "bench"}}
+    with saver._cursor() as cur:
+        cur.execute(sql, (thread_id, thread_id, thread_id))
+        row = cur.fetchone()
+    if row is None:
+        return 0
+    if isinstance(row, dict):
+        return int(row.get("total") or 0)
+    return int(row[0] or 0)
 
+
+def _run_scenario(
+    freqs: list[int],
+    n_turns: int,
+    checkpointer: Any,
+    thread_id: str,
+) -> dict[str, float | int]:
+    """Drive `n_turns` invocations of a K-channel graph, measure
+    write/read/storage/peak-memory."""
+    K = len(freqs)
+    state_cls = _make_state_cls(freqs)
+    graph = _make_graph(state_cls, K, checkpointer)
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # Write phase
     t0 = time.perf_counter()
     for i in range(n_turns):
-        graph.invoke(
-            {"messages": [HumanMessage(content=_human_content(i), id=f"h{i}")]},
-            config,
-        )
+        graph.invoke({}, config)
     write_elapsed = time.perf_counter() - t0
 
+    # Read phase + tracemalloc peak across get_state calls
+    gc.collect()
+    tracemalloc.start()
     t1 = time.perf_counter()
     for _ in range(5):
         graph.get_state(config)
     read_elapsed = (time.perf_counter() - t1) / 5
+    _, peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
 
-    blob_bytes = (
-        _total_blob_bytes(graph.checkpointer)
-        if isinstance(graph.checkpointer, MemorySaver)
-        else -1
-    )
-    return write_elapsed, read_elapsed, blob_bytes
+    # Storage
+    if isinstance(graph.checkpointer, MemorySaver):
+        storage = _inmemory_blob_bytes(graph.checkpointer)
+    elif _POSTGRES_AVAILABLE and isinstance(graph.checkpointer, PostgresSaver):
+        storage = _postgres_storage_bytes(graph.checkpointer, thread_id)
+    else:
+        storage = -1
 
-
-def _fmt_bytes(n: int) -> str:
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:.1f} MB"
-    if n >= 1_000:
-        return f"{n / 1_000:.1f} KB"
-    return f"{n} B"
-
-
-def _approx_tokens(n_turns: int) -> str:
-    tokens = n_turns * 200
-    if tokens >= 1_000_000:
-        return f"~{tokens / 1_000_000:.1f}M tok"
-    if tokens >= 1_000:
-        return f"~{tokens / 1_000:.0f}K tok"
-    return f"~{tokens} tok"
+    return {
+        "K": K,
+        "turns": n_turns,
+        "write_total_s": write_elapsed,
+        "write_per_invoke_ms": (write_elapsed / n_turns) * 1000,
+        "read_avg_ms": read_elapsed * 1000,
+        "storage_bytes": storage,
+        "peak_mem_bytes": peak_bytes,
+    }
 
 
 # ---------------------------------------------------------------------------
-# Checkpointer factories
+# Postgres helpers
 # ---------------------------------------------------------------------------
 
 
 @contextlib.contextmanager
-def _pg_saver(thread_id: str = "bench"):
-    """Context manager that yields a fresh PostgresSaver and cleans up after."""
+def _pg_saver(thread_id: str):
     with PostgresSaver.from_conn_string(_POSTGRES_URI) as saver:
         saver.setup()
         with saver._cursor() as cur:
@@ -241,7 +217,6 @@ def _pg_saver(thread_id: str = "bench"):
 
 
 def _checkpointers() -> list[tuple[str, Any]]:
-    """Return (label, saver_or_None) pairs for available checkpointers."""
     result: list[tuple[str, Any]] = [("InMemory", None)]
     if _POSTGRES_AVAILABLE:
         try:
@@ -255,224 +230,92 @@ def _checkpointers() -> list[tuple[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Part 1: baseline DeltaChannel(inf) vs add_messages
+# Scenarios
 # ---------------------------------------------------------------------------
 
-BASELINE_TURN_COUNTS = [10, 25, 50, 100, 500]
-DELTA_ONLY_TURN_COUNTS = [1000]
+SCENARIOS: list[tuple[str, list[int]]] = [
+    ("K=1, freq=50", [50]),
+    ("K=3, freq=50 uniform", [50, 50, 50]),
+    ("K=3, freq=mixed", [50, 200, 1000]),
+    ("K=8, freq=50 uniform", [50] * 8),
+    ("K=8, freq=mixed", [25, 50, 100, 200, 500, 1000, 1000, 1000]),
+]
+
+TURN_COUNTS = [100, 500]
 
 
-def _run_baseline_for_checkpointer(cp_label: str, cp_hint: Any) -> None:
-    W = 72
+def _fmt_bytes(n: int) -> str:
+    if n < 0:
+        return "n/a"
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f} MB"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f} KB"
+    return f"{n} B"
 
-    def _make_saver():
-        if cp_hint is None:
-            return contextlib.nullcontext(None)
-        return _pg_saver()
 
-    rows: list[tuple[int, Any, Any, Any, Any, Any, Any]] = []
-    for turns in BASELINE_TURN_COUNTS:
-        with _make_saver() as saver:
-            b_wt, b_rt, b_bytes = _run_turns(turns, BinaryState, saver)
-        with _make_saver() as saver:
-            d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
-        rows.append((turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt))
-    for turns in DELTA_ONLY_TURN_COUNTS:
-        with _make_saver() as saver:
-            d_wt, d_rt, d_bytes = _run_turns(turns, DeltaState, saver)
-        rows.append((turns, None, d_bytes, None, d_rt, None, d_wt))
-
-    def _bytes_or_na(v: Any) -> str:
-        if v is None or v < 0:
-            return "n/a"
-        return _fmt_bytes(v)
-
-    def _ms_or_na(v: Any) -> str:
-        return "n/a" if v is None else f"{v * 1000:.1f}ms"
-
-    print(f"\n  [{cp_label}] Storage (blob bytes)")
-    print(
-        f"  {'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta':>12}  {'savings':>8}"
+def _print_scenario_table(cp_label: str, rows: list[dict]) -> None:
+    print(f"\n  [{cp_label}]")
+    header = (
+        f"  {'scenario':<28}{'turns':>8}{'write_ms':>11}"
+        f"{'read_ms':>10}{'storage':>12}{'peak_mem':>12}"
     )
-    print("  " + "-" * (W - 2))
-    for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
-        if b_bytes is None or b_bytes < 0 or d_bytes is None or d_bytes < 0:
-            ratio_str = "n/a"
-        else:
-            ratio = b_bytes / d_bytes if d_bytes else float("inf")
-            ratio_str = f"{ratio:.0f}x"
+    print(header)
+    print("  " + "-" * (len(header) - 2))
+    for row in rows:
         print(
-            f"  {turns:>6}  {_approx_tokens(turns):>10}  "
-            f"{_bytes_or_na(b_bytes):>12}  {_bytes_or_na(d_bytes):>12}  {ratio_str:>8}"
-        )
-
-    print(f"\n  [{cp_label}] Read latency (avg of 5 get_state calls)")
-    print(f"  {'turns':>6}  {'ctx':>10}  {'add_msgs':>12}  {'delta':>12}")
-    print("  " + "-" * (W - 2))
-    for turns, b_bytes, d_bytes, b_rt, d_rt, b_wt, d_wt in rows:
-        print(
-            f"  {turns:>6}  {_approx_tokens(turns):>10}  "
-            f"{_ms_or_na(b_rt):>12}  {_ms_or_na(d_rt):>12}"
+            f"  {row['scenario']:<28}"
+            f"{row['turns']:>8}"
+            f"{row['write_per_invoke_ms']:>10.1f}"
+            f"{row['read_avg_ms']:>10.2f}"
+            f"{_fmt_bytes(row['storage_bytes']):>12}"
+            f"{_fmt_bytes(row['peak_mem_bytes']):>12}"
         )
 
 
-def run_baseline_benchmark() -> None:
-    print()
-    print("Part 1 — DeltaChannel (default freq) vs add_messages: storage & latency")
-    print("=" * 72)
+def run_benchmark() -> list[dict]:
+    """Run the full sweep and return all measurement rows."""
+    all_rows: list[dict] = []
     for cp_label, cp_hint in _checkpointers():
-        _run_baseline_for_checkpointer(cp_label, cp_hint)
-    print()
+        rows: list[dict] = []
+        for scenario_label, freqs in SCENARIOS:
+            for turns in TURN_COUNTS:
+                thread_id = f"bench-{scenario_label.replace(' ', '_')}-{turns}".lower()
+                if cp_hint is None:
+                    saver_ctx: Any = contextlib.nullcontext(None)
+                else:
+                    saver_ctx = _pg_saver(thread_id)
+                with saver_ctx as saver:
+                    measured = _run_scenario(freqs, turns, saver, thread_id)
+                measured["scenario"] = scenario_label
+                measured["saver"] = cp_label
+                rows.append(measured)
+                all_rows.append(measured)
+        _print_scenario_table(cp_label, rows)
+    return all_rows
 
 
 # ---------------------------------------------------------------------------
-# Part 2: snapshot_frequency sweep
-# ---------------------------------------------------------------------------
-
-# Frequencies to test. `1` = snapshot every update (like add_messages / BinOp).
-# Higher values = fewer snapshots, deeper read replay. Values up to 50 keep
-# walk depth bounded; the default in this branch is `1000`, so freq=50 is
-# already conservative for typical workloads.
-SNAPSHOT_FREQUENCIES: list[int] = [1, 5, 10, 50]
-
-# Turn counts for the sweep — high enough to show storage divergence.
-SWEEP_TURN_COUNTS = [50, 100, 500]
-
-
-def _freq_label(freq: int) -> str:
-    return str(int(freq))
-
-
-def _run_sweep_for_checkpointer(cp_label: str, cp_hint: Any) -> None:
-    def _make_saver():
-        if cp_hint is None:
-            return contextlib.nullcontext(None)
-        return _pg_saver()
-
-    # Collect results: {turns: {freq_label: (write_s, read_s, bytes)}}
-    results: dict[int, dict[str, tuple[float, float, int]]] = {}
-    for turns in SWEEP_TURN_COUNTS:
-        results[turns] = {}
-        for freq in SNAPSHOT_FREQUENCIES:
-            state_cls = _make_delta_state(freq)
-            with _make_saver() as saver:
-                wt, rt, bb = _run_turns(turns, state_cls, saver)
-            results[turns][_freq_label(freq)] = (wt, rt, bb)
-
-    freq_labels = [_freq_label(f) for f in SNAPSHOT_FREQUENCIES]
-    col_w = 12
-
-    header = f"  {'turns':>6}  {'ctx':>10}" + "".join(
-        f"  {f'freq={freq_label}':>{col_w}}" for freq_label in freq_labels
-    )
-
-    print(f"\n  [{cp_label}] Storage (blob bytes) — lower is better")
-    print(header)
-    print("  " + "-" * (len(header) - 2))
-    for turns in SWEEP_TURN_COUNTS:
-        row = f"  {turns:>6}  {_approx_tokens(turns):>10}"
-        for label in freq_labels:
-            _, _, bb = results[turns][label]
-            row += f"  {_fmt_bytes(bb) if bb >= 0 else 'n/a':>{col_w}}"
-        print(row)
-
-    print(f"\n  [{cp_label}] Read latency (avg of 5 get_state) — lower is better")
-    print(header)
-    print("  " + "-" * (len(header) - 2))
-    for turns in SWEEP_TURN_COUNTS:
-        row = f"  {turns:>6}  {_approx_tokens(turns):>10}"
-        for label in freq_labels:
-            _, rt, _ = results[turns][label]
-            row += f"  {f'{rt * 1000:.1f}ms':>{col_w}}"
-        print(row)
-
-    print(
-        f"\n  [{cp_label}] Per-invoke write latency (total / turns) — lower is better"
-    )
-    print(header)
-    print("  " + "-" * (len(header) - 2))
-    for turns in SWEEP_TURN_COUNTS:
-        row = f"  {turns:>6}  {_approx_tokens(turns):>10}"
-        for label in freq_labels:
-            wt, _, _ = results[turns][label]
-            row += f"  {f'{(wt / turns) * 1000:.1f}ms':>{col_w}}"
-        print(row)
-
-
-def run_snapshot_freq_benchmark() -> None:
-    print()
-    print("Part 2 — DeltaChannel snapshot_frequency sweep")
-    print("Lower freq → fewer snapshots → less storage but deeper read replay")
-    print("=" * 80)
-    for cp_label, cp_hint in _checkpointers():
-        _run_sweep_for_checkpointer(cp_label, cp_hint)
-    print()
-    print("Legend:")
-    print(
-        "  freq=1    snapshot every write (full blob always — same as add_messages / BinOp)"
-    )
-    print("  freq=N    snapshot every N writes; read walks at most N ancestor writes")
-    print()
-
-
-# ---------------------------------------------------------------------------
-# Pytest entry points
+# Pytest entry point
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.skip(
     reason="slow benchmark — run manually with: python tests/test_delta_channel_benchmark.py"
 )
-def test_delta_channel_baseline_benchmark(capsys: Any) -> None:
-    """DeltaChannel(inf) uses less storage than add_messages at scale."""
+def test_delta_channel_benchmark(capsys: Any) -> None:
+    """Manual benchmark — see module docstring."""
     with capsys.disabled():
-        run_baseline_benchmark()
-
-    for turns in [25, 50]:
-        _, _, b_bytes = _run_turns(turns, BinaryState)
-        _, _, d_bytes = _run_turns(turns, DeltaState)
-        assert d_bytes < b_bytes, (
-            f"DeltaChannel should use less storage at {turns} turns, "
-            f"got delta={d_bytes} binary={b_bytes}"
-        )
-
-
-@pytest.mark.skip(
-    reason="slow benchmark — run manually with: python tests/test_delta_channel_benchmark.py"
-)
-def test_snapshot_freq_benchmark(capsys: Any) -> None:
-    """snapshot_frequency trades storage for bounded read depth."""
-    with capsys.disabled():
-        run_snapshot_freq_benchmark()
-
-    # Correctness: results at all frequencies should agree on final state.
-    n_turns = 20
-    states: dict[str, list] = {}
-    for freq in SNAPSHOT_FREQUENCIES:
-        state_cls = _make_delta_state(freq)
-        graph = _make_graph(state_cls)
-        config = {"configurable": {"thread_id": "correctness"}}
-        for i in range(n_turns):
-            graph.invoke(
-                {"messages": [HumanMessage(content=_human_content(i), id=f"h{i}")]},
-                config,
-            )
-        state = graph.get_state(config)
-        states[_freq_label(freq)] = [m.id for m in state.values["messages"]]
-
-    ref_label = _freq_label(SNAPSHOT_FREQUENCIES[-1])
-    ref = states[ref_label]
-    for label, msg_ids in states.items():
-        assert msg_ids == ref, (
-            f"freq={label} produced different message IDs than freq={ref_label}"
-        )
+        run_benchmark()
 
 
 # ---------------------------------------------------------------------------
 # Script entry point
 # ---------------------------------------------------------------------------
 
+
 if __name__ == "__main__":
-    run_baseline_benchmark()
-    run_snapshot_freq_benchmark()
+    print("DeltaChannel benchmark — multi-channel reads, mixed frequencies")
+    print("=" * 78)
+    run_benchmark()
     sys.exit(0)
