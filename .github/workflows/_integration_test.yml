@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GO_VERSION: "1.23"
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -51,12 +54,23 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: "false"
           working-directory: libs/cli
+      - name: Set up Go
+        if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
       - name: Install cli globally
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
         run: pip install -e .
+      - name: Build Go CLI binary
+        if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
+        run: make build-go
       - name: Build service ${{ matrix.example.name }}
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
         working-directory: ${{ matrix.example.workdir }}
+        env:
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           langgraph build -t ${{ matrix.example.tag }}
       - name: Test service ${{ matrix.example.name }}
@@ -64,6 +78,8 @@ jobs:
         working-directory: ${{ matrix.example.workdir }}
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           # Prepare environment file from local or parent example directory
           if [ -f .env.example ]; then cp .env.example .env; elif [ -f ../.env.example ]; then cp ../.env.example .env && cp ../.env.example ../.env; fi
@@ -76,18 +92,27 @@ jobs:
       - name: Build JS service
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
         working-directory: libs/cli/js-examples
+        env:
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           langgraph build -t langgraph-test-e
 
       - name: Build JS monorepo service
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
         working-directory: libs/cli/js-monorepo-example
+        env:
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           langgraph build -t langgraph-test-f -c apps/agent/langgraph.json --build-command "yarn run turbo build" --install-command "yarn install"
 
       - name: Build Python monorepo service
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
         working-directory: libs/cli/python-monorepo-example
+        env:
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           langgraph build -t langgraph-test-g -c apps/agent/langgraph.json
       - name: Test Python monorepo service
@@ -95,6 +120,8 @@ jobs:
         working-directory: libs/cli/python-monorepo-example
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           cp apps/agent/.env.example apps/agent/.env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> apps/agent/.env
@@ -103,6 +130,9 @@ jobs:
       - name: Build prerelease reqs service
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
         working-directory: libs/cli/examples/graph_prerelease_reqs
+        env:
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           langgraph build -t langgraph-test-h
       - name: Test prerelease reqs service
@@ -110,6 +140,8 @@ jobs:
         working-directory: libs/cli/examples/graph_prerelease_reqs
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           cp ../.env.example .env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
@@ -134,12 +166,18 @@ jobs:
       - name: Build and test prerelease reqs fail service
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
         working-directory: libs/cli/examples/graph_prerelease_reqs_fail
+        env:
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           langgraph build -t langgraph-test-i || [ $? -eq 1 ]
 
       - name: Build uv simple service
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
         working-directory: libs/cli/uv-examples/simple
+        env:
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           langgraph build -t langgraph-test-uv-simple
       - name: Test uv simple service
@@ -147,6 +185,8 @@ jobs:
         working-directory: libs/cli/uv-examples/simple
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           cp .env.example .env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
@@ -155,6 +195,9 @@ jobs:
       - name: Build uv monorepo service
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
         working-directory: libs/cli/uv-examples/monorepo/apps/agent
+        env:
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           langgraph build -t langgraph-test-uv-monorepo
       - name: Test uv monorepo service
@@ -162,6 +205,8 @@ jobs:
         working-directory: libs/cli/uv-examples/monorepo/apps/agent
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGGRAPH_USE_GO_CLI: "1"
+          LANGGRAPH_GO_CLI_PATH: ${{ github.workspace }}/libs/cli/langgraph_cli/bin/langgraph
         run: |
           cp .env.example .env
           echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
