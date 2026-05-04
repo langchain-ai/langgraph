@@ -70,7 +70,7 @@ def _should_snapshot_delta(
 
 def create_checkpoint(
     mutated_checkpoint: Checkpoint,
-    live_channels: Mapping[str, BaseChannel] | None,
+    channels: Mapping[str, BaseChannel] | None,
     step: int,
     *,
     id: str | None = None,
@@ -87,7 +87,7 @@ def create_checkpoint(
             already reflect this superstep's writes).  The new checkpoint
             inherits these mutated values and builds new ``channel_values``
             from the live channels.
-        live_channels: In-memory channel objects whose state was updated by
+        channels: In-memory channel objects whose state was updated by
             ``apply_writes``.  Needed because ``mutated_checkpoint`` only
             carries updated version metadata — its ``channel_values`` still
             holds stale blobs from the previous checkpoint load.  This
@@ -127,18 +127,18 @@ def create_checkpoint(
     ts = datetime.now(timezone.utc).isoformat()
     counts = updates_since_snapshot or {}
     snapshotted: set[str] = set()
-    if live_channels is None:
+    if channels is None:
         values = mutated_checkpoint["channel_values"]
         channel_versions = mutated_checkpoint["channel_versions"]
     else:
         values = {}
         channel_versions = dict(mutated_checkpoint["channel_versions"])
-        for k in live_channels:
+        for k in channels:
             # Channel has never been written to (no version entry from
             # apply_writes), so there is no meaningful state to checkpoint.
             if k not in channel_versions:
                 continue
-            ch = live_channels[k]
+            ch = channels[k]
             if (
                 isinstance(ch, DeltaChannel)
                 and ch.is_available()

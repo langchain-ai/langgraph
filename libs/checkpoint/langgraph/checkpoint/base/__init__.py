@@ -727,7 +727,7 @@ def empty_checkpoint() -> Checkpoint:
 
 def create_checkpoint(
     prev_checkpoint: Checkpoint,
-    live_channels: Mapping[str, ChannelProtocol] | None,
+    channels: Mapping[str, ChannelProtocol] | None,
     step: int,
     *,
     id: str | None = None,
@@ -743,11 +743,11 @@ def create_checkpoint(
     from datetime import datetime, timezone
 
     ts = datetime.now(timezone.utc).isoformat()
-    if live_channels is None:
+    if channels is None:
         values = prev_checkpoint["channel_values"]
     else:
         values = {}
-        for k, v in live_channels.items():
+        for k, v in channels.items():
             if k not in prev_checkpoint["channel_versions"]:
                 continue
             try:
