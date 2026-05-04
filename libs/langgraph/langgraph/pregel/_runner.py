@@ -110,7 +110,15 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
             with self.lock:
                 self.event.clear()
                 self.counter += 1
+            # Add callback outside lock to avoid deadlock
             key.add_done_callback(partial(self.on_done, value))
+            # If future completed before callback was added, manually trigger callback
+            # This handles the race condition where future completes between
+            # counter increment and callback registration
+            if key.done():
+                # Callback may have already fired, but on_done is idempotent
+                # due to the done set check
+                self.on_done(value, key)
 
     def on_done(
         self,
@@ -123,6 +131,9 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
                 cb(task, _exception(fut))
         finally:
             with self.lock:
+                # Only process each future once (handles double-call from __setitem__)
+                if fut in self.done:
+                    return
                 self.done.add(fut)
                 self.counter -= 1
                 # Wake waiter when all tracked futures are done, or when runner-level
