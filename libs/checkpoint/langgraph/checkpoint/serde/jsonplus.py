@@ -493,7 +493,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, obj.value),
+                (obj.__class__.__module__, obj.__class__.__qualname__, obj.value),
             ),
         )
     elif isinstance(obj, SendProtocol):
@@ -668,9 +668,19 @@ def _create_msgpack_ext_hook(
                     # it would be validated upon construction.
                     return tup[2]
                 # module, name, arg
-                return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+                # Handle nested classes (e.g., "DatasetArtifact.PhaseEnum")
+                from functools import reduce
+
+                name_parts = tup[1].split(".")
+                cls = reduce(getattr, name_parts, importlib.import_module(tup[0]))
+                return cls(tup[2])
             except Exception:
-                return None
+                # Fallback: return the raw value for enums/constructors
+                # This allows Pydantic to validate and reconstruct from the value
+                try:
+                    return tup[2]
+                except (NameError, IndexError):
+                    return None
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
             try:
                 tup = ormsgpack.unpackb(
