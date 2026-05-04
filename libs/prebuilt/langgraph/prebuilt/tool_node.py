@@ -119,6 +119,7 @@ TOOL_INVOCATION_ERROR_TEMPLATE = (
     " {error}\n"
     " Please fix the error and try again."
 )
+TOOL_ERROR_METADATA_TEMPLATE = "\n\nModel output metadata: {metadata}"
 
 
 class _ToolCallRequestOverrides(TypedDict, total=False):
@@ -507,6 +508,27 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
     return (Exception,)
 
 
+def _get_metadata_suffix(ai_message: AIMessage) -> str | None:
+    """Return a suffix with model output metadata to append to error messages.
+
+    When a tool call fails, the model only sees the exception text — it has no
+    access to its own output metadata (stop reason, token counts, etc.). This
+    function extracts that metadata so it can be included in the error message,
+    giving the model the context it needs to self-correct.
+
+    Args:
+        ai_message: The AIMessage whose response metadata to inspect.
+
+    Returns:
+        A formatted metadata string to append to error messages, or None if
+        no response metadata is available.
+    """
+    metadata = ai_message.response_metadata
+    if not metadata:
+        return None
+    return TOOL_ERROR_METADATA_TEMPLATE.format(metadata=metadata)
+
+
 def _filter_validation_errors(
     validation_error: ValidationError,
     injected_args: _InjectedArgs | None,
@@ -796,7 +818,7 @@ class ToolNode(RunnableCallable):
         config: RunnableConfig,
         runtime: Runtime,
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input)
+        tool_calls, input_type, ai_message = self._parse_input(input)
         config_list = get_config_list(config, len(tool_calls))
 
         # Construct ToolRuntime instances at the top level for each tool call
@@ -823,6 +845,19 @@ class ToolNode(RunnableCallable):
                 executor.map(self._run_one, tool_calls, input_types, tool_runtimes)
             )
 
+        # Surface model output metadata on tool errors so the model can
+        # diagnose root causes (e.g., truncated output, rate limits).
+        if ai_message is not None:
+            metadata_suffix = _get_metadata_suffix(ai_message)
+            if metadata_suffix:
+                for output in outputs:
+                    if (
+                        isinstance(output, ToolMessage)
+                        and output.status == "error"
+                        and isinstance(output.content, str)
+                    ):
+                        output.content += metadata_suffix
+
         return self._combine_tool_outputs(outputs, input_type)
 
     async def _afunc(
@@ -831,7 +866,7 @@ class ToolNode(RunnableCallable):
         config: RunnableConfig,
         runtime: Runtime,
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input)
+        tool_calls, input_type, ai_message = self._parse_input(input)
         config_list = get_config_list(config, len(tool_calls))
 
         # Construct ToolRuntime instances at the top level for each tool call
@@ -856,6 +891,19 @@ class ToolNode(RunnableCallable):
         for call, tool_runtime in zip(tool_calls, tool_runtimes, strict=False):
             coros.append(self._arun_one(call, input_type, tool_runtime))  # type: ignore[arg-type]
         outputs = await asyncio.gather(*coros)
+
+        # Surface model output metadata on tool errors so the model can
+        # diagnose root causes (e.g., truncated output, rate limits).
+        if ai_message is not None:
+            metadata_suffix = _get_metadata_suffix(ai_message)
+            if metadata_suffix:
+                for output in outputs:
+                    if (
+                        isinstance(output, ToolMessage)
+                        and output.status == "error"
+                        and isinstance(output.content, str)
+                    ):
+                        output.content += metadata_suffix
 
         return self._combine_tool_outputs(outputs, input_type)
 
@@ -1224,13 +1272,13 @@ class ToolNode(RunnableCallable):
     def _parse_input(
         self,
         input: list[AnyMessage] | dict[str, Any] | BaseModel,
-    ) -> tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
+    ) -> tuple[list[ToolCall], Literal["list", "dict", "tool_calls"], AIMessage | None]:
         input_type: Literal["list", "dict", "tool_calls"]
         if isinstance(input, list):
             if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
                 input_type = "tool_calls"
                 tool_calls = cast("list[ToolCall]", input)
-                return tool_calls, input_type
+                return tool_calls, input_type, None
             input_type = "list"
             messages = input
         elif (
@@ -1242,7 +1290,7 @@ class ToolNode(RunnableCallable):
             # before we can apply correct typing.
             input_with_ctx = cast("ToolCallWithContext", input)
             input_type = "tool_calls"
-            return [input_with_ctx["tool_call"]], input_type
+            return [input_with_ctx["tool_call"]], input_type, None
         elif isinstance(input, dict) and (
             messages := input.get(self._messages_key, [])
         ):
@@ -1263,7 +1311,7 @@ class ToolNode(RunnableCallable):
             raise ValueError(msg)
 
         tool_calls = list(latest_ai_message.tool_calls)
-        return tool_calls, input_type
+        return tool_calls, input_type, latest_ai_message
 
     def _validate_tool_call(self, call: ToolCall) -> ToolMessage | None:
         requested_tool = call["name"]
