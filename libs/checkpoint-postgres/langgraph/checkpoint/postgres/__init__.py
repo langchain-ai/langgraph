@@ -322,6 +322,12 @@ class PostgresSaver(BasePostgresSaver):
                 blob_values[k] = copy["channel_values"].pop(k)
 
         with self._cursor(pipeline=True) as cur:
+            cur.execute(
+                self.CHECK_CHECKPOINT_DELETED_THREAD_SQL,
+                (thread_id,),
+            )
+            if cur.fetchone():
+                return next_config
             if blob_versions := {
                 k: v for k, v in new_versions.items() if k in blob_values
             }:
@@ -369,6 +375,12 @@ class PostgresSaver(BasePostgresSaver):
             else self.INSERT_CHECKPOINT_WRITES_SQL
         )
         with self._cursor(pipeline=True) as cur:
+            cur.execute(
+                self.CHECK_CHECKPOINT_DELETED_THREAD_SQL,
+                (config["configurable"]["thread_id"],),
+            )
+            if cur.fetchone():
+                return
             cur.executemany(
                 query,
                 self._dump_writes(
@@ -391,6 +403,10 @@ class PostgresSaver(BasePostgresSaver):
             None
         """
         with self._cursor(pipeline=True) as cur:
+            cur.execute(
+                self.INSERT_CHECKPOINT_DELETED_THREAD_SQL,
+                (str(thread_id),),
+            )
             cur.execute(
                 "DELETE FROM checkpoints WHERE thread_id = %s",
                 (str(thread_id),),

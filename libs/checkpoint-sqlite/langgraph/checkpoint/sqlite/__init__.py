@@ -153,6 +153,9 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 value BLOB,
                 PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
             );
+            CREATE TABLE IF NOT EXISTS checkpoint_deleted_threads (
+                thread_id TEXT PRIMARY KEY
+            );
             """
         )
 
@@ -416,6 +419,18 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         ).encode("utf-8", "ignore")
         with self.cursor() as cur:
             cur.execute(
+                "SELECT 1 FROM checkpoint_deleted_threads WHERE thread_id = ?",
+                (str(thread_id),),
+            )
+            if cur.fetchone():
+                return {
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "checkpoint_id": checkpoint["id"],
+                    }
+                }
+            cur.execute(
                 "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     str(config["configurable"]["thread_id"]),
@@ -458,6 +473,12 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
         with self.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM checkpoint_deleted_threads WHERE thread_id = ?",
+                (str(config["configurable"]["thread_id"]),),
+            )
+            if cur.fetchone():
+                return
             cur.executemany(
                 query,
                 [
@@ -484,6 +505,10 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             None
         """
         with self.cursor() as cur:
+            cur.execute(
+                "INSERT OR IGNORE INTO checkpoint_deleted_threads (thread_id) VALUES (?)",
+                (str(thread_id),),
+            )
             cur.execute(
                 "DELETE FROM checkpoints WHERE thread_id = ?",
                 (str(thread_id),),
