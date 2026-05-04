@@ -1052,6 +1052,31 @@ def test_config_to_docker_python_encryption_formatted():
     )
 
 
+def test_config_to_docker_python_auth_formatted():
+    # Test that auth config is properly formatted in Docker output with POSIX paths
+    graphs = {"agent": "./graphs/agent.py:graph"}
+    actual_docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+                "auth": {"path": "./agent.py:auth"},
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    # Verify that LANGGRAPH_AUTH is in the docker output with the correct POSIX path
+    assert "LANGGRAPH_AUTH=" in actual_docker_stdin
+    assert "/deps/outer-unit_tests/unit_tests/agent.py:auth" in actual_docker_stdin
+    # Verify no backslashes in the auth path (Windows path separators)
+    auth_line = [
+        line for line in actual_docker_stdin.splitlines() if "LANGGRAPH_AUTH=" in line
+    ][0]
+    assert "\\" not in auth_line or "\\\\" not in auth_line.split("LANGGRAPH_AUTH=")[1]
+
+
 def test_config_to_docker_nodejs_internal_docker_tag():
     graphs = {"agent": "./graphs/agent.js:graph"}
     actual_docker_stdin, additional_contexts = config_to_docker(
