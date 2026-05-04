@@ -1612,9 +1612,13 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
             if isinstance(cmd, Command):
                 commands.append(cmd)
     rtn: list[tuple[str, Any]] = []
+    parent_commands: list[Command] = []
+    
     for command in commands:
         if command.graph == Command.PARENT:
-            raise ParentCommand(command)
+            # Collect all parent commands to process their updates together
+            parent_commands.append(command)
+            continue
 
         goto_targets = (
             [command.goto] if isinstance(command.goto, (Send, str)) else command.goto
@@ -1627,6 +1631,23 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
                 # END is a special case, it's not actually a node in a practical sense
                 # but rather a special terminal node that we don't need to branch to
                 rtn.append((_CHANNEL_BRANCH_TO.format(go), None))
+    
+    # If we have parent commands, raise with merged updates from all of them
+    if parent_commands:
+        # Merge all updates from parent commands
+        merged_update: dict[str, Any] = {}
+        for cmd in parent_commands:
+            if cmd.update:
+                merged_update.update(cmd.update)
+        
+        # Create a new command with merged updates using pydantic
+        if merged_update:
+            first_cmd = parent_commands[0]
+            merged_cmd = first_cmd.model_copy(update={"update": merged_update})
+            raise ParentCommand(merged_cmd)
+        else:
+            raise ParentCommand(parent_commands[0])
+    
     return rtn
 
 
