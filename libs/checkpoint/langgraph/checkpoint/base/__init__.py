@@ -726,22 +726,29 @@ def empty_checkpoint() -> Checkpoint:
 
 
 def create_checkpoint(
-    checkpoint: Checkpoint,
-    channels: Mapping[str, ChannelProtocol] | None,
+    prev_checkpoint: Checkpoint,
+    live_channels: Mapping[str, ChannelProtocol] | None,
     step: int,
     *,
     id: str | None = None,
 ) -> Checkpoint:
-    """Create a checkpoint for the given channels."""
+    """Simplified checkpoint constructor used only by saver test suites.
+
+    The real runtime version lives in
+    ``langgraph.pregel._checkpoint.create_checkpoint`` and handles
+    DeltaChannel snapshots, version tracking, etc.  This copy exists so
+    that ``libs/checkpoint-*`` tests can build test checkpoints without
+    depending on the ``langgraph`` main package.
+    """
     from datetime import datetime, timezone
 
     ts = datetime.now(timezone.utc).isoformat()
-    if channels is None:
-        values = checkpoint["channel_values"]
+    if live_channels is None:
+        values = prev_checkpoint["channel_values"]
     else:
         values = {}
-        for k, v in channels.items():
-            if k not in checkpoint["channel_versions"]:
+        for k, v in live_channels.items():
+            if k not in prev_checkpoint["channel_versions"]:
                 continue
             try:
                 values[k] = v.checkpoint()
@@ -752,8 +759,8 @@ def create_checkpoint(
         ts=ts,
         id=id or str(uuid6(clock_seq=step)),
         channel_values=values,
-        channel_versions=checkpoint["channel_versions"],
-        versions_seen=checkpoint["versions_seen"],
-        pending_sends=checkpoint.get("pending_sends", []),
+        channel_versions=prev_checkpoint["channel_versions"],
+        versions_seen=prev_checkpoint["versions_seen"],
+        pending_sends=prev_checkpoint.get("pending_sends", []),
         updated_channels=None,
     )

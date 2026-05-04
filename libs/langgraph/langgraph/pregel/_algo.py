@@ -268,7 +268,9 @@ def apply_writes(
             }
         )
 
-    # Find the highest version of all channels
+    # Lightweight mode: when get_next_version is None (e.g. graph drawing,
+    # dry runs without a checkpointer) we still apply channel state updates
+    # but skip all channel_versions tracking and updated_channels collection.
     if get_next_version is None:
         next_version = None
     else:
