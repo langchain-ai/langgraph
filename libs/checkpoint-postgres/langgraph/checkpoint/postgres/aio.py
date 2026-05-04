@@ -13,7 +13,7 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    DeltaWrites,
+    DeltaHistory,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
@@ -402,12 +402,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    async def aget_delta_writes(
+    async def aget_delta_history(
         self, *, config: RunnableConfig, channels: Sequence[str]
-    ) -> Mapping[str, DeltaWrites]:
-        """Fast-path override of `BaseCheckpointSaver.aget_delta_writes`.
+    ) -> Mapping[str, DeltaHistory]:
+        """Fast-path override of `BaseCheckpointSaver.aget_delta_history`.
 
-        See `PostgresSaver.get_delta_writes` for design notes; this is
+        See `PostgresSaver.get_delta_history` for design notes; this is
         the async equivalent with internal stage-1 paging and per-channel
         UNION ALL stage-2.
         """
