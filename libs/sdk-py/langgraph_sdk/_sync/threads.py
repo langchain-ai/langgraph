@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal, overload
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import (
@@ -168,15 +168,52 @@ class SyncThreadsClient:
 
         return self.http.post("/threads", json=payload, headers=headers, params=params)
 
+    @overload
     def update(
         self,
         thread_id: str,
         *,
         metadata: Mapping[str, Any],
         ttl: int | Mapping[str, Any] | None = None,
+        return_minimal: Literal[False] = False,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> Thread:
+    ) -> Thread: ...
+
+    @overload
+    def update(
+        self,
+        thread_id: str,
+        *,
+        metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
+        return_minimal: Literal[True],
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> None: ...
+
+    @overload
+    def update(
+        self,
+        thread_id: str,
+        *,
+        metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
+        return_minimal: bool,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> Thread | None: ...
+
+    def update(
+        self,
+        thread_id: str,
+        *,
+        metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
+        return_minimal: bool = False,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> Thread | None:
         """Update a thread.
 
         Args:
@@ -185,11 +222,12 @@ class SyncThreadsClient:
             ttl: Optional time-to-live in minutes for the thread. You can pass an
                 integer (minutes) or a mapping with keys `ttl` and optional
                 `strategy` (defaults to "delete").
+            return_minimal: If `True`, request a 204 response with no body.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
         Returns:
-            The created `Thread`.
+            The updated `Thread`, or `None` when `return_minimal=True`.
 
         ???+ example "Example Usage"
 
@@ -208,10 +246,13 @@ class SyncThreadsClient:
                 payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
             else:
                 payload["ttl"] = ttl
+        request_headers = dict(headers or {})
+        if return_minimal:
+            request_headers["Prefer"] = "return=minimal"
         return self.http.patch(
             f"/threads/{thread_id}",
             json=payload,
-            headers=headers,
+            headers=request_headers or None,
             params=params,
         )
 
