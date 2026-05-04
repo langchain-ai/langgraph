@@ -187,6 +187,6 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         version) and write `_DeltaSnapshot(ch.get())` directly into
         `channel_values`. For non-snapshot steps the channel does not appear
         in `channel_values`; reconstruction walks ancestor writes via the
-        saver's `get_delta_history`.
+        saver's `get_delta_channel_history`.
         """
         return MISSING

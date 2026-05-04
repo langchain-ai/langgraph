@@ -13,7 +13,7 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    DeltaHistory,
+    DeltaChannelHistory,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
@@ -441,10 +441,10 @@ class PostgresSaver(BasePostgresSaver):
                 with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
-    def get_delta_history(
+    def get_delta_channel_history(
         self, *, config: RunnableConfig, channels: Sequence[str]
-    ) -> Mapping[str, DeltaHistory]:
-        """Fast-path override of `BaseCheckpointSaver.get_delta_history`.
+    ) -> Mapping[str, DeltaChannelHistory]:
+        """Fast-path override of `BaseCheckpointSaver.get_delta_channel_history`.
 
         Two-stage query, both stages cover ALL requested channels:
 

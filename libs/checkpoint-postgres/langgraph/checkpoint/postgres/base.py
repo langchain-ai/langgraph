@@ -11,14 +11,14 @@ from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
-    DeltaHistory,
+    DeltaChannelHistory,
     PendingWrite,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
 
-# Page size for stage-1 paged scan in `get_delta_history`. Internal
+# Page size for stage-1 paged scan in `get_delta_channel_history`. Internal
 # constant — exposing this as a kwarg is left as a follow-up.
 _DELTA_PAGE_SIZE = 1024
 
@@ -416,12 +416,12 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         chain_by_ch: Mapping[str, list[str]],
         seed_ver_by_ch: Mapping[str, str | None],
         stage2_rows: Sequence[_DeltaStage2Row],
-    ) -> dict[str, DeltaHistory]:
+    ) -> dict[str, DeltaChannelHistory]:
         """Demux stage 2 rows per channel; produce per-channel histories.
 
         stage2_rows carry `channel` on every row. We build per-channel
         `writes_by_cid` and per-channel `seed_blob` dicts, then assemble
-        a `DeltaHistory` per requested channel. The `seed` key is omitted
+        a `DeltaChannelHistory` per requested channel. The `seed` key is omitted
         when the walk reached root with no snapshot found, or when the
         seed blob is sentinel "empty" — in both cases the consumer treats
         absence as "start empty".
@@ -455,7 +455,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             for ws in cid_map.values():
                 ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
 
-        result: dict[str, DeltaHistory] = {}
+        result: dict[str, DeltaChannelHistory] = {}
         for ch in channels:
             chain_cids = chain_by_ch.get(ch, [])
             seed_version = seed_ver_by_ch.get(ch)
@@ -468,7 +468,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                     collected.append((task_id, ch, val))
             collected.reverse()
 
-            entry: DeltaHistory = {"writes": collected}
+            entry: DeltaChannelHistory = {"writes": collected}
             if seed_version is not None:
                 blob = seed_blob_by_ver.get((ch, seed_version))
                 if blob is not None and blob[0] != "empty":

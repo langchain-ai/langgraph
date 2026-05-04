@@ -132,8 +132,8 @@ class CheckpointTuple(NamedTuple):
     pending_writes: list[PendingWrite] | None = None
 
 
-class DeltaHistory(TypedDict):
-    """Per-channel result entry from `BaseCheckpointSaver.get_delta_history`.
+class DeltaChannelHistory(TypedDict):
+    """Per-channel result entry from `BaseCheckpointSaver.get_delta_channel_history`.
 
     Storage-level view of what one channel contributed across the ancestor
     chain of a target checkpoint:
@@ -492,9 +492,9 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
-    def get_delta_history(
+    def get_delta_channel_history(
         self, *, config: RunnableConfig, channels: Sequence[str]
-    ) -> Mapping[str, DeltaHistory]:
+    ) -> Mapping[str, DeltaChannelHistory]:
         """Walk the parent chain returning per-channel writes + seed.
 
         For each requested channel, walks ancestors of the checkpoint
@@ -520,7 +520,7 @@ class BaseCheckpointSaver(Generic[V]):
             channels: Channel names to walk for. Empty → empty mapping.
 
         Returns:
-            Per-channel `DeltaHistory` for every name in `channels`.
+            Per-channel `DeltaChannelHistory` for every name in `channels`.
         """
         if not channels:
             return {}
@@ -545,18 +545,18 @@ class BaseCheckpointSaver(Generic[V]):
                     seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]
                     remaining.discard(ch)
             cursor_config = tup.parent_config
-        result: dict[str, DeltaHistory] = {}
+        result: dict[str, DeltaChannelHistory] = {}
         for ch in channels:
-            entry: DeltaHistory = {"writes": list(reversed(collected_by_ch[ch]))}
+            entry: DeltaChannelHistory = {"writes": list(reversed(collected_by_ch[ch]))}
             if ch in seed_by_ch:
                 entry["seed"] = seed_by_ch[ch]
             result[ch] = entry
         return result
 
-    async def aget_delta_history(
+    async def aget_delta_channel_history(
         self, *, config: RunnableConfig, channels: Sequence[str]
-    ) -> Mapping[str, DeltaHistory]:
-        """Async version of `get_delta_history`."""
+    ) -> Mapping[str, DeltaChannelHistory]:
+        """Async version of `get_delta_channel_history`."""
         if not channels:
             return {}
         collected_by_ch: dict[str, list[PendingWrite]] = {c: [] for c in channels}
@@ -580,9 +580,9 @@ class BaseCheckpointSaver(Generic[V]):
                     seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]
                     remaining.discard(ch)
             cursor_config = tup.parent_config
-        result: dict[str, DeltaHistory] = {}
+        result: dict[str, DeltaChannelHistory] = {}
         for ch in channels:
-            entry: DeltaHistory = {"writes": list(reversed(collected_by_ch[ch]))}
+            entry: DeltaChannelHistory = {"writes": list(reversed(collected_by_ch[ch]))}
             if ch in seed_by_ch:
                 entry["seed"] = seed_by_ch[ch]
             result[ch] = entry

@@ -6,10 +6,10 @@ checkpointer — pre-migration state visible at each *settled* ancestor
 checkpoint is preserved, and post-migration writes fold on top through
 the reducer.
 
-Mechanism under test: the saver's public `get_delta_history(config,
+Mechanism under test: the saver's public `get_delta_channel_history(config,
 channels)` walks the parent chain; when it encounters an ancestor whose
 `channel_values[channel]` is a real value, it populates that channel's
-`seed` in the returned `DeltaHistory`. If the walk reaches the root
+`seed` in the returned `DeltaChannelHistory`. If the walk reaches the root
 without finding a stored value, the `seed` key is omitted (TypedDict
 absence indicates "start empty"). `DeltaChannel.from_checkpoint(seed)`
 uses it as the base value, and `replay_writes(writes)` folds on-path
@@ -32,7 +32,7 @@ Scenarios covered:
    pre-migration seed.
 4. **Base-saver fallback path**: a third-party-style subclass that
    removes the optimized `InMemorySaver` override and falls back to
-   `BaseCheckpointSaver.get_delta_history` must produce the same
+   `BaseCheckpointSaver.get_delta_channel_history` must produce the same
    result as the optimized path.
 5. **Channel-type isolation across threads**: two threads on the same
    checkpointer under the delta-channel graph — one freshly-started,
@@ -269,7 +269,7 @@ def test_continuing_migrated_thread_folds_deltas_on_seed() -> None:
 
 class _ThirdPartyStyleSaver(InMemorySaver):
     """Simulates a third-party saver that inherits the reference
-    `get_delta_history` implementation from `BaseCheckpointSaver`
+    `get_delta_channel_history` implementation from `BaseCheckpointSaver`
     rather than overriding it.
 
     We rebind the two methods to the base-class versions (via MRO) so
@@ -278,11 +278,11 @@ class _ThirdPartyStyleSaver(InMemorySaver):
     """
 
     # MRO: [_ThirdPartyStyleSaver, InMemorySaver, BaseCheckpointSaver, ...]
-    get_delta_history = (  # type: ignore[assignment]
-        InMemorySaver.__mro__[1].get_delta_history  # type: ignore[attr-defined]
+    get_delta_channel_history = (  # type: ignore[assignment]
+        InMemorySaver.__mro__[1].get_delta_channel_history  # type: ignore[attr-defined]
     )
-    aget_delta_history = (  # type: ignore[assignment]
-        InMemorySaver.__mro__[1].aget_delta_history  # type: ignore[attr-defined]
+    aget_delta_channel_history = (  # type: ignore[assignment]
+        InMemorySaver.__mro__[1].aget_delta_channel_history  # type: ignore[attr-defined]
     )
 
 
@@ -329,7 +329,7 @@ def test_delta_and_migrated_threads_do_not_cross_contaminate() -> None:
     """Two threads sharing a checkpointer — one migrated from
     pre-migration state, one freshly-started under DeltaChannel — must
     maintain independent state. The parent-chain walk in
-    `get_delta_history` must be scoped to the target thread.
+    `get_delta_channel_history` must be scoped to the target thread.
     """
 
     checkpointer = InMemorySaver()

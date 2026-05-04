@@ -162,7 +162,7 @@ def channels_from_checkpoint(
     For most channels, `spec.from_checkpoint(checkpoint["channel_values"][k])`
     is sufficient. `DeltaChannel` is the exception: when the channel is
     absent from `channel_values`, an ancestor walk via
-    `saver.get_delta_history` is required to find the nearest seed
+    `saver.get_delta_channel_history` is required to find the nearest seed
     (`_DeltaSnapshot` blob or pre-migration plain value) and accumulate
     the writes between it and the target. All delta channels needing
     replay are batched into a single saver call.
@@ -182,7 +182,9 @@ def channels_from_checkpoint(
     ]
     histories: Mapping[str, Any] = {}
     if delta_channels and saver is not None and config is not None:
-        histories = saver.get_delta_history(config=config, channels=delta_channels)
+        histories = saver.get_delta_channel_history(
+            config=config, channels=delta_channels
+        )
 
     channels: dict[str, BaseChannel] = {}
     for k, spec in channel_specs.items():
@@ -222,7 +224,7 @@ async def achannels_from_checkpoint(
     ]
     histories: Mapping[str, Any] = {}
     if delta_channels and saver is not None and config is not None:
-        histories = await saver.aget_delta_history(
+        histories = await saver.aget_delta_channel_history(
             config=config, channels=delta_channels
         )
 
