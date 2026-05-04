@@ -48,7 +48,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.config import get_stream_writer
-from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
+from langgraph.errors import EmptyInputError, GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
@@ -8968,6 +8968,43 @@ def test_null_resume_disallowed_with_multiple_interrupts(
         "text_1": "resume for prompt: original text 1",
         "text_2": "resume for prompt: original text 2",
     }
+
+
+def test_command_resume_none_does_not_crash(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that Command(resume=None) raises EmptyInputError instead of UnboundLocalError."""
+
+    class State(TypedDict):
+        result: str
+
+    def checkpoint_node(state: State):
+        interrupt(None)
+        return {}
+
+    def work_node(state: State):
+        return {"result": "done"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("checkpoint", checkpoint_node)
+        .add_node("work", work_node)
+        .add_edge(START, "checkpoint")
+        .add_edge("checkpoint", "work")
+        .add_edge("work", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config: RunnableConfig = {
+        "configurable": {"thread_id": str(uuid.uuid4())}
+    }
+
+    # Run until interrupt
+    graph.invoke({"result": ""}, config)
+
+    # Resume with None should raise EmptyInputError, not UnboundLocalError
+    with pytest.raises(EmptyInputError):
+        graph.invoke(Command(resume=None), config)
 
 
 def test_interrupt_stream_mode_values(sync_checkpointer: BaseCheckpointSaver):
