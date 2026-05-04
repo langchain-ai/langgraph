@@ -120,6 +120,35 @@ def test_fetch_resumes_with_data():
     assert result["result"] == "account_data"
 
 
+def test_fetch_checkpoint_persists_across_graph_recompile():
+    saver = InMemorySaver()
+
+    def node(state: State):
+        data = fetch({"resource": "transactions", "user_id": "123"})
+        return {"result": data}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    builder.add_edge("node", END)
+
+    graph = builder.compile(checkpointer=saver)
+    config = {"configurable": {"thread_id": "t6"}}
+
+    graph.invoke({"result": ""}, config)
+    snapshot = graph.get_state(config)
+
+    assert snapshot.tasks[0].fetches[0].value == {
+        "resource": "transactions",
+        "user_id": "123",
+    }
+
+    # Recompile with the same saver and resume using the persisted checkpoint.
+    graph_reloaded = builder.compile(checkpointer=saver)
+    result = graph_reloaded.invoke(Command(resume="account_data"), config)
+    assert result["result"] == "account_data"
+
+
 def test_fetch_kind_does_not_appear_in_human_interrupts():
     """Serving layer can filter: task.interrupts where kind == human."""
     graph = _graph_with_fetch()
