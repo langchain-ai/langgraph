@@ -79,6 +79,7 @@ __all__ = (
     "Command",
     "Durability",
     "interrupt",
+    "fetch",
     "Overwrite",
     "GraphOutput",
     "ensure_valid_checkpointer",
@@ -538,6 +539,11 @@ class Interrupt:
         * `when`
         * `resumable`
         * `interrupt_id`, deprecated in favor of `id`
+
+    !!! version-changed "Changed in version v0.6.x"
+        * `kind` field added to distinguish human-in-the-loop interrupts from
+          automated data-fetch requests. Defaults to `"human"` for backwards
+          compatibility.
     """
 
     value: Any
@@ -546,13 +552,25 @@ class Interrupt:
     id: str
     """The ID of the interrupt. Can be used to resume the interrupt directly."""
 
+    kind: Literal["human", "fetch"]
+    """Semantic kind of this interrupt.
+
+    - `"human"`: execution is paused waiting for a human decision. Resume is
+      indeterminate — may never happen.
+    - `"fetch"`: execution is paused waiting for an automated data dependency.
+      The serving layer is expected to fulfill the request and always resume,
+      within a bounded SLA.
+    """
+
     def __init__(
         self,
         value: Any,
         id: str = _DEFAULT_INTERRUPT_ID,
+        kind: Literal["human", "fetch"] = "human",
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         self.value = value
+        self.kind = kind
 
         if (
             (ns := deprecated_kwargs.get("ns", MISSING)) is not MISSING
@@ -564,8 +582,13 @@ class Interrupt:
             self.id = id
 
     @classmethod
-    def from_ns(cls, value: Any, ns: str) -> Interrupt:
-        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()))
+    def from_ns(
+        cls,
+        value: Any,
+        ns: str,
+        kind: Literal["human", "fetch"] = "human",
+    ) -> Interrupt:
+        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()), kind=kind)
 
     @property
     @deprecated("`interrupt_id` is deprecated. Use `id` instead.", category=None)
@@ -594,6 +617,15 @@ class PregelTask(NamedTuple):
     interrupts: tuple[Interrupt, ...] = ()
     state: None | RunnableConfig | StateSnapshot = None
     result: Any | None = None
+
+    @property
+    def fetches(self) -> tuple[Interrupt, ...]:
+        """Interrupts with `kind="fetch"` — automated data dependencies.
+
+        Serving layer code can use this to distinguish data-fetch requests
+        from human-in-the-loop interrupts without inspecting interrupt payloads.
+        """
+        return tuple(i for i in self.interrupts if i.kind == "fetch")
 
 
 if sys.version_info > (3, 11):
@@ -798,7 +830,7 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
-def interrupt(value: Any) -> Any:
+def interrupt(value: Any, *, _kind: Literal["human", "fetch"] = "human") -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
     The `interrupt` function enables human-in-the-loop workflows by pausing graph
@@ -919,9 +951,47 @@ def interrupt(value: Any) -> Any:
             Interrupt.from_ns(
                 value=value,
                 ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+                kind=_kind,
             ),
         )
     )
+
+
+def fetch(value: Any) -> Any:
+    """Declare a data dependency from within a node or tool.
+
+    Semantically distinct from `interrupt()`: a `fetch()` call signals that
+    the graph needs an automated data response — not a human decision. The
+    serving layer is expected to always fulfill the request and resume execution
+    within a bounded SLA.
+
+    Thin wrapper over `interrupt()` that sets `kind="fetch"` on the resulting
+    `Interrupt`, enabling the serving layer to route fetch requests separately
+    from human interrupts without inspecting payloads:
+
+    ```python
+    snapshot = graph.get_state(config)
+    for task in snapshot.tasks:
+        for req in task.fetches:          # kind="fetch" — always automated
+            result = data_layer.get(req.value)
+            graph.invoke(Command(resume={req.id: result}), config)
+        for intr in task.interrupts:
+            if intr.kind == "human":
+                ui.show(intr.value)
+    ```
+
+    Args:
+        value: Describes the data needed. Surfaced to the serving layer as
+            `Interrupt.value` on the suspended task.
+
+    Returns:
+        Any: The value provided by the serving layer when resuming.
+
+    Raises:
+        GraphInterrupt: On the first invocation within the node, checkpoints
+            state and suspends execution.
+    """
+    return interrupt(value, _kind="fetch")
 
 
 @dataclass(slots=True)
