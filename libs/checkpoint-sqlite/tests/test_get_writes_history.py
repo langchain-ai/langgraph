@@ -25,9 +25,9 @@ from typing import Annotated, Any
 
 import pytest
 from langchain_core.runnables import RunnableConfig
-from langgraph.channels.delta import DeltaChannel
+from langgraph.channels.delta import DeltaChannel  # type: ignore[import-untyped]
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
-from langgraph.graph import END, START, StateGraph
+from langgraph.graph import END, START, StateGraph  # type: ignore[import-untyped]
 from typing_extensions import TypedDict
 
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -52,7 +52,7 @@ class _DeltaState(TypedDict):
 def _delta_graph(checkpointer: Any) -> Any:
     return (
         StateGraph(_DeltaState)
-        .add_node("noop", _noop)  # type: ignore[call-overload]
+        .add_node("noop", _noop)
         .add_edge(START, "noop")
         .add_edge("noop", END)
         .compile(checkpointer=checkpointer)
