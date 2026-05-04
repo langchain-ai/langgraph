@@ -82,6 +82,12 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
             self.operator, value.operator
         )
 
+    def __repr__(self) -> str:
+        op_name = getattr(self.operator, "__name__", repr(self.operator))
+        if self.value is MISSING:
+            return f"BinaryOperatorAggregate(typ={self.typ!r}, key={self.key!r}, operator={op_name}, value=MISSING)"
+        return f"BinaryOperatorAggregate(typ={self.typ!r}, key={self.key!r}, operator={op_name}, value={self.value!r})"
+
     @property
     def ValueType(self) -> type[Value]:
         """The type of the value stored in the channel."""
