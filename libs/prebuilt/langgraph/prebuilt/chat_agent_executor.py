@@ -1,4 +1,5 @@
 import inspect
+import logging
 import warnings
 from collections.abc import Awaitable, Callable, Sequence
 from typing import (
@@ -45,6 +46,13 @@ from pydantic import BaseModel
 from typing_extensions import NotRequired, TypedDict, deprecated
 
 from langgraph.prebuilt.tool_node import ToolCallWithContext, ToolNode
+
+logger = logging.getLogger(__name__)
+
+# Finish reasons that indicate the LLM attempted a tool call but produced
+# malformed output. When detected, the agent retries the LLM call.
+# LangGraph's recursion limit prevents infinite retry loops.
+_RETRYABLE_FINISH_REASONS: set[str] = {"MALFORMED_FUNCTION_CALL"}
 
 StructuredResponse = dict | BaseModel
 StructuredResponseSchema = dict | type[BaseModel]
@@ -833,6 +841,20 @@ def create_react_agent(
         last_message = messages[-1]
         # If there is no function call, then we finish
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+            # Check if the LLM returned a retryable finish reason
+            # (e.g. Gemini's MALFORMED_FUNCTION_CALL)
+            if isinstance(last_message, AIMessage):
+                finish_reason = (last_message.response_metadata or {}).get(
+                    "finish_reason"
+                )
+                if finish_reason in _RETRYABLE_FINISH_REASONS:
+                    logger.warning(
+                        "LLM returned finish_reason '%s' with no tool calls. "
+                        "Retrying the agent node.",
+                        finish_reason,
+                    )
+                    return entrypoint
+
             if post_model_hook is not None:
                 return "post_model_hook"
             elif response_format is not None:
@@ -884,7 +906,7 @@ def create_react_agent(
     # This means that this node is the first one called
     workflow.set_entry_point(entrypoint)
 
-    agent_paths = []
+    agent_paths = [entrypoint]
     post_model_hook_paths = [entrypoint, "tools"]
 
     # Add a post model hook node if post_model_hook is provided
