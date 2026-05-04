@@ -96,6 +96,12 @@ logger = logging.getLogger(__name__)
 
 _CHANNEL_BRANCH_TO = "branch:to:{}"
 
+# TypeVar for the return type of the path callable in conditional edges.
+# Using a bound TypeVar instead of Hashable directly allows type checkers to
+# accept dict[str, str] (and other specific subtypes) without an error, since
+# dict is invariant in its key type.
+_K = TypeVar("_K", bound=Hashable)
+
 
 def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
     if isinstance(schema, type):
@@ -891,10 +897,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     def add_conditional_edges(
         self,
         source: str,
-        path: Callable[..., Hashable | Sequence[Hashable]]
-        | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
-        | Runnable[Any, Hashable | Sequence[Hashable]],
-        path_map: dict[Hashable, str] | list[str] | None = None,
+        path: Callable[..., _K | Sequence[_K]]
+        | Callable[..., Awaitable[_K | Sequence[_K]]]
+        | Runnable[Any, _K | Sequence[_K]],
+        path_map: dict[_K, str] | list[str] | None = None,
     ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
@@ -1000,10 +1006,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     def set_conditional_entry_point(
         self,
-        path: Callable[..., Hashable | Sequence[Hashable]]
-        | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
-        | Runnable[Any, Hashable | Sequence[Hashable]],
-        path_map: dict[Hashable, str] | list[str] | None = None,
+        path: Callable[..., _K | Sequence[_K]]
+        | Callable[..., Awaitable[_K | Sequence[_K]]]
+        | Runnable[Any, _K | Sequence[_K]],
+        path_map: dict[_K, str] | list[str] | None = None,
     ) -> Self:
         """Sets a conditional entry point in the graph.
 
