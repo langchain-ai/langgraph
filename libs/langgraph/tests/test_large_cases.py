@@ -6443,9 +6443,61 @@ def test_send_react_interrupt_control(
     }
     assert foo_called == 0
 
-    # interrupt-update-resume flow, creating new Send in update call
+    # interrupt-update-resume flow, using invoke(Command()) to resume with new Send
+    foo_called = 0
+    graph = builder.compile(checkpointer=sync_checkpointer, interrupt_before=["foo"])
+    thread1 = {"configurable": {"thread_id": "3"}}
+    assert graph.invoke(
+        {"messages": [HumanMessage("hello")]}, thread1, durability="exit"
+    ) == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            _AnyIdAIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [1, 2, 3]},
+                        "id": "",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+        ]
+    }
+    assert foo_called == 0
 
-    # TODO add here test with invoke(Command())
+    # resume with Command: replace the tool call via update and create a new Send
+    new_tool_call = ToolCall(name="foo", args={"hi": [4, 5, 6]}, id="tool1")
+    new_ai_message = AIMessage("", id=ai_message.id, tool_calls=[new_tool_call])
+    result = graph.invoke(
+        Command(
+            update={"messages": new_ai_message},
+            goto=[Send("foo", new_tool_call)],
+        ),
+        thread1,
+    )
+
+    # the new tool call should have been executed
+    assert foo_called == 1
+    assert result == {
+        "messages": [
+            _AnyIdHumanMessage(content="hello"),
+            AIMessage(
+                "",
+                id=ai_message.id,
+                tool_calls=[
+                    {
+                        "name": "foo",
+                        "args": {"hi": [4, 5, 6]},
+                        "id": "tool1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            _AnyIdToolMessage(content="{'hi': [4, 5, 6]}", tool_call_id="tool1"),
+        ]
+    }
 
 
 def test_weather_subgraph(
