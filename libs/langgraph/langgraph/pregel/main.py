@@ -1066,9 +1066,11 @@ class Pregel(
             An iterator of the `(namespace, subgraph)` pairs.
         """
         for name, node in self.nodes.items():
-            # filter by prefix
+            # filter by prefix (must match full segment, not just any prefix)
             if namespace is not None:
-                if not namespace.startswith(name):
+                if namespace != name and not namespace.startswith(
+                    name + NS_SEP
+                ):
                     continue
 
             # find the subgraph, if any
