@@ -106,6 +106,51 @@ async def test_list_ordering(saver: BaseCheckpointSaver) -> None:
     assert results == list(reversed(ids))
 
 
+async def test_list_uses_checkpoint_timestamp_not_id(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """Newest-first and before-cursor semantics should follow checkpoint timestamps."""
+    tid = str(uuid4())
+
+    first_config = generate_config(tid)
+    first_checkpoint = generate_checkpoint(checkpoint_id="z-older")
+    first_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+    stored_first = await saver.aput(
+        first_config,
+        first_checkpoint,
+        generate_metadata(step=0),
+        {},
+    )
+
+    second_config = generate_config(tid)
+    second_config["configurable"]["checkpoint_id"] = stored_first["configurable"][
+        "checkpoint_id"
+    ]
+    second_checkpoint = generate_checkpoint(checkpoint_id="a-newer")
+    second_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+    await saver.aput(
+        second_config,
+        second_checkpoint,
+        generate_metadata(step=1),
+        {},
+    )
+
+    result_ids = []
+    async for tup in saver.alist(generate_config(tid)):
+        result_ids.append(tup.checkpoint["id"])
+
+    assert result_ids == ["a-newer", "z-older"]
+
+    before_ids = []
+    async for tup in saver.alist(
+        generate_config(tid),
+        before=generate_config(tid, checkpoint_id="a-newer"),
+    ):
+        before_ids.append(tup.checkpoint["id"])
+
+    assert before_ids == ["z-older"]
+
+
 async def test_list_metadata_filter_single_key(
     saver: BaseCheckpointSaver,
 ) -> None:
@@ -344,6 +389,7 @@ ALL_LIST_TESTS = [
     test_list_by_thread,
     test_list_by_namespace,
     test_list_ordering,
+    test_list_uses_checkpoint_timestamp_not_id,
     test_list_metadata_filter_single_key,
     test_list_metadata_filter_step,
     test_list_metadata_filter_multiple_keys,

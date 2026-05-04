@@ -446,9 +446,56 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             param_values.append(Jsonb(filter))
 
         # construct predicate for `before`
-        if before is not None:
-            wheres.append("checkpoint_id < %s ")
-            param_values.append(get_checkpoint_id(before))
+        if before is not None and (before_checkpoint_id := get_checkpoint_id(before)):
+            before_configurable = before["configurable"]
+            config_configurable = config["configurable"] if config is not None else {}
+            before_thread_id = before_configurable.get(
+                "thread_id", config_configurable.get("thread_id")
+            )
+            if before_thread_id is None:
+                return (
+                    "WHERE " + " AND ".join(wheres) if wheres else "",
+                    param_values,
+                )
+            before_timestamp_subquery = (
+                "SELECT checkpoint->>'ts' "
+                "FROM checkpoints "
+                "WHERE thread_id = %s AND checkpoint_id = %s "
+                "ORDER BY checkpoint->>'ts' DESC LIMIT 1"
+            )
+            wheres.append(
+                """(
+                    NOT EXISTS (
+                        SELECT 1
+                        FROM checkpoints
+                        WHERE thread_id = %s AND checkpoint_id = %s
+                    )
+                    OR
+                    checkpoint->>'ts' < (
+                        {before_timestamp_subquery}
+                    )
+                    OR (
+                        checkpoint->>'ts' = (
+                            {before_timestamp_subquery}
+                        )
+                        AND checkpoint_id < %s
+                    )
+                )""".replace(
+                    "{before_timestamp_subquery}",
+                    before_timestamp_subquery,
+                )
+            )
+            param_values.extend(
+                [
+                    before_thread_id,
+                    before_checkpoint_id,
+                    before_thread_id,
+                    before_checkpoint_id,
+                    before_thread_id,
+                    before_checkpoint_id,
+                    before_checkpoint_id,
+                ]
+            )
 
         return (
             "WHERE " + " AND ".join(wheres) if wheres else "",
