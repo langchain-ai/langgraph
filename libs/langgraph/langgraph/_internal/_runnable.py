@@ -491,7 +491,11 @@ class RunnableCallable(Runnable):
                     with set_config_context(child_config, run) as context:
                         ret = await asyncio.create_task(coro, context=context)
                 else:
-                    ret = await coro
+                    token = var_child_runnable_config.set(child_config)
+                    try:
+                        ret = await coro
+                    finally:
+                        var_child_runnable_config.reset(token)
             except BaseException as e:
                 await run_manager.on_chain_error(e)
                 raise
@@ -734,7 +738,11 @@ class RunnableSeq(Runnable):
                                 step.ainvoke(input, config, **kwargs), context=context
                             )
                     else:
-                        input = await step.ainvoke(input, config, **kwargs)
+                        token = var_child_runnable_config.set(config)
+                        try:
+                            input = await step.ainvoke(input, config, **kwargs)
+                        finally:
+                            var_child_runnable_config.reset(token)
                 else:
                     input = await step.ainvoke(input, config)
         # finish the root run
