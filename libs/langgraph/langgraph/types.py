@@ -540,7 +540,7 @@ class Interrupt:
         * `resumable`
         * `interrupt_id`, deprecated in favor of `id`
 
-    !!! version-changed "Changed in version v0.6.x"
+    !!! version-changed "Changed in version v1.2.0a7"
         * `kind` field added to distinguish human-in-the-loop interrupts from
           automated data-fetch requests. Defaults to `"human"` for backwards
           compatibility.
