@@ -25,13 +25,20 @@ from typing import Annotated, Any
 
 import pytest
 from langchain_core.runnables import RunnableConfig
-from langgraph.channels.delta import DeltaChannel  # type: ignore[import-untyped]
-from langgraph.checkpoint.serde.types import _DeltaSnapshot
-from langgraph.graph import END, START, StateGraph  # type: ignore[import-untyped]
-from typing_extensions import TypedDict
 
-from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+# `langgraph` is not a dep of `langgraph-checkpoint-sqlite`. When tests run
+# in the sqlite lib's standalone CI environment without it installed, skip
+# the whole module rather than failing at import.
+pytest.importorskip("langgraph.channels.delta", reason="langgraph core not installed")
+pytest.importorskip("langgraph.graph", reason="langgraph core not installed")
+
+from langgraph.channels.delta import DeltaChannel  # type: ignore[import-untyped]  # noqa: E402,I001
+from langgraph.checkpoint.serde.types import _DeltaSnapshot  # noqa: E402
+from langgraph.graph import END, START, StateGraph  # type: ignore[import-untyped]  # noqa: E402
+from typing_extensions import TypedDict  # noqa: E402
+
+from langgraph.checkpoint.sqlite import SqliteSaver  # noqa: E402
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver  # noqa: E402
 
 pytestmark = pytest.mark.anyio
 
