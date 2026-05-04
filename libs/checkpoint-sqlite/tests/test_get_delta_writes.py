@@ -1,4 +1,4 @@
-"""Smoke tests for `BaseCheckpointSaver.get_writes_history` on sqlite.
+"""Smoke tests for `BaseCheckpointSaver.get_delta_writes` on sqlite.
 
 `SqliteSaver` (and `AsyncSqliteSaver`) deliberately don't override the
 default implementation in `BaseCheckpointSaver` — these tests pin the
@@ -15,7 +15,7 @@ Scenarios covered:
   empty").
 * When a `_DeltaSnapshot` blob is present at an ancestor, it is returned
   as the `seed`.
-* The async saver returns the same shape via `aget_writes_history`.
+* The async saver returns the same shape via `aget_delta_writes`.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ async def _adrive(graph: Any, config: RunnableConfig, n: int) -> None:
 def _pick_non_root(saver: Any, config: RunnableConfig) -> RunnableConfig:
     """Return a config pointing at a checkpoint that has at least one ancestor.
 
-    `get_writes_history` walks the parent chain — calling it on the root
+    `get_delta_writes` walks the parent chain — calling it on the root
     checkpoint produces `writes=[]` and no `seed`, which is uninteresting
     for the multi-step assertions below.
     """
@@ -111,7 +111,7 @@ def test_empty_channels_returns_empty_mapping_sync() -> None:
     """Empty `channels` short-circuits to `{}` without touching storage."""
     with SqliteSaver.from_conn_string(":memory:") as saver:
         config: RunnableConfig = {"configurable": {"thread_id": "empty"}}
-        assert saver.get_writes_history(config, []) == {}
+        assert saver.get_delta_writes(config=config, channels=[]) == {}
 
 
 def test_writes_history_oldest_to_newest_sync() -> None:
@@ -122,7 +122,7 @@ def test_writes_history_oldest_to_newest_sync() -> None:
         _drive(graph, config, 3)
 
         target_cfg = _pick_non_root(saver, config)
-        result = saver.get_writes_history(target_cfg, ["items"])
+        result = saver.get_delta_writes(config=target_cfg, channels=["items"])
 
         assert "items" in result
         entry = result["items"]
@@ -152,7 +152,7 @@ def test_seed_present_when_snapshot_in_ancestor_sync() -> None:
 
         # Find the oldest non-root checkpoint, then walk to its parent and
         # rewrite that parent's `channel_values["items"]` to a real
-        # `_DeltaSnapshot`. After this surgery, calling `get_writes_history`
+        # `_DeltaSnapshot`. After this surgery, calling `get_delta_writes`
         # at the leaf must return the snapshot value as `seed`.
         history = list(saver.list(config))
         assert len(history) >= 2
@@ -181,7 +181,7 @@ def test_seed_present_when_snapshot_in_ancestor_sync() -> None:
             {},
         )
 
-        result = saver.get_writes_history(leaf_tup.config, ["items"])
+        result = saver.get_delta_writes(config=leaf_tup.config, channels=["items"])
         entry = result["items"]
         assert "seed" in entry, f"expected seed to be present, got {entry}"
         seed = entry["seed"]
@@ -192,7 +192,7 @@ def test_seed_present_when_snapshot_in_ancestor_sync() -> None:
 
 
 def test_seed_omitted_when_walk_reaches_root_sync() -> None:
-    """`get_writes_history` on the root checkpoint → no `seed` key, no writes."""
+    """`get_delta_writes` on the root checkpoint → no `seed` key, no writes."""
     with SqliteSaver.from_conn_string(":memory:") as saver:
         config: RunnableConfig = {"configurable": {"thread_id": "root-sync"}}
         graph = _delta_graph(saver)
@@ -203,7 +203,7 @@ def test_seed_omitted_when_walk_reaches_root_sync() -> None:
         root_tup = history[-1]
         assert root_tup.parent_config is None
 
-        result = saver.get_writes_history(root_tup.config, ["items"])
+        result = saver.get_delta_writes(config=root_tup.config, channels=["items"])
         entry = result["items"]
         assert "seed" not in entry, f"root-walk should have no seed, got {entry}"
         assert entry["writes"] == []
@@ -218,7 +218,7 @@ async def test_empty_channels_returns_empty_mapping_async() -> None:
     """Async equivalent of the empty-channels short-circuit."""
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
         config: RunnableConfig = {"configurable": {"thread_id": "empty-async"}}
-        assert await saver.aget_writes_history(config, []) == {}
+        assert await saver.aget_delta_writes(config=config, channels=[]) == {}
 
 
 async def test_writes_history_oldest_to_newest_async() -> None:
@@ -229,7 +229,7 @@ async def test_writes_history_oldest_to_newest_async() -> None:
         await _adrive(graph, config, 3)
 
         target_cfg = await _apick_non_root(saver, config)
-        result = await saver.aget_writes_history(target_cfg, ["items"])
+        result = await saver.aget_delta_writes(config=target_cfg, channels=["items"])
 
         assert "items" in result
         entry = result["items"]
@@ -257,7 +257,9 @@ async def test_seed_omitted_when_walk_reaches_root_async() -> None:
         root_tup = history[-1]
         assert root_tup.parent_config is None
 
-        result = await saver.aget_writes_history(root_tup.config, ["items"])
+        result = await saver.aget_delta_writes(
+            config=root_tup.config, channels=["items"]
+        )
         entry = result["items"]
         assert "seed" not in entry, f"root-walk should have no seed, got {entry}"
         assert entry["writes"] == []

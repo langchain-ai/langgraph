@@ -20,9 +20,9 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    DeltaWrites,
     PendingWrite,
     SerializerProtocol,
-    WritesHistory,
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
@@ -139,9 +139,9 @@ class InMemorySaver(
             result[k] = self.serde.loads_typed(vv)
         return result
 
-    def get_writes_history(
-        self, config: RunnableConfig, channels: Sequence[str]
-    ) -> Mapping[str, WritesHistory]:
+    def get_delta_writes(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaWrites]:
         """Override: walk the parent chain ONCE for all requested channels.
 
         Each channel terminates independently at the nearest ancestor
@@ -218,18 +218,18 @@ class InMemorySaver(
                 seed_by_ch[ch] = blob_value_by_ch[ch]
                 remaining.discard(ch)
 
-        result: dict[str, WritesHistory] = {}
+        result: dict[str, DeltaWrites] = {}
         for ch in channels:
-            entry_h: WritesHistory = {"writes": list(reversed(collected_by_ch[ch]))}
+            entry_h: DeltaWrites = {"writes": list(reversed(collected_by_ch[ch]))}
             if ch in seed_by_ch:
                 entry_h["seed"] = seed_by_ch[ch]
             result[ch] = entry_h
         return result
 
-    async def aget_writes_history(
-        self, config: RunnableConfig, channels: Sequence[str]
-    ) -> Mapping[str, WritesHistory]:
-        return self.get_writes_history(config, channels)
+    async def aget_delta_writes(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaWrites]:
+        return self.get_delta_writes(config=config, channels=channels)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.
