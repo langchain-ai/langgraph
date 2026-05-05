@@ -2,7 +2,7 @@ import collections.abc
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
-from typing_extensions import NotRequired, Required, Self
+from typing_extensions import NotRequired, Required, Self, get_args, get_origin
 
 from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
@@ -21,10 +21,16 @@ __all__ = ("BinaryOperatorAggregate",)
 # Adapted from typing_extensions
 def _strip_extras(t):  # type: ignore[no-untyped-def]
     """Strips Annotated, Required and NotRequired from a given type."""
-    if hasattr(t, "__origin__"):
-        if t.__origin__ in (Required, NotRequired):
-            return _strip_extras(t.__args__[0])
-        return _strip_extras(t.__origin__)
+    # Use get_origin/get_args from typing_extensions for reliable cross-version
+    # behavior. In some Python/typing_extensions combinations Required[X] has
+    # no __origin__ attribute, so the hasattr-based check silently returns the
+    # wrapper unchanged instead of unwrapping it.
+    origin = get_origin(t)
+    if origin in (Required, NotRequired):
+        args = get_args(t)
+        return _strip_extras(args[0]) if args else t
+    if origin is not None:
+        return _strip_extras(origin)
     return t
 
 
