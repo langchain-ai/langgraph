@@ -427,3 +427,31 @@ def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
         "thread_id": "th-123",
         "user_id": "uid-1",
     }
+
+def test_ensure_config_does_not_mutate_caller_metadata() -> None:
+    """ensure_config must not mutate the metadata dict from the caller's config.
+
+    The propagation block that writes configurable keys (thread_id, run_id, …)
+    into metadata must operate on a copy, not the original dict (issue #7441).
+    """
+    # Simulate a shared base config like the one langchain's create_agent sets.
+    base_config: RunnableConfig = {"metadata": {"ls_integration": "langchain_create_agent"}}
+
+    # First call with thread_id in configurable.
+    result1 = ensure_config(base_config, {"configurable": {"thread_id": "thread-1"}})
+    # The result should contain thread_id in its metadata (propagation is expected).
+    assert result1["metadata"].get("thread_id") == "thread-1"
+
+    # The original base config's metadata dict must NOT be modified.
+    assert base_config == {"metadata": {"ls_integration": "langchain_create_agent"}}, (
+        f"base_config was mutated: {base_config}"
+    )
+
+    # A second call with a different thread_id must not see the first thread_id.
+    result2 = ensure_config(base_config, {"configurable": {"thread_id": "thread-2"}})
+    assert result2["metadata"].get("thread_id") == "thread-2"
+    # Results are independent.
+    assert result1["metadata"].get("thread_id") == "thread-1"
+    # Base config still clean.
+    assert base_config == {"metadata": {"ls_integration": "langchain_create_agent"}}
+
