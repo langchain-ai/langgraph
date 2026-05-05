@@ -1,0 +1,32 @@
+{
+  "tools": [
+    {
+      "name": "tavily_search_results_json",
+      "description": "Search the web and return a small set of relevant results for the example graph.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true
+      },
+      "auth": {
+        "type": "api_key",
+        "scopes": [
+          "tavily:search:read"
+        ]
+      },
+      "owner": "langgraph-examples"
+    }
+  ]
+}

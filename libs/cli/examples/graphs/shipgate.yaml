@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ThreeMoonsLab/agents-shipgate/main/docs/manifest-v0.1.json
+# Optional Agents Shipgate manifest for these LangGraph CLI examples.
+version: "0.1"
+
+project:
+  name: langgraph-cli-graphs
+
+agent:
+  name: cli-graph-examples
+  declared_purpose:
+    - demonstrate LangGraph CLI graph entrypoints
+    - route model responses through declared graph nodes and tool nodes
+    - show search-backed graph patterns for local development
+  prohibited_actions: []
+
+environment:
+  target: local
+
+tool_sources:
+  - id: cli_graph_agent
+    type: langchain
+    path: agent.py
+  - id: cli_graph_storm
+    type: langchain
+    path: storm.py
+
+langchain:
+  tool_inventories:
+    - tool-inventory.json
+
+policies:
+  require_approval_for_tools: []
+  require_confirmation_for_tools: []
+  require_idempotency_for_tools: []
+
+permissions:
+  scopes:
+    - tavily:search:read
+  notes: "These examples require user-provided development credentials for external search/model providers."
+
+ci:
+  mode: advisory
+
+output:
+  directory: agents-shipgate-reports
+  formats:
+    - markdown
+    - json
