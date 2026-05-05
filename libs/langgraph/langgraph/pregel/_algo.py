@@ -236,98 +236,19 @@ def apply_writes(
     get_next_version: GetNextVersion | None,
     trigger_to_nodes: Mapping[str, Sequence[str]],
 ) -> set[str]:
-    """Apply task writes to channels and update checkpoint version metadata.
-
-    Mutates two objects in-place:
-
-    - ``checkpoint["channel_versions"]`` and ``checkpoint["versions_seen"]``
-      (version tracking for scheduling — see below).
-    - ``channels[k].value`` (in-memory channel state via ``update`` /
-      ``consume`` / ``finish``).
-
-    Does NOT touch ``checkpoint["channel_values"]`` (serialized blobs).
-    Serialization is deferred to ``create_checkpoint``, which reads the
-    final in-memory state from ``channels``.  This avoids serializing
-    intermediate states that may be overwritten by later phases (e.g.
-    ``finish()`` can change a channel after ``update()``).
-
-    Version system recap
-    ---------------------
-    ``channel_versions`` and ``versions_seen`` form the scheduling
-    mechanism that prevents nodes from re-executing on stale triggers.
-
-    - ``channel_versions[chan]``: monotonically increasing stamp, bumped
-      whenever ``chan`` is modified.  All channels modified in the same
-      superstep share one ``next_version`` (computed from the current
-      max).  This works because writes within a superstep are atomic —
-      no ordering between them — so a single stamp suffices.
-    - ``versions_seen[node_name][chan]``: the version of ``chan`` that
-      ``node_name`` last consumed.  Sparse — only the node's trigger
-      channels (defined by graph edges) are recorded.
-      ``prepare_next_tasks`` triggers a node only when
-      ``channel_versions[chan] > versions_seen[node][chan]``.
-
-    ::
-
-        superstep 1: next_version = 2
-          channel_versions = {"messages": 2, "count": 2}
-          versions_seen = {"A": {"messages": 2}, "B": {"count": 2}}
-
-        superstep 2: only "count" written, next_version = 3
-          channel_versions = {"messages": 2, "count": 3}
-          Node A trigger "messages": 2 == seen 2 -> NOT triggered
-          Node B trigger "count":    3 >  seen 2 -> triggered
-
-    Pipeline (4 phases)
-    -------------------
-    1. **versions_seen**: record each task's trigger-channel versions so
-       ``prepare_next_tasks`` won't re-fire the same node on the same
-       data.
-    2. **consume**: call ``ch.consume()`` on channels that triggered
-       tasks.  Most channels no-op (base returns ``False``).
-       ``NamedBarrierValue`` resets its seen set;
-       ``LastValueAfterFinish`` clears its value after a finish cycle.
-    3. **update** (two sub-phases):
-       - 3a: apply actual writes — ``ch.update(vals)`` for each channel.
-       - 3b: notify un-written channels of a new step via
-         ``ch.update([])``.  Most return ``False``; ephemeral channels
-         use this to clear themselves.
-    4. **finish**: if no updated channel can trigger further nodes (check
-       via ``updated_channels.isdisjoint(trigger_to_nodes)``), call
-       ``ch.finish()`` on all channels.  ``LastValueAfterFinish`` uses
-       this to become available.
-
-    Regular vs DeltaChannel
-    -----------------------
-    Both channel types go through the same ``update()`` path and get the
-    same ``channel_versions`` bump.  The difference is at checkpoint time:
-
-    - ``BinaryOperatorAggregate.checkpoint()`` returns the full value,
-      stored in ``channel_values``.
-    - ``DeltaChannel.checkpoint()`` returns ``MISSING`` — omitted from
-      ``channel_values``.  Its state is reconstructed on load via
-      ancestor replay of ``checkpoint_writes``.
+    """Apply writes from a set of tasks (usually the tasks from a Pregel step)
+    to the checkpoint and channels, and return managed values writes to be applied
+    externally.
 
     Args:
-        checkpoint: Mutated in-place — ``channel_versions`` (stamps
-            bumped for modified channels) and ``versions_seen`` (records
-            which versions each node consumed, preventing re-trigger).
-        channels: Mutated in-place (channel values via ``update`` /
-            ``consume`` / ``finish``).
-        tasks: The writes to apply, sorted deterministically by path.
-        get_next_version: Generates the next monotonic version stamp.
-            ``None`` = lightweight mode (skip version tracking, used for
-            graph drawing / dry runs).
-        trigger_to_nodes: Maps channel names to triggerable nodes
-            (derived from graph edges).  Used in phase 4 to check if any
-            updated channel can trigger further nodes; if not,
-            ``finish()`` is called.
+        checkpoint: The checkpoint to update.
+        channels: The channels to update.
+        tasks: The tasks to apply writes from.
+        get_next_version: Optional function to determine the next version of a channel.
+        trigger_to_nodes: Mapping of channel names to the set of nodes that can be triggered by updates to that channel.
 
     Returns:
-        Set of channel names whose ``update()`` returned ``True`` and are
-        ``is_available()``.  Used by ``_loop.py`` to populate
-        ``updated_channels`` for ``create_checkpoint`` and
-        ``prepare_next_tasks``.
+        Set of channels that were updated in this step.
     """
     # sort tasks on path, to ensure deterministic order for update application
     # any path parts after the 3rd are ignored for sorting
@@ -347,9 +268,7 @@ def apply_writes(
             }
         )
 
-    # Lightweight mode: when get_next_version is None (e.g. graph drawing,
-    # dry runs without a checkpointer) we still apply channel state updates
-    # but skip all channel_versions tracking and updated_channels collection.
+    # Find the highest version of all channels
     if get_next_version is None:
         next_version = None
     else:

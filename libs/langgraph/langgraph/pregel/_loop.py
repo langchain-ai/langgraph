@@ -935,7 +935,7 @@ class PregelLoop:
             exiting or self.durability != "exit"
         )
         # create new checkpoint
-        result = create_checkpoint(
+        self.checkpoint = create_checkpoint(
             self.checkpoint,
             self.channels if do_checkpoint else None,
             self.step,
@@ -946,10 +946,8 @@ class PregelLoop:
             else None,
             force_delta_snapshot=exiting and self.durability == "exit",
             updates_since_snapshot=new_counts,
+            new_updates_since_snapshot=new_counts,
         )
-        self.checkpoint = result.checkpoint
-        for k in result.snapshotted:
-            new_counts[k] = 0
         if new_counts:
             self.checkpoint_metadata["delta_updates_since_snapshot"] = new_counts
         elif "delta_updates_since_snapshot" in self.checkpoint_metadata:

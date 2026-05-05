@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
-from typing import Any, NamedTuple, cast
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -21,16 +21,6 @@ from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 LATEST_VERSION = 4
 
 GetNextVersion = Callable[[Any, None], Any]
-
-
-class CreateCheckpointResult(NamedTuple):
-    """Return value of :func:`create_checkpoint`."""
-
-    checkpoint: Checkpoint
-    """The checkpoint to persist via ``saver.put()``."""
-    snapshotted: set[str]
-    """DeltaChannel names that were snapshotted this step.  The caller
-    should reset their ``updates_since_snapshot`` counters to ``0``."""
 
 
 def empty_checkpoint() -> Checkpoint:
@@ -69,7 +59,7 @@ def _should_snapshot_delta(
 
 
 def create_checkpoint(
-    mutated_checkpoint: Checkpoint,
+    checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel] | None,
     step: int,
     *,
@@ -78,64 +68,39 @@ def create_checkpoint(
     get_next_version: GetNextVersion | None = None,
     force_delta_snapshot: bool = False,
     updates_since_snapshot: Mapping[str, int] | None = None,
-) -> CreateCheckpointResult:
-    """Build a new ``Checkpoint`` from the previous one and live channel state.
+    new_updates_since_snapshot: dict[str, int] | None = None,
+) -> Checkpoint:
+    """Create a checkpoint for the given channels.
 
-    Args:
-        mutated_checkpoint: The checkpoint that has been mutated in-place by
-            ``apply_writes`` (its ``channel_versions`` and ``versions_seen``
-            already reflect this superstep's writes).  The new checkpoint
-            inherits these mutated values and builds new ``channel_values``
-            from the live channels.
-        channels: In-memory channel objects whose state was updated by
-            ``apply_writes``.  Needed because ``mutated_checkpoint`` only
-            carries updated version metadata — its ``channel_values`` still
-            holds stale blobs from the previous checkpoint load.  This
-            function calls ``ch.checkpoint()`` (or wraps in ``_DeltaSnapshot``
-            for DeltaChannels) to produce fresh serialised ``channel_values``.
-            Pass ``None`` to skip serialisation — the new checkpoint reuses
-            ``mutated_checkpoint``'s ``channel_values`` as-is (used by
-            ``durability="exit"`` intermediate steps or when no checkpointer
-            is present).
-        step: Superstep number, used to generate the checkpoint ``id`` via
-            ``uuid6(clock_seq=step)`` when *id* is not provided explicitly.
-        id: Explicit checkpoint id.  When supplied (e.g. during ``exiting``),
-            overrides the ``uuid6``-based generation.
-        updated_channels: Set of channel names written during this superstep
-            (produced by ``apply_writes``).  Persisted as a sorted list in
-            the new checkpoint for efficient cold-start scheduling.
-        get_next_version: Version generator (e.g. ``saver.get_next_version``).
-            ``None`` means version tracking is skipped (lightweight / no-
-            checkpointer mode).
-        force_delta_snapshot: When ``True``, every DeltaChannel is snapshotted
-            regardless of ``snapshot_frequency``.  Used by ``durability="exit"``
-            where intermediate ``checkpoint_writes`` are not stored, so ancestor
-            replay would have nothing to replay from.
-        updates_since_snapshot: *Read-only* counters — maps each DeltaChannel
-            name to the number of updates since its last snapshot.  Used by
-            ``_should_snapshot_delta`` to decide whether to snapshot now.
+    For each `DeltaChannel`, a `_DeltaSnapshot(value)` blob is written into
+    `channel_values[k]` when this channel has accumulated at least
+    `snapshot_frequency` updates since its last snapshot (counter supplied
+    via `updates_since_snapshot`). Otherwise the channel is omitted from
+    `channel_values`; its `channel_versions` entry still bumps so that the
+    saver tracks the channel and the ancestor walk can replay writes.
 
-    Returns:
-        A tuple of:
-        - The checkpoint to persist via ``saver.put()``, with a fresh
-          ``id``, ``ts``, and serialised ``channel_values`` /
-          ``channel_versions``.
-        - Names of DeltaChannels that were snapshotted this step.  The
-          caller should reset their ``updates_since_snapshot`` counters
-          to ``0``.
+    Snapshots are eager: even if the channel had no write this step, a
+    version bump is forced (via `get_next_version`) so `put()` includes
+    the channel in `new_versions` and stores the blob.
+
+    `force_delta_snapshot` ignores the cadence and always snapshots —
+    used by `durability="exit"` where intermediate writes are not stored
+    as ancestor `checkpoint_writes`.
+
+    If `new_updates_since_snapshot` is provided, the function resets the
+    counter to `0` for any channel that snapshotted this step. Counters
+    for channels that did not snapshot are left untouched (the caller is
+    responsible for incrementing them based on `updated_channels`).
     """
     ts = datetime.now(timezone.utc).isoformat()
     counts = updates_since_snapshot or {}
-    snapshotted: set[str] = set()
     if channels is None:
-        values = mutated_checkpoint["channel_values"]
-        channel_versions = mutated_checkpoint["channel_versions"]
+        values = checkpoint["channel_values"]
+        channel_versions = checkpoint["channel_versions"]
     else:
         values = {}
-        channel_versions = dict(mutated_checkpoint["channel_versions"])
+        channel_versions = dict(checkpoint["channel_versions"])
         for k in channels:
-            # Channel has never been written to (no version entry from
-            # apply_writes), so there is no meaningful state to checkpoint.
             if k not in channel_versions:
                 continue
             ch = channels[k]
@@ -149,48 +114,27 @@ def create_checkpoint(
                     force=force_delta_snapshot,
                 )
             ):
-                # Force-snapshot (durability="exit"): some channels may not
-                # have been written this step, so apply_writes didn't bump
-                # their version.  Manually bump so saver.put() persists the
-                # blob.  Other channels in the same force-snapshot batch
-                # *were* written this step and already bumped by
-                # apply_writes — those are skipped below to avoid
-                # double-bumping.  In the normal count-based path the
-                # channel was necessarily written (otherwise count can't
-                # reach snapshot_frequency), so this branch never fires.
-                # TODO: force-snapshot on every exit is wasteful for short
-                # runs — a 1-message run still serialises the full state.
-                # The right fix is to persist checkpoint_writes for delta
-                # channels in durability="exit" mode so ancestor replay
-                # works, eliminating the need for force-snapshot entirely.
-                if (
-                    force_delta_snapshot
-                    and get_next_version is not None
-                    # Even in force-snapshot mode, some channels were
-                    # written this step and already bumped by apply_writes.
-                    # Skip those to avoid double-bumping.
-                    and k not in (updated_channels or ())
+                # Eager snapshot: bump version if not already written this step
+                # so put() includes this channel in new_versions and stores blob.
+                if get_next_version is not None and (
+                    updated_channels is None or k not in updated_channels
                 ):
                     channel_versions[k] = get_next_version(channel_versions[k], None)
                 values[k] = _DeltaSnapshot(ch.get())
-                snapshotted.add(k)
+                if new_updates_since_snapshot is not None:
+                    new_updates_since_snapshot[k] = 0
             else:
                 v = ch.checkpoint()
                 if v is not MISSING:
                     values[k] = v
-    return CreateCheckpointResult(
-        checkpoint=Checkpoint(
-            v=LATEST_VERSION,
-            ts=ts,
-            id=id or str(uuid6(clock_seq=step)),
-            channel_values=values,
-            channel_versions=channel_versions,
-            versions_seen=mutated_checkpoint["versions_seen"],
-            updated_channels=None
-            if updated_channels is None
-            else sorted(updated_channels),
-        ),
-        snapshotted=snapshotted,
+    return Checkpoint(
+        v=LATEST_VERSION,
+        ts=ts,
+        id=id or str(uuid6(clock_seq=step)),
+        channel_values=values,
+        channel_versions=channel_versions,
+        versions_seen=checkpoint["versions_seen"],
+        updated_channels=None if updated_channels is None else sorted(updated_channels),
     )
 
 
