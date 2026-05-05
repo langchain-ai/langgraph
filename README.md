@@ -27,10 +27,10 @@ Trusted by companies shaping the future of agents – including Klarna, Replit, 
 pip install -U langgraph
 ```
 
-If you're looking to quickly build agents with LangChain's `create_agent` (built on LangGraph), check out the [LangChain Agents documentation](https://docs.langchain.com/oss/python/langchain/agents).
+> [!TIP]
+> If you're looking to quickly build agents, check out **[Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview)** — a higher-level package built on LangGraph for agents that can plan, use subagents, and leverage file systems for complex tasks.
 
-> [!NOTE]
-> Looking for the JS/TS library? Check out [LangGraph.js](https://github.com/langchain-ai/langgraphjs) and the [JS docs](https://docs.langchain.com/oss/javascript/langgraph/overview).
+For an equivalent JS/TS library, check out [LangGraph.js](https://github.com/langchain-ai/langgraphjs) and the [JS docs](https://docs.langchain.com/oss/javascript/langgraph/overview).
 
 ## Why use LangGraph?
 
