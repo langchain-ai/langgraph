@@ -624,13 +624,15 @@ class BasePostgresStore(Generic[C]):
         if op == "$eq":
             return "value->%s = %s::jsonb", [key, json.dumps(value)]
         elif op == "$gt":
-            return "value->>%s > %s", [key, str(value)]
+            # Cast to numeric so comparison is numeric, not lexicographic text.
+            # value->>key returns text; without the cast "9" > "10" is True.
+            return "(value->>%s)::numeric > %s", [key, value]
         elif op == "$gte":
-            return "value->>%s >= %s", [key, str(value)]
+            return "(value->>%s)::numeric >= %s", [key, value]
         elif op == "$lt":
-            return "value->>%s < %s", [key, str(value)]
+            return "(value->>%s)::numeric < %s", [key, value]
         elif op == "$lte":
-            return "value->>%s <= %s", [key, str(value)]
+            return "(value->>%s)::numeric <= %s", [key, value]
         elif op == "$ne":
             return "value->%s != %s::jsonb", [key, json.dumps(value)]
         else:
