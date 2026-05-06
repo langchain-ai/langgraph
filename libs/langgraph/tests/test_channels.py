@@ -284,6 +284,28 @@ def test_messages_delta_reducer_tuple_write_is_one_message() -> None:
     assert result[0].content == "hi"
 
 
+def test_messages_delta_reducer_assigns_uuid_to_id_less_messages() -> None:
+    """Messages without IDs get UUIDs assigned, matching add_messages behavior.
+
+    Without UUID assignment, RemoveMessage tombstoning fails on messages that
+    were created without explicit IDs.
+    """
+    m1 = HumanMessage(content="hi")
+    m2 = AIMessage(content="hello")
+    assert m1.id is None
+    assert m2.id is None
+
+    result = _messages_delta_reducer([], [[m1, m2]])
+    assert len(result) == 2
+    assert result[0].id is not None
+    assert result[1].id is not None
+
+    # RemoveMessage tombstoning must work on the now-assigned IDs.
+    result2 = _messages_delta_reducer(result, [RemoveMessage(id=result[1].id)])
+    assert len(result2) == 1
+    assert result2[0].content == "hi"
+
+
 def test_delta_channel_checkpoint_returns_missing() -> None:
     """checkpoint() always returns MISSING regardless of state.
 

@@ -257,9 +257,10 @@ def _messages_delta_reducer(
 
     Raw dict / string / tuple inputs are coerced to typed `BaseMessage`
     objects so that HTTP-driven graphs work without a separate coercion
-    step. This is not full `add_messages` parity — `REMOVE_ALL_MESSAGES`,
-    unknown-id `RemoveMessage` errors, missing-id UUID assignment, and
-    `BaseMessageChunk` conversion are not handled here.
+    step. Messages without IDs are assigned UUIDs (matching `add_messages`
+    behavior) so that message eviction and `RemoveMessage` tombstoning work
+    correctly. `REMOVE_ALL_MESSAGES` and `BaseMessageChunk` conversion are
+    not handled here.
 
     Example::
 
@@ -289,15 +290,19 @@ def _messages_delta_reducer(
         state_msgs = cast("list[AnyMessage]", convert_to_messages(state))
     msgs = cast("list[AnyMessage]", convert_to_messages(flat))
 
-    index: dict[str, int] = {
-        m.id: i for i, m in enumerate(state_msgs) if m.id is not None
-    }
+    # Build index and assign missing IDs in one pass (parity with add_messages
+    # so that eviction and RemoveMessage tombstoning work on ID-less messages).
+    index: dict[str, int] = {}
+    for i, m in enumerate(state_msgs):
+        if m.id is None:
+            m.id = str(uuid.uuid4())
+        index[m.id] = i
     result: list[AnyMessage | None] = list(state_msgs)
     for msg in msgs:
+        if msg.id is None:
+            msg.id = str(uuid.uuid4())
         mid = msg.id
-        if mid is None:
-            result.append(msg)
-        elif isinstance(msg, RemoveMessage):
+        if isinstance(msg, RemoveMessage):
             if mid in index:
                 result[index[mid]] = None
                 del index[mid]
