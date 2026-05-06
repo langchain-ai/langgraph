@@ -624,12 +624,32 @@ class BasePostgresStore(Generic[C]):
         if op == "$eq":
             return "value->%s = %s::jsonb", [key, json.dumps(value)]
         elif op == "$gt":
+            if isinstance(value, (int, float)):
+                return (
+                    "(jsonb_typeof(value->>%s) = 'number') AND (CAST(value->>%s AS NUMERIC) > %s)",
+                    [key, key, value],
+                )
             return "value->>%s > %s", [key, str(value)]
         elif op == "$gte":
+            if isinstance(value, (int, float)):
+                return (
+                    "(jsonb_typeof(value->>%s) = 'number') AND (CAST(value->>%s AS NUMERIC) >= %s)",
+                    [key, key, value],
+                )
             return "value->>%s >= %s", [key, str(value)]
         elif op == "$lt":
+            if isinstance(value, (int, float)):
+                return (
+                    "(jsonb_typeof(value->>%s) = 'number') AND (CAST(value->>%s AS NUMERIC) < %s)",
+                    [key, key, value],
+                )
             return "value->>%s < %s", [key, str(value)]
         elif op == "$lte":
+            if isinstance(value, (int, float)):
+                return (
+                    "(jsonb_typeof(value->>%s) = 'number') AND (CAST(value->>%s AS NUMERIC) <= %s)",
+                    [key, key, value],
+                )
             return "value->>%s <= %s", [key, str(value)]
         elif op == "$ne":
             return "value->%s != %s::jsonb", [key, json.dumps(value)]
