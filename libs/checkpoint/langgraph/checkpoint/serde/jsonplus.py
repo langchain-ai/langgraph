@@ -391,6 +391,17 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 (obj.__class__.__module__, obj.__class__.__name__, obj.hex),
             ),
         )
+    elif (bson_mod := sys.modules.get("bson")) is not None and isinstance(
+        obj, bson_mod.ObjectId
+    ):
+        # bson.ObjectId (used by the MongoDB checkpointer). Round-trip via
+        # the 24-char hex string: ObjectId(str(obj)) reconstructs the value.
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc(
+                (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
+            ),
+        )
     elif isinstance(obj, decimal.Decimal):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
