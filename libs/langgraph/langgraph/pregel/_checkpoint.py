@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -23,6 +23,11 @@ LATEST_VERSION = 4
 GetNextVersion = Callable[[Any, None], Any]
 
 
+class CreateCheckpointResult(NamedTuple):
+    checkpoint: Checkpoint
+    snapshotted: set[str]
+
+
 def empty_checkpoint() -> Checkpoint:
     return Checkpoint(
         v=LATEST_VERSION,
@@ -34,28 +39,23 @@ def empty_checkpoint() -> Checkpoint:
     )
 
 
-def _should_snapshot_delta(
-    name: str,
-    ch: DeltaChannel,
-    updates_since_snapshot: Mapping[str, int],
-    *,
-    force: bool,
-) -> bool:
-    """Decide whether `ch` should write a `_DeltaSnapshot` this step.
+def decide_delta_snapshots(
+    channels: Mapping[str, BaseChannel],
+    counts: Mapping[str, int],
+) -> set[str]:
+    """Return the set of DeltaChannel names that should snapshot now.
 
-    Triggers:
-      * `force` — always snapshot (used by `durability="exit"`).
-      * Update-count: this channel has accumulated at least
-        `snapshot_frequency` updates since its last snapshot. The count
-        is supplied by the caller via `updates_since_snapshot[name]` and
-        is reset to `0` whenever a snapshot fires.
-
-    Version-format-independent: works for `int`, `float`, and `str`
-    versioning schemes alike.
+    A channel snapshots when its accumulated update count (since the last
+    snapshot) reaches or exceeds `snapshot_frequency`. This is a pure
+    predicate — no mutation.
     """
-    if force:
-        return True
-    return updates_since_snapshot.get(name, 0) >= ch.snapshot_frequency
+    return {
+        name
+        for name, ch in channels.items()
+        if isinstance(ch, DeltaChannel)
+        and ch.is_available()
+        and counts.get(name, 0) >= ch.snapshot_frequency
+    }
 
 
 def create_checkpoint(
@@ -66,75 +66,69 @@ def create_checkpoint(
     id: str | None = None,
     updated_channels: set[str] | None = None,
     get_next_version: GetNextVersion | None = None,
-    force_delta_snapshot: bool = False,
     updates_since_snapshot: Mapping[str, int] | None = None,
-    new_updates_since_snapshot: dict[str, int] | None = None,
-) -> Checkpoint:
-    """Create a checkpoint for the given channels.
+) -> CreateCheckpointResult:
+    """Build a new Checkpoint from the previous one and live channel state.
 
     For each `DeltaChannel`, a `_DeltaSnapshot(value)` blob is written into
-    `channel_values[k]` when this channel has accumulated at least
-    `snapshot_frequency` updates since its last snapshot (counter supplied
-    via `updates_since_snapshot`). Otherwise the channel is omitted from
-    `channel_values`; its `channel_versions` entry still bumps so that the
-    saver tracks the channel and the ancestor walk can replay writes.
+    `channel_values[k]` when `decide_delta_snapshots` says the channel should
+    snapshot (i.e. update count >= `snapshot_frequency`). Otherwise the
+    channel is omitted from `channel_values` and the ancestor walk
+    reconstructs state from `checkpoint_writes`.
 
-    Snapshots are eager: even if the channel had no write this step, a
-    version bump is forced (via `get_next_version`) so `put()` includes
-    the channel in `new_versions` and stores the blob.
-
-    `force_delta_snapshot` ignores the cadence and always snapshots —
-    used by `durability="exit"` where intermediate writes are not stored
-    as ancestor `checkpoint_writes`.
-
-    If `new_updates_since_snapshot` is provided, the function resets the
-    counter to `0` for any channel that snapshotted this step. Counters
-    for channels that did not snapshot are left untouched (the caller is
-    responsible for incrementing them based on `updated_channels`).
+    Returns a `CreateCheckpointResult` containing the checkpoint and the
+    set of DeltaChannel names that were snapshotted (caller should reset
+    their per-channel counters to 0 for these).
     """
     ts = datetime.now(timezone.utc).isoformat()
     counts = updates_since_snapshot or {}
+    snapshotted: set[str] = set()
     if channels is None:
         values = checkpoint["channel_values"]
         channel_versions = checkpoint["channel_versions"]
     else:
+        will_snapshot = decide_delta_snapshots(channels, counts)
         values = {}
         channel_versions = dict(checkpoint["channel_versions"])
         for k in channels:
             if k not in channel_versions:
                 continue
             ch = channels[k]
-            if (
-                isinstance(ch, DeltaChannel)
-                and ch.is_available()
-                and _should_snapshot_delta(
-                    k,
-                    ch,
-                    counts,
-                    force=force_delta_snapshot,
-                )
-            ):
-                # Eager snapshot: bump version if not already written this step
-                # so put() includes this channel in new_versions and stores blob.
+            if k in will_snapshot:
+                # In exit mode, the snapshot decision is deferred to exit
+                # time (intermediate steps have do_checkpoint=False). The
+                # channel's count may have reached snapshot_frequency over
+                # several supersteps, but the LAST superstep may not have
+                # written to this channel. In that case apply_writes()
+                # (in _algo.py) didn't bump this channel's version, so
+                # saver.put() wouldn't include it in new_versions and
+                # the snapshot blob would be silently dropped. The manual
+                # bump below closes the gap. In sync/async durability this
+                # branch is effectively dead code (the step that pushes
+                # the count to freq always writes the channel).
                 if get_next_version is not None and (
                     updated_channels is None or k not in updated_channels
                 ):
                     channel_versions[k] = get_next_version(channel_versions[k], None)
                 values[k] = _DeltaSnapshot(ch.get())
-                if new_updates_since_snapshot is not None:
-                    new_updates_since_snapshot[k] = 0
+                snapshotted.add(k)
             else:
                 v = ch.checkpoint()
                 if v is not MISSING:
                     values[k] = v
-    return Checkpoint(
-        v=LATEST_VERSION,
-        ts=ts,
-        id=id or str(uuid6(clock_seq=step)),
-        channel_values=values,
-        channel_versions=channel_versions,
-        versions_seen=checkpoint["versions_seen"],
-        updated_channels=None if updated_channels is None else sorted(updated_channels),
+    return CreateCheckpointResult(
+        checkpoint=Checkpoint(
+            v=LATEST_VERSION,
+            ts=ts,
+            id=id or str(uuid6(clock_seq=step)),
+            channel_values=values,
+            channel_versions=channel_versions,
+            versions_seen=checkpoint["versions_seen"],
+            updated_channels=None
+            if updated_channels is None
+            else sorted(updated_channels),
+        ),
+        snapshotted=snapshotted,
     )
 
 
