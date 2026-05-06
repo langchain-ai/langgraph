@@ -902,9 +902,7 @@ class PregelLoop:
             if self._exit_delta_writes is not None:
                 for c, v in input_writes:
                     if isinstance(self.specs.get(c), DeltaChannel):
-                        self._exit_delta_writes.append(
-                            (self.step, NULL_TASK_ID, c, v)
-                        )
+                        self._exit_delta_writes.append((self.step, NULL_TASK_ID, c, v))
             # Persist delta-channel input writes so sub-freq inputs are
             # recoverable via ancestor walk (mirrors the Command input path).
             if self.durability != "exit":
@@ -967,7 +965,7 @@ class PregelLoop:
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         # `is` (object identity) — not `==`. Three of four call sites pass a
-        # fresh dict ({"source":"input"|"loop"|"fork"}); only 
+        # fresh dict ({"source":"input"|"loop"|"fork"}); only
         # `_suppress_interrupt`(will rename to _on_loop_exit soon)
         # at exit reuses the existing `self.checkpoint_metadata` instance. So
         # `metadata is self.checkpoint_metadata` is True only on the exit call,
@@ -985,7 +983,7 @@ class PregelLoop:
         # `_put_checkpoint` is called once per superstep with a fresh
         # metadata dict (source="input"|"loop"|"fork") — those are the
         # intermediate calls that bump the count by +1 for each delta
-        # channel touched that step. In exit mode, 
+        # channel touched that step. In exit mode,
         # `_suppress_interrupt`(will rename to _on_loop_exit soon)
         # additionally calls `_put_checkpoint(self.checkpoint_metadata)` AT
         # EXIT to commit the final checkpoint — this runs *after* the last
@@ -996,8 +994,7 @@ class PregelLoop:
         # used to mask this latent bug by resetting every count to 0.)
         if not exiting:
             prev_counts = dict(
-                self.checkpoint_metadata.get("delta_updates_since_snapshot", {})
-                or {}
+                self.checkpoint_metadata.get("delta_updates_since_snapshot", {}) or {}
             )
             new_counts = dict(prev_counts)
             if self.updated_channels:
@@ -1009,8 +1006,7 @@ class PregelLoop:
             self.checkpoint_metadata = metadata
         else:
             new_counts = dict(
-                self.checkpoint_metadata.get("delta_updates_since_snapshot", {})
-                or {}
+                self.checkpoint_metadata.get("delta_updates_since_snapshot", {}) or {}
             )
         # do checkpoint?
         do_checkpoint = self._checkpointer_put_after_previous is not None and (
@@ -1101,12 +1097,15 @@ class PregelLoop:
         Stub is created lazily — only when no persisted parent exists AND at
         least one delta channel has writes that won't be snapshotted.
         """
-        if not self._exit_delta_writes or self.checkpointer is None:
+        if (
+            not self._exit_delta_writes
+            or self.checkpointer is None
+            or self._checkpointer_put_after_previous is None
+            or self.checkpointer_put_writes is None
+        ):
             return
 
-        counts = (
-            self.checkpoint_metadata.get("delta_updates_since_snapshot", {}) or {}
-        )
+        counts = self.checkpoint_metadata.get("delta_updates_since_snapshot", {}) or {}
         will_snapshot = decide_delta_snapshots(self.channels, counts)
 
         pending = [
@@ -1158,9 +1157,7 @@ class PregelLoop:
                 CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
                     CONFIG_KEY_CHECKPOINT_NS, ""
                 ),
-                CONFIG_KEY_CHECKPOINT_ID: anchor_config[CONF][
-                    CONFIG_KEY_CHECKPOINT_ID
-                ],
+                CONFIG_KEY_CHECKPOINT_ID: anchor_config[CONF][CONFIG_KEY_CHECKPOINT_ID],
             },
         )
         for (step, tid), entries in grouped.items():
@@ -1555,9 +1552,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         )
         self._delta_write_futs = []
         self._exit_delta_writes = (
-            []
-            if self.durability == "exit" and self.checkpointer is not None
-            else None
+            [] if self.durability == "exit" and self.checkpointer is not None else None
         )
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = channels_from_checkpoint(
@@ -1815,9 +1810,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         )
         self._delta_write_futs = []
         self._exit_delta_writes = (
-            []
-            if self.durability == "exit" and self.checkpointer is not None
-            else None
+            [] if self.durability == "exit" and self.checkpointer is not None else None
         )
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)

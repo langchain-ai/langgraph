@@ -27,7 +27,9 @@ def _build_graph(
     freq: int = 1000,
 ) -> Any:
     channel = DeltaChannel(_messages_delta_reducer, snapshot_frequency=freq)
-    State = TypedDict("State", {"messages": Annotated[list, channel]})  # type: ignore[call-overload]
+    # Functional TypedDict form: class form can't reference `channel` (a
+    # local variable) inside Annotated due to forward-ref evaluation rules.
+    State = TypedDict("State", {"messages": Annotated[list, channel]})  # type: ignore[call-overload]  # noqa: UP013
 
     def respond(state: dict) -> dict:
         i = len(state["messages"])
@@ -47,7 +49,7 @@ def _build_graph(
 async def test_exit_first_run_no_delta_writes() -> None:
     """Graph with delta channel invoked with input that doesn't touch it.
     Only one checkpoint row, no stub."""
-    State = TypedDict(
+    State = TypedDict(  # noqa: UP013
         "State",
         {
             "messages": Annotated[list, DeltaChannel(_messages_delta_reducer)],
@@ -93,9 +95,7 @@ async def test_exit_first_run_all_snapshot() -> None:
 
     head = saver.get_tuple(config)
     assert head is not None
-    assert isinstance(
-        head.checkpoint["channel_values"].get("messages"), _DeltaSnapshot
-    )
+    assert isinstance(head.checkpoint["channel_values"].get("messages"), _DeltaSnapshot)
 
     state = graph.get_state(config)
     assert [m.content for m in state.values["messages"]] == ["hi", "reply-1"]
@@ -208,9 +208,7 @@ async def test_exit_snapshot_fires_at_frequency() -> None:
     assert head is not None
     count2 = head.metadata.get("delta_updates_since_snapshot", {}).get("messages", 0)
     assert count2 == 0, f"Expected reset to 0 after snapshot, got {count2}"
-    assert isinstance(
-        head.checkpoint["channel_values"].get("messages"), _DeltaSnapshot
-    )
+    assert isinstance(head.checkpoint["channel_values"].get("messages"), _DeltaSnapshot)
 
 
 async def test_exit_mixed_snapshot_and_non_snapshot() -> None:
@@ -219,7 +217,7 @@ async def test_exit_mixed_snapshot_and_non_snapshot() -> None:
 
     fast_ch = DeltaChannel(_messages_delta_reducer, snapshot_frequency=1)
     slow_ch = DeltaChannel(_messages_delta_reducer, snapshot_frequency=1000)
-    State = TypedDict(
+    State = TypedDict(  # noqa: UP013
         "State",
         {"fast": Annotated[list, fast_ch], "slow": Annotated[list, slow_ch]},
     )  # type: ignore[call-overload]
@@ -300,9 +298,7 @@ async def test_exit_metadata_round_trip() -> None:
         )
         head = saver.get_tuple(config)
         assert head is not None
-        count = head.metadata.get("delta_updates_since_snapshot", {}).get(
-            "messages", 0
-        )
+        count = head.metadata.get("delta_updates_since_snapshot", {}).get("messages", 0)
         cumulative = i * 2
         if cumulative >= freq:
             assert count == 0 or count == cumulative % freq or count < freq, (
