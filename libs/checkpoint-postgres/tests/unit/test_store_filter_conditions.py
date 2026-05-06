@@ -1,4 +1,3 @@
-# type: ignore
 """Regression tests for numeric filter operators in PostgresStore.
 
 Fixes https://github.com/langchain-ai/langgraph/issues/7684
@@ -23,7 +22,7 @@ class _MockPostgresStore(BasePostgresStore):
 
 @pytest.fixture()
 def store() -> _MockPostgresStore:
-    return object.__new__(_MockPostgresStore)
+    return object.__new__(_MockPostgresStore)  # type: ignore[arg-type,misc]
 
 
 @pytest.mark.parametrize(
@@ -33,33 +32,33 @@ def store() -> _MockPostgresStore:
         (
             "$gt",
             10,
-            "jsonb_typeof(value->>%s) = 'number') AND (CAST(value->>%s AS NUMERIC) > %s",
+            "jsonb_typeof(value->%s) = 'number') AND (value->>%s::numeric > %s",
         ),
         (
             "$gte",
             10,
-            "jsonb_typeof(value->>%s) = 'number') AND (CAST(value->>%s AS NUMERIC) >= %s",
+            "jsonb_typeof(value->%s) = 'number') AND (value->>%s::numeric >= %s",
         ),
         (
             "$lt",
             10,
-            "jsonb_typeof(value->>%s) = 'number') AND (CAST(value->>%s AS NUMERIC) < %s",
+            "jsonb_typeof(value->%s) = 'number') AND (value->>%s::numeric < %s",
         ),
         (
             "$lte",
             10,
-            "jsonb_typeof(value->>%s) = 'number') AND (CAST(value->>%s AS NUMERIC) <= %s",
+            "jsonb_typeof(value->%s) = 'number') AND (value->>%s::numeric <= %s",
         ),
         # Float values must also use numeric cast
         (
             "$gt",
             3.14,
-            "jsonb_typeof(value->>%s) = 'number') AND (CAST(value->>%s AS NUMERIC) > %s",
+            "jsonb_typeof(value->%s) = 'number') AND (value->>%s::numeric > %s",
         ),
         (
             "$lt",
             2.718,
-            "jsonb_typeof(value->>%s) = 'number') AND (CAST(value->>%s AS NUMERIC) < %s",
+            "jsonb_typeof(value->%s) = 'number') AND (value->>%s::numeric < %s",
         ),
         # String values must NOT use CAST (text comparison is correct for strings)
         ("$gt", "apple", "value->>%s > %s"),
@@ -109,8 +108,10 @@ def test_numeric_filter_params_are_not_stringified(
     assert value in params, (
         f"Numeric value {value!r} should be in params, got {params!r}"
     )
-    # Confirm it's not the string version
-    assert str(value) not in params or value in params
+    # Stringified form must NOT be present for numeric inputs
+    assert str(value) not in params, (
+        f"Stringified value {str(value)!r} should NOT be in params, got {params!r}"
+    )
 
 
 @pytest.mark.parametrize("op", ["$eq", "$ne"])
