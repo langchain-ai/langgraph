@@ -2267,3 +2267,48 @@ def test_node_without_error_handler_still_fails_run():
 
     with pytest.raises(ValueError, match="no handler"):
         graph.invoke({"foo": ""})
+
+
+def test_retry_jitter_does_not_exceed_max_interval() -> None:
+    """Jitter must never push sleep_time past max_interval (issue #7554)."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempt_count = 0
+
+    def failing_node(state: State) -> State:
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count < 2:
+            raise ValueError("deliberate")
+        return {"foo": "ok"}
+
+    policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.5,
+        max_interval=0.5,  # tight cap — same as initial_interval
+        jitter=True,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, retry_policy=policy)
+        .add_edge(START, "failing_node")
+        .compile()
+    )
+
+    # Worst-case jitter: random.uniform always returns 1.0
+    with (
+        patch("random.uniform", return_value=1.0),
+        patch("time.sleep") as mock_sleep,
+    ):
+        result = graph.invoke({"foo": ""})
+
+    assert result["foo"] == "ok"
+    for call in mock_sleep.call_args_list:
+        actual_sleep = call[0][0]
+        assert actual_sleep <= 0.5, (
+            f"sleep_time {actual_sleep} exceeded max_interval 0.5 — jitter was not capped"
+        )
