@@ -768,7 +768,7 @@ class PregelLoop:
                     if len(self._pending_interrupts()) > 1:
                         raise RuntimeError(
                             "When there are multiple pending interrupts, you must specify the interrupt id when resuming. "
-                            "Docs: https://docs.langchain.com/oss/python/langgraph/add-human-in-the-loop#resume-multiple-interrupts-with-one-invocation."
+                            "Docs: https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/#resuming-with-multiple-interrupt-ids"
                         )
 
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
