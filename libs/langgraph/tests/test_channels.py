@@ -3,7 +3,12 @@ from collections.abc import Sequence
 from typing import Annotated
 
 import pytest
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, RemoveMessage
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    HumanMessage,
+    RemoveMessage,
+)
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import NotRequired, TypedDict
@@ -311,7 +316,15 @@ def test_messages_delta_reducer_remove_all_messages() -> None:
     state = [HumanMessage(content="old", id="h1"), AIMessage(content="prior", id="a1")]
 
     # Sentinel mid-batch: everything before it (including state) is discarded.
-    result = _messages_delta_reducer(state, [[RemoveMessage(id=REMOVE_ALL_MESSAGES), HumanMessage(content="fresh", id="h2")]])
+    result = _messages_delta_reducer(
+        state,
+        [
+            [
+                RemoveMessage(id=REMOVE_ALL_MESSAGES),
+                HumanMessage(content="fresh", id="h2"),
+            ]
+        ],
+    )
     assert len(result) == 1
     assert result[0].content == "fresh"
 
