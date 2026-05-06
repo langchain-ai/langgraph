@@ -71,6 +71,8 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
         ("langchain_core.messages.modifier", "RemoveMessage"),
         # langchain-core document model
         ("langchain_core.documents.base", "Document"),
+        # bson (used by the MongoDB checkpointer)
+        ("bson.objectid", "ObjectId"),
         # langgraph
         ("langgraph.types", "Send"),
         ("langgraph.types", "TimeoutPolicy"),
