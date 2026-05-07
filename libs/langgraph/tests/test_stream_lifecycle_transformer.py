@@ -35,8 +35,16 @@ def _tasks_start(
     *,
     task_id: str,
     name: str,
+    input: Any = None,
 ) -> dict[str, Any]:
-    """Build a `tasks` ProtocolEvent carrying a TaskPayload (start)."""
+    """Build a `tasks` ProtocolEvent carrying a TaskPayload (start).
+
+    Pass `input={"tool_call": {"args": {...}}}` (or any envelope with
+    that shape) to exercise the lifecycle transformer's input mining of
+    spawn-intent metadata (`subagent_type`, `description`) — this
+    mirrors the `ToolCallWithContext` payload `langgraph.prebuilt.ToolNode`
+    Send-fans out per tool call.
+    """
     return {
         "type": "event",
         "method": "tasks",
@@ -46,7 +54,7 @@ def _tasks_start(
             "data": {
                 "id": task_id,
                 "name": name,
-                "input": None,
+                "input": input,
                 "triggers": [],
             },
         },
@@ -124,6 +132,91 @@ def test_started_emitted_on_first_direct_child_task() -> None:
     assert payload["namespace"] == ["agent:abc123"]
     assert payload["graph_name"] == "agent"
     assert payload["trigger_call_id"] == "abc123"
+
+
+def test_started_carries_cause_when_parent_input_has_spawn_metadata() -> None:
+    """When a parent task's `input` is a `ToolCallWithContext`-shaped
+    envelope (`{"tool_call": {"args": {...}}, ...}`, the layout
+    `langgraph.prebuilt.ToolNode` Send-fans out per call), the
+    transformer mines `subagent_type` and `description` from
+    `tool_call.args` and remembers them keyed by `parent_task_id`.
+    When that parent task spawns a subgraph (the child's namespace
+    ends in `name:<parent_task_id>`), the `lifecycle.started` payload
+    carries `cause = {"type": "tool_call", "subagent_type": ..., "description": ...}`.
+    Consumers join on `trigger_call_id` (the pregel task id) for
+    identity; this dict is purely descriptive."""
+    mux = _build_lifecycle_mux()
+    # Parent task at root ns whose input matches the Send envelope.
+    mux.push(
+        _tasks_start(
+            [],
+            task_id="abc123",
+            name="tools",
+            input={
+                "tool_call": {
+                    "id": "call_xyz",
+                    "name": "task",
+                    "args": {
+                        "subagent_type": "researcher",
+                        "description": "look up weather",
+                    },
+                }
+            },
+        )
+    )
+    # Child subgraph's first task — trigger_call_id parsed from segment.
+    mux.push(_tasks_start(["agent:abc123"], task_id="t1", name="model"))
+
+    [payload] = _drain_lifecycle(mux)
+    assert payload["event"] == "started"
+    assert payload["trigger_call_id"] == "abc123"
+    assert payload["cause"] == {
+        "type": "tool_call",
+        "subagent_type": "researcher",
+        "description": "look up weather",
+    }
+    # tool_call_id is intentionally not in cause — consumers join on
+    # trigger_call_id (the pregel task id) instead.
+    assert "tool_call_id" not in payload["cause"]
+
+
+def test_started_cause_with_description_but_no_subagent_type() -> None:
+    """Partial spawn metadata (only `description`, or only `subagent_type`)
+    still produces a cause — both fields are optional within the dict."""
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            [],
+            task_id="abc123",
+            name="tools",
+            input={
+                "tool_call": {
+                    "id": "call_xyz",
+                    "name": "task",
+                    "args": {"description": "do a thing"},
+                }
+            },
+        )
+    )
+    mux.push(_tasks_start(["agent:abc123"], task_id="t1", name="model"))
+
+    [payload] = _drain_lifecycle(mux)
+    assert payload["cause"] == {
+        "type": "tool_call",
+        "description": "do a thing",
+    }
+
+
+def test_started_omits_cause_for_structurally_spawned_subgraph() -> None:
+    """Subgraphs spawned without a recognizable tool-call envelope on
+    the parent's input (Send with custom payloads, plain nested
+    `graph.invoke`, etc.) don't get a `cause` field on
+    `lifecycle.started`."""
+    mux = _build_lifecycle_mux()
+    mux.push(_tasks_start(["agent:abc123"], task_id="t1", name="tool"))
+
+    [payload] = _drain_lifecycle(mux)
+    assert "cause" not in payload
 
 
 def test_started_dedup_on_repeat_namespace() -> None:
