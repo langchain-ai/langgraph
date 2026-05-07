@@ -18,6 +18,7 @@ from langgraph_sdk.schema import (
     CronSortBy,
     Durability,
     Input,
+    Json,
     OnCompletionBehavior,
     QueryParamTypes,
     Run,
@@ -413,6 +414,7 @@ class CronClient:
         assistant_id: str | None = None,
         thread_id: str | None = None,
         enabled: bool | None = None,
+        metadata: Json = None,
         limit: int = 10,
         offset: int = 0,
         sort_by: CronSortBy | None = None,
@@ -427,6 +429,7 @@ class CronClient:
             assistant_id: The assistant ID or graph name to search for.
             thread_id: the thread ID to search for.
             enabled: The enabled status to search for.
+            metadata: Metadata to filter by. Exact match filter for each KV pair.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             headers: Optional custom headers to include with the request.
@@ -481,6 +484,8 @@ class CronClient:
             "limit": limit,
             "offset": offset,
         }
+        if metadata:
+            payload["metadata"] = metadata
         if sort_by:
             payload["sort_by"] = sort_by
         if sort_order:
@@ -497,6 +502,7 @@ class CronClient:
         *,
         assistant_id: str | None = None,
         thread_id: str | None = None,
+        metadata: Json = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> int:
@@ -505,6 +511,7 @@ class CronClient:
         Args:
             assistant_id: Assistant ID to filter by.
             thread_id: Thread ID to filter by.
+            metadata: Metadata to filter by. Exact match filter for each KV pair.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -516,6 +523,8 @@ class CronClient:
             payload["assistant_id"] = assistant_id
         if thread_id:
             payload["thread_id"] = thread_id
+        if metadata:
+            payload["metadata"] = metadata
         return await self.http.post(
             "/runs/crons/count", json=payload, headers=headers, params=params
         )
