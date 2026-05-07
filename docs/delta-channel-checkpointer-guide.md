@@ -164,7 +164,7 @@ These optional methods (`prune`, `delete_for_runs`, `copy_thread`) have
 **no OSS implementation** yet. The docstrings on `BaseCheckpointSaver` flag
 the danger; this section provides concrete recipes.
 
-### The pitfall
+### The challenge
 
 - The "latest" checkpoint is rarely a snapshot point (`snapshot_frequency`
   defaults to 1000).
@@ -195,7 +195,7 @@ Pass `channels=[]` for graphs without `DeltaChannel` — returns
 
 ### Implementing `prune`
 
-Three strategies, ordered by recommendation:
+Three strategies:
 
 #### Strategy A — Compact-and-prune (requires graph access)
 
@@ -211,7 +211,7 @@ This is the most space-efficient but requires access to the graph's
 reducers, so it must be done at the application layer (not purely
 saver-side).
 
-#### Strategy B — Walk-to-boundary (purely saver-side, recommended)
+#### Strategy B — Walk-to-boundary 
 
 ```python
 async def aprune(self, thread_ids, *, strategy="keep_latest"):
