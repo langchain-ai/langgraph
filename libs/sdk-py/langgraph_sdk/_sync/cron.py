@@ -419,6 +419,7 @@ class SyncCronClient:
             thread_id: the thread ID to search for.
             enabled: Whether the cron job is enabled.
             metadata: Metadata to filter by. Exact match filter for each KV pair.
+                !!! version-added "Added in Agent Server version 0.9.0"
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             headers: Optional custom headers to include with the request.
@@ -499,6 +500,7 @@ class SyncCronClient:
             assistant_id: Assistant ID to filter by.
             thread_id: Thread ID to filter by.
             metadata: Metadata to filter by. Exact match filter for each KV pair.
+                !!! version-added "Added in Agent Server version 0.9.0"
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
