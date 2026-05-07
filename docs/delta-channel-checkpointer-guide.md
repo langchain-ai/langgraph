@@ -253,12 +253,6 @@ SELECT checkpoint_id FROM ancestors;
 -- This returns the keep-set for channel 'messages'.
 ```
 
-#### Strategy C — Refuse
-
-Detect `DeltaChannel` usage (e.g. check
-`delta_updates_since_snapshot` in metadata) and skip pruning those threads.
-Cheapest correct option for projects that don't need pruning yet.
-
 ### Implementing `copy_thread`
 
 **Default safe approach:** copy *all* rows for
@@ -348,46 +342,6 @@ necessary but not sufficient for cleanup methods).
 See existing patterns in:
 - `libs/langgraph/tests/test_delta_channel_migration.py`
 - `libs/langgraph/tests/test_delta_channel_exit_mode.py`
-
----
-
-## Part V — Future Work
-
-- **`DeltaChannelAwarePruneMixin`** — wraps `aget_delta_channel_keepset`
-  together with abstract backend hooks into ready-to-use `aprune` /
-  `acopy_thread` / `adelete_for_runs` bodies. Deferred because the hook
-  shape is opinionated and the keepset helper already factors out the
-  dangerous logic.
-
-  Sketch:
-  ```python
-  class DeltaChannelAwarePruneMixin:
-      DELTA_CHANNELS: ClassVar[Sequence[str]] = ()
-
-      async def _alist_thread_heads(self, tid: str) -> list[RunnableConfig]: ...
-      async def _alist_thread_checkpoint_ids(self, tid: str) -> set[str]: ...
-      async def _adelete_checkpoint_rows(self, tid: str, ids: set[str]) -> None: ...
-
-      async def aprune(self, thread_ids, *, strategy="keep_latest"):
-          for tid in thread_ids:
-              heads = await self._alist_thread_heads(tid)
-              keep: set[str] = set()
-              for h in heads:
-                  keep |= await self.aget_delta_channel_keepset(
-                      config=h, channels=self.DELTA_CHANNELS,
-                  )
-              all_ids = await self._alist_thread_checkpoint_ids(tid)
-              await self._adelete_checkpoint_rows(tid, all_ids - keep)
-  ```
-
-- **OSS `prune` / `delete_for_runs` / `copy_thread` implementations** on
-  Postgres / SQLite savers. Planned as separate PRs.
-
-- **Pregel-side Strategy A compaction helper** — needs graph + reducers;
-  lives in `langgraph` package, not the saver.
-
-- **API stabilization** — all methods marked Beta here will move to stable
-  once the design proves out in production.
 
 ---
 
