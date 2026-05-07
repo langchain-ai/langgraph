@@ -207,6 +207,121 @@ def test_started_cause_with_description_but_no_subagent_type() -> None:
     }
 
 
+def test_started_carries_cause_for_list_shape_per_call_input() -> None:
+    """langchain v1's `create_agent` Send-fans out a per-call task whose
+    `input` is a single-element list of tool-call dicts:
+    `[{"id": ..., "name": ..., "args": {...}}]`. The transformer mines
+    `subagent_type` and `description` from `args` exactly as for the
+    `ToolCallWithContext` dict envelope, so `lifecycle.started.cause`
+    fires regardless of which agent factory drove the dispatch."""
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            [],
+            task_id="abc123",
+            name="tools",
+            input=[
+                {
+                    "id": "tc-1",
+                    "name": "task",
+                    "args": {
+                        "subagent_type": "researcher",
+                        "description": "Do X",
+                    },
+                }
+            ],
+        )
+    )
+    mux.push(_tasks_start(["agent:abc123"], task_id="t1", name="model"))
+
+    [payload] = _drain_lifecycle(mux)
+    assert payload["event"] == "started"
+    assert payload["trigger_call_id"] == "abc123"
+    assert payload["cause"] == {
+        "type": "tool_call",
+        "subagent_type": "researcher",
+        "description": "Do X",
+    }
+
+
+def test_list_shape_ignored_when_not_single_element() -> None:
+    """Only single-element lists are recognized as the per-call shape;
+    a 0- or 2+-element list is some other batched/multi-call payload
+    and must not be mined."""
+    # Two-element list — not the per-call shape.
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            [],
+            task_id="abc123",
+            name="tools",
+            input=[
+                {
+                    "id": "tc-1",
+                    "name": "task",
+                    "args": {"subagent_type": "researcher"},
+                },
+                {
+                    "id": "tc-2",
+                    "name": "task",
+                    "args": {"subagent_type": "writer"},
+                },
+            ],
+        )
+    )
+    mux.push(_tasks_start(["agent:abc123"], task_id="t1", name="model"))
+
+    [payload] = _drain_lifecycle(mux)
+    assert "cause" not in payload
+
+    # Empty list.
+    mux2 = _build_lifecycle_mux()
+    mux2.push(_tasks_start([], task_id="def456", name="tools", input=[]))
+    mux2.push(_tasks_start(["agent:def456"], task_id="t1", name="model"))
+    [payload2] = _drain_lifecycle(mux2)
+    assert "cause" not in payload2
+
+
+def test_list_shape_robust_to_non_dict_or_missing_args() -> None:
+    """Duck-typing safety: a single-element list whose element isn't a
+    dict, or whose dict has no/non-dict `args`, or whose `args` lacks
+    both fields, must not raise — it just no-ops."""
+    # Element is not a dict.
+    mux = _build_lifecycle_mux()
+    mux.push(_tasks_start([], task_id="t-a", name="tools", input=["not-a-dict"]))
+    mux.push(_tasks_start(["agent:t-a"], task_id="t1", name="model"))
+    [payload] = _drain_lifecycle(mux)
+    assert "cause" not in payload
+
+    # Args is not a dict.
+    mux2 = _build_lifecycle_mux()
+    mux2.push(
+        _tasks_start(
+            [],
+            task_id="t-b",
+            name="tools",
+            input=[{"id": "tc", "name": "task", "args": "nope"}],
+        )
+    )
+    mux2.push(_tasks_start(["agent:t-b"], task_id="t1", name="model"))
+    [payload2] = _drain_lifecycle(mux2)
+    assert "cause" not in payload2
+
+    # Args dict lacks both subagent_type and description.
+    mux3 = _build_lifecycle_mux()
+    mux3.push(
+        _tasks_start(
+            [],
+            task_id="t-c",
+            name="tools",
+            input=[{"id": "tc", "name": "task", "args": {"other": "field"}}],
+        )
+    )
+    mux3.push(_tasks_start(["agent:t-c"], task_id="t1", name="model"))
+    [payload3] = _drain_lifecycle(mux3)
+    assert "cause" not in payload3
+
+
 def test_started_omits_cause_for_structurally_spawned_subgraph() -> None:
     """Subgraphs spawned without a recognizable tool-call envelope on
     the parent's input (Send with custom payloads, plain nested

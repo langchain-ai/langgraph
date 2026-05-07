@@ -495,26 +495,42 @@ class _TasksLifecycleBase(StreamTransformer):
 
     def _record_spawn_metadata(self, data: dict[str, Any]) -> None:
         """Remember `task_id -> spawn metadata` if the task input matches
-        the `ToolCallWithContext`-style envelope used by Send-fan-out
-        tool runners (`{"tool_call": {"id": ..., "args": {...}, ...}, ...}`).
+        a recognized per-call tool-dispatch shape.
 
-        Captures `subagent_type` and `description` from the tool_call
-        args when present. Duck-typed on shape so 3rd-party tool runners
+        Two shapes are accepted (both duck-typed so 3rd-party tool runners
         that mimic the layout participate without importing prebuilt
-        types. Tool_call_id is intentionally not extracted — consumers
-        join on `trigger_call_id` (the pregel task id), which is the
-        same `task.id` we cache by here.
+        types):
+
+        1. `ToolCallWithContext`-style envelope used by
+           `langgraph.prebuilt.ToolNode` Send-fan-out:
+           `{"tool_call": {"id": ..., "args": {...}, ...}, ...}`.
+        2. Single-element list of tool-call dicts used by langchain v1's
+           `create_agent` Send-fan-out:
+           `[{"id": ..., "name": ..., "args": {...}}]`.
+
+        Both funnel through the same args-mining code so
+        `subagent_type` and `description` are extracted identically.
+        Tool_call_id is intentionally not extracted — consumers join
+        on `trigger_call_id` (the pregel task id), which is the same
+        `task.id` we cache by here.
         """
         task_id = data.get("id")
         if not isinstance(task_id, str):
             return
         payload = data.get("input")
-        if not isinstance(payload, dict):
+        args: Any
+        if isinstance(payload, dict):
+            tool_call = payload.get("tool_call")
+            if not isinstance(tool_call, dict):
+                return
+            args = tool_call.get("args")
+        elif isinstance(payload, list) and len(payload) == 1:
+            element = payload[0]
+            if not isinstance(element, dict):
+                return
+            args = element.get("args")
+        else:
             return
-        tool_call = payload.get("tool_call")
-        if not isinstance(tool_call, dict):
-            return
-        args = tool_call.get("args")
         if not isinstance(args, dict):
             return
         metadata: dict[str, str] = {}
