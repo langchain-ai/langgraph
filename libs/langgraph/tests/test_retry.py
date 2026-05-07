@@ -1674,15 +1674,28 @@ async def test_arun_with_retry_timeout_observer_tracks_attempts():
 async def test_arun_with_retry_timeout_observer_emits_progress_on_heartbeat():
     events: list = []
 
+    # `_TimedAttemptScope.__init__` sets `_last_progress` to `time.monotonic()`,
+    # but the watchdog itself doesn't start running until after `wrap_config`
+    # and task scheduling — under CI load that gap can be large enough to eat
+    # the entire idle window before the task body's first await even runs. We
+    # defend against that by:
+    #   1. Using a generous idle_timeout so scheduling slack stays well within it.
+    #   2. Calling `runtime.heartbeat()` BEFORE the first sleep, which resets
+    #      `_last_progress` to "now" the moment the task body actually starts.
+    idle_timeout_s = 1.0
+
     class HeartbeatProc:
         async def ainvoke(self, input, config):
             runtime = config[CONF][CONFIG_KEY_RUNTIME]
+            runtime.heartbeat()  # reset the idle clock at task-body entry
             for _ in range(8):
                 await asyncio.sleep(0.05)
                 runtime.heartbeat()
             return "ok"
 
-    task = _make_task(HeartbeatProc(), timeout=_idle_timeout(0.2), name="heartbeat")
+    task = _make_task(
+        HeartbeatProc(), timeout=_idle_timeout(idle_timeout_s), name="heartbeat"
+    )
     task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
     assert await arun_with_retry(task, retry_policy=None) == "ok"
 
@@ -1691,13 +1704,13 @@ async def test_arun_with_retry_timeout_observer_emits_progress_on_heartbeat():
     assert by_event[-1] == "finish"
     progress = [ev for ev in events if ev.event == "progress"]
     assert progress, "expected at least one progress event from heartbeat"
-    # Rate limit is `idle_timeout / 4` = 0.05s; with 8 heartbeats spaced ~0.05s
-    # we should see at most ~one progress event per heartbeat (well below 8).
+    # Rate limit is `idle_timeout / 4` = 0.25s; with the task running for
+    # ~400ms we expect 1–2 progress events (well below the 9 heartbeats).
     assert len(progress) <= len(by_event)
     for ev in progress:
         assert ev.context.task_name == "heartbeat"
         assert ev.context.attempt == 1
-        assert ev.context.idle_timeout_secs == 0.2
+        assert ev.context.idle_timeout_secs == idle_timeout_s
         assert isinstance(ev.progress_at, datetime)
 
 
