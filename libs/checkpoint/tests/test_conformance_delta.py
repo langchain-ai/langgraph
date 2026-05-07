@@ -2,29 +2,27 @@
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
-pytest.importorskip(
+conformance = pytest.importorskip(
     "langgraph.checkpoint.conformance",
     reason="langgraph-checkpoint-conformance not installed",
 )
 
-from langgraph.checkpoint.conformance import validate  # noqa: E402
-from langgraph.checkpoint.conformance.initializer import checkpointer_test  # noqa: E402
-from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
-
-
-@checkpointer_test(name="InMemorySaver")
-async def _mem_saver():
-    yield InMemorySaver()
-
 
 @pytest.mark.asyncio
 async def test_delta_channel_conformance():
+    from langgraph.checkpoint.conformance import validate
+    from langgraph.checkpoint.conformance.initializer import checkpointer_test
+
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    @checkpointer_test(name="InMemorySaver")
+    async def mem_saver():
+        yield InMemorySaver()
+
     report = await validate(
-        _mem_saver,
+        mem_saver,
         capabilities={
             "delta_channel_history",
             "delta_channel_keepset",

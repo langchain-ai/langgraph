@@ -10,21 +10,21 @@ pytest.importorskip(
 )
 pytest.importorskip("aiosqlite", reason="aiosqlite not installed")
 
-from langgraph.checkpoint.conformance import validate  # noqa: E402
-from langgraph.checkpoint.conformance.initializer import checkpointer_test  # noqa: E402
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver  # noqa: E402
-
-
-@checkpointer_test(name="AsyncSqliteSaver")
-async def _sqlite_saver():
-    async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
-        yield saver
-
 
 @pytest.mark.asyncio
 async def test_delta_channel_conformance():
+    from langgraph.checkpoint.conformance import validate
+    from langgraph.checkpoint.conformance.initializer import checkpointer_test
+
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+    @checkpointer_test(name="AsyncSqliteSaver")
+    async def sqlite_saver():
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            yield saver
+
     report = await validate(
-        _sqlite_saver,
+        sqlite_saver,
         capabilities={
             "delta_channel_history",
             "delta_channel_keepset",
