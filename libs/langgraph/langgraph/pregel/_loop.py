@@ -100,6 +100,7 @@ from langgraph.pregel._checkpoint import (
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
+    delta_channels_to_snapshot,
     empty_checkpoint,
 )
 from langgraph.pregel._executor import (
@@ -194,8 +195,40 @@ class PregelLoop:
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
-    # Only set on AsyncPregelLoop; sync loops keep this as None.
+    # Futures from `checkpointer.put_writes` calls that produced delta-channel
+    # writes. `_checkpointer_put_after_previous` drains this list (swap to a
+    # local `futs` then reset to `[]` and wait/gather) before putting the
+    # next checkpoint, so a checkpoint never becomes durable before the
+    # writes that produced it. Initialised to `[]` in both sync and async
+    # `__enter__`; stays `None` only when no checkpointer.
     _delta_write_futs: list[Any] | None = None
+
+    # Exit-mode accumulator: every delta-channel write produced during this
+    # run (input writes from `_first` + per-superstep writes captured in
+    # `after_tick`). At exit, `_put_exit_delta_writes` filters out channels
+    # that will snapshot, then persists the rest under an anchor parent.
+    # `None` when not in exit mode (so the capture sites are no-ops).
+    # Each tuple is `(step, task_id, channel, value)` — `step` drives the
+    # synthetic step-prefixed task_id used to preserve chronological order
+    # under the saver's `ORDER BY task_id, idx` sorting.
+    _exit_delta_writes: list[tuple[int, str, str, Any]] | None = None
+
+    # The checkpoint_config that points at the parent loaded at `__enter__`
+    # (or the synthetic-empty checkpoint, on first run). We capture it
+    # eagerly because every `_put_checkpoint` advances `self.checkpoint_config`
+    # to the newly-saved checkpoint's id — by exit time the original parent
+    # config would otherwise be lost. `_put_exit_delta_writes` uses this:
+    # on resumed runs as the anchor for exit delta writes; on first runs
+    # to derive the lazy stub's config (its `checkpoint_id` is the
+    # synthetic-empty id we want the stub persisted under).
+    _initial_checkpoint_config: RunnableConfig
+
+    # True iff the saver actually returned a tuple at `__enter__`. False
+    # on the first-ever run for a thread (no parent persisted yet).
+    # `_put_exit_delta_writes` uses this to decide between anchoring on
+    # the existing parent (True) or creating a lazy stub (False).
+    _has_persisted_parent: bool = False
+
     managed: ManagedValueMapping
     checkpoint: Checkpoint
     checkpoint_id_saved: str
@@ -637,6 +670,11 @@ class PregelLoop:
             self._emit(
                 "values", map_output_values, self.output_keys, writes, self.channels
             )
+        # capture delta-channel writes for exit-mode accumulator before clearing
+        if self._exit_delta_writes is not None:
+            for tid, ch, v in self.checkpoint_pending_writes:
+                if isinstance(self.specs.get(ch), DeltaChannel):
+                    self._exit_delta_writes.append((self.step, tid, ch, v))
         # clear pending writes
         self.checkpoint_pending_writes.clear()
         # only replay (re-execute) done tasks on the first tick
@@ -854,6 +892,27 @@ class PregelLoop:
                 self.checkpointer_get_next_version,
                 self.trigger_to_nodes,
             )
+            # Input writes go through `apply_writes` directly (above) — they
+            # never enter `checkpoint_pending_writes`, so the after_tick
+            # capture site does not see them. In exit mode, capture them
+            # here so `_exit_delta_writes` includes the input's delta writes
+            # alongside per-superstep writes; otherwise the input would be
+            # lost on read (it's not in final_checkpoint.channel_values for
+            # sub-freq channels, and walks ignore target.pending_writes).
+            if self._exit_delta_writes is not None:
+                for c, v in input_writes:
+                    if isinstance(self.specs.get(c), DeltaChannel):
+                        self._exit_delta_writes.append((self.step, NULL_TASK_ID, c, v))
+            # Persist delta-channel input writes so sub-freq inputs are
+            # recoverable via ancestor walk (mirrors the Command input path).
+            if self.durability != "exit":
+                delta_input = [
+                    (c, v)
+                    for c, v in input_writes
+                    if isinstance(self.specs.get(c), DeltaChannel)
+                ]
+                if delta_input:
+                    self.put_writes(NULL_TASK_ID, delta_input)
             # save input checkpoint
             self.updated_channels = updated_channels
             self._put_checkpoint({"source": "input"})
@@ -905,36 +964,60 @@ class PregelLoop:
         return updated_channels
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
-        # assign step and parents
+        # `is` (object identity) — not `==`. Three of four call sites pass a
+        # fresh dict ({"source":"input"|"loop"|"fork"}); only
+        # `_suppress_interrupt`(will rename to _on_loop_exit soon)
+        # at exit reuses the existing `self.checkpoint_metadata` instance. So
+        # `metadata is self.checkpoint_metadata` is True only on the exit call,
+        # which is what we use to gate exit-only behaviour (skip count-bump,
+        # don't replace metadata). Could be replaced by an explicit
+        # `exiting: bool = False` parameter; left as-is to match the existing
+        # idiom in this file.
+        # TODO: replace with an explicit `exiting: bool = False` parameter.
         exiting = metadata is self.checkpoint_metadata
         if exiting and self.checkpoint["id"] == self.checkpoint_id_saved:
             # checkpoint already saved
             return
-        # Carry per-delta-channel update bookkeeping forward across
-        # supersteps. Capture from the OLD metadata before potentially
-        # replacing it with a fresh dict that wouldn't contain it. Then
-        # increment for any delta channel updated this step (so the count
-        # reflects "supersteps that wrote to this channel since last
-        # snapshot"). create_checkpoint will reset entries to 0 for any
-        # channel that fires a snapshot this step.
-        prev_counts = dict(
-            self.checkpoint_metadata.get("delta_updates_since_snapshot", {}) or {}
-        )
-        new_counts = dict(prev_counts)
-        if self.updated_channels:
-            for ch_name in self.updated_channels:
-                ch_obj = self.channels.get(ch_name)
-                if isinstance(ch_obj, DeltaChannel):
-                    new_counts[ch_name] = new_counts.get(ch_name, 0) + 1
+        # Per-delta-channel update bookkeeping.
+        #
+        # `_put_checkpoint` is called once per superstep with a fresh
+        # metadata dict (source="input"|"loop"|"fork") — those are the
+        # intermediate calls that bump the count by +1 for each delta
+        # channel touched that step. In exit mode,
+        # `_suppress_interrupt`(will rename to _on_loop_exit soon)
+        # additionally calls `_put_checkpoint(self.checkpoint_metadata)` AT
+        # EXIT to commit the final checkpoint — this runs *after* the last
+        # intermediate call already counted the last superstep. So the
+        # exit call must NOT bump again or it would double-count the last
+        # superstep. (Sync/async durability does not call `_put_checkpoint`
+        # at exit, so the issue only surfaces in exit mode. force_delta_snapshot
+        # used to mask this latent bug by resetting every count to 0.)
         if not exiting:
+            prev_counts = dict(
+                self.checkpoint_metadata.get("delta_updates_since_snapshot", {}) or {}
+            )
+            new_counts = dict(prev_counts)
+            if self.updated_channels:
+                for ch_name in self.updated_channels:
+                    if isinstance(self.channels.get(ch_name), DeltaChannel):
+                        new_counts[ch_name] = new_counts.get(ch_name, 0) + 1
             metadata["step"] = self.step
             metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
             self.checkpoint_metadata = metadata
+        else:
+            new_counts = dict(
+                self.checkpoint_metadata.get("delta_updates_since_snapshot", {}) or {}
+            )
         # do checkpoint?
         do_checkpoint = self._checkpointer_put_after_previous is not None and (
             exiting or self.durability != "exit"
         )
         # create new checkpoint
+        channels_to_snapshot = (
+            delta_channels_to_snapshot(self.channels, new_counts)
+            if do_checkpoint
+            else set()
+        )
         self.checkpoint = create_checkpoint(
             self.checkpoint,
             self.channels if do_checkpoint else None,
@@ -944,10 +1027,10 @@ class PregelLoop:
             get_next_version=self.checkpointer_get_next_version
             if do_checkpoint
             else None,
-            force_delta_snapshot=exiting and self.durability == "exit",
-            updates_since_snapshot=new_counts,
-            new_updates_since_snapshot=new_counts,
+            channels_to_snapshot=channels_to_snapshot,
         )
+        for k in channels_to_snapshot:
+            new_counts[k] = 0
         if new_counts:
             self.checkpoint_metadata["delta_updates_since_snapshot"] = new_counts
         elif "delta_updates_since_snapshot" in self.checkpoint_metadata:
@@ -1010,6 +1093,97 @@ class PregelLoop:
             # increment step
             self.step += 1
 
+    def _put_exit_delta_writes(self) -> None:
+        """Stage stub + accumulated delta writes so final_checkpoint's put
+        waits on them (visibility invariant: both must be durable before
+        final_checkpoint becomes visible to readers).
+
+        Stub is created lazily — only when no persisted parent exists AND at
+        least one delta channel has writes that won't be snapshotted.
+        """
+        if (
+            not self._exit_delta_writes
+            or self.checkpointer is None
+            or self._checkpointer_put_after_previous is None
+            or self.checkpointer_put_writes is None
+        ):
+            return
+
+        counts = self.checkpoint_metadata.get("delta_updates_since_snapshot", {}) or {}
+        channels_to_snapshot = delta_channels_to_snapshot(self.channels, counts)
+
+        pending = [
+            (step, tid, ch, v)
+            for (step, tid, ch, v) in self._exit_delta_writes
+            if ch not in channels_to_snapshot
+        ]
+        if not pending:
+            return
+
+        if self._has_persisted_parent:
+            # _initial_checkpoint_config's checkpoint_id is the saved parent's
+            # id (saver returned a real tuple at __enter__).
+            anchor_config = self._initial_checkpoint_config
+        else:
+            stub_cp = empty_checkpoint()
+            stub_cp["id"] = self.checkpoint_id_saved
+            stub_cp["ts"] = datetime.now(timezone.utc).isoformat()
+            # Stub has no parent (checkpoint_id=None in config).
+            stub_put_config = patch_configurable(
+                self._initial_checkpoint_config,
+                {CONFIG_KEY_CHECKPOINT_ID: None},
+            )
+            # Anchor config for put_writes: checkpoint_id = stub's id.
+            anchor_config = patch_configurable(
+                self._initial_checkpoint_config,
+                {CONFIG_KEY_CHECKPOINT_ID: stub_cp["id"]},
+            )
+            self._put_checkpoint_fut = self.submit(
+                self._checkpointer_put_after_previous,
+                getattr(self, "_put_checkpoint_fut", None),
+                stub_put_config,
+                stub_cp,
+                {"step": -2},
+                {},
+            )
+            # Set checkpoint_config so final_checkpoint's _put_checkpoint
+            # sees the stub as its parent.
+            self.checkpoint_config = anchor_config
+
+        # Step-prefixed synthetic task_id preserves chronological superstep
+        # order under the saver's ORDER BY task_id, idx sorting.
+        grouped: dict[tuple[int, str], list[tuple[str, Any]]] = {}
+        for step, tid, ch, v in pending:
+            grouped.setdefault((step, tid), []).append((ch, v))
+        anchor_write_config = patch_configurable(
+            anchor_config,
+            {
+                CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
+                    CONFIG_KEY_CHECKPOINT_NS, ""
+                ),
+                CONFIG_KEY_CHECKPOINT_ID: anchor_config[CONF][CONFIG_KEY_CHECKPOINT_ID],
+            },
+        )
+        for (step, tid), entries in grouped.items():
+            synth_tid = f"{step:08d}-{tid}"
+            if self.checkpointer_put_writes_accepts_task_path:
+                fut = self.submit(
+                    self.checkpointer_put_writes,
+                    anchor_write_config,
+                    entries,
+                    synth_tid,
+                    "",
+                )
+            else:
+                fut = self.submit(
+                    self.checkpointer_put_writes,
+                    anchor_write_config,
+                    entries,
+                    synth_tid,
+                )
+            if self._delta_write_futs is not None:
+                self._delta_write_futs.append(fut)
+
     def _suppress_interrupt(
         self,
         exc_type: type[BaseException] | None,
@@ -1025,6 +1199,7 @@ class PregelLoop:
             # or a nested graph with checkpointer=True
             or all(NS_END not in part for part in self.checkpoint_ns)
         ):
+            self._put_exit_delta_writes()
             self._put_checkpoint(self.checkpoint_metadata)
             self._put_pending_writes()
         # suppress interrupt
@@ -1230,6 +1405,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
+        if self._delta_write_futs:
+            futs, self._delta_write_futs = self._delta_write_futs, []
+            concurrent.futures.wait(futs)
         try:
             if prev is not None:
                 prev.result()
@@ -1347,6 +1525,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             # graph/thread. Returns None on first invocation.
             saved = self.checkpointer.get_tuple(self.checkpoint_config)
 
+        # Capture before the synthetic-empty fallback below overwrites `saved`.
+        # `_put_exit_delta_writes` uses this on first run (no persisted parent)
+        # to lazy-create a stub instead of anchoring delta writes on a parent.
+        self._has_persisted_parent = saved is not None
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
@@ -1362,6 +1544,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
                 **saved.config.get(CONF, {}),
             },
         }
+        self._initial_checkpoint_config = self.checkpoint_config
         self.prev_checkpoint_config = saved.parent_config
         self.checkpoint_id_saved = saved.checkpoint["id"]
         self.checkpoint = saved.checkpoint
@@ -1370,6 +1553,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
             if saved.pending_writes is not None
             else []
+        )
+        self._delta_write_futs = []
+        self._exit_delta_writes = (
+            [] if self.durability == "exit" and self.checkpointer is not None else None
         )
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = channels_from_checkpoint(
@@ -1596,6 +1783,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             # graph/thread. Returns None on first invocation.
             saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
 
+        # Capture before the synthetic-empty fallback below overwrites `saved`.
+        # `_put_exit_delta_writes` uses this on first run (no persisted parent)
+        # to lazy-create a stub instead of anchoring delta writes on a parent.
+        self._has_persisted_parent = saved is not None
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
@@ -1611,6 +1802,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
                 **saved.config.get(CONF, {}),
             },
         }
+        self._initial_checkpoint_config = self.checkpoint_config
         self.prev_checkpoint_config = saved.parent_config
         self.checkpoint_id_saved = saved.checkpoint["id"]
         self.checkpoint = saved.checkpoint
@@ -1621,6 +1813,9 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             else []
         )
         self._delta_write_futs = []
+        self._exit_delta_writes = (
+            [] if self.durability == "exit" and self.checkpointer is not None else None
+        )
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )
