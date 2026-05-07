@@ -63,6 +63,11 @@ class CheckpointMetadata(TypedDict, total=False):
     delta_updates_since_snapshot: dict[str, int]
     """Per-channel update count since the last `_DeltaSnapshot` was written.
 
+    !!! warning "Beta"
+
+        This metadata field backs `DeltaChannel` (beta). The key name and
+        contents may change while the delta-channel design stabilizes.
+
     Maps channel name → number of supersteps that wrote to this channel
     since its last snapshot blob. Used by `pregel.create_checkpoint` to
     decide when to write the next snapshot (when the count reaches the
@@ -134,6 +139,11 @@ class CheckpointTuple(NamedTuple):
 
 class DeltaChannelHistory(TypedDict):
     """Per-channel result entry from `BaseCheckpointSaver.get_delta_channel_history`.
+
+    !!! warning "Beta"
+
+        Part of the `DeltaChannel` support surface; in beta. Field names and
+        semantics may change.
 
     Storage-level view of what one channel contributed across the ancestor
     chain of a target checkpoint:
@@ -497,6 +507,14 @@ class BaseCheckpointSaver(Generic[V]):
     ) -> Mapping[str, DeltaChannelHistory]:
         """Walk the parent chain returning per-channel writes + seed.
 
+        !!! warning "Beta"
+
+            This method is part of the `DeltaChannel` support surface and is
+            in beta. The signature, return shape (`DeltaChannelHistory`), and
+            interaction with `_DeltaSnapshot` blobs may change. Override at
+            your own risk; the default implementation will continue to work
+            against the public `BaseCheckpointSaver` contract.
+
         For each requested channel, walks ancestors of the checkpoint
         identified by `config` (following `parent_config`) and accumulates
         `pending_writes` for that channel. The walk terminates per-channel
@@ -556,7 +574,13 @@ class BaseCheckpointSaver(Generic[V]):
     async def aget_delta_channel_history(
         self, *, config: RunnableConfig, channels: Sequence[str]
     ) -> Mapping[str, DeltaChannelHistory]:
-        """Async version of `get_delta_channel_history`."""
+        """Async version of `get_delta_channel_history`.
+
+        !!! warning "Beta"
+
+            This method is part of the `DeltaChannel` support surface and is
+            in beta. See `get_delta_channel_history` for caveats.
+        """
         if not channels:
             return {}
         collected_by_ch: dict[str, list[PendingWrite]] = {c: [] for c in channels}

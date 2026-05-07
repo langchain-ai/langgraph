@@ -26,6 +26,15 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     """Reducer channel that stores only a sentinel in checkpoint blobs and
     reconstructs state by replaying ancestor writes through the reducer.
 
+    !!! warning "Beta"
+
+        `DeltaChannel` is in beta. The API and on-disk representation may
+        change in future releases. Threads written with `DeltaChannel` today
+        are expected to remain readable, but the surrounding contract
+        (`BaseCheckpointSaver.get_delta_channel_history`, the
+        `_DeltaSnapshot` blob shape, the `delta_updates_since_snapshot`
+        metadata field) is not yet stable.
+
     The reducer receives the current accumulated value and a batch of writes
     in one call: `reducer(state, [write1, write2, ...]) -> new_state`.
 
