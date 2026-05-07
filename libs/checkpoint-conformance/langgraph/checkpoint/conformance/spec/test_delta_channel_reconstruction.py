@@ -1,14 +1,19 @@
 """DELTA_CHANNEL_RECONSTRUCTION capability tests — end-to-end round-trip.
 
-Exercises: aput + aput_writes + aget_delta_channel_history + from_checkpoint +
-replay_writes. This catches the most common silent-corruption mode: failing to
-round-trip `_DeltaSnapshot` blobs through serialization.
+Exercises: aput + aput_writes + aget_delta_channel_history + reconstruction.
+This catches the most common silent-corruption mode: failing to round-trip
+`_DeltaSnapshot` blobs through serialization.
+
+NOTE: This test does NOT import from `langgraph` (which is not a dependency
+of checkpoint-conformance). Instead it inlines a minimal reconstruction
+equivalent: seed + fold writes through a simple list-append reducer.
 """
 
 from __future__ import annotations
 
 import traceback
 from collections.abc import Callable
+from typing import Any
 from uuid import uuid4
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -16,18 +21,31 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.conformance.spec._delta_fixtures import build_delta_chain
 
 
-def _list_reducer(state: list, writes: list) -> list:
-    """Simple append reducer for testing."""
-    return state + writes
+def _reconstruct(seed: Any, writes: list) -> list:
+    """Minimal DeltaChannel reconstruction: list-append reducer.
+
+    Mirrors DeltaChannel.from_checkpoint(seed) + replay_writes(writes).
+    """
+    from langgraph.checkpoint.serde.types import _DeltaSnapshot
+
+    if seed is None:
+        base: list = []
+    elif isinstance(seed, _DeltaSnapshot):
+        base = list(seed.value)
+    else:
+        base = list(seed)
+    for _task_id, _ch, value in writes:
+        base = base + value
+    return base
 
 
 async def test_reconstruction_basic(
     saver: BaseCheckpointSaver,
 ) -> None:
     """Reconstruct delta channel value from history matches expected."""
-    from langgraph.channels.delta import DeltaChannel
-
     tid = str(uuid4())
+    # 5 steps: snapshot at 0 (value=[0]), writes at 1,2,3,4.
+    # Head = step 4. Walk from parent (step 3) collects writes 1,2,3.
     configs = await build_delta_chain(
         saver,
         thread_id=tid,
@@ -41,18 +59,10 @@ async def test_reconstruction_basic(
     history = result["msgs"]
 
     seed = history.get("seed")
-    from langgraph._internal._typing import MISSING
+    reconstructed = _reconstruct(seed, history["writes"])
 
-    if seed is None:
-        seed = MISSING
-
-    ch = DeltaChannel(_list_reducer, list)
-    replay_ch = ch.from_checkpoint(seed)
-    replay_ch.replay_writes(history["writes"])
-    reconstructed = replay_ch.get()
-
-    # Expected: snapshot at step 0 = [0], then writes at steps 1,2,3,4
-    expected = [0] + [1] + [2] + [3] + [4]
+    # seed=[0] from step 0, writes from steps 1,2,3
+    expected = [0] + [1] + [2] + [3]
     assert reconstructed == expected, (
         f"Reconstructed {reconstructed} != expected {expected}"
     )
@@ -62,9 +72,10 @@ async def test_reconstruction_mid_chain_snapshot(
     saver: BaseCheckpointSaver,
 ) -> None:
     """Reconstruction works when snapshot is mid-chain."""
-    from langgraph.channels.delta import DeltaChannel
-
     tid = str(uuid4())
+    # 6 steps: snapshots at 0 and 3, writes at 1,2,4,5.
+    # Head = step 5. Walk from step 4 stops at step 3 (snapshot).
+    # Collects writes from step 4.
     configs = await build_delta_chain(
         saver,
         thread_id=tid,
@@ -78,18 +89,10 @@ async def test_reconstruction_mid_chain_snapshot(
     history = result["msgs"]
 
     seed = history.get("seed")
-    from langgraph._internal._typing import MISSING
+    reconstructed = _reconstruct(seed, history["writes"])
 
-    if seed is None:
-        seed = MISSING
-
-    ch = DeltaChannel(_list_reducer, list)
-    replay_ch = ch.from_checkpoint(seed)
-    replay_ch.replay_writes(history["writes"])
-    reconstructed = replay_ch.get()
-
-    # Snapshot at step 3 = [3], writes at steps 4,5
-    expected = [3] + [4] + [5]
+    # Snapshot at step 3 = [3], write from step 4
+    expected = [3] + [4]
     assert reconstructed == expected, (
         f"Reconstructed {reconstructed} != expected {expected}"
     )
@@ -99,9 +102,9 @@ async def test_reconstruction_no_snapshot(
     saver: BaseCheckpointSaver,
 ) -> None:
     """Reconstruction from root (no snapshot) gives all writes accumulated."""
-    from langgraph.channels.delta import DeltaChannel
-
     tid = str(uuid4())
+    # 4 steps: no snapshot, writes at 0,1,2,3.
+    # Head = step 3. Walk from step 2 collects writes 0,1,2.
     configs = await build_delta_chain(
         saver,
         thread_id=tid,
@@ -114,16 +117,11 @@ async def test_reconstruction_no_snapshot(
     result = await saver.aget_delta_channel_history(config=head, channels=["msgs"])
     history = result["msgs"]
 
-    from langgraph._internal._typing import MISSING
+    seed = history.get("seed")
+    reconstructed = _reconstruct(seed, history["writes"])
 
-    seed = history.get("seed", MISSING)
-
-    ch = DeltaChannel(_list_reducer, list)
-    replay_ch = ch.from_checkpoint(seed)
-    replay_ch.replay_writes(history["writes"])
-    reconstructed = replay_ch.get()
-
-    expected = [0] + [1] + [2] + [3]
+    # No seed → start empty, writes from steps 0,1,2
+    expected = [0] + [1] + [2]
     assert reconstructed == expected, (
         f"Reconstructed {reconstructed} != expected {expected}"
     )

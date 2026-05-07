@@ -64,7 +64,7 @@ _CAPABILITY_METHOD_MAP: dict[Capability, str] = {
     Capability.COPY_THREAD: "acopy_thread",
     Capability.PRUNE: "aprune",
     Capability.DELTA_CHANNEL_HISTORY: "aget_delta_channel_history",
-    Capability.DELTA_CHANNEL_KEEPSET: "aget_delta_channel_keepset",
+    Capability.DELTA_CHANNEL_KEEPSET: "aget_tuple",
     Capability.DELTA_CHANNEL_RECONSTRUCTION: "aput",
 }
 

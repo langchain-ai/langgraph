@@ -63,6 +63,9 @@ lint.select = [
 lint.ignore = ["E501", "B008"]
 target-version = "py310"
 
+[tool.uv.sources]
+langgraph-checkpoint = {path = "../checkpoint", editable = true}
+
 [[tool.uv.index]]
 name = "testpypi"
 url = "https://test.pypi.org/simple/"

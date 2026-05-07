@@ -727,6 +727,11 @@ class BaseCheckpointSaver(Generic[V]):
         if not channels:
             return keep
         remaining: set[str] = set(channels)
+        for ch in list(remaining):
+            if ch in target_tuple.checkpoint["channel_values"]:
+                remaining.discard(ch)
+        if not remaining:
+            return keep
         cursor_config: RunnableConfig | None = target_tuple.parent_config
         while cursor_config is not None and remaining:
             tup = self.get_tuple(cursor_config)
@@ -763,6 +768,11 @@ class BaseCheckpointSaver(Generic[V]):
         if not channels:
             return keep
         remaining: set[str] = set(channels)
+        for ch in list(remaining):
+            if ch in target_tuple.checkpoint["channel_values"]:
+                remaining.discard(ch)
+        if not remaining:
+            return keep
         cursor_config: RunnableConfig | None = target_tuple.parent_config
         while cursor_config is not None and remaining:
             tup = await self.aget_tuple(cursor_config)

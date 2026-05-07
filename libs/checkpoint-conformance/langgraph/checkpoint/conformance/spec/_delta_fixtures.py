@@ -13,7 +13,6 @@ from uuid import uuid4
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint
 from langgraph.checkpoint.base.id import uuid6
-from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
 from langgraph.checkpoint.conformance.test_utils import generate_metadata
 
@@ -47,6 +46,8 @@ async def build_delta_chain(
 
         def write_value_fn(step: int) -> Any:
             return step
+
+    from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
     thread_id = thread_id or str(uuid4())
     snapshot_set = set(snapshots_at_steps)

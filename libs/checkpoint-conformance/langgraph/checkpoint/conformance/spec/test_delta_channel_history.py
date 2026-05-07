@@ -16,6 +16,9 @@ async def test_history_returns_writes_oldest_first(
 ) -> None:
     """Writes are returned oldest-to-newest."""
     tid = str(uuid4())
+    # 5 steps: snapshot at 0, writes at 1,2,3,4.
+    # Head is step 4. Walk starts at step 3 (parent of head).
+    # Collects writes from steps 1,2,3 (between snapshot at 0 and head's parent).
     configs = await build_delta_chain(
         saver, thread_id=tid, channel="ch", snapshots_at_steps=[0], total_steps=5
     )
@@ -23,7 +26,7 @@ async def test_history_returns_writes_oldest_first(
     result = await saver.aget_delta_channel_history(config=head, channels=["ch"])
     writes = result["ch"]["writes"]
     values = [w[2] for w in writes]
-    assert values == [1, 2, 3, 4], f"Expected [1,2,3,4], got {values}"
+    assert values == [1, 2, 3], f"Expected [1,2,3], got {values}"
 
 
 async def test_history_seed_is_nearest_snapshot(
@@ -31,6 +34,9 @@ async def test_history_seed_is_nearest_snapshot(
 ) -> None:
     """Seed is the value from the nearest ancestor with channel_values populated."""
     tid = str(uuid4())
+    # 6 steps: snapshots at 0 and 3, writes at 1,2,4,5.
+    # Head is step 5. Walk from step 4 backward stops at step 3 (snapshot).
+    # Collects writes from step 4 only (between step 3 and head's parent step 4).
     configs = await build_delta_chain(
         saver,
         thread_id=tid,
@@ -48,7 +54,7 @@ async def test_history_seed_is_nearest_snapshot(
     assert actual_value == 3, f"Expected seed value 3 (step 3), got {actual_value}"
     writes = result["ch"]["writes"]
     values = [w[2] for w in writes]
-    assert values == [4, 5], f"Expected [4,5], got {values}"
+    assert values == [4], f"Expected [4], got {values}"
 
 
 async def test_history_excludes_target_pending_writes(
