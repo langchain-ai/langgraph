@@ -354,21 +354,21 @@ class LifecyclePayload(TypedDict, total=False):
     graph_name: NotRequired[str]
     trigger_call_id: NotRequired[str]
     cause: NotRequired[dict[str, Any]]
-    """Optional generic descriptor of what spawned this subgraph. Forwarded
+    """Optional generic descriptor of what triggered this subgraph. Forwarded
     by protocol layers as the wire `lifecycle.started.cause` field.
 
     Shape:
 
     - `{"type": "tool_call", "subagent_type": "<name>", "description": "<text>"}`
-      — set when the subgraph was spawned by a tool invocation routed
+      — set when the subgraph was triggered by a tool invocation routed
       through `langgraph.prebuilt.ToolNode`. Mined from the per-call
       dispatched task's `input.tool_call.args`. Lets consumers attribute
-      `lifecycle.started` to the spawning intent without needing the
+      `lifecycle.started` to the invoking intent without needing the
       model's `tool_call_id` (consumers join on the existing
       `trigger_call_id` field, which is the unique pregel task id of the
-      spawn).
+      invocation).
 
-    Absent for structurally-spawned subgraphs (parallel branches via
+    Absent for structurally-triggered subgraphs (parallel branches via
     `Send` without ToolNode, nested `graph.invoke()`, etc.)."""
     error: NotRequired[str]
 
@@ -410,13 +410,13 @@ class _TasksLifecycleBase(StreamTransformer):
         # Maps tracked namespace -> task_id of the parent task whose
         # `TaskResultPayload` will close it.
         self._open: dict[tuple[str, ...], str] = {}
-        # Maps task_id -> spawn metadata for tasks whose `input` looked
+        # Maps task_id -> invocation metadata for tasks whose `input` looked
         # like a `{"tool_call": {...}, ...}` envelope (the shape
         # `langgraph.prebuilt.ToolNode` Send-fans out via
         # `ToolCallWithContext`). The lifecycle hook joins on this
         # when a child subgraph fires its first task event so it can
-        # attribute the spawn to the model tool call's args.
-        self._spawn_metadata: dict[str, dict[str, str]] = {}
+        # attribute the invocation to the model tool call's args.
+        self._invocation_metadata: dict[str, dict[str, str]] = {}
 
     # --- Template-method hooks (subclass overrides) ---
 
@@ -429,14 +429,14 @@ class _TasksLifecycleBase(StreamTransformer):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
-        spawn_metadata: dict[str, str] | None = None,
+        invocation_metadata: dict[str, str] | None = None,
     ) -> None:
         """Fired once per discovered namespace (first observed task event).
 
-        `spawn_metadata` carries spawn-intent fields mined from the
+        `invocation_metadata` carries invocation-intent fields mined from the
         per-call dispatched task's `input.tool_call.args` envelope:
         `{"subagent_type": str, "description": str}` (either or both
-        may be absent). `None` for structurally-spawned subgraphs.
+        may be absent). `None` for structurally-triggered subgraphs.
         Consumers join on `trigger_call_id` (the pregel task id) for
         identity; this dict is purely descriptive metadata.
         """
@@ -474,13 +474,13 @@ class _TasksLifecycleBase(StreamTransformer):
         # so we capture parent tasks that themselves live outside the
         # tracked region but whose `id` will appear as `trigger_call_id`
         # for a child subgraph.
-        self._record_spawn_metadata(data)
+        self._record_invocation_metadata(data)
         if not self._should_track(ns) or ns in self._seen:
             return
         self._seen.add(ns)
         graph_name, trigger_call_id = _parse_ns_segment(ns[-1])
-        spawn_metadata = (
-            self._spawn_metadata.get(trigger_call_id)
+        invocation_metadata = (
+            self._invocation_metadata.get(trigger_call_id)
             if trigger_call_id is not None
             else None
         )
@@ -488,13 +488,13 @@ class _TasksLifecycleBase(StreamTransformer):
             ns,
             graph_name or None,
             trigger_call_id,
-            spawn_metadata,
+            invocation_metadata,
         )
         if trigger_call_id is not None:
             self._open[ns] = trigger_call_id
 
-    def _record_spawn_metadata(self, data: dict[str, Any]) -> None:
-        """Remember `task_id -> spawn metadata` if the task input matches
+    def _record_invocation_metadata(self, data: dict[str, Any]) -> None:
+        """Remember `task_id -> invocation metadata` if the task input matches
         a recognized per-call tool-dispatch shape.
 
         Two shapes are accepted (both duck-typed so 3rd-party tool runners
@@ -541,7 +541,7 @@ class _TasksLifecycleBase(StreamTransformer):
         if isinstance(description, str):
             metadata["description"] = description
         if metadata:
-            self._spawn_metadata[task_id] = metadata
+            self._invocation_metadata[task_id] = metadata
 
     def _pop_terminal_transitions(
         self, ns: tuple[str, ...], data: dict[str, Any]
@@ -638,7 +638,7 @@ class LifecycleTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
-        spawn_metadata: dict[str, str] | None = None,
+        invocation_metadata: dict[str, str] | None = None,
     ) -> None:
         if trigger_call_id is None:
             # Without a task id we can't correlate a parent-result
@@ -649,9 +649,9 @@ class LifecycleTransformer(_TasksLifecycleBase):
         if graph_name:
             payload["graph_name"] = graph_name
         payload["trigger_call_id"] = trigger_call_id
-        if spawn_metadata:
+        if invocation_metadata:
             cause: dict[str, Any] = {"type": "tool_call"}
-            cause.update(spawn_metadata)
+            cause.update(invocation_metadata)
             payload["cause"] = cause
         self._channel.push(payload)
 
@@ -715,7 +715,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
-        spawn_metadata: dict[str, str] | None = None,  # noqa: ARG002
+        invocation_metadata: dict[str, str] | None = None,  # noqa: ARG002
     ) -> None:
         if self._mux is None:
             return
