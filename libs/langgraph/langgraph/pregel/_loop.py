@@ -100,7 +100,7 @@ from langgraph.pregel._checkpoint import (
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
-    decide_delta_snapshots,
+    delta_channels_to_snapshot,
     empty_checkpoint,
 )
 from langgraph.pregel._executor import (
@@ -1013,7 +1013,12 @@ class PregelLoop:
             exiting or self.durability != "exit"
         )
         # create new checkpoint
-        result = create_checkpoint(
+        channels_to_snapshot = (
+            delta_channels_to_snapshot(self.channels, new_counts)
+            if do_checkpoint
+            else set()
+        )
+        self.checkpoint = create_checkpoint(
             self.checkpoint,
             self.channels if do_checkpoint else None,
             self.step,
@@ -1022,10 +1027,9 @@ class PregelLoop:
             get_next_version=self.checkpointer_get_next_version
             if do_checkpoint
             else None,
-            updates_since_snapshot=new_counts,
+            channels_to_snapshot=channels_to_snapshot,
         )
-        self.checkpoint = result.checkpoint
-        for k in result.snapshotted:
+        for k in channels_to_snapshot:
             new_counts[k] = 0
         if new_counts:
             self.checkpoint_metadata["delta_updates_since_snapshot"] = new_counts
@@ -1106,12 +1110,12 @@ class PregelLoop:
             return
 
         counts = self.checkpoint_metadata.get("delta_updates_since_snapshot", {}) or {}
-        will_snapshot = decide_delta_snapshots(self.channels, counts)
+        channels_to_snapshot = delta_channels_to_snapshot(self.channels, counts)
 
         pending = [
             (step, tid, ch, v)
             for (step, tid, ch, v) in self._exit_delta_writes
-            if ch not in will_snapshot
+            if ch not in channels_to_snapshot
         ]
         if not pending:
             return

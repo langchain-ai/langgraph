@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
-from typing import Any, NamedTuple, cast
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -23,11 +23,6 @@ LATEST_VERSION = 4
 GetNextVersion = Callable[[Any, None], Any]
 
 
-class CreateCheckpointResult(NamedTuple):
-    checkpoint: Checkpoint
-    snapshotted: set[str]
-
-
 def empty_checkpoint() -> Checkpoint:
     return Checkpoint(
         v=LATEST_VERSION,
@@ -39,7 +34,7 @@ def empty_checkpoint() -> Checkpoint:
     )
 
 
-def decide_delta_snapshots(
+def delta_channels_to_snapshot(
     channels: Mapping[str, BaseChannel],
     counts: Mapping[str, int],
 ) -> set[str]:
@@ -66,35 +61,30 @@ def create_checkpoint(
     id: str | None = None,
     updated_channels: set[str] | None = None,
     get_next_version: GetNextVersion | None = None,
-    updates_since_snapshot: Mapping[str, int] | None = None,
-) -> CreateCheckpointResult:
+    channels_to_snapshot: set[str] | None = None,
+) -> Checkpoint:
     """Build a new Checkpoint from the previous one and live channel state.
 
-    For each `DeltaChannel`, a `_DeltaSnapshot(value)` blob is written into
-    `channel_values[k]` when `decide_delta_snapshots` says the channel should
-    snapshot (i.e. update count >= `snapshot_frequency`). Otherwise the
-    channel is omitted from `channel_values` and the ancestor walk
-    reconstructs state from `checkpoint_writes`.
-
-    Returns a `CreateCheckpointResult` containing the checkpoint and the
-    set of DeltaChannel names that were snapshotted (caller should reset
-    their per-channel counters to 0 for these).
+    For each name in `channels_to_snapshot`, a `_DeltaSnapshot(value)` blob
+    is written into `channel_values[k]`. Other delta channels are omitted
+    from `channel_values` — the ancestor walk reconstructs their state
+    from `checkpoint_writes`. Callers compute the set via
+    `delta_channels_to_snapshot(channels, counts)`; defaults to empty
+    (no snapshots) when not provided.
     """
     ts = datetime.now(timezone.utc).isoformat()
-    counts = updates_since_snapshot or {}
-    snapshotted: set[str] = set()
+    channels_to_snapshot = channels_to_snapshot or set()
     if channels is None:
         values = checkpoint["channel_values"]
         channel_versions = checkpoint["channel_versions"]
     else:
-        will_snapshot = decide_delta_snapshots(channels, counts)
         values = {}
         channel_versions = dict(checkpoint["channel_versions"])
         for k in channels:
             if k not in channel_versions:
                 continue
             ch = channels[k]
-            if k in will_snapshot:
+            if k in channels_to_snapshot:
                 # In exit mode, the snapshot decision is deferred to exit
                 # time (intermediate steps have do_checkpoint=False). The
                 # channel's count may have reached snapshot_frequency over
@@ -111,24 +101,18 @@ def create_checkpoint(
                 ):
                     channel_versions[k] = get_next_version(channel_versions[k], None)
                 values[k] = _DeltaSnapshot(ch.get())
-                snapshotted.add(k)
             else:
                 v = ch.checkpoint()
                 if v is not MISSING:
                     values[k] = v
-    return CreateCheckpointResult(
-        checkpoint=Checkpoint(
-            v=LATEST_VERSION,
-            ts=ts,
-            id=id or str(uuid6(clock_seq=step)),
-            channel_values=values,
-            channel_versions=channel_versions,
-            versions_seen=checkpoint["versions_seen"],
-            updated_channels=None
-            if updated_channels is None
-            else sorted(updated_channels),
-        ),
-        snapshotted=snapshotted,
+    return Checkpoint(
+        v=LATEST_VERSION,
+        ts=ts,
+        id=id or str(uuid6(clock_seq=step)),
+        channel_values=values,
+        channel_versions=channel_versions,
+        versions_seen=checkpoint["versions_seen"],
+        updated_channels=None if updated_channels is None else sorted(updated_channels),
     )
 
 

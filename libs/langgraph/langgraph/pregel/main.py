@@ -1726,7 +1726,7 @@ class Pregel(
                 # save checkpoint
                 next_config = checkpointer.put(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, channels, step).checkpoint,
+                    create_checkpoint(checkpoint, channels, step),
                     {
                         "source": "update",
                         "step": step + 1,
@@ -1765,7 +1765,7 @@ class Pregel(
                     )
                     next_config = checkpointer.put(
                         checkpoint_config,
-                        create_checkpoint(checkpoint, channels, next_step).checkpoint,
+                        create_checkpoint(checkpoint, channels, next_step),
                         {
                             "source": "input",
                             "step": next_step,
@@ -1804,7 +1804,7 @@ class Pregel(
                 if saved is None:
                     raise InvalidUpdateError("Cannot copy a non-existent checkpoint")
 
-                next_checkpoint = create_checkpoint(checkpoint, None, step).checkpoint
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
 
                 # copy checkpoint
                 next_config = checkpointer.put(
@@ -2009,7 +2009,7 @@ class Pregel(
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1).checkpoint
+            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             next_config = checkpointer.put(
                 checkpoint_config,
                 checkpoint,
@@ -2175,7 +2175,7 @@ class Pregel(
                 # save checkpoint
                 next_config = await checkpointer.aput(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, channels, step).checkpoint,
+                    create_checkpoint(checkpoint, channels, step),
                     {
                         "source": "update",
                         "step": step + 1,
@@ -2213,7 +2213,7 @@ class Pregel(
                     )
                     next_config = await checkpointer.aput(
                         checkpoint_config,
-                        create_checkpoint(checkpoint, channels, next_step).checkpoint,
+                        create_checkpoint(checkpoint, channels, next_step),
                         {
                             "source": "input",
                             "step": next_step,
@@ -2252,7 +2252,7 @@ class Pregel(
                 if saved is None:
                     raise InvalidUpdateError("Cannot copy a non-existent checkpoint")
 
-                next_checkpoint = create_checkpoint(checkpoint, None, step).checkpoint
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
 
                 # copy checkpoint
                 next_config = await checkpointer.aput(
@@ -2456,7 +2456,7 @@ class Pregel(
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1).checkpoint
+            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             # save checkpoint, after applying writes
             next_config = await checkpointer.aput(
                 checkpoint_config,
