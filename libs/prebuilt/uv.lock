@@ -618,14 +618,14 @@ dev = [
     { name = "pytest-watch" },
     { name = "ruff", specifier = "==0.15.12" },
     { name = "starlette" },
-    { name = "ty", specifier = "==0.0.23" },
+    { name = "ty", specifier = "==0.0.33" },
 ]
 lint = [
     { name = "codespell" },
     { name = "mypy", specifier = "==1.20.2" },
     { name = "ruff", specifier = "==0.15.12" },
     { name = "starlette" },
-    { name = "ty", specifier = "==0.0.23" },
+    { name = "ty", specifier = "==0.0.33" },
 ]
 test = [
     { name = "pytest" },

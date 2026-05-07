@@ -55,7 +55,7 @@ class BytesLineDecoder:
             # Include any existing buffer in the first portion of the
             # splitlines result.
             self.buffer.extend(lines[0])
-            lines = cast(list[BytesLike], [self.buffer, *lines[1:]])
+            lines = [self.buffer, *lines[1:]]
             self.buffer = bytearray()
 
         if not trailing_newline:
@@ -69,7 +69,7 @@ class BytesLineDecoder:
         if not self.buffer and not self.trailing_cr:
             return []
 
-        lines = [self.buffer]
+        lines: list[BytesLike] = [self.buffer]
         self.buffer = bytearray()
         self.trailing_cr = False
         return lines
@@ -102,7 +102,7 @@ class SSEDecoder:
 
             sse = StreamPart(
                 event=self._event,
-                data=orjson.loads(self._data) if self._data else None,  # type: ignore[invalid-argument-type]
+                data=orjson.loads(self._data) if self._data else None,  # ty: ignore[invalid-argument-type]
                 id=self.last_event_id,
             )
 
