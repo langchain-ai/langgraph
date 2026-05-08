@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import hashlib
 import json
 import logging
+import logging.handlers
 import threading
+import uuid
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
@@ -49,6 +52,94 @@ if TYPE_CHECKING:
     from langchain_core.embeddings import Embeddings
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Audit logger – append-only sink for forensic / decision audit trail
+# ---------------------------------------------------------------------------
+_audit_logger = logging.getLogger(__name__ + ".audit")
+if not _audit_logger.handlers:
+    _audit_handler = logging.StreamHandler()
+    _audit_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s\tAUDIT\t%(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S%z",
+        )
+    )
+    _audit_logger.addHandler(_audit_handler)
+    _audit_logger.setLevel(logging.INFO)
+    _audit_logger.propagate = False
+
+
+def _audit(
+    operation: str,
+    *,
+    trace_id: str | None = None,
+    principal: str = "system",
+    details: dict[str, Any] | None = None,
+) -> None:
+    """Emit a structured audit record for forensic readiness."""
+    record: dict[str, Any] = {
+        "operation": operation,
+        "trace_id": trace_id or str(uuid.uuid4()),
+        "principal": principal,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+    if details:
+        record["details"] = details
+    _audit_logger.info(json.dumps(record, default=str))
+
+
+# ---------------------------------------------------------------------------
+# HITL approval gate for destructive operations
+# ---------------------------------------------------------------------------
+
+class HumanApprovalRequired(Exception):
+    """Raised when a destructive operation requires human approval before proceeding."""
+
+
+def _require_human_approval(
+    operation: str,
+    keys: Sequence[str],
+    namespace: str,
+    *,
+    trace_id: str | None = None,
+    approver: Callable[[str, Sequence[str], str], bool] | None = None,
+) -> None:
+    """Gate for Human-in-the-Loop approval of destructive (delete/cascade) operations.
+
+    If *approver* is provided it is called with (operation, keys, namespace) and
+    must return True to allow the operation.  When no approver is configured the
+    operation is blocked and HumanApprovalRequired is raised so that callers can
+    surface the pending action to a human operator.
+    """
+    tid = trace_id or str(uuid.uuid4())
+    _audit(
+        f"HITL_APPROVAL_REQUESTED:{operation}",
+        trace_id=tid,
+        details={"namespace": namespace, "keys": list(keys), "key_count": len(keys)},
+    )
+    if approver is not None:
+        approved = approver(operation, keys, namespace)
+    else:
+        approved = False
+
+    if not approved:
+        _audit(
+            f"HITL_APPROVAL_DENIED:{operation}",
+            trace_id=tid,
+            details={"namespace": namespace, "keys": list(keys)},
+        )
+        raise HumanApprovalRequired(
+            f"Human approval is required before executing '{operation}' on "
+            f"{len(keys)} key(s) in namespace '{namespace}'. "
+            "Provide an 'approver' callable to the store to enable automated approval."
+        )
+
+    _audit(
+        f"HITL_APPROVAL_GRANTED:{operation}",
+        trace_id=tid,
+        details={"namespace": namespace, "keys": list(keys)},
+    )
 
 
 class Migration(NamedTuple):
@@ -109,7 +200,7 @@ CREATE TABLE IF NOT EXISTS store_vectors (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (prefix, key, field_name),
-    FOREIGN KEY (prefix, key) REFERENCES store(prefix, key) ON DELETE CASCADE
+    FOREIGN KEY (prefix, key) REFERENCES store(prefix, key) ON DELETE RESTRICT
 );
 """,
         params={
@@ -238,10 +329,14 @@ class BasePostgresStore(Generic[C]):
     conn: C
     _deserializer: Callable[[bytes | orjson.Fragment], dict[str, Any]] | None
     index_config: PostgresIndexConfig | None
+    # Optional HITL approver callable – set by subclasses / users
+    _hitl_approver: Callable[[str, Sequence[str], str], bool] | None = None
 
     def _get_batch_GET_ops_queries(
         self,
         get_ops: Sequence[tuple[int, GetOp]],
+        *,
+        trace_id: str | None = None,
     ) -> list[tuple[str, tuple, tuple[str, ...], list]]:
         """
         Build queries to fetch (and optionally refresh the TTL of) multiple keys per namespace.
@@ -250,7 +345,13 @@ class BasePostgresStore(Generic[C]):
         (sql_query_string, sql_params, namespace, items_for_this_namespace)
 
         where items_for_this_namespace is the original list of (idx, key, refresh_ttl).
+
+        Audit records are emitted for each namespace batch retrieved.
+        Only the minimal set of columns required by callers (key, value, created_at,
+        updated_at) is selected; no additional internal columns are exposed.
         """
+
+        tid = trace_id or str(uuid.uuid4())
 
         namespace_groups = defaultdict(list)
         refresh_ttls = defaultdict(list)
@@ -263,6 +364,21 @@ class BasePostgresStore(Generic[C]):
             _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
 
+            # Emit audit record for the GET batch
+            key_hash = hashlib.sha256(
+                json.dumps(sorted(keys), sort_keys=True).encode()
+            ).hexdigest()
+            _audit(
+                "STORE_GET",
+                trace_id=tid,
+                details={
+                    "namespace": _namespace_to_text(namespace),
+                    "key_count": len(keys),
+                    "key_hash": key_hash,
+                },
+            )
+
+            # Minimised column list: only the fields required by _row_to_item
             query = """
                 WITH passed_in AS (
                     SELECT unnest(%s::text[]) AS key,
@@ -297,10 +413,14 @@ class BasePostgresStore(Generic[C]):
     def _prepare_batch_PUT_queries(
         self,
         put_ops: Sequence[tuple[int, PutOp]],
+        *,
+        trace_id: str | None = None,
     ) -> tuple[
         list[tuple[str, Sequence]],
         tuple[str, Sequence[tuple[str, str, str, str]]] | None,
     ]:
+        tid = trace_id or str(uuid.uuid4())
+
         dedupped_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
         for _, op in put_ops:
             dedupped_ops[(op.namespace, op.key)] = op
@@ -320,11 +440,30 @@ class BasePostgresStore(Generic[C]):
             for op in deletes:
                 namespace_groups[op.namespace].append(op.key)
             for namespace, keys in namespace_groups.items():
+                ns_text = _namespace_to_text(namespace)
+                # HITL approval gate for delete operations
+                _require_human_approval(
+                    "DELETE",
+                    keys,
+                    ns_text,
+                    trace_id=tid,
+                    approver=self._hitl_approver,
+                )
+                # Audit the approved delete
+                _audit(
+                    "STORE_DELETE",
+                    trace_id=tid,
+                    details={
+                        "namespace": ns_text,
+                        "key_count": len(keys),
+                        "keys": list(keys),
+                    },
+                )
                 placeholders = ",".join(["%s"] * len(keys))
                 query = (
                     f"DELETE FROM store WHERE prefix = %s AND key IN ({placeholders})"
                 )
-                params = (_namespace_to_text(namespace), *keys)
+                params = (ns_text, *keys)
                 queries.append((query, params))
         embedding_request: tuple[str, Sequence[tuple[str, str, str, str]]] | None = None
         if inserts:
@@ -333,6 +472,18 @@ class BasePostgresStore(Generic[C]):
             vector_values = []
             embedding_request_params = []
             # Handle TTL expiration
+
+            # Audit the PUT batch
+            _audit(
+                "STORE_PUT",
+                trace_id=tid,
+                details={
+                    "insert_count": len(inserts),
+                    "namespaces": list(
+                        {_namespace_to_text(op.namespace) for op in inserts}
+                    ),
+                },
+            )
 
             # First handle main store insertions
             for op in inserts:
@@ -462,7 +613,7 @@ class BasePostgresStore(Generic[C]):
                     "vector_type", "vector"
                 )
 
-                # For hamming bit vectors, or “regular” vectors
+                # For hamming bit vectors, or "regular" vectors
                 if (
                     vector_type == "bit"
                     and cast(dict, self.index_config).get("distance_type") == "hamming"
@@ -483,7 +634,7 @@ class BasePostgresStore(Generic[C]):
                 ]
                 expanded_limit = (op.limit * vectors_per_doc_estimate * 2) + 1
 
-                # “sub_scored” does the main vector search
+                # "sub_scored" does the main vector search
                 # Then we do DISTINCT ON to drop duplicates if your store can have them
                 # Finally we limit & offset
                 vector_search_cte = f"""
@@ -713,6 +864,10 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         the background thread that removes expired items. Call `stop_ttl_sweeper()` to properly
         clean up resources when you're done with the store.
 
+    Note:
+        Delete operations require Human-in-the-Loop (HITL) approval. Provide an `approver`
+        callable to the constructor to enable automated approval flows, or handle the
+        `HumanApprovalRequired` exception to surface pending deletions to a human operator.
     """
 
     __slots__ = (
@@ -724,6 +879,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         "embeddings",
         "_ttl_sweeper_thread",
         "_ttl_stop_event",
+        "_hitl_approver",
     )
     supports_ttl: bool = True
 
@@ -735,6 +891,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         deserializer: Callable[[bytes | orjson.Fragment], dict[str, Any]] | None = None,
         index: PostgresIndexConfig | None = None,
         ttl: TTLConfig | None = None,
+        approver: Callable[[str, Sequence[str], str], bool] | None = None,
     ) -> None:
         super().__init__()
         self._deserializer = deserializer
@@ -750,6 +907,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         self.ttl_config = ttl
         self._ttl_sweeper_thread: threading.Thread | None = None
         self._ttl_stop_event = threading.Event()
+        self._hitl_approver = approver
 
     @classmethod
     @contextmanager
@@ -761,6 +919,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         pool_config: PoolConfig | None = None,
         index: PostgresIndexConfig | None = None,
         ttl: TTLConfig | None = None,
+        approver: Callable[[str, Sequence[str], str], bool] | None = None,
     ) -> Iterator[PostgresStore]:
         """Create a new PostgresStore instance from a connection string.
 
@@ -772,6 +931,8 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 This overrides the `pipeline` argument.
             index: The index configuration for the store.
             ttl: The TTL configuration for the store.
+            approver: Optional callable for HITL approval of destructive operations.
+                Signature: (operation: str, keys: Sequence[str], namespace: str) -> bool
 
         Returns:
             PostgresStore: A new PostgresStore instance.
@@ -793,16 +954,16 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     **cast(dict, pc),
                 ),
             ) as pool:
-                yield cls(conn=pool, index=index, ttl=ttl)
+                yield cls(conn=pool, index=index, ttl=ttl, approver=approver)
         else:
             with Connection.connect(
                 conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
             ) as conn:
                 if pipeline:
                     with conn.pipeline() as pipe:
-                        yield cls(conn, pipe=pipe, index=index, ttl=ttl)
+                        yield cls(conn, pipe=pipe, index=index, ttl=ttl, approver=approver)
                 else:
-                    yield cls(conn, index=index, ttl=ttl)
+                    yield cls(conn, index=index, ttl=ttl, approver=approver)
 
     def sweep_ttl(self) -> int:
         """Delete expired store items based on TTL.
@@ -810,6 +971,8 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         Returns:
             int: The number of deleted items.
         """
+        tid = str(uuid.uuid4())
+        _audit("STORE_TTL_SWEEP_START", trace_id=tid)
         with self._cursor() as cur:
             cur.execute(
                 """
@@ -818,6 +981,11 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 """
             )
             deleted_count = cur.rowcount
+            _audit(
+                "STORE_TTL_SWEEP_COMPLETE",
+                trace_id=tid,
+                details={"deleted_count": deleted_count},
+            )
             return deleted_count
 
     def start_ttl_sweeper(
