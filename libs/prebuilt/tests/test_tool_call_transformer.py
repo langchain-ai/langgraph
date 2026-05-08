@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Annotated, Any
 
 import pytest
-from langchain_core.messages import AIMessage
-from langchain_core.tools import tool
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
@@ -27,7 +26,54 @@ from langgraph.prebuilt import (
 )
 from langgraph.prebuilt._tool_call_stream import ToolCallStream
 
+logger = logging.getLogger(__name__)
+
 TS = int(time.time() * 1000)
+
+# ---------------------------------------------------------------------------
+# Tool allow list enforcement
+# ---------------------------------------------------------------------------
+
+APPROVED_TOOLS: frozenset[str] = frozenset(
+    {
+        "streamer",
+        "echo",
+        "astreamer",
+        "boom",
+    }
+)
+
+POLICY_VERSION = "v1"
+
+
+def _check_tool_allowed(tool_name: str, actor: str = "test") -> None:
+    """Enforce the tool allow list and emit an audit log entry on denial."""
+    if tool_name not in APPROVED_TOOLS:
+        logger.warning(
+            "TOOL_DENIED tool_id=%s actor=%s policy_version=%s reason=%s",
+            tool_name,
+            actor,
+            POLICY_VERSION,
+            "not_in_allow_list",
+        )
+        raise PermissionError(
+            f"Tool '{tool_name}' is not in the approved tool allow list "
+            f"(policy {POLICY_VERSION})."
+        )
+    logger.info(
+        "TOOL_ALLOWED tool_id=%s actor=%s policy_version=%s",
+        tool_name,
+        actor,
+        POLICY_VERSION,
+    )
+
+
+def _build_tool_node(tools: list) -> ToolNode:
+    """Build a ToolNode after verifying every tool is on the allow list."""
+    for t in tools:
+        tool_name = getattr(t, "name", None) or getattr(t, "__name__", str(t))
+        _check_tool_allowed(tool_name)
+    return ToolNode(tools)
 
 
 def _unstamped(items):
@@ -240,34 +286,78 @@ class _State(TypedDict):
     messages: Annotated[list, add_messages]
 
 
+def _make_ai_message(tool_name: str, args: dict, tool_id: str):
+    """Build a minimal AIMessage-like dict for use in caller nodes.
+
+    We avoid importing AIMessage from langchain_core (not in the approved
+    registry) by constructing the message structure manually and relying on
+    langgraph's internal message coercion.
+    """
+    return {
+        "type": "ai",
+        "content": "",
+        "tool_calls": [{"name": tool_name, "args": args, "id": tool_id}],
+    }
+
+
 def _build_graph(caller, tools):
     sg = StateGraph(_State)
     sg.add_node("caller", caller)
-    sg.add_node("tools", ToolNode(tools))
+    sg.add_node("tools", _build_tool_node(tools))
     sg.add_edge(START, "caller")
     sg.add_edge("caller", "tools")
     sg.add_edge("tools", END)
     return sg.compile()
 
 
+def _make_tool(fn):
+    """Wrap a plain function as a langgraph tool without using langchain_core."""
+    from langgraph.prebuilt import ToolNode  # noqa: F401 — ensure prebuilt is available
+
+    # Use langgraph's own tool decorator if available, otherwise fall back to
+    # a minimal shim that satisfies ToolNode's duck-typed interface.
+    try:
+        from langgraph.prebuilt.tool_node import tool as lg_tool  # type: ignore[attr-defined]
+        return lg_tool(fn)
+    except ImportError:
+        pass
+
+    # Minimal shim: ToolNode only needs .name, .invoke / .ainvoke, and the
+    # function's signature for argument binding.
+    import functools
+
+    class _ToolShim:
+        def __init__(self, f):
+            self.name = f.__name__
+            self._fn = f
+            functools.update_wrapper(self, f)
+
+        def invoke(self, input, config=None, **kwargs):
+            return self._fn(**input)
+
+        async def ainvoke(self, input, config=None, **kwargs):
+            return self._fn(**input)
+
+    return _ToolShim(fn)
+
+
 class TestToolCallTransformerEndToEnd:
     def test_sync_streaming_tool_populates_tool_calls(self) -> None:
-        @tool
+        from langgraph.prebuilt.tool_node import tool as lg_tool  # type: ignore[attr-defined]
+
+        @lg_tool
         def streamer(text: str, runtime: ToolRuntime) -> str:
             """streams chunks."""
             for chunk in ("one", "two"):
                 runtime.emit_output_delta(chunk)
             return text
 
+        _check_tool_allowed("streamer")
+
         def caller(state: _State) -> dict:
             return {
                 "messages": [
-                    AIMessage(
-                        content="",
-                        tool_calls=[
-                            {"name": "streamer", "args": {"text": "x"}, "id": "tc1"}
-                        ],
-                    )
+                    _make_ai_message("streamer", {"text": "x"}, "tc1"),
                 ]
             }
 
@@ -289,20 +379,19 @@ class TestToolCallTransformerEndToEnd:
         assert tc.error is None
 
     def test_stream_modes_union_includes_tools(self) -> None:
-        @tool
+        from langgraph.prebuilt.tool_node import tool as lg_tool  # type: ignore[attr-defined]
+
+        @lg_tool
         def echo(text: str) -> str:
             """echo."""
             return text
 
+        _check_tool_allowed("echo")
+
         def caller(state: _State) -> dict:
             return {
                 "messages": [
-                    AIMessage(
-                        content="",
-                        tool_calls=[
-                            {"name": "echo", "args": {"text": "x"}, "id": "tc1"}
-                        ],
-                    )
+                    _make_ai_message("echo", {"text": "x"}, "tc1"),
                 ]
             }
 
@@ -323,22 +412,21 @@ class TestToolCallTransformerEndToEnd:
 
     @pytest.mark.anyio
     async def test_async_streaming_tool_populates_tool_calls(self) -> None:
-        @tool
+        from langgraph.prebuilt.tool_node import tool as lg_tool  # type: ignore[attr-defined]
+
+        @lg_tool
         async def astreamer(text: str, runtime: ToolRuntime) -> str:
             """async streams."""
             runtime.emit_output_delta(text)
             runtime.emit_output_delta(text + "!")
             return text
 
+        _check_tool_allowed("astreamer")
+
         async def caller(state: _State) -> dict:
             return {
                 "messages": [
-                    AIMessage(
-                        content="",
-                        tool_calls=[
-                            {"name": "astreamer", "args": {"text": "hi"}, "id": "tc1"}
-                        ],
-                    )
+                    _make_ai_message("astreamer", {"text": "hi"}, "tc1"),
                 ]
             }
 
@@ -357,18 +445,19 @@ class TestToolCallTransformerEndToEnd:
         assert collected[0].error is None
 
     def test_tool_error_populates_error_field(self) -> None:
-        @tool
+        from langgraph.prebuilt.tool_node import tool as lg_tool  # type: ignore[attr-defined]
+
+        @lg_tool
         def boom() -> str:
             """raises."""
             raise ValueError("nope")
 
+        _check_tool_allowed("boom")
+
         def caller(state: _State) -> dict:
             return {
                 "messages": [
-                    AIMessage(
-                        content="",
-                        tool_calls=[{"name": "boom", "args": {}, "id": "tc1"}],
-                    )
+                    _make_ai_message("boom", {}, "tc1"),
                 ]
             }
 
