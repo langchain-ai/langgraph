@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
+import time
 from collections.abc import Callable, Sequence
 from typing import (
     Any,
@@ -21,6 +25,8 @@ R = TypeVar("R", bound=Runnable)
 
 SKIP_WRITE = object()
 PASSTHROUGH = object()
+
+_audit_logger = logging.getLogger("langgraph.audit.channel_write")
 
 
 class ChannelWriteEntry(NamedTuple):
@@ -123,7 +129,44 @@ class ChannelWrite(RunnableCallable):
         # if we want to persist writes found before hitting a ParentCommand
         # can move this to a finally block
         write: TYPE_SEND = config[CONF][CONFIG_KEY_SEND]
-        write(_assemble_writes(writes))
+        assembled = _assemble_writes(writes)
+
+        # Produce audit record for AI-driven channel writes
+        try:
+            conf = config.get(CONF, {}) if isinstance(config, dict) else config.get(CONF, {})
+            run_id = conf.get("run_id", None)
+            thread_id = conf.get("thread_id", None)
+            tags = config.get("tags", []) if isinstance(config, dict) else config.get("tags", [])
+
+            audit_entries = []
+            for channel, value in assembled:
+                try:
+                    value_repr = repr(value)
+                    input_hash = hashlib.sha256(value_repr.encode("utf-8", errors="replace")).hexdigest()
+                except Exception:
+                    value_repr = "<unserializable>"
+                    input_hash = "unknown"
+                audit_entries.append({
+                    "channel": channel,
+                    "value_repr": value_repr,
+                    "input_hash": input_hash,
+                })
+
+            audit_record = {
+                "event": "channel_write",
+                "timestamp": time.time(),
+                "run_id": str(run_id) if run_id is not None else None,
+                "thread_id": str(thread_id) if thread_id is not None else None,
+                "tags": tags,
+                "writes": audit_entries,
+                "write_count": len(assembled),
+            }
+            _audit_logger.info(json.dumps(audit_record, default=str))
+        except Exception:
+            # Audit logging must never block the write operation
+            pass
+
+        write(assembled)
 
     @staticmethod
     def is_writer(runnable: Runnable) -> bool:
