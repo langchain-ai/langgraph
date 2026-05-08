@@ -22,7 +22,6 @@ from typing import (
     cast,
 )
 
-from langchain_core.embeddings import Embeddings
 from typing_extensions import override
 
 from langgraph.store.base.embed import (
@@ -587,31 +586,16 @@ class IndexConfig(TypedDict, total=False):
         - `cohere:embed-multilingual-light-v3.0`: `384`
     """
 
-    embed: Embeddings | EmbeddingsFunc | AEmbeddingsFunc | str
+    embed: EmbeddingsFunc | AEmbeddingsFunc | str
     """Optional function to generate embeddings from text.
     
     Can be specified in three ways:
-        1. A LangChain `Embeddings` instance
-        2. A synchronous embedding function (`EmbeddingsFunc`)
-        3. An asynchronous embedding function (`AEmbeddingsFunc`)
-        4. A provider string (e.g., `"openai:text-embedding-3-small"`)
+        1. A synchronous embedding function (`EmbeddingsFunc`)
+        2. An asynchronous embedding function (`AEmbeddingsFunc`)
+        3. A provider string (e.g., `"openai:text-embedding-3-small"`)
     
     ???+ example "Examples"
 
-        Using LangChain's initialization with `InMemoryStore`:
-
-        ```python
-        from langchain.embeddings import init_embeddings
-        from langgraph.store.memory import InMemoryStore
-        
-        store = InMemoryStore(
-            index={
-                "dims": 1536,
-                "embed": init_embeddings("openai:text-embedding-3-small")
-            }
-        )
-        ```
-        
         Using a custom embedding function with `InMemoryStore`:
 
         ```python
@@ -1307,7 +1291,6 @@ __all__ = [
     "MatchCondition",
     "NamespacePath",
     "NamespaceMatchType",
-    "Embeddings",
     "ensure_embeddings",
     "tokenize_path",
     "get_text_at_path",
