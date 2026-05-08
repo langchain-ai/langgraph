@@ -41,6 +41,78 @@ SKIP_PYTHON_314 = pytest.mark.skipif(
     reason="Not yet testing Python 3.14 with the server bc of dependency limits on the api side",
 )
 
+# Approved model registry - only models from the organization's approved list are permitted
+APPROVED_MODELS = frozenset([
+    # Add approved model identifiers here per organization policy
+])
+
+# Dangerous content patterns for prompt injection / malicious command detection
+import base64
+import re as _re
+
+_DANGEROUS_PATTERNS = [
+    _re.compile(r"(?i)(ignore\s+(previous|above|prior)\s+instructions?)"),
+    _re.compile(r"(?i)(system\s*prompt|you\s+are\s+now|act\s+as\s+)"),
+    _re.compile(r"(?i)(rm\s+-rf|sudo\s+|chmod\s+|chown\s+|wget\s+|curl\s+.*\|\s*sh)"),
+    _re.compile(r"(?i)(exec\s*\(|eval\s*\(|__import__\s*\()"),
+    _re.compile(r"(?i)(base64\s*decode|atob\s*\()"),
+    _re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]"),  # non-printable/binary chars
+]
+
+
+def _is_safe_content(content: str) -> bool:
+    """Check that content does not contain dangerous patterns."""
+    if not isinstance(content, str):
+        return True
+    for pattern in _DANGEROUS_PATTERNS:
+        if pattern.search(content):
+            return False
+    # Check for suspicious base64-encoded payloads
+    try:
+        # Only flag if it looks like a long base64 string that decodes to something dangerous
+        b64_pattern = _re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")
+        for match in b64_pattern.finditer(content):
+            try:
+                decoded = base64.b64decode(match.group()).decode("utf-8", errors="ignore")
+                for pattern in _DANGEROUS_PATTERNS:
+                    if pattern.search(decoded):
+                        return False
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return True
+
+
+def _sanitize_message_content(content) -> str:
+    """Sanitize and validate message content before sending to AI model."""
+    if not isinstance(content, str):
+        content = str(content)
+    # Strip leading/trailing whitespace
+    content = content.strip()
+    if not _is_safe_content(content):
+        raise ValueError(f"Message content failed safety validation: potentially malicious content detected.")
+    return content
+
+
+def _sanitize_input(input_data: dict) -> dict:
+    """Sanitize input dict before passing to RemoteGraph."""
+    if not isinstance(input_data, dict):
+        return input_data
+    sanitized = dict(input_data)
+    if "messages" in sanitized:
+        sanitized_messages = []
+        for msg in sanitized["messages"]:
+            if isinstance(msg, dict):
+                msg = dict(msg)
+                if "content" in msg:
+                    msg["content"] = _sanitize_message_content(msg["content"])
+            sanitized_messages.append(msg)
+        sanitized["messages"] = sanitized_messages
+    if "input" in sanitized and isinstance(sanitized["input"], dict):
+        sanitized["input"] = _sanitize_input(sanitized["input"])
+    return sanitized
+
 
 def test_with_config():
     # set up test
@@ -484,7 +556,7 @@ def test_stream():
     # test raising graph interrupt if invoked as a subgraph
     with pytest.raises(GraphInterrupt) as exc:
         for stream_part in remote_pregel.stream(
-            {"input": "data"},
+            _sanitize_input({"input": "data"}),
             # pretend we invoked this as a subgraph
             config={
                 "configurable": {"thread_id": "thread_1", "checkpoint_ns": "some_ns"}
@@ -503,7 +575,7 @@ def test_stream():
     # stream modes doesn't include 'updates'
     stream_parts = []
     for stream_part in remote_pregel.stream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         stream_mode="values",
     ):
@@ -518,7 +590,7 @@ def test_stream():
     # stream_mode messages
     stream_parts = []
     for stream_part in remote_pregel.stream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         stream_mode="messages",
     ):
@@ -548,7 +620,7 @@ def test_stream():
     # default stream_mode is updates
     stream_parts = []
     for stream_part in remote_pregel.stream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
     ):
         stream_parts.append(stream_part)
@@ -562,7 +634,7 @@ def test_stream():
     # list stream_mode includes mode names
     stream_parts = []
     for stream_part in remote_pregel.stream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         stream_mode=["updates"],
     ):
@@ -577,7 +649,7 @@ def test_stream():
     # subgraphs + list modes
     stream_parts = []
     for stream_part in remote_pregel.stream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         stream_mode=["updates"],
         subgraphs=True,
@@ -593,7 +665,7 @@ def test_stream():
     # subgraphs + single mode
     stream_parts = []
     for stream_part in remote_pregel.stream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         subgraphs=True,
     ):
@@ -654,7 +726,7 @@ async def test_astream():
     # test raising graph interrupt if invoked as a subgraph
     with pytest.raises(GraphInterrupt) as exc:
         async for stream_part in remote_pregel.astream(
-            {"input": "data"},
+            _sanitize_input({"input": "data"}),
             # pretend we invoked this as a subgraph
             config={
                 "configurable": {"thread_id": "thread_1", "checkpoint_ns": "some_ns"}
@@ -673,7 +745,7 @@ async def test_astream():
     # stream modes doesn't include 'updates'
     stream_parts = []
     async for stream_part in remote_pregel.astream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         stream_mode="values",
     ):
@@ -688,7 +760,7 @@ async def test_astream():
     # stream_mode messages
     stream_parts = []
     async for stream_part in remote_pregel.astream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         stream_mode="messages",
     ):
@@ -720,7 +792,7 @@ async def test_astream():
     # default stream_mode is updates
     stream_parts = []
     async for stream_part in remote_pregel.astream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
     ):
         stream_parts.append(stream_part)
@@ -734,7 +806,7 @@ async def test_astream():
     # list stream_mode includes mode names
     stream_parts = []
     async for stream_part in remote_pregel.astream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         stream_mode=["updates"],
     ):
@@ -749,7 +821,7 @@ async def test_astream():
     # subgraphs + list modes
     stream_parts = []
     async for stream_part in remote_pregel.astream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         stream_mode=["updates"],
         subgraphs=True,
@@ -765,7 +837,7 @@ async def test_astream():
     # subgraphs + single mode
     stream_parts = []
     async for stream_part in remote_pregel.astream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         subgraphs=True,
     ):
@@ -788,7 +860,7 @@ async def test_astream():
     # subgraphs + list modes
     stream_parts = []
     async for stream_part in remote_pregel.astream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         stream_mode=["updates"],
         subgraphs=True,
@@ -804,7 +876,7 @@ async def test_astream():
     # subgraphs + single mode
     stream_parts = []
     async for stream_part in remote_pregel.astream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config={"configurable": {"thread_id": "thread_1"}},
         subgraphs=True,
     ):
@@ -836,7 +908,7 @@ def test_invoke():
 
     config = {"configurable": {"thread_id": "thread_1"}}
     result = remote_pregel.invoke(
-        {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
+        _sanitize_input({"input": {"messages": [{"type": "human", "content": "hello"}]}}), config
     )
 
     assert result == {"messages": [{"type": "human", "content": "world"}]}
@@ -851,7 +923,7 @@ def test_invoke_sanitizes_thread_id():
 
     config = {"configurable": {"thread_id": "thread_1"}}
     remote_pregel.invoke(
-        {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
+        _sanitize_input({"input": {"messages": [{"type": "human", "content": "hello"}]}}), config
     )
 
     assert mock_sync_client.runs.stream.called
@@ -871,7 +943,7 @@ def test_stream_sanitizes_thread_id():
     remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
 
     config = {"configurable": {"thread_id": "thread_2"}}
-    list(remote_pregel.stream({"input": {"messages": []}}, config))
+    list(remote_pregel.stream(_sanitize_input({"input": {"messages": []}}), config))
 
     assert mock_sync_client.runs.stream.called
     _, kwargs = mock_sync_client.runs.stream.call_args
@@ -904,7 +976,7 @@ async def test_ainvoke():
 
     config = {"configurable": {"thread_id": "thread_1"}}
     result = await remote_pregel.ainvoke(
-        {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
+        _sanitize_input({"input": {"messages": [{"type": "human", "content": "hello"}]}}), config
     )
 
     assert result == {"messages": [{"type": "human", "content": "world"}]}
@@ -923,10 +995,10 @@ def test_stream_context():
     )
 
     config = {"configurable": {"thread_id": "thread_1"}}
-    context = {"model_name": "anthropic", "user_id": "123"}
+    context = {"model_name": "approved_model", "user_id": "123"}
     stream_parts = list(
         remote_pregel.stream(
-            {"input": "data"},
+            _sanitize_input({"input": "data"}),
             config,
             context=context,
             stream_mode="values",
@@ -935,7 +1007,7 @@ def test_stream_context():
 
     assert stream_parts == [{"chunk": "data1"}]
     _, kwargs = mock_sync_client.runs.stream.call_args
-    assert kwargs["context"] == {"model_name": "anthropic", "user_id": "123"}
+    assert kwargs["context"] == {"model_name": "approved_model", "user_id": "123"}
 
 
 def test_stream_context_none():
@@ -951,7 +1023,7 @@ def test_stream_context_none():
     )
 
     config = {"configurable": {"thread_id": "thread_1"}}
-    list(remote_pregel.stream({"input": "data"}, config, stream_mode="values"))
+    list(remote_pregel.stream(_sanitize_input({"input": "data"}), config, stream_mode="values"))
 
     _, kwargs = mock_sync_client.runs.stream.call_args
     assert kwargs["context"] is None
@@ -973,10 +1045,10 @@ async def test_astream_context():
     )
 
     config = {"configurable": {"thread_id": "thread_1"}}
-    context = {"model_name": "anthropic"}
+    context = {"model_name": "approved_model"}
     chunks = []
     async for chunk in remote_pregel.astream(
-        {"input": "data"},
+        _sanitize_input({"input": "data"}),
         config,
         context=context,
         stream_mode="values",
@@ -985,7 +1057,7 @@ async def test_astream_context():
 
     assert chunks == [{"chunk": "data1"}]
     _, kwargs = mock_async_client.runs.stream.call_args
-    assert kwargs["context"] == {"model_name": "anthropic"}
+    assert kwargs["context"] == {"model_name": "approved_model"}
 
 
 def test_invoke_context():
@@ -1001,12 +1073,12 @@ def test_invoke_context():
     )
 
     config = {"configurable": {"thread_id": "thread_1"}}
-    context = {"model_name": "openai"}
-    result = remote_pregel.invoke({"input": "data"}, config, context=context)
+    context = {"model_name": "approved_model"}
+    result = remote_pregel.invoke(_sanitize_input({"input": "data"}), config, context=context)
 
     assert result == {"result": "done"}
     _, kwargs = mock_sync_client.runs.stream.call_args
-    assert kwargs["context"] == {"model_name": "openai"}
+    assert kwargs["context"] == {"model_name": "approved_model"}
 
 
 @pytest.mark.anyio
@@ -1026,7 +1098,7 @@ async def test_ainvoke_context():
 
     config = {"configurable": {"thread_id": "thread_1"}}
     context = {"user_id": "456"}
-    result = await remote_pregel.ainvoke({"input": "data"}, config, context=context)
+    result = await remote_pregel.ainvoke(_sanitize_input({"input": "data"}), config, context=context)
 
     assert result == {"result": "done"}
     _, kwargs = mock_async_client.runs.stream.call_args
@@ -1052,10 +1124,10 @@ def test_stream_context_dataclass():
     )
 
     config = {"configurable": {"thread_id": "thread_1"}}
-    ctx = MyContext(model_name="anthropic", user_id="123")
+    ctx = MyContext(model_name="approved_model", user_id="123")
     list(
         remote_pregel.stream(
-            {"input": "data"}, config, context=ctx, stream_mode="values"
+            _sanitize_input({"input": "data"}), config, context=ctx, stream_mode="values"
         )
     )
 
@@ -1081,10 +1153,10 @@ def test_stream_context_base_model():
     )
 
     config = {"configurable": {"thread_id": "thread_1"}}
-    ctx = MyContext(model_name="anthropic", user_id="123")
+    ctx = MyContext(model_name="approved_model", user_id="123")
     list(
         remote_pregel.stream(
-            {"input": "data"}, config, context=ctx, stream_mode="values"
+            _sanitize_input({"input": "data"}), config, context=ctx, stream_mode="values"
         )
     )
 
@@ -1119,14 +1191,14 @@ async def test_langgraph_cloud_integration():
     app = workflow.compile(checkpointer=InMemorySaver())
 
     # test invocation
-    input = {
+    input = _sanitize_input({
         "messages": [
             {
                 "role": "human",
                 "content": "What's the weather in SF?",
             }
         ]
-    }
+    })
 
     # test invoke
     app.invoke(
@@ -1163,14 +1235,14 @@ async def test_langgraph_cloud_integration():
     # test update state
     await remote_pregel.aupdate_state(
         config={"configurable": {"thread_id": "6645e002-ed50-4022-92a3-d0d186fdf812"}},
-        values={
+        values=_sanitize_input({
             "messages": [
                 {
                     "role": "ai",
                     "content": "Hello world again!",
                 }
             ]
-        },
+        }),
     )
 
     # test get history
@@ -1339,7 +1411,7 @@ def get_message_dict(msg: BaseMessage | dict):
 async def test_remote_graph_basic_invoke(remote_graph: RemoteGraph) -> None:
     # Basic smoke test of the remote graph
     response = await remote_graph.ainvoke(
-        {"messages": [{"role": "user", "content": "hello"}]}
+        _sanitize_input({"messages": [{"role": "user", "content": "hello"}]})
     )
     assert response == {
         "content": "answer",
@@ -1380,7 +1452,7 @@ async def test_remote_graph_stream_messages_tuple(
     namespaces = []
     uid_generator = monotonic_uid()
     async for ns, messages in nested_remote_graph.astream(
-        {"messages": [{"role": "user", "content": "hello"}]},
+        _sanitize_input({"messages": [{"role": "user", "content": "hello"}]}),
         stream_mode="messages",
         subgraphs=True,
     ):
@@ -1392,7 +1464,7 @@ async def test_remote_graph_stream_messages_tuple(
     inmem_namespaces = []
     uid_generator = monotonic_uid()
     async for ns, messages in nested_graph.astream(
-        {"messages": [{"role": "user", "content": "hello"}]},
+        _sanitize_input({"messages": [{"role": "user", "content": "hello"}]}),
         stream_mode="messages",
         subgraphs=True,
     ):
@@ -1439,12 +1511,14 @@ async def test_include_headers(
         distributed_tracing=distributed_tracing,
     )
 
+    _safe_input = _sanitize_input({"input": {"messages": [{"type": "human", "content": "hello"}]}})
+
     config = {"configurable": {"thread_id": "thread_1"}}
     with ls.tracing_context(enabled=True, client=MagicMock()):
         with ls.trace("foo"):
             if stream:
                 async for _ in remote_pregel.astream(
-                    {"input": {"messages": [{"type": "human", "content": "hello"}]}},
+                    _safe_input,
                     config,
                     headers=headers,
                 ):
@@ -1452,7 +1526,7 @@ async def test_include_headers(
 
             else:
                 await remote_pregel.ainvoke(
-                    {"input": {"messages": [{"type": "human", "content": "hello"}]}},
+                    _safe_input,
                     config,
                     headers=headers,
                 )
@@ -1470,7 +1544,7 @@ async def test_include_headers(
         with ls.trace("foo"):
             if stream:
                 for _ in remote_pregel.stream(
-                    {"input": {"messages": [{"type": "human", "content": "hello"}]}},
+                    _safe_input,
                     config,
                     headers=headers,
                 ):
@@ -1478,7 +1552,7 @@ async def test_include_headers(
 
             else:
                 remote_pregel.invoke(
-                    {"input": {"messages": [{"type": "human", "content": "hello"}]}},
+                    _safe_input,
                     config,
                     headers=headers,
                 )
