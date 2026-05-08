@@ -44,7 +44,7 @@ if TYPE_CHECKING:
         AllowedMsgpackModules,
     )
 
-LC_REVIVER = Reviver()
+LC_REVIVER = Reviver(allowed_objects="core")
 EMPTY_BYTES = b""
 logger = logging.getLogger(__name__)
 
