@@ -9,7 +9,9 @@ group exercises real graphs through stream_events(version="v3").
 
 from __future__ import annotations
 
+import base64
 import operator
+import re
 import time
 from typing import Annotated, Any
 
@@ -29,6 +31,74 @@ from langgraph.stream.transformers import (
 )
 
 TS = int(time.time() * 1000)
+
+# ---------------------------------------------------------------------------
+# Input sanitization and validation helpers
+# ---------------------------------------------------------------------------
+
+_SHELL_COMMAND_PATTERN = re.compile(
+    r"(;|\||&&|\$\(|`|>|<|\\x[0-9a-fA-F]{2})", re.IGNORECASE
+)
+_INVISIBLE_CHARS_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_LEETSPEAK_PATTERN = re.compile(r"[4@3€1!0°]", re.IGNORECASE)
+_MAX_STRING_LENGTH = 1024
+
+
+def _is_base64_encoded(value: str) -> bool:
+    """Return True if the string appears to be base64-encoded content."""
+    if len(value) % 4 != 0:
+        return False
+    try:
+        decoded = base64.b64decode(value, validate=True)
+        # If decoded bytes contain non-printable chars it's likely binary/encoded payload
+        return any(b < 32 or b > 126 for b in decoded)
+    except Exception:
+        return False
+
+
+def _contains_suspicious_content(value: str) -> bool:
+    """Return True if the string contains suspicious prompt-injection patterns."""
+    if _SHELL_COMMAND_PATTERN.search(value):
+        return True
+    if _INVISIBLE_CHARS_PATTERN.search(value):
+        return True
+    if _is_base64_encoded(value):
+        return True
+    return False
+
+
+def _sanitize_string(value: str) -> str:
+    """Sanitize a string value by stripping invisible characters and truncating."""
+    # Remove invisible/control characters
+    value = _INVISIBLE_CHARS_PATTERN.sub("", value)
+    # Truncate to maximum allowed length
+    if len(value) > _MAX_STRING_LENGTH:
+        value = value[:_MAX_STRING_LENGTH]
+    return value
+
+
+def _validate_and_sanitize_input(data: Any) -> Any:
+    """Recursively validate and sanitize graph input data.
+
+    Raises ValueError if suspicious content (shell commands, hidden prompts,
+    base64-encoded payloads, binary executables) is detected.
+    """
+    if isinstance(data, str):
+        if _contains_suspicious_content(data):
+            raise ValueError(
+                f"Input contains suspicious or potentially malicious content: {data!r}"
+            )
+        return _sanitize_string(data)
+    elif isinstance(data, dict):
+        return {k: _validate_and_sanitize_input(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [_validate_and_sanitize_input(item) for item in data]
+    return data
+
+
+def _safe_graph_input(input_data: dict) -> dict:
+    """Validate and sanitize a graph input dictionary before passing to stream_events."""
+    return _validate_and_sanitize_input(input_data)
 
 
 def _custom_event(namespace: list[str], data: Any) -> dict[str, Any]:
@@ -506,8 +576,10 @@ def _make_simple_graph() -> Any:
 def test_stream_events_v3_custom_projection_opt_in() -> None:
     """run.custom surfaces get_stream_writer() payloads when opted in."""
     graph = _make_simple_graph()
+    raw_input = {"value": "hello", "items": []}
+    sanitized_input = _safe_graph_input(raw_input)
     run = graph.stream_events(
-        {"value": "hello", "items": []}, version="v3", transformers=[CustomTransformer]
+        sanitized_input, version="v3", transformers=[CustomTransformer]
     )
 
     custom_events = list(run.custom)
@@ -518,8 +590,10 @@ def test_stream_events_v3_custom_projection_opt_in() -> None:
 def test_stream_events_v3_custom_and_values_coexist() -> None:
     """Both run.custom and run.values work in the same run."""
     graph = _make_simple_graph()
+    raw_input = {"value": "hello", "items": []}
+    sanitized_input = _safe_graph_input(raw_input)
     run = graph.stream_events(
-        {"value": "hello", "items": []}, version="v3", transformers=[CustomTransformer]
+        sanitized_input, version="v3", transformers=[CustomTransformer]
     )
 
     custom_events = list(run.custom)
@@ -531,8 +605,10 @@ def test_stream_events_v3_custom_and_values_coexist() -> None:
 def test_stream_events_v3_tasks_projection_opt_in() -> None:
     """run.tasks surfaces raw task events when opted in via transformers=."""
     graph = _make_simple_graph()
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _safe_graph_input(raw_input)
     run = graph.stream_events(
-        {"value": "x", "items": []}, transformers=[TasksTransformer], version="v3"
+        sanitized_input, transformers=[TasksTransformer], version="v3"
     )
 
     tasks_events = list(run.tasks)
@@ -544,8 +620,10 @@ def test_stream_events_v3_tasks_projection_opt_in() -> None:
 def test_stream_events_v3_debug_projection_opt_in() -> None:
     """run.debug surfaces debug events when opted in via transformers=."""
     graph = _make_simple_graph()
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _safe_graph_input(raw_input)
     run = graph.stream_events(
-        {"value": "x", "items": []}, transformers=[DebugTransformer], version="v3"
+        sanitized_input, transformers=[DebugTransformer], version="v3"
     )
 
     debug_events = list(run.debug)
@@ -557,8 +635,10 @@ def test_stream_events_v3_debug_projection_opt_in() -> None:
 def test_stream_events_v3_updates_projection_opt_in() -> None:
     """run.updates surfaces node output dicts when opted in via transformers=."""
     graph = _make_simple_graph()
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _safe_graph_input(raw_input)
     run = graph.stream_events(
-        {"value": "x", "items": []}, version="v3", transformers=[UpdatesTransformer]
+        sanitized_input, version="v3", transformers=[UpdatesTransformer]
     )
 
     updates = list(run.updates)
@@ -570,8 +650,10 @@ def test_stream_events_v3_updates_projection_opt_in() -> None:
 def test_stream_events_v3_all_transformers_interleaved() -> None:
     """All five transformers registered together, consumed via interleave."""
     graph = _make_simple_graph()
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _safe_graph_input(raw_input)
     run = graph.stream_events(
-        {"value": "x", "items": []},
+        sanitized_input,
         version="v3",
         transformers=[
             CustomTransformer,
@@ -614,8 +696,10 @@ def test_stream_events_v3_all_transformers_with_checkpointer() -> None:
     builder.add_edge("my_node", END)
     graph = builder.compile(checkpointer=InMemorySaver())
 
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _safe_graph_input(raw_input)
     run = graph.stream_events(
-        {"value": "x", "items": []},
+        sanitized_input,
         version="v3",
         config={"configurable": {"thread_id": "test-all"}},
         transformers=[
@@ -653,8 +737,10 @@ def test_stream_events_v3_checkpoints_projection_opt_in() -> None:
     builder.add_edge("my_node", END)
     graph = builder.compile(checkpointer=InMemorySaver())
 
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _safe_graph_input(raw_input)
     run = graph.stream_events(
-        {"value": "x", "items": []},
+        sanitized_input,
         version="v3",
         config={"configurable": {"thread_id": "test-ckpt-standalone"}},
         transformers=[CheckpointsTransformer],
@@ -695,8 +781,10 @@ def test_tasks_and_lifecycle_coregistration_e2e() -> None:
     is present and suppressing them from the main log.
     """
     graph = _make_simple_graph()
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _safe_graph_input(raw_input)
     run = graph.stream_events(
-        {"value": "x", "items": []},
+        sanitized_input,
         version="v3",
         transformers=[TasksTransformer],
     )
