@@ -1,6 +1,9 @@
 import inspect
+import logging
+import re
 import warnings
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import datetime, timezone
 from typing import (
     Annotated,
     Any,
@@ -46,8 +49,173 @@ from typing_extensions import NotRequired, TypedDict, deprecated
 
 from langgraph.prebuilt.tool_node import ToolCallWithContext, ToolNode
 
+logger = logging.getLogger(__name__)
+
 StructuredResponse = dict | BaseModel
 StructuredResponseSchema = dict | type[BaseModel]
+
+# ---------------------------------------------------------------------------
+# Approved model registry – only models whose identifier prefix appears here
+# may be used.  Dynamic / caller-supplied models are accepted as-is (they are
+# opaque Runnable objects) but string identifiers are validated.
+# ---------------------------------------------------------------------------
+_APPROVED_MODEL_REGISTRY: set[str] = {
+    # Add approved model identifier prefixes here, e.g.:
+    # "approved-provider:approved-model",
+}
+
+# ---------------------------------------------------------------------------
+# Dangerous patterns that must not appear in message content or tool arguments
+# ---------------------------------------------------------------------------
+_DANGEROUS_PATTERNS = re.compile(
+    r"\beval\s*\(|\bexec\s*\(|\bsubprocess\s*\(|"
+    r"shell\s*=\s*True|__import__\s*\(|"
+    r"os\.system\s*\(|os\.popen\s*\(|"
+    r"compile\s*\(.*exec|"
+    r"base64\.b64decode\s*\(|"
+    r"\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}",
+    re.IGNORECASE,
+)
+
+# Invisible / zero-width characters used in prompt-injection attacks
+_INVISIBLE_CHARS_PATTERN = re.compile(
+    r"[\u200b\u200c\u200d\u200e\u200f\u202a-\u202e\u2060-\u2064\ufeff]"
+)
+
+
+def _check_content_for_dangerous_patterns(content: Any, context: str = "") -> None:
+    """Raise ValueError if dangerous code-execution primitives are found."""
+    text = content if isinstance(content, str) else str(content)
+    if _DANGEROUS_PATTERNS.search(text):
+        raise ValueError(
+            f"Dangerous code-execution primitive detected in {context}. "
+            "Content rejected for security reasons."
+        )
+    if _INVISIBLE_CHARS_PATTERN.search(text):
+        raise ValueError(
+            f"Invisible/zero-width characters detected in {context}. "
+            "Content rejected as potential prompt-injection attempt."
+        )
+
+
+def _sanitize_message_content(message: BaseMessage, context: str = "input message") -> None:
+    """Validate a single message for dangerous content."""
+    content = message.content
+    if isinstance(content, str):
+        _check_content_for_dangerous_patterns(content, context)
+    elif isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict):
+                _check_content_for_dangerous_patterns(str(part), context)
+            elif isinstance(part, str):
+                _check_content_for_dangerous_patterns(part, context)
+
+
+def _sanitize_messages(messages: Sequence[BaseMessage]) -> None:
+    """Sanitize and validate all messages before sending to the model."""
+    for msg in messages:
+        _sanitize_message_content(msg, context=f"message of type {type(msg).__name__}")
+
+
+def _sanitize_llm_output(response: AIMessage) -> None:
+    """Validate LLM output for dangerous code-execution primitives."""
+    content = response.content
+    if isinstance(content, str):
+        _check_content_for_dangerous_patterns(content, context="LLM response content")
+    elif isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict):
+                _check_content_for_dangerous_patterns(str(part), context="LLM response content part")
+            elif isinstance(part, str):
+                _check_content_for_dangerous_patterns(part, context="LLM response content part")
+
+    # Validate tool call arguments
+    for tool_call in response.tool_calls:
+        args = tool_call.get("args", {})
+        _check_content_for_dangerous_patterns(str(args), context=f"tool call args for '{tool_call.get('name')}'")
+
+
+def _validate_model_registry(model_identifier: str) -> None:
+    """Validate that a string model identifier is in the approved registry.
+
+    If the registry is empty (not yet configured) this check is skipped so
+    that the library remains usable out-of-the-box while still providing the
+    enforcement hook.
+    """
+    if not _APPROVED_MODEL_REGISTRY:
+        logger.warning(
+            "Model registry is empty – skipping registry validation for model '%s'. "
+            "Populate _APPROVED_MODEL_REGISTRY to enforce model allow-listing.",
+            model_identifier,
+        )
+        return
+    if not any(model_identifier.startswith(approved) for approved in _APPROVED_MODEL_REGISTRY):
+        raise ValueError(
+            f"Model '{model_identifier}' is not in the approved model registry. "
+            "Only models from the approved registry may be used."
+        )
+
+
+def _validate_tool_allow_list(
+    tool_calls: list[dict],
+    allowed_tool_names: set[str],
+) -> list[dict]:
+    """Filter tool calls to only those present in the allow list.
+
+    Logs a warning (audit trail) for any tool call that is not in the allow
+    list and removes it from the returned list.
+    """
+    approved: list[dict] = []
+    for call in tool_calls:
+        tool_name = call.get("name", "")
+        if tool_name in allowed_tool_names:
+            approved.append(call)
+        else:
+            logger.warning(
+                "AUDIT: Tool call denied – tool '%s' (id=%s) is not in the approved "
+                "tool allow list. Allowed tools: %s",
+                tool_name,
+                call.get("id"),
+                sorted(allowed_tool_names),
+            )
+    return approved
+
+
+def _log_llm_interaction(
+    direction: str,
+    content: Any,
+    model_name: str | None = None,
+    extra: dict | None = None,
+) -> None:
+    """Emit a structured audit log entry for every LLM interaction."""
+    record: dict[str, Any] = {
+        "event": f"llm_{direction}",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "model": model_name or "unknown",
+        "ai_generated": direction == "output",
+        "provenance": {
+            "generator": "langgraph-react-agent",
+            "model": model_name or "unknown",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+    if extra:
+        record.update(extra)
+    logger.info("LLM_AUDIT: %s", record)
+
+
+def _attach_provenance(response: AIMessage, model_name: str | None = None) -> AIMessage:
+    """Attach provenance metadata to an AI-generated message via additional_kwargs."""
+    provenance = {
+        "ai_generated": True,
+        "generator": "langgraph-react-agent",
+        "model": model_name or "unknown",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    if response.additional_kwargs is None:
+        response.additional_kwargs = {}
+    response.additional_kwargs["provenance"] = provenance
+    return response
 
 
 @deprecated(
@@ -134,21 +302,40 @@ def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
     )
 
 
+def _sanitize_messages_list(messages: Sequence[BaseMessage]) -> Sequence[BaseMessage]:
+    """Sanitize a list of messages and return them (raises on violation)."""
+    _sanitize_messages(messages)
+    return messages
+
+
 def _get_prompt_runnable(prompt: Prompt | None) -> Runnable:
     prompt_runnable: Runnable
     if prompt is None:
+        def _safe_get_messages(state: Any) -> Any:
+            msgs = _get_state_value(state, "messages")
+            _sanitize_messages(msgs or [])
+            return msgs
         prompt_runnable = RunnableCallable(
-            lambda state: _get_state_value(state, "messages"), name=PROMPT_RUNNABLE_NAME
+            _safe_get_messages, name=PROMPT_RUNNABLE_NAME
         )
     elif isinstance(prompt, str):
         _system_message: BaseMessage = SystemMessage(content=prompt)
+        def _safe_prepend_system(state: Any) -> Any:
+            msgs = _get_state_value(state, "messages")
+            _sanitize_messages(msgs or [])
+            return [_system_message] + list(msgs)
         prompt_runnable = RunnableCallable(
-            lambda state: [_system_message] + _get_state_value(state, "messages"),
+            _safe_prepend_system,
             name=PROMPT_RUNNABLE_NAME,
         )
     elif isinstance(prompt, SystemMessage):
+        _fixed_prompt = prompt
+        def _safe_prepend_fixed(state: Any) -> Any:
+            msgs = _get_state_value(state, "messages")
+            _sanitize_messages(msgs or [])
+            return [_fixed_prompt] + list(msgs)
         prompt_runnable = RunnableCallable(
-            lambda state: [prompt] + _get_state_value(state, "messages"),
+            _safe_prepend_fixed,
             name=PROMPT_RUNNABLE_NAME,
         )
     elif inspect.iscoroutinefunction(prompt):
@@ -199,10 +386,10 @@ def _should_bind_tools(
     tool_names = set(tool.name for tool in tools)
     bound_tool_names = set()
     for bound_tool in bound_tools:
-        # OpenAI-style tool
+        # Standard function-style tool (provider-agnostic)
         if bound_tool.get("type") == "function":
             bound_tool_name = bound_tool["function"]["name"]
-        # Anthropic-style tool
+        # Name-keyed tool style (provider-agnostic)
         elif bound_tool.get("name"):
             bound_tool_name = bound_tool["name"]
         else:
@@ -551,6 +738,10 @@ def create_react_agent(
             else AgentState
         )
 
+    # Validate string model identifiers against the approved registry
+    if isinstance(model, str):
+        _validate_model_registry(model)
+
     llm_builtin_tools: list[dict] = []
     if isinstance(tools, ToolNode):
         tool_classes = list(tools.tools_by_name.values())
@@ -559,6 +750,9 @@ def create_react_agent(
         llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
         tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
         tool_classes = list(tool_node.tools_by_name.values())
+
+    # Build the explicit tool allow list from the registered tool classes
+    _tool_allow_list: set[str] = {t.name for t in tool_classes}
 
     is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
     is_async_dynamic_model = is_dynamic_model and inspect.iscoroutinefunction(model)
@@ -649,6 +843,9 @@ def create_react_agent(
             raise ValueError(error_msg)
 
         _validate_chat_history(messages)
+        # Sanitize and validate all input messages before sending to the model
+        _sanitize_messages(messages)
+
         # we're passing messages under `messages` key, as this is expected by the prompt
         if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
             state.messages = messages  # type: ignore
@@ -656,6 +853,14 @@ def create_react_agent(
             state["messages"] = messages  # type: ignore
 
         return state
+
+    def _get_model_name(resolved_model: Any) -> str:
+        """Best-effort extraction of a model name for logging/provenance."""
+        try:
+            underlying = _get_model(resolved_model)
+            return getattr(underlying, "model_name", None) or getattr(underlying, "model", None) or "unknown"
+        except Exception:
+            return "unknown"
 
     # Define the function that calls the model
     def call_model(
@@ -674,9 +879,30 @@ def create_react_agent(
         if is_dynamic_model:
             # Resolve dynamic model at runtime and apply prompt
             dynamic_model = _resolve_model(state, runtime)
+            model_name = _get_model_name(dynamic_model)
+            _log_llm_interaction("input", model_input, model_name=model_name)
             response = cast(AIMessage, dynamic_model.invoke(model_input, config))  # type: ignore[arg-type]
         else:
+            model_name = _get_model_name(static_model)
+            _log_llm_interaction("input", model_input, model_name=model_name)
             response = cast(AIMessage, static_model.invoke(model_input, config))  # type: ignore[union-attr]
+
+        # Validate LLM output for dangerous code-execution primitives
+        _sanitize_llm_output(response)
+
+        # Attach provenance / watermark metadata to the AI-generated message
+        response = _attach_provenance(response, model_name=model_name)
+
+        # Log the LLM output
+        _log_llm_interaction(
+            "output",
+            response.content,
+            model_name=model_name,
+            extra={
+                "tool_calls": [tc.get("name") for tc in response.tool_calls],
+                "message_id": response.id,
+            },
+        )
 
         # add agent name to the AIMessage
         response.name = name
@@ -702,9 +928,30 @@ def create_react_agent(
             # Resolve dynamic model at runtime and apply prompt
             # (supports both sync and async)
             dynamic_model = await _aresolve_model(state, runtime)
+            model_name = _get_model_name(dynamic_model)
+            _log_llm_interaction("input", model_input, model_name=model_name)
             response = cast(AIMessage, await dynamic_model.ainvoke(model_input, config))  # type: ignore[arg-type]
         else:
+            model_name = _get_model_name(static_model)
+            _log_llm_interaction("input", model_input, model_name=model_name)
             response = cast(AIMessage, await static_model.ainvoke(model_input, config))  # type: ignore[union-attr]
+
+        # Validate LLM output for dangerous code-execution primitives
+        _sanitize_llm_output(response)
+
+        # Attach provenance / watermark metadata to the AI-generated message
+        response = _attach_provenance(response, model_name=model_name)
+
+        # Log the LLM output
+        _log_llm_interaction(
+            "output",
+            response.content,
+            model_name=model_name,
+            extra={
+                "tool_calls": [tc.get("name") for tc in response.tool_calls],
+                "message_id": response.id,
+            },
+        )
 
         # add agent name to the AIMessage
         response.name = name
@@ -752,36 +999,46 @@ def create_react_agent(
             raise RuntimeError(msg)
 
         messages = _get_state_value(state, "messages")
+        # Sanitize messages before structured response generation
+        _sanitize_messages(messages or [])
         structured_response_schema = response_format
         if isinstance(response_format, tuple):
             system_prompt, structured_response_schema = response_format
             messages = [SystemMessage(content=system_prompt)] + list(messages)
 
         resolved_model = _resolve_model(state, runtime)
+        model_name = _get_model_name(resolved_model)
+        _log_llm_interaction("structured_response_input", messages, model_name=model_name)
         model_with_structured_output = _get_model(
             resolved_model
         ).with_structured_output(
             cast(StructuredResponseSchema, structured_response_schema)
         )
         response = model_with_structured_output.invoke(messages, config)
+        _log_llm_interaction("structured_response_output", str(response), model_name=model_name)
         return {"structured_response": response}
 
     async def agenerate_structured_response(
         state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
     ) -> StateSchema:
         messages = _get_state_value(state, "messages")
+        # Sanitize messages before structured response generation
+        _sanitize_messages(messages or [])
         structured_response_schema = response_format
         if isinstance(response_format, tuple):
             system_prompt, structured_response_schema = response_format
             messages = [SystemMessage(content=system_prompt)] + list(messages)
 
         resolved_model = await _aresolve_model(state, runtime)
+        model_name = _get_model_name(resolved_model)
+        _log_llm_interaction("structured_response_input", messages, model_name=model_name)
         model_with_structured_output = _get_model(
             resolved_model
         ).with_structured_output(
             cast(StructuredResponseSchema, structured_response_schema)
         )
         response = await model_with_structured_output.ainvoke(messages, config)
+        _log_llm_interaction("structured_response_output", str(response), model_name=model_name)
         return {"structured_response": response}
 
     if not tool_calling_enabled:
@@ -841,7 +1098,20 @@ def create_react_agent(
                 return END
         # Otherwise if there is, we continue
         else:
+            # Enforce tool allow list on LLM-generated tool calls
+            approved_tool_calls = _validate_tool_allow_list(
+                last_message.tool_calls, _tool_allow_list
+            )
             if version == "v1":
+                if len(approved_tool_calls) != len(last_message.tool_calls):
+                    # Some tool calls were denied; if none remain, end or go to post hook
+                    if not approved_tool_calls:
+                        if post_model_hook is not None:
+                            return "post_model_hook"
+                        elif response_format is not None:
+                            return "generate_structured_response"
+                        else:
+                            return END
                 return "tools"
             elif version == "v2":
                 if post_model_hook is not None:
@@ -855,7 +1125,7 @@ def create_react_agent(
                             state=state,
                         ),
                     )
-                    for call in last_message.tool_calls
+                    for call in approved_tool_calls
                 ]
 
     # Define a new graph
@@ -935,6 +1205,11 @@ def create_react_agent(
             pending_tool_calls = [
                 c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
             ]
+
+            # Enforce tool allow list on pending tool calls
+            pending_tool_calls = _validate_tool_allow_list(
+                pending_tool_calls, _tool_allow_list
+            )
 
             if pending_tool_calls:
                 return [
