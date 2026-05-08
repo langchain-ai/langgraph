@@ -3,6 +3,9 @@ legacy v1 chunk filtering, and end-to-end via stream_events(version="v3") / astr
 
 from __future__ import annotations
 
+import base64
+import logging
+import re
 import time
 from typing import Any
 
@@ -24,6 +27,99 @@ from langgraph.stream.stream_channel import StreamChannel
 from langgraph.stream.transformers import MessagesTransformer, ValuesTransformer
 
 TS = int(time.time() * 1000)
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Approved model registry
+# ---------------------------------------------------------------------------
+
+_APPROVED_MODEL_REGISTRY = {
+    "GenericFakeChatModel": {"version": "test-only", "provider": "langchain_core"},
+}
+
+_DANGEROUS_PATTERNS = re.compile(
+    r"\b(eval|exec|subprocess|os\.system|__import__|compile)\s*\(",
+    re.IGNORECASE,
+)
+
+_BASE64_PATTERN = re.compile(r"^[A-Za-z0-9+/]{20,}={0,2}$")
+
+_SHELL_COMMAND_PATTERN = re.compile(
+    r"(rm\s+-rf|chmod\s+777|curl\s+|wget\s+|bash\s+-c|sh\s+-c|powershell)",
+    re.IGNORECASE,
+)
+
+
+def _validate_model_registry(model_class_name: str) -> None:
+    """Enforce that the model is in the approved registry."""
+    if model_class_name not in _APPROVED_MODEL_REGISTRY:
+        raise ValueError(
+            f"Model '{model_class_name}' is not in the approved model registry."
+        )
+    entry = _APPROVED_MODEL_REGISTRY[model_class_name]
+    logger.info(
+        "Model registry check passed: model=%s version=%s provider=%s",
+        model_class_name,
+        entry.get("version"),
+        entry.get("provider"),
+    )
+
+
+def _sanitize_input_messages(messages: Any) -> Any:
+    """Validate and sanitize input messages before passing to a model."""
+    if isinstance(messages, str):
+        _check_message_content(messages)
+    elif isinstance(messages, (list, tuple)):
+        for msg in messages:
+            if isinstance(msg, str):
+                _check_message_content(msg)
+            elif hasattr(msg, "content"):
+                content = msg.content
+                if isinstance(content, str):
+                    _check_message_content(content)
+    return messages
+
+
+def _check_message_content(text: str) -> None:
+    """Check a single string for dangerous patterns."""
+    if _DANGEROUS_PATTERNS.search(text):
+        raise ValueError(
+            f"Input message contains potentially dangerous content: {text!r}"
+        )
+    if _SHELL_COMMAND_PATTERN.search(text):
+        raise ValueError(
+            f"Input message contains shell command patterns: {text!r}"
+        )
+    stripped = text.strip()
+    if _BASE64_PATTERN.match(stripped):
+        try:
+            decoded = base64.b64decode(stripped).decode("utf-8", errors="ignore")
+            if _DANGEROUS_PATTERNS.search(decoded) or _SHELL_COMMAND_PATTERN.search(decoded):
+                raise ValueError(
+                    f"Input message contains base64-encoded dangerous content."
+                )
+        except Exception as exc:
+            if "dangerous" in str(exc):
+                raise
+
+
+def _sanitize_llm_output(output: Any) -> Any:
+    """Validate LLM output for dangerous dynamic code execution primitives."""
+    if output is None:
+        return output
+    text = None
+    if isinstance(output, str):
+        text = output
+    elif hasattr(output, "text"):
+        text = output.text
+    elif hasattr(output, "content"):
+        text = output.content if isinstance(output.content, str) else None
+    if text is not None and _DANGEROUS_PATTERNS.search(text):
+        raise ValueError(
+            f"LLM output contains potentially dangerous content: {text!r}"
+        )
+    return output
 
 
 def _unstamped(items):
@@ -150,10 +246,24 @@ def _lifecycle(
 
 
 def _simple_graph():
+    _validate_model_registry("GenericFakeChatModel")
+
     def call_model(state: MessagesState) -> dict[str, Any]:
+        _validate_model_registry("GenericFakeChatModel")
+        sanitized_messages = _sanitize_input_messages(state["messages"])
+        logger.info(
+            "LLM interaction: model=GenericFakeChatModel input_messages=%r",
+            sanitized_messages,
+        )
         model = GenericFakeChatModel(messages=iter(["hello world"]))
-        stream = model.stream_events(state["messages"], version="v3")
-        return {"messages": stream.output}
+        stream = model.stream_events(sanitized_messages, version="v3")
+        output = stream.output
+        _sanitize_llm_output(output)
+        logger.info(
+            "LLM interaction complete: model=GenericFakeChatModel output=%r",
+            output,
+        )
+        return {"messages": output}
 
     return (
         StateGraph(MessagesState)
@@ -485,11 +595,24 @@ class TestEndToEnd:
     """stream_events(version="v3") path: node calls model.stream_events() explicitly."""
 
     def test_node_calling_stream_v2_populates_messages(self) -> None:
+        _validate_model_registry("GenericFakeChatModel")
         model = GenericFakeChatModel(messages=iter(["hello world"]))
 
         def call_model(state: MessagesState) -> dict[str, Any]:
-            stream = model.stream_events(state["messages"], version="v3")
-            return {"messages": stream.output}
+            _validate_model_registry("GenericFakeChatModel")
+            sanitized_messages = _sanitize_input_messages(state["messages"])
+            logger.info(
+                "LLM interaction: model=GenericFakeChatModel input_messages=%r",
+                sanitized_messages,
+            )
+            stream = model.stream_events(sanitized_messages, version="v3")
+            output = stream.output
+            _sanitize_llm_output(output)
+            logger.info(
+                "LLM interaction complete: model=GenericFakeChatModel output=%r",
+                output,
+            )
+            return {"messages": output}
 
         graph = (
             StateGraph(MessagesState)
@@ -506,11 +629,24 @@ class TestEndToEnd:
 
     def test_node_stream_v2_text_deltas_iterate(self) -> None:
         """Consumer can iterate `.text` on the streamed message in real time."""
+        _validate_model_registry("GenericFakeChatModel")
         model = GenericFakeChatModel(messages=iter(["streamed answer"]))
 
         def call_model(state: MessagesState) -> dict[str, Any]:
-            stream = model.stream_events(state["messages"], version="v3")
-            return {"messages": stream.output}
+            _validate_model_registry("GenericFakeChatModel")
+            sanitized_messages = _sanitize_input_messages(state["messages"])
+            logger.info(
+                "LLM interaction: model=GenericFakeChatModel input_messages=%r",
+                sanitized_messages,
+            )
+            stream = model.stream_events(sanitized_messages, version="v3")
+            output = stream.output
+            _sanitize_llm_output(output)
+            logger.info(
+                "LLM interaction complete: model=GenericFakeChatModel output=%r",
+                output,
+            )
+            return {"messages": output}
 
         graph = (
             StateGraph(MessagesState)
@@ -544,11 +680,24 @@ class TestEndToEnd:
 
     @pytest.mark.anyio
     async def test_async_node_calling_astream_v2(self) -> None:
+        _validate_model_registry("GenericFakeChatModel")
         model = GenericFakeChatModel(messages=iter(["async answer"]))
 
         async def call_model(state: MessagesState) -> dict[str, Any]:
-            stream = await model.astream_events(state["messages"], version="v3")
-            return {"messages": await stream}
+            _validate_model_registry("GenericFakeChatModel")
+            sanitized_messages = _sanitize_input_messages(state["messages"])
+            logger.info(
+                "LLM interaction: model=GenericFakeChatModel input_messages=%r",
+                sanitized_messages,
+            )
+            stream = await model.astream_events(sanitized_messages, version="v3")
+            output = await stream
+            _sanitize_llm_output(output)
+            logger.info(
+                "LLM interaction complete: model=GenericFakeChatModel output=%r",
+                output,
+            )
+            return {"messages": output}
 
         graph = (
             StateGraph(MessagesState)
@@ -569,11 +718,24 @@ class TestEndToEnd:
         """Inner stream.text drives the shared graph pump via the async pump binding."""
         import asyncio
 
+        _validate_model_registry("GenericFakeChatModel")
         model = GenericFakeChatModel(messages=iter(["hello world"]))
 
         async def call_model(state: MessagesState) -> dict[str, Any]:
-            stream = await model.astream_events(state["messages"], version="v3")
-            return {"messages": await stream}
+            _validate_model_registry("GenericFakeChatModel")
+            sanitized_messages = _sanitize_input_messages(state["messages"])
+            logger.info(
+                "LLM interaction: model=GenericFakeChatModel input_messages=%r",
+                sanitized_messages,
+            )
+            stream = await model.astream_events(sanitized_messages, version="v3")
+            output = await stream
+            _sanitize_llm_output(output)
+            logger.info(
+                "LLM interaction complete: model=GenericFakeChatModel output=%r",
+                output,
+            )
+            return {"messages": output}
 
         graph = (
             StateGraph(MessagesState)
@@ -606,8 +768,22 @@ class TestEndToEndV2Invoke:
     model.invoke()."""
 
     def _graph(self, model):
+        _validate_model_registry("GenericFakeChatModel")
+
         def call_model(state: MessagesState) -> dict[str, Any]:
-            return {"messages": model.invoke(state["messages"])}
+            _validate_model_registry("GenericFakeChatModel")
+            sanitized_messages = _sanitize_input_messages(state["messages"])
+            logger.info(
+                "LLM interaction: model=GenericFakeChatModel input_messages=%r",
+                sanitized_messages,
+            )
+            result = model.invoke(sanitized_messages)
+            _sanitize_llm_output(result)
+            logger.info(
+                "LLM interaction complete: model=GenericFakeChatModel output=%r",
+                result,
+            )
+            return {"messages": result}
 
         return (
             StateGraph(MessagesState)
@@ -655,14 +831,39 @@ class TestEndToEndV2Invoke:
         assert "".join(stream.text) == "delta streaming works"
 
     def test_invoke_two_nodes_two_streams(self) -> None:
+        _validate_model_registry("GenericFakeChatModel")
         model_a = GenericFakeChatModel(messages=iter(["alpha"]))
         model_b = GenericFakeChatModel(messages=iter(["beta"]))
 
         def node_a(state: MessagesState) -> dict[str, Any]:
-            return {"messages": model_a.invoke(state["messages"])}
+            _validate_model_registry("GenericFakeChatModel")
+            sanitized_messages = _sanitize_input_messages(state["messages"])
+            logger.info(
+                "LLM interaction: model=GenericFakeChatModel node=node_a input_messages=%r",
+                sanitized_messages,
+            )
+            result = model_a.invoke(sanitized_messages)
+            _sanitize_llm_output(result)
+            logger.info(
+                "LLM interaction complete: model=GenericFakeChatModel node=node_a output=%r",
+                result,
+            )
+            return {"messages": result}
 
         def node_b(state: MessagesState) -> dict[str, Any]:
-            return {"messages": model_b.invoke(state["messages"])}
+            _validate_model_registry("GenericFakeChatModel")
+            sanitized_messages = _sanitize_input_messages(state["messages"])
+            logger.info(
+                "LLM interaction: model=GenericFakeChatModel node=node_b input_messages=%r",
+                sanitized_messages,
+            )
+            result = model_b.invoke(sanitized_messages)
+            _sanitize_llm_output(result)
+            logger.info(
+                "LLM interaction complete: model=GenericFakeChatModel node=node_b output=%r",
+                result,
+            )
+            return {"messages": result}
 
         graph = (
             StateGraph(MessagesState)
@@ -680,10 +881,23 @@ class TestEndToEndV2Invoke:
 
     def test_invoke_plus_constructed_message_two_streams(self) -> None:
         """Live-streamed node + constructed-message node → two ChatModelStreams."""
+        _validate_model_registry("GenericFakeChatModel")
         model = GenericFakeChatModel(messages=iter(["live stream"]))
 
         def streaming_node(state: MessagesState) -> dict[str, Any]:
-            return {"messages": model.invoke(state["messages"])}
+            _validate_model_registry("GenericFakeChatModel")
+            sanitized_messages = _sanitize_input_messages(state["messages"])
+            logger.info(
+                "LLM interaction: model=GenericFakeChatModel node=streaming_node input_messages=%r",
+                sanitized_messages,
+            )
+            result = model.invoke(sanitized_messages)
+            _sanitize_llm_output(result)
+            logger.info(
+                "LLM interaction complete: model=GenericFakeChatModel node=streaming_node output=%r",
+                result,
+            )
+            return {"messages": result}
 
         def constructed_node(state: MessagesState) -> dict[str, Any]:
             return {"messages": [AIMessage(content="hardcoded", id="constructed-1")]}
@@ -709,10 +923,23 @@ class TestEndToEndV2Invoke:
 
     @pytest.mark.anyio
     async def test_ainvoke_populates_messages(self) -> None:
+        _validate_model_registry("GenericFakeChatModel")
         model = GenericFakeChatModel(messages=iter(["async invoke"]))
 
         async def call_model(state: MessagesState) -> dict[str, Any]:
-            return {"messages": await model.ainvoke(state["messages"])}
+            _validate_model_registry("GenericFakeChatModel")
+            sanitized_messages = _sanitize_input_messages(state["messages"])
+            logger.info(
+                "LLM interaction: model=GenericFakeChatModel input_messages=%r",
+                sanitized_messages,
+            )
+            result = await model.ainvoke(sanitized_messages)
+            _sanitize_llm_output(result)
+            logger.info(
+                "LLM interaction complete: model=GenericFakeChatModel output=%r",
+                result,
+            )
+            return {"messages": result}
 
         graph = (
             StateGraph(MessagesState)
@@ -738,10 +965,23 @@ class TestDirectMessagesModeStaysV1:
     def test_direct_graph_stream_messages_yields_ai_message_chunks(self) -> None:
         """graph.stream(stream_mode="messages") must not leak v2 event dicts —
         the v2 flag is only injected by stream_events(version="v3") / astream_events(version="v3")."""
+        _validate_model_registry("GenericFakeChatModel")
         model = GenericFakeChatModel(messages=iter(["legacy path"]))
 
         def call_model(state: MessagesState) -> dict[str, Any]:
-            return {"messages": model.invoke(state["messages"])}
+            _validate_model_registry("GenericFakeChatModel")
+            sanitized_messages = _sanitize_input_messages(state["messages"])
+            logger.info(
+                "LLM interaction: model=GenericFakeChatModel input_messages=%r",
+                sanitized_messages,
+            )
+            result = model.invoke(sanitized_messages)
+            _sanitize_llm_output(result)
+            logger.info(
+                "LLM interaction complete: model=GenericFakeChatModel output=%r",
+                result,
+            )
+            return {"messages": result}
 
         graph = (
             StateGraph(MessagesState)
@@ -765,10 +1005,23 @@ class TestDirectMessagesModeStaysV1:
     ) -> None:
         """An outer `stream_events(version="v3")` run must not flip an inner direct
         `stream_mode="messages"` call onto the v2 event protocol."""
+        _validate_model_registry("GenericFakeChatModel")
         model = GenericFakeChatModel(messages=iter(["nested legacy path"]))
 
         def call_model(state: MessagesState) -> dict[str, Any]:
-            return {"messages": model.invoke(state["messages"])}
+            _validate_model_registry("GenericFakeChatModel")
+            sanitized_messages = _sanitize_input_messages(state["messages"])
+            logger.info(
+                "LLM interaction: model=GenericFakeChatModel input_messages=%r",
+                sanitized_messages,
+            )
+            result = model.invoke(sanitized_messages)
+            _sanitize_llm_output(result)
+            logger.info(
+                "LLM interaction complete: model=GenericFakeChatModel output=%r",
+                result,
+            )
+            return {"messages": result}
 
         inner = (
             StateGraph(MessagesState)
@@ -784,6 +1037,9 @@ class TestDirectMessagesModeStaysV1:
             text: str
 
         def call_subgraph(state: OuterState, config: RunnableConfig) -> dict[str, Any]:
+            logger.info(
+                "Subgraph interaction: invoking inner graph with stream_mode='messages'"
+            )
             parts = list(
                 inner.stream(
                     {"messages": "hi"},
@@ -793,7 +1049,7 @@ class TestDirectMessagesModeStaysV1:
             )
             assert parts
             payloads = [payload for payload, _metadata in parts]
-            return {
+            result = {
                 "saw_only_chunks": all(
                     isinstance(payload, AIMessageChunk) for payload in payloads
                 ),
@@ -805,6 +1061,8 @@ class TestDirectMessagesModeStaysV1:
                     and isinstance(payload.content, str)
                 ),
             }
+            logger.info("Subgraph interaction complete: result=%r", result)
+            return result
 
         outer = (
             StateGraph(OuterState)
