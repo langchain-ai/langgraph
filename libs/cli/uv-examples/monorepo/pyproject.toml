@@ -5,7 +5,7 @@ description = "uv workspace monorepo example for LangGraph CLI integration test"
 requires-python = ">=3.11"
 dependencies = [
     "langgraph>=0.6.0,<2",
-    "langchain-core>=0.2.14",
+    "langchain-core>=1.3.3",
 ]
 
 [tool.uv.workspace]
