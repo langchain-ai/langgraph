@@ -32,6 +32,14 @@ def my_tool(some_val: int, some_other_val: str) -> str:
     return f"{some_val} - {some_other_val}"
 
 
+ALLOWED_TOOLS = {
+    "my_function",
+    "MyModel",
+    "MyModelV1",
+    "my_tool",
+}
+
+
 @pytest.mark.parametrize(
     "tool_schema",
     [
@@ -51,6 +59,12 @@ def my_tool(some_val: int, some_other_val: str) -> str:
 async def test_validation_node(tool_schema: Any, use_message_key: bool):
     validation_node = ValidationNode([tool_schema])
     tool_name = getattr(tool_schema, "name", getattr(tool_schema, "__name__", None))
+
+    if tool_name not in ALLOWED_TOOLS:
+        raise ValueError(
+            f"Tool '{tool_name}' is not in the approved allow list of permitted tools."
+        )
+
     inputs = [
         AIMessage(
             "hi?",
@@ -69,8 +83,20 @@ async def test_validation_node(tool_schema: Any, use_message_key: bool):
             ],
         ),
     ]
+
     if use_message_key:
         inputs = {"messages": inputs}
+
+    # Validate all tool call names against the allow list before invocation
+    raw_inputs = inputs if not use_message_key else inputs["messages"]
+    for msg in raw_inputs:
+        if hasattr(msg, "tool_calls"):
+            for tc in msg.tool_calls:
+                if tc["name"] not in ALLOWED_TOOLS:
+                    raise ValueError(
+                        f"Tool call '{tc['name']}' is not in the approved allow list of permitted tools."
+                    )
+
     result = await validation_node.ainvoke(inputs)
     if use_message_key:
         result = result["messages"]
