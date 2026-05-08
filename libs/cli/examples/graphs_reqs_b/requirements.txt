@@ -1,4 +1,4 @@
 requests
-langchain_anthropic
-langchain_openai
-langchain_community
+langchain_anthropic==0.3.15
+langchain_openai==0.3.16
+langchain_community==0.3.23
