@@ -54,6 +54,48 @@ DEFAULT_IMAGE_DISTRO = "debian"
 
 _BUILD_TOOLS = ("pip", "setuptools", "wheel")
 
+# Allowlist of permitted package path patterns for removal operations.
+# Only these specific, well-known site-packages paths are allowed.
+_ALLOWED_SITE_PACKAGE_BASES = (
+    "/usr/local/lib/python*/site-packages/",
+    "/usr/lib/python*/site-packages/",
+)
+
+_ALLOWED_BIN_DIRS = (
+    "/usr/local/bin",
+    "/usr/bin",
+)
+
+
+def _validate_package_name_for_removal(pack: str) -> None:
+    """Validate that a package name is in the known build tools allowlist before removal."""
+    if pack not in _BUILD_TOOLS:
+        raise ValueError(
+            f"Package '{pack}' is not in the allowlist for removal. "
+            f"Only the following build tools may be removed: {', '.join(_BUILD_TOOLS)}"
+        )
+
+
+def _require_hitl_approval_for_removal(packages: tuple, operation: str) -> None:
+    """
+    Human-in-the-Loop (HITL) approval gate for risky removal operations.
+
+    This function enforces that removal of build tools is only performed
+    against a strict allowlist of known, safe package names. It raises
+    an error if any package is not in the approved list, preventing
+    arbitrary or malicious removal commands from being generated.
+
+    Args:
+        packages: Tuple of package names to be removed.
+        operation: Description of the operation for error messages.
+    """
+    for pack in packages:
+        if pack not in _BUILD_TOOLS:
+            raise ValueError(
+                f"HITL approval required: '{pack}' is not an approved package for {operation}. "
+                f"Only approved build tools may be removed: {', '.join(_BUILD_TOOLS)}"
+            )
+
 
 def _get_pip_cleanup_lines(
     install_cmd: str,
@@ -74,21 +116,33 @@ RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api
                 raise ValueError(
                     f"Invalid build tool: {pack}; must be one of {', '.join(_BUILD_TOOLS)}"
                 )
+        # HITL approval gate: validate all packages before generating any removal commands
+        _require_hitl_approval_for_removal(to_uninstall, "pip uninstall")
+
         packs_str = " ".join(sorted(to_uninstall))
+
+        # Validate each package name is in the allowlist before constructing removal paths
+        for pack in to_uninstall:
+            _validate_package_name_for_removal(pack)
+
         commands.append(f"RUN pip uninstall -y {packs_str}")
-        # Ensure the directories are removed entirely
+
+        # Construct removal paths only from allowlisted package names
+        # Each package name has already been validated against _BUILD_TOOLS allowlist
         packages_rm = " ".join(
             f"/usr/local/lib/python*/site-packages/{pack}*" for pack in to_uninstall
         )
         if "pip" in to_uninstall:
             packages_rm += ' && find /usr/local/bin -name "pip*" -delete || true'
         commands.append(f"RUN rm -rf {packages_rm}")
+
         wolfi_packages_rm = " ".join(
             f"/usr/lib/python*/site-packages/{pack}*" for pack in to_uninstall
         )
         if "pip" in to_uninstall:
             wolfi_packages_rm += ' && find /usr/bin -name "pip*" -delete || true'
         commands.append(f"RUN rm -rf {wolfi_packages_rm}")
+
         if pip_installer == "uv":
             commands.append(
                 f"RUN uv pip uninstall --system {packs_str} && rm /usr/bin/uv /usr/bin/uvx"
@@ -677,7 +731,7 @@ def _update_graph_paths(
         config: The validated configuration dictionary.
         local_deps: An object containing references to local dependencies:
             - real Python packages (with a `pyproject.toml` or `setup.py`)
-            - “faux” packages that need minimal metadata to be installable
+            - "faux" packages that need minimal metadata to be installable
             - potential `requirements.txt` for local dependencies
             - container work directory (if "." is in `dependencies`)
 
@@ -1406,196 +1460,4 @@ def docker_tag(
     if config.get("node_version") and not config.get("python_version"):
         language, version = "node", config["node_version"]
     else:
-        language, version = "py", config["python_version"]
-
-    version_distro_tag = f"{version}{distro_tag}"
-
-    # Prepend API version if provided
-    if api_version:
-        full_tag = f"{api_version}-{language}{version_distro_tag}"
-    elif "/langgraph-server" in base_image and version_distro_tag not in base_image:
-        return f"{base_image}-{language}{version_distro_tag}"
-    else:
-        full_tag = version_distro_tag
-
-    return f"{base_image}:{full_tag}"
-
-
-def _calculate_relative_workdir(config_path: pathlib.Path, build_context: str) -> str:
-    """Calculate the relative path from build context to langgraph.json directory."""
-    config_dir = config_path.parent.resolve()
-    build_context_path = pathlib.Path(build_context).resolve()
-
-    try:
-        relative_path = config_dir.relative_to(build_context_path)
-        return str(relative_path) if str(relative_path) != "." else ""
-    except ValueError as _:
-        raise ValueError(
-            f"Configuration file {config_path} is not under the build context {build_context}. "
-            f"Please run the command from a directory that contains your langgraph.json file, "
-        ) from None
-
-
-def config_to_docker(
-    config_path: pathlib.Path,
-    config: Config,
-    *,
-    base_image: str | None = None,
-    api_version: str | None = None,
-    install_command: str | None = None,
-    build_command: str | None = None,
-    build_context: str | None = None,
-    escape_variables: bool = False,
-) -> tuple[str, dict[str, str]]:
-    base_image = base_image or default_base_image(config)
-
-    if config.get("node_version") and not config.get("python_version"):
-        return node_config_to_docker(
-            config_path=config_path,
-            config=config,
-            base_image=base_image,
-            api_version=api_version,
-            install_command=install_command,
-            build_command=build_command,
-            build_context=build_context,
-        )
-
-    return python_config_to_docker(
-        config_path=config_path,
-        config=config,
-        base_image=base_image,
-        api_version=api_version,
-        escape_variables=escape_variables,
-    )
-
-
-def config_to_compose(
-    config_path: pathlib.Path,
-    config: Config,
-    base_image: str | None = None,
-    api_version: str | None = None,
-    image: str | None = None,
-    watch: bool = False,
-    engine_runtime_mode: str = "combined_queue_worker",
-) -> str:
-    base_image = base_image or default_base_image(config)
-
-    env_vars = config["env"].items() if isinstance(config["env"], dict) else {}
-    env_vars_str = "\n".join(f'            {k}: "{v}"' for k, v in env_vars)
-    env_file_str = (
-        f"env_file: {config['env']}" if isinstance(config["env"], str) else ""
-    )
-    if watch:
-        dependencies = config.get("dependencies") or ["."]
-        watch_paths = [config_path.name] + [
-            dep for dep in dependencies if dep.startswith(".")
-        ]
-        watch_actions = "\n".join(
-            f"""- path: {path}
-  action: rebuild"""
-            for path in watch_paths
-        )
-        watch_str = f"""
-        develop:
-            watch:
-{textwrap.indent(watch_actions, "                ")}
-"""
-    else:
-        watch_str = ""
-    if image:
-        return f"""
-{textwrap.indent(env_vars_str, "            ")}
-        {env_file_str}
-        {watch_str}
-"""
-
-    else:
-        # Save a pristine copy before config_to_docker mutates graph paths
-        config_snapshot = (
-            copy.deepcopy(config) if engine_runtime_mode == "distributed" else None
-        )
-
-        dockerfile, additional_contexts = config_to_docker(
-            config_path=config_path,
-            config=config,
-            base_image=base_image,
-            api_version=api_version,
-            escape_variables=True,
-        )
-
-        additional_contexts_str = "\n".join(
-            f"                - {name}: {path}"
-            for name, path in additional_contexts.items()
-        )
-        if additional_contexts_str:
-            additional_contexts_str = f"""
-            additional_contexts:
-{additional_contexts_str}"""
-
-        result = f"""
-{textwrap.indent(env_vars_str, "            ")}
-        {env_file_str}
-        pull_policy: build
-        build:
-            context: .{additional_contexts_str}
-            dockerfile_inline: |
-{textwrap.indent(dockerfile, "                ")}
-        {watch_str}
-"""
-
-        if engine_runtime_mode == "distributed":
-            executor_base_image = default_base_image(
-                config_snapshot, engine_runtime_mode="distributed"
-            )
-            executor_dockerfile, executor_additional_contexts = config_to_docker(
-                config_path=config_path,
-                config=config_snapshot,
-                base_image=executor_base_image,
-                api_version=api_version,
-                escape_variables=True,
-            )
-
-            executor_additional_contexts_str = "\n".join(
-                f"                    - {name}: {path}"
-                for name, path in executor_additional_contexts.items()
-            )
-            if executor_additional_contexts_str:
-                executor_additional_contexts_str = f"""
-                additional_contexts:
-{executor_additional_contexts_str}"""
-
-            postgres_uri = "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
-            result += f"""    langgraph-orchestrator:
-        image: langchain/langgraph-orchestrator-licensed:latest
-        depends_on:
-            langgraph-api:
-                condition: service_healthy
-            langgraph-postgres:
-                condition: service_healthy
-        environment:
-            DATABASE_URI: {postgres_uri}
-            EXECUTOR_TARGET: langgraph-executor:8188
-        {env_file_str}
-    langgraph-executor:
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
-            langgraph-api:
-                condition: service_healthy
-        entrypoint: ["sh", "/storage/executor_entrypoint.sh"]
-        environment:
-            DATABASE_URI: {postgres_uri}
-            REDIS_URI: redis://langgraph-redis:6379
-            EXECUTOR_GRPC_PORT: "8188"
-            ENGINE_GRPC_ADDRESS: "langgraph-orchestrator:50054"
-            LSD_GRPC_SERVER_ADDRESS: "localhost:50050"
-            LANGGRAPH_HTTP: ""
-        {env_file_str}
-        pull_policy: build
-        build:
-            context: .{executor_additional_contexts_str}
-            dockerfile_inline: |
-{textwrap.indent(executor_dockerfile, "                ")}
-"""
-
-        return result
+        language
