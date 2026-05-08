@@ -151,6 +151,63 @@ async def test_history_walk_to_root_no_seed(
     assert "seed" not in result["ch"], f"Expected no seed, got {result['ch']}"
 
 
+async def test_history_migration_plain_value_as_seed(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """Pre-delta plain value in channel_values acts as seed (migration case).
+
+    When a thread was originally using a regular channel (BinaryOperatorAggregate)
+    and later switches to DeltaChannel, the old checkpoint has a plain value in
+    channel_values[ch] (not a _DeltaSnapshot). The walk should treat it as the
+    seed and terminate there.
+    """
+    from langgraph.checkpoint.base import Checkpoint
+    from langgraph.checkpoint.base.id import uuid6
+
+    from langgraph.checkpoint.conformance.test_utils import generate_metadata
+
+    tid = str(uuid4())
+    configs: list = []
+    parent_cfg = None
+
+    for step in range(4):
+        config = {"configurable": {"thread_id": tid, "checkpoint_ns": ""}}
+        if parent_cfg:
+            config["configurable"]["checkpoint_id"] = parent_cfg["configurable"][
+                "checkpoint_id"
+            ]
+        cv: dict = {}
+        cvs: dict = {}
+        # Step 1: plain value (migration case — old checkpoint before delta)
+        if step == 1:
+            cv["ch"] = [10, 20, 30]
+            cvs["ch"] = step + 1
+        cp = Checkpoint(
+            v=1,
+            id=str(uuid6(clock_seq=-1)),
+            ts="",
+            channel_values=cv,
+            channel_versions=cvs,
+            versions_seen={},
+            updated_channels=None,
+        )
+        parent_cfg = await saver.aput(config, cp, generate_metadata(step=step), cvs)
+        configs.append(parent_cfg)
+        if step != 1:
+            await saver.aput_writes(parent_cfg, [("ch", step)], str(uuid4()))
+
+    head = configs[-1]
+    result = await saver.aget_delta_channel_history(config=head, channels=["ch"])
+    # Seed should be the plain value from step 1
+    assert "seed" in result["ch"], "Expected seed from migration plain value at step 1"
+    seed = result["ch"]["seed"]
+    assert seed == [10, 20, 30], f"Expected plain value [10,20,30], got {seed}"
+    # Writes should be from step 2 only (between seed at step 1 and head's parent step 2)
+    writes = result["ch"]["writes"]
+    values = [w[2] for w in writes]
+    assert values == [2], f"Expected [2], got {values}"
+
+
 ALL_DELTA_CHANNEL_HISTORY_TESTS = [
     test_history_returns_writes_oldest_first,
     test_history_seed_is_nearest_snapshot,
@@ -158,6 +215,7 @@ ALL_DELTA_CHANNEL_HISTORY_TESTS = [
     test_history_multi_channel,
     test_history_empty_channels_returns_empty,
     test_history_walk_to_root_no_seed,
+    test_history_migration_plain_value_as_seed,
 ]
 
 
