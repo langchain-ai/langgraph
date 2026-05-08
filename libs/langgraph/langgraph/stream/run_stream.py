@@ -523,7 +523,7 @@ class _SubgraphRunStreamMixin:
 
     path: tuple[str, ...]
     graph_name: str | None
-    trigger_call_id: str | None
+    parent_task_id: str | None
     status: LifecycleEvent
     error: str | None
     _seen_terminal: bool
@@ -538,7 +538,7 @@ class SubgraphRunStream(GraphRunStream, _SubgraphRunStreamMixin):
         *,
         path: tuple[str, ...],
         graph_name: str | None = None,
-        trigger_call_id: str | None = None,
+        parent_task_id: str | None = None,
     ) -> None:
         # Capture the parent-inherited pump before super().__init__
         # touches anything; we delegate to it from `_pump_next`.
@@ -550,7 +550,7 @@ class SubgraphRunStream(GraphRunStream, _SubgraphRunStreamMixin):
         )
         self.path = path
         self.graph_name = graph_name
-        self.trigger_call_id = trigger_call_id
+        self.parent_task_id = parent_task_id
         self.status = "started"
         self.error = None
         self._seen_terminal = False
@@ -581,7 +581,7 @@ class AsyncSubgraphRunStream(AsyncGraphRunStream, _SubgraphRunStreamMixin):
         *,
         path: tuple[str, ...],
         graph_name: str | None = None,
-        trigger_call_id: str | None = None,
+        parent_task_id: str | None = None,
     ) -> None:
         self._parent_apump_fn: Callable[[], Awaitable[bool]] | None = mux._apump_fn
         super().__init__(
@@ -591,7 +591,7 @@ class AsyncSubgraphRunStream(AsyncGraphRunStream, _SubgraphRunStreamMixin):
         )
         self.path = path
         self.graph_name = graph_name
-        self.trigger_call_id = trigger_call_id
+        self.parent_task_id = parent_task_id
         self.status = "started"
         self.error = None
         self._seen_terminal = False

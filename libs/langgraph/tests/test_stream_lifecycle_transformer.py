@@ -131,7 +131,7 @@ def test_started_emitted_on_first_direct_child_task() -> None:
     assert payload["event"] == "started"
     assert payload["namespace"] == ["agent:abc123"]
     assert payload["graph_name"] == "agent"
-    assert payload["trigger_call_id"] == "abc123"
+    assert payload["parent_task_id"] == "abc123"
 
 
 def test_started_carries_cause_for_dict_envelope_input() -> None:
@@ -142,7 +142,7 @@ def test_started_carries_cause_for_dict_envelope_input() -> None:
     When that task triggers a subgraph (the child's namespace ends in
     `name:<dispatching_task_id>`), `lifecycle.started.cause` carries
     `{"type": "tool_call", "tool_call_id": ...}`. Identity correlation
-    still uses `trigger_call_id`; `tool_call_id` is exposed so UI
+    still uses `parent_task_id`; `tool_call_id` is exposed so UI
     consumers can anchor the lifecycle event back to the originating
     AI message tool call. Args are deliberately NOT mined — they live
     on the AIMessage and have a single source of truth there.
@@ -166,7 +166,7 @@ def test_started_carries_cause_for_dict_envelope_input() -> None:
 
     [payload] = _drain_lifecycle(mux)
     assert payload["event"] == "started"
-    assert payload["trigger_call_id"] == "abc123"
+    assert payload["parent_task_id"] == "abc123"
     assert payload["cause"] == {
         "type": "tool_call",
         "tool_call_id": "call_xyz",
@@ -200,7 +200,7 @@ def test_started_carries_cause_for_list_shape_per_call_input() -> None:
 
     [payload] = _drain_lifecycle(mux)
     assert payload["event"] == "started"
-    assert payload["trigger_call_id"] == "abc123"
+    assert payload["parent_task_id"] == "abc123"
     assert payload["cause"] == {"type": "tool_call", "tool_call_id": "tc-1"}
 
 
@@ -284,7 +284,7 @@ def test_parallel_dispatches_attributed_to_correct_parent() -> None:
     out to their own child subgraph; each child's `cause.tool_call_id`
     must reflect its own dispatching envelope, not the other.
 
-    Defends the `trigger_call_id` (pregel task id) join: that id is
+    Defends the `parent_task_id` (pregel task id) join: that id is
     parsed from the child namespace segment and is unique per Send,
     so it disambiguates parallel dispatches 1:1. Both children share
     the same `subagent_type` (in args, not on cause) — only the
@@ -411,10 +411,10 @@ def test_completed_on_parent_task_result() -> None:
 
     payloads = _drain_lifecycle(mux)
     assert [p["event"] for p in payloads] == ["started", "completed"]
-    # `trigger_call_id` is required on every event for the same subgraph
+    # `parent_task_id` is required on every event for the same subgraph
     # so consumers can correlate `started` ↔ terminal without joining
     # via `namespace`.
-    assert all(p["trigger_call_id"] == "abc" for p in payloads)
+    assert all(p["parent_task_id"] == "abc" for p in payloads)
 
 
 def test_failed_on_parent_task_result_with_error() -> None:
@@ -490,10 +490,10 @@ def test_fail_emits_failed_for_other_exceptions() -> None:
     assert payloads[1]["error"] == "boom"
 
 
-def test_trigger_call_id_present_on_every_terminal_path() -> None:
+def test_parent_task_id_present_on_every_terminal_path() -> None:
     """Every exit path that emits a terminal event (parent-result with
     error / interrupts, finalize sweep, fail sweep) must carry
-    `trigger_call_id` so consumers can correlate the terminal event
+    `parent_task_id` so consumers can correlate the terminal event
     back to its `started` without falling back to namespace joins."""
     # Path 1: parent-result with error.
     mux = _build_lifecycle_mux()
@@ -501,7 +501,7 @@ def test_trigger_call_id_present_on_every_terminal_path() -> None:
     mux.push(_tasks_result([], task_id="abc", name="agent", error="boom"))
     [_, terminal] = _drain_lifecycle(mux)
     assert terminal["event"] == "failed"
-    assert terminal["trigger_call_id"] == "abc"
+    assert terminal["parent_task_id"] == "abc"
 
     # Path 2: parent-result with interrupts.
     mux2 = _build_lifecycle_mux()
@@ -511,7 +511,7 @@ def test_trigger_call_id_present_on_every_terminal_path() -> None:
     )
     [_, terminal2] = _drain_lifecycle(mux2)
     assert terminal2["event"] == "interrupted"
-    assert terminal2["trigger_call_id"] == "def"
+    assert terminal2["parent_task_id"] == "def"
 
     # Path 3: finalize sweep (no parent result arrived).
     mux3 = _build_lifecycle_mux()
@@ -519,7 +519,7 @@ def test_trigger_call_id_present_on_every_terminal_path() -> None:
     mux3.close()
     [_, terminal3] = _drain_lifecycle(mux3)
     assert terminal3["event"] == "completed"
-    assert terminal3["trigger_call_id"] == "ghi"
+    assert terminal3["parent_task_id"] == "ghi"
 
     # Path 4: fail sweep with GraphInterrupt.
     mux4 = _build_lifecycle_mux()
@@ -527,7 +527,7 @@ def test_trigger_call_id_present_on_every_terminal_path() -> None:
     mux4.fail(GraphInterrupt())
     [_, terminal4] = _drain_lifecycle(mux4)
     assert terminal4["event"] == "interrupted"
-    assert terminal4["trigger_call_id"] == "jkl"
+    assert terminal4["parent_task_id"] == "jkl"
 
     # Path 5: fail sweep with generic exception.
     mux5 = _build_lifecycle_mux()
@@ -535,7 +535,7 @@ def test_trigger_call_id_present_on_every_terminal_path() -> None:
     mux5.fail(RuntimeError("kaboom"))
     [_, terminal5] = _drain_lifecycle(mux5)
     assert terminal5["event"] == "failed"
-    assert terminal5["trigger_call_id"] == "mno"
+    assert terminal5["parent_task_id"] == "mno"
 
 
 def test_unrelated_methods_pass_through() -> None:

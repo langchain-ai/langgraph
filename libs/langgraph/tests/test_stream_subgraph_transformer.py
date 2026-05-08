@@ -195,7 +195,7 @@ def test_handle_created_on_first_direct_child_task() -> None:
     [handle] = _drain_subgraphs(mux)
     assert handle.path == ("agent:abc",)
     assert handle.graph_name == "agent"
-    assert handle.trigger_call_id == "abc"
+    assert handle.parent_task_id == "abc"
     assert handle.status == "started"
     _child_mux(handle)  # mini-mux backed
 

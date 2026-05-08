@@ -333,7 +333,7 @@ LifecycleEvent = Literal["started", "completed", "failed", "interrupted", "drain
 Each value:
 
 - `started` — first `tasks` event observed at the tracked namespace. Carries
-  `graph_name` / `trigger_call_id` / optional `cause` describing what spawned
+  `graph_name` / `parent_task_id` / optional `cause` describing what spawned
   the subgraph.
 - `completed` — the dispatching task's `TaskResultPayload` arrived with neither
   error nor interrupts. Also emitted by `finalize` for any tracked namespace
@@ -351,7 +351,7 @@ Each value:
 
 
 def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
-    """Split a namespace segment into `(graph_name, trigger_call_id)`.
+    """Split a namespace segment into `(graph_name, parent_task_id)`.
 
     Segments are formatted `node_name:task_id` by `prepare_next_tasks`.
     Returns `(segment, None)` if no `:` is present.
@@ -416,7 +416,7 @@ class LifecyclePayload(TypedDict, total=False):
     split (it does for normally-dispatched subgraphs). Absent if the segment
     has no `:` separator.
     """
-    trigger_call_id: str
+    parent_task_id: str
     """Pregel task id of the dispatching task — the task whose execution
     spawned this subgraph.
 
@@ -465,10 +465,10 @@ class _TasksLifecycleBase(StreamTransformer):
 
     - `_should_track(ns)` — scope filter (e.g. multi-depth vs
       direct-children-only).
-    - `_on_started(ns, graph_name, trigger_call_id, tool_call_id)` —
+    - `_on_started(ns, graph_name, parent_task_id, tool_call_id)` —
       first sighting action (push payload / build handle / etc.).
       Called once per discovered namespace.
-    - `_on_terminal(ns, status, error, trigger_call_id)` — terminal
+    - `_on_terminal(ns, status, error, parent_task_id)` — terminal
       action (push terminal payload / mark handle status). Called
       once per tracked namespace at result time, or via `finalize` /
       `fail` sweeps if no parent result arrived.
@@ -504,7 +504,7 @@ class _TasksLifecycleBase(StreamTransformer):
         self,
         ns: tuple[str, ...],
         graph_name: str | None,
-        trigger_call_id: str | None,
+        parent_task_id: str | None,
         tool_call_id: str | None = None,
     ) -> None:
         """Fired once per discovered namespace (first observed task event).
@@ -512,7 +512,7 @@ class _TasksLifecycleBase(StreamTransformer):
         `tool_call_id` is the model-side id of the originating tool call
         (from the per-call dispatched task's `input`). `None` for
         structurally-triggered subgraphs or per-call envelopes that omitted
-        an `id`. Consumers join on `trigger_call_id` (the pregel task id)
+        an `id`. Consumers join on `parent_task_id` (the pregel task id)
         for identity; `tool_call_id` is purely an anchor back to the AI
         message that dispatched the subgraph.
         """
@@ -523,12 +523,12 @@ class _TasksLifecycleBase(StreamTransformer):
         ns: tuple[str, ...],
         status: LifecycleEvent,
         error: str | None,
-        trigger_call_id: str,
+        parent_task_id: str,
     ) -> None:
         """Fired once per tracked namespace when its dispatching task's
         result arrives, or via finalize/fail safety-net sweeps.
 
-        `trigger_call_id` is the same id paired with the namespace at
+        `parent_task_id` is the same id paired with the namespace at
         `_on_started` time, so subscribers can correlate the terminal
         event back to its `started`.
         """
@@ -553,26 +553,26 @@ class _TasksLifecycleBase(StreamTransformer):
     def _handle_task_start(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
         # Mine input shape on every tasks event (not just tracked ones)
         # so we capture dispatching tasks that themselves live outside the
-        # tracked region but whose `id` will appear as `trigger_call_id`
+        # tracked region but whose `id` will appear as `parent_task_id`
         # for a child subgraph.
         self._record_dispatching_tool_call_id(data)
         if not self._should_track(ns) or ns in self._seen:
             return
         self._seen.add(ns)
-        graph_name, trigger_call_id = _parse_ns_segment(ns[-1])
+        graph_name, parent_task_id = _parse_ns_segment(ns[-1])
         tool_call_id = (
-            self._dispatching_tool_call_id.pop(trigger_call_id, None)
-            if trigger_call_id is not None
+            self._dispatching_tool_call_id.pop(parent_task_id, None)
+            if parent_task_id is not None
             else None
         )
         self._on_started(
             ns,
             graph_name or None,
-            trigger_call_id,
+            parent_task_id,
             tool_call_id,
         )
-        if trigger_call_id is not None:
-            self._open[ns] = trigger_call_id
+        if parent_task_id is not None:
+            self._open[ns] = parent_task_id
 
     def _record_dispatching_tool_call_id(self, data: dict[str, Any]) -> None:
         """Remember `task_id -> tool_call_id` if the task input matches
@@ -597,8 +597,8 @@ class _TasksLifecycleBase(StreamTransformer):
     ) -> list[tuple[tuple[str, ...], LifecycleEvent, str | None, str]]:
         """Return and remove tracked children closed by this task result.
 
-        Each tuple is `(child_ns, status, error, trigger_call_id)`.
-        `trigger_call_id` is the dispatching task's id — the same id
+        Each tuple is `(child_ns, status, error, parent_task_id)`.
+        `parent_task_id` is the dispatching task's id — the same id
         we'd already paired with the namespace at `_on_started`.
         """
         result_id = data.get("id")
@@ -614,22 +614,22 @@ class _TasksLifecycleBase(StreamTransformer):
         return transitions
 
     def _handle_task_result(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
-        for child_ns, status, error, trigger_call_id in self._pop_terminal_transitions(
+        for child_ns, status, error, parent_task_id in self._pop_terminal_transitions(
             ns, data
         ):
-            self._on_terminal(child_ns, status, error, trigger_call_id)
+            self._on_terminal(child_ns, status, error, parent_task_id)
 
     def finalize(self) -> None:
         """Emit `completed` for any tracked namespace still open at run end."""
-        for ns, trigger_call_id in list(self._open.items()):
-            self._on_terminal(ns, "completed", None, trigger_call_id)
+        for ns, parent_task_id in list(self._open.items()):
+            self._on_terminal(ns, "completed", None, parent_task_id)
         self._open.clear()
 
     def fail(self, err: BaseException) -> None:
         """Emit terminal status for any tracked namespace still open."""
         status, error_str = _status_from_exception(err)
-        for ns, trigger_call_id in list(self._open.items()):
-            self._on_terminal(ns, status, error_str, trigger_call_id)
+        for ns, parent_task_id in list(self._open.items()):
+            self._on_terminal(ns, status, error_str, parent_task_id)
         self._open.clear()
 
 
@@ -693,10 +693,10 @@ class LifecycleTransformer(_TasksLifecycleBase):
         self,
         ns: tuple[str, ...],
         graph_name: str | None,
-        trigger_call_id: str | None,
+        parent_task_id: str | None,
         tool_call_id: str | None = None,
     ) -> None:
-        if trigger_call_id is None:
+        if parent_task_id is None:
             # Without a task id we can't correlate a dispatching-task-result
             # event back to this namespace — skip the started payload
             # and rely on finalize/fail to close.
@@ -704,7 +704,7 @@ class LifecycleTransformer(_TasksLifecycleBase):
         payload: LifecyclePayload = {
             "event": "started",
             "namespace": list(ns),
-            "trigger_call_id": trigger_call_id,
+            "parent_task_id": parent_task_id,
         }
         if graph_name:
             payload["graph_name"] = graph_name
@@ -717,12 +717,12 @@ class LifecycleTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         status: LifecycleEvent,
         error: str | None,
-        trigger_call_id: str,
+        parent_task_id: str,
     ) -> None:
         payload: LifecyclePayload = {
             "event": status,
             "namespace": list(ns),
-            "trigger_call_id": trigger_call_id,
+            "parent_task_id": parent_task_id,
         }
         if error is not None:
             payload["error"] = error
@@ -776,7 +776,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         self,
         ns: tuple[str, ...],
         graph_name: str | None,
-        trigger_call_id: str | None,
+        parent_task_id: str | None,
         tool_call_id: str | None = None,  # noqa: ARG002
     ) -> None:
         if self._mux is None:
@@ -790,7 +790,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
             mux=child_mux,
             path=ns,
             graph_name=graph_name,
-            trigger_call_id=trigger_call_id,
+            parent_task_id=parent_task_id,
         )
         self._handles[ns] = handle
         self._log.push(handle)
@@ -800,7 +800,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         status: LifecycleEvent,
         error: str | None,
-        trigger_call_id: str,  # noqa: ARG002
+        parent_task_id: str,  # noqa: ARG002
     ) -> None:
         handle = self._handles.get(ns)
         if handle is None or not self._mark_terminal(handle, status, error):
@@ -812,7 +812,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         status: LifecycleEvent,
         error: str | None,
-        trigger_call_id: str,  # noqa: ARG002
+        parent_task_id: str,  # noqa: ARG002
     ) -> None:
         handle = self._handles.get(ns)
         if handle is None or not self._mark_terminal(handle, status, error):
@@ -893,9 +893,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
                     child_ns,
                     status,
                     error,
-                    trigger_call_id,
+                    parent_task_id,
                 ) in self._pop_terminal_transitions(ns, data):
-                    await self._aon_terminal(child_ns, status, error, trigger_call_id)
+                    await self._aon_terminal(child_ns, status, error, parent_task_id)
             else:
                 self._handle_task_start(ns, data)
             keep = False
@@ -909,9 +909,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
 
     def _complete_open_handles(self) -> BaseException | None:
         first_error: BaseException | None = None
-        for ns, trigger_call_id in list(self._open.items()):
+        for ns, parent_task_id in list(self._open.items()):
             try:
-                self._on_terminal(ns, "completed", None, trigger_call_id)
+                self._on_terminal(ns, "completed", None, parent_task_id)
             except BaseException as e:
                 if first_error is None:
                     first_error = e
@@ -927,9 +927,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
 
     async def _acomplete_open_handles(self) -> BaseException | None:
         first_error: BaseException | None = None
-        for ns, trigger_call_id in list(self._open.items()):
+        for ns, parent_task_id in list(self._open.items()):
             try:
-                await self._aon_terminal(ns, "completed", None, trigger_call_id)
+                await self._aon_terminal(ns, "completed", None, parent_task_id)
             except BaseException as e:
                 if first_error is None:
                     first_error = e
