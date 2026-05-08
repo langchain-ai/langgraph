@@ -39,11 +39,12 @@ def _tasks_start(
 ) -> dict[str, Any]:
     """Build a `tasks` ProtocolEvent carrying a TaskPayload (start).
 
-    Pass `input={"tool_call": {"args": {...}}}` (or any envelope with
-    that shape) to exercise the lifecycle transformer's input mining of
-    invocation-intent metadata (`subagent_type`, `description`) — this
-    mirrors the `ToolCallWithContext` payload `langgraph.prebuilt.ToolNode`
-    Send-fans out per tool call.
+    Pass `input=[{"id": ..., "name": ..., "args": {...}}]` (the per-call
+    list shape `langchain.agents.create_agent` Send-fans out) or
+    `input={"tool_call": {"args": {...}}, ...}` (the dict envelope older
+    prebuilt agent paths emit) to exercise the lifecycle transformer's
+    input mining of invocation-intent metadata (`subagent_type`,
+    `description`).
     """
     return {
         "type": "event",
@@ -135,14 +136,14 @@ def test_started_emitted_on_first_direct_child_task() -> None:
 
 
 def test_started_carries_cause_when_parent_input_has_invocation_metadata() -> None:
-    """When a parent task's `input` is a `ToolCallWithContext`-shaped
-    envelope (`{"tool_call": {"args": {...}}, ...}`, the layout
-    `langgraph.prebuilt.ToolNode` Send-fans out per call), the
-    transformer mines `subagent_type`, `description`, and `tool_call_id`
-    from `tool_call` and remembers them keyed by `parent_task_id`.
-    When that parent task triggers a subgraph (the child's namespace
-    ends in `name:<parent_task_id>`), the `lifecycle.started` payload
-    carries `cause = {"type": "tool_call", "subagent_type": ..., "description": ...,
+    """When a parent task's `input` is a dict envelope with a `tool_call`
+    field (`{"tool_call": {"args": {...}}, ...}`, the layout older
+    prebuilt agent paths Send-fan out per call), the transformer mines
+    `subagent_type`, `description`, and `tool_call_id` from `tool_call`
+    and remembers them keyed by `parent_task_id`. When that parent task
+    triggers a subgraph (the child's namespace ends in
+    `name:<parent_task_id>`), the `lifecycle.started` payload carries
+    `cause = {"type": "tool_call", "subagent_type": ..., "description": ...,
     "tool_call_id": ...}`. Identity-level correlation still uses
     `trigger_call_id`; `tool_call_id` is exposed so UI consumers can
     anchor the lifecycle event back to the originating AI message."""
@@ -210,12 +211,12 @@ def test_started_cause_with_description_but_no_subagent_type() -> None:
 
 
 def test_started_carries_cause_for_list_shape_per_call_input() -> None:
-    """langchain v1's `create_agent` Send-fans out a per-call task whose
-    `input` is a single-element list of tool-call dicts:
+    """`langchain.agents.create_agent` Send-fans out a per-call task
+    whose `input` is a single-element list of tool-call dicts:
     `[{"id": ..., "name": ..., "args": {...}}]`. The transformer mines
-    `subagent_type`, `description`, and `tool_call_id` exactly as for the
-    `ToolCallWithContext` dict envelope, so `lifecycle.started.cause`
-    fires regardless of which agent factory drove the dispatch."""
+    `subagent_type`, `description`, and `tool_call_id` exactly as for
+    the dict envelope shape, so `lifecycle.started.cause` fires
+    regardless of which agent factory drove the dispatch."""
     mux = _build_lifecycle_mux()
     mux.push(
         _tasks_start(

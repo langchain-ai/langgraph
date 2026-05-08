@@ -343,16 +343,17 @@ def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
 def _extract_per_call_args(payload: Any) -> tuple[dict[str, Any], str | None] | None:
     """Pull `(args, tool_call_id)` out of a per-call dispatched task's `input`.
 
-    Two shapes are recognised; both are duck-typed so 3rd-party tool
-    runners that mimic the layout participate without importing prebuilt
-    types:
+    Two shapes are recognised; both are duck-typed so any tool runner
+    that mimics the layout participates without naming any specific
+    dispatcher's types:
 
-    1. `ToolCallWithContext`-style envelope used by
-       `langgraph.prebuilt.ToolNode` Send-fan-out:
-       `{"tool_call": {"id": ..., "args": {...}, ...}, ...}`.
-    2. Single-element list of tool-call dicts used by langchain v1's
-       `create_agent` Send-fan-out:
-       `[{"id": ..., "name": ..., "args": {...}}]`.
+    1. Single-element list of tool-call dicts:
+       `[{"id": ..., "name": ..., "args": {...}}]`. The current public
+       shape — `langchain.agents.create_agent` Send-fans this out per
+       pending tool call.
+    2. Dict envelope wrapping a tool call:
+       `{"tool_call": {"id": ..., "args": {...}, ...}, ...}`. Older
+       prebuilt agent paths Send-fan-out this shape.
 
     Returns `None` if the payload doesn't match either shape or its
     `args` isn't a dict. `tool_call_id` is `None` when the envelope
@@ -395,10 +396,11 @@ class LifecyclePayload(TypedDict, total=False):
     Shape:
 
     - `{"type": "tool_call", "subagent_type": "<name>", "description": "<text>",
-       "tool_call_id": "<id>"}` — set when the subgraph was triggered by a tool
-      invocation routed through `langgraph.prebuilt.ToolNode`. Mined from the
-      per-call dispatched task's `input.tool_call`. `subagent_type` and
-      `description` describe the invoking intent; `tool_call_id` is the
+       "tool_call_id": "<id>"}` — set when the subgraph was triggered by a
+      per-call tool dispatch (a model tool call routed through whatever
+      tool node the agent uses). Mined from the per-call task's `input` —
+      see `_extract_per_call_args` for the recognised shapes. `subagent_type`
+      and `description` describe the invoking intent; `tool_call_id` is the
       model-side id of the originating tool call, exposed so UI consumers
       can anchor the lifecycle event back to the AI message that dispatched
       it (the per-call Send fan-out gives each tool_call its own pregel task,
@@ -410,7 +412,7 @@ class LifecyclePayload(TypedDict, total=False):
     a `cause` if at least one field was extractable.
 
     Absent for structurally-triggered subgraphs (parallel branches via
-    `Send` without ToolNode, nested `graph.invoke()`, etc.)."""
+    `Send` with non-tool-call payloads, nested `graph.invoke()`, etc.)."""
     error: NotRequired[str]
 
 
@@ -451,12 +453,11 @@ class _TasksLifecycleBase(StreamTransformer):
         # Maps tracked namespace -> task_id of the parent task whose
         # `TaskResultPayload` will close it.
         self._open: dict[tuple[str, ...], str] = {}
-        # Maps task_id -> invocation metadata for tasks whose `input` looked
-        # like a `{"tool_call": {...}, ...}` envelope (the shape
-        # `langgraph.prebuilt.ToolNode` Send-fans out via
-        # `ToolCallWithContext`). The lifecycle hook joins on this
-        # when a child subgraph fires its first task event so it can
-        # attribute the invocation to the model tool call's args.
+        # Maps task_id -> invocation metadata for tasks whose `input` matched
+        # a recognized per-call tool-dispatch shape (see `_extract_per_call_args`
+        # for the accepted layouts). The lifecycle hook joins on this when a
+        # child subgraph fires its first task event so it can attribute the
+        # invocation to the model tool call's args.
         self._invocation_metadata: dict[str, dict[str, str]] = {}
 
     # --- Template-method hooks (subclass overrides) ---
