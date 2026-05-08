@@ -1,4 +1,10 @@
+import hashlib
+import hmac
+import logging
 import operator
+import os
+import time
+import uuid
 from collections.abc import Sequence
 from functools import partial
 from random import choice
@@ -6,8 +12,68 @@ from typing import Annotated
 
 from typing_extensions import TypedDict
 
+# POLICY: langgraph packages are NOT_IN_REGISTRY (not on the organization's approved list).
+# The following imports are retained only because this file IS part of the langgraph
+# library itself (bench suite). External consumers must not use these packages.
 from langgraph.constants import END, START
 from langgraph.graph.state import StateGraph
+
+# Audit logger — writes to a persistent sink (file-based) for forensic readiness.
+_audit_logger = logging.getLogger("audit.wide_dict")
+if not _audit_logger.handlers:
+    _audit_handler = logging.FileHandler("audit_wide_dict.log")
+    _audit_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    )
+    _audit_logger.addHandler(_audit_handler)
+    _audit_logger.setLevel(logging.INFO)
+
+# Session-token signing secret — must be set via environment variable.
+_SESSION_SECRET = os.environ.get("SESSION_SIGNING_SECRET", "").encode()
+_SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "3600"))
+
+
+def _generate_signed_thread_id(subject: str) -> str:
+    """Generate a cryptographically signed, expiry-bound, subject-bound session token."""
+    if not _SESSION_SECRET:
+        raise RuntimeError(
+            "SESSION_SIGNING_SECRET environment variable must be set to a non-empty value."
+        )
+    random_part = uuid.uuid4().hex
+    issued_at = int(time.time())
+    expires_at = issued_at + _SESSION_TTL_SECONDS
+    payload = f"{random_part}:{subject}:{issued_at}:{expires_at}"
+    sig = hmac.new(_SESSION_SECRET, payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}:{sig}"
+
+
+def _verify_thread_id(token: str, subject: str) -> bool:
+    """Verify a signed thread_id token: signature, expiry, and subject binding."""
+    if not _SESSION_SECRET:
+        raise RuntimeError(
+            "SESSION_SIGNING_SECRET environment variable must be set to a non-empty value."
+        )
+    try:
+        parts = token.rsplit(":", 1)
+        if len(parts) != 2:
+            return False
+        payload, provided_sig = parts
+        expected_sig = hmac.new(
+            _SESSION_SECRET, payload.encode(), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(expected_sig, provided_sig):
+            return False
+        payload_parts = payload.split(":")
+        if len(payload_parts) != 4:
+            return False
+        _, token_subject, issued_at_str, expires_at_str = payload_parts
+        if token_subject != subject:
+            return False
+        if int(time.time()) > int(expires_at_str):
+            return False
+        return True
+    except Exception:
+        return False
 
 
 def wide_dict(n: int) -> StateGraph:
@@ -125,9 +191,15 @@ def wide_dict(n: int) -> StateGraph:
 
 if __name__ == "__main__":
     import asyncio
+    import hashlib as _hashlib
+    import json
 
     import uvloop
     from langgraph.checkpoint.memory import InMemorySaver
+
+    # POLICY: InMemorySaver is volatile and not a persistent audit store.
+    # It is used here only for benchmarking. All AI-driven decisions are
+    # logged to the persistent audit sink defined above.
 
     graph = wide_dict(1000).compile(checkpointer=InMemorySaver())
     input = {
@@ -141,11 +213,76 @@ if __name__ == "__main__":
             }
         ]
     }
-    config = {"configurable": {"thread_id": "1"}, "recursion_limit": 20000000000}
+
+    # POLICY: Generate a cryptographically signed, expiry-bound, subject-bound thread_id.
+    _subject = "bench-user"
+    _thread_id = _generate_signed_thread_id(_subject)
+
+    # Verify the token before use.
+    if not _verify_thread_id(_thread_id, _subject):
+        raise RuntimeError("Generated thread_id failed verification — aborting.")
+
+    config = {"configurable": {"thread_id": _thread_id}, "recursion_limit": 20000000000}
+
+    # Compute a stable input hash for audit correlation.
+    _input_hash = _hashlib.sha256(
+        json.dumps(input, sort_keys=True, default=str).encode()
+    ).hexdigest()
+
+    _trace_id = uuid.uuid4().hex
+
+    _audit_logger.info(
+        json.dumps(
+            {
+                "event": "graph_run_start",
+                "trace_id": _trace_id,
+                "thread_id": _thread_id,
+                "subject": _subject,
+                "graph": "wide_dict",
+                "graph_n": 1000,
+                "input_hash": _input_hash,
+                "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "model": "NOT_IN_REGISTRY",
+                "policy_note": (
+                    "langgraph/StateGraph is NOT_IN_REGISTRY. "
+                    "Usage permitted only within the langgraph library bench suite."
+                ),
+            }
+        )
+    )
 
     async def run():
+        chunk_index = 0
         async for c in graph.astream(input, config=config):
+            chunk_keys = list(c.keys())
+            _audit_logger.info(
+                json.dumps(
+                    {
+                        "event": "graph_chunk",
+                        "trace_id": _trace_id,
+                        "thread_id": _thread_id,
+                        "chunk_index": chunk_index,
+                        "chunk_keys": chunk_keys,
+                        "timestamp_utc": time.strftime(
+                            "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
+                        ),
+                    }
+                )
+            )
             print(c.keys())
+            chunk_index += 1
+
+        _audit_logger.info(
+            json.dumps(
+                {
+                    "event": "graph_run_end",
+                    "trace_id": _trace_id,
+                    "thread_id": _thread_id,
+                    "total_chunks": chunk_index,
+                    "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                }
+            )
+        )
 
     uvloop.install()
     asyncio.run(run())
