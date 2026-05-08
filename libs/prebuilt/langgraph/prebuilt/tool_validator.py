@@ -5,7 +5,11 @@ returns a ToolMessage with the error message. The ValidationNode can be used in 
 StateGraph with a "messages" key. If multiple tool calls are requested, they will be run in parallel.
 """
 
+import hashlib
+import json
+import logging
 from collections.abc import Callable, Sequence
+from datetime import datetime, timezone
 from typing import (
     Any,
     cast,
@@ -30,6 +34,8 @@ from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
 from typing_extensions import deprecated
 
+logger = logging.getLogger(__name__)
+
 
 def _default_format_error(
     error: BaseException,
@@ -38,6 +44,59 @@ def _default_format_error(
 ) -> str:
     """Default error formatting function."""
     return f"{repr(error)}\n\nRespond after fixing all validation errors."
+
+
+def _filter_output(content: str, schema: type) -> str:
+    """Apply output data minimisation: only return fields explicitly declared on the schema."""
+    try:
+        data = json.loads(content)
+        if isinstance(data, dict):
+            if issubclass(schema, BaseModel):
+                allowed_fields = set(schema.model_fields.keys())
+            elif issubclass(schema, BaseModelV1):
+                allowed_fields = set(schema.__fields__.keys())
+            else:
+                allowed_fields = set(data.keys())
+            filtered = {k: v for k, v in data.items() if k in allowed_fields}
+            return json.dumps(filtered)
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return content
+
+
+def _emit_audit_record(
+    *,
+    event: str,
+    tool_name: str,
+    tool_call_id: str,
+    input_args: Any,
+    outcome: str,
+    error: str | None = None,
+    config: RunnableConfig | None = None,
+) -> None:
+    """Emit a structured audit log record for a tool validation decision."""
+    try:
+        input_hash = hashlib.sha256(
+            json.dumps(input_args, sort_keys=True, default=str).encode()
+        ).hexdigest()
+    except Exception:
+        input_hash = "unhashable"
+
+    record: dict[str, Any] = {
+        "audit_event": event,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "tool_name": tool_name,
+        "tool_call_id": tool_call_id,
+        "input_hash": input_hash,
+        "outcome": outcome,
+    }
+    if error is not None:
+        record["error"] = error
+    if config is not None:
+        record["run_id"] = str(config.get("run_id", ""))
+        record["tags"] = config.get("tags", [])
+
+    logger.info("AUDIT tool_validation %s", json.dumps(record))
 
 
 @deprecated(
@@ -65,7 +124,7 @@ class ValidationNode(RunnableCallable):
         from typing import Literal, Annotated
         from typing_extensions import TypedDict
 
-        from langchain_anthropic import ChatAnthropic
+        from langchain_openai import ChatOpenAI
         from pydantic import BaseModel, field_validator
 
         from langgraph.graph import END, START, StateGraph
@@ -82,7 +141,7 @@ class ValidationNode(RunnableCallable):
                 return v
 
         builder = StateGraph(Annotated[list, add_messages])
-        llm = ChatAnthropic(model="claude-3-5-haiku-latest").bind_tools([SelectNumber])
+        llm = ChatOpenAI(model="gpt-4o").bind_tools([SelectNumber])
         builder.add_node("model", llm)
         builder.add_node("validation", ValidationNode([SelectNumber]))
         builder.add_edge(START, "model")
@@ -187,29 +246,77 @@ class ValidationNode(RunnableCallable):
         """Validate and run tool calls synchronously."""
         output_type, message = self._get_message(input)
 
+        # Build the allow list from registered schemas
+        allow_list: set[str] = set(self.schemas_by_name.keys())
+
         def run_one(call: ToolCall) -> ToolMessage:
-            schema = self.schemas_by_name[call["name"]]
+            tool_name = call["name"]
+            tool_call_id = cast(str, call["id"])
+
+            # Enforce explicit tool allow list
+            if tool_name not in allow_list:
+                _emit_audit_record(
+                    event="tool_validation_denied",
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                    input_args=call.get("args"),
+                    outcome="denied",
+                    error=f"Tool '{tool_name}' is not in the approved allow list.",
+                    config=config,
+                )
+                logger.warning(
+                    "AUDIT tool_validation_denied: tool '%s' (call_id=%s) is not in the allow list.",
+                    tool_name,
+                    tool_call_id,
+                )
+                return ToolMessage(
+                    content=f"Error: tool '{tool_name}' is not permitted.",
+                    name=tool_name,
+                    tool_call_id=tool_call_id,
+                    additional_kwargs={"is_error": True},
+                )
+
+            schema = self.schemas_by_name[tool_name]
             try:
                 if issubclass(schema, BaseModel):
                     output = schema.model_validate(call["args"])
-                    content = output.model_dump_json()
+                    raw_content = output.model_dump_json()
                 elif issubclass(schema, BaseModelV1):
                     output = schema.validate(call["args"])
-                    content = output.json()
+                    raw_content = output.json()
                 else:
                     raise ValueError(
                         f"Unsupported schema type: {type(schema)}. Expected BaseModel or BaseModelV1."
                     )
+                # Apply output data minimisation
+                content = _filter_output(raw_content, schema)
+                _emit_audit_record(
+                    event="tool_validation_success",
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                    input_args=call.get("args"),
+                    outcome="success",
+                    config=config,
+                )
                 return ToolMessage(
                     content=content,
-                    name=call["name"],
-                    tool_call_id=cast(str, call["id"]),
+                    name=tool_name,
+                    tool_call_id=tool_call_id,
                 )
             except (ValidationError, ValidationErrorV1) as e:
+                _emit_audit_record(
+                    event="tool_validation_error",
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                    input_args=call.get("args"),
+                    outcome="validation_error",
+                    error=repr(e),
+                    config=config,
+                )
                 return ToolMessage(
                     content=self._format_error(e, call, schema),
-                    name=call["name"],
-                    tool_call_id=cast(str, call["id"]),
+                    name=tool_name,
+                    tool_call_id=tool_call_id,
                     additional_kwargs={"is_error": True},
                 )
 
