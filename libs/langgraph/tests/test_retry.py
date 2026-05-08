@@ -2468,3 +2468,259 @@ def test_compile_default_error_handler_collides_with_user_node():
 
     with pytest.raises(ValueError, match="__default_error_handler__"):
         builder.compile(default_error_handler=default_handler)
+
+
+# ---------------------------------------------------------------------------
+# set_defaults()
+# ---------------------------------------------------------------------------
+
+
+def test_set_defaults_error_handler():
+    """set_defaults(error_handler=...) works the same as compile(default_error_handler=...)."""
+
+    class State(TypedDict):
+        foo: str
+
+    def always_failing(state: State) -> State:
+        raise RuntimeError("boom")
+
+    captured: dict[str, Any] = {}
+
+    def default_handler(state: State, error: NodeError) -> State:
+        captured["node"] = error.node
+        return {"foo": "handled"}
+
+    graph = (
+        StateGraph(State)
+        .set_defaults(error_handler=default_handler)
+        .add_node("always_failing", always_failing)
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    result = graph.invoke({"foo": ""})
+    assert result["foo"] == "handled"
+    assert captured["node"] == "always_failing"
+
+
+def test_set_defaults_error_handler_compile_kwarg_wins():
+    """compile(default_error_handler=...) takes precedence over set_defaults(error_handler=...)."""
+
+    class State(TypedDict):
+        foo: str
+
+    def always_failing(state: State) -> State:
+        raise RuntimeError("boom")
+
+    captured: dict[str, str] = {}
+
+    def builder_handler(state: State, error: NodeError) -> State:
+        captured["source"] = "builder"
+        return {"foo": "builder"}
+
+    def compile_handler(state: State, error: NodeError) -> State:
+        captured["source"] = "compile"
+        return {"foo": "compile"}
+
+    graph = (
+        StateGraph(State)
+        .set_defaults(error_handler=builder_handler)
+        .add_node("always_failing", always_failing)
+        .add_edge(START, "always_failing")
+        .compile(default_error_handler=compile_handler)
+    )
+
+    result = graph.invoke({"foo": ""})
+    assert result["foo"] == "compile"
+    assert captured["source"] == "compile"
+
+
+def test_set_defaults_retry_policy():
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+
+    def flaky_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise ValueError("not yet")
+        return {"foo": "ok"}
+
+    graph = (
+        StateGraph(State)
+        .set_defaults(
+            retry_policy=RetryPolicy(
+                max_attempts=3, initial_interval=0.01, jitter=False, retry_on=ValueError
+            )
+        )
+        .add_node("flaky", flaky_node)
+        .add_edge(START, "flaky")
+        .compile()
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke({"foo": ""})
+
+    assert result["foo"] == "ok"
+    assert attempts == 3
+
+
+def test_set_defaults_retry_policy_per_node_wins():
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+
+    def flaky_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 2:
+            raise ValueError("not yet")
+        return {"foo": "ok"}
+
+    graph = (
+        StateGraph(State)
+        .set_defaults(
+            retry_policy=RetryPolicy(
+                max_attempts=1, initial_interval=0.01, jitter=False, retry_on=ValueError
+            )
+        )
+        .add_node(
+            "flaky",
+            flaky_node,
+            retry_policy=RetryPolicy(
+                max_attempts=3,
+                initial_interval=0.01,
+                jitter=False,
+                retry_on=ValueError,
+            ),
+        )
+        .add_edge(START, "flaky")
+        .compile()
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke({"foo": ""})
+
+    assert result["foo"] == "ok"
+    assert attempts == 2
+
+
+@pytest.mark.anyio
+async def test_set_defaults_timeout():
+    class State(TypedDict):
+        foo: str
+
+    async def slow_node(state: State) -> State:
+        await asyncio.sleep(10)
+        return {"foo": "should-not-happen"}
+
+    graph = (
+        StateGraph(State)
+        .set_defaults(timeout=TimeoutPolicy(run_timeout=0.05))
+        .add_node("slow", slow_node)
+        .add_edge(START, "slow")
+        .compile()
+    )
+
+    from langgraph.errors import NodeTimeoutError
+
+    with pytest.raises(NodeTimeoutError):
+        await graph.ainvoke({"foo": ""})
+
+
+@pytest.mark.anyio
+async def test_set_defaults_timeout_per_node_wins():
+    """Per-node timeout overrides the default; a generous per-node timeout
+    allows a node to complete even when the builder default is very short."""
+
+    class State(TypedDict):
+        foo: str
+
+    async def quick_node(state: State) -> State:
+        await asyncio.sleep(0.05)
+        return {"foo": "done"}
+
+    graph = (
+        StateGraph(State)
+        .set_defaults(timeout=TimeoutPolicy(run_timeout=0.01))
+        .add_node("quick", quick_node, timeout=TimeoutPolicy(run_timeout=5.0))
+        .add_edge(START, "quick")
+        .compile()
+    )
+
+    result = await graph.ainvoke({"foo": ""})
+    assert result["foo"] == "done"
+
+
+def test_set_defaults_chaining():
+    """set_defaults() is chainable and can be called in any order relative to add_node."""
+
+    class State(TypedDict):
+        foo: str
+
+    def always_failing(state: State) -> State:
+        raise RuntimeError("boom")
+
+    def handler(state: State, error: NodeError) -> State:
+        return {"foo": "handled"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("a", always_failing)
+        .add_edge(START, "a")
+        .set_defaults(
+            retry_policy=RetryPolicy(
+                max_attempts=1, initial_interval=0.01, jitter=False
+            ),
+            error_handler=handler,
+        )
+        .compile()
+    )
+
+    result = graph.invoke({"foo": ""})
+    assert result["foo"] == "handled"
+
+
+def test_set_defaults_combined_retry_and_error_handler():
+    """Retries are exhausted first, then the error handler runs."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+    captured: dict[str, Any] = {}
+
+    def always_failing(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("Always fails")
+
+    def handler(state: State, error: NodeError) -> State:
+        captured["error"] = str(error.error)
+        return {"foo": "handled"}
+
+    graph = (
+        StateGraph(State)
+        .set_defaults(
+            retry_policy=RetryPolicy(
+                max_attempts=2,
+                initial_interval=0.01,
+                jitter=False,
+                retry_on=ValueError,
+            ),
+            error_handler=handler,
+        )
+        .add_node("fail", always_failing)
+        .add_edge(START, "fail")
+        .compile()
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke({"foo": ""})
+
+    assert result["foo"] == "handled"
+    assert attempts == 2
+    assert captured["error"] == "Always fails"
