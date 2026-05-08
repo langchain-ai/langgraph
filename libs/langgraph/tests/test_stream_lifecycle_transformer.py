@@ -43,7 +43,7 @@ def _tasks_start(
     list shape `langchain.agents.create_agent` Send-fans out) or
     `input={"tool_call": {"id": ..., ...}, ...}` (the dict envelope older
     prebuilt agent paths emit) to exercise the lifecycle transformer's
-    `tool_call_id` mining for `lifecycle.started.cause`.
+    `tool_call_id` mining for `lifecycle.started.metadata`.
     """
     return {
         "type": "event",
@@ -134,13 +134,13 @@ def test_started_emitted_on_first_direct_child_task() -> None:
     assert payload["parent_task_id"] == "abc123"
 
 
-def test_started_carries_cause_for_dict_envelope_input() -> None:
+def test_started_carries_metadata_for_dict_envelope_input() -> None:
     """When the dispatching task's `input` is a dict envelope with a
     `tool_call` field (the shape older prebuilt agent paths Send-fan
     out per call), the transformer mines `tool_call_id` from
     `tool_call.id` and remembers it keyed by the dispatching task id.
     When that task triggers a subgraph (the child's namespace ends in
-    `name:<dispatching_task_id>`), `lifecycle.started.cause` carries
+    `name:<dispatching_task_id>`), `lifecycle.started.metadata` carries
     `{"type": "tool_call", "tool_call_id": ...}`. Identity correlation
     still uses `parent_task_id`; `tool_call_id` is exposed so UI
     consumers can anchor the lifecycle event back to the originating
@@ -167,18 +167,18 @@ def test_started_carries_cause_for_dict_envelope_input() -> None:
     [payload] = _drain_lifecycle(mux)
     assert payload["event"] == "started"
     assert payload["parent_task_id"] == "abc123"
-    assert payload["cause"] == {
+    assert payload["metadata"] == {
         "type": "tool_call",
         "tool_call_id": "call_xyz",
     }
 
 
-def test_started_carries_cause_for_list_shape_per_call_input() -> None:
+def test_started_carries_metadata_for_list_shape_per_call_input() -> None:
     """`langchain.agents.create_agent` Send-fans out a per-call task
     whose `input` is a single-element list of tool-call dicts:
     `[{"id": ..., "name": ..., "args": {...}}]`. The transformer mines
     `tool_call_id` exactly as for the dict envelope shape, so
-    `lifecycle.started.cause` fires regardless of which agent factory
+    `lifecycle.started.metadata` fires regardless of which agent factory
     drove the dispatch.
     """
     mux = _build_lifecycle_mux()
@@ -201,13 +201,13 @@ def test_started_carries_cause_for_list_shape_per_call_input() -> None:
     [payload] = _drain_lifecycle(mux)
     assert payload["event"] == "started"
     assert payload["parent_task_id"] == "abc123"
-    assert payload["cause"] == {"type": "tool_call", "tool_call_id": "tc-1"}
+    assert payload["metadata"] == {"type": "tool_call", "tool_call_id": "tc-1"}
 
 
-def test_started_carries_cause_when_args_absent() -> None:
-    """`tool_call_id` is the only field cause needs; the dispatching
+def test_started_carries_metadata_when_args_absent() -> None:
+    """`tool_call_id` is the only field metadata needs; the dispatching
     envelope can omit `args` entirely (or have non-dict args) and we
-    still produce a cause as long as `id` is a string."""
+    still produce a metadata as long as `id` is a string."""
     mux = _build_lifecycle_mux()
     mux.push(
         _tasks_start(
@@ -220,7 +220,7 @@ def test_started_carries_cause_when_args_absent() -> None:
     mux.push(_tasks_start(["agent:abc123"], task_id="t1", name="model"))
 
     [payload] = _drain_lifecycle(mux)
-    assert payload["cause"] == {"type": "tool_call", "tool_call_id": "tc-1"}
+    assert payload["metadata"] == {"type": "tool_call", "tool_call_id": "tc-1"}
 
 
 def test_list_shape_ignored_when_not_single_element() -> None:
@@ -243,51 +243,51 @@ def test_list_shape_ignored_when_not_single_element() -> None:
     mux.push(_tasks_start(["agent:abc123"], task_id="t1", name="model"))
 
     [payload] = _drain_lifecycle(mux)
-    assert "cause" not in payload
+    assert "metadata" not in payload
 
     # Empty list.
     mux2 = _build_lifecycle_mux()
     mux2.push(_tasks_start([], task_id="def456", name="tools", input=[]))
     mux2.push(_tasks_start(["agent:def456"], task_id="t1", name="model"))
     [payload2] = _drain_lifecycle(mux2)
-    assert "cause" not in payload2
+    assert "metadata" not in payload2
 
 
 def test_list_shape_robust_to_non_dict_or_missing_id() -> None:
     """Duck-typing safety: a single-element list whose element isn't a
     dict, or whose dict has no string `id`, must not raise — it just
-    leaves `cause` absent."""
+    leaves `metadata` absent."""
     # Element is not a dict.
     mux = _build_lifecycle_mux()
     mux.push(_tasks_start([], task_id="t-a", name="tools", input=["not-a-dict"]))
     mux.push(_tasks_start(["agent:t-a"], task_id="t1", name="model"))
     [payload] = _drain_lifecycle(mux)
-    assert "cause" not in payload
+    assert "metadata" not in payload
 
     # Element has no `id`.
     mux2 = _build_lifecycle_mux()
     mux2.push(_tasks_start([], task_id="t-b", name="tools", input=[{"name": "task"}]))
     mux2.push(_tasks_start(["agent:t-b"], task_id="t1", name="model"))
     [payload2] = _drain_lifecycle(mux2)
-    assert "cause" not in payload2
+    assert "metadata" not in payload2
 
     # Element's `id` is not a string.
     mux3 = _build_lifecycle_mux()
     mux3.push(_tasks_start([], task_id="t-c", name="tools", input=[{"id": 123}]))
     mux3.push(_tasks_start(["agent:t-c"], task_id="t1", name="model"))
     [payload3] = _drain_lifecycle(mux3)
-    assert "cause" not in payload3
+    assert "metadata" not in payload3
 
 
 def test_parallel_dispatches_attributed_to_correct_parent() -> None:
     """Two dispatching task envelopes in the same model turn each fan
-    out to their own child subgraph; each child's `cause.tool_call_id`
+    out to their own child subgraph; each child's `metadata.tool_call_id`
     must reflect its own dispatching envelope, not the other.
 
     Defends the `parent_task_id` (pregel task id) join: that id is
     parsed from the child namespace segment and is unique per Send,
     so it disambiguates parallel dispatches 1:1. Both children share
-    the same `subagent_type` (in args, not on cause) — only the
+    the same `subagent_type` (in args, not on metadata) — only the
     pregel task id can tell them apart, so the `tool_call_id` must
     follow the pregel id, not anything from `args`.
     """
@@ -325,26 +325,26 @@ def test_parallel_dispatches_attributed_to_correct_parent() -> None:
 
     payloads = _drain_lifecycle(mux)
     by_ns = {tuple(p["namespace"]): p for p in payloads}
-    assert by_ns[("agent:parent_A",)]["cause"] == {
+    assert by_ns[("agent:parent_A",)]["metadata"] == {
         "type": "tool_call",
         "tool_call_id": "call_1",
     }
-    assert by_ns[("agent:parent_B",)]["cause"] == {
+    assert by_ns[("agent:parent_B",)]["metadata"] == {
         "type": "tool_call",
         "tool_call_id": "call_2",
     }
 
 
-def test_started_omits_cause_for_structurally_triggered_subgraph() -> None:
+def test_started_omits_metadata_for_structurally_triggered_subgraph() -> None:
     """Subgraphs triggered without a recognizable tool-call envelope on
     the parent's input (Send with custom payloads, plain nested
-    `graph.invoke`, etc.) don't get a `cause` field on
+    `graph.invoke`, etc.) don't get a `metadata` field on
     `lifecycle.started`."""
     mux = _build_lifecycle_mux()
     mux.push(_tasks_start(["agent:abc123"], task_id="t1", name="tool"))
 
     [payload] = _drain_lifecycle(mux)
-    assert "cause" not in payload
+    assert "metadata" not in payload
 
 
 def test_started_dedup_on_repeat_namespace() -> None:

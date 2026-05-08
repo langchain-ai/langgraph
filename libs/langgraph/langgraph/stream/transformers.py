@@ -333,7 +333,7 @@ LifecycleEvent = Literal["started", "completed", "failed", "interrupted", "drain
 Each value:
 
 - `started` — first `tasks` event observed at the tracked namespace. Carries
-  `graph_name` / `parent_task_id` / optional `cause` describing what spawned
+  `graph_name` / `parent_task_id` / optional `metadata` describing what spawned
   the subgraph.
 - `completed` — the dispatching task's `TaskResultPayload` arrived with neither
   error nor interrupts. Also emitted by `finalize` for any tracked namespace
@@ -425,9 +425,9 @@ class LifecyclePayload(TypedDict, total=False):
     its own pregel task with its own id, so the join is 1:1 even when a
     model dispatches multiple parallel tool calls in one turn.
     """
-    cause: NotRequired[dict[str, Any]]
+    metadata: NotRequired[dict[str, Any]]
     """Optional generic descriptor of *what triggered* this subgraph.
-    Forwarded by protocol layers as the wire `lifecycle.started.cause` field.
+    Forwarded by protocol layers as the wire `lifecycle.started.metadata` field.
 
     Shape:
 
@@ -708,7 +708,7 @@ class LifecycleTransformer(_TasksLifecycleBase):
         if graph_name:
             payload["graph_name"] = graph_name
         if tool_call_id is not None:
-            payload["cause"] = {"type": "tool_call", "tool_call_id": tool_call_id}
+            payload["metadata"] = {"type": "tool_call", "tool_call_id": tool_call_id}
         self._channel.push(payload)
 
     def _on_terminal(
