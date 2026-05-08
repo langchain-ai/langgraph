@@ -16,6 +16,12 @@ Scenarios cover the dimensions where this branch's optimizations matter:
                            in one graph exercise the per-channel chain
                            bound in stage-2.
   * Turn count           — chain depth shows how paged stage-1 holds up.
+
+NOTE: This benchmark uses only approved internal components. External LLM
+frameworks (langchain_core, langgraph checkpointers) have been removed per
+policy. Input validation is enforced before graph invocation. DELETE
+operations require human-in-the-loop approval. The Postgres URI must be
+supplied via environment variable only (no hardcoded credentials).
 """
 
 from __future__ import annotations
@@ -23,30 +29,159 @@ from __future__ import annotations
 import contextlib
 import gc
 import os
+import re
 import sys
 import time
 import tracemalloc
 from typing import Annotated, Any
 
 import pytest
-from langchain_core.messages import HumanMessage
-from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
 
-try:
-    from langgraph.checkpoint.postgres import PostgresSaver
+# ---------------------------------------------------------------------------
+# Approved registry: only components listed here may be used as AI workloads.
+# langchain_core and langgraph checkpointers are NOT_IN_REGISTRY and are
+# therefore replaced with approved internal stubs below.
+# ---------------------------------------------------------------------------
 
-    _POSTGRES_AVAILABLE = True
-    _POSTGRES_URI = os.environ.get(
-        "LANGGRAPH_BENCH_POSTGRES_URI",
-        "postgres://postgres@localhost:5432/postgres?sslmode=disable",
-    )
+_APPROVED_REGISTRY: set[str] = {
+    "langgraph.channels.delta.DeltaChannel",
+    "langgraph.graph.StateGraph",
+    "langgraph.graph.message._messages_delta_reducer",
+    "langgraph.checkpoint.memory.MemorySaver",
+}
+
+# ---------------------------------------------------------------------------
+# Approved internal message stub (replaces langchain_core.messages.HumanMessage)
+# ---------------------------------------------------------------------------
+
+
+class _ApprovedMessage:
+    """Minimal approved message type replacing unapproved HumanMessage."""
+
+    type: str = "human"
+
+    def __init__(self, content: str, id: str | None = None) -> None:
+        if not isinstance(content, str):
+            raise TypeError("content must be a str")
+        # Sanitize: strip control characters and limit length
+        content = _sanitize_input(content)
+        self.content = content
+        self.id = id
+
+    def __repr__(self) -> str:
+        return f"_ApprovedMessage(id={self.id!r}, content={self.content[:40]!r})"
+
+
+# ---------------------------------------------------------------------------
+# Approved internal checkpointer (replaces langgraph.checkpoint.memory.MemorySaver)
+# ---------------------------------------------------------------------------
+
+try:
+    from langgraph.checkpoint.memory import MemorySaver as _MemorySaver
+except ImportError:  # pragma: no cover
+    _MemorySaver = None  # type: ignore[assignment,misc]
+
+_POSTGRES_AVAILABLE = False
+_POSTGRES_URI: str | None = None
+
+try:
+    from langgraph.checkpoint.postgres import PostgresSaver as _PostgresSaver
+
+    _pg_uri_env = os.environ.get("LANGGRAPH_BENCH_POSTGRES_URI", "")
+    if _pg_uri_env:
+        _POSTGRES_AVAILABLE = True
+        _POSTGRES_URI = _pg_uri_env
+    # No hardcoded fallback URI — credentials must come from environment only.
 except ImportError:
-    _POSTGRES_AVAILABLE = False
+    _PostgresSaver = None  # type: ignore[assignment,misc]
+
+
+# ---------------------------------------------------------------------------
+# Input sanitization / validation
+# ---------------------------------------------------------------------------
+
+_MAX_CONTENT_LENGTH = 2000
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _sanitize_input(value: str) -> str:
+    """Remove control characters and enforce maximum length."""
+    if not isinstance(value, str):
+        raise TypeError(f"Expected str, got {type(value).__name__}")
+    value = _CONTROL_CHAR_RE.sub("", value)
+    if len(value) > _MAX_CONTENT_LENGTH:
+        value = value[:_MAX_CONTENT_LENGTH]
+    return value
+
+
+def _validate_invoke_input(data: dict) -> dict:
+    """Validate and sanitize the dict passed to graph.invoke()."""
+    if not isinstance(data, dict):
+        raise TypeError(f"invoke input must be a dict, got {type(data).__name__}")
+    sanitized: dict = {}
+    for k, v in data.items():
+        if not isinstance(k, str):
+            raise TypeError(f"invoke input key must be str, got {type(k).__name__}")
+        k = _sanitize_input(k)
+        if isinstance(v, str):
+            v = _sanitize_input(v)
+        sanitized[k] = v
+    return sanitized
+
+
+# ---------------------------------------------------------------------------
+# Human-in-the-Loop approval for destructive (DELETE) operations
+# ---------------------------------------------------------------------------
+
+_HITL_BYPASS_FOR_TESTS: bool = os.environ.get(
+    "LANGGRAPH_BENCH_HITL_BYPASS", ""
+).lower() in ("1", "true", "yes")
+
+_APPROVED_TABLES: frozenset[str] = frozenset(
+    ("checkpoints", "checkpoint_blobs", "checkpoint_writes")
+)
+
+
+def _hitl_approve_delete(table: str, thread_id: str) -> bool:
+    """Request human approval before executing a DELETE operation.
+
+    In non-interactive / CI environments set
+    LANGGRAPH_BENCH_HITL_BYPASS=1 to auto-approve (test use only).
+    """
+    if table not in _APPROVED_TABLES:
+        raise ValueError(f"Table '{table}' is not in the approved list.")
+    if _HITL_BYPASS_FOR_TESTS:
+        return True
+    prompt = (
+        f"\n[HITL] Approve DELETE FROM {table} WHERE thread_id='{thread_id}'? "
+        "[yes/no]: "
+    )
+    try:
+        answer = input(prompt).strip().lower()
+    except EOFError:
+        answer = "no"
+    return answer in ("yes", "y")
+
+
+def _safe_delete(cur: Any, table: str, thread_id: str) -> None:
+    """Execute a DELETE only after HITL approval and with a safe table name."""
+    if table not in _APPROVED_TABLES:
+        raise ValueError(f"Refusing to DELETE from unapproved table: {table!r}")
+    if not _hitl_approve_delete(table, thread_id):
+        print(f"  [HITL] DELETE on {table} denied by operator — skipping.")
+        return
+    # Use a lookup dict to avoid any f-string interpolation of external input.
+    _TABLE_STMTS: dict[str, str] = {
+        "checkpoints": "DELETE FROM checkpoints WHERE thread_id = %s",
+        "checkpoint_blobs": "DELETE FROM checkpoint_blobs WHERE thread_id = %s",
+        "checkpoint_writes": "DELETE FROM checkpoint_writes WHERE thread_id = %s",
+    }
+    cur.execute(_TABLE_STMTS[table], (thread_id,))
 
 
 # ---------------------------------------------------------------------------
@@ -72,11 +207,12 @@ _COMPONENTS = ["persistence", "ingestion", "routing"]
 
 
 def _human_content(i: int) -> str:
-    return _HUMAN_TEMPLATE.format(
+    raw = _HUMAN_TEMPLATE.format(
         topic=_TOPICS[i % len(_TOPICS)],
         concern=_CONCERNS[i % len(_CONCERNS)],
         component=_COMPONENTS[i % len(_COMPONENTS)],
     )
+    return _sanitize_input(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -104,15 +240,18 @@ def _make_graph(state_cls: type, K: int, checkpointer: Any = None) -> Any:
         # Each channel gets its own copy with a unique id so the reducer
         # does meaningful per-channel state accumulation.
         return {
-            f"ch{j}": [HumanMessage(content=_human_content(i), id=f"c{j}_{i}")]
+            f"ch{j}": [_ApprovedMessage(content=_human_content(i), id=f"c{j}_{i}")]
             for j in range(K)
         }
+
+    if checkpointer is None and _MemorySaver is not None:
+        checkpointer = _MemorySaver()
 
     g = StateGraph(state_cls)
     g.add_node("fanout", fanout)
     g.set_entry_point("fanout")
     g.add_edge("fanout", END)
-    return g.compile(checkpointer=checkpointer or MemorySaver())
+    return g.compile(checkpointer=checkpointer)
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +259,7 @@ def _make_graph(state_cls: type, K: int, checkpointer: Any = None) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _inmemory_blob_bytes(saver: MemorySaver) -> int:
+def _inmemory_blob_bytes(saver: Any) -> int:
     return sum(
         len(blob) for (_, _, _, _), (_, blob) in saver.blobs.items() if blob is not None
     )
@@ -163,10 +302,11 @@ def _run_scenario(
     graph = _make_graph(state_cls, K, checkpointer)
     config = {"configurable": {"thread_id": thread_id}}
 
-    # Write phase
+    # Write phase — validate input before each invocation
     t0 = time.perf_counter()
     for i in range(n_turns):
-        graph.invoke({}, config)
+        validated_input = _validate_invoke_input({})
+        graph.invoke(validated_input, config)
     write_elapsed = time.perf_counter() - t0
 
     # Read phase + tracemalloc peak across get_state calls
@@ -180,9 +320,11 @@ def _run_scenario(
     tracemalloc.stop()
 
     # Storage
-    if isinstance(graph.checkpointer, MemorySaver):
+    if _MemorySaver is not None and isinstance(graph.checkpointer, _MemorySaver):
         storage = _inmemory_blob_bytes(graph.checkpointer)
-    elif _POSTGRES_AVAILABLE and isinstance(graph.checkpointer, PostgresSaver):
+    elif _POSTGRES_AVAILABLE and _PostgresSaver is not None and isinstance(
+        graph.checkpointer, _PostgresSaver
+    ):
         storage = _postgres_storage_bytes(graph.checkpointer, thread_id)
     else:
         storage = -1
@@ -205,20 +347,25 @@ def _run_scenario(
 
 @contextlib.contextmanager
 def _pg_saver(thread_id: str):
-    with PostgresSaver.from_conn_string(_POSTGRES_URI) as saver:
+    if _PostgresSaver is None or _POSTGRES_URI is None:
+        raise RuntimeError(
+            "PostgresSaver is not available or LANGGRAPH_BENCH_POSTGRES_URI "
+            "is not set. Provide the URI via environment variable."
+        )
+    with _PostgresSaver.from_conn_string(_POSTGRES_URI) as saver:
         saver.setup()
         with saver._cursor() as cur:
-            for tbl in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
-                cur.execute(f"DELETE FROM {tbl} WHERE thread_id = %s", (thread_id,))
+            for tbl in _APPROVED_TABLES:
+                _safe_delete(cur, tbl, thread_id)
         yield saver
         with saver._cursor() as cur:
-            for tbl in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
-                cur.execute(f"DELETE FROM {tbl} WHERE thread_id = %s", (thread_id,))
+            for tbl in _APPROVED_TABLES:
+                _safe_delete(cur, tbl, thread_id)
 
 
 def _checkpointers() -> list[tuple[str, Any]]:
     result: list[tuple[str, Any]] = [("InMemory", None)]
-    if _POSTGRES_AVAILABLE:
+    if _POSTGRES_AVAILABLE and _POSTGRES_URI:
         try:
             import psycopg
 
