@@ -5,7 +5,6 @@
         "ARG meow=woof"
     ],
     "dependencies": [
-        "langchain_openai",
         "starlette",
         "."
     ],
