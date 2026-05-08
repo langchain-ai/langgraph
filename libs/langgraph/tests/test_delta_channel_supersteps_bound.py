@@ -113,7 +113,7 @@ async def test_forced_snapshot_accumulates_across_runs() -> None:
 
             head = saver.get_tuple(config)
             assert head is not None
-            counters = head.metadata.get("counters_since_last_snapshot", {})
+            counters = head.metadata.get("counters_since_delta_snapshot", {})
             b_counters = counters.get("b", (0, 0))
 
             if b_counters == (0, 0):
@@ -164,7 +164,7 @@ async def test_counter_reset_after_supersteps_snapshot() -> None:
 
         head = saver.get_tuple(config)
         assert head is not None
-        counters = head.metadata.get("counters_since_last_snapshot", {})
+        counters = head.metadata.get("counters_since_delta_snapshot", {})
         b_counters = counters.get("b", (0, 0))
         run1_supersteps = b_counters[1]
         assert run1_supersteps > 0, "Should have some supersteps"
@@ -173,7 +173,7 @@ async def test_counter_reset_after_supersteps_snapshot() -> None:
         graph.invoke({"a": ["more-a"]}, config)
         head2 = saver.get_tuple(config)
         assert head2 is not None
-        counters2 = head2.metadata.get("counters_since_last_snapshot", {})
+        counters2 = head2.metadata.get("counters_since_delta_snapshot", {})
         b_counters2 = counters2.get("b", (0, 0))
         run2_supersteps = b_counters2[1]
         assert run2_supersteps > run1_supersteps, "Supersteps should accumulate"
@@ -185,7 +185,7 @@ async def test_counter_reset_after_supersteps_snapshot() -> None:
         assert isinstance(
             head3.checkpoint["channel_values"].get("b"), _DeltaSnapshot
         ), "B should have snapshotted at supersteps >= max_ss"
-        counters3 = head3.metadata.get("counters_since_last_snapshot", {})
+        counters3 = head3.metadata.get("counters_since_delta_snapshot", {})
         b_counters3 = counters3.get("b", (0, 0))
         assert b_counters3[1] < max_ss, (
             f"After snapshot, supersteps should have reset, got {b_counters3}"

@@ -37,7 +37,7 @@ def empty_checkpoint() -> Checkpoint:
 
 def delta_channels_to_snapshot(
     channels: Mapping[str, BaseChannel],
-    counters_since_last_snapshot: Mapping[str, tuple[int, int]],
+    counters_since_delta_snapshot: Mapping[str, tuple[int, int]],
 ) -> set[str]:
     """Return the set of DeltaChannel names that should snapshot now.
 
@@ -50,7 +50,7 @@ def delta_channels_to_snapshot(
     for name, ch in channels.items():
         if not isinstance(ch, DeltaChannel) or not ch.is_available():
             continue
-        updates, supersteps = counters_since_last_snapshot.get(name, (0, 0))
+        updates, supersteps = counters_since_delta_snapshot.get(name, (0, 0))
         if (
             updates >= ch.snapshot_frequency
             or supersteps >= DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
@@ -237,18 +237,3 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         updated_channels=checkpoint.get("updated_channels", None),
     )
-
-
-def read_counters_since_last_snapshot(
-    metadata: CheckpointMetadata | None,
-) -> dict[str, tuple[int, int]]:
-    """Read the per-channel `(updates, supersteps)` counters from metadata.
-
-    Returns an empty dict for missing/None metadata; the dict is
-    `total=False` on `CheckpointMetadata`, so absence means "no prior
-    delta-channel activity tracked."
-    """
-    if not metadata:
-        return {}
-    raw = metadata.get("counters_since_last_snapshot") or {}
-    return {k: (int(v[0]), int(v[1])) for k, v in raw.items()}

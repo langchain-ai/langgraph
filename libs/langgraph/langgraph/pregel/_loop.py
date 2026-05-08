@@ -102,7 +102,6 @@ from langgraph.pregel._checkpoint import (
     create_checkpoint,
     delta_channels_to_snapshot,
     empty_checkpoint,
-    read_counters_since_last_snapshot,
 )
 from langgraph.pregel._executor import (
     AsyncBackgroundExecutor,
@@ -995,7 +994,9 @@ class PregelLoop:
         # exit call must NOT bump again or it would double-count the last
         # superstep.
         if not exiting:
-            prev_counters = read_counters_since_last_snapshot(self.checkpoint_metadata)
+            prev_counters = dict(
+                self.checkpoint_metadata.get("counters_since_delta_snapshot") or {}
+            )
             new_counters: dict[str, tuple[int, int]] = {}
             updated = self.updated_channels or set()
             for ch_name, ch in self.channels.items():
@@ -1010,7 +1011,9 @@ class PregelLoop:
             metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
             self.checkpoint_metadata = metadata
         else:
-            new_counters = read_counters_since_last_snapshot(self.checkpoint_metadata)
+            new_counters = dict(
+                self.checkpoint_metadata.get("counters_since_delta_snapshot") or {}
+            )
         # do checkpoint?
         do_checkpoint = self._checkpointer_put_after_previous is not None and (
             exiting or self.durability != "exit"
@@ -1036,9 +1039,9 @@ class PregelLoop:
             new_counters[k] = (0, 0)
         non_zero = {k: v for k, v in new_counters.items() if v != (0, 0)}
         if non_zero:
-            self.checkpoint_metadata["counters_since_last_snapshot"] = non_zero
-        elif "counters_since_last_snapshot" in self.checkpoint_metadata:
-            del self.checkpoint_metadata["counters_since_last_snapshot"]
+            self.checkpoint_metadata["counters_since_delta_snapshot"] = non_zero
+        elif "counters_since_delta_snapshot" in self.checkpoint_metadata:
+            del self.checkpoint_metadata["counters_since_delta_snapshot"]
         # sanitize TASK channel in the checkpoint before saving (durability=="exit")
         if TASKS in self.checkpoint["channel_values"] and any(
             isinstance(channel, UntrackedValue) for channel in self.channels.values()
@@ -1113,7 +1116,9 @@ class PregelLoop:
         ):
             return
 
-        counters = read_counters_since_last_snapshot(self.checkpoint_metadata)
+        counters = dict(
+            self.checkpoint_metadata.get("counters_since_delta_snapshot") or {}
+        )
         channels_to_snapshot = delta_channels_to_snapshot(self.channels, counters)
 
         pending = [

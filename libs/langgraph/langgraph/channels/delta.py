@@ -32,7 +32,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         change in future releases. Threads written with `DeltaChannel` today
         are expected to remain readable, but the surrounding contract
         (`BaseCheckpointSaver.get_delta_channel_history`, the
-        `_DeltaSnapshot` blob shape, the `counters_since_last_snapshot`
+        `_DeltaSnapshot` blob shape, the `counters_since_delta_snapshot`
         metadata field) is not yet stable.
 
     The reducer receives the current accumulated value and a batch of writes

@@ -60,7 +60,7 @@ class CheckpointMetadata(TypedDict, total=False):
     """
     run_id: str
     """The ID of the run that created this checkpoint."""
-    counters_since_last_snapshot: dict[str, tuple[int, int]]
+    counters_since_delta_snapshot: dict[str, tuple[int, int]]
     """Per-channel counters since the last `_DeltaSnapshot` was written.
 
     !!! warning "Beta"

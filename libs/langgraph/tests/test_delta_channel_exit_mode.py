@@ -161,7 +161,7 @@ async def test_exit_resumed_run_sub_freq() -> None:
 
 async def test_exit_count_parity_sync_vs_exit() -> None:
     """Sync and exit durability produce the same update count in
-    counters_since_last_snapshot after an equivalent run."""
+    counters_since_delta_snapshot after an equivalent run."""
     for durability in ("sync", "exit"):
         saver = InMemorySaver()
         graph = _build_graph(saver)
@@ -175,7 +175,7 @@ async def test_exit_count_parity_sync_vs_exit() -> None:
 
         head = saver.get_tuple(config)
         assert head is not None
-        counters = head.metadata.get("counters_since_last_snapshot", {})
+        counters = head.metadata.get("counters_since_delta_snapshot", {})
         updates, supersteps = counters.get("messages", (0, 0))
         assert updates == 2, (
             f"durability={durability}: expected updates=2, got {updates}"
@@ -200,7 +200,7 @@ async def test_exit_snapshot_fires_at_frequency() -> None:
     )
     head = saver.get_tuple(config)
     assert head is not None
-    counters1 = head.metadata.get("counters_since_last_snapshot", {})
+    counters1 = head.metadata.get("counters_since_delta_snapshot", {})
     updates1 = counters1.get("messages", (0, 0))[0]
     assert updates1 == 2
 
@@ -211,7 +211,7 @@ async def test_exit_snapshot_fires_at_frequency() -> None:
     )
     head = saver.get_tuple(config)
     assert head is not None
-    counters2 = head.metadata.get("counters_since_last_snapshot", {})
+    counters2 = head.metadata.get("counters_since_delta_snapshot", {})
     updates2 = counters2.get("messages", (0, 0))[0]
     assert updates2 == 0, f"Expected reset to 0 after snapshot, got {updates2}"
     assert isinstance(head.checkpoint["channel_values"].get("messages"), _DeltaSnapshot)
@@ -290,7 +290,7 @@ async def test_exit_multi_run_replay_chain() -> None:
 
 async def test_exit_metadata_round_trip() -> None:
     """K=5 consecutive exit runs with snapshot_frequency=5. Verify metadata
-    counters_since_last_snapshot increments correctly across runs."""
+    counters_since_delta_snapshot increments correctly across runs."""
     freq = 5
     saver = InMemorySaver()
     graph = _build_graph(saver, freq=freq)
@@ -304,7 +304,7 @@ async def test_exit_metadata_round_trip() -> None:
         )
         head = saver.get_tuple(config)
         assert head is not None
-        counters = head.metadata.get("counters_since_last_snapshot", {})
+        counters = head.metadata.get("counters_since_delta_snapshot", {})
         updates = counters.get("messages", (0, 0))[0]
         cumulative = i * 2
         if cumulative >= freq:
