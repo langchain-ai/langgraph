@@ -3,5 +3,8 @@
   "graphs": {
     "agent": "./src/graph.ts:graph"
   },
-  "env": "../../.env"
+  "env": "../../.env",
+  "tools": {
+    "allow_list": []
+  }
 }
