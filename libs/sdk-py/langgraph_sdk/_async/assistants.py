@@ -449,6 +449,7 @@ class AssistantsClient:
         delete_threads: bool = False,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        confirm: bool = False,
     ) -> None:
         """Delete an assistant.
 
@@ -459,6 +460,9 @@ class AssistantsClient:
                 those threads.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
+            confirm: Human-in-the-Loop approval flag. Must be set to `True` to
+                confirm and authorize the delete operation. If `False` (default),
+                the deletion will be rejected to prevent accidental data loss.
 
         Returns:
             `None`
@@ -468,11 +472,18 @@ class AssistantsClient:
             ```python
             client = get_client(url="http://localhost:2024")
             await client.assistants.delete(
-                assistant_id="my_assistant_id"
+                assistant_id="my_assistant_id",
+                confirm=True
             )
             ```
 
         """
+        if not confirm:
+            raise ValueError(
+                "Deleting an assistant is a destructive operation and requires explicit "
+                "human approval. To confirm and authorize this deletion, call delete() "
+                "with confirm=True."
+            )
         query_params: dict[str, Any] = {}
         if delete_threads:
             query_params["delete_threads"] = True
