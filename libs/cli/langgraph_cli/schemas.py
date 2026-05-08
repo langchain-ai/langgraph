@@ -42,28 +42,23 @@ class IndexConfig(TypedDict, total=False):
     Must match the output dimension of your selected embedding model or custom embed function.
     If mismatched, you will likely encounter shape/size errors when inserting or querying vectors.
 
-    Common embedding model output dimensions:
-        - openai:text-embedding-3-large: 3072
-        - openai:text-embedding-3-small: 1536
-        - openai:text-embedding-ada-002: 1536
-        - cohere:embed-english-v3.0: 1024
-        - cohere:embed-english-light-v3.0: 384
-        - cohere:embed-multilingual-v3.0: 1024
-        - cohere:embed-multilingual-light-v3.0: 384
+    Common embedding model output dimensions vary by provider. Consult your approved model
+    registry for the correct dimensions for your approved and version-pinned embedding model.
+    Only models from the organization's approved model registry may be used.
     """
 
     embed: str
-    """Required. Identifier or reference to the embedding model or a custom embedding function.
+    """Required. Identifier or reference to an approved embedding model or a custom embedding function.
 
     The format can vary:
-      - "<provider>:<model_name>" for recognized providers (e.g., "openai:text-embedding-3-large")
+      - "<provider>:<model_name>" for recognized providers — must reference a model from the
+        organization's approved model registry with a pinned, immutable version identifier
       - "path/to/module.py:function_name" for your own local embedding function
       - "my_custom_embed" if it's a known alias in your system
 
-     Examples:
-        - "openai:text-embedding-3-large"
-        - "cohere:embed-multilingual-v3.0"
-        - "src/app.py:embeddings"
+    IMPORTANT: Only models from the organization's approved model registry are permitted.
+    Arbitrary or unapproved model identifiers are not allowed. All model references must
+    include a pinned version to ensure reproducibility and compliance.
 
     Note: Must return embeddings of dimension `dims`.
     """
@@ -109,11 +104,15 @@ class StoreConfig(TypedDict, total=False):
 class ThreadTTLConfig(TypedDict, total=False):
     """Configure a default TTL for checkpointed data within threads."""
 
-    strategy: Literal["delete", "keep_latest"]
+    strategy: Literal["keep_latest"]
     """Action taken when a thread exceeds its TTL.
 
-    - "delete": Remove the thread and all its data entirely.
     - "keep_latest": Prune old checkpoints but keep the thread and its latest state.
+
+    NOTE: The "delete" strategy has been removed. Automated deletion of thread data
+    requires Human-in-the-Loop (HITL) approval and cannot be configured via this schema.
+    Any destructive operations on thread data must go through an explicit human approval
+    gate before execution.
     """
     default_ttl: float | None
     """Default TTL (time-to-live) in minutes for checkpointed data."""
