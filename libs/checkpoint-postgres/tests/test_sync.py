@@ -15,7 +15,7 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.checkpoint.serde.types import TASKS
-from psycopg import Connection
+from psycopg import Connection, sql
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -27,13 +27,22 @@ def _exclude_keys(config: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in config.items() if k not in EXCLUDED_METADATA_KEYS}
 
 
+def _confirm_drop(database: str) -> bool:
+    """Human-in-the-Loop approval for DROP DATABASE operation."""
+    response = input(
+        f"HITL Approval Required: Are you sure you want to DROP DATABASE '{database}'? "
+        f"This is a destructive operation that cannot be undone. Type 'yes' to confirm: "
+    )
+    return response.strip().lower() == "yes"
+
+
 @contextmanager
 def _pool_saver():
     """Fixture for pool mode testing."""
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
+        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
     try:
         # yield checkpointer
         with ConnectionPool(
@@ -46,8 +55,14 @@ def _pool_saver():
             yield checkpointer
     finally:
         # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+        if _confirm_drop(database):
+            with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+                conn.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(database)))
+        else:
+            raise RuntimeError(
+                f"DROP DATABASE '{database}' was not approved by the user. "
+                f"The database has not been dropped."
+            )
 
 
 @contextmanager
@@ -56,7 +71,7 @@ def _pipe_saver():
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
+        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
     try:
         with Connection.connect(
             DEFAULT_POSTGRES_URI + database,
@@ -71,8 +86,14 @@ def _pipe_saver():
                 yield checkpointer
     finally:
         # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+        if _confirm_drop(database):
+            with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+                conn.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(database)))
+        else:
+            raise RuntimeError(
+                f"DROP DATABASE '{database}' was not approved by the user. "
+                f"The database has not been dropped."
+            )
 
 
 @contextmanager
@@ -81,7 +102,7 @@ def _base_saver():
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
+        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
     try:
         with Connection.connect(
             DEFAULT_POSTGRES_URI + database,
@@ -94,8 +115,14 @@ def _base_saver():
             yield checkpointer
     finally:
         # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+        if _confirm_drop(database):
+            with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+                conn.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(database)))
+        else:
+            raise RuntimeError(
+                f"DROP DATABASE '{database}' was not approved by the user. "
+                f"The database has not been dropped."
+            )
 
 
 @contextmanager
@@ -104,7 +131,7 @@ def _shallow_saver():
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
+        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
     try:
         with Connection.connect(
             DEFAULT_POSTGRES_URI + database,
@@ -117,8 +144,14 @@ def _shallow_saver():
             yield checkpointer
     finally:
         # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+        if _confirm_drop(database):
+            with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+                conn.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(database)))
+        else:
+            raise RuntimeError(
+                f"DROP DATABASE '{database}' was not approved by the user. "
+                f"The database has not been dropped."
+            )
 
 
 @contextmanager
