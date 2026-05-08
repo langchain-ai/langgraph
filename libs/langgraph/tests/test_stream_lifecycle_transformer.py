@@ -325,6 +325,76 @@ def test_list_shape_robust_to_non_dict_or_missing_args() -> None:
     assert "cause" not in payload3
 
 
+def test_parallel_dispatches_attributed_to_correct_parent() -> None:
+    """Two parent task envelopes dispatched in the same model turn each
+    fan out to their own child subgraph; each child's `cause` must
+    reflect its own parent's invocation metadata, not the other
+    parent's.
+
+    Defends the `trigger_call_id` (pregel task id) join: that id is
+    parsed from the child namespace segment and is unique per Send,
+    so it disambiguates parallel dispatches 1:1. Any join key derived
+    from the originating tool call's args (e.g. `subagent_type`)
+    would collide here because both parents target the same subagent
+    type.
+    """
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            [],
+            task_id="parent_A",
+            name="tools",
+            input={
+                "tool_call": {
+                    "id": "call_1",
+                    "name": "task",
+                    "args": {
+                        "subagent_type": "researcher",
+                        "description": "find X",
+                    },
+                }
+            },
+        )
+    )
+    mux.push(
+        _tasks_start(
+            [],
+            task_id="parent_B",
+            name="tools",
+            input={
+                "tool_call": {
+                    "id": "call_2",
+                    "name": "task",
+                    "args": {
+                        "subagent_type": "researcher",
+                        "description": "find Y",
+                    },
+                }
+            },
+        )
+    )
+    # Each parent triggers its own child subgraph; the child's namespace
+    # ends in `name:<parent_task_id>` so the trigger_call_id parsed out
+    # of the segment is what disambiguates the two.
+    mux.push(_tasks_start(["agent:parent_A"], task_id="t1", name="model"))
+    mux.push(_tasks_start(["agent:parent_B"], task_id="t2", name="model"))
+
+    payloads = _drain_lifecycle(mux)
+    by_ns = {tuple(p["namespace"]): p for p in payloads}
+    assert by_ns[("agent:parent_A",)]["cause"] == {
+        "type": "tool_call",
+        "subagent_type": "researcher",
+        "description": "find X",
+        "tool_call_id": "call_1",
+    }
+    assert by_ns[("agent:parent_B",)]["cause"] == {
+        "type": "tool_call",
+        "subagent_type": "researcher",
+        "description": "find Y",
+        "tool_call_id": "call_2",
+    }
+
+
 def test_started_omits_cause_for_structurally_triggered_subgraph() -> None:
     """Subgraphs triggered without a recognizable tool-call envelope on
     the parent's input (Send with custom payloads, plain nested

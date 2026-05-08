@@ -340,6 +340,41 @@ def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
     return name, task_id if sep else None
 
 
+def _extract_per_call_args(payload: Any) -> tuple[dict[str, Any], str | None] | None:
+    """Pull `(args, tool_call_id)` out of a per-call dispatched task's `input`.
+
+    Two shapes are recognised; both are duck-typed so 3rd-party tool
+    runners that mimic the layout participate without importing prebuilt
+    types:
+
+    1. `ToolCallWithContext`-style envelope used by
+       `langgraph.prebuilt.ToolNode` Send-fan-out:
+       `{"tool_call": {"id": ..., "args": {...}, ...}, ...}`.
+    2. Single-element list of tool-call dicts used by langchain v1's
+       `create_agent` Send-fan-out:
+       `[{"id": ..., "name": ..., "args": {...}}]`.
+
+    Returns `None` if the payload doesn't match either shape or its
+    `args` isn't a dict. `tool_call_id` is `None` when the envelope
+    omits an `id` or its `id` isn't a string.
+    """
+    if isinstance(payload, dict):
+        tool_call = payload.get("tool_call")
+        if not isinstance(tool_call, dict):
+            return None
+    elif (
+        isinstance(payload, list) and len(payload) == 1 and isinstance(payload[0], dict)
+    ):
+        tool_call = payload[0]
+    else:
+        return None
+    args = tool_call.get("args")
+    if not isinstance(args, dict):
+        return None
+    raw_id = tool_call.get("id")
+    return args, raw_id if isinstance(raw_id, str) else None
+
+
 class LifecyclePayload(TypedDict, total=False):
     """Payload of a lifecycle event surfaced on the `lifecycle` channel.
 
@@ -394,7 +429,7 @@ class _TasksLifecycleBase(StreamTransformer):
 
     - `_should_track(ns)` — scope filter (e.g. multi-depth vs
       direct-children-only).
-    - `_on_started(ns, graph_name, trigger_call_id, tool_call_id)` —
+    - `_on_started(ns, graph_name, trigger_call_id, invocation_metadata)` —
       first sighting action (push payload / build handle / etc.).
       Called once per discovered namespace.
     - `_on_terminal(ns, status, error)` — terminal action (push
@@ -486,7 +521,7 @@ class _TasksLifecycleBase(StreamTransformer):
         self._seen.add(ns)
         graph_name, trigger_call_id = _parse_ns_segment(ns[-1])
         invocation_metadata = (
-            self._invocation_metadata.get(trigger_call_id)
+            self._invocation_metadata.pop(trigger_call_id, None)
             if trigger_call_id is not None
             else None
         )
@@ -503,61 +538,30 @@ class _TasksLifecycleBase(StreamTransformer):
         """Remember `task_id -> invocation metadata` if the task input matches
         a recognized per-call tool-dispatch shape.
 
-        Two shapes are accepted (both duck-typed so 3rd-party tool runners
-        that mimic the layout participate without importing prebuilt
-        types):
-
-        1. `ToolCallWithContext`-style envelope used by
-           `langgraph.prebuilt.ToolNode` Send-fan-out:
-           `{"tool_call": {"id": ..., "args": {...}, ...}, ...}`.
-        2. Single-element list of tool-call dicts used by langchain v1's
-           `create_agent` Send-fan-out:
-           `[{"id": ..., "name": ..., "args": {...}}]`.
-
-        Both funnel through the same args-mining code so
-        `subagent_type`, `description`, and `tool_call_id` are extracted
-        identically. Identity-level correlation still uses
-        `trigger_call_id` (the pregel task id, == this `task.id`); the
-        model-side `tool_call_id` is recorded so UI consumers can anchor
-        the lifecycle event back to the originating AI message tool call
-        (the per-call Send fan-out architecture gives each tool_call its
-        own per-call task, so tool_call_id ↔ trigger_call_id is 1:1 here).
+        Shape detection lives in `_extract_per_call_args`; this method
+        mines `subagent_type` / `description` from the resulting `args`
+        and tags on the model-side `tool_call_id` for UI anchoring.
+        Identity-level correlation still uses `trigger_call_id` (the
+        pregel task id, == this `task.id`).
         """
         task_id = data.get("id")
         if not isinstance(task_id, str):
             return
-        payload = data.get("input")
-        args: Any
-        tool_call_id: Any = None
-        if isinstance(payload, dict):
-            tool_call = payload.get("tool_call")
-            if not isinstance(tool_call, dict):
-                return
-            args = tool_call.get("args")
-            tool_call_id = tool_call.get("id")
-        elif isinstance(payload, list) and len(payload) == 1:
-            element = payload[0]
-            if not isinstance(element, dict):
-                return
-            args = element.get("args")
-            tool_call_id = element.get("id")
-        else:
+        extracted = _extract_per_call_args(data.get("input"))
+        if extracted is None:
             return
-        if not isinstance(args, dict):
-            return
+        args, tool_call_id = extracted
         metadata: dict[str, str] = {}
-        subagent_type = args.get("subagent_type")
-        if isinstance(subagent_type, str):
-            metadata["subagent_type"] = subagent_type
-        description = args.get("description")
-        if isinstance(description, str):
-            metadata["description"] = description
+        for key in ("subagent_type", "description"):
+            value = args.get(key)
+            if isinstance(value, str):
+                metadata[key] = value
         # `tool_call_id` rides along as anchoring metadata only when we
         # already have descriptive intent (`subagent_type`/`description`).
         # A per-call envelope without descriptive args is a non-subagent
         # tool dispatch — it stays causeless, matching the structurally-
         # triggered subgraph case.
-        if metadata and isinstance(tool_call_id, str):
+        if metadata and tool_call_id is not None:
             metadata["tool_call_id"] = tool_call_id
         if metadata:
             self._invocation_metadata[task_id] = metadata
