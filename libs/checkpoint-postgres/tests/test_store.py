@@ -18,6 +18,7 @@ from langgraph.store.base import (
     SearchOp,
 )
 from psycopg import Connection
+from psycopg.sql import SQL, Identifier
 
 from langgraph.store.postgres import PostgresStore
 from tests.conftest import (
@@ -48,7 +49,7 @@ def store(request) -> PostgresStore:
         "sweep_interval_minutes": TTL_MINUTES / 2,
     }
     with Connection.connect(admin_conn_string, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
+        conn.execute(SQL("CREATE DATABASE {}").format(Identifier(database)))
     try:
         with PostgresStore.from_conn_string(conn_string, ttl=ttl_config) as store:
             store.MIGRATIONS = [
@@ -89,7 +90,7 @@ def store(request) -> PostgresStore:
                 store.stop_ttl_sweeper()
     finally:
         with Connection.connect(admin_conn_string, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+            conn.execute(SQL("DROP DATABASE {}").format(Identifier(database)))
 
 
 def test_batch_order(store: PostgresStore) -> None:
@@ -406,7 +407,7 @@ def _create_vector_store(
     }
 
     with Connection.connect(admin_conn_string, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
+        conn.execute(SQL("CREATE DATABASE {}").format(Identifier(database)))
     try:
         with PostgresStore.from_conn_string(
             conn_string,
@@ -421,7 +422,7 @@ def _create_vector_store(
             yield store
     finally:
         with Connection.connect(admin_conn_string, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+            conn.execute(SQL("DROP DATABASE {}").format(Identifier(database)))
 
 
 _vector_params = [
