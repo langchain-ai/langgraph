@@ -359,14 +359,20 @@ class LifecyclePayload(TypedDict, total=False):
 
     Shape:
 
-    - `{"type": "tool_call", "subagent_type": "<name>", "description": "<text>"}`
-      — set when the subgraph was triggered by a tool invocation routed
-      through `langgraph.prebuilt.ToolNode`. Mined from the per-call
-      dispatched task's `input.tool_call.args`. Lets consumers attribute
-      `lifecycle.started` to the invoking intent without needing the
-      model's `tool_call_id` (consumers join on the existing
-      `trigger_call_id` field, which is the unique pregel task id of the
-      invocation).
+    - `{"type": "tool_call", "subagent_type": "<name>", "description": "<text>",
+       "tool_call_id": "<id>"}` — set when the subgraph was triggered by a tool
+      invocation routed through `langgraph.prebuilt.ToolNode`. Mined from the
+      per-call dispatched task's `input.tool_call`. `subagent_type` and
+      `description` describe the invoking intent; `tool_call_id` is the
+      model-side id of the originating tool call, exposed so UI consumers
+      can anchor the lifecycle event back to the AI message that dispatched
+      it (the per-call Send fan-out gives each tool_call its own pregel task,
+      so each `tool_call_id` here corresponds to exactly one `trigger_call_id`).
+      Identity-level correlation across lifecycle events for the same
+      invocation still uses `trigger_call_id`.
+
+    Any field inside the dict is optional — partial metadata still produces
+    a `cause` if at least one field was extractable.
 
     Absent for structurally-triggered subgraphs (parallel branches via
     `Send` without ToolNode, nested `graph.invoke()`, etc.)."""
@@ -509,26 +515,32 @@ class _TasksLifecycleBase(StreamTransformer):
            `[{"id": ..., "name": ..., "args": {...}}]`.
 
         Both funnel through the same args-mining code so
-        `subagent_type` and `description` are extracted identically.
-        Tool_call_id is intentionally not extracted — consumers join
-        on `trigger_call_id` (the pregel task id), which is the same
-        `task.id` we cache by here.
+        `subagent_type`, `description`, and `tool_call_id` are extracted
+        identically. Identity-level correlation still uses
+        `trigger_call_id` (the pregel task id, == this `task.id`); the
+        model-side `tool_call_id` is recorded so UI consumers can anchor
+        the lifecycle event back to the originating AI message tool call
+        (the per-call Send fan-out architecture gives each tool_call its
+        own per-call task, so tool_call_id ↔ trigger_call_id is 1:1 here).
         """
         task_id = data.get("id")
         if not isinstance(task_id, str):
             return
         payload = data.get("input")
         args: Any
+        tool_call_id: Any = None
         if isinstance(payload, dict):
             tool_call = payload.get("tool_call")
             if not isinstance(tool_call, dict):
                 return
             args = tool_call.get("args")
+            tool_call_id = tool_call.get("id")
         elif isinstance(payload, list) and len(payload) == 1:
             element = payload[0]
             if not isinstance(element, dict):
                 return
             args = element.get("args")
+            tool_call_id = element.get("id")
         else:
             return
         if not isinstance(args, dict):
@@ -540,6 +552,13 @@ class _TasksLifecycleBase(StreamTransformer):
         description = args.get("description")
         if isinstance(description, str):
             metadata["description"] = description
+        # `tool_call_id` rides along as anchoring metadata only when we
+        # already have descriptive intent (`subagent_type`/`description`).
+        # A per-call envelope without descriptive args is a non-subagent
+        # tool dispatch — it stays causeless, matching the structurally-
+        # triggered subgraph case.
+        if metadata and isinstance(tool_call_id, str):
+            metadata["tool_call_id"] = tool_call_id
         if metadata:
             self._invocation_metadata[task_id] = metadata
 

@@ -138,13 +138,14 @@ def test_started_carries_cause_when_parent_input_has_invocation_metadata() -> No
     """When a parent task's `input` is a `ToolCallWithContext`-shaped
     envelope (`{"tool_call": {"args": {...}}, ...}`, the layout
     `langgraph.prebuilt.ToolNode` Send-fans out per call), the
-    transformer mines `subagent_type` and `description` from
-    `tool_call.args` and remembers them keyed by `parent_task_id`.
+    transformer mines `subagent_type`, `description`, and `tool_call_id`
+    from `tool_call` and remembers them keyed by `parent_task_id`.
     When that parent task triggers a subgraph (the child's namespace
     ends in `name:<parent_task_id>`), the `lifecycle.started` payload
-    carries `cause = {"type": "tool_call", "subagent_type": ..., "description": ...}`.
-    Consumers join on `trigger_call_id` (the pregel task id) for
-    identity; this dict is purely descriptive."""
+    carries `cause = {"type": "tool_call", "subagent_type": ..., "description": ...,
+    "tool_call_id": ...}`. Identity-level correlation still uses
+    `trigger_call_id`; `tool_call_id` is exposed so UI consumers can
+    anchor the lifecycle event back to the originating AI message."""
     mux = _build_lifecycle_mux()
     # Parent task at root ns whose input matches the Send envelope.
     mux.push(
@@ -174,15 +175,15 @@ def test_started_carries_cause_when_parent_input_has_invocation_metadata() -> No
         "type": "tool_call",
         "subagent_type": "researcher",
         "description": "look up weather",
+        "tool_call_id": "call_xyz",
     }
-    # tool_call_id is intentionally not in cause — consumers join on
-    # trigger_call_id (the pregel task id) instead.
-    assert "tool_call_id" not in payload["cause"]
 
 
 def test_started_cause_with_description_but_no_subagent_type() -> None:
     """Partial invocation metadata (only `description`, or only `subagent_type`)
-    still produces a cause — both fields are optional within the dict."""
+    still produces a cause — every field other than `type` is optional.
+    `tool_call_id` rides outside `args` and is extracted independently of
+    args content, so it shows up here even when args is sparse."""
     mux = _build_lifecycle_mux()
     mux.push(
         _tasks_start(
@@ -204,6 +205,7 @@ def test_started_cause_with_description_but_no_subagent_type() -> None:
     assert payload["cause"] == {
         "type": "tool_call",
         "description": "do a thing",
+        "tool_call_id": "call_xyz",
     }
 
 
@@ -211,7 +213,7 @@ def test_started_carries_cause_for_list_shape_per_call_input() -> None:
     """langchain v1's `create_agent` Send-fans out a per-call task whose
     `input` is a single-element list of tool-call dicts:
     `[{"id": ..., "name": ..., "args": {...}}]`. The transformer mines
-    `subagent_type` and `description` from `args` exactly as for the
+    `subagent_type`, `description`, and `tool_call_id` exactly as for the
     `ToolCallWithContext` dict envelope, so `lifecycle.started.cause`
     fires regardless of which agent factory drove the dispatch."""
     mux = _build_lifecycle_mux()
@@ -241,6 +243,7 @@ def test_started_carries_cause_for_list_shape_per_call_input() -> None:
         "type": "tool_call",
         "subagent_type": "researcher",
         "description": "Do X",
+        "tool_call_id": "tc-1",
     }
 
 
