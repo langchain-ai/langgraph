@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import random
+import secrets
 import warnings
 from collections.abc import Mapping, Sequence
 from importlib.metadata import version as get_version
@@ -548,8 +548,8 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         else:
             current_v = int(current.split(".")[0])
         next_v = current_v + 1
-        next_h = random.random()
-        return f"{next_v:032}.{next_h:016}"
+        next_h = secrets.token_hex(16)
+        return f"{next_v:032}.{next_h}"
 
     def _search_where(
         self,
