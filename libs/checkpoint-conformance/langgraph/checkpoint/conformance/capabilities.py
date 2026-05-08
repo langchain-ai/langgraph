@@ -23,6 +23,9 @@ class Capability(str, Enum):
     DELETE_FOR_RUNS = "delete_for_runs"
     COPY_THREAD = "copy_thread"
     PRUNE = "prune"
+    DELTA_CHANNEL_HISTORY = "delta_channel_history"
+    DELTA_CHANNEL_KEEPSET = "delta_channel_keepset"
+    DELTA_CHANNEL_RECONSTRUCTION = "delta_channel_reconstruction"
 
 
 # Capabilities that every checkpointer must support.
@@ -42,6 +45,9 @@ EXTENDED_CAPABILITIES = frozenset(
         Capability.DELETE_FOR_RUNS,
         Capability.COPY_THREAD,
         Capability.PRUNE,
+        Capability.DELTA_CHANNEL_HISTORY,
+        Capability.DELTA_CHANNEL_KEEPSET,
+        Capability.DELTA_CHANNEL_RECONSTRUCTION,
     }
 )
 
@@ -57,6 +63,9 @@ _CAPABILITY_METHOD_MAP: dict[Capability, str] = {
     Capability.DELETE_FOR_RUNS: "adelete_for_runs",
     Capability.COPY_THREAD: "acopy_thread",
     Capability.PRUNE: "aprune",
+    Capability.DELTA_CHANNEL_HISTORY: "aget_delta_channel_history",
+    Capability.DELTA_CHANNEL_KEEPSET: "aget_tuple",
+    Capability.DELTA_CHANNEL_RECONSTRUCTION: "aput",
 }
 
 
