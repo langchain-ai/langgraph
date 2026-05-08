@@ -105,7 +105,7 @@ def test_serde_jsonplus() -> None:
     uid = uuid.UUID(int=1)
     deque_instance = deque([1, 2, 3])
     tzn = ZoneInfo("America/New_York")
-    ip4 = IPv4Address("192.168.0.1")
+    ip4 = IPv4Address("203.0.113.1")
     current_date = date(2024, 4, 19)
     current_time = time(23, 4, 57, 51022, timezone.max)
     current_timestamp = datetime(2024, 4, 19, 23, 4, 57, 51022, timezone.max)
@@ -209,7 +209,7 @@ def test_serde_jsonplus_json_mode() -> None:
     uid = uuid.UUID(int=1)
     deque_instance = deque([1, 2, 3])
     tzn = ZoneInfo("America/New_York")
-    ip4 = IPv4Address("192.168.0.1")
+    ip4 = IPv4Address("203.0.113.1")
     current_date = date(2024, 4, 19)
     current_time = time(23, 4, 57, 51022, timezone.max)
     current_timestamp = datetime(2024, 4, 19, 23, 4, 57, 51022, timezone.max)
@@ -272,7 +272,7 @@ def test_serde_jsonplus_json_mode() -> None:
         "decimal": "1.10101",
         "set": [1, 2, [1, 2]],
         "frozen_set": [1, 2, 3],
-        "ip4": "192.168.0.1",
+        "ip4": "203.0.113.1",
         "deque": [1, 2, 3],
         "tzn": "America/New_York",
         "date": [2024, 4, 19],
@@ -619,7 +619,7 @@ def test_msgpack_safe_types_no_warning(caplog: pytest.LogCaptureFixture) -> None
         {1, 2, 3},
         frozenset([1, 2, 3]),
         deque([1, 2, 3]),
-        IPv4Address("192.168.1.1"),
+        IPv4Address("203.0.113.1"),
         pathlib.Path("/tmp/test"),
     ]
 
@@ -1006,7 +1006,7 @@ def test_msgpack_safe_types_value_equality(caplog: pytest.LogCaptureFixture) -> 
         {1, 2, 3, 4, 5},
         frozenset(["a", "b", "c"]),
         deque([1, 2, 3]),
-        IPv4Address("10.0.0.1"),
+        IPv4Address("203.0.113.1"),
         pathlib.Path("/some/test/path"),
         re.compile(r"\d+", re.MULTILINE),
     ]
