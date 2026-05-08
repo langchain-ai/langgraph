@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager, contextmanager
+import os
+import re
 from uuid import uuid4
 
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -10,7 +12,26 @@ from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
 from tests.memory_assert import MemorySaverAssertImmutable
 
-DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
+DEFAULT_POSTGRES_URI = os.environ.get(
+    "POSTGRES_URI", "postgres://postgres:postgres@localhost:5442/"
+)
+
+_SAFE_DB_NAME_RE = re.compile(r'^[a-z0-9_]+$')
+
+
+def _validate_db_name(name: str) -> str:
+    if not _SAFE_DB_NAME_RE.match(name):
+        raise ValueError(f"Unsafe database name rejected: {name!r}")
+    return name
+
+
+def _request_hitl_approval(operation: str, target: str) -> bool:
+    """Human-in-the-Loop approval for risky destructive operations."""
+    response = input(
+        f"\n[HITL APPROVAL REQUIRED] Operation: {operation} on target: {target}\n"
+        "Type 'yes' to approve or anything else to deny: "
+    ).strip().lower()
+    return response == "yes"
 
 
 @contextmanager
@@ -26,7 +47,7 @@ def _checkpointer_sqlite():
 
 @contextmanager
 def _checkpointer_postgres():
-    database = f"test_{uuid4().hex[:16]}"
+    database = _validate_db_name(f"test_{uuid4().hex[:16]}")
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
         conn.execute(f"CREATE DATABASE {database}")
@@ -39,13 +60,18 @@ def _checkpointer_postgres():
             yield checkpointer
     finally:
         # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+        if _request_hitl_approval("DROP DATABASE", database):
+            with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+                conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise PermissionError(
+                f"DROP DATABASE {database} was denied by human operator."
+            )
 
 
 @contextmanager
 def _checkpointer_postgres_pipe():
-    database = f"test_{uuid4().hex[:16]}"
+    database = _validate_db_name(f"test_{uuid4().hex[:16]}")
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
         conn.execute(f"CREATE DATABASE {database}")
@@ -61,13 +87,18 @@ def _checkpointer_postgres_pipe():
                 yield checkpointer
     finally:
         # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+        if _request_hitl_approval("DROP DATABASE", database):
+            with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+                conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise PermissionError(
+                f"DROP DATABASE {database} was denied by human operator."
+            )
 
 
 @contextmanager
 def _checkpointer_postgres_pool():
-    database = f"test_{uuid4().hex[:16]}"
+    database = _validate_db_name(f"test_{uuid4().hex[:16]}")
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
         conn.execute(f"CREATE DATABASE {database}")
@@ -81,8 +112,13 @@ def _checkpointer_postgres_pool():
             yield checkpointer
     finally:
         # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+        if _request_hitl_approval("DROP DATABASE", database):
+            with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+                conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise PermissionError(
+                f"DROP DATABASE {database} was denied by human operator."
+            )
 
 
 @asynccontextmanager
@@ -93,7 +129,7 @@ async def _checkpointer_sqlite_aio():
 
 @asynccontextmanager
 async def _checkpointer_postgres_aio():
-    database = f"test_{uuid4().hex[:16]}"
+    database = _validate_db_name(f"test_{uuid4().hex[:16]}")
     # create unique db
     async with await AsyncConnection.connect(
         DEFAULT_POSTGRES_URI, autocommit=True
@@ -108,15 +144,20 @@ async def _checkpointer_postgres_aio():
             yield checkpointer
     finally:
         # drop unique db
-        async with await AsyncConnection.connect(
-            DEFAULT_POSTGRES_URI, autocommit=True
-        ) as conn:
-            await conn.execute(f"DROP DATABASE {database}")
+        if _request_hitl_approval("DROP DATABASE", database):
+            async with await AsyncConnection.connect(
+                DEFAULT_POSTGRES_URI, autocommit=True
+            ) as conn:
+                await conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise PermissionError(
+                f"DROP DATABASE {database} was denied by human operator."
+            )
 
 
 @asynccontextmanager
 async def _checkpointer_postgres_aio_pipe():
-    database = f"test_{uuid4().hex[:16]}"
+    database = _validate_db_name(f"test_{uuid4().hex[:16]}")
     # create unique db
     async with await AsyncConnection.connect(
         DEFAULT_POSTGRES_URI, autocommit=True
@@ -134,15 +175,20 @@ async def _checkpointer_postgres_aio_pipe():
                 yield checkpointer
     finally:
         # drop unique db
-        async with await AsyncConnection.connect(
-            DEFAULT_POSTGRES_URI, autocommit=True
-        ) as conn:
-            await conn.execute(f"DROP DATABASE {database}")
+        if _request_hitl_approval("DROP DATABASE", database):
+            async with await AsyncConnection.connect(
+                DEFAULT_POSTGRES_URI, autocommit=True
+            ) as conn:
+                await conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise PermissionError(
+                f"DROP DATABASE {database} was denied by human operator."
+            )
 
 
 @asynccontextmanager
 async def _checkpointer_postgres_aio_pool():
-    database = f"test_{uuid4().hex[:16]}"
+    database = _validate_db_name(f"test_{uuid4().hex[:16]}")
     # create unique db
     async with await AsyncConnection.connect(
         DEFAULT_POSTGRES_URI, autocommit=True
@@ -158,10 +204,15 @@ async def _checkpointer_postgres_aio_pool():
             yield checkpointer
     finally:
         # drop unique db
-        async with await AsyncConnection.connect(
-            DEFAULT_POSTGRES_URI, autocommit=True
-        ) as conn:
-            await conn.execute(f"DROP DATABASE {database}")
+        if _request_hitl_approval("DROP DATABASE", database):
+            async with await AsyncConnection.connect(
+                DEFAULT_POSTGRES_URI, autocommit=True
+            ) as conn:
+                await conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise PermissionError(
+                f"DROP DATABASE {database} was denied by human operator."
+            )
 
 
 __all__ = [
