@@ -1,4 +1,9 @@
 import operator
+import logging
+import hashlib
+import json
+import datetime
+import uuid
 from collections.abc import Sequence
 from functools import partial
 from random import choice
@@ -8,6 +13,25 @@ from pydantic import BaseModel, Field, field_validator
 
 from langgraph.constants import END, START
 from langgraph.graph.state import StateGraph
+
+# Audit logger for forensic readiness
+audit_logger = logging.getLogger("audit.pydantic_state")
+audit_logger.setLevel(logging.INFO)
+_audit_handler = logging.StreamHandler()
+_audit_handler.setFormatter(
+    logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+)
+audit_logger.addHandler(_audit_handler)
+
+
+def _audit_log(event: str, details: dict) -> None:
+    """Write an immutable audit record with timestamp and trace context."""
+    record = {
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "event": event,
+        **details,
+    }
+    audit_logger.info(json.dumps(record))
 
 
 def pydantic_state(n: int) -> StateGraph:
@@ -303,6 +327,9 @@ if __name__ == "__main__":
     import asyncio
 
     import uvloop
+    # NOTE: langgraph and InMemorySaver are NOT on the organization's approved list.
+    # Usage here is flagged by policy. Replace with an approved framework and
+    # checkpointer before deploying to production.
     from langgraph.checkpoint.memory import InMemorySaver
 
     graph = pydantic_state(1000).compile(checkpointer=InMemorySaver())
@@ -320,8 +347,59 @@ if __name__ == "__main__":
     config = {"configurable": {"thread_id": "1"}, "recursion_limit": 20000000000}
 
     async def run():
-        async for c in graph.astream(input, config=config):
-            print(c.keys())
+        trace_id = str(uuid.uuid4())
+        input_hash = hashlib.sha256(
+            json.dumps(input, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        _audit_log(
+            "graph_execution_start",
+            {
+                "trace_id": trace_id,
+                "framework": "langgraph",
+                "framework_status": "NOT_IN_REGISTRY",
+                "thread_id": config["configurable"]["thread_id"],
+                "input_hash": input_hash,
+                "principal": "benchmark_runner",
+            },
+        )
+        step = 0
+        try:
+            async for c in graph.astream(input, config=config):
+                output_keys = list(c.keys())
+                output_hash = hashlib.sha256(
+                    json.dumps(c, sort_keys=True, default=str).encode()
+                ).hexdigest()
+                _audit_log(
+                    "graph_step_output",
+                    {
+                        "trace_id": trace_id,
+                        "step": step,
+                        "output_keys": output_keys,
+                        "output_hash": output_hash,
+                        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                    },
+                )
+                print(c.keys())
+                step += 1
+            _audit_log(
+                "graph_execution_complete",
+                {
+                    "trace_id": trace_id,
+                    "total_steps": step,
+                    "status": "success",
+                },
+            )
+        except Exception as exc:
+            _audit_log(
+                "graph_execution_error",
+                {
+                    "trace_id": trace_id,
+                    "step": step,
+                    "error": str(exc),
+                    "status": "failure",
+                },
+            )
+            raise
 
     uvloop.install()
     asyncio.run(run())
