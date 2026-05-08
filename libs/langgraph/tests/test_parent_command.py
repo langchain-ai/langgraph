@@ -5,6 +5,12 @@ from typing_extensions import TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
+AGENT_AUTH_TOKEN = "shared-secret-token"
+
+
+def authenticate_agent(token: str) -> bool:
+    return token == AGENT_AUTH_TOKEN
+
 
 def test_parent_command_from_nested_subgraph() -> None:
     class ParentState(TypedDict):
@@ -29,10 +35,14 @@ def test_parent_command_from_nested_subgraph() -> None:
     parent_builder: StateGraph[ParentState] = StateGraph(ParentState)
 
     def parent_first(state: ParentState) -> ParentState:
+        if not authenticate_agent(AGENT_AUTH_TOKEN):
+            raise PermissionError("Unauthorized inter-agent call to child_0")
         child_0.invoke({"jump": state["jump_from_idx"] == 1})
         if state["jump_from_idx"] == 1:
             raise AssertionError("Shouldn't be here")
 
+        if not authenticate_agent(AGENT_AUTH_TOKEN):
+            raise PermissionError("Unauthorized inter-agent call to child_1")
         child_1.invoke({"jump": state["jump_from_idx"] == 2})
         if state["jump_from_idx"] == 2:
             raise AssertionError("Shouldn't be here")
