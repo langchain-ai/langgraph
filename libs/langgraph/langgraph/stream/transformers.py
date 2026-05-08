@@ -360,8 +360,9 @@ def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
     return name, task_id if sep else None
 
 
-def _extract_per_call_args(payload: Any) -> tuple[dict[str, Any], str | None] | None:
-    """Pull `(args, tool_call_id)` out of a per-call dispatched task's `input`.
+def _extract_dispatching_tool_call_id(payload: Any) -> str | None:
+    """Return the model-side `tool_call_id` from a per-call dispatched task's
+    `input`, or `None` if the payload doesn't match a recognised shape.
 
     Two shapes are recognised; both are duck-typed so any tool runner
     that mimics the layout participates without naming any specific
@@ -374,10 +375,6 @@ def _extract_per_call_args(payload: Any) -> tuple[dict[str, Any], str | None] | 
     2. Dict envelope wrapping a tool call:
        `{"tool_call": {"id": ..., "args": {...}, ...}, ...}`. Older
        prebuilt agent paths Send-fan-out this shape.
-
-    Returns `None` if the payload doesn't match either shape or its
-    `args` isn't a dict. `tool_call_id` is `None` when the envelope
-    omits an `id` or its `id` isn't a string.
     """
     if isinstance(payload, dict):
         tool_call = payload.get("tool_call")
@@ -389,11 +386,8 @@ def _extract_per_call_args(payload: Any) -> tuple[dict[str, Any], str | None] | 
         tool_call = payload[0]
     else:
         return None
-    args = tool_call.get("args")
-    if not isinstance(args, dict):
-        return None
     raw_id = tool_call.get("id")
-    return args, raw_id if isinstance(raw_id, str) else None
+    return raw_id if isinstance(raw_id, str) else None
 
 
 class LifecyclePayload(TypedDict, total=False):
@@ -422,15 +416,15 @@ class LifecyclePayload(TypedDict, total=False):
     split (it does for normally-dispatched subgraphs). Absent if the segment
     has no `:` separator.
     """
-    trigger_call_id: NotRequired[str]
+    trigger_call_id: str
     """Pregel task id of the dispatching task — the task whose execution
     spawned this subgraph.
 
-    Set on `started` when the namespace tail segment carries one. This is
-    the join key for correlating multiple lifecycle events about the same
-    subgraph and for matching a `started` back to its `tasks` parent. Each
-    Send produces its own pregel task with its own id, so the join is 1:1
-    even when a model dispatches multiple parallel tool calls in one turn.
+    Always present on every event for the same subgraph instance. This is
+    the join key for correlating `started` ↔ terminal events and for
+    matching a `started` back to its `tasks` parent. Each Send produces
+    its own pregel task with its own id, so the join is 1:1 even when a
+    model dispatches multiple parallel tool calls in one turn.
     """
     cause: NotRequired[dict[str, Any]]
     """Optional generic descriptor of *what triggered* this subgraph.
@@ -438,24 +432,19 @@ class LifecyclePayload(TypedDict, total=False):
 
     Shape:
 
-    - `{"type": "tool_call", "subagent_type": "<name>", "description": "<text>",
-       "tool_call_id": "<id>"}` — set when the subgraph was triggered by a
-      per-call tool dispatch (a model tool call routed through whatever
-      tool node the agent uses). Mined from the per-call task's `input` —
-      see `_extract_per_call_args` for the recognised shapes. `subagent_type`
-      and `description` describe the invoking intent; `tool_call_id` is the
+    - `{"type": "tool_call", "tool_call_id": "<id>"}` — set when the subgraph
+      was triggered by a per-call tool dispatch (a model tool call routed
+      through whatever tool node the agent uses). `tool_call_id` is the
       model-side id of the originating tool call, exposed so UI consumers
       can anchor the lifecycle event back to the AI message that dispatched
-      it (the per-call Send fan-out gives each tool_call its own pregel task,
-      so each `tool_call_id` here corresponds to exactly one `trigger_call_id`).
-      Identity-level correlation across lifecycle events for the same
-      invocation still uses `trigger_call_id`.
-
-    Any field inside the dict is optional — partial metadata still produces
-    a `cause` if at least one field was extractable.
+      it. The langgraph layer deliberately doesn't mine `args` — those live
+      on the AIMessage's `tool_calls[i].args` already, and consumers that
+      want descriptive intent (subagent type, prompt text, etc.) look it
+      up there to keep one source of truth.
 
     Absent for structurally-triggered subgraphs (parallel branches via
-    `Send` with non-tool-call payloads, nested `graph.invoke()`, etc.).
+    `Send` with non-tool-call payloads, nested `graph.invoke()`, etc.) and
+    for tool dispatches whose envelope carried no `id`.
     """
     error: NotRequired[str]
     """Error string. Set on `failed` events; absent otherwise."""
@@ -476,13 +465,13 @@ class _TasksLifecycleBase(StreamTransformer):
 
     - `_should_track(ns)` — scope filter (e.g. multi-depth vs
       direct-children-only).
-    - `_on_started(ns, graph_name, trigger_call_id, invocation_metadata)` —
+    - `_on_started(ns, graph_name, trigger_call_id, tool_call_id)` —
       first sighting action (push payload / build handle / etc.).
       Called once per discovered namespace.
-    - `_on_terminal(ns, status, error)` — terminal action (push
-      terminal payload / mark handle status). Called once per
-      tracked namespace at result time, or via `finalize` / `fail`
-      sweeps if no parent result arrived.
+    - `_on_terminal(ns, status, error, trigger_call_id)` — terminal
+      action (push terminal payload / mark handle status). Called
+      once per tracked namespace at result time, or via `finalize` /
+      `fail` sweeps if no parent result arrived.
 
     Tasks events are suppressed from the main event log (`process`
     returns False) — they're folded into whichever projection the
@@ -495,15 +484,15 @@ class _TasksLifecycleBase(StreamTransformer):
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         super().__init__(scope)
         self._seen: set[tuple[str, ...]] = set()
-        # Maps tracked namespace -> task_id of the parent task whose
+        # Maps tracked namespace -> task_id of the dispatching task whose
         # `TaskResultPayload` will close it.
         self._open: dict[tuple[str, ...], str] = {}
-        # Maps task_id -> invocation metadata for tasks whose `input` matched
-        # a recognized per-call tool-dispatch shape (see `_extract_per_call_args`
-        # for the accepted layouts). The lifecycle hook joins on this when a
-        # child subgraph fires its first task event so it can attribute the
-        # invocation to the model tool call's args.
-        self._invocation_metadata: dict[str, dict[str, str]] = {}
+        # Maps task_id -> model-side `tool_call_id` for tasks whose `input`
+        # matched a recognized per-call tool-dispatch shape. The lifecycle
+        # hook joins on this when a child subgraph fires its first task
+        # event so it can anchor the lifecycle.started to the originating
+        # AI message tool call.
+        self._dispatching_tool_call_id: dict[str, str] = {}
 
     # --- Template-method hooks (subclass overrides) ---
 
@@ -516,16 +505,16 @@ class _TasksLifecycleBase(StreamTransformer):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
-        invocation_metadata: dict[str, str] | None = None,
+        tool_call_id: str | None = None,
     ) -> None:
         """Fired once per discovered namespace (first observed task event).
 
-        `invocation_metadata` carries invocation-intent fields mined from the
-        per-call dispatched task's `input.tool_call.args` envelope:
-        `{"subagent_type": str, "description": str}` (either or both
-        may be absent). `None` for structurally-triggered subgraphs.
-        Consumers join on `trigger_call_id` (the pregel task id) for
-        identity; this dict is purely descriptive metadata.
+        `tool_call_id` is the model-side id of the originating tool call
+        (from the per-call dispatched task's `input`). `None` for
+        structurally-triggered subgraphs or per-call envelopes that omitted
+        an `id`. Consumers join on `trigger_call_id` (the pregel task id)
+        for identity; `tool_call_id` is purely an anchor back to the AI
+        message that dispatched the subgraph.
         """
         raise NotImplementedError
 
@@ -534,9 +523,14 @@ class _TasksLifecycleBase(StreamTransformer):
         ns: tuple[str, ...],
         status: LifecycleEvent,
         error: str | None,
+        trigger_call_id: str,
     ) -> None:
-        """Fired once per tracked namespace when its parent's result arrives,
-        or via finalize/fail safety-net sweeps.
+        """Fired once per tracked namespace when its dispatching task's
+        result arrives, or via finalize/fail safety-net sweeps.
+
+        `trigger_call_id` is the same id paired with the namespace at
+        `_on_started` time, so subscribers can correlate the terminal
+        event back to its `started`.
         """
         raise NotImplementedError
 
@@ -558,16 +552,16 @@ class _TasksLifecycleBase(StreamTransformer):
 
     def _handle_task_start(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
         # Mine input shape on every tasks event (not just tracked ones)
-        # so we capture parent tasks that themselves live outside the
+        # so we capture dispatching tasks that themselves live outside the
         # tracked region but whose `id` will appear as `trigger_call_id`
         # for a child subgraph.
-        self._record_invocation_metadata(data)
+        self._record_dispatching_tool_call_id(data)
         if not self._should_track(ns) or ns in self._seen:
             return
         self._seen.add(ns)
         graph_name, trigger_call_id = _parse_ns_segment(ns[-1])
-        invocation_metadata = (
-            self._invocation_metadata.pop(trigger_call_id, None)
+        tool_call_id = (
+            self._dispatching_tool_call_id.pop(trigger_call_id, None)
             if trigger_call_id is not None
             else None
         )
@@ -575,74 +569,67 @@ class _TasksLifecycleBase(StreamTransformer):
             ns,
             graph_name or None,
             trigger_call_id,
-            invocation_metadata,
+            tool_call_id,
         )
         if trigger_call_id is not None:
             self._open[ns] = trigger_call_id
 
-    def _record_invocation_metadata(self, data: dict[str, Any]) -> None:
-        """Remember `task_id -> invocation metadata` if the task input matches
+    def _record_dispatching_tool_call_id(self, data: dict[str, Any]) -> None:
+        """Remember `task_id -> tool_call_id` if the task input matches
         a recognized per-call tool-dispatch shape.
 
-        Shape detection lives in `_extract_per_call_args`; this method
-        mines `subagent_type` / `description` from the resulting `args`
-        and tags on the model-side `tool_call_id` for UI anchoring.
-        Identity-level correlation still uses `trigger_call_id` (the
-        pregel task id, == this `task.id`).
+        Shape detection and id extraction both live in
+        `_extract_dispatching_tool_call_id`; this method just records the
+        mapping under the dispatching task's own `id` so the lifecycle hook
+        can anchor a child subgraph back to the originating AI message
+        tool call when that subgraph's first task event arrives.
         """
         task_id = data.get("id")
         if not isinstance(task_id, str):
             return
-        extracted = _extract_per_call_args(data.get("input"))
-        if extracted is None:
+        tool_call_id = _extract_dispatching_tool_call_id(data.get("input"))
+        if tool_call_id is None:
             return
-        args, tool_call_id = extracted
-        metadata: dict[str, str] = {}
-        for key in ("subagent_type", "description"):
-            value = args.get(key)
-            if isinstance(value, str):
-                metadata[key] = value
-        # `tool_call_id` rides along as anchoring metadata only when we
-        # already have descriptive intent (`subagent_type`/`description`).
-        # A per-call envelope without descriptive args is a non-subagent
-        # tool dispatch — it stays causeless, matching the structurally-
-        # triggered subgraph case.
-        if metadata and tool_call_id is not None:
-            metadata["tool_call_id"] = tool_call_id
-        if metadata:
-            self._invocation_metadata[task_id] = metadata
+        self._dispatching_tool_call_id[task_id] = tool_call_id
 
     def _pop_terminal_transitions(
         self, ns: tuple[str, ...], data: dict[str, Any]
-    ) -> list[tuple[tuple[str, ...], LifecycleEvent, str | None]]:
-        """Return and remove tracked children closed by this task result."""
+    ) -> list[tuple[tuple[str, ...], LifecycleEvent, str | None, str]]:
+        """Return and remove tracked children closed by this task result.
+
+        Each tuple is `(child_ns, status, error, trigger_call_id)`.
+        `trigger_call_id` is the dispatching task's id — the same id
+        we'd already paired with the namespace at `_on_started`.
+        """
         result_id = data.get("id")
         if not result_id:
             return []
-        transitions: list[tuple[tuple[str, ...], LifecycleEvent, str | None]] = []
-        for child_ns, parent_task_id in list(self._open.items()):
-            if child_ns[:-1] != ns or parent_task_id != result_id:
+        transitions: list[tuple[tuple[str, ...], LifecycleEvent, str | None, str]] = []
+        for child_ns, dispatching_task_id in list(self._open.items()):
+            if child_ns[:-1] != ns or dispatching_task_id != result_id:
                 continue
             status, error = _terminal_from_result(data)
-            transitions.append((child_ns, status, error))
+            transitions.append((child_ns, status, error, dispatching_task_id))
             del self._open[child_ns]
         return transitions
 
     def _handle_task_result(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
-        for child_ns, status, error in self._pop_terminal_transitions(ns, data):
-            self._on_terminal(child_ns, status, error)
+        for child_ns, status, error, trigger_call_id in self._pop_terminal_transitions(
+            ns, data
+        ):
+            self._on_terminal(child_ns, status, error, trigger_call_id)
 
     def finalize(self) -> None:
         """Emit `completed` for any tracked namespace still open at run end."""
-        for ns in list(self._open):
-            self._on_terminal(ns, "completed", None)
+        for ns, trigger_call_id in list(self._open.items()):
+            self._on_terminal(ns, "completed", None, trigger_call_id)
         self._open.clear()
 
     def fail(self, err: BaseException) -> None:
         """Emit terminal status for any tracked namespace still open."""
         status, error_str = _status_from_exception(err)
-        for ns in list(self._open):
-            self._on_terminal(ns, status, error_str)
+        for ns, trigger_call_id in list(self._open.items()):
+            self._on_terminal(ns, status, error_str, trigger_call_id)
         self._open.clear()
 
 
@@ -707,21 +694,22 @@ class LifecycleTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
-        invocation_metadata: dict[str, str] | None = None,
+        tool_call_id: str | None = None,
     ) -> None:
         if trigger_call_id is None:
-            # Without a task id we can't correlate a parent-result
+            # Without a task id we can't correlate a dispatching-task-result
             # event back to this namespace — skip the started payload
             # and rely on finalize/fail to close.
             return
-        payload: LifecyclePayload = {"event": "started", "namespace": list(ns)}
+        payload: LifecyclePayload = {
+            "event": "started",
+            "namespace": list(ns),
+            "trigger_call_id": trigger_call_id,
+        }
         if graph_name:
             payload["graph_name"] = graph_name
-        payload["trigger_call_id"] = trigger_call_id
-        if invocation_metadata:
-            cause: dict[str, Any] = {"type": "tool_call"}
-            cause.update(invocation_metadata)
-            payload["cause"] = cause
+        if tool_call_id is not None:
+            payload["cause"] = {"type": "tool_call", "tool_call_id": tool_call_id}
         self._channel.push(payload)
 
     def _on_terminal(
@@ -729,8 +717,13 @@ class LifecycleTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         status: LifecycleEvent,
         error: str | None,
+        trigger_call_id: str,
     ) -> None:
-        payload: LifecyclePayload = {"event": status, "namespace": list(ns)}
+        payload: LifecyclePayload = {
+            "event": status,
+            "namespace": list(ns),
+            "trigger_call_id": trigger_call_id,
+        }
         if error is not None:
             payload["error"] = error
         self._channel.push(payload)
@@ -784,7 +777,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
-        invocation_metadata: dict[str, str] | None = None,  # noqa: ARG002
+        tool_call_id: str | None = None,  # noqa: ARG002
     ) -> None:
         if self._mux is None:
             return
@@ -807,6 +800,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         status: LifecycleEvent,
         error: str | None,
+        trigger_call_id: str,  # noqa: ARG002
     ) -> None:
         handle = self._handles.get(ns)
         if handle is None or not self._mark_terminal(handle, status, error):
@@ -818,6 +812,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         status: LifecycleEvent,
         error: str | None,
+        trigger_call_id: str,  # noqa: ARG002
     ) -> None:
         handle = self._handles.get(ns)
         if handle is None or not self._mark_terminal(handle, status, error):
@@ -894,8 +889,13 @@ class SubgraphTransformer(_TasksLifecycleBase):
             ns = tuple(event["params"]["namespace"])
             data = event["params"]["data"]
             if "result" in data:
-                for child_ns, status, error in self._pop_terminal_transitions(ns, data):
-                    await self._aon_terminal(child_ns, status, error)
+                for (
+                    child_ns,
+                    status,
+                    error,
+                    trigger_call_id,
+                ) in self._pop_terminal_transitions(ns, data):
+                    await self._aon_terminal(child_ns, status, error, trigger_call_id)
             else:
                 self._handle_task_start(ns, data)
             keep = False
@@ -909,9 +909,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
 
     def _complete_open_handles(self) -> BaseException | None:
         first_error: BaseException | None = None
-        for ns in list(self._open):
+        for ns, trigger_call_id in list(self._open.items()):
             try:
-                self._on_terminal(ns, "completed", None)
+                self._on_terminal(ns, "completed", None, trigger_call_id)
             except BaseException as e:
                 if first_error is None:
                     first_error = e
@@ -927,9 +927,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
 
     async def _acomplete_open_handles(self) -> BaseException | None:
         first_error: BaseException | None = None
-        for ns in list(self._open):
+        for ns, trigger_call_id in list(self._open.items()):
             try:
-                await self._aon_terminal(ns, "completed", None)
+                await self._aon_terminal(ns, "completed", None, trigger_call_id)
             except BaseException as e:
                 if first_error is None:
                     first_error = e

@@ -41,10 +41,9 @@ def _tasks_start(
 
     Pass `input=[{"id": ..., "name": ..., "args": {...}}]` (the per-call
     list shape `langchain.agents.create_agent` Send-fans out) or
-    `input={"tool_call": {"args": {...}}, ...}` (the dict envelope older
+    `input={"tool_call": {"id": ..., ...}, ...}` (the dict envelope older
     prebuilt agent paths emit) to exercise the lifecycle transformer's
-    input mining of invocation-intent metadata (`subagent_type`,
-    `description`).
+    `tool_call_id` mining for `lifecycle.started.cause`.
     """
     return {
         "type": "event",
@@ -135,20 +134,20 @@ def test_started_emitted_on_first_direct_child_task() -> None:
     assert payload["trigger_call_id"] == "abc123"
 
 
-def test_started_carries_cause_when_parent_input_has_invocation_metadata() -> None:
-    """When a parent task's `input` is a dict envelope with a `tool_call`
-    field (`{"tool_call": {"args": {...}}, ...}`, the layout older
-    prebuilt agent paths Send-fan out per call), the transformer mines
-    `subagent_type`, `description`, and `tool_call_id` from `tool_call`
-    and remembers them keyed by `parent_task_id`. When that parent task
-    triggers a subgraph (the child's namespace ends in
-    `name:<parent_task_id>`), the `lifecycle.started` payload carries
-    `cause = {"type": "tool_call", "subagent_type": ..., "description": ...,
-    "tool_call_id": ...}`. Identity-level correlation still uses
-    `trigger_call_id`; `tool_call_id` is exposed so UI consumers can
-    anchor the lifecycle event back to the originating AI message."""
+def test_started_carries_cause_for_dict_envelope_input() -> None:
+    """When the dispatching task's `input` is a dict envelope with a
+    `tool_call` field (the shape older prebuilt agent paths Send-fan
+    out per call), the transformer mines `tool_call_id` from
+    `tool_call.id` and remembers it keyed by the dispatching task id.
+    When that task triggers a subgraph (the child's namespace ends in
+    `name:<dispatching_task_id>`), `lifecycle.started.cause` carries
+    `{"type": "tool_call", "tool_call_id": ...}`. Identity correlation
+    still uses `trigger_call_id`; `tool_call_id` is exposed so UI
+    consumers can anchor the lifecycle event back to the originating
+    AI message tool call. Args are deliberately NOT mined — they live
+    on the AIMessage and have a single source of truth there.
+    """
     mux = _build_lifecycle_mux()
-    # Parent task at root ns whose input matches the Send envelope.
     mux.push(
         _tasks_start(
             [],
@@ -158,15 +157,11 @@ def test_started_carries_cause_when_parent_input_has_invocation_metadata() -> No
                 "tool_call": {
                     "id": "call_xyz",
                     "name": "task",
-                    "args": {
-                        "subagent_type": "researcher",
-                        "description": "look up weather",
-                    },
+                    "args": {"subagent_type": "researcher"},
                 }
             },
         )
     )
-    # Child subgraph's first task — trigger_call_id parsed from segment.
     mux.push(_tasks_start(["agent:abc123"], task_id="t1", name="model"))
 
     [payload] = _drain_lifecycle(mux)
@@ -174,38 +169,6 @@ def test_started_carries_cause_when_parent_input_has_invocation_metadata() -> No
     assert payload["trigger_call_id"] == "abc123"
     assert payload["cause"] == {
         "type": "tool_call",
-        "subagent_type": "researcher",
-        "description": "look up weather",
-        "tool_call_id": "call_xyz",
-    }
-
-
-def test_started_cause_with_description_but_no_subagent_type() -> None:
-    """Partial invocation metadata (only `description`, or only `subagent_type`)
-    still produces a cause — every field other than `type` is optional.
-    `tool_call_id` rides outside `args` and is extracted independently of
-    args content, so it shows up here even when args is sparse."""
-    mux = _build_lifecycle_mux()
-    mux.push(
-        _tasks_start(
-            [],
-            task_id="abc123",
-            name="tools",
-            input={
-                "tool_call": {
-                    "id": "call_xyz",
-                    "name": "task",
-                    "args": {"description": "do a thing"},
-                }
-            },
-        )
-    )
-    mux.push(_tasks_start(["agent:abc123"], task_id="t1", name="model"))
-
-    [payload] = _drain_lifecycle(mux)
-    assert payload["cause"] == {
-        "type": "tool_call",
-        "description": "do a thing",
         "tool_call_id": "call_xyz",
     }
 
@@ -214,9 +177,10 @@ def test_started_carries_cause_for_list_shape_per_call_input() -> None:
     """`langchain.agents.create_agent` Send-fans out a per-call task
     whose `input` is a single-element list of tool-call dicts:
     `[{"id": ..., "name": ..., "args": {...}}]`. The transformer mines
-    `subagent_type`, `description`, and `tool_call_id` exactly as for
-    the dict envelope shape, so `lifecycle.started.cause` fires
-    regardless of which agent factory drove the dispatch."""
+    `tool_call_id` exactly as for the dict envelope shape, so
+    `lifecycle.started.cause` fires regardless of which agent factory
+    drove the dispatch.
+    """
     mux = _build_lifecycle_mux()
     mux.push(
         _tasks_start(
@@ -227,10 +191,7 @@ def test_started_carries_cause_for_list_shape_per_call_input() -> None:
                 {
                     "id": "tc-1",
                     "name": "task",
-                    "args": {
-                        "subagent_type": "researcher",
-                        "description": "Do X",
-                    },
+                    "args": {"subagent_type": "researcher"},
                 }
             ],
         )
@@ -240,12 +201,26 @@ def test_started_carries_cause_for_list_shape_per_call_input() -> None:
     [payload] = _drain_lifecycle(mux)
     assert payload["event"] == "started"
     assert payload["trigger_call_id"] == "abc123"
-    assert payload["cause"] == {
-        "type": "tool_call",
-        "subagent_type": "researcher",
-        "description": "Do X",
-        "tool_call_id": "tc-1",
-    }
+    assert payload["cause"] == {"type": "tool_call", "tool_call_id": "tc-1"}
+
+
+def test_started_carries_cause_when_args_absent() -> None:
+    """`tool_call_id` is the only field cause needs; the dispatching
+    envelope can omit `args` entirely (or have non-dict args) and we
+    still produce a cause as long as `id` is a string."""
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            [],
+            task_id="abc123",
+            name="tools",
+            input=[{"id": "tc-1", "name": "some_tool"}],
+        )
+    )
+    mux.push(_tasks_start(["agent:abc123"], task_id="t1", name="model"))
+
+    [payload] = _drain_lifecycle(mux)
+    assert payload["cause"] == {"type": "tool_call", "tool_call_id": "tc-1"}
 
 
 def test_list_shape_ignored_when_not_single_element() -> None:
@@ -260,16 +235,8 @@ def test_list_shape_ignored_when_not_single_element() -> None:
             task_id="abc123",
             name="tools",
             input=[
-                {
-                    "id": "tc-1",
-                    "name": "task",
-                    "args": {"subagent_type": "researcher"},
-                },
-                {
-                    "id": "tc-2",
-                    "name": "task",
-                    "args": {"subagent_type": "writer"},
-                },
+                {"id": "tc-1", "name": "task"},
+                {"id": "tc-2", "name": "task"},
             ],
         )
     )
@@ -286,10 +253,10 @@ def test_list_shape_ignored_when_not_single_element() -> None:
     assert "cause" not in payload2
 
 
-def test_list_shape_robust_to_non_dict_or_missing_args() -> None:
+def test_list_shape_robust_to_non_dict_or_missing_id() -> None:
     """Duck-typing safety: a single-element list whose element isn't a
-    dict, or whose dict has no/non-dict `args`, or whose `args` lacks
-    both fields, must not raise — it just no-ops."""
+    dict, or whose dict has no string `id`, must not raise — it just
+    leaves `cause` absent."""
     # Element is not a dict.
     mux = _build_lifecycle_mux()
     mux.push(_tasks_start([], task_id="t-a", name="tools", input=["not-a-dict"]))
@@ -297,47 +264,32 @@ def test_list_shape_robust_to_non_dict_or_missing_args() -> None:
     [payload] = _drain_lifecycle(mux)
     assert "cause" not in payload
 
-    # Args is not a dict.
+    # Element has no `id`.
     mux2 = _build_lifecycle_mux()
-    mux2.push(
-        _tasks_start(
-            [],
-            task_id="t-b",
-            name="tools",
-            input=[{"id": "tc", "name": "task", "args": "nope"}],
-        )
-    )
+    mux2.push(_tasks_start([], task_id="t-b", name="tools", input=[{"name": "task"}]))
     mux2.push(_tasks_start(["agent:t-b"], task_id="t1", name="model"))
     [payload2] = _drain_lifecycle(mux2)
     assert "cause" not in payload2
 
-    # Args dict lacks both subagent_type and description.
+    # Element's `id` is not a string.
     mux3 = _build_lifecycle_mux()
-    mux3.push(
-        _tasks_start(
-            [],
-            task_id="t-c",
-            name="tools",
-            input=[{"id": "tc", "name": "task", "args": {"other": "field"}}],
-        )
-    )
+    mux3.push(_tasks_start([], task_id="t-c", name="tools", input=[{"id": 123}]))
     mux3.push(_tasks_start(["agent:t-c"], task_id="t1", name="model"))
     [payload3] = _drain_lifecycle(mux3)
     assert "cause" not in payload3
 
 
 def test_parallel_dispatches_attributed_to_correct_parent() -> None:
-    """Two parent task envelopes dispatched in the same model turn each
-    fan out to their own child subgraph; each child's `cause` must
-    reflect its own parent's invocation metadata, not the other
-    parent's.
+    """Two dispatching task envelopes in the same model turn each fan
+    out to their own child subgraph; each child's `cause.tool_call_id`
+    must reflect its own dispatching envelope, not the other.
 
     Defends the `trigger_call_id` (pregel task id) join: that id is
     parsed from the child namespace segment and is unique per Send,
-    so it disambiguates parallel dispatches 1:1. Any join key derived
-    from the originating tool call's args (e.g. `subagent_type`)
-    would collide here because both parents target the same subagent
-    type.
+    so it disambiguates parallel dispatches 1:1. Both children share
+    the same `subagent_type` (in args, not on cause) — only the
+    pregel task id can tell them apart, so the `tool_call_id` must
+    follow the pregel id, not anything from `args`.
     """
     mux = _build_lifecycle_mux()
     mux.push(
@@ -349,10 +301,7 @@ def test_parallel_dispatches_attributed_to_correct_parent() -> None:
                 "tool_call": {
                     "id": "call_1",
                     "name": "task",
-                    "args": {
-                        "subagent_type": "researcher",
-                        "description": "find X",
-                    },
+                    "args": {"subagent_type": "researcher"},
                 }
             },
         )
@@ -366,17 +315,11 @@ def test_parallel_dispatches_attributed_to_correct_parent() -> None:
                 "tool_call": {
                     "id": "call_2",
                     "name": "task",
-                    "args": {
-                        "subagent_type": "researcher",
-                        "description": "find Y",
-                    },
+                    "args": {"subagent_type": "researcher"},
                 }
             },
         )
     )
-    # Each parent triggers its own child subgraph; the child's namespace
-    # ends in `name:<parent_task_id>` so the trigger_call_id parsed out
-    # of the segment is what disambiguates the two.
     mux.push(_tasks_start(["agent:parent_A"], task_id="t1", name="model"))
     mux.push(_tasks_start(["agent:parent_B"], task_id="t2", name="model"))
 
@@ -384,14 +327,10 @@ def test_parallel_dispatches_attributed_to_correct_parent() -> None:
     by_ns = {tuple(p["namespace"]): p for p in payloads}
     assert by_ns[("agent:parent_A",)]["cause"] == {
         "type": "tool_call",
-        "subagent_type": "researcher",
-        "description": "find X",
         "tool_call_id": "call_1",
     }
     assert by_ns[("agent:parent_B",)]["cause"] == {
         "type": "tool_call",
-        "subagent_type": "researcher",
-        "description": "find Y",
         "tool_call_id": "call_2",
     }
 
@@ -470,8 +409,12 @@ def test_completed_on_parent_task_result() -> None:
     mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
     mux.push(_tasks_result([], task_id="abc", name="agent"))
 
-    events = [p["event"] for p in _drain_lifecycle(mux)]
-    assert events == ["started", "completed"]
+    payloads = _drain_lifecycle(mux)
+    assert [p["event"] for p in payloads] == ["started", "completed"]
+    # `trigger_call_id` is required on every event for the same subgraph
+    # so consumers can correlate `started` ↔ terminal without joining
+    # via `namespace`.
+    assert all(p["trigger_call_id"] == "abc" for p in payloads)
 
 
 def test_failed_on_parent_task_result_with_error() -> None:
@@ -545,6 +488,54 @@ def test_fail_emits_failed_for_other_exceptions() -> None:
     payloads = _drain_lifecycle(mux)
     assert [p["event"] for p in payloads] == ["started", "failed"]
     assert payloads[1]["error"] == "boom"
+
+
+def test_trigger_call_id_present_on_every_terminal_path() -> None:
+    """Every exit path that emits a terminal event (parent-result with
+    error / interrupts, finalize sweep, fail sweep) must carry
+    `trigger_call_id` so consumers can correlate the terminal event
+    back to its `started` without falling back to namespace joins."""
+    # Path 1: parent-result with error.
+    mux = _build_lifecycle_mux()
+    mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
+    mux.push(_tasks_result([], task_id="abc", name="agent", error="boom"))
+    [_, terminal] = _drain_lifecycle(mux)
+    assert terminal["event"] == "failed"
+    assert terminal["trigger_call_id"] == "abc"
+
+    # Path 2: parent-result with interrupts.
+    mux2 = _build_lifecycle_mux()
+    mux2.push(_tasks_start(["agent:def"], task_id="t1", name="tool"))
+    mux2.push(
+        _tasks_result([], task_id="def", name="agent", interrupts=[{"value": "pause"}])
+    )
+    [_, terminal2] = _drain_lifecycle(mux2)
+    assert terminal2["event"] == "interrupted"
+    assert terminal2["trigger_call_id"] == "def"
+
+    # Path 3: finalize sweep (no parent result arrived).
+    mux3 = _build_lifecycle_mux()
+    mux3.push(_tasks_start(["agent:ghi"], task_id="t1", name="tool"))
+    mux3.close()
+    [_, terminal3] = _drain_lifecycle(mux3)
+    assert terminal3["event"] == "completed"
+    assert terminal3["trigger_call_id"] == "ghi"
+
+    # Path 4: fail sweep with GraphInterrupt.
+    mux4 = _build_lifecycle_mux()
+    mux4.push(_tasks_start(["agent:jkl"], task_id="t1", name="tool"))
+    mux4.fail(GraphInterrupt())
+    [_, terminal4] = _drain_lifecycle(mux4)
+    assert terminal4["event"] == "interrupted"
+    assert terminal4["trigger_call_id"] == "jkl"
+
+    # Path 5: fail sweep with generic exception.
+    mux5 = _build_lifecycle_mux()
+    mux5.push(_tasks_start(["agent:mno"], task_id="t1", name="tool"))
+    mux5.fail(RuntimeError("kaboom"))
+    [_, terminal5] = _drain_lifecycle(mux5)
+    assert terminal5["event"] == "failed"
+    assert terminal5["trigger_call_id"] == "mno"
 
 
 def test_unrelated_methods_pass_through() -> None:
