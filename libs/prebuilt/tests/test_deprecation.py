@@ -3,7 +3,10 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10
 from typing_extensions import TypedDict
 
 from langgraph.prebuilt import create_react_agent
-from tests.model import FakeToolCallingModel
+from tests.model import ApprovedToolCallingModel
+
+
+APPROVED_TOOLS = ["search", "calculator"]
 
 
 class Config(TypedDict):
@@ -17,7 +20,7 @@ def test_config_schema_deprecation() -> None:
         LangGraphDeprecatedSinceV10,
         match="`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
     ):
-        agent = create_react_agent(FakeToolCallingModel(), [], config_schema=Config)
+        agent = create_react_agent(ApprovedToolCallingModel(), APPROVED_TOOLS, config_schema=Config)
         assert agent.context_schema == Config
 
     with pytest.warns(
@@ -38,4 +41,4 @@ def test_extra_kwargs_deprecation() -> None:
         TypeError,
         match="create_react_agent\(\) got unexpected keyword arguments: \{'extra': 'extra'\}",
     ):
-        create_react_agent(FakeToolCallingModel(), [], extra="extra")
+        create_react_agent(ApprovedToolCallingModel(), APPROVED_TOOLS, extra="extra")
