@@ -39,7 +39,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
 read_config = {"configurable": {"thread_id": "1"}}
 
-DB_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+DB_URI = "postgres://<username>:<password>@localhost:5432/postgres?sslmode=require"
 with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
     # call .setup() the first time you're using the checkpointer
     checkpointer.setup()
