@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import enum
 import inspect
+import re
 import sys
 import warnings
 from collections.abc import (
@@ -62,6 +64,104 @@ try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
 except ImportError:
     _StreamingCallbackHandler = None  # type: ignore
+
+
+# Patterns for detecting potentially malicious content in string inputs
+_SHELL_COMMAND_PATTERN = re.compile(
+    r'(?:'
+    r'\b(?:bash|sh|zsh|cmd|powershell|exec|eval|system|popen|subprocess)\s*[\(\[]'
+    r'|(?:&&|\|\|)\s*\w+'
+    r'|;\s*(?:rm|del|format|mkfs|dd)\b'
+    r'|`[^`]+`'
+    r'|\$\([^)]+\)'
+    r')',
+    re.IGNORECASE,
+)
+
+_HIDDEN_PROMPT_PATTERN = re.compile(
+    r'(?:'
+    r'ignore\s+(?:previous|prior|above|all)\s+instructions?'
+    r'|forget\s+(?:previous|prior|above|all)\s+instructions?'
+    r'|disregard\s+(?:previous|prior|above|all)\s+instructions?'
+    r'|you\s+are\s+now\s+(?:a\s+)?(?:an?\s+)?\w+'
+    r'|act\s+as\s+(?:a\s+)?(?:an?\s+)?\w+'
+    r'|pretend\s+(?:you\s+are|to\s+be)\s+'
+    r'|new\s+instructions?:'
+    r'|system\s*:\s*you'
+    r')',
+    re.IGNORECASE,
+)
+
+_LEETSPEAK_PATTERN = re.compile(
+    r'(?:'
+    r'[il1][gq9][n][0o][r][e3]'
+    r'|[il1][n][s5][t7][r][u][c][t7][il1][o0][n][s5]'
+    r')',
+    re.IGNORECASE,
+)
+
+
+def _is_base64_encoded(s: str) -> bool:
+    """Check if a string appears to be base64-encoded content."""
+    # Base64 strings are typically long, use only base64 chars, and decode to something meaningful
+    if len(s) < 20:
+        return False
+    base64_pattern = re.compile(r'^[A-Za-z0-9+/]{20,}={0,2}$')
+    if base64_pattern.match(s.strip()):
+        try:
+            decoded = base64.b64decode(s.strip()).decode('utf-8', errors='strict')
+            # If it decodes to printable ASCII, it might be encoded content
+            if decoded.isprintable() and len(decoded) > 10:
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _sanitize_string_input(value: str) -> str:
+    """Sanitize a string input by checking for malicious patterns.
+
+    Raises ValueError if malicious content is detected.
+    """
+    if _SHELL_COMMAND_PATTERN.search(value):
+        raise ValueError(
+            "Input contains potentially malicious shell command patterns and cannot be processed."
+        )
+    if _HIDDEN_PROMPT_PATTERN.search(value):
+        raise ValueError(
+            "Input contains prompt injection patterns and cannot be processed."
+        )
+    if _LEETSPEAK_PATTERN.search(value):
+        raise ValueError(
+            "Input contains obfuscated content patterns and cannot be processed."
+        )
+    if _is_base64_encoded(value):
+        raise ValueError(
+            "Input appears to contain base64-encoded content and cannot be processed without verification."
+        )
+    return value
+
+
+def _sanitize_input(input: Any) -> Any:
+    """Sanitize and validate input before passing to AI model runnables.
+
+    Checks string inputs and string values within dicts/lists for malicious content.
+    """
+    if isinstance(input, str):
+        _sanitize_string_input(input)
+    elif isinstance(input, dict):
+        for key, value in input.items():
+            if isinstance(value, str):
+                _sanitize_string_input(value)
+            elif isinstance(value, (dict, list)):
+                _sanitize_input(value)
+    elif isinstance(input, list):
+        for item in input:
+            if isinstance(item, str):
+                _sanitize_string_input(item)
+            elif isinstance(item, (dict, list)):
+                _sanitize_input(item)
+    return input
 
 
 def _set_config_context(
@@ -368,6 +468,9 @@ class RunnableCallable(Runnable):
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
 
+        # Sanitize and validate input before passing to the AI model
+        _sanitize_input(input)
+
         runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
 
         for kw, (runtime_key, default) in self.func_accepts.items():
@@ -441,6 +544,9 @@ class RunnableCallable(Runnable):
         else:
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
+
+        # Sanitize and validate input before passing to the AI model
+        _sanitize_input(input)
 
         runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
 
@@ -653,6 +759,8 @@ class RunnableSeq(Runnable):
     ) -> Any:
         if config is None:
             config = ensure_config()
+        # Sanitize and validate input before passing to AI model steps
+        _sanitize_input(input)
         # setup callbacks and context
         callback_manager = get_callback_manager_for_config(config)
         # start the root run
@@ -700,6 +808,8 @@ class RunnableSeq(Runnable):
     ) -> Any:
         if config is None:
             config = ensure_config()
+        # Sanitize and validate input before passing to AI model steps
+        _sanitize_input(input)
         # setup callbacks
         callback_manager = get_async_callback_manager_for_config(config)
         # start the root run
@@ -753,6 +863,8 @@ class RunnableSeq(Runnable):
     ) -> Iterator[Any]:
         if config is None:
             config = ensure_config()
+        # Sanitize and validate input before passing to AI model steps
+        _sanitize_input(input)
         # setup callbacks
         callback_manager = get_callback_manager_for_config(config)
         # start the root run
@@ -813,6 +925,8 @@ class RunnableSeq(Runnable):
     ) -> AsyncIterator[Any]:
         if config is None:
             config = ensure_config()
+        # Sanitize and validate input before passing to AI model steps
+        _sanitize_input(input)
         # setup callbacks
         callback_manager = get_async_callback_manager_for_config(config)
         # start the root run
