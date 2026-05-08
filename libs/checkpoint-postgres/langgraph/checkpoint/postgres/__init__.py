@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
 import threading
+import time
+import traceback
+import uuid
 from collections import defaultdict
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -35,6 +39,26 @@ from langgraph.checkpoint.postgres.base import (
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
 Conn = _internal.Conn  # For backward compatibility
+
+_audit_logger = logging.getLogger("langgraph.checkpoint.postgres.audit")
+
+
+def _emit_audit_event(event: str, details: dict[str, Any]) -> None:
+    """Emit a structured audit log entry for checkpoint operations."""
+    try:
+        record: dict[str, Any] = {
+            "audit_event": event,
+            "trace_id": str(uuid.uuid4()),
+            "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        record.update(details)
+        _audit_logger.info("AUDIT %s %s", event, record)
+    except Exception:
+        # Audit logging must not silently swallow failures — re-raise so callers
+        # are aware the audit sink is unavailable (fail-closed on audit errors).
+        raise RuntimeError(
+            f"Audit logging failed for event '{event}': {traceback.format_exc()}"
+        )
 
 
 class PostgresSaver(BasePostgresSaver):
@@ -227,6 +251,18 @@ class PostgresSaver(BasePostgresSaver):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        trace_id = str(uuid.uuid4())
+
+        _emit_audit_event(
+            "get_tuple.start",
+            {
+                "trace_id": trace_id,
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": checkpoint_id,
+            },
+        )
+
         if checkpoint_id:
             args: tuple[Any, ...] = (thread_id, checkpoint_ns, checkpoint_id)
             where = "WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s"
@@ -241,6 +277,15 @@ class PostgresSaver(BasePostgresSaver):
             )
             value = cur.fetchone()
             if value is None:
+                _emit_audit_event(
+                    "get_tuple.not_found",
+                    {
+                        "trace_id": trace_id,
+                        "thread_id": thread_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "checkpoint_id": checkpoint_id,
+                    },
+                )
                 return None
 
             # migrate pending sends if necessary
@@ -258,7 +303,18 @@ class PostgresSaver(BasePostgresSaver):
                         value["channel_values"],
                     )
 
-            return self._load_checkpoint_tuple(value)
+            result = self._load_checkpoint_tuple(value)
+            _emit_audit_event(
+                "get_tuple.success",
+                {
+                    "trace_id": trace_id,
+                    "thread_id": thread_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "retrieved_checkpoint_id": value.get("checkpoint_id"),
+                    "parent_checkpoint_id": value.get("parent_checkpoint_id"),
+                },
+            )
+            return result
 
     def put(
         self,
@@ -296,6 +352,22 @@ class PostgresSaver(BasePostgresSaver):
         thread_id = configurable.pop("thread_id")
         checkpoint_ns = configurable.pop("checkpoint_ns")
         checkpoint_id = configurable.pop("checkpoint_id", None)
+        trace_id = str(uuid.uuid4())
+
+        _emit_audit_event(
+            "put.start",
+            {
+                "trace_id": trace_id,
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "parent_checkpoint_id": checkpoint_id,
+                "new_checkpoint_id": checkpoint["id"],
+                "metadata_source": metadata.get("source") if isinstance(metadata, dict) else None,
+                "metadata_step": metadata.get("step") if isinstance(metadata, dict) else None,
+                "new_versions_keys": list(new_versions.keys()) if new_versions else [],
+            },
+        )
+
         copy = checkpoint.copy()
         copy["channel_values"] = copy["channel_values"].copy()
         next_config = {
@@ -342,6 +414,19 @@ class PostgresSaver(BasePostgresSaver):
                     Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
                 ),
             )
+
+        _emit_audit_event(
+            "put.success",
+            {
+                "trace_id": trace_id,
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": checkpoint["id"],
+                "parent_checkpoint_id": checkpoint_id,
+                "blob_channels_written": list(blob_values.keys()),
+            },
+        )
+
         return next_config
 
     def put_writes(
@@ -360,6 +445,25 @@ class PostgresSaver(BasePostgresSaver):
             writes: List of writes to store.
             task_id: Identifier for the task creating the writes.
         """
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        checkpoint_id = config["configurable"]["checkpoint_id"]
+        trace_id = str(uuid.uuid4())
+
+        _emit_audit_event(
+            "put_writes.start",
+            {
+                "trace_id": trace_id,
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": checkpoint_id,
+                "task_id": task_id,
+                "task_path": task_path,
+                "write_channels": [w[0] for w in writes],
+                "write_count": len(writes),
+            },
+        )
+
         query = (
             self.UPSERT_CHECKPOINT_WRITES_SQL
             if all(w[0] in WRITES_IDX_MAP for w in writes)
@@ -369,14 +473,27 @@ class PostgresSaver(BasePostgresSaver):
             cur.executemany(
                 query,
                 self._dump_writes(
-                    config["configurable"]["thread_id"],
-                    config["configurable"]["checkpoint_ns"],
-                    config["configurable"]["checkpoint_id"],
+                    thread_id,
+                    checkpoint_ns,
+                    checkpoint_id,
                     task_id,
                     task_path,
                     writes,
                 ),
             )
+
+        _emit_audit_event(
+            "put_writes.success",
+            {
+                "trace_id": trace_id,
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": checkpoint_id,
+                "task_id": task_id,
+                "task_path": task_path,
+                "write_count": len(writes),
+            },
+        )
 
     def delete_thread(self, thread_id: str) -> None:
         """Delete all checkpoints and writes associated with a thread ID.
