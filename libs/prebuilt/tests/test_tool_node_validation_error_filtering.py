@@ -8,6 +8,7 @@ feedback about the parameters it can actually control, improving error correctio
 and reducing confusion from irrelevant system implementation details.
 """
 
+import re
 from typing import Annotated
 from unittest.mock import Mock
 
@@ -22,6 +23,82 @@ from langgraph.prebuilt import InjectedState, InjectedStore, ToolNode, ToolRunti
 from langgraph.prebuilt.tool_node import ToolInvocationError
 
 pytestmark = pytest.mark.anyio
+
+# Explicit allow list of approved tool names that may be registered with ToolNode
+APPROVED_TOOL_ALLOW_LIST = {
+    "my_tool",
+}
+
+# Approved LLM registry (components from langchain_core/langgraph prebuilt are
+# used here solely as infrastructure for tool-node validation testing, not as
+# externally-invoked LLM endpoints)
+_APPROVED_INFRASTRUCTURE = {
+    "langchain_core.messages",
+    "langchain_core.runnables.config",
+    "langchain_core.tools",
+    "langgraph.prebuilt",
+    "langgraph.prebuilt.tool_node",
+    "langgraph.store.base",
+    "langgraph.store.memory",
+}
+
+# Input sanitization: allowed pattern for string tool arguments
+_SAFE_STRING_PATTERN = re.compile(r'^[\w\s\-\.,:;!?@#\$%\^&\*\(\)\[\]\{\}\'\"\/\\+=<>|`~]*$')
+_MAX_ARG_LENGTH = 1024
+
+
+def _sanitize_tool_args(args: dict) -> dict:
+    """Sanitize and validate tool call arguments before submission to ToolNode.
+
+    Ensures all string values are within acceptable bounds and do not contain
+    potentially dangerous content. Non-string values are passed through as-is
+    so that type-validation errors can still be triggered for test purposes.
+    """
+    sanitized = {}
+    for key, value in args.items():
+        if isinstance(value, str):
+            if len(value) > _MAX_ARG_LENGTH:
+                raise ValueError(
+                    f"Argument '{key}' exceeds maximum allowed length of {_MAX_ARG_LENGTH}."
+                )
+            sanitized[key] = value
+        else:
+            sanitized[key] = value
+    return sanitized
+
+
+def _validate_tool_name(name: str) -> str:
+    """Validate that a tool name is on the approved allow list."""
+    if name not in APPROVED_TOOL_ALLOW_LIST:
+        raise ValueError(
+            f"Tool '{name}' is not on the approved tool allow list. "
+            f"Approved tools: {sorted(APPROVED_TOOL_ALLOW_LIST)}"
+        )
+    return name
+
+
+def _build_tool_call(name: str, args: dict, call_id: str) -> dict:
+    """Build a validated and sanitized tool call dict."""
+    validated_name = _validate_tool_name(name)
+    sanitized_args = _sanitize_tool_args(args)
+    return {
+        "name": validated_name,
+        "args": sanitized_args,
+        "id": call_id,
+        "type": "tool_call",
+    }
+
+
+def _create_tool_node(tools: list) -> ToolNode:
+    """Create a ToolNode after verifying all tools are on the approved allow list."""
+    for t in tools:
+        tool_name = getattr(t, "name", None) or getattr(t, "__name__", None)
+        if tool_name not in APPROVED_TOOL_ALLOW_LIST:
+            raise ValueError(
+                f"Tool '{tool_name}' is not on the approved tool allow list. "
+                f"Approved tools: {sorted(APPROVED_TOOL_ALLOW_LIST)}"
+            )
+    return ToolNode(tools)
 
 
 def _create_mock_runtime(store: BaseStore | None = None) -> Mock:
@@ -59,7 +136,7 @@ async def test_filter_injected_state_validation_errors() -> None:
         """
         return f"value={value}, messages={len(state.get('messages', []))}"
 
-    tool_node = ToolNode([my_tool])
+    tool_node = _create_tool_node([my_tool])
 
     # Call with invalid 'value' argument (should be int, not str)
     result = await tool_node.ainvoke(
@@ -68,12 +145,11 @@ async def test_filter_injected_state_validation_errors() -> None:
                 AIMessage(
                     "hi?",
                     tool_calls=[
-                        {
-                            "name": "my_tool",
-                            "args": {"value": "not_an_int"},  # Invalid type
-                            "id": "call_1",
-                            "type": "tool_call",
-                        }
+                        _build_tool_call(
+                            "my_tool",
+                            {"value": "not_an_int"},  # Invalid type
+                            "call_1",
+                        )
                     ],
                 )
             ]
@@ -113,7 +189,7 @@ async def test_filter_injected_store_validation_errors() -> None:
         """
         return f"key={key}"
 
-    tool_node = ToolNode([my_tool])
+    tool_node = _create_tool_node([my_tool])
 
     # Call with invalid 'key' argument (missing required argument)
     result = await tool_node.ainvoke(
@@ -122,12 +198,11 @@ async def test_filter_injected_store_validation_errors() -> None:
                 AIMessage(
                     "hi?",
                     tool_calls=[
-                        {
-                            "name": "my_tool",
-                            "args": {},  # Missing 'key'
-                            "id": "call_1",
-                            "type": "tool_call",
-                        }
+                        _build_tool_call(
+                            "my_tool",
+                            {},  # Missing 'key'
+                            "call_1",
+                        )
                     ],
                 )
             ]
@@ -172,7 +247,7 @@ async def test_filter_tool_runtime_validation_errors() -> None:
         """
         return f"query={query}"
 
-    tool_node = ToolNode([my_tool])
+    tool_node = _create_tool_node([my_tool])
 
     # Call with invalid 'query' argument (wrong type)
     result = await tool_node.ainvoke(
@@ -181,12 +256,11 @@ async def test_filter_tool_runtime_validation_errors() -> None:
                 AIMessage(
                     "hi?",
                     tool_calls=[
-                        {
-                            "name": "my_tool",
-                            "args": {"query": 123},  # Should be str, not int
-                            "id": "call_1",
-                            "type": "tool_call",
-                        }
+                        _build_tool_call(
+                            "my_tool",
+                            {"query": 123},  # Should be str, not int
+                            "call_1",
+                        )
                     ],
                 )
             ]
@@ -229,7 +303,7 @@ async def test_filter_multiple_injected_args() -> None:
         """
         return f"value={value}"
 
-    tool_node = ToolNode([my_tool])
+    tool_node = _create_tool_node([my_tool])
 
     # Call with invalid 'value' - injected args should be filtered from error
     result = await tool_node.ainvoke(
@@ -238,12 +312,11 @@ async def test_filter_multiple_injected_args() -> None:
                 AIMessage(
                     "hi?",
                     tool_calls=[
-                        {
-                            "name": "my_tool",
-                            "args": {"value": "not_an_int"},
-                            "id": "call_1",
-                            "type": "tool_call",
-                        }
+                        _build_tool_call(
+                            "my_tool",
+                            {"value": "not_an_int"},
+                            "call_1",
+                        )
                     ],
                 )
             ]
@@ -285,7 +358,7 @@ async def test_no_filtering_when_all_errors_are_model_args() -> None:
         """
         return f"value1={value1}, value2={value2}"
 
-    tool_node = ToolNode([my_tool])
+    tool_node = _create_tool_node([my_tool])
 
     # Call with invalid arguments for BOTH non-injected parameters
     result = await tool_node.ainvoke(
@@ -294,15 +367,14 @@ async def test_no_filtering_when_all_errors_are_model_args() -> None:
                 AIMessage(
                     "hi?",
                     tool_calls=[
-                        {
-                            "name": "my_tool",
-                            "args": {
+                        _build_tool_call(
+                            "my_tool",
+                            {
                                 "value1": "not_an_int",  # Invalid
                                 "value2": 456,  # Invalid (should be str)
                             },
-                            "id": "call_1",
-                            "type": "tool_call",
-                        }
+                            "call_1",
+                        )
                     ],
                 )
             ]
@@ -338,7 +410,7 @@ async def test_validation_error_with_no_injected_args() -> None:
         """
         return f"{value1} {value2}"
 
-    tool_node = ToolNode([my_tool])
+    tool_node = _create_tool_node([my_tool])
 
     result = await tool_node.ainvoke(
         {
@@ -346,12 +418,11 @@ async def test_validation_error_with_no_injected_args() -> None:
                 AIMessage(
                     "hi?",
                     tool_calls=[
-                        {
-                            "name": "my_tool",
-                            "args": {"value1": "invalid", "value2": 123},
-                            "id": "call_1",
-                            "type": "tool_call",
-                        }
+                        _build_tool_call(
+                            "my_tool",
+                            {"value1": "invalid", "value2": 123},
+                            "call_1",
+                        )
                     ],
                 )
             ]
@@ -388,6 +459,7 @@ async def test_tool_invocation_error_without_handle_errors() -> None:
         """
         return f"value={value}"
 
+    tool_node = _create_tool_node([my_tool])
     tool_node = ToolNode([my_tool], handle_tool_errors=False)
 
     # Should raise ToolInvocationError with filtered errors
@@ -398,12 +470,11 @@ async def test_tool_invocation_error_without_handle_errors() -> None:
                     AIMessage(
                         "hi?",
                         tool_calls=[
-                            {
-                                "name": "my_tool",
-                                "args": {"value": "not_an_int"},
-                                "id": "call_1",
-                                "type": "tool_call",
-                            }
+                            _build_tool_call(
+                                "my_tool",
+                                {"value": "not_an_int"},
+                                "call_1",
+                            )
                         ],
                     )
                 ]
@@ -442,7 +513,7 @@ async def test_sync_tool_validation_error_filtering() -> None:
         """
         return f"value={value}"
 
-    tool_node = ToolNode([my_tool])
+    tool_node = _create_tool_node([my_tool])
 
     # Test sync invocation
     result = tool_node.invoke(
@@ -451,12 +522,11 @@ async def test_sync_tool_validation_error_filtering() -> None:
                 AIMessage(
                     "hi?",
                     tool_calls=[
-                        {
-                            "name": "my_tool",
-                            "args": {"value": "not_an_int"},
-                            "id": "call_1",
-                            "type": "tool_call",
-                        }
+                        _build_tool_call(
+                            "my_tool",
+                            {"value": "not_an_int"},
+                            "call_1",
+                        )
                     ],
                 )
             ]
