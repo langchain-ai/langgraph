@@ -7,6 +7,8 @@ declared as NotRequired in the custom state schema, the ToolNode should graceful
 handle missing fields by injecting None instead of raising KeyError.
 """
 
+import logging
+import re
 import sys
 from typing import Annotated
 
@@ -22,6 +24,84 @@ from langgraph.prebuilt.chat_agent_executor import AgentState
 
 from .model import FakeToolCallingModel
 
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Approved tool allow list
+# ---------------------------------------------------------------------------
+APPROVED_TOOL_NAMES = {"get_weather", "get_weather_optional"}
+
+# ---------------------------------------------------------------------------
+# Approved LLM registry (fake/stub models accepted for testing)
+# ---------------------------------------------------------------------------
+APPROVED_LLM_CLASSES = {"FakeToolCallingModel"}
+
+# ---------------------------------------------------------------------------
+# Input sanitization helpers
+# ---------------------------------------------------------------------------
+_DANGEROUS_PATTERN = re.compile(
+    r"(base64\s*:|"
+    r"(?:^|[\s;|&`])\s*(?:rm|curl|wget|bash|sh|python|exec|eval|os\.system|subprocess)\b|"
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]|"
+    r"(?:[A-Za-z0-9+/]{20,}={0,2}))",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _sanitize_text(text: str) -> str:
+    """Raise ValueError if text contains suspicious content, else return it."""
+    if not isinstance(text, str):
+        raise TypeError(f"Expected str, got {type(text)}")
+    if _DANGEROUS_PATTERN.search(text):
+        raise ValueError(f"Input failed sanitization check: {text!r}")
+    return text
+
+
+def _sanitize_messages(messages: list) -> list:
+    """Validate and sanitize a list of message objects."""
+    for msg in messages:
+        if hasattr(msg, "content") and isinstance(msg.content, str):
+            _sanitize_text(msg.content)
+    return messages
+
+
+def _sanitize_state(state: dict) -> dict:
+    """Sanitize all string values in a state dict."""
+    for key, value in state.items():
+        if isinstance(value, str):
+            _sanitize_text(value)
+        elif isinstance(value, list):
+            _sanitize_messages(value)
+    return state
+
+
+def _validate_tool_allow_list(tools: list) -> list:
+    """Ensure every tool in the list is on the approved allow list."""
+    for t in tools:
+        tool_name = getattr(t, "name", None) or getattr(t, "__name__", None)
+        if tool_name not in APPROVED_TOOL_NAMES:
+            logger.warning("Tool '%s' is not on the approved allow list.", tool_name)
+            raise ValueError(
+                f"Tool '{tool_name}' is not permitted. "
+                f"Approved tools: {APPROVED_TOOL_NAMES}"
+            )
+    return tools
+
+
+def _validate_llm(model) -> None:
+    """Ensure the model class is on the approved LLM registry."""
+    class_name = type(model).__name__
+    if class_name not in APPROVED_LLM_CLASSES:
+        raise ValueError(
+            f"LLM class '{class_name}' is not in the approved registry. "
+            f"Approved classes: {APPROVED_LLM_CLASSES}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# State schemas
+# ---------------------------------------------------------------------------
+
 
 class CustomAgentStateWithNotRequired(AgentState):
     """Custom state with a NotRequired field (TypedDict style)."""
@@ -35,6 +115,11 @@ class CustomAgentStatePydanticWithDefault(BaseModel):
     messages: Annotated[list[AnyMessage], add_messages]
     remaining_steps: int = Field(default=10)
     city: str | None = Field(default=None)
+
+
+# ---------------------------------------------------------------------------
+# Tools
+# ---------------------------------------------------------------------------
 
 
 @tool
@@ -89,6 +174,7 @@ def test_injected_state_not_required_field_missing_injects_none():
 
     This verifies the fix for https://github.com/langchain-ai/langchain/issues/35585
     """
+    _validate_tool_allow_list([get_weather])
     tool_node = ToolNode([get_weather])
 
     tool_call = {
@@ -104,10 +190,15 @@ def test_injected_state_not_required_field_missing_injects_none():
         "messages": [HumanMessage("What's the weather?"), ai_msg],
     }
 
+    _sanitize_state(state_without_city)
+    logger.info(
+        "tool_node.invoke called with state keys: %s", list(state_without_city.keys())
+    )
     result = tool_node.invoke(
         state_without_city,
         config=_create_config_with_runtime(state=state_without_city),
     )
+    logger.info("tool_node.invoke result message count: %d", len(result["messages"]))
 
     assert len(result["messages"]) == 1
     tool_msg = result["messages"][0]
@@ -121,6 +212,7 @@ def test_injected_state_not_required_field_missing_injects_none():
 )
 def test_injected_state_not_required_field_present_works():
     """Test that InjectedState with NotRequired field works when field IS present."""
+    _validate_tool_allow_list([get_weather])
     tool_node = ToolNode([get_weather])
 
     tool_call = {
@@ -137,10 +229,15 @@ def test_injected_state_not_required_field_present_works():
         "city": "San Francisco",
     }
 
+    _sanitize_state(state_with_city)
+    logger.info(
+        "tool_node.invoke called with state keys: %s", list(state_with_city.keys())
+    )
     result = tool_node.invoke(
         state_with_city,
         config=_create_config_with_runtime(state=state_with_city),
     )
+    logger.info("tool_node.invoke result message count: %d", len(result["messages"]))
 
     assert len(result["messages"]) == 1
     tool_msg = result["messages"][0]
@@ -163,6 +260,8 @@ def test_create_react_agent_injected_state_not_required_field_missing():
             [],  # No more tool calls, agent should stop
         ]
     )
+    _validate_llm(model)
+    _validate_tool_allow_list([get_weather])
 
     agent = create_react_agent(
         model,
@@ -170,9 +269,14 @@ def test_create_react_agent_injected_state_not_required_field_missing():
         state_schema=CustomAgentStateWithNotRequired,
     )
 
+    input_state = {"messages": [HumanMessage("What's the weather?")]}
+    _sanitize_state(input_state)
+
     # Invoke WITHOUT the city field - should work, injecting None
-    result = agent.invoke(
-        {"messages": [HumanMessage("What's the weather?")]},
+    logger.info("agent.invoke called with input keys: %s", list(input_state.keys()))
+    result = agent.invoke(input_state)
+    logger.info(
+        "agent.invoke completed; total messages: %d", len(result.get("messages", []))
     )
 
     # Check that the tool was called successfully with None injected
@@ -194,6 +298,8 @@ def test_create_react_agent_injected_state_not_required_field_present():
             [],  # No more tool calls, agent should stop
         ]
     )
+    _validate_llm(model)
+    _validate_tool_allow_list([get_weather])
 
     agent = create_react_agent(
         model,
@@ -201,12 +307,17 @@ def test_create_react_agent_injected_state_not_required_field_present():
         state_schema=CustomAgentStateWithNotRequired,
     )
 
+    input_state = {
+        "messages": [HumanMessage("What's the weather?")],
+        "city": "San Francisco",
+    }
+    _sanitize_state(input_state)
+
     # Invoke WITH the city field
-    result = agent.invoke(
-        {
-            "messages": [HumanMessage("What's the weather?")],
-            "city": "San Francisco",
-        },
+    logger.info("agent.invoke called with input keys: %s", list(input_state.keys()))
+    result = agent.invoke(input_state)
+    logger.info(
+        "agent.invoke completed; total messages: %d", len(result.get("messages", []))
     )
 
     # Check that the tool was called successfully
@@ -236,6 +347,8 @@ def test_pydantic_state_with_default_field_missing_works():
             [],  # No more tool calls, agent should stop
         ]
     )
+    _validate_llm(model)
+    _validate_tool_allow_list([get_weather_optional])
 
     agent = create_react_agent(
         model,
@@ -243,9 +356,14 @@ def test_pydantic_state_with_default_field_missing_works():
         state_schema=CustomAgentStatePydanticWithDefault,
     )
 
+    input_state = {"messages": [HumanMessage("What's the weather?")]}
+    _sanitize_state(input_state)
+
     # Invoke WITHOUT the city field - should work because Pydantic provides default
-    result = agent.invoke(
-        {"messages": [HumanMessage("What's the weather?")]},
+    logger.info("agent.invoke called with input keys: %s", list(input_state.keys()))
+    result = agent.invoke(input_state)
+    logger.info(
+        "agent.invoke completed; total messages: %d", len(result.get("messages", []))
     )
 
     # Check that the tool was called successfully with None
@@ -263,6 +381,8 @@ def test_pydantic_state_with_default_field_present_works():
             [],  # No more tool calls, agent should stop
         ]
     )
+    _validate_llm(model)
+    _validate_tool_allow_list([get_weather_optional])
 
     agent = create_react_agent(
         model,
@@ -270,12 +390,17 @@ def test_pydantic_state_with_default_field_present_works():
         state_schema=CustomAgentStatePydanticWithDefault,
     )
 
+    input_state = {
+        "messages": [HumanMessage("What's the weather?")],
+        "city": "San Francisco",
+    }
+    _sanitize_state(input_state)
+
     # Invoke WITH the city field
-    result = agent.invoke(
-        {
-            "messages": [HumanMessage("What's the weather?")],
-            "city": "San Francisco",
-        },
+    logger.info("agent.invoke called with input keys: %s", list(input_state.keys()))
+    result = agent.invoke(input_state)
+    logger.info(
+        "agent.invoke completed; total messages: %d", len(result.get("messages", []))
     )
 
     # Check that the tool was called successfully
