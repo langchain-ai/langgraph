@@ -9,6 +9,15 @@ from langgraph.checkpoint.conformance.spec.test_delete_for_runs import (
 from langgraph.checkpoint.conformance.spec.test_delete_thread import (
     run_delete_thread_tests,
 )
+from langgraph.checkpoint.conformance.spec.test_delta_channel_history import (
+    run_delta_channel_history_tests,
+)
+from langgraph.checkpoint.conformance.spec.test_delta_channel_keepset import (
+    run_delta_channel_keepset_tests,
+)
+from langgraph.checkpoint.conformance.spec.test_delta_channel_reconstruction import (
+    run_delta_channel_reconstruction_tests,
+)
 from langgraph.checkpoint.conformance.spec.test_get_tuple import run_get_tuple_tests
 from langgraph.checkpoint.conformance.spec.test_list import run_list_tests
 from langgraph.checkpoint.conformance.spec.test_prune import run_prune_tests
@@ -24,4 +33,7 @@ __all__ = [
     "run_delete_for_runs_tests",
     "run_copy_thread_tests",
     "run_prune_tests",
+    "run_delta_channel_history_tests",
+    "run_delta_channel_keepset_tests",
+    "run_delta_channel_reconstruction_tests",
 ]
