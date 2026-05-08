@@ -1,11 +1,57 @@
 from contextlib import asynccontextmanager, contextmanager
+import os
+import sys
 from uuid import uuid4
+
+from psycopg import AsyncConnection, Connection
+from psycopg.sql import SQL, Identifier
 
 from langgraph.store.memory import InMemoryStore
 from langgraph.store.postgres import AsyncPostgresStore, PostgresStore
-from psycopg import AsyncConnection, Connection
 
-DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
+DEFAULT_POSTGRES_URI = os.environ.get(
+    "POSTGRES_URI", "postgres://postgres:postgres@localhost:5442/"
+)
+
+HITL_ENABLED = os.environ.get("HITL_DROP_DATABASE", "false").lower() == "true"
+
+
+def _hitl_approve_drop(database: str) -> bool:
+    """Human-in-the-Loop approval for DROP DATABASE operations."""
+    if not sys.stdin.isatty():
+        # In non-interactive environments, require explicit env var approval
+        return HITL_ENABLED
+    response = input(
+        f"[HITL APPROVAL REQUIRED] About to DROP DATABASE '{database}'. "
+        f"Type 'yes' to confirm: "
+    )
+    return response.strip().lower() == "yes"
+
+
+def _safe_create_database(conn: Connection, database: str) -> None:
+    conn.execute(SQL("CREATE DATABASE {}").format(Identifier(database)))
+
+
+def _safe_drop_database(conn: Connection, database: str) -> None:
+    if not _hitl_approve_drop(database):
+        raise RuntimeError(
+            f"HITL approval denied or not granted for DROP DATABASE '{database}'. "
+            "Set HITL_DROP_DATABASE=true to allow automated drops in CI."
+        )
+    conn.execute(SQL("DROP DATABASE {}").format(Identifier(database)))
+
+
+async def _async_safe_create_database(conn: AsyncConnection, database: str) -> None:
+    await conn.execute(SQL("CREATE DATABASE {}").format(Identifier(database)))
+
+
+async def _async_safe_drop_database(conn: AsyncConnection, database: str) -> None:
+    if not _hitl_approve_drop(database):
+        raise RuntimeError(
+            f"HITL approval denied or not granted for DROP DATABASE '{database}'. "
+            "Set HITL_DROP_DATABASE=true to allow automated drops in CI."
+        )
+    await conn.execute(SQL("DROP DATABASE {}").format(Identifier(database)))
 
 
 @contextmanager
@@ -19,7 +65,7 @@ def _store_postgres():
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
+        _safe_create_database(conn, database)
     try:
         # yield store
         with PostgresStore.from_conn_string(DEFAULT_POSTGRES_URI + database) as store:
@@ -28,7 +74,7 @@ def _store_postgres():
     finally:
         # drop unique db
         with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+            _safe_drop_database(conn, database)
 
 
 @contextmanager
@@ -36,7 +82,7 @@ def _store_postgres_pipe():
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
+        _safe_create_database(conn, database)
     try:
         # yield store
         with PostgresStore.from_conn_string(DEFAULT_POSTGRES_URI + database) as store:
@@ -48,7 +94,7 @@ def _store_postgres_pipe():
     finally:
         # drop unique db
         with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+            _safe_drop_database(conn, database)
 
 
 @contextmanager
@@ -56,7 +102,7 @@ def _store_postgres_pool():
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
+        _safe_create_database(conn, database)
     try:
         # yield store
         with PostgresStore.from_conn_string(
@@ -67,7 +113,7 @@ def _store_postgres_pool():
     finally:
         # drop unique db
         with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+            _safe_drop_database(conn, database)
 
 
 @asynccontextmanager
@@ -76,7 +122,7 @@ async def _store_postgres_aio():
     async with await AsyncConnection.connect(
         DEFAULT_POSTGRES_URI, autocommit=True
     ) as conn:
-        await conn.execute(f"CREATE DATABASE {database}")
+        await _async_safe_create_database(conn, database)
     try:
         async with AsyncPostgresStore.from_conn_string(
             DEFAULT_POSTGRES_URI + database
@@ -87,7 +133,7 @@ async def _store_postgres_aio():
         async with await AsyncConnection.connect(
             DEFAULT_POSTGRES_URI, autocommit=True
         ) as conn:
-            await conn.execute(f"DROP DATABASE {database}")
+            await _async_safe_drop_database(conn, database)
 
 
 @asynccontextmanager
@@ -96,7 +142,7 @@ async def _store_postgres_aio_pipe():
     async with await AsyncConnection.connect(
         DEFAULT_POSTGRES_URI, autocommit=True
     ) as conn:
-        await conn.execute(f"CREATE DATABASE {database}")
+        await _async_safe_create_database(conn, database)
     try:
         async with AsyncPostgresStore.from_conn_string(
             DEFAULT_POSTGRES_URI + database
@@ -110,7 +156,7 @@ async def _store_postgres_aio_pipe():
         async with await AsyncConnection.connect(
             DEFAULT_POSTGRES_URI, autocommit=True
         ) as conn:
-            await conn.execute(f"DROP DATABASE {database}")
+            await _async_safe_drop_database(conn, database)
 
 
 @asynccontextmanager
@@ -119,7 +165,7 @@ async def _store_postgres_aio_pool():
     async with await AsyncConnection.connect(
         DEFAULT_POSTGRES_URI, autocommit=True
     ) as conn:
-        await conn.execute(f"CREATE DATABASE {database}")
+        await _async_safe_create_database(conn, database)
     try:
         async with AsyncPostgresStore.from_conn_string(
             DEFAULT_POSTGRES_URI + database,
@@ -131,7 +177,7 @@ async def _store_postgres_aio_pool():
         async with await AsyncConnection.connect(
             DEFAULT_POSTGRES_URI, autocommit=True
         ) as conn:
-            await conn.execute(f"DROP DATABASE {database}")
+            await _async_safe_drop_database(conn, database)
 
 
 __all__ = [
