@@ -327,7 +327,27 @@ class MessagesTransformer(StreamTransformer):
         self._by_run.clear()
 
 
-SubgraphStatus = Literal["started", "completed", "failed", "interrupted", "drained"]
+LifecycleEvent = Literal["started", "completed", "failed", "interrupted", "drained"]
+"""State transition surfaced on the `lifecycle` channel for a tracked subgraph.
+
+Each value:
+
+- `started` — first `tasks` event observed at the tracked namespace. Carries
+  `graph_name` / `trigger_call_id` / optional `cause` describing what spawned
+  the subgraph.
+- `completed` — the dispatching task's `TaskResultPayload` arrived with neither
+  error nor interrupts. Also emitted by `finalize` for any tracked namespace
+  still open at run end.
+- `failed` — the dispatching task's result carried an `error`, OR the run
+  failed at top level with a non-interrupt / non-drain exception. Carries
+  `error` (string).
+- `interrupted` — the dispatching task's result carried `interrupts` (takes
+  precedence over `error` if both present), OR the run failed with
+  `GraphInterrupt`.
+- `drained` — the run was cooperatively stopped at a superstep boundary via
+  `RunControl.request_drain()` (e.g. SIGTERM). The checkpoint is saved and
+  the run is resumable.
+"""
 
 
 def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
@@ -385,13 +405,36 @@ class LifecyclePayload(TypedDict, total=False):
     `run.lifecycle`.
     """
 
-    event: SubgraphStatus
+    event: LifecycleEvent
+    """State transition. See `LifecycleEvent` for per-value semantics."""
     namespace: list[str]
+    """Checkpoint namespace of the subgraph the event is about. Always present.
+
+    A list of `node_name:task_id` segments, one per nesting level (root has
+    `[]`, a direct child of root has `["agent:abc123"]`, a grandchild has
+    `["agent:abc123", "tool:def456"]`, etc.). Stable identity across the
+    `started → terminal` pair for the same subgraph instance.
+    """
     graph_name: NotRequired[str]
+    """Compiled name of the subgraph (e.g. the `add_node` name in the parent).
+
+    Set on `started` when the namespace tail segment carries a `name:id`
+    split (it does for normally-dispatched subgraphs). Absent if the segment
+    has no `:` separator.
+    """
     trigger_call_id: NotRequired[str]
+    """Pregel task id of the dispatching task — the task whose execution
+    spawned this subgraph.
+
+    Set on `started` when the namespace tail segment carries one. This is
+    the join key for correlating multiple lifecycle events about the same
+    subgraph and for matching a `started` back to its `tasks` parent. Each
+    Send produces its own pregel task with its own id, so the join is 1:1
+    even when a model dispatches multiple parallel tool calls in one turn.
+    """
     cause: NotRequired[dict[str, Any]]
-    """Optional generic descriptor of what triggered this subgraph. Forwarded
-    by protocol layers as the wire `lifecycle.started.cause` field.
+    """Optional generic descriptor of *what triggered* this subgraph.
+    Forwarded by protocol layers as the wire `lifecycle.started.cause` field.
 
     Shape:
 
@@ -412,8 +455,10 @@ class LifecyclePayload(TypedDict, total=False):
     a `cause` if at least one field was extractable.
 
     Absent for structurally-triggered subgraphs (parallel branches via
-    `Send` with non-tool-call payloads, nested `graph.invoke()`, etc.)."""
+    `Send` with non-tool-call payloads, nested `graph.invoke()`, etc.).
+    """
     error: NotRequired[str]
+    """Error string. Set on `failed` events; absent otherwise."""
 
 
 class _TasksLifecycleBase(StreamTransformer):
@@ -487,7 +532,7 @@ class _TasksLifecycleBase(StreamTransformer):
     def _on_terminal(
         self,
         ns: tuple[str, ...],
-        status: SubgraphStatus,
+        status: LifecycleEvent,
         error: str | None,
     ) -> None:
         """Fired once per tracked namespace when its parent's result arrives,
@@ -569,12 +614,12 @@ class _TasksLifecycleBase(StreamTransformer):
 
     def _pop_terminal_transitions(
         self, ns: tuple[str, ...], data: dict[str, Any]
-    ) -> list[tuple[tuple[str, ...], SubgraphStatus, str | None]]:
+    ) -> list[tuple[tuple[str, ...], LifecycleEvent, str | None]]:
         """Return and remove tracked children closed by this task result."""
         result_id = data.get("id")
         if not result_id:
             return []
-        transitions: list[tuple[tuple[str, ...], SubgraphStatus, str | None]] = []
+        transitions: list[tuple[tuple[str, ...], LifecycleEvent, str | None]] = []
         for child_ns, parent_task_id in list(self._open.items()):
             if child_ns[:-1] != ns or parent_task_id != result_id:
                 continue
@@ -601,7 +646,7 @@ class _TasksLifecycleBase(StreamTransformer):
         self._open.clear()
 
 
-def _status_from_exception(err: BaseException) -> tuple[SubgraphStatus, str | None]:
+def _status_from_exception(err: BaseException) -> tuple[LifecycleEvent, str | None]:
     """Map a run exception to a subgraph terminal status and error string."""
     if isinstance(err, GraphDrained):
         return "drained", None
@@ -612,7 +657,7 @@ def _status_from_exception(err: BaseException) -> tuple[SubgraphStatus, str | No
 
 def _terminal_from_result(
     payload: dict[str, Any],
-) -> tuple[SubgraphStatus, str | None]:
+) -> tuple[LifecycleEvent, str | None]:
     """Map a `TaskResultPayload` to a `(status, error)` pair.
 
     Order matters: a result with both `error` and `interrupts` prefers
@@ -682,7 +727,7 @@ class LifecycleTransformer(_TasksLifecycleBase):
     def _on_terminal(
         self,
         ns: tuple[str, ...],
-        status: SubgraphStatus,
+        status: LifecycleEvent,
         error: str | None,
     ) -> None:
         payload: LifecyclePayload = {"event": status, "namespace": list(ns)}
@@ -760,7 +805,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
     def _on_terminal(
         self,
         ns: tuple[str, ...],
-        status: SubgraphStatus,
+        status: LifecycleEvent,
         error: str | None,
     ) -> None:
         handle = self._handles.get(ns)
@@ -771,7 +816,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
     async def _aon_terminal(
         self,
         ns: tuple[str, ...],
-        status: SubgraphStatus,
+        status: LifecycleEvent,
         error: str | None,
     ) -> None:
         handle = self._handles.get(ns)
@@ -782,7 +827,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
     def _mark_terminal(
         self,
         handle: SubgraphRunStream | AsyncSubgraphRunStream,
-        status: SubgraphStatus,
+        status: LifecycleEvent,
         error: str | None,
     ) -> bool:
         """Mark a handle terminal once. Returns True on first transition."""
@@ -797,7 +842,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
     def _close_or_fail_handle(
         self,
         handle: SubgraphRunStream | AsyncSubgraphRunStream,
-        status: SubgraphStatus,
+        status: LifecycleEvent,
         error: str | None,
     ) -> None:
         if handle._mux is None or handle._mux._events._closed:
@@ -810,7 +855,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
     async def _aclose_or_fail_handle(
         self,
         handle: SubgraphRunStream | AsyncSubgraphRunStream,
-        status: SubgraphStatus,
+        status: LifecycleEvent,
         error: str | None,
     ) -> None:
         if handle._mux is None or handle._mux._events._closed:

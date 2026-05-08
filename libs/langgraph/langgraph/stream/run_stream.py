@@ -12,7 +12,7 @@ from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
 
 if TYPE_CHECKING:
-    from langgraph.stream.transformers import SubgraphStatus
+    from langgraph.stream.transformers import LifecycleEvent
 
 
 def _drive_until_done(pump: Callable[[], bool]) -> None:
@@ -524,7 +524,7 @@ class _SubgraphRunStreamMixin:
     path: tuple[str, ...]
     graph_name: str | None
     trigger_call_id: str | None
-    status: SubgraphStatus
+    status: LifecycleEvent
     error: str | None
     _seen_terminal: bool
 
