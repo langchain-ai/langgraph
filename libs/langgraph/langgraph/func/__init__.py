@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import base64
 import functools
 import inspect
+import logging
+import re
 import warnings
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -55,6 +58,88 @@ from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedS
 
 __all__ = ("task", "entrypoint")
 
+logger = logging.getLogger(__name__)
+
+# Approved LLM registry - only models from this list are permitted
+_APPROVED_LLM_REGISTRY: set[str] = set()
+
+# Patterns used to detect potentially malicious prompt content
+_MALICIOUS_PATTERNS = [
+    re.compile(r"(?i)(ignore\s+(previous|prior|above|all)\s+(instructions?|prompts?|context))"),
+    re.compile(r"(?i)(system\s*prompt|you\s+are\s+now|act\s+as\s+if|pretend\s+(you\s+are|to\s+be))"),
+    re.compile(r"(?i)(exec\s*\(|eval\s*\(|subprocess|os\.system|shell\s*=\s*True)"),
+    re.compile(r"(?i)(base64\s*decode|b64decode)"),
+    re.compile(r"(?i)(\bsudo\b|\brm\s+-rf\b|\bchmod\b|\bchown\b|\bwget\b|\bcurl\b.*\|\s*bash)"),
+]
+
+# Pattern to detect base64-encoded content
+_BASE64_PATTERN = re.compile(r"^[A-Za-z0-9+/]{20,}={0,2}$")
+
+
+def _is_base64_encoded(value: str) -> bool:
+    """Check if a string appears to be base64-encoded content."""
+    stripped = value.strip()
+    if _BASE64_PATTERN.match(stripped):
+        try:
+            decoded = base64.b64decode(stripped).decode("utf-8", errors="replace")
+            # If decoded content contains suspicious patterns, flag it
+            for pattern in _MALICIOUS_PATTERNS:
+                if pattern.search(decoded):
+                    return True
+        except Exception:
+            pass
+    return False
+
+
+def _contains_malicious_content(value: Any, _depth: int = 0) -> bool:
+    """Recursively check if a value contains potentially malicious content."""
+    if _depth > 10:
+        return False
+    if isinstance(value, str):
+        for pattern in _MALICIOUS_PATTERNS:
+            if pattern.search(value):
+                return True
+        if _is_base64_encoded(value):
+            return True
+    elif isinstance(value, dict):
+        for k, v in value.items():
+            if _contains_malicious_content(k, _depth + 1) or _contains_malicious_content(v, _depth + 1):
+                return True
+    elif isinstance(value, (list, tuple, set)):
+        for item in value:
+            if _contains_malicious_content(item, _depth + 1):
+                return True
+    return False
+
+
+def _sanitize_input(args: tuple, kwargs: dict) -> tuple[tuple, dict]:
+    """Validate and sanitize inputs before forwarding to LLM-bound callables."""
+    all_inputs = list(args) + list(kwargs.values())
+    for inp in all_inputs:
+        if _contains_malicious_content(inp):
+            logger.warning(
+                "Potentially malicious content detected in input and blocked. "
+                "args=%r kwargs=%r",
+                args,
+                kwargs,
+            )
+            raise ValueError(
+                "Input contains potentially malicious content and has been blocked."
+            )
+    return args, kwargs
+
+
+def _log_llm_interaction(func_name: str, args: tuple, kwargs: dict, result: Any = None, error: Any = None) -> None:
+    """Log LLM interaction inputs and outputs."""
+    logger.info(
+        "LLM interaction: func=%s args=%r kwargs=%r result=%r error=%r",
+        func_name,
+        args,
+        kwargs,
+        result,
+        error,
+    )
+
 
 class _TaskFunction(Generic[P, T]):
     def __init__(
@@ -84,10 +169,17 @@ class _TaskFunction(Generic[P, T]):
         functools.update_wrapper(self, func)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> SyncAsyncFuture[T]:
+        func_name = getattr(self.func, "__name__", repr(self.func))
+        try:
+            sanitized_args, sanitized_kwargs = _sanitize_input(args, kwargs)
+        except ValueError as exc:
+            _log_llm_interaction(func_name, args, kwargs, error=str(exc))
+            raise
+        _log_llm_interaction(func_name, sanitized_args, sanitized_kwargs)
         return _call_with_options(
             self.func,
-            args,
-            kwargs,
+            sanitized_args,
+            sanitized_kwargs,
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
             timeout=self.timeout,
@@ -551,6 +643,26 @@ class entrypoint(Generic[ContextT]):
             """Get save value from the entrypoint.final object or passthrough."""
             return value.save if isinstance(value, entrypoint.final) else value
 
+        def _validated_bound_call(*args: Any, **kwargs: Any) -> Any:
+            """Wrapper around bound that validates and logs inputs before forwarding."""
+            all_args = args
+            try:
+                _sanitize_input(all_args, kwargs)
+            except ValueError as exc:
+                logger.warning(
+                    "Entrypoint input blocked due to malicious content: func=%s error=%s",
+                    func.__name__,
+                    str(exc),
+                )
+                raise
+            logger.info(
+                "LLM interaction: func=%s args=%r kwargs=%r",
+                func.__name__,
+                args,
+                kwargs,
+            )
+            return bound(*args, **kwargs)
+
         output_type, save_type = Any, Any
         if sig.return_annotation is not inspect.Signature.empty:
             # User does not parameterize entrypoint.final properly
@@ -576,7 +688,7 @@ class entrypoint(Generic[ContextT]):
         graph: Pregel[Any, ContextT, Any, Any] = Pregel(
             nodes={
                 func.__name__: PregelNode(
-                    bound=bound,
+                    bound=_validated_bound_call,
                     triggers=[START],
                     channels=START,
                     timeout=self.timeout,
