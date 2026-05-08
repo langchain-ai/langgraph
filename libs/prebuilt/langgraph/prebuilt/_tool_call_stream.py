@@ -8,10 +8,36 @@ by `ToolCallTransformer` as `tool-started` / `tool-output-delta` /
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from langgraph.stream.stream_channel import StreamChannel
+
+logger = logging.getLogger(__name__)
+
+
+def _sanitize_value(value: Any) -> Any:
+    """Validate and sanitize output from an MCP server.
+
+    Performs basic validation to ensure the value is a safe, serializable
+    type. Returns the value unchanged if it passes validation, or raises
+    ValueError if it fails.
+    """
+    if value is None:
+        return value
+    allowed_types = (str, int, float, bool, list, dict, tuple)
+    if not isinstance(value, allowed_types):
+        raise ValueError(
+            f"MCP server output contains unsupported type {type(value)!r}; "
+            "expected a JSON-serializable value."
+        )
+    if isinstance(value, dict):
+        return {_sanitize_value(k): _sanitize_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        sanitized = [_sanitize_value(item) for item in value]
+        return type(value)(sanitized)
+    return value
 
 
 class ToolCallStream:
@@ -55,6 +81,12 @@ class ToolCallStream:
         self.output: Any = None
         self.error: str | None = None
         self.completed = False
+        logger.debug(
+            "tool-started: tool_call_id=%r tool_name=%r input=%r",
+            self.tool_call_id,
+            self.tool_name,
+            self.input,
+        )
 
     @property
     def output_deltas(self) -> StreamChannel[Any]:
@@ -75,14 +107,34 @@ class ToolCallStream:
         self._output_deltas._bind(is_async=is_async)
 
     def _push_delta(self, delta: Any) -> None:
-        self._output_deltas.push(delta)
+        logger.debug(
+            "tool-output-delta: tool_call_id=%r tool_name=%r delta=%r",
+            self.tool_call_id,
+            self.tool_name,
+            delta,
+        )
+        sanitized_delta = _sanitize_value(delta)
+        self._output_deltas.push(sanitized_delta)
 
     def _finish(self, output: Any) -> None:
-        self.output = output
+        logger.debug(
+            "tool-finished: tool_call_id=%r tool_name=%r output=%r",
+            self.tool_call_id,
+            self.tool_name,
+            output,
+        )
+        sanitized_output = _sanitize_value(output)
+        self.output = sanitized_output
         self.completed = True
         self._output_deltas.close()
 
     def _fail(self, message: str) -> None:
+        logger.debug(
+            "tool-error: tool_call_id=%r tool_name=%r error=%r",
+            self.tool_call_id,
+            self.tool_name,
+            message,
+        )
         self.error = message
         self.completed = True
         self._output_deltas.close()
