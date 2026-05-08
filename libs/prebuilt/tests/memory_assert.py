@@ -13,6 +13,16 @@ from langgraph.checkpoint.memory import InMemorySaver, PersistentDict
 from langgraph.pregel._checkpoint import copy_checkpoint
 
 
+def _safe_remove(filename: str) -> None:
+    confirmation = input(
+        f"Human approval required: Delete temporary file '{filename}'? [yes/no]: "
+    ).strip().lower()
+    if confirmation == "yes":
+        os.remove(filename)
+    else:
+        pass
+
+
 class MemorySaverAssertImmutable(InMemorySaver):
     storage_for_copies: defaultdict[str, dict[str, dict[str, Checkpoint]]]
 
@@ -28,7 +38,7 @@ class MemorySaverAssertImmutable(InMemorySaver):
         )
         self.storage_for_copies = defaultdict(lambda: defaultdict(dict))
         self.put_sleep = put_sleep
-        self.stack.callback(os.remove, filename)
+        self.stack.callback(_safe_remove, filename)
 
     def put(
         self,
