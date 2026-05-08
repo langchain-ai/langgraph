@@ -6,6 +6,7 @@ from typing import (
     Any,
     Literal,
     TypeVar,
+    Union,
     cast,
     get_type_hints,
 )
@@ -125,6 +126,9 @@ Prompt = (
     | Runnable[StateSchema, LanguageModelInput]
 )
 
+# A single hook or a list of hooks to be composed in order.
+HookLike = Union[RunnableLike, Sequence[RunnableLike]]
+
 
 def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
     return (
@@ -132,6 +136,131 @@ def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
         if isinstance(state, dict)
         else getattr(state, key, default)
     )
+
+
+def _set_state_value(state: StateSchema, key: str, value: Any) -> None:
+    """Set a value in the state, supporting both dict and Pydantic model states."""
+    if isinstance(state, dict):
+        state[key] = value
+    else:
+        setattr(state, key, value)
+
+
+def _merge_state_update(state: StateSchema, update: dict) -> StateSchema:
+    """Return a shallow copy of *state* with *update* applied.
+
+    This is used when chaining multiple hooks: each hook receives the state
+    as it would look after all previous hooks have run, so that hooks later
+    in the chain can observe updates made by earlier ones.
+
+    Note: only simple key-level merging is performed here (no reducer logic).
+    The full reducer logic is applied by the graph engine when the final
+    combined update dict is written back to the state.
+    """
+    if isinstance(state, dict):
+        return {**state, **update}  # type: ignore[return-value]
+    else:
+        # Pydantic / dataclass – make a shallow copy and patch fields
+        try:
+            merged = state.model_copy()  # pydantic v2
+        except AttributeError:
+            merged = state.copy()  # pydantic v1 / dataclass fallback
+        for k, v in update.items():
+            setattr(merged, k, v)
+        return merged  # type: ignore[return-value]
+
+
+def _coerce_to_runnable(hook: RunnableLike) -> RunnableCallable:
+    """Wrap a plain callable into a RunnableCallable if necessary."""
+    if isinstance(hook, RunnableCallable):
+        return hook
+    if isinstance(hook, Runnable):
+        # Already a Runnable – wrap so we get a uniform interface
+        sync_fn = hook.invoke
+        async_fn = hook.ainvoke
+        return RunnableCallable(sync_fn, async_fn)
+    if inspect.iscoroutinefunction(hook):
+        return RunnableCallable(None, hook)
+    if callable(hook):
+        return RunnableCallable(hook)
+    raise TypeError(f"Expected a callable or Runnable, got {type(hook)!r}")
+
+
+def _chain_hooks(hooks: Sequence[RunnableLike]) -> RunnableCallable:
+    """Compose multiple hook callables into a single hook.
+
+    Each hook is called in order.  After each hook the returned update dict is
+    merged into a running copy of the graph state so that subsequent hooks can
+    observe the changes made by earlier ones.  The accumulated update dict
+    (union of all individual update dicts, with later hooks winning on key
+    conflicts) is returned as the final state update.
+
+    Args:
+        hooks: A sequence of :data:`RunnableLike` objects.  Each must accept
+            the graph state as its first positional argument and return a
+            ``dict`` of state updates.
+
+    Returns:
+        A :class:`~langgraph._internal._runnable.RunnableCallable` that behaves
+        like a single hook but applies all of *hooks* in sequence.
+    """
+    if not hooks:
+        raise ValueError("_chain_hooks requires at least one hook")
+    if len(hooks) == 1:
+        return _coerce_to_runnable(hooks[0])
+
+    runnables = [_coerce_to_runnable(h) for h in hooks]
+
+    def _sync_chained(state: Any, **kwargs: Any) -> dict:
+        accumulated: dict = {}
+        current_state = state
+        for runnable in runnables:
+            # Pass extra kwargs (e.g. config, store) through if the hook
+            # accepts them; RunnableCallable handles introspection.
+            update = runnable.invoke(current_state, **kwargs)
+            if update:
+                accumulated.update(update)
+                current_state = _merge_state_update(current_state, update)
+        return accumulated
+
+    async def _async_chained(state: Any, **kwargs: Any) -> dict:
+        accumulated: dict = {}
+        current_state = state
+        for runnable in runnables:
+            update = await runnable.ainvoke(current_state, **kwargs)
+            if update:
+                accumulated.update(update)
+                current_state = _merge_state_update(current_state, update)
+        return accumulated
+
+    return RunnableCallable(_sync_chained, _async_chained, name="chained_hooks")
+
+
+def _resolve_hook(hook: HookLike | None) -> RunnableLike | None:
+    """Normalise *hook* to a single ``RunnableLike`` (or ``None``).
+
+    * If *hook* is ``None`` → return ``None``.
+    * If *hook* is already a ``RunnableLike`` → return it unchanged.
+    * If *hook* is a non-empty :class:`~collections.abc.Sequence` of
+      ``RunnableLike`` → chain them with :func:`_chain_hooks`.
+    """
+    if hook is None:
+        return None
+    # A Sequence[RunnableLike] but NOT a single Runnable/callable
+    if (
+        isinstance(hook, Sequence)
+        and not isinstance(hook, str)
+        and not isinstance(hook, Runnable)
+        and not callable(hook)
+    ):
+        hooks_list: list[RunnableLike] = list(hook)
+        if not hooks_list:
+            return None
+        if len(hooks_list) == 1:
+            return hooks_list[0]
+        return _chain_hooks(hooks_list)
+    # Single hook – return as-is
+    return hook  # type: ignore[return-value]
 
 
 def _get_prompt_runnable(prompt: Prompt | None) -> Runnable:
@@ -293,8 +422,8 @@ def create_react_agent(
     response_format: StructuredResponseSchema
     | tuple[str, StructuredResponseSchema]
     | None = None,
-    pre_model_hook: RunnableLike | None = None,
-    post_model_hook: RunnableLike | None = None,
+    pre_model_hook: HookLike | None = None,
+    post_model_hook: HookLike | None = None,
     state_schema: StateSchemaType | None = None,
     context_schema: type[Any] | None = None,
     checkpointer: Checkpointer | None = None,
@@ -393,10 +522,21 @@ def create_react_agent(
                 The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
                 This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
 
-        pre_model_hook: An optional node to add before the `agent` node (i.e., the node that calls the LLM).
-            Useful for managing long message histories (e.g., message trimming, summarization, etc.).
-            Pre-model hook must be a callable or a runnable that takes in current graph state and returns a state update in the form of
-                ```python
+        pre_model_hook: An optional node (or list of nodes) to add before the
+            ``agent`` node (i.e., the node that calls the LLM). Useful for
+            managing long message histories (e.g., message trimming,
+            summarization, etc.) or for composing multiple pre-processing
+            steps.
+
+            A single hook **or a list of hooks** may be provided. When a list
+            is given the hooks are executed in order: each hook receives the
+            graph state as updated by all preceding hooks, and the union of
+            all their return dicts is applied to the graph state before the
+            agent node runs.
+
+            Each hook must be a callable or a runnable that takes the current
+            graph state and returns a state update::
+
                 # At least one of `messages` or `llm_input_messages` MUST be provided
                 {
                     # If provided, will UPDATE the `messages` in the state
@@ -407,27 +547,63 @@ def create_react_agent(
                     # Any other state keys that need to be propagated
                     ...
                 }
-                ```
 
             !!! Important
-                At least one of `messages` or `llm_input_messages` MUST be provided and will be used as an input to the `agent` node.
-                The rest of the keys will be added to the graph state.
+                At least one of `messages` or `llm_input_messages` MUST be
+                provided (by at least one hook in the chain) and will be used
+                as an input to the ``agent`` node.  The rest of the keys will
+                be added to the graph state.
 
             !!! Warning
-                If you are returning `messages` in the pre-model hook, you should OVERWRITE the `messages` key by doing the following:
+                If you are returning `messages` in the pre-model hook, you
+                should OVERWRITE the `messages` key::
+
+                    {
+                        "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *new_messages]
+                        ...
+                    }
+
+            !!! Example "Composing multiple pre-model hooks"
 
                 ```python
-                {
-                    "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *new_messages]
-                    ...
-                }
+                from langchain_core.messages import RemoveMessage
+                from langgraph.graph.message import REMOVE_ALL_MESSAGES
+
+                def trim_messages(state):
+                    # Keep only the last 10 messages
+                    return {
+                        "messages": [
+                            RemoveMessage(id=REMOVE_ALL_MESSAGES),
+                            *state["messages"][-10:],
+                        ]
+                    }
+
+                def inject_system_prompt(state):
+                    return {
+                        "llm_input_messages": [
+                            SystemMessage("You are a helpful assistant."),
+                            *state["messages"],
+                        ]
+                    }
+
+                agent = create_react_agent(
+                    model,
+                    tools,
+                    pre_model_hook=[trim_messages, inject_system_prompt],
+                )
                 ```
-        post_model_hook: An optional node to add after the `agent` node (i.e., the node that calls the LLM).
-            Useful for implementing human-in-the-loop, guardrails, validation, or other post-processing.
-            Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
+
+        post_model_hook: An optional node (or list of nodes) to add after the
+            ``agent`` node (i.e., the node that calls the LLM). Useful for
+            implementing human-in-the-loop, guardrails, validation, or other
+            post-processing steps.
+
+            Accepts the same single-hook-or-list-of-hooks form as
+            ``pre_model_hook``.
 
             !!! Note
-                Only available with `version="v2"`.
+                Only available with ``version="v2"``.
+
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -551,6 +727,10 @@ def create_react_agent(
             else AgentState
         )
 
+    # Normalise hook arguments: a list of hooks is composed into a single hook.
+    resolved_pre_model_hook: RunnableLike | None = _resolve_hook(pre_model_hook)
+    resolved_post_model_hook: RunnableLike | None = _resolve_hook(post_model_hook)
+
     llm_builtin_tools: list[dict] = []
     if isinstance(tools, ToolNode):
         tool_classes = list(tools.tools_by_name.values())
@@ -634,7 +814,7 @@ def create_react_agent(
         return False
 
     def _get_model_input_state(state: StateSchema) -> StateSchema:
-        if pre_model_hook is not None:
+        if resolved_pre_model_hook is not None:
             messages = (
                 _get_state_value(state, "llm_input_messages")
             ) or _get_state_value(state, "messages")
@@ -721,7 +901,7 @@ def create_react_agent(
         return {"messages": [response]}
 
     input_schema: StateSchemaType
-    if pre_model_hook is not None:
+    if resolved_pre_model_hook is not None:
         # Dynamically create a schema that inherits from state_schema and adds 'llm_input_messages'
         if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
             # For Pydantic schemas
@@ -792,8 +972,8 @@ def create_react_agent(
             RunnableCallable(call_model, acall_model),
             input_schema=input_schema,
         )
-        if pre_model_hook is not None:
-            workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
+        if resolved_pre_model_hook is not None:
+            workflow.add_node("pre_model_hook", resolved_pre_model_hook)  # type: ignore[arg-type]
             workflow.add_edge("pre_model_hook", "agent")
             entrypoint = "pre_model_hook"
         else:
@@ -801,8 +981,8 @@ def create_react_agent(
 
         workflow.set_entry_point(entrypoint)
 
-        if post_model_hook is not None:
-            workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
+        if resolved_post_model_hook is not None:
+            workflow.add_node("post_model_hook", resolved_post_model_hook)  # type: ignore[arg-type]
             workflow.add_edge("agent", "post_model_hook")
 
         if response_format is not None:
@@ -813,7 +993,7 @@ def create_react_agent(
                     agenerate_structured_response,
                 ),
             )
-            if post_model_hook is not None:
+            if resolved_post_model_hook is not None:
                 workflow.add_edge("post_model_hook", "generate_structured_response")
             else:
                 workflow.add_edge("agent", "generate_structured_response")
@@ -833,7 +1013,7 @@ def create_react_agent(
         last_message = messages[-1]
         # If there is no function call, then we finish
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            if post_model_hook is not None:
+            if resolved_post_model_hook is not None:
                 return "post_model_hook"
             elif response_format is not None:
                 return "generate_structured_response"
@@ -844,7 +1024,7 @@ def create_react_agent(
             if version == "v1":
                 return "tools"
             elif version == "v2":
-                if post_model_hook is not None:
+                if resolved_post_model_hook is not None:
                     return "post_model_hook"
                 return [
                     Send(
@@ -873,8 +1053,8 @@ def create_react_agent(
 
     # Optionally add a pre-model hook node that will be called
     # every time before the "agent" (LLM-calling node)
-    if pre_model_hook is not None:
-        workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
+    if resolved_pre_model_hook is not None:
+        workflow.add_node("pre_model_hook", resolved_pre_model_hook)  # type: ignore[arg-type]
         workflow.add_edge("pre_model_hook", "agent")
         entrypoint = "pre_model_hook"
     else:
@@ -888,8 +1068,8 @@ def create_react_agent(
     post_model_hook_paths = [entrypoint, "tools"]
 
     # Add a post model hook node if post_model_hook is provided
-    if post_model_hook is not None:
-        workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
+    if resolved_post_model_hook is not None:
+        workflow.add_node("post_model_hook", resolved_post_model_hook)  # type: ignore[arg-type]
         agent_paths.append("post_model_hook")
         workflow.add_edge("agent", "post_model_hook")
     else:
@@ -904,17 +1084,17 @@ def create_react_agent(
                 agenerate_structured_response,
             ),
         )
-        if post_model_hook is not None:
+        if resolved_post_model_hook is not None:
             post_model_hook_paths.append("generate_structured_response")
         else:
             agent_paths.append("generate_structured_response")
     else:
-        if post_model_hook is not None:
+        if resolved_post_model_hook is not None:
             post_model_hook_paths.append(END)
         else:
             agent_paths.append(END)
 
-    if post_model_hook is not None:
+    if resolved_post_model_hook is not None:
 
         def post_model_hook_router(state: StateSchema) -> str | list[Send]:
             """Route to the next node after post_model_hook.
@@ -1012,4 +1192,5 @@ __all__ = [
     "AgentStatePydantic",
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
+    "HookLike",
 ]
