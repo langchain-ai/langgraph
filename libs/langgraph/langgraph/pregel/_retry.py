@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import random
 import sys
@@ -538,6 +539,85 @@ def _checkpoint_ns_for_parent_command(ns: str) -> str:
     return NS_SEP.join(parts)
 
 
+def _compute_input_hash(task: PregelExecutableTask) -> str:
+    """Compute a stable hash of the task input for audit trail purposes."""
+    try:
+        input_repr = repr(task.input).encode("utf-8", errors="replace")
+        return hashlib.sha256(input_repr).hexdigest()
+    except Exception:
+        return "<hash-unavailable>"
+
+
+def _get_correlation_id(config: RunnableConfig) -> str | None:
+    """Extract a correlation/trace identifier from the config for causal chain linking."""
+    run_id = config.get("run_id")
+    if run_id is not None:
+        return str(run_id)
+    configurable = config.get(CONF, {})
+    thread_id = configurable.get(CONFIG_KEY_THREAD_ID)
+    checkpoint_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS)
+    task_id = configurable.get(CONFIG_KEY_TASK_ID)
+    parts = [p for p in [thread_id, checkpoint_ns, task_id] if p]
+    return "|".join(parts) if parts else None
+
+
+def _emit_retry_audit_log(
+    task: PregelExecutableTask,
+    config: RunnableConfig,
+    attempts: int,
+    sleep_time: float,
+    exc: Exception,
+) -> None:
+    """Emit a structured audit log record for a retry decision.
+
+    Records the causal correlation identifier, task identity, attempt count,
+    input hash, and exception details to support end-to-end forensic
+    reconstruction of AI-driven retry decisions.
+    """
+    correlation_id = _get_correlation_id(config)
+    input_hash = _compute_input_hash(task)
+    configurable = config.get(CONF, {})
+    thread_id = configurable.get(CONFIG_KEY_THREAD_ID)
+    checkpoint_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS)
+    task_id = configurable.get(CONFIG_KEY_TASK_ID, task.id)
+    run_id = config.get("run_id")
+
+    audit_record = {
+        "event": "task_retry",
+        "task_name": task.name,
+        "task_id": task_id,
+        "attempt": attempts,
+        "sleep_secs": round(sleep_time, 4),
+        "exception_type": exc.__class__.__name__,
+        "exception_message": str(exc),
+        "input_hash": input_hash,
+        "correlation_id": correlation_id,
+        "run_id": str(run_id) if run_id is not None else None,
+        "thread_id": thread_id,
+        "checkpoint_ns": checkpoint_ns,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        logger.info(
+            f"Retrying task {task.name} after {sleep_time:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}",
+            exc_info=exc,
+            extra={"audit": audit_record},
+        )
+    except Exception as log_exc:
+        # Logging sink is unavailable; emit a warning via stderr-level fallback
+        # so the failure is not silently swallowed.
+        import sys as _sys
+        try:
+            print(
+                f"[AUDIT LOG FAILURE] task={task.name} attempt={attempts} "
+                f"correlation_id={correlation_id} log_error={log_exc!r}",
+                file=_sys.stderr,
+            )
+        except Exception:
+            pass
+
+
 def run_with_retry(
     task: PregelExecutableTask,
     retry_policy: Sequence[RetryPolicy] | None,
@@ -635,11 +715,8 @@ def run_with_retry(
             )
             time.sleep(sleep_time)
 
-            # log the retry
-            logger.info(
-                f"Retrying task {task.name} after {sleep_time:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}",
-                exc_info=exc,
-            )
+            # log the retry with full audit trail
+            _emit_retry_audit_log(task, config, attempts, sleep_time, exc)
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
 
@@ -773,11 +850,8 @@ async def arun_with_retry(
             )
             await asyncio.sleep(sleep_time)
 
-            # log the retry
-            logger.info(
-                f"Retrying task {task.name} after {sleep_time:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}",
-                exc_info=exc,
-            )
+            # log the retry with full audit trail
+            _emit_retry_audit_log(task, config, attempts, sleep_time, exc)
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
 
