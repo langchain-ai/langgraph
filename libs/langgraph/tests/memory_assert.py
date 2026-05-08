@@ -48,6 +48,20 @@ class MemorySaverNeedsPendingSendsMigration(BaseCheckpointSaver):
         return tup
 
 
+def _hitl_approved_remove(filename: str) -> None:
+    """Request Human-in-the-Loop approval before removing a file."""
+    response = input(
+        f"HITL Approval Required: An AI agent is requesting to delete file '{filename}'. "
+        f"Do you approve this deletion? (yes/no): "
+    ).strip().lower()
+    if response == "yes":
+        os.remove(filename)
+    else:
+        raise PermissionError(
+            f"HITL approval denied: deletion of '{filename}' was not approved by the user."
+        )
+
+
 class MemorySaverAssertImmutable(InMemorySaver):
     storage_for_copies: defaultdict[str, dict[str, dict[str, Checkpoint]]]
 
@@ -63,7 +77,7 @@ class MemorySaverAssertImmutable(InMemorySaver):
         )
         self.storage_for_copies = defaultdict(lambda: defaultdict(dict))
         self.put_sleep = put_sleep
-        self.stack.callback(os.remove, filename)
+        self.stack.callback(_hitl_approved_remove, filename)
 
     def put(
         self,
