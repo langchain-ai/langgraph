@@ -8,6 +8,9 @@ through `Pregel.stream(stream_mode=["tools", ...])` and inspect the raw
 
 from __future__ import annotations
 
+import logging
+import re
+import base64
 from typing import Annotated, Any
 
 import pytest
@@ -21,35 +24,96 @@ from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.pregel._tools import _tool_call_writer
 
+logger = logging.getLogger(__name__)
+
+_DANGEROUS_PATTERN = re.compile(
+    r"(base64|eval\(|exec\(|__import__|subprocess|os\.system|shell=True"
+    r"|<script|javascript:|data:text/html"
+    r"|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f])",
+    re.IGNORECASE,
+)
+
+_INVISIBLE_PATTERN = re.compile(
+    r"[\u200b\u200c\u200d\u200e\u200f\u202a-\u202e\u2060-\u2064\ufeff]"
+)
+
+
+def _is_base64_encoded(value: str) -> bool:
+    try:
+        if len(value) % 4 == 0 and len(value) >= 8:
+            decoded = base64.b64decode(value, validate=True)
+            decoded_str = decoded.decode("utf-8", errors="ignore")
+            if _DANGEROUS_PATTERN.search(decoded_str):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _sanitize_value(value: Any) -> Any:
+    if isinstance(value, str):
+        if _DANGEROUS_PATTERN.search(value):
+            raise ValueError(f"Potentially dangerous content detected in input: {value!r}")
+        if _INVISIBLE_PATTERN.search(value):
+            raise ValueError(f"Invisible/hidden characters detected in input: {value!r}")
+        if _is_base64_encoded(value):
+            raise ValueError(f"Potentially dangerous base64-encoded content detected: {value!r}")
+    elif isinstance(value, dict):
+        return {k: _sanitize_value(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [_sanitize_value(item) for item in value]
+    return value
+
+
+def _sanitize_tool_args(tool_name: str, tool_args: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(tool_name, str) or not tool_name.strip():
+        raise ValueError("tool_name must be a non-empty string")
+    _sanitize_value(tool_name)
+    return _sanitize_value(tool_args)
+
+
+def _sanitize_graph_input(graph_input: dict[str, Any]) -> dict[str, Any]:
+    return _sanitize_value(graph_input)
+
 
 class _State(TypedDict):
     messages: Annotated[list, add_messages]
 
 
 def _caller_sync(tool_name: str, tool_args: dict[str, Any], tc_id: str = "tc1"):
+    sanitized_args = _sanitize_tool_args(tool_name, tool_args)
+
     def caller(state: _State) -> dict:
-        return {
-            "messages": [
-                AIMessage(
-                    content="",
-                    tool_calls=[{"name": tool_name, "args": tool_args, "id": tc_id}],
-                )
-            ]
-        }
+        ai_message = AIMessage(
+            content="",
+            tool_calls=[{"name": tool_name, "args": sanitized_args, "id": tc_id}],
+        )
+        logger.info(
+            "LLM interaction: tool_call name=%s args=%r tc_id=%s",
+            tool_name,
+            sanitized_args,
+            tc_id,
+        )
+        return {"messages": [ai_message]}
 
     return caller
 
 
 def _caller_async(tool_name: str, tool_args: dict[str, Any], tc_id: str = "tc1"):
+    sanitized_args = _sanitize_tool_args(tool_name, tool_args)
+
     async def caller(state: _State) -> dict:
-        return {
-            "messages": [
-                AIMessage(
-                    content="",
-                    tool_calls=[{"name": tool_name, "args": tool_args, "id": tc_id}],
-                )
-            ]
-        }
+        ai_message = AIMessage(
+            content="",
+            tool_calls=[{"name": tool_name, "args": sanitized_args, "id": tc_id}],
+        )
+        logger.info(
+            "LLM interaction (async): tool_call name=%s args=%r tc_id=%s",
+            tool_name,
+            sanitized_args,
+            tc_id,
+        )
+        return {"messages": [ai_message]}
 
     return caller
 
@@ -81,9 +145,10 @@ class TestSyncGraphSyncTool:
             return f"echoed:{text}"
 
         graph = _build_graph(_caller_sync("echo", {"text": "hi"}), [echo])
+        sanitized_input = _sanitize_graph_input({"messages": []})
         events = _tool_events(
             graph.stream(
-                {"messages": []},
+                sanitized_input,
                 stream_mode=["tools"],
                 subgraphs=True,
             )
@@ -110,9 +175,10 @@ class TestSyncGraphSyncTool:
         graph = _build_graph(
             _caller_sync("streaming_echo", {"text": "x"}), [streaming_echo]
         )
+        sanitized_input = _sanitize_graph_input({"messages": []})
         events = _tool_events(
             graph.stream(
-                {"messages": []},
+                sanitized_input,
                 stream_mode=["tools"],
                 subgraphs=True,
             )
@@ -132,10 +198,11 @@ class TestSyncGraphSyncTool:
             raise ValueError("nope")
 
         graph = _build_graph(_caller_sync("boom", {}), [boom])
+        sanitized_input = _sanitize_graph_input({"messages": []})
         events: list[tuple[tuple[str, ...], dict]] = []
         with pytest.raises(ValueError, match="nope"):
             for ns, mode, payload in graph.stream(
-                {"messages": []},
+                sanitized_input,
                 stream_mode=["tools"],
                 subgraphs=True,
             ):
@@ -158,11 +225,12 @@ class TestSyncGraphSyncTool:
             return text
 
         graph = _build_graph(_caller_sync("echo", {"text": "hi"}), [echo])
+        sanitized_input = _sanitize_graph_input({"messages": []})
         # No "tools" in stream_mode — handler is not attached and zero
         # `tools`-method events fire.
         chunks = list(
             graph.stream(
-                {"messages": []},
+                sanitized_input,
                 stream_mode=["values"],
                 subgraphs=True,
             )
@@ -183,9 +251,10 @@ class TestAsyncGraphAsyncTool:
             return f"got:{text}"
 
         graph = _build_graph(_caller_async("aecho", {"text": "hi"}), [aecho])
+        sanitized_input = _sanitize_graph_input({"messages": []})
         events: list[tuple[tuple[str, ...], dict]] = []
         async for ns, mode, payload in graph.astream(
-            {"messages": []},
+            sanitized_input,
             stream_mode=["tools"],
             subgraphs=True,
         ):
@@ -207,22 +276,23 @@ class TestConcurrentToolCalls:
             return marker
 
         def caller(state: _State) -> dict:
-            return {
-                "messages": [
-                    AIMessage(
-                        content="",
-                        tool_calls=[
-                            {"name": "streamer", "args": {"marker": "A"}, "id": "a"},
-                            {"name": "streamer", "args": {"marker": "B"}, "id": "b"},
-                        ],
-                    )
-                ]
-            }
+            ai_message = AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "streamer", "args": {"marker": "A"}, "id": "a"},
+                    {"name": "streamer", "args": {"marker": "B"}, "id": "b"},
+                ],
+            )
+            logger.info(
+                "LLM interaction: parallel tool_calls streamer A and B"
+            )
+            return {"messages": [ai_message]}
 
         graph = _build_graph(caller, [streamer])
+        sanitized_input = _sanitize_graph_input({"messages": []})
         events = _tool_events(
             graph.stream(
-                {"messages": []},
+                sanitized_input,
                 stream_mode=["tools"],
                 subgraphs=True,
             )
@@ -245,20 +315,20 @@ class TestSubgraphNamespacePropagation:
             return text
 
         def sub_caller(state: _State) -> dict:
-            return {
-                "messages": [
-                    AIMessage(
-                        content="",
-                        tool_calls=[
-                            {
-                                "name": "inner_tool",
-                                "args": {"text": "x"},
-                                "id": "tc1",
-                            }
-                        ],
-                    )
-                ]
-            }
+            ai_message = AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "inner_tool",
+                        "args": {"text": "x"},
+                        "id": "tc1",
+                    }
+                ],
+            )
+            logger.info(
+                "LLM interaction: sub_caller tool_call inner_tool args={'text': 'x'} tc_id=tc1"
+            )
+            return {"messages": [ai_message]}
 
         inner = StateGraph(_State)
         inner.add_node("sub_caller", sub_caller)
@@ -274,9 +344,10 @@ class TestSubgraphNamespacePropagation:
         outer.add_edge("sub", END)
         graph = outer.compile()
 
+        sanitized_input = _sanitize_graph_input({"messages": []})
         events = _tool_events(
             graph.stream(
-                {"messages": []},
+                sanitized_input,
                 stream_mode=["tools"],
                 subgraphs=True,
             )
