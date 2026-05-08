@@ -1,4 +1,5 @@
 import random
+import re
 from uuid import uuid4
 
 from langchain_core.messages import HumanMessage
@@ -16,16 +17,70 @@ from bench.wide_state import wide_state
 from langgraph.graph import StateGraph
 from langgraph.pregel import Pregel
 
+# Maximum allowed recursion limit to prevent resource exhaustion
+_MAX_RECURSION_LIMIT = 1000
+
+# Patterns that indicate potentially malicious content
+_MALICIOUS_PATTERNS = [
+    re.compile(r"(?i)(base64|b64decode|eval\s*\(|exec\s*\(|__import__\s*\()"),
+    re.compile(r"(?i)(system\s*\(|subprocess|os\.popen|shell=True)"),
+    re.compile(r"(?i)(ignore\s+previous\s+instructions|disregard\s+prior)"),
+    re.compile(r"(?:[A-Za-z0-9+/]{40,}={0,2})"),  # base64-like long strings
+]
+
+_MAX_STRING_LENGTH = 100000
+
+
+def _sanitize_string(value: str) -> str:
+    """Sanitize a string value by checking for malicious patterns."""
+    if len(value) > _MAX_STRING_LENGTH:
+        raise ValueError(
+            f"Input string exceeds maximum allowed length of {_MAX_STRING_LENGTH}"
+        )
+    for pattern in _MALICIOUS_PATTERNS:
+        if pattern.search(value):
+            raise ValueError(
+                f"Input contains potentially malicious content matching pattern: {pattern.pattern}"
+            )
+    return value
+
+
+def _sanitize_input(value: object) -> object:
+    """Recursively sanitize input values."""
+    if isinstance(value, str):
+        return _sanitize_string(value)
+    elif isinstance(value, dict):
+        return {_sanitize_input(k): _sanitize_input(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [_sanitize_input(item) for item in value]
+    elif isinstance(value, tuple):
+        return tuple(_sanitize_input(item) for item in value)
+    elif isinstance(value, HumanMessage):
+        sanitized_content = _sanitize_input(value.content)
+        return HumanMessage(sanitized_content)
+    return value
+
+
+def _validate_recursion_limit(limit: int) -> int:
+    """Validate and cap the recursion limit."""
+    if limit > _MAX_RECURSION_LIMIT:
+        return _MAX_RECURSION_LIMIT
+    if limit < 1:
+        raise ValueError("recursion_limit must be at least 1")
+    return limit
+
 
 async def arun(graph: Pregel, input: dict):
+    sanitized_input = _sanitize_input(input)
+    recursion_limit = _validate_recursion_limit(1000)
     len(
         [
             c
             async for c in graph.astream(
-                input,
+                sanitized_input,
                 {
                     "configurable": {"thread_id": str(uuid4())},
-                    "recursion_limit": 1000000000,
+                    "recursion_limit": recursion_limit,
                 },
                 durability="exit",
             )
@@ -38,11 +93,13 @@ async def arun_first_event_latency(graph: Pregel, input: dict) -> None:
 
     Run the graph until the first event is processed and then stop.
     """
+    sanitized_input = _sanitize_input(input)
+    recursion_limit = _validate_recursion_limit(1000)
     stream = graph.astream(
-        input,
+        sanitized_input,
         {
             "configurable": {"thread_id": str(uuid4())},
-            "recursion_limit": 1000000000,
+            "recursion_limit": recursion_limit,
         },
         durability="exit",
     )
@@ -55,14 +112,16 @@ async def arun_first_event_latency(graph: Pregel, input: dict) -> None:
 
 
 def run(graph: Pregel, input: dict):
+    sanitized_input = _sanitize_input(input)
+    recursion_limit = _validate_recursion_limit(1000)
     len(
         [
             c
             for c in graph.stream(
-                input,
+                sanitized_input,
                 {
                     "configurable": {"thread_id": str(uuid4())},
-                    "recursion_limit": 1000000000,
+                    "recursion_limit": recursion_limit,
                 },
                 durability="exit",
             )
@@ -75,11 +134,13 @@ def run_first_event_latency(graph: Pregel, input: dict) -> None:
 
     Run the graph until the first event is processed and then stop.
     """
+    sanitized_input = _sanitize_input(input)
+    recursion_limit = _validate_recursion_limit(1000)
     stream = graph.stream(
-        input,
+        sanitized_input,
         {
             "configurable": {"thread_id": str(uuid4())},
-            "recursion_limit": 1000000000,
+            "recursion_limit": recursion_limit,
         },
         durability="exit",
     )
