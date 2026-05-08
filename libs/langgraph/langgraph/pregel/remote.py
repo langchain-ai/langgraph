@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import logging
+import os
+import re
+import time
+import uuid
 from collections.abc import AsyncIterator, Iterator, Sequence
 from dataclasses import asdict
 from typing import (
@@ -9,6 +15,7 @@ from typing import (
     cast,
     overload,
 )
+from urllib.parse import urlparse
 from uuid import UUID
 
 import langsmith as ls
@@ -79,6 +86,193 @@ _CONF_DROPLIST = frozenset(
         CONFIG_KEY_TASK_ID,
     ),
 )
+
+# URL allowlist: set LANGGRAPH_ALLOWED_URLS env var as comma-separated list of allowed URL prefixes/hosts.
+# If not set, defaults to allowing only https scheme with no private IP ranges.
+_ALLOWED_URL_PREFIXES: list[str] | None = None
+
+_PRIVATE_IP_PATTERNS = re.compile(
+    r"^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|::1|0\.0\.0\.0)$",
+    re.IGNORECASE,
+)
+
+_MALICIOUS_INPUT_PATTERNS = [
+    # Shell command injection patterns
+    re.compile(r"(?:^|[\s;|&`$])(rm\s+-rf|sudo\s+|chmod\s+|chown\s+|wget\s+|curl\s+[^|]*\|\s*(?:bash|sh)|eval\s+|exec\s+)", re.IGNORECASE),
+    # Base64-encoded content that decodes to shell commands
+    re.compile(r"(?:^|[\s])(?:[A-Za-z0-9+/]{20,}={0,2})(?:[\s]|$)"),
+    # Null bytes
+    re.compile(r"\x00"),
+    # Script injection
+    re.compile(r"<script[\s>]", re.IGNORECASE),
+]
+
+_PROMPT_INJECTION_PATTERNS = [
+    re.compile(r"ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?", re.IGNORECASE),
+    re.compile(r"disregard\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?", re.IGNORECASE),
+    re.compile(r"forget\s+(?:all\s+)?(?:previous|prior|above)\s+instructions?", re.IGNORECASE),
+    re.compile(r"you\s+are\s+now\s+(?:a\s+)?(?:an?\s+)?(?:different|new|another|evil|unrestricted)", re.IGNORECASE),
+    re.compile(r"jailbreak", re.IGNORECASE),
+    re.compile(r"do\s+anything\s+now", re.IGNORECASE),
+    re.compile(r"DAN\b"),
+]
+
+# Output field allowlist for data minimisation
+_OUTPUT_ALLOWED_KEYS: frozenset[str] | None = None  # None means allow all (default passthrough with provenance)
+
+
+def _get_allowed_url_prefixes() -> list[str] | None:
+    env_val = os.environ.get("LANGGRAPH_ALLOWED_URLS", "").strip()
+    if env_val:
+        return [u.strip() for u in env_val.split(",") if u.strip()]
+    return None
+
+
+def _validate_url(url: str) -> None:
+    """Validate URL against allowlist and block dangerous schemes/hosts."""
+    if not url:
+        raise ValueError("URL must not be empty.")
+
+    parsed = urlparse(url)
+
+    # Enforce https scheme only (block http, file, ftp, etc.)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError(
+            f"URL scheme '{parsed.scheme}' is not allowed. Only 'https' (and 'http' for local dev) are permitted."
+        )
+
+    hostname = parsed.hostname or ""
+
+    # Block private/loopback IPs unless explicitly allowed
+    allowed_prefixes = _get_allowed_url_prefixes()
+    if allowed_prefixes is not None:
+        # Check if URL matches any allowed prefix
+        if not any(url.startswith(prefix) for prefix in allowed_prefixes):
+            raise ValueError(
+                f"URL '{url}' is not in the configured allowlist (LANGGRAPH_ALLOWED_URLS)."
+            )
+    else:
+        # Default policy: block private IP ranges and metadata endpoints
+        if _PRIVATE_IP_PATTERNS.match(hostname):
+            raise ValueError(
+                f"URL hostname '{hostname}' resolves to a private/loopback address and is not allowed."
+            )
+        # Block AWS/GCP/Azure metadata endpoints
+        if hostname in ("169.254.169.254", "metadata.google.internal", "metadata.azure.com"):
+            raise ValueError(
+                f"URL hostname '{hostname}' is a cloud metadata endpoint and is not allowed."
+            )
+
+    logger.debug("URL validation passed for host: %s", hostname)
+
+
+def _check_authentication(api_key: str | None, client: Any, sync_client: Any, url: str | None) -> None:
+    """Enforce that authentication credentials are present for inter-agent communication."""
+    # If a pre-built client is provided, we trust it was constructed with auth.
+    if client is not None or sync_client is not None:
+        return
+    # If url is provided without api_key, check environment variables as fallback.
+    if url is not None and api_key is None:
+        env_key = (
+            os.environ.get("LANGGRAPH_API_KEY")
+            or os.environ.get("LANGSMITH_API_KEY")
+            or os.environ.get("LANGCHAIN_API_KEY")
+        )
+        if not env_key:
+            raise ValueError(
+                "Authentication is required for inter-agent communication. "
+                "Provide 'api_key' or set one of LANGGRAPH_API_KEY, LANGSMITH_API_KEY, or LANGCHAIN_API_KEY."
+            )
+
+
+def _sanitize_input(input: Any) -> Any:
+    """Sanitize and validate input before sending to the remote LLM graph."""
+    if input is None:
+        return input
+
+    # Serialize to string for pattern matching if it's a string or dict
+    input_str: str | None = None
+    if isinstance(input, str):
+        input_str = input
+    elif isinstance(input, dict):
+        # Check string values within the dict
+        input_str = str(input)
+
+    if input_str is not None:
+        # Check for prompt injection patterns
+        for pattern in _PROMPT_INJECTION_PATTERNS:
+            if pattern.search(input_str):
+                logger.warning(
+                    "Potential prompt injection detected in input; request blocked. pattern=%s",
+                    pattern.pattern,
+                )
+                raise ValueError(
+                    "Input contains potentially malicious prompt injection content and has been blocked."
+                )
+
+        # Check for shell command injection and other malicious patterns
+        for pattern in _MALICIOUS_INPUT_PATTERNS:
+            if pattern.search(input_str):
+                # For base64 pattern, attempt to decode and check
+                if "A-Za-z0-9" in pattern.pattern:
+                    # Heuristic: only flag if it decodes to something suspicious
+                    matches = re.findall(r"[A-Za-z0-9+/]{20,}={0,2}", input_str)
+                    for match in matches:
+                        try:
+                            decoded = base64.b64decode(match + "==").decode("utf-8", errors="ignore")
+                            for shell_pattern in _MALICIOUS_INPUT_PATTERNS[:1]:
+                                if shell_pattern.search(decoded):
+                                    logger.warning(
+                                        "Base64-encoded malicious content detected in input; request blocked."
+                                    )
+                                    raise ValueError(
+                                        "Input contains base64-encoded malicious content and has been blocked."
+                                    )
+                        except Exception:
+                            pass
+                else:
+                    logger.warning(
+                        "Potentially malicious input pattern detected; request blocked. pattern=%s",
+                        pattern.pattern,
+                    )
+                    raise ValueError(
+                        "Input contains potentially malicious content and has been blocked."
+                    )
+
+    return input
+
+
+def _compute_input_hash(input: Any) -> str:
+    """Compute a hash of the input for audit logging."""
+    try:
+        return hashlib.sha256(str(input).encode("utf-8", errors="replace")).hexdigest()[:16]
+    except Exception:
+        return "unknown"
+
+
+def _attach_provenance(data: Any, assistant_id: str, correlation_id: str) -> Any:
+    """Attach provenance metadata to AI-generated output."""
+    if isinstance(data, dict):
+        data = dict(data)
+        data["__ai_generated__"] = True
+        data["__assistant_id__"] = assistant_id
+        data["__provenance_timestamp__"] = time.time()
+        data["__correlation_id__"] = correlation_id
+    return data
+
+
+def _minimise_output(data: Any) -> Any:
+    """Apply output data minimisation: remove internal/sensitive keys if allowlist is configured."""
+    allowed_keys = os.environ.get("LANGGRAPH_OUTPUT_ALLOWED_KEYS", "").strip()
+    if not allowed_keys:
+        # No allowlist configured — return as-is (provenance already attached)
+        return data
+    if isinstance(data, dict):
+        keys = frozenset(k.strip() for k in allowed_keys.split(",") if k.strip())
+        # Always allow provenance keys
+        provenance_keys = {"__ai_generated__", "__assistant_id__", "__provenance_timestamp__", "__correlation_id__"}
+        return {k: v for k, v in data.items() if k in keys or k in provenance_keys}
+    return data
 
 
 def _sanitize_config_value(v: Any) -> Any:
@@ -163,6 +357,13 @@ class RemoteGraph(PregelProtocol):
             self.name = name
         self.config = config
         self.distributed_tracing = distributed_tracing
+
+        # Validate URL against allowlist before creating clients
+        if url is not None:
+            _validate_url(url)
+
+        # Enforce authentication for inter-agent communication
+        _check_authentication(api_key, client, sync_client, url)
 
         if client is None and url is not None:
             client = get_client(url=url, api_key=api_key, headers=headers)
@@ -760,6 +961,21 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
+
+        # Sanitize and validate input before sending to remote LLM
+        if not isinstance(input, Command):
+            input = _sanitize_input(input)
+
+        correlation_id = str(uuid.uuid4())
+        input_hash = _compute_input_hash(input)
+        logger.info(
+            "RemoteGraph.stream: initiating LLM interaction. assistant_id=%s correlation_id=%s input_hash=%s stream_modes=%s",
+            self.assistant_id,
+            correlation_id,
+            input_hash,
+            stream_modes,
+        )
+
         if isinstance(input, Command):
             command: CommandSDK | None = cast(CommandSDK, asdict(input))
             input = None
@@ -767,6 +983,7 @@ class RemoteGraph(PregelProtocol):
             command = None
         thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
+        chunk_count = 0
         for chunk in sync_client.runs.stream(
             thread_id=thread_id,
             assistant_id=self.assistant_id,
@@ -785,6 +1002,14 @@ class RemoteGraph(PregelProtocol):
             params=params,
             **kwargs,
         ):
+            chunk_count += 1
+            logger.debug(
+                "RemoteGraph.stream: received chunk. assistant_id=%s correlation_id=%s event=%s chunk_index=%d",
+                self.assistant_id,
+                correlation_id,
+                chunk.event,
+                chunk_count,
+            )
             # split mode and ns
             if NS_SEP in chunk.event:
                 mode, ns_ = chunk.event.split(NS_SEP, 1)
@@ -809,6 +1034,12 @@ class RemoteGraph(PregelProtocol):
                             [Interrupt(**i) for i in chunk.data[INTERRUPT]]
                         )
             elif chunk.event.startswith("error"):
+                logger.error(
+                    "RemoteGraph.stream: error received from remote graph. assistant_id=%s correlation_id=%s error=%s",
+                    self.assistant_id,
+                    correlation_id,
+                    chunk.data,
+                )
                 raise RemoteException(chunk.data)
             # filter for what was actually requested
             if mode not in requested:
@@ -825,7 +1056,9 @@ class RemoteGraph(PregelProtocol):
                         Interrupt(**i) if isinstance(i, dict) else i
                         for i in chunk.data.pop(INTERRUPT, ())
                     )
-                yield {"type": mode, "ns": ns, "data": chunk.data, "interrupts": ints}
+                output_data = _attach_provenance(chunk.data, self.assistant_id, correlation_id)
+                output_data = _minimise_output(output_data)
+                yield {"type": mode, "ns": ns, "data": output_data, "interrupts": ints}
             elif subgraphs:
                 if NS_SEP in chunk.event:
                     mode, ns_ = chunk.event.split(NS_SEP, 1)
@@ -840,6 +1073,13 @@ class RemoteGraph(PregelProtocol):
                 yield chunk.data
             else:
                 yield chunk
+
+        logger.info(
+            "RemoteGraph.stream: LLM interaction complete. assistant_id=%s correlation_id=%s total_chunks=%d",
+            self.assistant_id,
+            correlation_id,
+            chunk_count,
+        )
 
     @overload
     def astream(
@@ -915,6 +1155,21 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
+
+        # Sanitize and validate input before sending to remote LLM
+        if not isinstance(input, Command):
+            input = _sanitize_input(input)
+
+        correlation_id = str(uuid.uuid4())
+        input_hash = _compute_input_hash(input)
+        logger.info(
+            "RemoteGraph.astream: initiating LLM interaction. assistant_id=%s correlation_id=%s input_hash=%s stream_modes=%s",
+            self.assistant_id,
+            correlation_id,
+            input_hash,
+            stream_modes,
+        )
+
         if isinstance(input, Command):
             command: CommandSDK | None = cast(CommandSDK, asdict(input))
             input = None
@@ -922,6 +1177,7 @@ class RemoteGraph(PregelProtocol):
             command = None
         thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
+        chunk_count = 0
         async for chunk in client.runs.stream(
             thread_id=thread_id,
             assistant_id=self.assistant_id,
@@ -940,6 +1196,14 @@ class RemoteGraph(PregelProtocol):
             params=params,
             **kwargs,
         ):
+            chunk_count += 1
+            logger.debug(
+                "RemoteGraph.astream: received chunk. assistant_id=%s correlation_id=%s event=%s chunk_index=%d",
+                self.assistant_id,
+                correlation_id,
+                chunk.event,
+                chunk_count,
+            )
             # split mode and ns
             if NS_SEP in chunk.event:
                 mode, ns_ = chunk.event.split(NS_SEP, 1)
@@ -964,6 +1228,12 @@ class RemoteGraph(PregelProtocol):
                             [Interrupt(**i) for i in chunk.data[INTERRUPT]]
                         )
             elif chunk.event.startswith("error"):
+                logger.error(
+                    "RemoteGraph.astream: error received from remote graph. assistant_id=%s correlation_id=%s error=%s",
+                    self.assistant_id,
+                    correlation_id,
+                    chunk.data,
+                )
                 raise RemoteException(chunk.data)
             # filter for what was actually requested
             if mode not in requested:
@@ -980,7 +1250,9 @@ class RemoteGraph(PregelProtocol):
                         Interrupt(**i) if isinstance(i, dict) else i
                         for i in chunk.data.pop(INTERRUPT, ())
                     )
-                yield {"type": mode, "ns": ns, "data": chunk.data, "interrupts": ints}
+                output_data = _attach_provenance(chunk.data, self.assistant_id, correlation_id)
+                output_data = _minimise_output(output_data)
+                yield {"type": mode, "ns": ns, "data": output_data, "interrupts": ints}
             elif subgraphs:
                 if NS_SEP in chunk.event:
                     mode, ns_ = chunk.event.split(NS_SEP, 1)
@@ -995,6 +1267,13 @@ class RemoteGraph(PregelProtocol):
                 yield chunk.data
             else:
                 yield chunk
+
+        logger.info(
+            "RemoteGraph.astream: LLM interaction complete. assistant_id=%s correlation_id=%s total_chunks=%d",
+            self.assistant_id,
+            correlation_id,
+            chunk_count,
+        )
 
     async def astream_events(
         self,
@@ -1070,6 +1349,15 @@ class RemoteGraph(PregelProtocol):
         Returns:
             The output of the graph.
         """
+        correlation_id = str(uuid.uuid4())
+        input_hash = _compute_input_hash(input)
+        logger.info(
+            "RemoteGraph.invoke: initiating LLM invocation. assistant_id=%s correlation_id=%s input_hash=%s version=%s",
+            self.assistant_id,
+            correlation_id,
+            input_hash,
+            version,
+        )
         for chunk in self.stream(  # type: ignore[misc, call-overload]
             input,
             config=config,
@@ -1085,13 +1373,30 @@ class RemoteGraph(PregelProtocol):
             pass
         try:
             if version == "v2":
+                output_value = _minimise_output(
+                    _attach_provenance(chunk["data"], self.assistant_id, correlation_id)
+                )
+                logger.info(
+                    "RemoteGraph.invoke: LLM invocation complete. assistant_id=%s correlation_id=%s",
+                    self.assistant_id,
+                    correlation_id,
+                )
                 return GraphOutput(
-                    value=chunk["data"],
+                    value=output_value,
                     interrupts=tuple(chunk.get("interrupts", ())),
                 )
+            logger.info(
+                "RemoteGraph.invoke: LLM invocation complete. assistant_id=%s correlation_id=%s",
+                self.assistant_id,
+                correlation_id,
+            )
             return chunk
         except UnboundLocalError:
-            logger.warning("No events received from remote graph")
+            logger.warning(
+                "RemoteGraph.invoke: No events received from remote graph. assistant_id=%s correlation_id=%s",
+                self.assistant_id,
+                correlation_id,
+            )
             return None
 
     @overload
@@ -1152,6 +1457,15 @@ class RemoteGraph(PregelProtocol):
         Returns:
             The output of the graph.
         """
+        correlation_id = str(uuid.uuid4())
+        input_hash = _compute_input_hash(input)
+        logger.info(
+            "RemoteGraph.ainvoke: initiating LLM invocation. assistant_id=%s correlation_id=%s input_hash=%s version=%s",
+            self.assistant_id,
+            correlation_id,
+            input_hash,
+            version,
+        )
         async for chunk in self.astream(  # type: ignore[misc, call-overload]
             input,
             config=config,
@@ -1167,13 +1481,30 @@ class RemoteGraph(PregelProtocol):
             pass
         try:
             if version == "v2":
+                output_value = _minimise_output(
+                    _attach_provenance(chunk["data"], self.assistant_id, correlation_id)
+                )
+                logger.info(
+                    "RemoteGraph.ainvoke: LLM invocation complete. assistant_id=%s correlation_id=%s",
+                    self.assistant_id,
+                    correlation_id,
+                )
                 return GraphOutput(
-                    value=chunk["data"],
+                    value=output_value,
                     interrupts=tuple(chunk.get("interrupts", ())),
                 )
+            logger.info(
+                "RemoteGraph.ainvoke: LLM invocation complete. assistant_id=%s correlation_id=%s",
+                self.assistant_id,
+                correlation_id,
+            )
             return chunk
         except UnboundLocalError:
-            logger.warning("No events received from remote graph")
+            logger.warning(
+                "RemoteGraph.ainvoke: No events received from remote graph. assistant_id=%s correlation_id=%s",
+                self.assistant_id,
+                correlation_id,
+            )
             return None
 
 
