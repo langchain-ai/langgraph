@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import functools
+import logging
 import weakref
 from collections.abc import Callable, Iterable
 from typing import Any, Literal, TypeVar
@@ -28,6 +30,23 @@ from langgraph.store.base import (
 )
 
 F = TypeVar("F", bound=Callable)
+
+logger = logging.getLogger(__name__)
+
+
+def _audit_log(event: str, details: dict[str, Any]) -> None:
+    """Write an audit record for AI-driven store actions."""
+    record = {
+        "audit_event": event,
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        **details,
+    }
+    try:
+        logger.info("AUDIT: %s", record)
+    except Exception as log_exc:
+        # Last-resort: print to stderr so the record is never silently lost
+        import sys
+        print(f"AUDIT_SINK_FAILURE event={event} details={details} log_exc={log_exc}", file=sys.stderr)
 
 
 def _check_loop(func: F) -> F:
@@ -155,6 +174,38 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
     ) -> None:
+        """Delete an item after obtaining Human-in-the-Loop approval."""
+        # HITL approval flow: require explicit human confirmation before deleting
+        approval = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: input(
+                f"[HITL] Approve deletion of key '{key}' in namespace {namespace}? "
+                "Type 'yes' to confirm: "
+            ),
+        )
+        if approval.strip().lower() != "yes":
+            _audit_log(
+                "delete_rejected",
+                {
+                    "namespace": namespace,
+                    "key": key,
+                    "reason": "Human operator rejected the delete operation",
+                },
+            )
+            raise PermissionError(
+                f"Delete operation for key '{key}' in namespace {namespace} "
+                "was not approved by the human operator."
+            )
+
+        _audit_log(
+            "delete_approved",
+            {
+                "namespace": namespace,
+                "key": key,
+                "reason": "Human operator approved the delete operation",
+            },
+        )
+
         self._ensure_task()
         fut = self._loop.create_future()
         self._aqueue.put_nowait((fut, PutOp(namespace, key, None)))
@@ -254,6 +305,35 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
     ) -> None:
+        """Delete an item after obtaining Human-in-the-Loop approval."""
+        # HITL approval flow: require explicit human confirmation before deleting
+        approval = input(
+            f"[HITL] Approve deletion of key '{key}' in namespace {namespace}? "
+            "Type 'yes' to confirm: "
+        )
+        if approval.strip().lower() != "yes":
+            _audit_log(
+                "delete_rejected",
+                {
+                    "namespace": namespace,
+                    "key": key,
+                    "reason": "Human operator rejected the delete operation",
+                },
+            )
+            raise PermissionError(
+                f"Delete operation for key '{key}' in namespace {namespace} "
+                "was not approved by the human operator."
+            )
+
+        _audit_log(
+            "delete_approved",
+            {
+                "namespace": namespace,
+                "key": key,
+                "reason": "Human operator approved the delete operation",
+            },
+        )
+
         asyncio.run_coroutine_threadsafe(
             self.adelete(namespace, key=key), self._loop
         ).result()
@@ -350,7 +430,29 @@ async def _run(
                 # action each operation
                 try:
                     listen, dedupped = _dedupe_ops(values)
+
+                    # Audit log each operation before execution
+                    _audit_log(
+                        "batch_operations_start",
+                        {
+                            "operation_count": len(dedupped),
+                            "operation_types": [type(op).__name__ for op in dedupped],
+                            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                        },
+                    )
+
                     results = await s.abatch(dedupped)
+
+                    # Audit log successful completion
+                    _audit_log(
+                        "batch_operations_success",
+                        {
+                            "operation_count": len(dedupped),
+                            "result_count": len(results),
+                            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                        },
+                    )
+
                     if listen is not None:
                         results = [results[ix] for ix in listen]
 
@@ -360,6 +462,25 @@ async def _run(
                         if not fut.done():
                             fut.set_result(result)
                 except Exception as e:
+                    # Audit log the failure so there is always a forensic record
+                    try:
+                        _audit_log(
+                            "batch_operations_failure",
+                            {
+                                "operation_count": len(dedupped),
+                                "operation_types": [type(op).__name__ for op in dedupped],
+                                "error_type": type(e).__name__,
+                                "error_message": str(e),
+                                "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                            },
+                        )
+                    except Exception as audit_exc:
+                        import sys
+                        print(
+                            f"AUDIT_SINK_FAILURE during batch_operations_failure: "
+                            f"original_error={e!r} audit_exc={audit_exc!r}",
+                            file=sys.stderr,
+                        )
                     for fut in futs:
                         # guard against future being done (e.g. cancelled)
                         if not fut.done():
