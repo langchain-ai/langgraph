@@ -1,4 +1,4 @@
-.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile start-dev-server integration_tests
+.PHONY: all format lint type test test_watch integration_tests spell_check spell_fix benchmark profile start-dev-server integration_tests
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -87,15 +87,15 @@ integration_tests:
 
 WORKERS ?= auto
 XDIST_ARGS := $(if $(WORKERS),-n $(WORKERS) --dist worksteal,)
-MAXFAIL ?=
-MAXFAIL_ARGS := $(if $(MAXFAIL),--maxfail $(MAXFAIL),)
+MAXFAIL ?= 1
+MAXFAIL_ARGS = $(if $(MAXFAIL),--maxfail $(MAXFAIL),)
 # Add an '-x' if xdist is enabled
 XDIST_ARGS := $(if $(WORKERS),-x $(XDIST_ARGS),)
 
 test_watch:
 	make start-services &&\
 	make start-dev-server &&\
-	uv run ptw . -- --ff -vv $(XDIST_ARGS) $(MAXFAIL_ARGS) $(TEST); \
+	uv run ptw -- --ff -vv $(XDIST_ARGS) $(MAXFAIL_ARGS) $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-services; \
 	make stop-dev-server; \
@@ -125,9 +125,12 @@ lint lint_diff lint_package lint_tests:
 	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE)
 	[ "$(PYTHON_FILES)" = "" ] || uv run mypy langgraph --cache-dir $(MYPY_CACHE)
 
+type:
+	mkdir -p $(MYPY_CACHE) && uv run mypy langgraph --cache-dir $(MYPY_CACHE)
+
 format format_diff:
 	uv run ruff format $(PYTHON_FILES)
-	uv run ruff check --select I --fix $(PYTHON_FILES)
+	uv run ruff check --fix $(PYTHON_FILES)
 
 spell_check:
 	uv run codespell --toml pyproject.toml
@@ -147,6 +150,7 @@ help:
 	@echo '-- LINTING --'
 	@echo 'format                       - run code formatters'
 	@echo 'lint                         - run linters'
+	@echo 'type                         - run type checking'
 	@echo 'spell_check               	- run codespell on the project'
 	@echo 'spell_fix               		- run codespell on the project and fix the errors'
 	@echo '-- TESTS --'

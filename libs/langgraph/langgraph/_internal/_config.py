@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import ChainMap
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from os import getenv
 from typing import Any, cast
 
@@ -28,7 +28,7 @@ from langgraph._internal._constants import (
     NS_SEP,
 )
 
-DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10000"))
+DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10007"))
 
 
 def recast_checkpoint_ns(ns: str) -> str:
@@ -217,14 +217,16 @@ def get_callback_manager_for_config(
             callbacks.add_tags(all_tags)
         if metadata := config.get("metadata"):
             callbacks.add_metadata(metadata)
-        return callbacks
+        manager = callbacks
     else:
         # otherwise create a new manager
-        return CallbackManager.configure(
+        manager = CallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
+            langsmith_inheritable_metadata=_get_tracing_metadata_defaults(config),
         )
+    return manager
 
 
 def get_async_callback_manager_for_config(
@@ -255,14 +257,16 @@ def get_async_callback_manager_for_config(
             callbacks.add_tags(all_tags)
         if metadata := config.get("metadata"):
             callbacks.add_metadata(metadata)
-        return callbacks
+        manager = callbacks
     else:
         # otherwise create a new manager
-        return AsyncCallbackManager.configure(
+        manager = AsyncCallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
+            langsmith_inheritable_metadata=_get_tracing_metadata_defaults(config),
         )
+    return manager
 
 
 def _is_not_empty(value: Any) -> bool:
@@ -308,22 +312,54 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         for k, v in config.items():
             if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
-    _empty_metadata = empty["metadata"]
-    for key, value in empty[CONF].items():
-        if _exclude_as_metadata(key, value, _empty_metadata):
-            continue
-        _empty_metadata[key] = value
+
+    configurable = empty.get("configurable")
+    metadata = empty.get("metadata")
+    if configurable and metadata is not None:
+        for key in _PROPAGATE_TO_METADATA:
+            if key in metadata:
+                continue
+            value = configurable.get(key)
+            if value:
+                metadata[key] = value
     return empty
 
 
 _OMIT = ("key", "token", "secret", "password", "auth")
 
 
-def _exclude_as_metadata(key: str, value: Any, metadata: Mapping[str, Any]) -> bool:
+def _exclude_as_metadata(key: str, value: Any) -> bool:
     key_lower = key.casefold()
     return (
         key.startswith("__")
         or not isinstance(value, (str, int, float, bool))
-        or key in metadata
         or any(substr in key_lower for substr in _OMIT)
     )
+
+
+def _get_tracing_metadata_defaults(
+    config: RunnableConfig,
+) -> dict[str, Any] | None:
+    """Get tracer-only metadata defaults from configurable values."""
+    configurable = config.get("configurable")
+    if not configurable:
+        return None
+    metadata: dict[str, Any] = {}
+    for key, value in configurable.items():
+        if _exclude_as_metadata(key, value):
+            continue
+        metadata[key] = value
+    return metadata or None
+
+
+_PROPAGATE_TO_METADATA = frozenset(
+    (
+        "thread_id",
+        "checkpoint_id",
+        "checkpoint_ns",
+        "task_id",
+        "run_id",
+        "assistant_id",
+        "graph_id",
+    )
+)

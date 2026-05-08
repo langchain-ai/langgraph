@@ -368,6 +368,61 @@ services:
     assert clean_empty_lines(actual_compose_str) == expected_compose_str
 
 
+def test_compose_distributed_mode_with_custom_db():
+    """Test compose with engine_runtime_mode='distributed' adds N_JOBS_PER_WORKER=0."""
+    port = 8123
+    custom_postgres_uri = "custom_postgres_uri"
+    actual_compose_str = compose(
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
+        postgres_uri=custom_postgres_uri,
+        engine_runtime_mode="distributed",
+    )
+    expected_compose_str = f"""services:
+    langgraph-redis:
+        image: redis:6
+        healthcheck:
+            test: redis-cli ping
+            interval: 5s
+            timeout: 1s
+            retries: 5
+    langgraph-api:
+        ports:
+            - "{port}:8000"
+        depends_on:
+            langgraph-redis:
+                condition: service_healthy
+        environment:
+            REDIS_URI: redis://langgraph-redis:6379
+            POSTGRES_URI: {custom_postgres_uri}
+            N_JOBS_PER_WORKER: "0\""""
+    assert clean_empty_lines(actual_compose_str) == expected_compose_str
+
+
+def test_compose_distributed_mode_with_default_db():
+    """Test compose distributed mode with default DB includes N_JOBS_PER_WORKER=0."""
+    port = 8123
+    actual_compose_str = compose(
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
+        engine_runtime_mode="distributed",
+    )
+    assert 'N_JOBS_PER_WORKER: "0"' in actual_compose_str
+    assert "langgraph-postgres:" in actual_compose_str
+    assert "langgraph-redis:" in actual_compose_str
+
+
+def test_compose_combined_mode_has_no_n_jobs():
+    """Test compose with default combined_queue_worker mode does NOT set N_JOBS_PER_WORKER."""
+    port = 8123
+    actual_compose_str = compose(
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
+        engine_runtime_mode="combined_queue_worker",
+    )
+    assert "N_JOBS_PER_WORKER" not in actual_compose_str
+
+
 @pytest.mark.parametrize(
     "input_str,expected",
     [

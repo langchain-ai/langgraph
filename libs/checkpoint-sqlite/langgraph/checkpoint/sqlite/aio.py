@@ -4,7 +4,7 @@ import asyncio
 import json
 import random
 import threading
-from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any, TypeVar, cast
 
@@ -17,12 +17,19 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    DeltaChannelHistory,
     SerializerProtocol,
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
+from langgraph.checkpoint.sqlite._delta import (
+    DELTA_STAGE1_SQL,
+    build_delta_channels_writes_history,
+    build_delta_stage2_sql,
+    step_walk_with_row,
+)
 from langgraph.checkpoint.sqlite.utils import search_where
 
 T = TypeVar("T", bound=Callable)
@@ -270,6 +277,29 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             pass
         return asyncio.run_coroutine_threadsafe(
             self.adelete_thread(thread_id), self.loop
+        ).result()
+
+    def get_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        """Sync bridge to `aget_delta_channel_history`.
+
+        Mirrors the same cross-thread guard as `get_tuple` /
+        `delete_thread` — calling from the loop thread raises rather than
+        deadlocking.
+        """
+        try:
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface. "
+                    "For example, use `await checkpointer.aget_delta_channel_history(...)`."
+                )
+        except RuntimeError:
+            pass
+        return asyncio.run_coroutine_threadsafe(
+            self.aget_delta_channel_history(config=config, channels=channels),
+            self.loop,
         ).result()
 
     async def setup(self) -> None:
@@ -588,6 +618,83 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                 (str(thread_id),),
             )
             await self.conn.commit()
+
+    async def aget_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        """Fast-path override of `BaseCheckpointSaver.aget_delta_channel_history`.
+
+        See `SqliteSaver.get_delta_channel_history` for design notes; this
+        is the async equivalent using `aiosqlite` cursors. Stage 1 pages
+        the parent chain newest-first and Python-deserializes each
+        checkpoint blob to find per-channel snapshots; stage 2 fetches
+        only the relevant writes via per-channel UNION ALL.
+        """
+        if not channels:
+            return {}
+        channels = list(channels)
+        await self.setup()
+        thread_id = str(config["configurable"]["thread_id"])
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = get_checkpoint_id(config)
+        if checkpoint_id is None:
+            target = await self.aget_tuple(config)
+            if target is None:
+                return {ch: {"writes": []} for ch in channels}
+            checkpoint_id = target.config["configurable"]["checkpoint_id"]
+
+        chain_by_ch: dict[str, list[str]] = {ch: [] for ch in channels}
+        seed_val_by_ch: dict[str, Any] = {}
+        walk_state: dict[str, Any] = {}
+        seeded: set[str] = set()
+
+        async with self.lock, self.conn.cursor() as cur:
+            await cur.execute(
+                DELTA_STAGE1_SQL, (thread_id, checkpoint_ns, checkpoint_id)
+            )
+            async for row in cur:
+                cid, parent_cid, type_tag, blob = row
+                if step_walk_with_row(
+                    cid=cid,
+                    parent_cid=parent_cid,
+                    type_tag=type_tag,
+                    blob=blob,
+                    target_id=checkpoint_id,
+                    serde=self.serde,
+                    chain_by_ch=chain_by_ch,
+                    seed_val_by_ch=seed_val_by_ch,
+                    walk_state=walk_state,
+                    seeded=seeded,
+                    channels=channels,
+                ):
+                    break
+
+            channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
+            stage2_sql = build_delta_stage2_sql(
+                chain_lens=[len(chain_by_ch[ch]) for ch in channels_with_chain],
+            )
+            if stage2_sql:
+                stage2_params: list[Any] = []
+                for ch in channels_with_chain:
+                    stage2_params.extend(
+                        [thread_id, checkpoint_ns, ch, *chain_by_ch[ch]]
+                    )
+                await cur.execute(stage2_sql, stage2_params)
+                stage2_rows = cast(
+                    "list[tuple[str, str, str, int, str, bytes]]",
+                    await cur.fetchall(),
+                )
+            else:
+                stage2_rows = []
+
+        return build_delta_channels_writes_history(
+            channels=channels,
+            chain_by_ch=chain_by_ch,
+            seed_val_by_ch=seed_val_by_ch,
+            seeded=seeded,
+            stage2_rows=stage2_rows,
+            serde=self.serde,
+        )
 
     def get_next_version(self, current: str | None, channel: None) -> str:
         """Generate the next version ID for a channel.

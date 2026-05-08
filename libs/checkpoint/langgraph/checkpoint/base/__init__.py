@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
-from typing import (  # noqa: UP035
+import copy
+import logging
+from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
+from typing import (
     Any,
     Generic,
     Literal,
@@ -11,9 +13,11 @@ from typing import (  # noqa: UP035
 )
 
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import NotRequired
 
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
     ERROR,
@@ -25,6 +29,9 @@ from langgraph.checkpoint.serde.types import (
 
 V = TypeVar("V", int, float, str)
 PendingWrite = tuple[str, str, Any]
+
+
+logger = logging.getLogger(__name__)
 
 
 # Marked as total=False to allow for future expansion.
@@ -50,6 +57,23 @@ class CheckpointMetadata(TypedDict, total=False):
     """The IDs of the parent checkpoints.
 
     Mapping from checkpoint namespace to checkpoint ID.
+    """
+    run_id: str
+    """The ID of the run that created this checkpoint."""
+    delta_updates_since_snapshot: dict[str, int]
+    """Per-channel update count since the last `_DeltaSnapshot` was written.
+
+    !!! warning "Beta"
+
+        This metadata field backs `DeltaChannel` (beta). The key name and
+        contents may change while the delta-channel design stabilizes.
+
+    Maps channel name → number of supersteps that wrote to this channel
+    since its last snapshot blob. Used by `pregel.create_checkpoint` to
+    decide when to write the next snapshot (when the count reaches the
+    channel's `snapshot_frequency`, snapshot fires and the count resets
+    to 0). Absent on threads that don't use delta channels. Version-format
+    independent — works for int, float, and string version schemes.
     """
 
 
@@ -111,6 +135,33 @@ class CheckpointTuple(NamedTuple):
     metadata: CheckpointMetadata
     parent_config: RunnableConfig | None = None
     pending_writes: list[PendingWrite] | None = None
+
+
+class DeltaChannelHistory(TypedDict):
+    """Per-channel result entry from `BaseCheckpointSaver.get_delta_channel_history`.
+
+    !!! warning "Beta"
+
+        Part of the `DeltaChannel` support surface; in beta. Field names and
+        semantics may change.
+
+    Storage-level view of what one channel contributed across the ancestor
+    chain of a target checkpoint:
+
+    * `writes` — on-path deltas oldest→newest as `PendingWrite` tuples.
+      Always present; possibly empty. Already filtered to one channel.
+      Writes stored at the target checkpoint itself are pending for the
+      next super-step and are excluded.
+    * `seed` — the stored value at the nearest ancestor whose
+      `channel_values[ch]` is populated. Omitted if the walk reached the
+      root without finding any stored value (consumer treats absence as
+      "start empty"). Typically a `_DeltaSnapshot` for delta channels with
+      finite snapshot frequency, or a plain value for threads migrated
+      from a pre-delta channel type.
+    """
+
+    writes: list[PendingWrite]
+    seed: NotRequired[Any]
 
 
 class BaseCheckpointSaver(Generic[V]):
@@ -268,6 +319,92 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
+    def delete_for_runs(
+        self,
+        run_ids: Sequence[str],
+    ) -> None:
+        """Delete all checkpoints and writes associated with the given run IDs.
+
+        Args:
+            run_ids: The run IDs whose checkpoints should be deleted.
+
+        !!! warning "DeltaChannel"
+
+            Deleting a run that produced ancestor `checkpoint_writes` — or
+            the only `_DeltaSnapshot` blob — for a still-live thread will
+            break reconstruction of any `DeltaChannel` whose history
+            depended on those rows. See the `DeltaChannel` note on `prune`
+            for safe-recovery strategies.
+        """
+        raise NotImplementedError
+
+    def copy_thread(
+        self,
+        source_thread_id: str,
+        target_thread_id: str,
+    ) -> None:
+        """Copy all checkpoints and writes from one thread to another.
+
+        Args:
+            source_thread_id: The thread ID to copy from.
+            target_thread_id: The thread ID to copy to.
+
+        !!! warning "DeltaChannel"
+
+            Implementations must copy the **complete** parent chain (all
+            ancestor checkpoints and their `checkpoint_writes`) — copying
+            only the head checkpoint will leave the target thread with
+            `DeltaChannel` state that cannot be reconstructed (no path back
+            to a `_DeltaSnapshot` ancestor). Equivalently, the copy must
+            include enough ancestors that every `DeltaChannel`-backed key
+            has either a `_DeltaSnapshot` in `channel_values` somewhere in
+            the chain, or a complete write history back to the chain root.
+        """
+        raise NotImplementedError
+
+    def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Prune checkpoints for the given threads.
+
+        Args:
+            thread_ids: The thread IDs to prune.
+            strategy: The pruning strategy. `"keep_latest"` retains only the most
+                recent checkpoint per namespace. `"delete"` removes all checkpoints.
+
+        !!! warning "DeltaChannel"
+
+            Custom implementations must be `DeltaChannel`-aware. `DeltaChannel`
+            stores only a sentinel in `channel_values` for non-snapshot steps;
+            reconstruction walks the parent chain via
+            `get_delta_channel_history`, accumulating rows from
+            `checkpoint_writes` until it reaches an ancestor whose
+            `channel_values` contains a `_DeltaSnapshot` blob (written every
+            `snapshot_frequency` updates).
+
+            A naive `"keep_latest"` that drops intermediate checkpoints and
+            their writes can sever that chain: the surviving "latest"
+            checkpoint is rarely a snapshot point itself, so its delta
+            channels would silently reconstruct as empty (no error raised —
+            `get_delta_channel_history` simply returns no `seed`). Safe
+            options when the graph uses `DeltaChannel`:
+
+            * Walk back from each kept checkpoint and preserve every
+              ancestor (plus its `checkpoint_writes`) up to the nearest one
+              whose `channel_values` already contains a `_DeltaSnapshot` for
+              every `DeltaChannel`-backed key.
+            * Force a fresh snapshot on the kept checkpoint before deleting
+              ancestors — rewrite `channel_values[k] = _DeltaSnapshot(value)`
+              for each delta channel `k` (resolving `value` via the existing
+              ancestor walk first), then prune.
+            * Skip pruning threads whose graph uses `DeltaChannel` until one
+              of the above is implemented.
+        """
+        raise NotImplementedError
+
     async def aget(self, config: RunnableConfig) -> Checkpoint | None:
         """Asynchronously fetch a checkpoint using the given configuration.
 
@@ -373,6 +510,293 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
+    async def adelete_for_runs(
+        self,
+        run_ids: Sequence[str],
+    ) -> None:
+        """Asynchronously delete all checkpoints and writes for the given run IDs.
+
+        Args:
+            run_ids: The run IDs whose checkpoints should be deleted.
+
+        !!! warning "DeltaChannel"
+
+            See `delete_for_runs` — deleting rows a still-live thread's
+            `DeltaChannel` reconstruction depends on (writes between the
+            head and its nearest `_DeltaSnapshot` ancestor) will silently
+            corrupt that channel's state.
+        """
+        raise NotImplementedError
+
+    async def acopy_thread(
+        self,
+        source_thread_id: str,
+        target_thread_id: str,
+    ) -> None:
+        """Asynchronously copy all checkpoints and writes from one thread to another.
+
+        Args:
+            source_thread_id: The thread ID to copy from.
+            target_thread_id: The thread ID to copy to.
+
+        !!! warning "DeltaChannel"
+
+            See `copy_thread` — the copy must carry the complete parent
+            chain (or at least back to a `_DeltaSnapshot` ancestor for every
+            `DeltaChannel`) so the target thread can reconstruct delta
+            state.
+        """
+        raise NotImplementedError
+
+    async def aprune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Asynchronously prune checkpoints for the given threads.
+
+        Args:
+            thread_ids: The thread IDs to prune.
+            strategy: The pruning strategy. `"keep_latest"` retains only the most
+                recent checkpoint per namespace. `"delete"` removes all checkpoints.
+
+        !!! warning "DeltaChannel"
+
+            See `prune` for the full `DeltaChannel` caveat. In short:
+            `"keep_latest"` must not drop ancestor checkpoints / writes that
+            sit between the kept checkpoint and the nearest `_DeltaSnapshot`
+            ancestor, or delta channels will silently reconstruct as empty.
+        """
+        raise NotImplementedError
+
+    def get_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        """Walk the parent chain returning per-channel writes + seed.
+
+        !!! warning "Beta"
+
+            This method is part of the `DeltaChannel` support surface and is
+            in beta. The signature, return shape (`DeltaChannelHistory`), and
+            interaction with `_DeltaSnapshot` blobs may change. Override at
+            your own risk; the default implementation will continue to work
+            against the public `BaseCheckpointSaver` contract.
+
+        For each requested channel, walks ancestors of the checkpoint
+        identified by `config` (following `parent_config`) and accumulates
+        `pending_writes` for that channel. The walk terminates per-channel
+        at the nearest ancestor whose `channel_values[ch]` is populated;
+        that value is returned as `seed`. If the walk reaches the root
+        without finding a stored value, `seed` is omitted from that
+        channel's entry — the consumer treats the absence as "start
+        empty."
+
+        Walks the **parent chain** (not `list(before=...)`): for forked
+        threads, only on-path ancestors contribute.
+
+        The default implementation walks `get_tuple` + `parent_config`
+        once for all channels — each ancestor visited once, not once per
+        channel. Savers with direct storage access (`InMemorySaver`,
+        `PostgresSaver`) override for performance; the return contract is
+        fixed here.
+
+        Args:
+            config: Configuration identifying the target checkpoint.
+            channels: Channel names to walk for. Empty → empty mapping.
+
+        Returns:
+            Per-channel `DeltaChannelHistory` for every name in `channels`.
+        """
+        if not channels:
+            return {}
+        collected_by_ch: dict[str, list[PendingWrite]] = {c: [] for c in channels}
+        seed_by_ch: dict[str, Any] = {}
+        remaining: set[str] = set(channels)
+        target_tuple = self.get_tuple(config)
+        cursor_config: RunnableConfig | None = (
+            target_tuple.parent_config if target_tuple else None
+        )
+        while cursor_config is not None and remaining:
+            tup = self.get_tuple(cursor_config)
+            if tup is None:
+                break
+            if tup.pending_writes:
+                for write in reversed(tup.pending_writes):
+                    ch = write[1]
+                    if ch in remaining:
+                        collected_by_ch[ch].append(write)
+            for ch in list(remaining):
+                if ch in tup.checkpoint["channel_values"]:
+                    seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]
+                    remaining.discard(ch)
+            cursor_config = tup.parent_config
+        result: dict[str, DeltaChannelHistory] = {}
+        for ch in channels:
+            entry: DeltaChannelHistory = {"writes": list(reversed(collected_by_ch[ch]))}
+            if ch in seed_by_ch:
+                entry["seed"] = seed_by_ch[ch]
+            result[ch] = entry
+        return result
+
+    async def aget_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        """Async version of `get_delta_channel_history`.
+
+        !!! warning "Beta"
+
+            This method is part of the `DeltaChannel` support surface and is
+            in beta. See `get_delta_channel_history` for caveats.
+        """
+        if not channels:
+            return {}
+        collected_by_ch: dict[str, list[PendingWrite]] = {c: [] for c in channels}
+        seed_by_ch: dict[str, Any] = {}
+        remaining: set[str] = set(channels)
+        target_tuple = await self.aget_tuple(config)
+        cursor_config: RunnableConfig | None = (
+            target_tuple.parent_config if target_tuple else None
+        )
+        while cursor_config is not None and remaining:
+            tup = await self.aget_tuple(cursor_config)
+            if tup is None:
+                break
+            if tup.pending_writes:
+                for write in reversed(tup.pending_writes):
+                    ch = write[1]
+                    if ch in remaining:
+                        collected_by_ch[ch].append(write)
+            for ch in list(remaining):
+                if ch in tup.checkpoint["channel_values"]:
+                    seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]
+                    remaining.discard(ch)
+            cursor_config = tup.parent_config
+        result: dict[str, DeltaChannelHistory] = {}
+        for ch in channels:
+            entry: DeltaChannelHistory = {"writes": list(reversed(collected_by_ch[ch]))}
+            if ch in seed_by_ch:
+                entry["seed"] = seed_by_ch[ch]
+            result[ch] = entry
+        return result
+
+    def get_delta_channel_keepset(
+        self,
+        *,
+        config: RunnableConfig,
+        channels: Sequence[str],
+    ) -> set[str]:
+        """Return ancestor checkpoint_ids that must survive deletion.
+
+        !!! warning "Beta"
+
+            This method is part of the `DeltaChannel` support surface and is
+            in beta. The signature may change while the delta-channel design
+            stabilizes.
+
+        Walks the parent chain from `config` backward, collecting visited
+        checkpoint_ids (inclusive of the target), and terminates per-channel
+        when that channel has a populated `channel_values[ch]` (a
+        `_DeltaSnapshot` blob or a pre-migration plain value). The returned
+        set is the minimum keep-set: every checkpoint_id whose removal would
+        break reconstruction of the listed channels at `config`.
+
+        Pass `channels=[]` to return just `{config.checkpoint_id}` — useful
+        for graphs that don't use `DeltaChannel`.
+
+        Compose this into custom `prune` / `delete_for_runs` / `copy_thread`::
+
+            keep = saver.get_delta_channel_keepset(
+                config=head_config, channels=delta_channels,
+            )
+            delete_rows_not_in(keep)
+
+        Note:
+            The default implementation here uses repeated `get_tuple` calls
+            to walk the parent chain. This is a basic reference implementation
+            suitable for low-frequency maintenance operations (prune, etc.).
+            Custom checkpointer backends may override with a more efficient
+            version tailored to their data model (e.g. a single SQL query
+            with a recursive CTE), but it is not required — the default works
+            correctly for any saver that implements `get_tuple`.
+
+        Args:
+            config: Configuration identifying the target checkpoint.
+            channels: Channel names whose delta history must be preserved.
+                Empty sequence means only the target checkpoint_id is kept.
+
+        Returns:
+            Set of checkpoint_ids that must not be deleted.
+        """
+        target_tuple = self.get_tuple(config)
+        if target_tuple is None:
+            return set()
+        target_id = target_tuple.config["configurable"]["checkpoint_id"]
+        keep: set[str] = {target_id}
+        if not channels:
+            return keep
+        remaining: set[str] = set(channels)
+        for ch in list(remaining):
+            if ch in target_tuple.checkpoint["channel_values"]:
+                remaining.discard(ch)
+        if not remaining:
+            return keep
+        cursor_config: RunnableConfig | None = target_tuple.parent_config
+        while cursor_config is not None and remaining:
+            tup = self.get_tuple(cursor_config)
+            if tup is None:
+                break
+            cid = tup.config["configurable"]["checkpoint_id"]
+            keep.add(cid)
+            for ch in list(remaining):
+                if ch in tup.checkpoint["channel_values"]:
+                    remaining.discard(ch)
+            if not remaining:
+                break
+            cursor_config = tup.parent_config
+        return keep
+
+    async def aget_delta_channel_keepset(
+        self,
+        *,
+        config: RunnableConfig,
+        channels: Sequence[str],
+    ) -> set[str]:
+        """Async version of `get_delta_channel_keepset`.
+
+        !!! warning "Beta"
+
+            This method is part of the `DeltaChannel` support surface and is
+            in beta. See `get_delta_channel_keepset` for full documentation.
+        """
+        target_tuple = await self.aget_tuple(config)
+        if target_tuple is None:
+            return set()
+        target_id = target_tuple.config["configurable"]["checkpoint_id"]
+        keep: set[str] = {target_id}
+        if not channels:
+            return keep
+        remaining: set[str] = set(channels)
+        for ch in list(remaining):
+            if ch in target_tuple.checkpoint["channel_values"]:
+                remaining.discard(ch)
+        if not remaining:
+            return keep
+        cursor_config: RunnableConfig | None = target_tuple.parent_config
+        while cursor_config is not None and remaining:
+            tup = await self.aget_tuple(cursor_config)
+            if tup is None:
+                break
+            cid = tup.config["configurable"]["checkpoint_id"]
+            keep.add(cid)
+            for ch in list(remaining):
+                if ch in tup.checkpoint["channel_values"]:
+                    remaining.discard(ch)
+            if not remaining:
+                break
+            cursor_config = tup.parent_config
+        return keep
+
     def get_next_version(self, current: V | None, channel: None) -> V:
         """Generate the next version ID for a channel.
 
@@ -393,6 +817,37 @@ class BaseCheckpointSaver(Generic[V]):
             return 1
         else:
             return current + 1
+
+    def with_allowlist(
+        self, extra_allowlist: Collection[tuple[str, ...]]
+    ) -> BaseCheckpointSaver[V]:
+        """Return a shallow clone with a derived msgpack allowlist."""
+        serde = _with_msgpack_allowlist(self.serde, extra_allowlist)
+        if serde is self.serde:
+            return self
+        clone = copy.copy(self)
+        clone.serde = maybe_add_typed_methods(serde)
+        return clone
+
+
+def _with_msgpack_allowlist(
+    serde: SerializerProtocol, extra_allowlist: Collection[tuple[str, ...]]
+) -> SerializerProtocol:
+    if isinstance(serde, JsonPlusSerializer):
+        return serde.with_msgpack_allowlist(extra_allowlist)
+    if isinstance(serde, EncryptedSerializer):
+        inner = serde.serde
+        if isinstance(inner, JsonPlusSerializer):
+            updated_inner = inner.with_msgpack_allowlist(extra_allowlist)
+            if updated_inner is inner:
+                return serde
+            return EncryptedSerializer(serde.cipher, updated_inner)
+    logger.warning(
+        "Serializer %s does not support msgpack allowlist. "
+        "Strict msgpack deserialization will not be enforced.",
+        type(serde).__name__,
+    )
+    return serde
 
 
 class EmptyChannelError(Exception):

@@ -6,6 +6,8 @@ import typing
 import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
+from dataclasses import is_dataclass
+from datetime import timedelta
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
@@ -14,6 +16,7 @@ from typing import (
     Any,
     Generic,
     Literal,
+    TypeVar,
     Union,
     cast,
     get_args,
@@ -29,6 +32,7 @@ from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
+from langgraph._internal import _serde
 from langgraph._internal._constants import (
     INTERRUPT,
     NS_END,
@@ -42,9 +46,11 @@ from langgraph._internal._fields import (
 )
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
+from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.named_barrier_value import (
@@ -78,6 +84,7 @@ from langgraph.types import (
     Command,
     RetryPolicy,
     Send,
+    TimeoutPolicy,
     ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
@@ -296,7 +303,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -363,7 +372,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph` where input schema is specified.
@@ -435,7 +446,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -502,7 +515,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is specified.
@@ -576,7 +591,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`.
@@ -595,6 +612,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
                 If a sequence is provided, the first matching policy will be applied.
             cache_policy: The cache policy for the node.
+            error_handler: Optional node-level error handler callable for this node.
             destinations: Destinations that indicate where a node can route to.
 
                 Useful for edgeless graphs with nodes that return `Command` objects.
@@ -606,6 +624,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 !!! warning
 
                     This is only used for graph rendering and doesn't have any effect on the graph execution.
+            timeout: Timeout for each node attempt. A number or `timedelta` is
+                a hard wall-clock cap and is not refreshed. Use `TimeoutPolicy`
+                to configure both a wall-clock `run_timeout` and an
+                `idle_timeout` refreshed by progress signals. When exceeded, a
+                [`NodeTimeoutError`][langgraph.errors.NodeTimeoutError] is raised
+                and the retry policy (if any) decides whether to retry. Timeouts
+                are supported only for async nodes; sync nodes cannot be safely
+                cancelled in-process.
 
         Example:
             ```python
@@ -659,6 +685,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
             if input_schema is None:
                 input_schema = cast(type[NodeInputT] | None, input_)
+        timeout = coerce_timeout_policy(timeout)
 
         if not isinstance(node, str):
             action = node
@@ -745,6 +772,25 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         if destinations is not None:
             ends = destinations
 
+        resolved_input_schema: type[Any] = (
+            input_schema or inferred_input_schema or self.state_schema
+        )
+        handler_node_name: str | None = None
+        if error_handler is not None:
+            handler_node_name = f"__error_handler__{node}"
+            if handler_node_name in self.nodes:
+                raise ValueError(
+                    f"Auto-generated error handler node `{handler_node_name}` already exists."
+                )
+            self.nodes[handler_node_name] = StateNodeSpec[Any, ContextT](
+                coerce_to_runnable(error_handler, name=handler_node_name, trace=False),  # type: ignore[arg-type]
+                metadata=None,
+                input_schema=resolved_input_schema,
+                retry_policy=None,
+                cache_policy=None,
+                is_error_handler=True,
+            )
+
         if input_schema is not None:
             self.nodes[node] = StateNodeSpec[NodeInputT, ContextT](
                 coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
@@ -752,8 +798,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=input_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
+                timeout=timeout,
             )
         elif inferred_input_schema is not None:
             self.nodes[node] = StateNodeSpec(
@@ -762,8 +810,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=inferred_input_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
+                timeout=timeout,
             )
         else:
             self.nodes[node] = StateNodeSpec[StateT, ContextT](
@@ -772,8 +822,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=self.state_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
+                timeout=timeout,
             )
 
         input_schema = input_schema or inferred_input_schema
@@ -1028,7 +1080,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             for node in interrupt:
                 if node not in self.nodes:
                     raise ValueError(f"Interrupt node `{node}` not found")
-
         self.compiled = True
         return self
 
@@ -1042,6 +1093,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1074,11 +1126,41 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
+            transformers: Optional sequence of `StreamTransformer` classes or
+                configured factories. Classes and factories are instantiated
+                per run whenever `stream_events(version="v3")` / `astream_events(version="v3")` is called and are
+                propagated to subgraph scopes. Custom factories should follow
+                the standard `StreamTransformer` constructor shape by
+                accepting `scope` as their first argument. Appended after the
+                built-in stream transformers.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
+
+        serde_allowlist: set[tuple[str, ...]] | None = None
+        if _serde.STRICT_MSGPACK_ENABLED:
+            schema_types: list[type[Any]] = [
+                self.state_schema,
+                self.input_schema,
+                self.output_schema,
+            ]
+            if self.context_schema is not None:
+                schema_types.append(self.context_schema)
+            for node in self.nodes.values():
+                schema_types.append(node.input_schema)
+            for branches in self.branches.values():
+                for branch in branches.values():
+                    if branch.input_schema is not None:
+                        schema_types.append(branch.input_schema)
+            serde_allowlist = _serde.build_serde_allowlist(
+                schemas=schema_types,
+                channels=self.channels,
+            )
+            checkpointer = _serde.apply_checkpointer_allowlist(
+                checkpointer, serde_allowlist
+            )
 
         # assign default values
         interrupt_before = interrupt_before or []
@@ -1111,6 +1193,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 key for key, val in self.channels.items() if not is_managed_value(val)
             ]
         )
+        node_error_handler_map = {
+            node_name: spec.error_handler_node
+            for node_name, spec in self.nodes.items()
+            if spec.error_handler_node is not None
+        }
 
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
@@ -1133,12 +1220,29 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             debug=debug,
             store=store,
             cache=cache,
+            node_error_handler_map=node_error_handler_map,
             name=name or "LangGraph",
+            stream_transformers=transformers,
         )
+        compiled._serde_allowlist = serde_allowlist
 
         compiled.attach_node(START, None)
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
+
+        # Record output/state mappers for v2 stream coercion (pydantic/dataclass only)
+        compiled._output_mapper = _pick_mapper(
+            list(output_channels)
+            if isinstance(output_channels, list)
+            else [output_channels],
+            self.output_schema,
+        )
+        compiled._state_mapper = _pick_mapper(
+            list(stream_channels)
+            if isinstance(stream_channels, list)
+            else [stream_channels],
+            self.state_schema,
+        )
 
         for start, end in self.edges:
             compiled.attach_edge(start, end)
@@ -1159,6 +1263,8 @@ class CompiledStateGraph(
 ):
     builder: StateGraph[StateT, ContextT, InputT, OutputT]
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
+    _output_mapper: Callable[[Any], Any] | None
+    _state_mapper: Callable[[Any], Any] | None
 
     def __init__(
         self,
@@ -1289,7 +1395,10 @@ class CompiledStateGraph(
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
+                is_error_handler=node.is_error_handler,
+                error_handler_node=node.error_handler_node,
                 bound=node.runnable,  # type: ignore[arg-type]
+                timeout=node.timeout,
             )
         else:
             raise RuntimeError
@@ -1480,12 +1589,15 @@ def _pick_mapper(
 ) -> Callable[[Any], Any] | None:
     if state_keys == ["__root__"]:
         return None
-    if isclass(schema) and issubclass(schema, dict):
-        return None
-    return partial(_coerce_state, schema)
+    if isclass(schema) and (issubclass(schema, BaseModel) or is_dataclass(schema)):
+        return partial(_coerce_state, schema)
+    return None
 
 
-def _coerce_state(schema: type[Any], input: dict[str, Any]) -> dict[str, Any]:
+_S = TypeVar("_S")
+
+
+def _coerce_state(schema: type[_S], input: dict[str, Any]) -> _S:
     return schema(**input)
 
 
@@ -1622,6 +1734,20 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
         # Search through all annotated medata to find channel annotations
         for item in meta:
             if isinstance(item, BaseChannel):
+                if isinstance(item, DeltaChannel) and hasattr(typ, "__origin__"):
+                    origin = typ.__origin__
+                    # Unwrap parameterized Required[X]/NotRequired[X] to X
+                    # (e.g. Annotated[NotRequired[dict[...]], ...]).
+                    if hasattr(origin, "__origin__") and origin.__origin__ in (
+                        Required,
+                        NotRequired,
+                    ):
+                        origin = origin.__args__[0]
+                    item = item.__class__(
+                        item.reducer,
+                        origin,
+                        snapshot_frequency=item.snapshot_frequency,
+                    )
                 return item
             elif isclass(item) and issubclass(item, BaseChannel):
                 # ex, Annotated[int, EphemeralValue, SomeOtherAnnotation]

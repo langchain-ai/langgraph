@@ -2,10 +2,12 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
   pull_request:
+  
 
 permissions:
   contents: read
@@ -24,11 +26,12 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      python: ${{ steps.filter.outputs.python }}
-      deps: ${{ steps.filter.outputs.deps }}
+      python: ${{ steps.filter.outputs.python || 'true' }}
+      deps: ${{ steps.filter.outputs.deps || 'true' }}
     steps:
       - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+        if: github.event_name != 'workflow_dispatch'
         id: filter
         with:
           filters: |
@@ -39,6 +42,7 @@ jobs:
               - 'libs/checkpoint/**'
               - 'libs/checkpoint-sqlite/**'
               - 'libs/checkpoint-postgres/**'
+              - 'libs/checkpoint-conformance/**'
               - 'libs/prebuilt/**'
             deps:
               - '**/pyproject.toml'
@@ -57,7 +61,7 @@ jobs:
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
-
+            "libs/checkpoint-conformance",
             "libs/prebuilt",
           ]
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
@@ -77,6 +81,7 @@ jobs:
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
+            "libs/checkpoint-conformance",
             "libs/prebuilt",
             "libs/sdk-py",
           ]
@@ -120,11 +125,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python-version }}
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: "3.13"
-          enable-cache: true
           cache-suffix: "schema-check-cli"
+          working-directory: libs/cli
       - name: Install CLI dependencies
         run: |
           cd libs/cli

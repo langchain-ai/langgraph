@@ -11,13 +11,19 @@ from typing import (
     TypeVar,
     Union,
 )
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import langsmith
 import pytest
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tracers import LangChainTracer
 from typing_extensions import NotRequired, Required, TypedDict
 
-from langgraph._internal._config import _is_not_empty, ensure_config
+from langgraph._internal._config import (
+    _is_not_empty,
+    ensure_config,
+    get_callback_manager_for_config,
+)
 from langgraph._internal._fields import (
     _is_optional_type,
     get_enhanced_type_hints,
@@ -298,7 +304,7 @@ def test_is_not_empty() -> None:
     assert not _is_not_empty({})
 
 
-def test_configurable_metadata():
+def test_configurable_metadata() -> None:
     config = {
         "configurable": {
             "a-key": "foo",
@@ -309,11 +315,115 @@ def test_configurable_metadata():
             "andme": 42,
             "nested": {"foo": "bar"},
             "nooverride": -2,
+            "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
+            "langgraph_auth_user_id": "user-1",
         },
         "metadata": {"nooverride": 18},
     }
-    expected = {"includeme", "andme", "nooverride"}
     merged = ensure_config(config)
     metadata = merged["metadata"]
-    assert metadata.keys() == expected
+    assert set(metadata) == {
+        "nooverride",
+        "assistant_id",
+        "thread_id",
+        "checkpoint_id",
+        "run_id",
+        "graph_id",
+        "checkpoint_ns",
+        "task_id",
+    }
     assert metadata["nooverride"] == 18
+
+
+def test_callback_manager_copies_whitelisted_configurable_ids_to_metadata() -> None:
+    config = {
+        "configurable": {
+            "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
+            "langgraph_auth_user_id": "user-1",
+        },
+        "metadata": {
+            "thread_id": "from-metadata",
+            "nooverride": 18,
+        },
+    }
+    manager = ensure_config(config)
+    callback_manager = get_callback_manager_for_config(manager)
+    assert callback_manager.metadata == {
+        "thread_id": "from-metadata",
+        "nooverride": 18,
+        "checkpoint_id": "ckpt-1",
+        "checkpoint_ns": "ns-1",
+        "task_id": "task-1",
+        "run_id": "run-456",
+        "assistant_id": "asst-789",
+        "graph_id": "graph-0",
+    }
+
+
+def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
+    tracer = LangChainTracer(client=MagicMock())
+    config: RunnableConfig = {
+        "configurable": {
+            "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
+            "langgraph_auth_user_id": "user-1",
+            "includeme": "hi",
+            "andme": 42,
+            "__dontinclude": "bar",
+            "some_api_key": "secret",
+            "custom_setting": {"nested": True},
+        },
+        "metadata": {
+            "thread_id": "from-metadata",
+            "user_id": "from-metadata-user",
+            "includeme": "from-metadata",
+        },
+        "callbacks": [tracer],
+    }
+
+    manager = ensure_config(config)
+    callback_manager = get_callback_manager_for_config(manager)
+    handlers = callback_manager.handlers
+    tracers = [handler for handler in handlers if isinstance(handler, LangChainTracer)]
+    assert len(tracers) == 1
+    tracer = tracers[0]
+    assert tracer.tracing_metadata == {
+        "checkpoint_id": "ckpt-1",
+        "checkpoint_ns": "ns-1",
+        "task_id": "task-1",
+        "run_id": "run-456",
+        "assistant_id": "asst-789",
+        "graph_id": "graph-0",
+        "model": "gpt-4o",
+        "cron_id": "cron-1",
+        "andme": 42,
+        "includeme": "hi",
+        "thread_id": "th-123",
+        "user_id": "uid-1",
+    }

@@ -65,7 +65,7 @@ def test_raise_for_status_typed_maps_exceptions_and_sets_status_code(
     with pytest.raises(exc_type) as ei:
         _raise_for_status_typed(r)
 
-    err = cast("APIStatusError", ei.value)
+    err = ei.value
     assert err.status_code == status
     # response attribute should be present and match
     assert err.response.status_code == status
@@ -113,7 +113,7 @@ def test_error_message_in_str_and_args() -> None:
     r = make_response(422, json_body={"message": "Validation failed"})
     with pytest.raises(UnprocessableEntityError) as ei:
         _raise_for_status_typed(r)
-    err = cast("UnprocessableEntityError", ei.value)
+    err = ei.value
     assert str(err) == "Validation failed"
     assert err.args == ("Validation failed",)
     assert err.message == "Validation failed"

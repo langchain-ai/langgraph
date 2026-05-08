@@ -7,7 +7,6 @@ from uuid import UUID
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import CheckpointMetadata, PendingWrite
-from typing_extensions import TypedDict
 
 from langgraph._internal._config import patch_checkpoint_map
 from langgraph._internal._constants import (
@@ -23,42 +22,14 @@ from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel._io import read_channels
-from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
-
-__all__ = ("TaskPayload", "TaskResultPayload", "CheckpointTask", "CheckpointPayload")
-
-
-class TaskPayload(TypedDict):
-    id: str
-    name: str
-    input: Any
-    triggers: list[str]
-
-
-class TaskResultPayload(TypedDict):
-    id: str
-    name: str
-    error: str | None
-    interrupts: list[dict]
-    result: dict[str, Any]
-
-
-class CheckpointTask(TypedDict):
-    id: str
-    name: str
-    error: str | None
-    interrupts: list[dict]
-    state: StateSnapshot | RunnableConfig | None
-
-
-class CheckpointPayload(TypedDict):
-    config: RunnableConfig | None
-    metadata: CheckpointMetadata
-    values: dict[str, Any]
-    next: list[str]
-    parent_config: RunnableConfig | None
-    tasks: list[CheckpointTask]
-
+from langgraph.types import (
+    CheckpointPayload,
+    PregelExecutableTask,
+    PregelTask,
+    StateSnapshot,
+    TaskPayload,
+    TaskResultPayload,
+)
 
 TASK_NAMESPACE = UUID("6ba7b831-9dad-11d1-80b4-00c04fd430c8")
 

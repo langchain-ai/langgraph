@@ -1398,6 +1398,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
             },
         ),
         (
@@ -1407,6 +1408,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 tool_call_id="tool_call123",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 2,
                 "langgraph_node": "tools",
                 "langgraph_triggers": (PUSH,),
@@ -1458,6 +1460,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
             },
         ),
     ]
@@ -1470,6 +1473,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 tool_call_id="tool_call234",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
                 "langgraph_triggers": (PUSH,),
@@ -1484,6 +1488,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 tool_call_id="tool_call567",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
                 "langgraph_triggers": (PUSH,),
@@ -1507,6 +1512,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
             },
         ),
     ]
@@ -6877,6 +6883,7 @@ def test_weather_subgraph(
                     "checkpoint_ns": AnyStr("router_node:"),
                     "ls_provider": "fakemessageslistchatmodel",
                     "ls_model_type": "chat",
+                    "ls_integration": "langchain_chat_model",
                 },
             ),
         ),
@@ -6903,6 +6910,7 @@ def test_weather_subgraph(
                     "checkpoint_ns": AnyStr("weather_graph:"),
                     "ls_provider": "fakemessageslistchatmodel",
                     "ls_model_type": "chat",
+                    "ls_integration": "langchain_chat_model",
                 },
             ),
         ),
@@ -6938,6 +6946,7 @@ def test_weather_subgraph(
                 "checkpoint_ns": AnyStr("router_node:"),
                 "ls_provider": "fakemessageslistchatmodel",
                 "ls_model_type": "chat",
+                "ls_integration": "langchain_chat_model",
             },
         ),
     ]
