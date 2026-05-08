@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import re
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from datetime import timedelta
 from functools import cached_property
@@ -20,6 +22,109 @@ from langgraph.types import CachePolicy, RetryPolicy, TimeoutPolicy
 
 READ_TYPE = Callable[[str | Sequence[str], bool], Any | dict[str, Any]]
 INPUT_CACHE_KEY_TYPE = tuple[Callable[..., Any], tuple[str, ...]]
+
+_DANGEROUS_PATTERNS = [
+    re.compile(r"(?i)(ignore\s+(previous|prior|above|all)\s+(instructions?|prompts?|context))"),
+    re.compile(r"(?i)(system\s*prompt|you\s+are\s+now|act\s+as\s+(?:a\s+)?(?:different|new|another))"),
+    re.compile(r"(?i)(exec\s*\(|eval\s*\(|subprocess|os\.system|shell\s*=\s*True)"),
+    re.compile(r"(?i)(rm\s+-rf|del\s+/[sqf]|format\s+c:|mkfs\b|dd\s+if=)"),
+    re.compile(r"(?i)(base64\s*decode|atob\s*\(|from_base64)"),
+    re.compile(r"(?i)(\bpowershell\b|\bcmd\.exe\b|\b/bin/sh\b|\b/bin/bash\b)"),
+    re.compile(r"(?i)(import\s+os|import\s+subprocess|import\s+sys\b)"),
+    re.compile(r"(?i)(jailbreak|dan\s+mode|developer\s+mode\s+enabled)"),
+]
+
+_LEETSPEAK_PATTERN = re.compile(r"(?i)\b[a-z0-9]*[013457][a-z0-9]*\b")
+_EXCESSIVE_LEETSPEAK_THRESHOLD = 5
+
+_MAX_BASE64_CHUNK_LENGTH = 100
+
+
+def _is_suspicious_base64(text: str) -> bool:
+    """Check if text contains suspicious base64-encoded content."""
+    b64_pattern = re.compile(r"[A-Za-z0-9+/]{20,}={0,2}")
+    for match in b64_pattern.finditer(text):
+        chunk = match.group(0)
+        if len(chunk) > _MAX_BASE64_CHUNK_LENGTH:
+            try:
+                decoded = base64.b64decode(chunk + "==").decode("utf-8", errors="ignore")
+                for pattern in _DANGEROUS_PATTERNS:
+                    if pattern.search(decoded):
+                        return True
+            except Exception:
+                pass
+    return False
+
+
+def _contains_leetspeak_commands(text: str) -> bool:
+    """Heuristic check for excessive leetspeak that may obfuscate commands."""
+    matches = _LEETSPEAK_PATTERN.findall(text)
+    leet_chars = re.compile(r"[013457]")
+    leet_heavy = [m for m in matches if len(leet_chars.findall(m)) >= 2]
+    return len(leet_heavy) >= _EXCESSIVE_LEETSPEAK_THRESHOLD
+
+
+def _sanitize_and_validate_input(input: Any) -> Any:
+    """Sanitize and validate input before passing to the AI model.
+
+    Raises ValueError if the input contains potentially malicious content.
+    Returns the input unchanged if it passes validation.
+    """
+    if input is None:
+        return input
+
+    text_to_check: str | None = None
+
+    if isinstance(input, str):
+        text_to_check = input
+    elif isinstance(input, dict):
+        # Check string values in dict inputs
+        parts = []
+        for v in input.values():
+            if isinstance(v, str):
+                parts.append(v)
+            elif isinstance(v, list):
+                for item in v:
+                    if isinstance(item, str):
+                        parts.append(item)
+                    elif isinstance(item, dict):
+                        for sv in item.values():
+                            if isinstance(sv, str):
+                                parts.append(sv)
+        text_to_check = " ".join(parts) if parts else None
+    elif isinstance(input, list):
+        parts = []
+        for item in input:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                for v in item.values():
+                    if isinstance(v, str):
+                        parts.append(v)
+        text_to_check = " ".join(parts) if parts else None
+
+    if text_to_check is not None:
+        for pattern in _DANGEROUS_PATTERNS:
+            if pattern.search(text_to_check):
+                raise ValueError(
+                    "Input validation failed: potentially malicious content detected. "
+                    "The input contains patterns that may attempt to manipulate the AI model "
+                    "or execute malicious commands."
+                )
+
+        if _is_suspicious_base64(text_to_check):
+            raise ValueError(
+                "Input validation failed: suspicious base64-encoded content detected. "
+                "The input may contain obfuscated malicious instructions."
+            )
+
+        if _contains_leetspeak_commands(text_to_check):
+            raise ValueError(
+                "Input validation failed: suspicious obfuscated content detected. "
+                "The input may contain obfuscated malicious instructions."
+            )
+
+    return input
 
 
 class ChannelRead(RunnableCallable):
@@ -250,9 +355,10 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Any:
+        validated_input = _sanitize_and_validate_input(input)
         self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         return self.bound.invoke(
-            input,
+            validated_input,
             merge_configs(self_config, config),
             **kwargs,
         )
@@ -263,9 +369,10 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Any:
+        validated_input = _sanitize_and_validate_input(input)
         self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         return await self.bound.ainvoke(
-            input,
+            validated_input,
             merge_configs(self_config, config),
             **kwargs,
         )
@@ -276,9 +383,10 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Iterator[Any]:
+        validated_input = _sanitize_and_validate_input(input)
         self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         yield from self.bound.stream(
-            input,
+            validated_input,
             merge_configs(self_config, config),
             **kwargs,
         )
@@ -289,9 +397,10 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> AsyncIterator[Any]:
+        validated_input = _sanitize_and_validate_input(input)
         self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         async for item in self.bound.astream(
-            input,
+            validated_input,
             merge_configs(self_config, config),
             **kwargs,
         ):
