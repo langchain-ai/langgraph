@@ -160,8 +160,8 @@ async def test_exit_resumed_run_sub_freq() -> None:
 
 
 async def test_exit_count_parity_sync_vs_exit() -> None:
-    """Sync and exit durability produce the same delta_updates_since_snapshot
-    after an equivalent run."""
+    """Sync and exit durability produce the same update count in
+    counters_since_delta_snapshot after an equivalent run."""
     for durability in ("sync", "exit"):
         saver = InMemorySaver()
         graph = _build_graph(saver)
@@ -175,9 +175,13 @@ async def test_exit_count_parity_sync_vs_exit() -> None:
 
         head = saver.get_tuple(config)
         assert head is not None
-        counts = head.metadata.get("delta_updates_since_snapshot", {})
-        assert counts.get("messages") == 2, (
-            f"durability={durability}: expected count=2, got {counts}"
+        counters = head.metadata.get("counters_since_delta_snapshot", {})
+        updates, supersteps = counters.get("messages", (0, 0))
+        assert updates == 2, (
+            f"durability={durability}: expected updates=2, got {updates}"
+        )
+        assert supersteps >= 2, (
+            f"durability={durability}: expected supersteps>=2, got {supersteps}"
         )
 
 
@@ -196,8 +200,9 @@ async def test_exit_snapshot_fires_at_frequency() -> None:
     )
     head = saver.get_tuple(config)
     assert head is not None
-    count1 = head.metadata.get("delta_updates_since_snapshot", {}).get("messages", 0)
-    assert count1 == 2
+    counters1 = head.metadata.get("counters_since_delta_snapshot", {})
+    updates1 = counters1.get("messages", (0, 0))[0]
+    assert updates1 == 2
 
     graph.invoke(
         {"messages": [HumanMessage(content="m2", id="h2")]},
@@ -206,8 +211,9 @@ async def test_exit_snapshot_fires_at_frequency() -> None:
     )
     head = saver.get_tuple(config)
     assert head is not None
-    count2 = head.metadata.get("delta_updates_since_snapshot", {}).get("messages", 0)
-    assert count2 == 0, f"Expected reset to 0 after snapshot, got {count2}"
+    counters2 = head.metadata.get("counters_since_delta_snapshot", {})
+    updates2 = counters2.get("messages", (0, 0))[0]
+    assert updates2 == 0, f"Expected reset to 0 after snapshot, got {updates2}"
     assert isinstance(head.checkpoint["channel_values"].get("messages"), _DeltaSnapshot)
 
 
@@ -284,7 +290,7 @@ async def test_exit_multi_run_replay_chain() -> None:
 
 async def test_exit_metadata_round_trip() -> None:
     """K=5 consecutive exit runs with snapshot_frequency=5. Verify metadata
-    delta_updates_since_snapshot increments correctly across runs."""
+    counters_since_delta_snapshot increments correctly across runs."""
     freq = 5
     saver = InMemorySaver()
     graph = _build_graph(saver, freq=freq)
@@ -298,15 +304,16 @@ async def test_exit_metadata_round_trip() -> None:
         )
         head = saver.get_tuple(config)
         assert head is not None
-        count = head.metadata.get("delta_updates_since_snapshot", {}).get("messages", 0)
+        counters = head.metadata.get("counters_since_delta_snapshot", {})
+        updates = counters.get("messages", (0, 0))[0]
         cumulative = i * 2
         if cumulative >= freq:
-            assert count == 0 or count == cumulative % freq or count < freq, (
-                f"After run {i}: count={count} should have reset or be partial"
+            assert updates == 0 or updates == cumulative % freq or updates < freq, (
+                f"After run {i}: updates={updates} should have reset or be partial"
             )
         else:
-            assert count == cumulative, (
-                f"After run {i}: expected {cumulative}, got {count}"
+            assert updates == cumulative, (
+                f"After run {i}: expected {cumulative}, got {updates}"
             )
 
 
