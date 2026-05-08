@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -19,6 +21,32 @@ from langgraph.runtime import (
     get_runtime,
 )
 
+audit_logger = logging.getLogger("langgraph.audit")
+audit_logger.setLevel(logging.INFO)
+if not audit_logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(
+        logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+    )
+    audit_logger.addHandler(_handler)
+
+
+def _audit_invoke(graph_id: str, input_data: Any, config: Any = None) -> None:
+    input_hash = hashlib.sha256(str(input_data).encode()).hexdigest()
+    audit_logger.info(
+        "graph_invocation graph_id=%s input_hash=%s config=%s timestamp=%s",
+        graph_id,
+        input_hash,
+        config,
+        time.time(),
+    )
+
+
+def _redact_api_key(api_key: str) -> str:
+    if api_key and len(api_key) > 4:
+        return api_key[:4] + "****"
+    return "****"
+
 
 def test_injected_runtime() -> None:
     @dataclass
@@ -29,17 +57,20 @@ def test_injected_runtime() -> None:
         message: str
 
     def injected_runtime(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-        return {"message": f"api key: {runtime.context.api_key}"}
+        redacted = _redact_api_key(runtime.context.api_key)
+        return {"message": f"api key: {redacted}"}
 
     graph = StateGraph(state_schema=State, context_schema=Context)
     graph.add_node("injected_runtime", injected_runtime)
     graph.add_edge(START, "injected_runtime")
     graph.add_edge("injected_runtime", END)
     compiled = graph.compile()
+    test_api_key = "test_key_for_testing"
+    _audit_invoke("test_injected_runtime", {"message": "hello world"})
     result = compiled.invoke(
-        {"message": "hello world"}, context=Context(api_key="sk_123456")
+        {"message": "hello world"}, context=Context(api_key=test_api_key)
     )
-    assert result == {"message": "api key: sk_123456"}
+    assert result == {"message": f"api key: {_redact_api_key(test_api_key)}"}
 
 
 def test_context_runtime() -> None:
@@ -52,17 +83,20 @@ def test_context_runtime() -> None:
 
     def context_runtime(state: State) -> dict[str, Any]:
         runtime = get_runtime(Context)
-        return {"message": f"api key: {runtime.context.api_key}"}
+        redacted = _redact_api_key(runtime.context.api_key)
+        return {"message": f"api key: {redacted}"}
 
     graph = StateGraph(state_schema=State, context_schema=Context)
     graph.add_node("context_runtime", context_runtime)
     graph.add_edge(START, "context_runtime")
     graph.add_edge("context_runtime", END)
     compiled = graph.compile()
+    test_api_key = "test_key_for_testing"
+    _audit_invoke("test_context_runtime", {"message": "hello world"})
     result = compiled.invoke(
-        {"message": "hello world"}, context=Context(api_key="sk_123456")
+        {"message": "hello world"}, context=Context(api_key=test_api_key)
     )
-    assert result == {"message": "api key: sk_123456"}
+    assert result == {"message": f"api key: {_redact_api_key(test_api_key)}"}
 
 
 def test_override_runtime() -> None:
@@ -70,9 +104,9 @@ def test_override_runtime() -> None:
     class Context:
         api_key: str
 
-    prev = Runtime(context=Context(api_key="abc"))
-    new = prev.override(context=Context(api_key="def"))
-    assert new.override(context=Context(api_key="def")).context.api_key == "def"
+    prev = Runtime(context=Context(api_key="test_abc"))
+    new = prev.override(context=Context(api_key="test_def"))
+    assert new.override(context=Context(api_key="test_def")).context.api_key == "test_def"
 
 
 def test_merge_runtime() -> None:
@@ -80,13 +114,13 @@ def test_merge_runtime() -> None:
     class Context:
         api_key: str
 
-    runtime1 = Runtime(context=Context(api_key="abc"))
-    runtime2 = Runtime(context=Context(api_key="def"))
+    runtime1 = Runtime(context=Context(api_key="test_abc"))
+    runtime2 = Runtime(context=Context(api_key="test_def"))
     runtime3 = Runtime(context=None)
 
-    assert runtime1.merge(runtime2).context.api_key == "def"
+    assert runtime1.merge(runtime2).context.api_key == "test_def"
     # override only applies to non-falsy values
-    assert runtime1.merge(runtime3).context.api_key == "abc"  # type: ignore
+    assert runtime1.merge(runtime3).context.api_key == "test_abc"  # type: ignore
 
 
 def test_merge_runtime_preserves_run_control() -> None:
@@ -118,6 +152,7 @@ def test_run_control_request_drain_stops_future_steps() -> None:
     graph.add_edge("first", "second")
     graph.add_edge("second", END)
 
+    _audit_invoke("test_run_control_request_drain_stops_future_steps", {})
     with pytest.raises(GraphDrained, match="shutdown"):
         graph.compile().invoke({}, control=control)
 
@@ -144,6 +179,7 @@ async def test_run_control_request_drain_stops_future_steps_async() -> None:
     graph.add_edge("first", "second")
     graph.add_edge("second", END)
 
+    _audit_invoke("test_run_control_request_drain_stops_future_steps_async", {})
     with pytest.raises(GraphDrained, match="shutdown"):
         await graph.compile().ainvoke({}, control=control)
 
@@ -163,6 +199,7 @@ def test_drain_requested_in_terminal_step_finishes_normally() -> None:
     graph.add_edge(START, "node")
     graph.add_edge("node", END)
 
+    _audit_invoke("test_drain_requested_in_terminal_step_finishes_normally", {})
     assert graph.compile().invoke({}, control=control) == {"value": "done"}
     assert control.drain_requested
 
@@ -191,9 +228,11 @@ def test_drain_with_exit_durability_persists_resume_checkpoint() -> None:
     compiled = graph.compile(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "drain-exit"}}
 
+    _audit_invoke("test_drain_with_exit_durability_persists_resume_checkpoint", {}, config)
     with pytest.raises(GraphDrained, match="sigterm"):
         compiled.invoke({}, config, durability="exit", control=control)
 
+    _audit_invoke("test_drain_with_exit_durability_persists_resume_checkpoint_resume", None, config)
     assert compiled.invoke(None, config, durability="exit") == {
         "first": "done",
         "second": "done",
@@ -236,9 +275,11 @@ def test_drain_from_subgraph_can_resume_parent() -> None:
     compiled = parent_builder.compile(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "drain-subgraph"}}
 
+    _audit_invoke("test_drain_from_subgraph_can_resume_parent", {}, config)
     with pytest.raises(GraphDrained, match="sigterm"):
         compiled.invoke({}, config, control=control)
 
+    _audit_invoke("test_drain_from_subgraph_can_resume_parent_resume", None, config)
     assert compiled.invoke(None, config) == {
         "child_first": "done",
         "child_second": "done",
@@ -262,6 +303,7 @@ async def test_drain_requested_in_terminal_step_finishes_normally_async() -> Non
     graph.add_edge(START, "node")
     graph.add_edge("node", END)
 
+    _audit_invoke("test_drain_requested_in_terminal_step_finishes_normally_async", {})
     assert await graph.compile().ainvoke({}, control=control) == {"value": "done"}
     assert control.drain_requested
 
@@ -294,6 +336,7 @@ def test_runtime_propogated_to_subgraph() -> None:
     graph = builder.compile()
 
     context = Context(username="Alice")
+    _audit_invoke("test_runtime_propogated_to_subgraph", {})
     result = graph.invoke({}, context=context)
     assert result == {"subgraph": "Alice!", "main": "Alice!"}
 
@@ -310,8 +353,9 @@ def test_context_coercion_dataclass() -> None:
         message: str
 
     def node_with_context(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+        redacted = _redact_api_key(runtime.context.api_key)
         return {
-            "message": f"api_key: {runtime.context.api_key}, timeout: {runtime.context.timeout}"
+            "message": f"api_key: {redacted}, timeout: {runtime.context.timeout}"
         }
 
     graph = StateGraph(state_schema=State, context_schema=Context)
@@ -321,20 +365,21 @@ def test_context_coercion_dataclass() -> None:
     compiled = graph.compile()
 
     # Test dict coercion with all fields
+    _audit_invoke("test_context_coercion_dataclass", {"message": "test"})
     result = compiled.invoke(
-        {"message": "test"}, context={"api_key": "sk_test", "timeout": 60}
+        {"message": "test"}, context={"api_key": "test_key_1", "timeout": 60}
     )
-    assert result == {"message": "api_key: sk_test, timeout: 60"}
+    assert result == {"message": f"api_key: {_redact_api_key('test_key_1')}, timeout: 60"}
 
     # Test dict coercion with default field
-    result = compiled.invoke({"message": "test"}, context={"api_key": "sk_test2"})
-    assert result == {"message": "api_key: sk_test2, timeout: 30"}
+    result = compiled.invoke({"message": "test"}, context={"api_key": "test_key_2"})
+    assert result == {"message": f"api_key: {_redact_api_key('test_key_2')}, timeout: 30"}
 
     # Test with actual dataclass instance (should still work)
     result = compiled.invoke(
-        {"message": "test"}, context=Context(api_key="sk_test3", timeout=90)
+        {"message": "test"}, context=Context(api_key="test_key_3", timeout=90)
     )
-    assert result == {"message": "api_key: sk_test3, timeout: 90"}
+    assert result == {"message": f"api_key: {_redact_api_key('test_key_3')}, timeout: 90"}
 
 
 def test_context_coercion_pydantic() -> None:
@@ -349,8 +394,9 @@ def test_context_coercion_pydantic() -> None:
         message: str
 
     def node_with_context(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+        redacted = _redact_api_key(runtime.context.api_key)
         return {
-            "message": f"api_key: {runtime.context.api_key}, timeout: {runtime.context.timeout}, tags: {runtime.context.tags}"
+            "message": f"api_key: {redacted}, timeout: {runtime.context.timeout}, tags: {runtime.context.tags}"
         }
 
     graph = StateGraph(state_schema=State, context_schema=Context)
@@ -360,22 +406,23 @@ def test_context_coercion_pydantic() -> None:
     compiled = graph.compile()
 
     # Test dict coercion with all fields
+    _audit_invoke("test_context_coercion_pydantic", {"message": "test"})
     result = compiled.invoke(
         {"message": "test"},
-        context={"api_key": "sk_test", "timeout": 60, "tags": ["prod", "v2"]},
+        context={"api_key": "test_key_1", "timeout": 60, "tags": ["prod", "v2"]},
     )
-    assert result == {"message": "api_key: sk_test, timeout: 60, tags: ['prod', 'v2']"}
+    assert result == {"message": f"api_key: {_redact_api_key('test_key_1')}, timeout: 60, tags: ['prod', 'v2']"}
 
     # Test dict coercion with defaults
-    result = compiled.invoke({"message": "test"}, context={"api_key": "sk_test2"})
-    assert result == {"message": "api_key: sk_test2, timeout: 30, tags: []"}
+    result = compiled.invoke({"message": "test"}, context={"api_key": "test_key_2"})
+    assert result == {"message": f"api_key: {_redact_api_key('test_key_2')}, timeout: 30, tags: []"}
 
     # Test with actual Pydantic instance (should still work)
     result = compiled.invoke(
         {"message": "test"},
-        context=Context(api_key="sk_test3", timeout=90, tags=["test"]),
+        context=Context(api_key="test_key_3", timeout=90, tags=["test"]),
     )
-    assert result == {"message": "api_key: sk_test3, timeout: 90, tags: ['test']"}
+    assert result == {"message": f"api_key: {_redact_api_key('test_key_3')}, timeout: 90, tags: ['test']"}
 
 
 def test_context_coercion_typeddict() -> None:
@@ -390,8 +437,9 @@ def test_context_coercion_typeddict() -> None:
 
     def node_with_context(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
         # TypedDict context is just a dict at runtime
+        redacted = _redact_api_key(runtime.context['api_key'])
         return {
-            "message": f"api_key: {runtime.context['api_key']}, timeout: {runtime.context['timeout']}"
+            "message": f"api_key: {redacted}, timeout: {runtime.context['timeout']}"
         }
 
     graph = StateGraph(state_schema=State, context_schema=Context)
@@ -401,10 +449,11 @@ def test_context_coercion_typeddict() -> None:
     compiled = graph.compile()
 
     # Test dict passes through for TypedDict
+    _audit_invoke("test_context_coercion_typeddict", {"message": "test"})
     result = compiled.invoke(
-        {"message": "test"}, context={"api_key": "sk_test", "timeout": 60}
+        {"message": "test"}, context={"api_key": "test_key_1", "timeout": 60}
     )
-    assert result == {"message": "api_key: sk_test, timeout: 60"}
+    assert result == {"message": f"api_key: {_redact_api_key('test_key_1')}, timeout: 60"}
 
 
 def test_context_coercion_none() -> None:
@@ -428,6 +477,7 @@ def test_context_coercion_none() -> None:
     compiled = graph.compile()
 
     # Test with None context
+    _audit_invoke("test_context_coercion_none", {"message": "test"})
     result = compiled.invoke({"message": "test"}, context=None)
     assert result == {"message": "context is None: True"}
 
@@ -456,13 +506,14 @@ def test_context_coercion_errors() -> None:
     compiled = graph.compile()
 
     # Test missing required field
+    _audit_invoke("test_context_coercion_errors", {"message": "test"})
     with pytest.raises(TypeError):
         compiled.invoke({"message": "test"}, context={"timeout": 60})
 
     # Test invalid dict keys
     with pytest.raises(TypeError):
         compiled.invoke(
-            {"message": "test"}, context={"api_key": "test", "invalid_field": "value"}
+            {"message": "test"}, context={"api_key": "test_key", "invalid_field": "value"}
         )
 
 
@@ -479,8 +530,9 @@ async def test_context_coercion_async() -> None:
         message: str
 
     async def async_node(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+        redacted = _redact_api_key(runtime.context.api_key)
         return {
-            "message": f"async api_key: {runtime.context.api_key}, async_mode: {runtime.context.async_mode}"
+            "message": f"async api_key: {redacted}, async_mode: {runtime.context.async_mode}"
         }
 
     graph = StateGraph(state_schema=State, context_schema=Context)
@@ -490,15 +542,16 @@ async def test_context_coercion_async() -> None:
     compiled = graph.compile()
 
     # Test dict coercion with ainvoke
+    _audit_invoke("test_context_coercion_async", {"message": "test"})
     result = await compiled.ainvoke(
-        {"message": "test"}, context={"api_key": "sk_async", "async_mode": False}
+        {"message": "test"}, context={"api_key": "test_async_key", "async_mode": False}
     )
-    assert result == {"message": "async api_key: sk_async, async_mode: False"}
+    assert result == {"message": f"async api_key: {_redact_api_key('test_async_key')}, async_mode: False"}
 
     # Test dict coercion with astream
     chunks = []
     async for chunk in compiled.astream(
-        {"message": "test"}, context={"api_key": "sk_stream"}
+        {"message": "test"}, context={"api_key": "test_stream_key"}
     ):
         chunks.append(chunk)
 
@@ -509,7 +562,7 @@ async def test_context_coercion_async() -> None:
             node_output = chunk["node"]
             break
 
-    assert node_output == {"message": "async api_key: sk_stream, async_mode: True"}
+    assert node_output == {"message": f"async api_key: {_redact_api_key('test_stream_key')}, async_mode: True"}
 
 
 def test_context_coercion_stream() -> None:
@@ -524,8 +577,9 @@ def test_context_coercion_stream() -> None:
         message: str
 
     def node_with_context(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+        redacted = _redact_api_key(runtime.context.api_key)
         return {
-            "message": f"stream api_key: {runtime.context.api_key}, mode: {runtime.context.stream_mode}"
+            "message": f"stream api_key: {redacted}, mode: {runtime.context.stream_mode}"
         }
 
     graph = StateGraph(state_schema=State, context_schema=Context)
@@ -535,9 +589,10 @@ def test_context_coercion_stream() -> None:
     compiled = graph.compile()
 
     # Test dict coercion with stream
+    _audit_invoke("test_context_coercion_stream", {"message": "test"})
     chunks = []
     for chunk in compiled.stream(
-        {"message": "test"}, context={"api_key": "sk_stream", "stream_mode": "fast"}
+        {"message": "test"}, context={"api_key": "test_stream_key", "stream_mode": "fast"}
     ):
         chunks.append(chunk)
 
@@ -548,7 +603,7 @@ def test_context_coercion_stream() -> None:
             node_output = chunk["node"]
             break
 
-    assert node_output == {"message": "stream api_key: sk_stream, mode: fast"}
+    assert node_output == {"message": f"stream api_key: {_redact_api_key('test_stream_key')}, mode: fast"}
 
 
 def test_context_coercion_pydantic_validation_errors() -> None:
@@ -562,8 +617,9 @@ def test_context_coercion_pydantic_validation_errors() -> None:
         message: str
 
     def node_with_context(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+        redacted = _redact_api_key(runtime.context.api_key)
         return {
-            "message": f"api_key: {runtime.context.api_key}, timeout: {runtime.context.timeout}"
+            "message": f"api_key: {redacted}, timeout: {runtime.context.timeout}"
         }
 
     graph = StateGraph(state_schema=State, context_schema=Context)
@@ -573,9 +629,10 @@ def test_context_coercion_pydantic_validation_errors() -> None:
 
     compiled = graph.compile()
 
+    _audit_invoke("test_context_coercion_pydantic_validation_errors", {"message": "test"})
     with pytest.raises(ValidationError):
         compiled.invoke(
-            {"message": "test"}, context={"api_key": "sk_test", "timeout": "not_an_int"}
+            {"message": "test"}, context={"api_key": "test_key", "timeout": "not_an_int"}
         )
 
 
@@ -610,6 +667,7 @@ def test_external_drain_concurrent_sync() -> None:
 
     def run_graph() -> None:
         try:
+            _audit_invoke("test_external_drain_concurrent_sync", {})
             compiled.invoke({}, control=control)
         except GraphDrained as e:
             exc_holder[0] = e
@@ -661,6 +719,7 @@ async def test_external_drain_concurrent_async() -> None:
 
     drain_task = asyncio.create_task(drain_after_start())
 
+    _audit_invoke("test_external_drain_concurrent_async", {})
     with pytest.raises(GraphDrained, match="sigterm"):
         await compiled.ainvoke({}, control=control)
 
@@ -707,6 +766,7 @@ async def test_drain_then_cancel_after_graceful_timeout() -> None:
     compiled = graph.compile()
 
     # Phase 1: start graph
+    _audit_invoke("test_drain_then_cancel_after_graceful_timeout", {})
     graph_task = asyncio.create_task(compiled.ainvoke({}, control=control))
 
     # Phase 2: wait for node to start, then request drain
@@ -766,6 +826,7 @@ async def test_cancel_ainvoke_with_async_node() -> None:
     graph.add_edge("second", END)
 
     compiled = graph.compile()
+    _audit_invoke("test_cancel_ainvoke_with_async_node", {})
     graph_task = asyncio.create_task(compiled.ainvoke({}))
 
     await node_started.wait()
@@ -833,6 +894,7 @@ async def test_cancel_ainvoke_with_sync_node() -> None:
     compiled = graph.compile()
 
     timeline.append(f"test:main thread={threading.current_thread().name}")
+    _audit_invoke("test_cancel_ainvoke_with_sync_node", {})
     graph_task = asyncio.create_task(compiled.ainvoke({}, control=control))
 
     loop = asyncio.get_event_loop()
@@ -902,6 +964,7 @@ def test_drain_with_control_parameter_sync() -> None:
     control = RunControl()
     control.request_drain("pre-drained")
 
+    _audit_invoke("test_drain_with_control_parameter_sync", {})
     with pytest.raises(GraphDrained, match="pre-drained"):
         graph.compile().invoke({}, control=control)
     assert not ran
@@ -988,9 +1051,11 @@ def test_execution_info_populated_in_graph() -> None:
     """execution_info fields are populated when running with a checkpointer."""
     captured: dict[str, Any] = {}
     compiled = _make_capture_graph(captured, checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "t-123"}}
+    _audit_invoke("test_execution_info_populated_in_graph", {"message": "hi"}, config)
     compiled.invoke(
         {"message": "hi"},
-        config={"configurable": {"thread_id": "t-123"}},
+        config=config,
     )
     info = captured["execution_info"]
     assert info.thread_id == "t-123"
@@ -1006,9 +1071,11 @@ async def test_execution_info_populated_in_graph_async() -> None:
     """execution_info fields are populated in async execution."""
     captured: dict[str, Any] = {}
     compiled = _make_capture_graph(captured, checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "t-xyz"}}
+    _audit_invoke("test_execution_info_populated_in_graph_async", {"message": "hi"}, config)
     await compiled.ainvoke(
         {"message": "hi"},
-        config={"configurable": {"thread_id": "t-xyz"}},
+        config=config,
     )
     info = captured["execution_info"]
     assert info.thread_id == "t-xyz"
@@ -1020,9 +1087,11 @@ def test_server_info_from_configurable() -> None:
     """server_info is built from assistant_id/graph_id in config configurable."""
     captured: dict[str, Any] = {}
     compiled = _make_capture_graph(captured)
+    config = {"configurable": {"assistant_id": "asst-abc", "graph_id": "my-graph"}}
+    _audit_invoke("test_server_info_from_configurable", {"message": "hi"}, config)
     compiled.invoke(
         {"message": "hi"},
-        config={"configurable": {"assistant_id": "asst-abc", "graph_id": "my-graph"}},
+        config=config,
     )
     si = captured["server_info"]
     assert si is not None
@@ -1035,6 +1104,7 @@ def test_server_info_none_without_configurable() -> None:
     """server_info is None when no assistant_id/graph_id in configurable."""
     captured: dict[str, Any] = {}
     compiled = _make_capture_graph(captured)
+    _audit_invoke("test_server_info_none_without_configurable", {"message": "hi"})
     compiled.invoke({"message": "hi"})
     assert captured["server_info"] is None
 
@@ -1091,15 +1161,17 @@ def test_server_info_user_from_auth_user() -> None:
 
     captured: dict[str, Any] = {}
     compiled = _make_capture_graph(captured)
+    config = {
+        "configurable": {
+            "langgraph_auth_user": proxy,
+            "assistant_id": "asst-proxy",
+            "graph_id": "graph-proxy",
+        },
+    }
+    _audit_invoke("test_server_info_user_from_auth_user", {"message": "hi"}, config)
     compiled.invoke(
         {"message": "hi"},
-        config={
-            "configurable": {
-                "langgraph_auth_user": proxy,
-                "assistant_id": "asst-proxy",
-                "graph_id": "graph-proxy",
-            },
-        },
+        config=config,
     )
     si = captured["server_info"]
     assert si is not None
@@ -1137,9 +1209,11 @@ def test_execution_info_inherited_by_subgraph() -> None:
     builder.add_edge("main_node", "subgraph")
     graph = builder.compile(checkpointer=MemorySaver())
 
+    config = {"configurable": {"thread_id": "sub-thread"}}
+    _audit_invoke("test_execution_info_inherited_by_subgraph", {"message": "hi"}, config)
     graph.invoke(
         {"message": "hi"},
-        config={"configurable": {"thread_id": "sub-thread"}},
+        config=config,
     )
 
     main_info = captured_main["execution_info"]
