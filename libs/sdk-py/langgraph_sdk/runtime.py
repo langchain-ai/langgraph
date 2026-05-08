@@ -116,10 +116,12 @@ class _ServerRuntimeBase(Generic[ContextT]):
                 # Only connect to MCP servers when actually executing a run.
                 # Introspection calls (get_schema, get_graph, ...) skip this.
                 mcp_tools = await connect_mcp(ert.context.mcp_endpoint)
-                yield create_agent(model, tools=mcp_tools)
+                # Filter mcp_tools against your approved tool allow list before use.
+                approved_tools = [t for t in mcp_tools if t.name in APPROVED_TOOL_NAMES]
+                yield create_agent(APPROVED_MODEL, tools=approved_tools)
                 await disconnect_mcp()
             else:
-                yield create_agent(model, tools=[])
+                yield create_agent(APPROVED_MODEL, tools=[])
         ```
         """
         if isinstance(self, _ExecutionRuntime):
@@ -201,11 +203,18 @@ from langchain.agents import create_agent
 from langgraph_sdk.runtime import ServerRuntime
 from my_agent import connect_mcp, disconnect_mcp
 
+# Use only models from the organization's approved registry.
+# Replace APPROVED_MODEL with a registry-approved, version-pinned model identifier.
+APPROVED_MODEL = "openai:gpt-4o"  # Must be set to an approved, pinned model from the registry.
+
+# Define the explicit allow list of approved tool names.
+APPROVED_TOOL_NAMES = {"tool_a", "tool_b"}  # Replace with your organization's approved tool names.
+
 @dataclass
 class MyCtx:
     mcp_endpoint: str
 
-_readonly_agent = create_agent("anthropic:claude-3-5-haiku", tools=[])
+_readonly_agent = create_agent(APPROVED_MODEL, tools=[])
 
 @contextlib.asynccontextmanager
 async def my_factory(runtime: ServerRuntime[MyCtx]):
@@ -214,7 +223,9 @@ async def my_factory(runtime: ServerRuntime[MyCtx]):
         # Schema / graph introspection calls skip this.
         user_id = runtime.ensure_user().identity
         mcp_tools = await connect_mcp(ert.context.mcp_endpoint, user_id)
-        yield create_agent("anthropic:claude-3-5-haiku", tools=mcp_tools)
+        # Filter discovered tools against the approved allow list before use.
+        approved_tools = [t for t in mcp_tools if t.name in APPROVED_TOOL_NAMES]
+        yield create_agent(APPROVED_MODEL, tools=approved_tools)
         await disconnect_mcp()
     else:
         yield _readonly_agent
