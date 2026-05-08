@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
+import hashlib
+import json
+import logging
+import uuid
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager
@@ -35,6 +40,30 @@ from langgraph.checkpoint.postgres.base import (
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 
 Conn = _ainternal.Conn  # For backward compatibility
+
+logger = logging.getLogger(__name__)
+
+
+def _audit_log(action: str, details: dict[str, Any]) -> None:
+    """Write an append-only audit log entry for forensic readiness."""
+    try:
+        entry = {
+            "audit_id": str(uuid.uuid4()),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "action": action,
+            **details,
+        }
+        logger.info("AUDIT: %s", json.dumps(entry))
+    except Exception as exc:  # noqa: BLE001
+        logger.error("AUDIT_LOG_FAILURE: action=%s error=%s", action, exc)
+
+
+def _hash_value(value: Any) -> str:
+    try:
+        serialized = json.dumps(value, sort_keys=True, default=str)
+        return hashlib.sha256(serialized.encode()).hexdigest()
+    except Exception:  # noqa: BLE001
+        return "unhashable"
 
 
 class AsyncPostgresSaver(BasePostgresSaver):
@@ -277,6 +306,21 @@ class AsyncPostgresSaver(BasePostgresSaver):
             else:
                 blob_values[k] = copy["channel_values"].pop(k)
 
+        trace_id = str(uuid.uuid4())
+        _audit_log(
+            "aput",
+            {
+                "trace_id": trace_id,
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": checkpoint["id"],
+                "parent_checkpoint_id": checkpoint_id,
+                "input_hash": _hash_value(checkpoint),
+                "metadata_hash": _hash_value(metadata),
+                "new_versions_hash": _hash_value(new_versions),
+            },
+        )
+
         async with self._cursor(pipeline=True) as cur:
             if blob_versions := {
                 k: v for k, v in new_versions.items() if k in blob_values
@@ -320,6 +364,22 @@ class AsyncPostgresSaver(BasePostgresSaver):
             writes: List of writes to store, each as (channel, value) pair.
             task_id: Identifier for the task creating the writes.
         """
+        trace_id = str(uuid.uuid4())
+        _audit_log(
+            "aput_writes",
+            {
+                "trace_id": trace_id,
+                "thread_id": config["configurable"]["thread_id"],
+                "checkpoint_ns": config["configurable"]["checkpoint_ns"],
+                "checkpoint_id": config["configurable"]["checkpoint_id"],
+                "task_id": task_id,
+                "task_path": task_path,
+                "writes_count": len(writes),
+                "writes_channels": [w[0] for w in writes],
+                "writes_hash": _hash_value(writes),
+            },
+        )
+
         query = (
             self.UPSERT_CHECKPOINT_WRITES_SQL
             if all(w[0] in WRITES_IDX_MAP for w in writes)
@@ -337,15 +397,42 @@ class AsyncPostgresSaver(BasePostgresSaver):
         async with self._cursor(pipeline=True) as cur:
             await cur.executemany(query, params)
 
-    async def adelete_thread(self, thread_id: str) -> None:
+    async def adelete_thread(self, thread_id: str, *, confirmed: bool = False) -> None:
         """Delete all checkpoints and writes associated with a thread ID.
+
+        This is a destructive operation. Human-in-the-Loop (HITL) approval is required.
+        Pass ``confirmed=True`` only after explicit human approval has been obtained.
 
         Args:
             thread_id: The thread ID to delete.
+            confirmed: Must be set to ``True`` by the caller after obtaining explicit
+                human approval. If ``False`` (the default), the deletion is refused and
+                a ``PermissionError`` is raised.
 
         Returns:
             None
+
+        Raises:
+            PermissionError: If ``confirmed`` is not ``True``.
         """
+        if not confirmed:
+            raise PermissionError(
+                "adelete_thread requires explicit human approval. "
+                "Call adelete_thread(thread_id, confirmed=True) only after a human "
+                "operator has reviewed and approved the deletion of thread '%s'."
+                % thread_id
+            )
+
+        trace_id = str(uuid.uuid4())
+        _audit_log(
+            "adelete_thread",
+            {
+                "trace_id": trace_id,
+                "thread_id": thread_id,
+                "human_confirmed": True,
+            },
+        )
+
         async with self._cursor(pipeline=True) as cur:
             await cur.execute(
                 "DELETE FROM checkpoints WHERE thread_id = %s",
@@ -655,15 +742,32 @@ class AsyncPostgresSaver(BasePostgresSaver):
             self.aput_writes(config, writes, task_id, task_path), self.loop
         ).result()
 
-    def delete_thread(self, thread_id: str) -> None:
+    def delete_thread(self, thread_id: str, *, confirmed: bool = False) -> None:
         """Delete all checkpoints and writes associated with a thread ID.
+
+        This is a destructive operation. Human-in-the-Loop (HITL) approval is required.
+        Pass ``confirmed=True`` only after explicit human approval has been obtained.
 
         Args:
             thread_id: The thread ID to delete.
+            confirmed: Must be set to ``True`` by the caller after obtaining explicit
+                human approval. If ``False`` (the default), the deletion is refused and
+                a ``PermissionError`` is raised.
 
         Returns:
             None
+
+        Raises:
+            PermissionError: If ``confirmed`` is not ``True``.
         """
+        if not confirmed:
+            raise PermissionError(
+                "delete_thread requires explicit human approval. "
+                "Call delete_thread(thread_id, confirmed=True) only after a human "
+                "operator has reviewed and approved the deletion of thread '%s'."
+                % thread_id
+            )
+
         try:
             # check if we are in the main thread, only bg threads can block
             # we don't check in other methods to avoid the overhead
@@ -677,7 +781,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         except RuntimeError:
             pass
         return asyncio.run_coroutine_threadsafe(
-            self.adelete_thread(thread_id), self.loop
+            self.adelete_thread(thread_id, confirmed=confirmed), self.loop
         ).result()
 
 
