@@ -15,10 +15,13 @@
     from langchain.embeddings import init_embeddings
     from langgraph.store.memory import InMemoryStore
 
+    # NOTE: Only use embedding models from the organization's approved registry.
+    # 'openai:text-embedding-3-small' is provided as a placeholder example only.
+    # Replace with an approved model identifier from your organization's registry.
     store = InMemoryStore(
         index={
             "dims": 1536,
-            "embed": init_embeddings("openai:text-embedding-3-small")
+            "embed": init_embeddings("APPROVED_EMBEDDING_MODEL")
         }
     )
 
@@ -30,19 +33,16 @@
     results = store.search(("docs",), query="python programming")
     ```
 
-    Vector search using OpenAI SDK directly:
+    Vector search using an approved embedding SDK directly:
     ```python
-    from openai import OpenAI
     from langgraph.store.memory import InMemoryStore
 
-    client = OpenAI()
-
+    # NOTE: Only use embedding models from the organization's approved registry.
+    # Replace APPROVED_MODEL_IDENTIFIER with a pinned, approved model name/digest.
     def embed_texts(texts: list[str]) -> list[list[float]]:
-        response = client.embeddings.create(
-            model="text-embedding-3-small",
-            input=texts
-        )
-        return [e.embedding for e in response.data]
+        # Use your organization's approved embedding client here.
+        # Record model identity, version, and input hash for audit purposes.
+        raise NotImplementedError("Replace with approved embedding implementation.")
 
     store = InMemoryStore(
         index={
@@ -59,19 +59,16 @@
     results = store.search(("docs",), query="python programming")
     ```
 
-    Async vector search using OpenAI SDK:
+    Async vector search using an approved embedding SDK:
     ```python
-    from openai import AsyncOpenAI
     from langgraph.store.memory import InMemoryStore
 
-    client = AsyncOpenAI()
-
+    # NOTE: Only use embedding models from the organization's approved registry.
+    # Replace APPROVED_MODEL_IDENTIFIER with a pinned, approved model name/digest.
     async def aembed_texts(texts: list[str]) -> list[list[float]]:
-        response = await client.embeddings.create(
-            model="text-embedding-3-small",
-            input=texts
-        )
-        return [e.embedding for e in response.data]
+        # Use your organization's approved async embedding client here.
+        # Record model identity, version, and input hash for audit purposes.
+        raise NotImplementedError("Replace with approved async embedding implementation.")
 
     store = InMemoryStore(
         index={
@@ -92,6 +89,13 @@ Warning:
     This store keeps all data in memory. Data is lost when the process exits.
     For persistence, use a database-backed store like PostgresStore.
 
+Warning:
+    All embedding models used with this store MUST be sourced from the organization's
+    approved model registry. Models must be version-pinned (using a commit hash, digest,
+    or other immutable identifier). Unapproved or unpinned models are not permitted.
+    All AI-driven operations (embedding generation, vector search) are audit-logged
+    with model identifier, input hash, timestamp, and operation type.
+
 Tip:
     For vector search, install numpy for better performance:
     ```bash
@@ -104,6 +108,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures as cf
 import functools
+import hashlib
 import logging
 from collections import defaultdict
 from collections.abc import Iterable
@@ -133,6 +138,41 @@ from langgraph.store.base import (
 logger = logging.getLogger(__name__)
 
 
+def _get_embeddings_model_id(embeddings: Any) -> str:
+    """Attempt to extract a model identifier string from an embeddings object for audit logging."""
+    for attr in ("model", "model_name", "model_id", "deployment"):
+        val = getattr(embeddings, attr, None)
+        if val:
+            return str(val)
+    return type(embeddings).__name__
+
+
+def _hash_texts(texts: list[str]) -> str:
+    """Compute a SHA-256 hash of the input texts for audit trail purposes."""
+    h = hashlib.sha256()
+    for t in texts:
+        h.update(t.encode("utf-8"))
+    return h.hexdigest()
+
+
+def _log_embedding_audit(
+    operation: str,
+    model_id: str,
+    input_hash: str,
+    num_inputs: int,
+    timestamp: str,
+) -> None:
+    """Emit a structured audit log record for an AI-driven embedding operation."""
+    logger.info(
+        "AUDIT | operation=%s | model_id=%s | input_hash=%s | num_inputs=%d | timestamp=%s",
+        operation,
+        model_id,
+        input_hash,
+        num_inputs,
+        timestamp,
+    )
+
+
 class InMemoryStore(BaseStore):
     """In-memory dictionary-backed store with optional vector search.
 
@@ -143,10 +183,12 @@ class InMemoryStore(BaseStore):
             item = store.get(("users", "123"), "prefs")
 
         Vector search with embeddings:
+            # NOTE: Only use embedding models from the organization's approved registry.
+            # Replace APPROVED_EMBEDDING_MODEL with a pinned, approved model identifier.
             from langchain.embeddings import init_embeddings
             store = InMemoryStore(index={
                 "dims": 1536,
-                "embed": init_embeddings("openai:text-embedding-3-small"),
+                "embed": init_embeddings("APPROVED_EMBEDDING_MODEL"),
                 "fields": ["text"],
             })
 
@@ -161,6 +203,13 @@ class InMemoryStore(BaseStore):
         Semantic search is disabled by default. You can enable it by providing an `index` configuration
         when creating the store. Without this configuration, all `index` arguments passed to
         `put` or `aput`will have no effect.
+
+    Warning:
+        All embedding models used with this store MUST be sourced from the organization's
+        approved model registry. Models must be version-pinned (using a commit hash, digest,
+        or other immutable identifier). Unapproved or unpinned models are not permitted.
+        All AI-driven operations (embedding generation, vector search) are audit-logged
+        with model identifier, input hash, timestamp, and operation type.
 
     Warning:
         This store keeps all data in memory. Data is lost when the process exits.
@@ -213,7 +262,18 @@ class InMemoryStore(BaseStore):
 
         to_embed = self._extract_texts(put_ops)
         if to_embed and self.index_config and self.embeddings:
-            embeddings = self.embeddings.embed_documents(list(to_embed))
+            texts_list = list(to_embed)
+            model_id = _get_embeddings_model_id(self.embeddings)
+            input_hash = _hash_texts(texts_list)
+            timestamp = datetime.now(timezone.utc).isoformat()
+            _log_embedding_audit(
+                operation="embed_documents",
+                model_id=model_id,
+                input_hash=input_hash,
+                num_inputs=len(texts_list),
+                timestamp=timestamp,
+            )
+            embeddings = self.embeddings.embed_documents(texts_list)
             self._insertinmem_store(to_embed, embeddings)
         self._apply_put_ops(put_ops)
         return results
@@ -228,7 +288,18 @@ class InMemoryStore(BaseStore):
 
         to_embed = self._extract_texts(put_ops)
         if to_embed and self.index_config and self.embeddings:
-            embeddings = await self.embeddings.aembed_documents(list(to_embed))
+            texts_list = list(to_embed)
+            model_id = _get_embeddings_model_id(self.embeddings)
+            input_hash = _hash_texts(texts_list)
+            timestamp = datetime.now(timezone.utc).isoformat()
+            _log_embedding_audit(
+                operation="aembed_documents",
+                model_id=model_id,
+                input_hash=input_hash,
+                num_inputs=len(texts_list),
+                timestamp=timestamp,
+            )
+            embeddings = await self.embeddings.aembed_documents(texts_list)
             self._insertinmem_store(to_embed, embeddings)
         self._apply_put_ops(put_ops)
         return results
@@ -274,10 +345,21 @@ class InMemoryStore(BaseStore):
             queries = {op.query for (op, _) in search_ops.values() if op.query}
 
             if queries:
+                model_id = _get_embeddings_model_id(self.embeddings)
+                timestamp = datetime.now(timezone.utc).isoformat()
+                queries_list = list(queries)
+                input_hash = _hash_texts(queries_list)
+                _log_embedding_audit(
+                    operation="embed_search_queries",
+                    model_id=model_id,
+                    input_hash=input_hash,
+                    num_inputs=len(queries_list),
+                    timestamp=timestamp,
+                )
                 with cf.ThreadPoolExecutor() as executor:
                     futures = {
                         q: executor.submit(self.embeddings.embed_query, q)
-                        for q in list(queries)
+                        for q in queries_list
                     }
                     for query, future in futures.items():
                         queryinmem_store[query] = future.result()
@@ -293,7 +375,18 @@ class InMemoryStore(BaseStore):
             queries = {op.query for (op, _) in search_ops.values() if op.query}
 
             if queries:
-                coros = [self.embeddings.aembed_query(q) for q in list(queries)]
+                model_id = _get_embeddings_model_id(self.embeddings)
+                timestamp = datetime.now(timezone.utc).isoformat()
+                queries_list = list(queries)
+                input_hash = _hash_texts(queries_list)
+                _log_embedding_audit(
+                    operation="aembed_search_queries",
+                    model_id=model_id,
+                    input_hash=input_hash,
+                    num_inputs=len(queries_list),
+                    timestamp=timestamp,
+                )
+                coros = [self.embeddings.aembed_query(q) for q in queries_list]
                 results = await asyncio.gather(*coros)
                 queryinmem_store = dict(zip(queries, results, strict=False))
 
