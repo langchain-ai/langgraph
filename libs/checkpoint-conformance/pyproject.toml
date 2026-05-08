@@ -50,7 +50,6 @@ unresolved-attribute = "ignore"
 unresolved-import = "ignore"
 invalid-argument-type = "ignore"
 invalid-return-type = "ignore"
-missing-typed-dict-key = "ignore"
 
 [tool.ruff]
 lint.select = [
