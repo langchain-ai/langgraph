@@ -19,12 +19,24 @@ from tests.memory_assert import (  # noqa: E402
     MemorySaverNeedsPendingSendsMigration,
 )
 
-DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
+DEFAULT_POSTGRES_URI = os.environ.get(
+    "LANGGRAPH_TEST_POSTGRES_URI", "postgres://localhost:5442/"
+)
+AES_TEST_KEY = os.environb.get(b"LANGGRAPH_TEST_AES_KEY", None)
+
 STRICT_MSGPACK = os.getenv("LANGGRAPH_STRICT_MSGPACK", "false").lower() in (
     "1",
     "true",
     "yes",
 )
+
+
+def _get_aes_key() -> bytes:
+    if AES_TEST_KEY is None:
+        raise ValueError(
+            "LANGGRAPH_TEST_AES_KEY environment variable must be set to a 16, 24, or 32-byte value."
+        )
+    return AES_TEST_KEY
 
 
 def _strict_msgpack_serde() -> JsonPlusSerializer:
@@ -39,6 +51,30 @@ def _apply_strict_msgpack(checkpointer) -> None:
         checkpointer.serde = serde
     if hasattr(checkpointer, "saver") and hasattr(checkpointer.saver, "serde"):
         checkpointer.saver.serde = serde
+
+
+def _confirm_drop_database(database: str) -> bool:
+    """HITL approval: prompt for confirmation before dropping a database."""
+    confirm = input(
+        f"HITL APPROVAL REQUIRED: Are you sure you want to DROP DATABASE '{database}'? "
+        "This is a destructive operation. Type 'yes' to confirm: "
+    )
+    return confirm.strip().lower() == "yes"
+
+
+async def _confirm_drop_database_async(database: str) -> bool:
+    """HITL approval for async context: prompt for confirmation before dropping a database."""
+    import asyncio
+
+    loop = asyncio.get_event_loop()
+    confirm = await loop.run_in_executor(
+        None,
+        lambda: input(
+            f"HITL APPROVAL REQUIRED: Are you sure you want to DROP DATABASE '{database}'? "
+            "This is a destructive operation. Type 'yes' to confirm: "
+        ),
+    )
+    return confirm.strip().lower() == "yes"
 
 
 @contextmanager
@@ -66,13 +102,14 @@ def _checkpointer_sqlite():
 @contextmanager
 def _checkpointer_sqlite_aes():
     with SqliteSaver.from_conn_string(":memory:") as checkpointer:
+        aes_key = _get_aes_key()
         if STRICT_MSGPACK:
             checkpointer.serde = EncryptedSerializer.from_pycryptodome_aes(
-                serde=_strict_msgpack_serde(), key=b"1234567890123456"
+                serde=_strict_msgpack_serde(), key=aes_key
             )
         else:
             checkpointer.serde = EncryptedSerializer.from_pycryptodome_aes(
-                key=b"1234567890123456"
+                key=aes_key
             )
         yield checkpointer
 
@@ -93,8 +130,13 @@ def _checkpointer_postgres():
             yield checkpointer
     finally:
         # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+        if _confirm_drop_database(database):
+            with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+                conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise RuntimeError(
+                f"DROP DATABASE '{database}' was not approved. Manual cleanup required."
+            )
 
 
 @contextmanager
@@ -116,8 +158,13 @@ def _checkpointer_postgres_pipe():
                 yield checkpointer
     finally:
         # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+        if _confirm_drop_database(database):
+            with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+                conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise RuntimeError(
+                f"DROP DATABASE '{database}' was not approved. Manual cleanup required."
+            )
 
 
 @contextmanager
@@ -137,8 +184,13 @@ def _checkpointer_postgres_pool():
             yield checkpointer
     finally:
         # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
+        if _confirm_drop_database(database):
+            with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+                conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise RuntimeError(
+                f"DROP DATABASE '{database}' was not approved. Manual cleanup required."
+            )
 
 
 @asynccontextmanager
@@ -166,10 +218,15 @@ async def _checkpointer_postgres_aio():
             yield checkpointer
     finally:
         # drop unique db
-        async with await AsyncConnection.connect(
-            DEFAULT_POSTGRES_URI, autocommit=True
-        ) as conn:
-            await conn.execute(f"DROP DATABASE {database}")
+        if await _confirm_drop_database_async(database):
+            async with await AsyncConnection.connect(
+                DEFAULT_POSTGRES_URI, autocommit=True
+            ) as conn:
+                await conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise RuntimeError(
+                f"DROP DATABASE '{database}' was not approved. Manual cleanup required."
+            )
 
 
 @asynccontextmanager
@@ -193,10 +250,15 @@ async def _checkpointer_postgres_aio_pipe():
                 yield checkpointer
     finally:
         # drop unique db
-        async with await AsyncConnection.connect(
-            DEFAULT_POSTGRES_URI, autocommit=True
-        ) as conn:
-            await conn.execute(f"DROP DATABASE {database}")
+        if await _confirm_drop_database_async(database):
+            async with await AsyncConnection.connect(
+                DEFAULT_POSTGRES_URI, autocommit=True
+            ) as conn:
+                await conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise RuntimeError(
+                f"DROP DATABASE '{database}' was not approved. Manual cleanup required."
+            )
 
 
 @asynccontextmanager
@@ -218,10 +280,15 @@ async def _checkpointer_postgres_aio_pool():
             yield checkpointer
     finally:
         # drop unique db
-        async with await AsyncConnection.connect(
-            DEFAULT_POSTGRES_URI, autocommit=True
-        ) as conn:
-            await conn.execute(f"DROP DATABASE {database}")
+        if await _confirm_drop_database_async(database):
+            async with await AsyncConnection.connect(
+                DEFAULT_POSTGRES_URI, autocommit=True
+            ) as conn:
+                await conn.execute(f"DROP DATABASE {database}")
+        else:
+            raise RuntimeError(
+                f"DROP DATABASE '{database}' was not approved. Manual cleanup required."
+            )
 
 
 __all__ = [
