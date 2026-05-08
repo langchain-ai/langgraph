@@ -4,8 +4,22 @@ from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Durability
+import uuid
+import time
+import hmac
+import hashlib
+import os
 
 pytestmark = pytest.mark.anyio
+
+
+def _make_thread_id() -> str:
+    random_part = uuid.uuid4().hex
+    expiry = int(time.time()) + 3600
+    secret = os.environ.get("TEST_SESSION_SECRET", os.urandom(32).hex())
+    payload = f"{random_part}:{expiry}"
+    sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}:{sig}"
 
 
 def test_interruption_without_state_updates(
@@ -32,7 +46,7 @@ def test_interruption_without_state_updates(
     graph = builder.compile(checkpointer=sync_checkpointer, interrupt_after="*")
 
     initial_input = {"input": "hello world"}
-    thread = {"configurable": {"thread_id": "1"}}
+    thread = {"configurable": {"thread_id": _make_thread_id()}}
 
     graph.invoke(initial_input, thread, durability=durability)
     assert graph.get_state(thread).next == ("step_2",)
@@ -74,7 +88,7 @@ async def test_interruption_without_state_updates_async(
     graph = builder.compile(checkpointer=async_checkpointer, interrupt_after="*")
 
     initial_input = {"input": "hello world"}
-    thread = {"configurable": {"thread_id": "1"}}
+    thread = {"configurable": {"thread_id": _make_thread_id()}}
 
     await graph.ainvoke(initial_input, thread, durability=durability)
     assert (await graph.aget_state(thread)).next == ("step_2",)
