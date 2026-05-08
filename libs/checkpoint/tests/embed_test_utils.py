@@ -5,10 +5,8 @@ import random
 from collections import Counter, defaultdict
 from typing import Any
 
-from langchain_core.embeddings import Embeddings
 
-
-class CharacterEmbeddings(Embeddings):
+class CharacterEmbeddings:
     """Simple character-frequency based embeddings using random projections."""
 
     def __init__(self, dims: int = 50, seed: int = 42):
