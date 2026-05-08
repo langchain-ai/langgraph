@@ -25,8 +25,6 @@ async def test_delta_channel_conformance():
         mem_saver,
         capabilities={
             "delta_channel_history",
-            "delta_channel_keepset",
-            "delta_channel_reconstruction",
         },
     )
     for cap, result in report.results.items():
