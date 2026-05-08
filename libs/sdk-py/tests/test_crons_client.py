@@ -485,3 +485,165 @@ def test_sync_update_with_enabled_parameter(enabled_value):
         )
 
     assert result == cron
+
+
+@pytest.mark.asyncio
+async def test_async_search_with_metadata():
+    """Test that CronClient.search forwards metadata in the request body."""
+    cron = _cron_response()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/runs/crons/search"
+
+        body = json.loads(request.content)
+        assert body["metadata"] == {"owner": "alice"}
+        assert body["limit"] == 10
+        assert body["offset"] == 0
+
+        return httpx.Response(200, json=[cron])
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        http_client = HttpClient(client)
+        cron_client = CronClient(http_client)
+        result = await cron_client.search(metadata={"owner": "alice"})
+
+    assert result == [cron]
+
+
+@pytest.mark.asyncio
+async def test_async_search_omits_empty_metadata():
+    """Test that CronClient.search does not send metadata when not provided."""
+    cron = _cron_response()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert "metadata" not in body
+        return httpx.Response(200, json=[cron])
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        http_client = HttpClient(client)
+        cron_client = CronClient(http_client)
+        await cron_client.search()
+
+
+@pytest.mark.asyncio
+async def test_async_count_with_metadata():
+    """Test that CronClient.count forwards metadata in the request body."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/runs/crons/count"
+
+        body = json.loads(request.content)
+        assert body["metadata"] == {"team": "infra"}
+
+        return httpx.Response(200, json=2)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        http_client = HttpClient(client)
+        cron_client = CronClient(http_client)
+        result = await cron_client.count(metadata={"team": "infra"})
+
+    assert result == 2
+
+
+@pytest.mark.asyncio
+async def test_async_count_omits_empty_metadata():
+    """Test that CronClient.count does not send metadata when not provided."""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert "metadata" not in body
+        return httpx.Response(200, json=0)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        http_client = HttpClient(client)
+        cron_client = CronClient(http_client)
+        await cron_client.count()
+
+
+def test_sync_search_with_metadata():
+    """Test that SyncCronClient.search forwards metadata in the request body."""
+    cron = _cron_response()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/runs/crons/search"
+
+        body = json.loads(request.content)
+        assert body["metadata"] == {"owner": "alice"}
+
+        return httpx.Response(200, json=[cron])
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        cron_client = SyncCronClient(http_client)
+        result = cron_client.search(metadata={"owner": "alice"})
+
+    assert result == [cron]
+
+
+def test_sync_search_omits_empty_metadata():
+    """Test that SyncCronClient.search does not send metadata when not provided."""
+    cron = _cron_response()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert "metadata" not in body
+        return httpx.Response(200, json=[cron])
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        cron_client = SyncCronClient(http_client)
+        cron_client.search()
+
+
+def test_sync_count_with_metadata():
+    """Test that SyncCronClient.count forwards metadata in the request body."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/runs/crons/count"
+
+        body = json.loads(request.content)
+        assert body["metadata"] == {"team": "infra"}
+
+        return httpx.Response(200, json=2)
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        cron_client = SyncCronClient(http_client)
+        result = cron_client.count(metadata={"team": "infra"})
+
+    assert result == 2
+
+
+def test_sync_count_omits_empty_metadata():
+    """Test that SyncCronClient.count does not send metadata when not provided."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert "metadata" not in body
+        return httpx.Response(200, json=0)
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        cron_client = SyncCronClient(http_client)
+        cron_client.count()
