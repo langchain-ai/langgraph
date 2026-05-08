@@ -8,6 +8,7 @@ when encryption is enabled.
 from __future__ import annotations
 
 import logging
+import os
 import pathlib
 import re
 import uuid
@@ -57,6 +58,15 @@ class _PassthroughCipher(CipherProtocol):
         return ciphertext
 
 
+def _get_test_aes_key() -> bytes:
+    key = os.environ.get("TEST_AES_KEY")
+    if key:
+        key_bytes = key.encode()
+        if len(key_bytes) in (16, 24, 32):
+            return key_bytes
+    return os.urandom(16)
+
+
 def _make_encrypted_serde(
     allowed_msgpack_modules: (
         _lg_msgpack.AllowedMsgpackModules | Literal[True] | None | object
@@ -70,7 +80,7 @@ def _make_encrypted_serde(
         )
     )
     return EncryptedSerializer.from_pycryptodome_aes(
-        serde=inner, key=b"1234567890123456"
+        serde=inner, key=_get_test_aes_key()
     )
 
 
@@ -270,7 +280,7 @@ class TestWithMsgpackAllowlistEncrypted:
         """_with_msgpack_allowlist should propagate allowlist to inner JsonPlusSerializer."""
         inner = JsonPlusSerializer(allowed_msgpack_modules=None)
         encrypted = EncryptedSerializer.from_pycryptodome_aes(
-            serde=inner, key=b"1234567890123456"
+            serde=inner, key=_get_test_aes_key()
         )
 
         extra = [("my.module", "MyClass")]
@@ -288,7 +298,7 @@ class TestWithMsgpackAllowlistEncrypted:
         """_with_msgpack_allowlist should preserve the cipher from the original."""
         inner = JsonPlusSerializer(allowed_msgpack_modules=None)
         encrypted = EncryptedSerializer.from_pycryptodome_aes(
-            serde=inner, key=b"1234567890123456"
+            serde=inner, key=_get_test_aes_key()
         )
 
         result = _with_msgpack_allowlist(encrypted, [("my.module", "MyClass")])
@@ -343,7 +353,7 @@ class TestWithMsgpackAllowlistEncrypted:
     def test_noop_allowlist_returns_same_encrypted_instance(self) -> None:
         inner = JsonPlusSerializer(allowed_msgpack_modules=None)
         encrypted = EncryptedSerializer.from_pycryptodome_aes(
-            serde=inner, key=b"1234567890123456"
+            serde=inner, key=_get_test_aes_key()
         )
 
         result = _with_msgpack_allowlist(encrypted, ())
@@ -356,7 +366,7 @@ class TestWithMsgpackAllowlistEncrypted:
         """End-to-end test: allowlist applied via _with_msgpack_allowlist works."""
         inner = JsonPlusSerializer(allowed_msgpack_modules=None)
         encrypted = EncryptedSerializer.from_pycryptodome_aes(
-            serde=inner, key=b"1234567890123456"
+            serde=inner, key=_get_test_aes_key()
         )
 
         # Apply allowlist for MyPydantic
@@ -385,7 +395,7 @@ class TestWithMsgpackAllowlistEncrypted:
         """Original serde should still block after _with_msgpack_allowlist creates a new one."""
         inner = JsonPlusSerializer(allowed_msgpack_modules=None)
         encrypted = EncryptedSerializer.from_pycryptodome_aes(
-            serde=inner, key=b"1234567890123456"
+            serde=inner, key=_get_test_aes_key()
         )
 
         # Apply allowlist - this should create a NEW serde
