@@ -37,7 +37,7 @@ def empty_checkpoint() -> Checkpoint:
 
 def delta_channels_to_snapshot(
     channels: Mapping[str, BaseChannel],
-    counters: Mapping[str, tuple[int, int]],
+    counters_since_last_snapshot: Mapping[str, tuple[int, int]],
 ) -> set[str]:
     """Return the set of DeltaChannel names that should snapshot now.
 
@@ -50,7 +50,7 @@ def delta_channels_to_snapshot(
     for name, ch in channels.items():
         if not isinstance(ch, DeltaChannel) or not ch.is_available():
             continue
-        updates, supersteps = counters.get(name, (0, 0))
+        updates, supersteps = counters_since_last_snapshot.get(name, (0, 0))
         if (
             updates >= ch.snapshot_frequency
             or supersteps >= DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
