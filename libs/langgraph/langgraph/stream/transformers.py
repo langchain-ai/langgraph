@@ -410,11 +410,10 @@ class LifecyclePayload(TypedDict, total=False):
     `started → terminal` pair for the same subgraph instance.
     """
     graph_name: NotRequired[str]
-    """Compiled name of the subgraph (e.g. the `add_node` name in the parent).
-
-    Set on `started` when the namespace tail segment carries a `name:id`
-    split (it does for normally-dispatched subgraphs). Absent if the segment
-    has no `:` separator.
+    """Name of the parent-scope node that dispatched this subgraph
+    (`add_node` name, surrounding tool's name for in-tool invokes,
+    `Send` target name, etc.) — parsed from the namespace tail
+    segment. Absent when the segment has no `:` separator.
     """
     parent_task_id: str
     """Pregel task id of the dispatching task — the task whose execution
