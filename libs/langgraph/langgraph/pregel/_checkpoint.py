@@ -13,6 +13,7 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
+from langgraph._internal._config import DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.delta import DeltaChannel
@@ -36,21 +37,26 @@ def empty_checkpoint() -> Checkpoint:
 
 def delta_channels_to_snapshot(
     channels: Mapping[str, BaseChannel],
-    counts: Mapping[str, int],
+    counters: Mapping[str, tuple[int, int]],
 ) -> set[str]:
     """Return the set of DeltaChannel names that should snapshot now.
 
-    A channel snapshots when its accumulated update count (since the last
-    snapshot) reaches or exceeds `snapshot_frequency`. This is a pure
+    A channel snapshots when EITHER its accumulated update count reaches
+    `snapshot_frequency` OR the total supersteps since its last snapshot
+    reaches `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT`. This is a pure
     predicate — no mutation.
     """
-    return {
-        name
-        for name, ch in channels.items()
-        if isinstance(ch, DeltaChannel)
-        and ch.is_available()
-        and counts.get(name, 0) >= ch.snapshot_frequency
-    }
+    result: set[str] = set()
+    for name, ch in channels.items():
+        if not isinstance(ch, DeltaChannel) or not ch.is_available():
+            continue
+        updates, supersteps = counters.get(name, (0, 0))
+        if (
+            updates >= ch.snapshot_frequency
+            or supersteps >= DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
+        ):
+            result.add(name)
+    return result
 
 
 def create_checkpoint(
@@ -69,7 +75,7 @@ def create_checkpoint(
     is written into `channel_values[k]`. Other delta channels are omitted
     from `channel_values` — the ancestor walk reconstructs their state
     from `checkpoint_writes`. Callers compute the set via
-    `delta_channels_to_snapshot(channels, counts)`; defaults to empty
+    `delta_channels_to_snapshot(channels, counters)`; defaults to empty
     (no snapshots) when not provided.
     """
     ts = datetime.now(timezone.utc).isoformat()
@@ -233,10 +239,10 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
     )
 
 
-def read_delta_updates_since_snapshot(
+def read_counters_since_last_snapshot(
     metadata: CheckpointMetadata | None,
-) -> dict[str, int]:
-    """Read the per-channel update counter from checkpoint metadata.
+) -> dict[str, tuple[int, int]]:
+    """Read the per-channel `(updates, supersteps)` counters from metadata.
 
     Returns an empty dict for missing/None metadata; the dict is
     `total=False` on `CheckpointMetadata`, so absence means "no prior
@@ -244,4 +250,5 @@ def read_delta_updates_since_snapshot(
     """
     if not metadata:
         return {}
-    return dict(metadata.get("delta_updates_since_snapshot", {}) or {})
+    raw = metadata.get("counters_since_last_snapshot") or {}
+    return {k: (int(v[0]), int(v[1])) for k, v in raw.items()}

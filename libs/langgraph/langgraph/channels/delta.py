@@ -32,7 +32,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
         change in future releases. Threads written with `DeltaChannel` today
         are expected to remain readable, but the surrounding contract
         (`BaseCheckpointSaver.get_delta_channel_history`, the
-        `_DeltaSnapshot` blob shape, the `delta_updates_since_snapshot`
+        `_DeltaSnapshot` blob shape, the `counters_since_last_snapshot`
         metadata field) is not yet stable.
 
     The reducer receives the current accumulated value and a batch of writes
@@ -47,9 +47,12 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     This lets LangGraph replay checkpointed writes in larger batches than they
     were originally produced without changing reconstructed state.
 
-    Snapshot cadence is driven by per-channel update count. `create_checkpoint`
-    writes a full `_DeltaSnapshot` blob every `snapshot_frequency` updates to
-    this channel, bounding replay depth.
+    Snapshot cadence is driven by two counters: per-channel update count and
+    total supersteps since last snapshot. `create_checkpoint` writes a full
+    `_DeltaSnapshot` blob when EITHER the update count reaches
+    `snapshot_frequency` OR the supersteps count reaches the system-wide
+    `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT` bound (default 5000), bounding
+    replay depth even for channels that stop receiving writes.
 
     Parameters:
         reducer: `(state, list[writes]) -> new_state`. Must be deterministic

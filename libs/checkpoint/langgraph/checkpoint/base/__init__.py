@@ -60,20 +60,29 @@ class CheckpointMetadata(TypedDict, total=False):
     """
     run_id: str
     """The ID of the run that created this checkpoint."""
-    delta_updates_since_snapshot: dict[str, int]
-    """Per-channel update count since the last `_DeltaSnapshot` was written.
+    counters_since_last_snapshot: dict[str, tuple[int, int]]
+    """Per-channel counters since the last `_DeltaSnapshot` was written.
 
     !!! warning "Beta"
 
         This metadata field backs `DeltaChannel` (beta). The key name and
         contents may change while the delta-channel design stabilizes.
 
-    Maps channel name → number of supersteps that wrote to this channel
-    since its last snapshot blob. Used by `pregel.create_checkpoint` to
-    decide when to write the next snapshot (when the count reaches the
-    channel's `snapshot_frequency`, snapshot fires and the count resets
-    to 0). Absent on threads that don't use delta channels. Version-format
-    independent — works for int, float, and string version schemes.
+    Maps channel name -> `(updates, supersteps)`:
+
+    - index 0 (`updates`): number of supersteps that wrote to this channel
+      since its last snapshot blob.
+    - index 1 (`supersteps`): total supersteps elapsed since this channel's
+      last snapshot, regardless of whether the channel was written.
+
+    A snapshot fires when EITHER `updates >= ch.snapshot_frequency` OR
+    `supersteps >= DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT` (system-wide bound,
+    default 5000, env `LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT`).
+    The supersteps bound prevents unbounded ancestor walks on threads where
+    a delta channel exists but is no longer being updated.
+
+    Absent on threads that don't use delta channels. Persisted as a
+    2-element list in JSON (no native tuple).
     """
 
 

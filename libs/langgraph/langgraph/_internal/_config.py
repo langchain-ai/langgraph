@@ -29,6 +29,9 @@ from langgraph._internal._constants import (
 )
 
 DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10007"))
+DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT = int(
+    getenv("LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT", "5000")
+)
 
 
 def recast_checkpoint_ns(ns: str) -> str:
