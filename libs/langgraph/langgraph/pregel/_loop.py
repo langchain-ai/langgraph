@@ -776,6 +776,17 @@ class PregelLoop:
                 and configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
                 in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {})
             )
+            # Outer graph: time-travel-resume — explicit non-head
+            # checkpoint paired with a Command(resume=...). Without this,
+            # `Command(resume=...) + checkpoint=<non-head>` would match the
+            # plain-resume exclusion below and skip the cleanup needed to
+            # treat this as a fork.
+            or (
+                not self.is_nested
+                and getattr(self, "_loaded_explicit_non_head", False)
+                and input_is_command
+                and cast(Command, self.input).resume is not None
+            )
             or not (
                 # Outer graph: resume arrives as Command(resume=...)
                 (input_is_command and cast(Command, self.input).resume is not None)
@@ -1500,6 +1511,13 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
     def __enter__(self) -> Self:
         self._graph_lifecycle_events = deque()
+        # Set by the explicit-id branch when the loaded checkpoint is not
+        # the latest for the (thread, ns). Lets _first distinguish a
+        # plain resume (`Command(resume=...)` against head, which carries
+        # an explicit checkpoint_id only because clients like LangGraph
+        # Studio echo it back) from time-travel-resume (`Command(resume=
+        # ...)` against an explicit non-head checkpoint).
+        self._loaded_explicit_non_head = False
         if not self.checkpointer:
             saved = None
         elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
@@ -1507,6 +1525,14 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             # This covers both normal replay and subgraphs resolved via
             # checkpoint_map during time-travel.
             saved = self.checkpointer.get_tuple(self.checkpoint_config)
+            if saved is not None and not self.is_nested:
+                head = self.checkpointer.get_tuple(
+                    patch_configurable(
+                        self.checkpoint_config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                    )
+                )
+                if head is not None and head.checkpoint["id"] != saved.checkpoint["id"]:
+                    self._loaded_explicit_non_head = True
         elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
             # Subgraph replay: the parent is replaying and passed us a
             # replay_state with its checkpoint_id. Look up our checkpoint
@@ -1758,6 +1784,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
 
     async def __aenter__(self) -> Self:
         self._graph_lifecycle_events = deque()
+        self._loaded_explicit_non_head = False
         if not self.checkpointer:
             saved = None
         elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
@@ -1765,6 +1792,14 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             # This covers both normal replay and subgraphs resolved via
             # checkpoint_map during time-travel.
             saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+            if saved is not None and not self.is_nested:
+                head = await self.checkpointer.aget_tuple(
+                    patch_configurable(
+                        self.checkpoint_config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                    )
+                )
+                if head is not None and head.checkpoint["id"] != saved.checkpoint["id"]:
+                    self._loaded_explicit_non_head = True
         elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
             # Subgraph replay: the parent is replaying and passed us a
             # replay_state with its checkpoint_id. Look up our checkpoint

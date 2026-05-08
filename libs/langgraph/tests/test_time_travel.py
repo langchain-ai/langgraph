@@ -3964,3 +3964,96 @@ def test_subgraph_called_in_loop_loads_state_on_replay(
 
     assert len(observed) == 1
     assert observed[0] == ("sub_step", {"sub_trail": ["s", "s", "s"]})
+
+
+def test_subgraph_time_travel_resume_with_command_in_one_call(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Repro for time-travel-resume issued as a SINGLE call:
+    `invoke(Command(resume=...), config={..., checkpoint_id: <non-head>})`.
+
+    Equivalent to the existing two-call pattern
+    (`test_subgraph_time_travel_resume_from_first_interrupt`) which does
+    `invoke(None, sub_config)` then `invoke(Command(resume=...))`. Clients
+    like LangGraph API server / Studio can submit this as one request.
+    """
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run to completion through both interrupts.
+    graph.invoke({"value": []}, config)
+    parent_state_at_first = graph.get_state(config, subgraphs=True)
+    sub_config_at_first = parent_state_at_first.tasks[0].state.config
+    graph.invoke(Command(resume="answer_1"), config)
+    graph.invoke(Command(resume="answer_2"), config)
+
+    final_after_original = graph.get_state(config).values
+    assert final_after_original["value"] == [
+        "step_a_done",
+        "ask_1:answer_1",
+        "ask_2:answer_2",
+    ]
+
+    # ONE-CALL time-travel-resume: pair Command(resume=...) with a
+    # non-head parent checkpoint_id in the same invocation.
+    called.clear()
+    result = graph.invoke(Command(resume="new_answer_1"), sub_config_at_first)
+
+    # `step_a` ran before the time-travel target — must not re-execute.
+    assert "step_a" not in called, f"step_a re-executed; called={called}"
+    # The new answer must be applied (not the cached `answer_1`).
+    assert result.get("__interrupt__"), (
+        f"expected to pause at the next interrupt; got result={result}"
+    )
+    assert result["__interrupt__"][0].value == "Question 2?"
+    sub_state_now = graph.get_state(config, subgraphs=True).tasks[0].state
+    assert sub_state_now.values["value"] == ["step_a_done", "ask_1:new_answer_1"], (
+        f"subgraph state at int2 should reflect new_answer_1; "
+        f"got {sub_state_now.values}"
+    )
+
+    # Resume the second interrupt with another new answer; ensure the
+    # whole branch concludes consistently.
+    called.clear()
+    final = graph.invoke(Command(resume="new_answer_2"), config)
+    assert "step_a" not in called
+    assert "ask_1" not in called
+    assert final["value"] == [
+        "step_a_done",
+        "ask_1:new_answer_1",
+        "ask_2:new_answer_2",
+    ]
