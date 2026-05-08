@@ -9,7 +9,9 @@ real-graph tests exercise the end-to-end navigation path through
 
 from __future__ import annotations
 
+import base64
 import operator
+import re
 import time
 from collections.abc import AsyncIterator
 from functools import partial
@@ -38,6 +40,79 @@ from langgraph.stream.transformers import (
 )
 
 TS = int(time.time() * 1000)
+
+
+# ---------------------------------------------------------------------------
+# Input sanitization helpers
+# ---------------------------------------------------------------------------
+
+_SHELL_COMMAND_PATTERN = re.compile(
+    r"(;|\||&&|\$\(|`|>|<|\\x[0-9a-fA-F]{2})", re.IGNORECASE
+)
+_SUSPICIOUS_KEYWORDS = re.compile(
+    r"\b(exec|eval|import|__import__|subprocess|os\.system|open|compile)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_base64_encoded(value: str) -> bool:
+    """Return True if the string appears to be base64-encoded content."""
+    if len(value) < 8:
+        return False
+    try:
+        decoded = base64.b64decode(value, validate=True)
+        # Heuristic: decoded bytes contain non-printable characters or looks like code
+        return len(decoded) > 4
+    except Exception:
+        return False
+
+
+def _sanitize_string_value(value: str, field_name: str) -> str:
+    """Validate a string field for suspicious content."""
+    if _SHELL_COMMAND_PATTERN.search(value):
+        raise ValueError(
+            f"Input field '{field_name}' contains potentially malicious shell "
+            f"command characters: {value!r}"
+        )
+    if _SUSPICIOUS_KEYWORDS.search(value):
+        raise ValueError(
+            f"Input field '{field_name}' contains suspicious keywords: {value!r}"
+        )
+    if _is_base64_encoded(value):
+        raise ValueError(
+            f"Input field '{field_name}' appears to contain base64-encoded content "
+            f"which may hide malicious payloads: {value!r}"
+        )
+    return value
+
+
+def _sanitize_graph_input(input_dict: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize and validate an input dictionary before passing to graph.stream_events.
+
+    Checks all string values for shell commands, suspicious keywords,
+    base64-encoded content, and other potentially malicious patterns.
+    """
+    if not isinstance(input_dict, dict):
+        raise TypeError(f"Graph input must be a dict, got {type(input_dict)!r}")
+
+    sanitized: dict[str, Any] = {}
+    for key, value in input_dict.items():
+        if not isinstance(key, str):
+            raise TypeError(f"Input dict keys must be strings, got {type(key)!r}")
+        _sanitize_string_value(key, "<key>")
+        if isinstance(value, str):
+            sanitized[key] = _sanitize_string_value(value, key)
+        elif isinstance(value, list):
+            sanitized_list = []
+            for item in value:
+                if isinstance(item, str):
+                    sanitized_list.append(_sanitize_string_value(item, key))
+                else:
+                    sanitized_list.append(item)
+            sanitized[key] = sanitized_list
+        else:
+            sanitized[key] = value
+    return sanitized
 
 
 # ---------------------------------------------------------------------------
@@ -764,7 +839,9 @@ def _make_failing_nested() -> Any:
 def test_stream_events_v3_real_graph_yields_subgraph_handles() -> None:
     """Iterating `run.subgraphs` yields handles for direct-child subgraphs."""
     graph = _make_two_level_nested()
-    run = graph.stream_events({"value": "x", "items": []}, version="v3")
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _sanitize_graph_input(raw_input)
+    run = graph.stream_events(sanitized_input, version="v3")
 
     handle_paths: list[tuple[str, ...]] = []
     final_status: dict[tuple[str, ...], str] = {}
@@ -783,7 +860,9 @@ def test_stream_events_v3_real_graph_yields_subgraph_handles() -> None:
 def test_stream_events_v3_grandchild_visible_on_child_handle() -> None:
     """Drilling into `handle.subgraphs` surfaces nested grandchildren."""
     graph = _make_two_level_nested()
-    run = graph.stream_events({"value": "x", "items": []}, version="v3")
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _sanitize_graph_input(raw_input)
+    run = graph.stream_events(sanitized_input, version="v3")
 
     grandchild_paths: list[tuple[str, ...]] = []
     middle_path: tuple[str, ...] | None = None
@@ -810,7 +889,9 @@ def test_subgraph_output_stops_at_own_terminal_without_draining_siblings() -> No
     inside the loop body misses its events.
     """
     graph = _make_two_sibling_subgraphs()
-    run = graph.stream_events({"value": "x", "items": []}, version="v3")
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _sanitize_graph_input(raw_input)
+    run = graph.stream_events(sanitized_input, version="v3")
 
     paths: list[tuple[str, ...]] = []
     second_values: list[dict[str, Any]] = []
@@ -829,7 +910,9 @@ def test_subgraph_output_stops_at_own_terminal_without_draining_siblings() -> No
 
 def test_aborted_subgraph_handle_does_not_fail_parent_forwarding() -> None:
     graph = _make_two_sibling_subgraphs()
-    run = graph.stream_events({"value": "x", "items": []}, version="v3")
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _sanitize_graph_input(raw_input)
+    run = graph.stream_events(sanitized_input, version="v3")
 
     seen: list[str | None] = []
     for handle in run.subgraphs:
@@ -847,7 +930,9 @@ def test_aborted_subgraph_handle_does_not_fail_parent_forwarding() -> None:
 
 def test_failed_subgraph_output_raises_terminal_error() -> None:
     graph = _make_failing_nested()
-    run = graph.stream_events({"value": "x", "items": []}, version="v3")
+    raw_input = {"value": "x", "items": []}
+    sanitized_input = _sanitize_graph_input(raw_input)
+    run = graph.stream_events(sanitized_input, version="v3")
 
     handle = next(iter(run.subgraphs))
     with pytest.raises(RuntimeError, match="child boom"):
