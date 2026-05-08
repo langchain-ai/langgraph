@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
+import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextvars import ContextVar, Token
 from typing import Any, TypeVar, cast
@@ -30,6 +34,43 @@ _tool_call_writer: ContextVar[ToolCallWriter | None] = ContextVar(
 Set by `StreamToolCallHandler.on_tool_start` and reset on end/error.
 Read by `ToolRuntime.emit_output_delta` (in `langgraph.prebuilt`).
 """
+
+_audit_logger = logging.getLogger("langgraph.tools.audit")
+
+_MAX_INPUT_REPR_BYTES = 256
+_MAX_OUTPUT_REPR_BYTES = 256
+
+
+def _redact_value(value: Any) -> str:
+    """Return a redacted, size-bounded representation of a value."""
+    try:
+        raw = json.dumps(value, default=str)
+    except Exception:
+        raw = repr(value)
+    if len(raw) > _MAX_OUTPUT_REPR_BYTES:
+        raw = raw[:_MAX_OUTPUT_REPR_BYTES] + "...<truncated>"
+    return raw
+
+
+def _hash_value(value: Any) -> str:
+    """Return a SHA-256 hex digest of the canonical JSON representation."""
+    try:
+        raw = json.dumps(value, sort_keys=True, default=str).encode()
+    except Exception:
+        raw = repr(value).encode()
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _sanitise_inputs(inputs: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return a redacted copy of inputs safe for streaming to clients."""
+    if inputs is None:
+        return None
+    return {k: _redact_value(v) for k, v in inputs.items()}
+
+
+def _sanitise_output(output: Any) -> str:
+    """Return a redacted, size-bounded representation of tool output."""
+    return _redact_value(output)
 
 
 class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
@@ -155,13 +196,32 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         token = _tool_call_writer.set(writer)
         self._run_to_call[run_id] = (ns, tool_call_id, token)
 
+        sanitised_inputs = _sanitise_inputs(inputs)
+        input_hash = _hash_value(inputs) if inputs is not None else None
+        timestamp = time.time()
+
+        _audit_logger.info(
+            "tool-started",
+            extra={
+                "audit": True,
+                "event": "tool-started",
+                "tool_call_id": tool_call_id,
+                "tool_name": tool_name,
+                "run_id": str(run_id),
+                "namespace": ns,
+                "input_hash": input_hash,
+                "timestamp": timestamp,
+            },
+        )
+
         payload: dict[str, Any] = {
             "event": "tool-started",
             "tool_call_id": tool_call_id,
             "tool_name": tool_name,
+            "timestamp": timestamp,
         }
-        if inputs is not None:
-            payload["input"] = inputs
+        if sanitised_inputs is not None:
+            payload["input"] = sanitised_inputs
         self.stream((ns, "tools", payload))
 
     def _end(self, output: Any, *, run_id: UUID) -> None:
@@ -170,6 +230,24 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             return
         ns, tool_call_id, token = info
         self._reset_writer(token)
+
+        sanitised_output = _sanitise_output(output)
+        output_hash = _hash_value(output)
+        timestamp = time.time()
+
+        _audit_logger.info(
+            "tool-finished",
+            extra={
+                "audit": True,
+                "event": "tool-finished",
+                "tool_call_id": tool_call_id,
+                "run_id": str(run_id),
+                "namespace": ns,
+                "output_hash": output_hash,
+                "timestamp": timestamp,
+            },
+        )
+
         self.stream(
             (
                 ns,
@@ -177,7 +255,8 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                 {
                     "event": "tool-finished",
                     "tool_call_id": tool_call_id,
-                    "output": output,
+                    "output": sanitised_output,
+                    "timestamp": timestamp,
                 },
             )
         )
@@ -188,6 +267,22 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             return
         ns, tool_call_id, token = info
         self._reset_writer(token)
+
+        timestamp = time.time()
+
+        _audit_logger.error(
+            "tool-error",
+            extra={
+                "audit": True,
+                "event": "tool-error",
+                "tool_call_id": tool_call_id,
+                "run_id": str(run_id),
+                "namespace": ns,
+                "error_type": type(error).__name__,
+                "timestamp": timestamp,
+            },
+        )
+
         self.stream(
             (
                 ns,
@@ -196,6 +291,7 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                     "event": "tool-error",
                     "tool_call_id": tool_call_id,
                     "message": str(error),
+                    "timestamp": timestamp,
                 },
             )
         )
