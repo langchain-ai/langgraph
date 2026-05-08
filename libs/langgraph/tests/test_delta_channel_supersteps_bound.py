@@ -139,19 +139,11 @@ async def test_predicate_fires_on_supersteps_overflow() -> None:
     channels = {"x": ch_instance}
     counters: dict[str, tuple[int, int]] = {"x": (0, 5000)}
 
-    with patch(
-        "langgraph.pregel._checkpoint.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT",
-        5000,
-    ):
-        result = delta_channels_to_snapshot(channels, counters)
+    result = delta_channels_to_snapshot(channels, counters)
     assert "x" in result
 
     counters_below: dict[str, tuple[int, int]] = {"x": (0, 4999)}
-    with patch(
-        "langgraph.pregel._checkpoint.DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT",
-        5000,
-    ):
-        result2 = delta_channels_to_snapshot(channels, counters_below)
+    result2 = delta_channels_to_snapshot(channels, counters_below)
     assert "x" not in result2
 
 
