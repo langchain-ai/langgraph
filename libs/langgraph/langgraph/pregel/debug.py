@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
+import time
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import asdict
 from typing import Any
@@ -33,6 +37,54 @@ from langgraph.types import (
 
 TASK_NAMESPACE = UUID("6ba7b831-9dad-11d1-80b4-00c04fd430c8")
 
+_audit_logger = logging.getLogger("langgraph.audit")
+
+_INPUT_MAX_BYTES = 4096
+
+
+def _truncate_input(value: Any) -> Any:
+    """Truncate task input to enforce output data minimisation."""
+    try:
+        serialised = json.dumps(value, default=str)
+    except Exception:
+        serialised = str(value)
+    if len(serialised) > _INPUT_MAX_BYTES:
+        return serialised[:_INPUT_MAX_BYTES] + "...<truncated>"
+    return value
+
+
+def _hash_value(value: Any) -> str:
+    """Return a SHA-256 hex digest of the JSON-serialised value."""
+    try:
+        raw = json.dumps(value, sort_keys=True, default=str).encode()
+    except Exception:
+        raw = str(value).encode()
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _redact_config(config: RunnableConfig | None) -> dict[str, Any] | None:
+    """Return a redacted view of a config exposing only non-sensitive keys."""
+    if config is None:
+        return None
+    configurable = config.get("configurable", {})
+    redacted: dict[str, Any] = {}
+    for k, v in configurable.items():
+        if k in ("thread_id", CONFIG_KEY_CHECKPOINT_NS):
+            redacted[k] = "<redacted>"
+        elif not k.startswith("__pregel_"):
+            redacted[k] = v
+    return {"configurable": redacted}
+
+
+def _write_audit_record(event: str, record: dict[str, Any]) -> None:
+    """Append an audit log entry with a timestamp and event type."""
+    entry = {
+        "audit_event": event,
+        "timestamp": time.time(),
+        **record,
+    }
+    _audit_logger.info(json.dumps(entry, default=str))
+
 
 def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPayload]:
     """Produce "task" events for stream_mode=debug."""
@@ -40,10 +92,23 @@ def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPaylo
         if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
             continue
 
+        truncated_input = _truncate_input(task.input)
+        input_hash = _hash_value(task.input)
+
+        _write_audit_record(
+            "task_dispatched",
+            {
+                "task_id": task.id,
+                "task_name": task.name,
+                "triggers": task.triggers,
+                "input_hash": input_hash,
+            },
+        )
+
         yield {
             "id": task.id,
             "name": task.name,
-            "input": task.input,
+            "input": truncated_input,
             "triggers": task.triggers,
         }
 
@@ -89,19 +154,34 @@ def map_debug_task_results(
         [stream_keys] if isinstance(stream_keys, str) else stream_keys
     )
     task, writes = task_tup
+    error = next((w[1] for w in writes if w[0] == ERROR), None)
+    result = map_task_result_writes(
+        [w for w in writes if w[0] in stream_channels_list or w[0] == RETURN]
+    )
+    interrupts = [
+        asdict(v)
+        for w in writes
+        if w[0] == INTERRUPT
+        for v in (w[1] if isinstance(w[1], Sequence) else [w[1]])
+    ]
+
+    _write_audit_record(
+        "task_result",
+        {
+            "task_id": task.id,
+            "task_name": task.name,
+            "has_error": error is not None,
+            "result_hash": _hash_value(result),
+            "interrupt_count": len(interrupts),
+        },
+    )
+
     yield {
         "id": task.id,
         "name": task.name,
-        "error": next((w[1] for w in writes if w[0] == ERROR), None),
-        "result": map_task_result_writes(
-            [w for w in writes if w[0] in stream_channels_list or w[0] == RETURN]
-        ),
-        "interrupts": [
-            asdict(v)
-            for w in writes
-            if w[0] == INTERRUPT
-            for v in (w[1] if isinstance(w[1], Sequence) else [w[1]])
-        ],
+        "error": error,
+        "result": result,
+        "interrupts": interrupts,
     }
 
 
@@ -133,6 +213,8 @@ def map_debug_checkpoint(
     parent_ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
     task_states: dict[str, RunnableConfig | StateSnapshot] = {}
 
+    tasks = list(tasks)
+
     for task in tasks:
         if not task.subgraphs:
             continue
@@ -150,10 +232,29 @@ def map_debug_checkpoint(
             }
         }
 
+    channel_values = read_channels(channels, stream_channels)
+    values_hash = _hash_value(channel_values)
+
+    redacted_config = _redact_config(rm_pregel_keys(patch_checkpoint_map(config, metadata)))
+    redacted_parent_config = _redact_config(rm_pregel_keys(patch_checkpoint_map(parent_config, metadata)))
+
+    computed_tasks = list(tasks_w_writes(tasks, pending_writes, task_states, output_keys))
+
+    _write_audit_record(
+        "checkpoint",
+        {
+            "values_hash": values_hash,
+            "task_count": len(computed_tasks),
+            "task_ids": [t.id for t in computed_tasks],
+            "task_names": [t.name for t in computed_tasks],
+            "metadata": metadata,
+        },
+    )
+
     yield {
-        "config": rm_pregel_keys(patch_checkpoint_map(config, metadata)),
-        "parent_config": rm_pregel_keys(patch_checkpoint_map(parent_config, metadata)),
-        "values": read_channels(channels, stream_channels),
+        "config": redacted_config,
+        "parent_config": redacted_parent_config,
+        "values": channel_values,
         "metadata": metadata,
         "next": [t.name for t in tasks],
         "tasks": [
@@ -178,7 +279,7 @@ def map_debug_checkpoint(
                 "interrupts": tuple(asdict(i) for i in t.interrupts),
                 "state": t.state,
             }
-            for t in tasks_w_writes(tasks, pending_writes, task_states, output_keys)
+            for t in computed_tasks
         ],
     }
 
@@ -240,6 +341,18 @@ def tasks_w_writes(
 
         has_writes = rtn is not MISSING or any(
             w[0] == task.id and w[1] not in (ERROR, INTERRUPT) for w in pending_writes
+        )
+
+        _write_audit_record(
+            "task_write",
+            {
+                "task_id": task.id,
+                "task_name": task.name,
+                "has_error": task_error is not None,
+                "has_result": has_writes,
+                "result_hash": _hash_value(task_result) if has_writes else None,
+                "interrupt_count": len(task_interrupts),
+            },
         )
 
         out.append(
