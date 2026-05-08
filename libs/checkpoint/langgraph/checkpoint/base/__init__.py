@@ -711,6 +711,15 @@ class BaseCheckpointSaver(Generic[V]):
             )
             delete_rows_not_in(keep)
 
+        Note:
+            The default implementation here uses repeated `get_tuple` calls
+            to walk the parent chain. This is a basic reference implementation
+            suitable for low-frequency maintenance operations (prune, etc.).
+            Custom checkpointer backends may override with a more efficient
+            version tailored to their data model (e.g. a single SQL query
+            with a recursive CTE), but it is not required — the default works
+            correctly for any saver that implements `get_tuple`.
+
         Args:
             config: Configuration identifying the target checkpoint.
             channels: Channel names whose delta history must be preserved.
