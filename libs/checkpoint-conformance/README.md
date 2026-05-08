@@ -63,6 +63,7 @@ The suite tests **base** capabilities (required) and **extended** capabilities (
 | `delete_for_runs` | no | `adelete_for_runs` |
 | `copy_thread` | no | `acopy_thread` |
 | `prune` | no | `aprune` |
+| `delta_channel_history` | no | `aget_delta_channel_history` |
 
 Extended capabilities are detected by checking whether the method is overridden from `BaseCheckpointSaver`. If not overridden, those tests are skipped.
 

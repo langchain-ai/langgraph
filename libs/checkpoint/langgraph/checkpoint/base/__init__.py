@@ -327,6 +327,14 @@ class BaseCheckpointSaver(Generic[V]):
 
         Args:
             run_ids: The run IDs whose checkpoints should be deleted.
+
+        !!! warning "DeltaChannel"
+
+            Deleting a run that produced ancestor `checkpoint_writes` — or
+            the only `_DeltaSnapshot` blob — for a still-live thread will
+            break reconstruction of any `DeltaChannel` whose history
+            depended on those rows. See the `DeltaChannel` note on `prune`
+            for safe-recovery strategies.
         """
         raise NotImplementedError
 
@@ -340,6 +348,17 @@ class BaseCheckpointSaver(Generic[V]):
         Args:
             source_thread_id: The thread ID to copy from.
             target_thread_id: The thread ID to copy to.
+
+        !!! warning "DeltaChannel"
+
+            Implementations must copy the **complete** parent chain (all
+            ancestor checkpoints and their `checkpoint_writes`) — copying
+            only the head checkpoint will leave the target thread with
+            `DeltaChannel` state that cannot be reconstructed (no path back
+            to a `_DeltaSnapshot` ancestor). Equivalently, the copy must
+            include enough ancestors that every `DeltaChannel`-backed key
+            has either a `_DeltaSnapshot` in `channel_values` somewhere in
+            the chain, or a complete write history back to the chain root.
         """
         raise NotImplementedError
 
@@ -355,6 +374,34 @@ class BaseCheckpointSaver(Generic[V]):
             thread_ids: The thread IDs to prune.
             strategy: The pruning strategy. `"keep_latest"` retains only the most
                 recent checkpoint per namespace. `"delete"` removes all checkpoints.
+
+        !!! warning "DeltaChannel"
+
+            Custom implementations must be `DeltaChannel`-aware. `DeltaChannel`
+            stores only a sentinel in `channel_values` for non-snapshot steps;
+            reconstruction walks the parent chain via
+            `get_delta_channel_history`, accumulating rows from
+            `checkpoint_writes` until it reaches an ancestor whose
+            `channel_values` contains a `_DeltaSnapshot` blob (written every
+            `snapshot_frequency` updates).
+
+            A naive `"keep_latest"` that drops intermediate checkpoints and
+            their writes can sever that chain: the surviving "latest"
+            checkpoint is rarely a snapshot point itself, so its delta
+            channels would silently reconstruct as empty (no error raised —
+            `get_delta_channel_history` simply returns no `seed`). Safe
+            options when the graph uses `DeltaChannel`:
+
+            * Walk back from each kept checkpoint and preserve every
+              ancestor (plus its `checkpoint_writes`) up to the nearest one
+              whose `channel_values` already contains a `_DeltaSnapshot` for
+              every `DeltaChannel`-backed key.
+            * Force a fresh snapshot on the kept checkpoint before deleting
+              ancestors — rewrite `channel_values[k] = _DeltaSnapshot(value)`
+              for each delta channel `k` (resolving `value` via the existing
+              ancestor walk first), then prune.
+            * Skip pruning threads whose graph uses `DeltaChannel` until one
+              of the above is implemented.
         """
         raise NotImplementedError
 
@@ -471,6 +518,13 @@ class BaseCheckpointSaver(Generic[V]):
 
         Args:
             run_ids: The run IDs whose checkpoints should be deleted.
+
+        !!! warning "DeltaChannel"
+
+            See `delete_for_runs` — deleting rows a still-live thread's
+            `DeltaChannel` reconstruction depends on (writes between the
+            head and its nearest `_DeltaSnapshot` ancestor) will silently
+            corrupt that channel's state.
         """
         raise NotImplementedError
 
@@ -484,6 +538,13 @@ class BaseCheckpointSaver(Generic[V]):
         Args:
             source_thread_id: The thread ID to copy from.
             target_thread_id: The thread ID to copy to.
+
+        !!! warning "DeltaChannel"
+
+            See `copy_thread` — the copy must carry the complete parent
+            chain (or at least back to a `_DeltaSnapshot` ancestor for every
+            `DeltaChannel`) so the target thread can reconstruct delta
+            state.
         """
         raise NotImplementedError
 
@@ -499,6 +560,13 @@ class BaseCheckpointSaver(Generic[V]):
             thread_ids: The thread IDs to prune.
             strategy: The pruning strategy. `"keep_latest"` retains only the most
                 recent checkpoint per namespace. `"delete"` removes all checkpoints.
+
+        !!! warning "DeltaChannel"
+
+            See `prune` for the full `DeltaChannel` caveat. In short:
+            `"keep_latest"` must not drop ancestor checkpoints / writes that
+            sit between the kept checkpoint and the nearest `_DeltaSnapshot`
+            ancestor, or delta channels will silently reconstruct as empty.
         """
         raise NotImplementedError
 
