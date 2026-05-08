@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import concurrent.futures
 import functools
+import hashlib
 import inspect
+import logging
 import sys
+import time
 import types
+import uuid
 from collections.abc import Awaitable, Callable, Generator, Sequence
 from datetime import timedelta
 from typing import Any, Generic, TypeVar, cast
@@ -28,6 +32,8 @@ from langgraph._internal._timeout import (
 from langgraph.config import get_config
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import CachePolicy, RetryPolicy, TimeoutPolicy
+
+logger = logging.getLogger(__name__)
 
 ##
 # Utilities borrowed from cloudpickle.
@@ -255,6 +261,16 @@ class SyncAsyncFuture(Generic[T], concurrent.futures.Future[T]):
         yield cast(T, ...)
 
 
+def _compute_input_hash(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
+    """Compute a stable hash of the call inputs for audit purposes."""
+    try:
+        import json
+        payload = json.dumps({"args": list(args), "kwargs": kwargs}, default=str, sort_keys=True)
+        return hashlib.sha256(payload.encode()).hexdigest()
+    except Exception:
+        return hashlib.sha256(repr((args, kwargs)).encode()).hexdigest()
+
+
 def call(
     func: Callable[P, Awaitable[T]] | Callable[P, T],
     *args: Any,
@@ -287,6 +303,29 @@ def _call_with_options(
         raise sync_timeout_unsupported(name, kind="Task")
     config = get_config()
     impl = config[CONF][CONFIG_KEY_CALL]
+
+    # Audit record for AI-driven action dispatch
+    func_module = getattr(func, "__module__", None)
+    func_qualname = getattr(func, "__qualname__", None) or getattr(func, "__name__", None) or func.__class__.__name__
+    func_identifier = f"{func_module}.{func_qualname}" if func_module else func_qualname
+    trace_id = str(uuid.uuid4())
+    input_hash = _compute_input_hash(args, kwargs)
+    audit_record = {
+        "event": "ai_action_dispatch",
+        "trace_id": trace_id,
+        "timestamp": time.time(),
+        "func_identifier": func_identifier,
+        "func_module": func_module,
+        "func_qualname": func_qualname,
+        "input_hash": input_hash,
+        "retry_policy": repr(retry_policy),
+        "cache_policy": repr(cache_policy),
+        "timeout": repr(timeout),
+        "run_id": str(config.get("run_id", "")),
+        "thread_id": str(config.get("configurable", {}).get("thread_id", "")),
+    }
+    logger.info("AUDIT: %s", audit_record)
+
     fut = impl(
         func,
         (args, kwargs),
