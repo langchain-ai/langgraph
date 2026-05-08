@@ -988,7 +988,10 @@ def python_config_to_docker_uv_lock(
     docker_plan.add_instruction(
         "RUN", f"{global_reqs_pip_install} -r uv_requirements.txt"
     )
-    docker_plan.add_instruction("RUN", "rm -rf /tmp/uv_export")
+    docker_plan.add_instruction(
+        "RUN",
+        "find /tmp/uv_export -mindepth 1 -maxdepth 1 -print0 | xargs -0 -I{} unlink {} 2>/dev/null || true && find /tmp/uv_export -depth -type d -empty -exec rmdir {} \\; 2>/dev/null || true",
+    )
     docker_plan.add_raw("# -- End of uv.lock dependencies install --")
     docker_plan.add_blank()
 
