@@ -1094,6 +1094,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         debug: bool = False,
         name: str | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        default_error_handler: StateNode[Any, ContextT] | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1133,6 +1134,12 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 the standard `StreamTransformer` constructor shape by
                 accepting `scope` as their first argument. Appended after the
                 built-in stream transformers.
+            default_error_handler: Optional fallback node-level error handler
+                invoked when any regular node raises and does not have its own
+                `error_handler` set via `add_node`. Per-node `error_handler`
+                always takes precedence. The default handler is **not** invoked
+                when an error-handler node itself raises -- handler failures
+                fail the run. Not inherited by subgraphs.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
@@ -1193,10 +1200,35 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 key for key, val in self.channels.items() if not is_managed_value(val)
             ]
         )
+        default_handler_node_name: str | None = None
+        if default_error_handler is not None:
+            _default_eh_name = "__default_error_handler__"
+            if _default_eh_name in self.nodes:
+                raise ValueError(
+                    f"Auto-generated default error handler node "
+                    f"`{_default_eh_name}` already exists."
+                )
+            default_handler_node_name = _default_eh_name
+            self.nodes[default_handler_node_name] = StateNodeSpec[Any, ContextT](
+                coerce_to_runnable(
+                    default_error_handler,  # type: ignore[arg-type]
+                    name=default_handler_node_name,
+                    trace=False,
+                ),
+                metadata=None,
+                input_schema=self.state_schema,
+                retry_policy=None,
+                cache_policy=None,
+                is_error_handler=True,
+            )
+            for _spec in self.nodes.values():
+                if not _spec.is_error_handler and _spec.error_handler_node is None:
+                    _spec.error_handler_node = default_handler_node_name
+
         node_error_handler_map = {
             node_name: spec.error_handler_node
             for node_name, spec in self.nodes.items()
-            if spec.error_handler_node is not None
+            if not spec.is_error_handler and spec.error_handler_node is not None
         }
 
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
