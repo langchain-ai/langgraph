@@ -451,6 +451,7 @@ class SyncAssistantsClient:
         delete_threads: bool = False,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        confirm: bool = False,
     ) -> None:
         """Delete an assistant.
 
@@ -461,6 +462,7 @@ class SyncAssistantsClient:
                 those threads.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
+            confirm: Must be set to True to confirm the delete operation (HITL approval gate).
 
         Returns:
             `None`
@@ -470,11 +472,17 @@ class SyncAssistantsClient:
             ```python
             client = get_sync_client(url="http://localhost:2024")
             client.assistants.delete(
-                assistant_id="my_assistant_id"
+                assistant_id="my_assistant_id",
+                confirm=True
             )
             ```
 
         """
+        if not confirm:
+            raise ValueError(
+                "Delete is a destructive operation. "
+                "Set confirm=True to approve and proceed with deleting the assistant."
+            )
         query_params: dict[str, Any] = {}
         if delete_threads:
             query_params["delete_threads"] = True
