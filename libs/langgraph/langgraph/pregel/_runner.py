@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import concurrent.futures
+import hashlib
 import inspect
+import logging
+import re
 import threading
 import time
+import uuid
 import weakref
 from collections.abc import (
     AsyncIterator,
@@ -51,6 +56,8 @@ from langgraph.types import (
     TimeoutPolicy,
 )
 
+logger = logging.getLogger(__name__)
+
 F = TypeVar("F", concurrent.futures.Future, asyncio.Future)
 E = TypeVar("E", threading.Event, asyncio.Event)
 
@@ -69,6 +76,185 @@ EXCLUDED_FRAME_FNAMES = (
 SKIP_RERAISE_SET: weakref.WeakSet[concurrent.futures.Future | asyncio.Future] = (
     weakref.WeakSet()
 )
+
+# ---------------------------------------------------------------------------
+# Security helpers
+# ---------------------------------------------------------------------------
+
+# Patterns used to detect potentially malicious prompt content (Instruction 3).
+_MALICIOUS_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"(?i)(ignore\s+(previous|prior|above)\s+instructions?)"),
+    re.compile(r"(?i)(system\s*prompt|you\s+are\s+now|act\s+as\s+)"),
+    re.compile(r"(?i)(exec\s*\(|eval\s*\(|__import__\s*\()"),
+    re.compile(r"(?i)(subprocess|os\.system|shell\s*=\s*True)"),
+    re.compile(r"(?i)(base64\.b64decode|base64\.decodebytes)"),
+    re.compile(r"(?i)(rm\s+-rf|del\s+/[sq]|format\s+c:)"),
+]
+
+# Compiled pattern for base64-encoded blobs that may hide malicious content.
+_BASE64_BLOB_PATTERN = re.compile(r"[A-Za-z0-9+/]{60,}={0,2}")
+
+# Global tool allow list.  When non-empty only tasks whose name appears in
+# this set are permitted to execute (Instruction 6).  An empty set means
+# "allow all" so that the default behaviour is preserved when the caller has
+# not configured an explicit allow list.
+TOOL_ALLOW_LIST: set[str] = set()
+
+# Global inter-agent authentication token (Instruction 5).  When non-empty
+# every inter-agent call must present this token.  An empty string disables
+# the check so that the default behaviour is preserved.
+AGENT_AUTH_TOKEN: str = ""
+
+
+def _sanitize_task_input(task: PregelExecutableTask) -> None:
+    """Validate and sanitize task inputs before they reach the LLM (Instructions 2 & 3).
+
+    Raises ``ValueError`` if the input contains content that violates the
+    input-sanitization or prompt-injection policies.
+    """
+    # Collect all string values from the task's input for inspection.
+    candidates: list[str] = []
+    if isinstance(task.input, str):
+        candidates.append(task.input)
+    elif isinstance(task.input, dict):
+        for v in task.input.values():
+            if isinstance(v, str):
+                candidates.append(v)
+    elif isinstance(task.input, (list, tuple)):
+        for item in task.input:
+            if isinstance(item, str):
+                candidates.append(item)
+
+    for text in candidates:
+        # Check for known malicious patterns.
+        for pattern in _MALICIOUS_PATTERNS:
+            if pattern.search(text):
+                logger.warning(
+                    "task_input_rejected",
+                    extra={
+                        "task_id": task.id,
+                        "task_name": task.name,
+                        "pattern": pattern.pattern,
+                    },
+                )
+                raise ValueError(
+                    f"Task input for '{task.name}' contains disallowed content "
+                    f"matching pattern: {pattern.pattern}"
+                )
+        # Check for suspicious base64 blobs.
+        for blob in _BASE64_BLOB_PATTERN.findall(text):
+            try:
+                decoded = base64.b64decode(blob + "==").decode("utf-8", errors="replace")
+                for pattern in _MALICIOUS_PATTERNS:
+                    if pattern.search(decoded):
+                        logger.warning(
+                            "task_input_rejected_base64",
+                            extra={
+                                "task_id": task.id,
+                                "task_name": task.name,
+                            },
+                        )
+                        raise ValueError(
+                            f"Task input for '{task.name}' contains disallowed "
+                            "base64-encoded content."
+                        )
+            except Exception as exc:
+                if isinstance(exc, ValueError):
+                    raise
+                # Ignore decode errors for non-base64 strings.
+
+
+def _check_tool_allow_list(task: PregelExecutableTask) -> None:
+    """Enforce the tool allow list policy (Instruction 6).
+
+    Raises ``PermissionError`` when ``TOOL_ALLOW_LIST`` is non-empty and the
+    task's name is not present in it.
+    """
+    if TOOL_ALLOW_LIST and task.name not in TOOL_ALLOW_LIST:
+        logger.error(
+            "task_blocked_not_in_allow_list",
+            extra={"task_id": task.id, "task_name": task.name},
+        )
+        raise PermissionError(
+            f"Task '{task.name}' is not in the tool allow list and cannot be executed."
+        )
+
+
+def _authenticate_agent_call(task: PregelExecutableTask) -> None:
+    """Verify inter-agent call authentication (Instruction 5).
+
+    When ``AGENT_AUTH_TOKEN`` is set the task's config must carry a matching
+    ``agent_auth_token`` key inside its ``configurable`` mapping.
+    """
+    if not AGENT_AUTH_TOKEN:
+        return
+    conf = (task.config or {}).get("configurable", {})
+    token = conf.get("agent_auth_token", "")
+    if token != AGENT_AUTH_TOKEN:
+        logger.error(
+            "inter_agent_auth_failed",
+            extra={"task_id": task.id, "task_name": task.name},
+        )
+        raise PermissionError(
+            f"Inter-agent call to '{task.name}' failed authentication."
+        )
+
+
+def _validate_task(task: PregelExecutableTask) -> None:
+    """Run all pre-execution security checks for a task."""
+    _check_tool_allow_list(task)
+    _authenticate_agent_call(task)
+    _sanitize_task_input(task)
+
+
+def _log_task_start(task: PregelExecutableTask, trace_id: str) -> None:
+    """Emit a structured audit log entry when a task starts (Instructions 1 & 4)."""
+    input_repr = repr(task.input)
+    input_hash = hashlib.sha256(input_repr.encode("utf-8", errors="replace")).hexdigest()
+    logger.info(
+        "task_start",
+        extra={
+            "trace_id": trace_id,
+            "task_id": task.id,
+            "task_name": task.name,
+            "input_hash": input_hash,
+            "timestamp": time.time(),
+        },
+    )
+
+
+def _log_task_end(
+    task: PregelExecutableTask,
+    trace_id: str,
+    exception: BaseException | None,
+) -> None:
+    """Emit a structured audit log entry when a task ends (Instructions 1 & 4)."""
+    writes_repr = repr(task.writes)
+    output_hash = hashlib.sha256(writes_repr.encode("utf-8", errors="replace")).hexdigest()
+    if exception is not None:
+        logger.error(
+            "task_end_error",
+            extra={
+                "trace_id": trace_id,
+                "task_id": task.id,
+                "task_name": task.name,
+                "output_hash": output_hash,
+                "exception_type": type(exception).__name__,
+                "exception_message": str(exception),
+                "timestamp": time.time(),
+            },
+        )
+    else:
+        logger.info(
+            "task_end_success",
+            extra={
+                "trace_id": trace_id,
+                "task_id": task.id,
+                "task_name": task.name,
+                "output_hash": output_hash,
+                "timestamp": time.time(),
+            },
+        )
 
 
 class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
@@ -166,6 +352,8 @@ class PregelRunner:
         # These ids are consulted by stop/panic checks to avoid re-raising handled
         # exceptions via the normal fatal path in the same run.
         self._handled_exception_ids: set[int] = set()
+        # Unique trace identifier for this runner instance (Instruction 4).
+        self._trace_id: str = str(uuid.uuid4())
 
     def _should_route_to_error_handler(self, task: PregelExecutableTask) -> bool:
         if task.name in self.error_handler_nodes:
@@ -201,8 +389,27 @@ class PregelRunner:
             return
         elif len(tasks) == 1 and timeout is None and get_waiter is None:
             t = tasks[0]
+            # Security: validate task before execution.
+            try:
+                _validate_task(t)
+            except (ValueError, PermissionError) as validation_exc:
+                logger.error(
+                    "task_validation_failed",
+                    extra={
+                        "trace_id": self._trace_id,
+                        "task_id": t.id,
+                        "task_name": t.name,
+                        "error": str(validation_exc),
+                        "timestamp": time.time(),
+                    },
+                )
+                self.commit(t, validation_exc)
+                if reraise:
+                    raise
+                return
             scheduled_error_handler = False
             try:
+                _log_task_start(t, self._trace_id)
                 run_with_retry(
                     t,
                     retry_policy,
@@ -217,8 +424,10 @@ class PregelRunner:
                         ),
                     },
                 )
+                _log_task_end(t, self._trace_id, None)
                 self.commit(t, None)
             except Exception as exc:
+                _log_task_end(t, self._trace_id, exc)
                 self.commit(t, exc)
                 if (
                     not isinstance(exc, GraphBubbleUp)
@@ -256,6 +465,25 @@ class PregelRunner:
             futures[get_waiter()] = None
         # schedule tasks
         for t in tasks:
+            # Security: validate task before scheduling.
+            try:
+                _validate_task(t)
+            except (ValueError, PermissionError) as validation_exc:
+                logger.error(
+                    "task_validation_failed",
+                    extra={
+                        "trace_id": self._trace_id,
+                        "task_id": t.id,
+                        "task_name": t.name,
+                        "error": str(validation_exc),
+                        "timestamp": time.time(),
+                    },
+                )
+                self.commit(t, validation_exc)
+                if reraise:
+                    raise
+                continue
+            _log_task_start(t, self._trace_id)
             fut = self.submit()(  # type: ignore[misc]
                 run_with_retry,
                 t,
@@ -303,6 +531,25 @@ class PregelRunner:
                     handled_futures.add(fut)
                     if self.schedule_error_handler is not None:
                         if handler_task := self.schedule_error_handler(task, task_exc):
+                            # Security: validate handler task before scheduling.
+                            try:
+                                _validate_task(handler_task)
+                            except (ValueError, PermissionError) as validation_exc:
+                                logger.error(
+                                    "task_validation_failed",
+                                    extra={
+                                        "trace_id": self._trace_id,
+                                        "task_id": handler_task.id,
+                                        "task_name": handler_task.name,
+                                        "error": str(validation_exc),
+                                        "timestamp": time.time(),
+                                    },
+                                )
+                                self.commit(handler_task, validation_exc)
+                                if reraise:
+                                    raise
+                                continue
+                            _log_task_start(handler_task, self._trace_id)
                             handler_fut = self.submit()(  # type: ignore[misc]
                                 run_with_retry,
                                 handler_task,
@@ -390,8 +637,27 @@ class PregelRunner:
             return
         elif len(tasks) == 1 and get_waiter is None and timeout is None:
             t = tasks[0]
+            # Security: validate task before execution.
+            try:
+                _validate_task(t)
+            except (ValueError, PermissionError) as validation_exc:
+                logger.error(
+                    "task_validation_failed",
+                    extra={
+                        "trace_id": self._trace_id,
+                        "task_id": t.id,
+                        "task_name": t.name,
+                        "error": str(validation_exc),
+                        "timestamp": time.time(),
+                    },
+                )
+                self.commit(t, validation_exc)
+                if reraise:
+                    raise
+                return
             scheduled_error_handler = False
             try:
+                _log_task_start(t, self._trace_id)
                 await arun_with_retry(
                     t,
                     retry_policy,
@@ -409,8 +675,10 @@ class PregelRunner:
                         ),
                     },
                 )
+                _log_task_end(t, self._trace_id, None)
                 self.commit(t, None)
             except Exception as exc:
+                _log_task_end(t, self._trace_id, exc)
                 self.commit(t, exc)
                 if (
                     not isinstance(exc, GraphBubbleUp)
@@ -447,6 +715,25 @@ class PregelRunner:
             futures[get_waiter()] = None
         # schedule tasks
         for t in tasks:
+            # Security: validate task before scheduling.
+            try:
+                _validate_task(t)
+            except (ValueError, PermissionError) as validation_exc:
+                logger.error(
+                    "task_validation_failed",
+                    extra={
+                        "trace_id": self._trace_id,
+                        "task_id": t.id,
+                        "task_name": t.name,
+                        "error": str(validation_exc),
+                        "timestamp": time.time(),
+                    },
+                )
+                self.commit(t, validation_exc)
+                if reraise:
+                    raise
+                continue
+            _log_task_start(t, self._trace_id)
             fut = cast(
                 asyncio.Future,
                 self.submit()(  # type: ignore[misc]
@@ -504,6 +791,25 @@ class PregelRunner:
                         if handler_task := await self.aschedule_error_handler(
                             task, task_exc
                         ):
+                            # Security: validate handler task before scheduling.
+                            try:
+                                _validate_task(handler_task)
+                            except (ValueError, PermissionError) as validation_exc:
+                                logger.error(
+                                    "task_validation_failed",
+                                    extra={
+                                        "trace_id": self._trace_id,
+                                        "task_id": handler_task.id,
+                                        "task_name": handler_task.name,
+                                        "error": str(validation_exc),
+                                        "timestamp": time.time(),
+                                    },
+                                )
+                                self.commit(handler_task, validation_exc)
+                                if reraise:
+                                    raise
+                                continue
+                            _log_task_start(handler_task, self._trace_id)
                             handler_fut = cast(
                                 asyncio.Future,
                                 self.submit()(  # type: ignore[misc]
@@ -575,6 +881,8 @@ class PregelRunner:
         task: PregelExecutableTask,
         exception: BaseException | None,
     ) -> None:
+        # Audit log every commit (Instruction 4).
+        _log_task_end(task, self._trace_id, exception)
         if isinstance(exception, asyncio.CancelledError):
             # for cancelled tasks, also save error in task,
             # so loop can finish super-step
@@ -730,6 +1038,8 @@ def _call(
             timeout=timeout,
         ),
     ):
+        # Security: validate the next task before scheduling (Instructions 2, 3, 5, 6).
+        _validate_task(next_task)
         if fut := next(
             (
                 f
@@ -755,6 +1065,15 @@ def _call(
                 fut.set_result(None)
         else:
             # schedule the next task
+            logger.info(
+                "inter_agent_call_scheduled",
+                extra={
+                    "caller_task_id": task().id if task() else None,  # type: ignore[union-attr]
+                    "callee_task_id": next_task.id,
+                    "callee_task_name": next_task.name,
+                    "timestamp": time.time(),
+                },
+            )
             fut = submit()(  # type: ignore[misc]
                 run_with_retry,
                 next_task,
@@ -877,6 +1196,8 @@ async def _acall_impl(
                 timeout=timeout,
             ),
         ):
+            # Security: validate the next task before scheduling (Instructions 2, 3, 5, 6).
+            _validate_task(next_task)
             if fut := next(
                 (
                     f
@@ -902,6 +1223,15 @@ async def _acall_impl(
                     fut.set_result(None)
             else:
                 # schedule the next task
+                logger.info(
+                    "inter_agent_acall_scheduled",
+                    extra={
+                        "caller_task_id": task().id if task() else None,  # type: ignore[union-attr]
+                        "callee_task_id": next_task.id,
+                        "callee_task_name": next_task.name,
+                        "timestamp": time.time(),
+                    },
+                )
                 fut = cast(
                     asyncio.Future,
                     submit()(  # type: ignore[misc]
