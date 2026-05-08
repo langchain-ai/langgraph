@@ -1,8 +1,11 @@
 import asyncio
+import hashlib
+import logging
 import threading
 import warnings
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime, timezone
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -31,6 +34,8 @@ from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
 from langgraph.checkpoint.postgres import _ainternal, _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
+
+logger = logging.getLogger(__name__)
 
 """
 To add a new migration, add a new string to the MIGRATIONS list.
@@ -84,9 +89,9 @@ MIGRATIONS = [
 SELECT_SQL = f"""
 select
     thread_id,
-    checkpoint,
+    checkpoint - 'channel_values' as checkpoint,
     checkpoint_ns,
-    metadata,
+    metadata - 'extra' as metadata,
     (
         select array_agg(array[bl.channel::bytea, bl.type::bytea, bl.blob])
         from jsonb_each_text(checkpoint -> 'channel_versions')
@@ -94,6 +99,7 @@ select
             on bl.thread_id = checkpoints.thread_id
             and bl.checkpoint_ns = checkpoints.checkpoint_ns
             and bl.channel = jsonb_each_text.key
+        where bl.blob is not null
     ) as channel_values,
     (
         select
@@ -102,6 +108,7 @@ select
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
             and cw.checkpoint_id = (checkpoint->>'id')
+            and cw.blob is not null
     ) as pending_writes,
     (
         select array_agg(array[cw.type::bytea, cw.blob] order by cw.task_path, cw.task_id, cw.idx)
@@ -109,6 +116,7 @@ select
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
             and cw.channel = '{TASKS}'
+            and cw.blob is not null
     ) as pending_sends
 from checkpoints """
 
@@ -164,6 +172,59 @@ def _dump_blobs(
         )
         for k in versions
     ]
+
+
+def _hash_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _hash_str(data: str) -> str:
+    return hashlib.sha256(data.encode()).hexdigest()
+
+
+def _audit_log_put(
+    thread_id: str,
+    checkpoint_ns: str,
+    checkpoint_id: str,
+    metadata: CheckpointMetadata,
+    input_hash: str,
+    output_hash: str,
+) -> None:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    logger.info(
+        "AUDIT put checkpoint: timestamp=%s thread_id=%s checkpoint_ns=%s "
+        "checkpoint_id=%s input_hash=%s output_hash=%s",
+        timestamp,
+        thread_id,
+        checkpoint_ns,
+        checkpoint_id,
+        input_hash,
+        output_hash,
+    )
+
+
+def _audit_log_put_writes(
+    thread_id: str,
+    checkpoint_ns: str,
+    checkpoint_id: str,
+    task_id: str,
+    task_path: str,
+    num_writes: int,
+    writes_hash: str,
+) -> None:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    logger.info(
+        "AUDIT put_writes: timestamp=%s thread_id=%s checkpoint_ns=%s "
+        "checkpoint_id=%s task_id=%s task_path=%s num_writes=%d writes_hash=%s",
+        timestamp,
+        thread_id,
+        checkpoint_ns,
+        checkpoint_id,
+        task_id,
+        task_path,
+        num_writes,
+        writes_hash,
+    )
 
 
 class ShallowPostgresSaver(BasePostgresSaver):
@@ -417,6 +478,10 @@ class ShallowPostgresSaver(BasePostgresSaver):
             }
         }
 
+        serializable_metadata = get_serializable_checkpoint_metadata(config, metadata)
+        input_hash = _hash_str(str(config))
+        output_hash = _hash_str(checkpoint["id"])
+
         with self._cursor(pipeline=True) as cur:
             cur.execute(
                 """DELETE FROM checkpoint_writes
@@ -444,9 +509,19 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     Jsonb(copy),
-                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
+                    Jsonb(serializable_metadata),
                 ),
             )
+
+        _audit_log_put(
+            thread_id=thread_id,
+            checkpoint_ns=checkpoint_ns,
+            checkpoint_id=checkpoint["id"],
+            metadata=metadata,
+            input_hash=input_hash,
+            output_hash=output_hash,
+        )
+
         return next_config
 
     def put_writes(
@@ -470,18 +545,34 @@ class ShallowPostgresSaver(BasePostgresSaver):
             if all(w[0] in WRITES_IDX_MAP for w in writes)
             else self.INSERT_CHECKPOINT_WRITES_SQL
         )
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        checkpoint_id = config["configurable"]["checkpoint_id"]
+
+        writes_hash = _hash_str(str([(w[0], str(w[1])) for w in writes]))
+
         with self._cursor(pipeline=True) as cur:
             cur.executemany(
                 query,
                 self._dump_writes(
-                    config["configurable"]["thread_id"],
-                    config["configurable"]["checkpoint_ns"],
-                    config["configurable"]["checkpoint_id"],
+                    thread_id,
+                    checkpoint_ns,
+                    checkpoint_id,
                     task_id,
                     task_path,
                     writes,
                 ),
             )
+
+        _audit_log_put_writes(
+            thread_id=thread_id,
+            checkpoint_ns=checkpoint_ns,
+            checkpoint_id=checkpoint_id,
+            task_id=task_id,
+            task_path=task_path,
+            num_writes=len(writes),
+            writes_hash=writes_hash,
+        )
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
@@ -755,6 +846,10 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             }
         }
 
+        serializable_metadata = get_serializable_checkpoint_metadata(config, metadata)
+        input_hash = _hash_str(str(config))
+        output_hash = _hash_str(checkpoint["id"])
+
         async with self._cursor(pipeline=True) as cur:
             await cur.execute(
                 """DELETE FROM checkpoint_writes
@@ -782,9 +877,19 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     Jsonb(copy),
-                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
+                    Jsonb(serializable_metadata),
                 ),
             )
+
+        _audit_log_put(
+            thread_id=thread_id,
+            checkpoint_ns=checkpoint_ns,
+            checkpoint_id=checkpoint["id"],
+            metadata=metadata,
+            input_hash=input_hash,
+            output_hash=output_hash,
+        )
+
         return next_config
 
     async def aput_writes(
@@ -808,17 +913,33 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             if all(w[0] in WRITES_IDX_MAP for w in writes)
             else self.INSERT_CHECKPOINT_WRITES_SQL
         )
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        checkpoint_id = config["configurable"]["checkpoint_id"]
+
+        writes_hash = _hash_str(str([(w[0], str(w[1])) for w in writes]))
+
         params = await asyncio.to_thread(
             self._dump_writes,
-            config["configurable"]["thread_id"],
-            config["configurable"]["checkpoint_ns"],
-            config["configurable"]["checkpoint_id"],
+            thread_id,
+            checkpoint_ns,
+            checkpoint_id,
             task_id,
             task_path,
             writes,
         )
         async with self._cursor(pipeline=True) as cur:
             await cur.executemany(query, params)
+
+        _audit_log_put_writes(
+            thread_id=thread_id,
+            checkpoint_ns=checkpoint_ns,
+            checkpoint_id=checkpoint_id,
+            task_id=task_id,
+            task_path=task_path,
+            num_writes=len(writes),
+            writes_hash=writes_hash,
+        )
 
     @asynccontextmanager
     async def _cursor(
