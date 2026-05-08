@@ -151,7 +151,7 @@ services:
                 COPY --from=cli_1 . /deps/cli_1
                 # -- End of local package ../../.. --
                 # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+                RUN for dep in /deps/*; do             if [ -d "$$dep" ]; then                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -1285,7 +1285,7 @@ def test_dockerfile_command_distributed_with_explicit_base_image() -> None:
                 "--engine-runtime-mode",
                 "distributed",
                 "--base-image",
-                "my-custom-executor:latest",
+                "my-registry/custom-executor:stable",
             ],
         )
 
@@ -1293,7 +1293,7 @@ def test_dockerfile_command_distributed_with_explicit_base_image() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert "FROM my-custom-executor:latest" in dockerfile
+            assert "FROM my-registry/custom-executor:stable" in dockerfile
 
 
 def test_prepare_args_and_stdin_distributed_mode() -> None:
