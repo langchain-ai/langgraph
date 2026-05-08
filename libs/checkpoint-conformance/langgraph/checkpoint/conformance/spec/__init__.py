@@ -12,9 +12,6 @@ from langgraph.checkpoint.conformance.spec.test_delete_thread import (
 from langgraph.checkpoint.conformance.spec.test_delta_channel_history import (
     run_delta_channel_history_tests,
 )
-from langgraph.checkpoint.conformance.spec.test_delta_channel_keepset import (
-    run_delta_channel_keepset_tests,
-)
 from langgraph.checkpoint.conformance.spec.test_delta_channel_reconstruction import (
     run_delta_channel_reconstruction_tests,
 )
@@ -34,6 +31,5 @@ __all__ = [
     "run_copy_thread_tests",
     "run_prune_tests",
     "run_delta_channel_history_tests",
-    "run_delta_channel_keepset_tests",
     "run_delta_channel_reconstruction_tests",
 ]
