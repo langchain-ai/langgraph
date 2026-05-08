@@ -2,10 +2,80 @@
 
 from __future__ import annotations
 
+import ipaddress
+import re
 from typing import Any
+from urllib.parse import urlparse
 
 import click
 import httpx
+
+# Allowlist of permitted host patterns for outbound HTTP requests.
+# Entries may be exact hostnames or fnmatch-style patterns.
+_ALLOWED_HOST_PATTERNS: list[str] = [
+    "api.langchain.com",
+    "api.smith.langchain.com",
+    "*.langchain.com",
+    "*.langgraph.com",
+    "localhost",
+    "127.0.0.1",
+]
+
+# Private/reserved IP ranges that must never be contacted.
+_PRIVATE_NETWORKS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local / metadata
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("::1/128"),
+]
+
+
+def _fnmatch_host(pattern: str, host: str) -> bool:
+    """Return True if *host* matches *pattern* (supports leading '*.' wildcard)."""
+    if pattern.startswith("*."):
+        suffix = pattern[1:]  # e.g. ".langchain.com"
+        return host == pattern[2:] or host.endswith(suffix)
+    return host == pattern
+
+
+def _validate_base_url(base_url: str) -> None:
+    """Raise HostBackendError if *base_url* is not on the allowlist."""
+    parsed = urlparse(base_url)
+
+    # Enforce https (or http for localhost in dev).
+    if parsed.scheme not in ("https", "http"):
+        raise HostBackendError(
+            f"Disallowed URL scheme '{parsed.scheme}' in base_url '{base_url}'. "
+            "Only 'https' is permitted."
+        )
+
+    host = parsed.hostname or ""
+    if not host:
+        raise HostBackendError(f"Could not determine hostname from base_url '{base_url}'.")
+
+    # Block private / metadata IP ranges.
+    try:
+        addr = ipaddress.ip_address(host)
+        for net in _PRIVATE_NETWORKS:
+            if addr in net:
+                raise HostBackendError(
+                    f"base_url '{base_url}' resolves to a private/reserved address "
+                    f"'{host}' which is not permitted."
+                )
+    except ValueError:
+        pass  # host is a domain name, not an IP — continue with pattern check.
+
+    # Check against the allowlist.
+    for pattern in _ALLOWED_HOST_PATTERNS:
+        if _fnmatch_host(pattern, host):
+            return
+
+    raise HostBackendError(
+        f"base_url host '{host}' is not on the permitted allowlist. "
+        f"Allowed patterns: {_ALLOWED_HOST_PATTERNS}"
+    )
 
 
 class HostBackendError(click.ClickException):
@@ -27,6 +97,10 @@ class HostBackendClient:
     ):
         if not base_url:
             raise click.UsageError("Host backend URL is required")
+
+        # Validate the base_url against the allowlist before use.
+        _validate_base_url(base_url)
+
         transport = httpx.HTTPTransport(retries=3)
         headers: dict[str, str] = {
             "X-Api-Key": api_key,
@@ -102,6 +176,14 @@ class HostBackendClient:
         return self._request("GET", f"/v2/deployments/{deployment_id}")
 
     def delete_deployment(self, deployment_id: str) -> None:
+        """Delete a deployment after obtaining explicit human confirmation."""
+        confirmed = click.confirm(
+            f"Are you sure you want to delete deployment '{deployment_id}'? "
+            "This action is irreversible.",
+            default=False,
+        )
+        if not confirmed:
+            raise click.Abort()
         return self._request("DELETE", f"/v2/deployments/{deployment_id}")
 
     def request_push_token(self, deployment_id: str) -> dict[str, Any]:
