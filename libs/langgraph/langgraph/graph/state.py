@@ -6,7 +6,7 @@ import typing
 import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
-from dataclasses import is_dataclass
+from dataclasses import dataclass, is_dataclass
 from datetime import timedelta
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
@@ -95,6 +95,17 @@ __all__ = ("StateGraph", "CompiledStateGraph")
 logger = logging.getLogger(__name__)
 
 _CHANNEL_BRANCH_TO = "branch:to:{}"
+_DEFAULT_ERROR_HANDLER_NODE = "__default_error_handler__"
+
+
+@dataclass(slots=True)
+class _NodeDefaults:
+    """Default node policies applied to every node at compile time."""
+
+    retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None
+    cache_policy: CachePolicy | None = None
+    error_handler: StateNode[Any, Any] | None = None
+    timeout: TimeoutPolicy | None = None
 
 
 def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
@@ -251,16 +262,13 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self.output_schema = cast(type[OutputT], output_schema or state_schema)
         self.context_schema = context_schema
 
-        self._default_retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None
-        self._default_cache_policy: CachePolicy | None = None
-        self._default_error_handler: StateNode[Any, ContextT] | None = None
-        self._default_timeout: TimeoutPolicy | None = None
+        self._node_defaults: _NodeDefaults = _NodeDefaults()
 
         self._add_schema(self.state_schema)
         self._add_schema(self.input_schema, allow_managed=False)
         self._add_schema(self.output_schema, allow_managed=False)
 
-    def set_defaults(
+    def set_node_defaults(
         self,
         *,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
@@ -268,10 +276,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
     ) -> Self:
-        """Set default node policies that apply to every node added to this graph.
+        """Set default node policies that apply to every node in this graph.
 
         Per-node values passed to `add_node` always take precedence over these
-        defaults.  Policies set here are **not** inherited by subgraphs.
+        defaults. Policies set here are **not** inherited by subgraphs.
 
         Args:
             retry_policy: Default retry policy for nodes that don't specify
@@ -284,9 +292,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 error-handler node itself raises -- handler failures fail the
                 run.
             timeout: Default timeout policy for nodes that don't specify their
-                own via `add_node(..., timeout=...)`.  Accepts a
-                `TimeoutPolicy`, a number of seconds (`float`), or a
-                `timedelta`.
+                own via `add_node(..., timeout=...)`. Accepts a `TimeoutPolicy`,
+                a number of seconds (`float`), or a `timedelta`.
 
         Returns:
             Self: The builder instance, for chaining.
@@ -295,7 +302,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             ```python
             graph = (
                 StateGraph(State)
-                .set_defaults(
+                .set_node_defaults(
                     retry_policy=RetryPolicy(max_attempts=3),
                     error_handler=my_fallback_handler,
                 )
@@ -306,15 +313,60 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
             ```
         """
+        defaults = self._node_defaults
         if retry_policy is not None:
-            self._default_retry_policy = retry_policy
+            defaults.retry_policy = retry_policy
         if cache_policy is not None:
-            self._default_cache_policy = cache_policy
+            defaults.cache_policy = cache_policy
         if error_handler is not None:
-            self._default_error_handler = error_handler
+            defaults.error_handler = error_handler
         if timeout is not None:
-            self._default_timeout = coerce_timeout_policy(timeout)
+            defaults.timeout = coerce_timeout_policy(timeout)
         return self
+
+    def _apply_node_defaults(self) -> None:
+        """Apply builder defaults to every regular node spec.
+
+        If `error_handler` is set, a synthetic node named
+        `_DEFAULT_ERROR_HANDLER_NODE` is added to the graph and wired in as the
+        fallback handler for any node without its own. Per-node values always
+        win; error-handler nodes are skipped so a default retry policy doesn't
+        silently apply to them.
+        """
+        defaults = self._node_defaults
+
+        handler_name: str | None = None
+        if defaults.error_handler is not None:
+            if _DEFAULT_ERROR_HANDLER_NODE in self.nodes:
+                raise ValueError(
+                    f"Auto-generated default error handler node "
+                    f"`{_DEFAULT_ERROR_HANDLER_NODE}` already exists."
+                )
+            handler_name = _DEFAULT_ERROR_HANDLER_NODE
+            self.nodes[handler_name] = StateNodeSpec[Any, ContextT](
+                coerce_to_runnable(
+                    defaults.error_handler,  # type: ignore[arg-type]
+                    name=handler_name,
+                    trace=False,
+                ),
+                metadata=None,
+                input_schema=self.state_schema,
+                retry_policy=None,
+                cache_policy=None,
+                is_error_handler=True,
+            )
+
+        for spec in self.nodes.values():
+            if spec.is_error_handler:
+                continue
+            if handler_name is not None and spec.error_handler_node is None:
+                spec.error_handler_node = handler_name
+            if defaults.retry_policy is not None and spec.retry_policy is None:
+                spec.retry_policy = defaults.retry_policy
+            if defaults.cache_policy is not None and spec.cache_policy is None:
+                spec.cache_policy = defaults.cache_policy
+            if defaults.timeout is not None and spec.timeout is None:
+                spec.timeout = defaults.timeout
 
     @property
     def _all_edges(self) -> set[tuple[str, str]]:
@@ -1155,7 +1207,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         debug: bool = False,
         name: str | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
-        default_error_handler: StateNode[Any, ContextT] | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1195,12 +1246,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 the standard `StreamTransformer` constructor shape by
                 accepting `scope` as their first argument. Appended after the
                 built-in stream transformers.
-            default_error_handler: Optional fallback node-level error handler
-                invoked when any regular node raises and does not have its own
-                `error_handler` set via `add_node`. Per-node `error_handler`
-                always takes precedence. The default handler is **not** invoked
-                when an error-handler node itself raises -- handler failures
-                fail the run. Not inherited by subgraphs.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
@@ -1261,59 +1306,12 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 key for key, val in self.channels.items() if not is_managed_value(val)
             ]
         )
-        # --- apply builder defaults (set_defaults) to node specs ----------------
-        # compile() kwarg wins over set_defaults() for error_handler.
-        _effective_error_handler = default_error_handler or self._default_error_handler
-
-        default_handler_node_name: str | None = None
-        if _effective_error_handler is not None:
-            _default_eh_name = "__default_error_handler__"
-            if _default_eh_name in self.nodes:
-                raise ValueError(
-                    f"Auto-generated default error handler node "
-                    f"`{_default_eh_name}` already exists."
-                )
-            default_handler_node_name = _default_eh_name
-            self.nodes[default_handler_node_name] = StateNodeSpec[Any, ContextT](
-                coerce_to_runnable(
-                    _effective_error_handler,  # type: ignore[arg-type]
-                    name=default_handler_node_name,
-                    trace=False,
-                ),
-                metadata=None,
-                input_schema=self.state_schema,
-                retry_policy=None,
-                cache_policy=None,
-                is_error_handler=True,
-            )
-
-        for _spec in self.nodes.values():
-            if _spec.is_error_handler:
-                continue
-            if default_handler_node_name and _spec.error_handler_node is None:
-                _spec.error_handler_node = default_handler_node_name
-            if self._default_retry_policy and _spec.retry_policy is None:
-                _spec.retry_policy = self._default_retry_policy
-            if self._default_cache_policy and _spec.cache_policy is None:
-                _spec.cache_policy = self._default_cache_policy
-            if self._default_timeout and _spec.timeout is None:
-                _spec.timeout = self._default_timeout
-
+        self._apply_node_defaults()
         node_error_handler_map = {
             node_name: spec.error_handler_node
             for node_name, spec in self.nodes.items()
             if not spec.is_error_handler and spec.error_handler_node is not None
         }
-
-        # Graph-level retry/cache fallbacks (Pregel uses these for nodes that
-        # still have no per-node policy after defaults are applied).
-        _graph_retry: Sequence[RetryPolicy] = ()
-        if self._default_retry_policy is not None:
-            _graph_retry = (
-                (self._default_retry_policy,)
-                if isinstance(self._default_retry_policy, RetryPolicy)
-                else self._default_retry_policy
-            )
 
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
@@ -1336,8 +1334,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             debug=debug,
             store=store,
             cache=cache,
-            retry_policy=_graph_retry,
-            cache_policy=self._default_cache_policy,
             node_error_handler_map=node_error_handler_map,
             name=name or "LangGraph",
             stream_transformers=transformers,

@@ -2283,11 +2283,11 @@ def test_node_without_error_handler_still_fails_run():
 
 
 # ---------------------------------------------------------------------------
-# default_error_handler on compile()
+# set_node_defaults()
 # ---------------------------------------------------------------------------
 
 
-def test_compile_default_error_handler_catches_all_nodes():
+def test_set_node_defaults_error_handler_catches_all_nodes():
     class State(TypedDict):
         route: str
         foo: Annotated[list[str], operator.add]
@@ -2309,6 +2309,7 @@ def test_compile_default_error_handler_catches_all_nodes():
 
     graph = (
         StateGraph(State)
+        .set_node_defaults(error_handler=default_handler)
         .add_node("route_node", route_node)
         .add_node("fail_a", fail_a)
         .add_node("fail_b", fail_b)
@@ -2316,7 +2317,7 @@ def test_compile_default_error_handler_catches_all_nodes():
         .add_conditional_edges(
             "route_node", lambda s: s["route"], path_map=["fail_a", "fail_b"]
         )
-        .compile(default_error_handler=default_handler)
+        .compile()
     )
 
     result_a = graph.invoke({"route": "fail_a", "foo": []})
@@ -2327,7 +2328,7 @@ def test_compile_default_error_handler_catches_all_nodes():
     assert "fail_b" in captured["nodes"]
 
 
-def test_compile_default_error_handler_overridden_by_node_handler():
+def test_set_node_defaults_error_handler_overridden_by_node_handler():
     class State(TypedDict):
         route: str
         foo: Annotated[list[str], operator.add]
@@ -2353,6 +2354,7 @@ def test_compile_default_error_handler_overridden_by_node_handler():
 
     graph = (
         StateGraph(State)
+        .set_node_defaults(error_handler=default_handler)
         .add_node("route_node", route_node)
         .add_node("fail_a", fail_a, error_handler=node_handler)
         .add_node("fail_b", fail_b)
@@ -2360,7 +2362,7 @@ def test_compile_default_error_handler_overridden_by_node_handler():
         .add_conditional_edges(
             "route_node", lambda s: s["route"], path_map=["fail_a", "fail_b"]
         )
-        .compile(default_error_handler=default_handler)
+        .compile()
     )
 
     result_a = graph.invoke({"route": "fail_a", "foo": []})
@@ -2373,7 +2375,7 @@ def test_compile_default_error_handler_overridden_by_node_handler():
     assert "default:fail_b" in captured["handler"]
 
 
-def test_compile_default_error_handler_skips_per_node_handler_nodes():
+def test_set_node_defaults_error_handler_skips_per_node_handler_nodes():
     """If a per-node error handler itself raises, the default handler must NOT
     catch it -- the run should fail."""
 
@@ -2391,16 +2393,17 @@ def test_compile_default_error_handler_skips_per_node_handler_nodes():
 
     graph = (
         StateGraph(State)
+        .set_node_defaults(error_handler=default_handler)
         .add_node("always_failing", always_failing, error_handler=broken_handler)
         .add_edge(START, "always_failing")
-        .compile(default_error_handler=default_handler)
+        .compile()
     )
 
     with pytest.raises(RuntimeError, match="handler boom"):
         graph.invoke({"foo": ""})
 
 
-def test_compile_default_error_handler_failure_fails_run():
+def test_set_node_defaults_error_handler_failure_fails_run():
     """When the default handler itself raises, the run fails (no infinite
     recursion, no double-routing)."""
 
@@ -2415,16 +2418,17 @@ def test_compile_default_error_handler_failure_fails_run():
 
     graph = (
         StateGraph(State)
+        .set_node_defaults(error_handler=broken_default_handler)
         .add_node("always_failing", always_failing)
         .add_edge(START, "always_failing")
-        .compile(default_error_handler=broken_default_handler)
+        .compile()
     )
 
     with pytest.raises(RuntimeError, match="default handler boom"):
         graph.invoke({"foo": ""})
 
 
-def test_compile_default_error_handler_receives_runnable_config():
+def test_set_node_defaults_error_handler_receives_runnable_config():
     class State(TypedDict):
         foo: str
 
@@ -2442,9 +2446,10 @@ def test_compile_default_error_handler_receives_runnable_config():
     checkpointer = MemorySaver()
     graph = (
         StateGraph(State)
+        .set_node_defaults(error_handler=default_handler)
         .add_node("always_failing", always_failing)
         .add_edge(START, "always_failing")
-        .compile(checkpointer=checkpointer, default_error_handler=default_handler)
+        .compile(checkpointer=checkpointer)
     )
 
     thread_id = str(uuid4())
@@ -2455,87 +2460,25 @@ def test_compile_default_error_handler_receives_runnable_config():
     assert captured["thread_id"] == thread_id
 
 
-def test_compile_default_error_handler_collides_with_user_node():
+def test_set_node_defaults_error_handler_collides_with_user_node():
     class State(TypedDict):
         foo: str
 
     def default_handler(state: State, error: NodeError) -> State:
         return {"foo": "handled"}
 
-    builder = StateGraph(State)
-    builder.add_node("__default_error_handler__", lambda s: s)
-    builder.add_edge(START, "__default_error_handler__")
+    builder = (
+        StateGraph(State)
+        .set_node_defaults(error_handler=default_handler)
+        .add_node("__default_error_handler__", lambda s: s)
+        .add_edge(START, "__default_error_handler__")
+    )
 
     with pytest.raises(ValueError, match="__default_error_handler__"):
-        builder.compile(default_error_handler=default_handler)
+        builder.compile()
 
 
-# ---------------------------------------------------------------------------
-# set_defaults()
-# ---------------------------------------------------------------------------
-
-
-def test_set_defaults_error_handler():
-    """set_defaults(error_handler=...) works the same as compile(default_error_handler=...)."""
-
-    class State(TypedDict):
-        foo: str
-
-    def always_failing(state: State) -> State:
-        raise RuntimeError("boom")
-
-    captured: dict[str, Any] = {}
-
-    def default_handler(state: State, error: NodeError) -> State:
-        captured["node"] = error.node
-        return {"foo": "handled"}
-
-    graph = (
-        StateGraph(State)
-        .set_defaults(error_handler=default_handler)
-        .add_node("always_failing", always_failing)
-        .add_edge(START, "always_failing")
-        .compile()
-    )
-
-    result = graph.invoke({"foo": ""})
-    assert result["foo"] == "handled"
-    assert captured["node"] == "always_failing"
-
-
-def test_set_defaults_error_handler_compile_kwarg_wins():
-    """compile(default_error_handler=...) takes precedence over set_defaults(error_handler=...)."""
-
-    class State(TypedDict):
-        foo: str
-
-    def always_failing(state: State) -> State:
-        raise RuntimeError("boom")
-
-    captured: dict[str, str] = {}
-
-    def builder_handler(state: State, error: NodeError) -> State:
-        captured["source"] = "builder"
-        return {"foo": "builder"}
-
-    def compile_handler(state: State, error: NodeError) -> State:
-        captured["source"] = "compile"
-        return {"foo": "compile"}
-
-    graph = (
-        StateGraph(State)
-        .set_defaults(error_handler=builder_handler)
-        .add_node("always_failing", always_failing)
-        .add_edge(START, "always_failing")
-        .compile(default_error_handler=compile_handler)
-    )
-
-    result = graph.invoke({"foo": ""})
-    assert result["foo"] == "compile"
-    assert captured["source"] == "compile"
-
-
-def test_set_defaults_retry_policy():
+def test_set_node_defaults_retry_policy():
     class State(TypedDict):
         foo: str
 
@@ -2550,7 +2493,7 @@ def test_set_defaults_retry_policy():
 
     graph = (
         StateGraph(State)
-        .set_defaults(
+        .set_node_defaults(
             retry_policy=RetryPolicy(
                 max_attempts=3, initial_interval=0.01, jitter=False, retry_on=ValueError
             )
@@ -2567,7 +2510,7 @@ def test_set_defaults_retry_policy():
     assert attempts == 3
 
 
-def test_set_defaults_retry_policy_per_node_wins():
+def test_set_node_defaults_retry_policy_per_node_wins():
     class State(TypedDict):
         foo: str
 
@@ -2582,7 +2525,7 @@ def test_set_defaults_retry_policy_per_node_wins():
 
     graph = (
         StateGraph(State)
-        .set_defaults(
+        .set_node_defaults(
             retry_policy=RetryPolicy(
                 max_attempts=1, initial_interval=0.01, jitter=False, retry_on=ValueError
             )
@@ -2609,7 +2552,7 @@ def test_set_defaults_retry_policy_per_node_wins():
 
 
 @pytest.mark.anyio
-async def test_set_defaults_timeout():
+async def test_set_node_defaults_timeout():
     class State(TypedDict):
         foo: str
 
@@ -2619,7 +2562,7 @@ async def test_set_defaults_timeout():
 
     graph = (
         StateGraph(State)
-        .set_defaults(timeout=TimeoutPolicy(run_timeout=0.05))
+        .set_node_defaults(timeout=TimeoutPolicy(run_timeout=0.05))
         .add_node("slow", slow_node)
         .add_edge(START, "slow")
         .compile()
@@ -2632,7 +2575,7 @@ async def test_set_defaults_timeout():
 
 
 @pytest.mark.anyio
-async def test_set_defaults_timeout_per_node_wins():
+async def test_set_node_defaults_timeout_per_node_wins():
     """Per-node timeout overrides the default; a generous per-node timeout
     allows a node to complete even when the builder default is very short."""
 
@@ -2645,7 +2588,7 @@ async def test_set_defaults_timeout_per_node_wins():
 
     graph = (
         StateGraph(State)
-        .set_defaults(timeout=TimeoutPolicy(run_timeout=0.01))
+        .set_node_defaults(timeout=TimeoutPolicy(run_timeout=0.01))
         .add_node("quick", quick_node, timeout=TimeoutPolicy(run_timeout=5.0))
         .add_edge(START, "quick")
         .compile()
@@ -2655,8 +2598,8 @@ async def test_set_defaults_timeout_per_node_wins():
     assert result["foo"] == "done"
 
 
-def test_set_defaults_chaining():
-    """set_defaults() is chainable and can be called in any order relative to add_node."""
+def test_set_node_defaults_chaining():
+    """set_node_defaults() is chainable and can be called in any order relative to add_node."""
 
     class State(TypedDict):
         foo: str
@@ -2671,7 +2614,7 @@ def test_set_defaults_chaining():
         StateGraph(State)
         .add_node("a", always_failing)
         .add_edge(START, "a")
-        .set_defaults(
+        .set_node_defaults(
             retry_policy=RetryPolicy(
                 max_attempts=1, initial_interval=0.01, jitter=False
             ),
@@ -2684,7 +2627,7 @@ def test_set_defaults_chaining():
     assert result["foo"] == "handled"
 
 
-def test_set_defaults_combined_retry_and_error_handler():
+def test_set_node_defaults_combined_retry_and_error_handler():
     """Retries are exhausted first, then the error handler runs."""
 
     class State(TypedDict):
@@ -2704,7 +2647,7 @@ def test_set_defaults_combined_retry_and_error_handler():
 
     graph = (
         StateGraph(State)
-        .set_defaults(
+        .set_node_defaults(
             retry_policy=RetryPolicy(
                 max_attempts=2,
                 initial_interval=0.01,
