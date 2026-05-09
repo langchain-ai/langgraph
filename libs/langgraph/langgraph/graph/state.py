@@ -324,50 +324,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             defaults.timeout = coerce_timeout_policy(timeout)
         return self
 
-    def _apply_node_defaults(self) -> None:
-        """Apply builder defaults to every regular node spec.
-
-        If `error_handler` is set, a synthetic node named
-        `_DEFAULT_ERROR_HANDLER_NODE` is added to the graph and wired in as the
-        fallback handler for any node without its own. Per-node values always
-        win; error-handler nodes are skipped so a default retry policy doesn't
-        silently apply to them.
-        """
-        defaults = self._node_defaults
-
-        handler_name: str | None = None
-        if defaults.error_handler is not None:
-            if _DEFAULT_ERROR_HANDLER_NODE in self.nodes:
-                raise ValueError(
-                    f"Auto-generated default error handler node "
-                    f"`{_DEFAULT_ERROR_HANDLER_NODE}` already exists."
-                )
-            handler_name = _DEFAULT_ERROR_HANDLER_NODE
-            self.nodes[handler_name] = StateNodeSpec[Any, ContextT](
-                coerce_to_runnable(
-                    defaults.error_handler,  # type: ignore[arg-type]
-                    name=handler_name,
-                    trace=False,
-                ),
-                metadata=None,
-                input_schema=self.state_schema,
-                retry_policy=None,
-                cache_policy=None,
-                is_error_handler=True,
-            )
-
-        for spec in self.nodes.values():
-            if spec.is_error_handler:
-                continue
-            if handler_name is not None and spec.error_handler_node is None:
-                spec.error_handler_node = handler_name
-            if defaults.retry_policy is not None and spec.retry_policy is None:
-                spec.retry_policy = defaults.retry_policy
-            if defaults.cache_policy is not None and spec.cache_policy is None:
-                spec.cache_policy = defaults.cache_policy
-            if defaults.timeout is not None and spec.timeout is None:
-                spec.timeout = defaults.timeout
-
     @property
     def _all_edges(self) -> set[tuple[str, str]]:
         return self.edges | {
@@ -1306,7 +1262,42 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 key for key, val in self.channels.items() if not is_managed_value(val)
             ]
         )
-        self._apply_node_defaults()
+        # Apply builder defaults to every regular node spec. Per-node values
+        # always win; error-handler nodes are skipped so a default retry/cache
+        # policy doesn't silently wrap the handler itself.
+        defaults = self._node_defaults
+        default_handler_name: str | None = None
+        if defaults.error_handler is not None:
+            if _DEFAULT_ERROR_HANDLER_NODE in self.nodes:
+                raise ValueError(
+                    f"Auto-generated default error handler node "
+                    f"`{_DEFAULT_ERROR_HANDLER_NODE}` already exists."
+                )
+            default_handler_name = _DEFAULT_ERROR_HANDLER_NODE
+            self.nodes[default_handler_name] = StateNodeSpec[Any, ContextT](
+                coerce_to_runnable(
+                    defaults.error_handler,  # type: ignore[arg-type]
+                    name=default_handler_name,
+                    trace=False,
+                ),
+                metadata=None,
+                input_schema=self.state_schema,
+                retry_policy=None,
+                cache_policy=None,
+                is_error_handler=True,
+            )
+        for spec in self.nodes.values():
+            if spec.is_error_handler:
+                continue
+            if default_handler_name is not None and spec.error_handler_node is None:
+                spec.error_handler_node = default_handler_name
+            if defaults.retry_policy is not None and spec.retry_policy is None:
+                spec.retry_policy = defaults.retry_policy
+            if defaults.cache_policy is not None and spec.cache_policy is None:
+                spec.cache_policy = defaults.cache_policy
+            if defaults.timeout is not None and spec.timeout is None:
+                spec.timeout = defaults.timeout
+
         node_error_handler_map = {
             node_name: spec.error_handler_node
             for node_name, spec in self.nodes.items()
