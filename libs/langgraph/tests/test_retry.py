@@ -2280,3 +2280,120 @@ def test_node_without_error_handler_still_fails_run():
 
     with pytest.raises(ValueError, match="no handler"):
         graph.invoke({"foo": ""})
+
+
+def test_graph_default_error_handler_applies_to_unhandled_nodes():
+    class State(TypedDict):
+        foo: str
+
+    captured: dict[str, object] = {}
+
+    def fail_node(state: State) -> State:
+        raise ValueError("node failed")
+
+    def default_handler(state: State, error: NodeError) -> State:
+        captured["from_node_name"] = error.node
+        captured["from_node_error"] = error.error
+        return {"foo": "handled_by_default"}
+
+    graph = (
+        StateGraph(State)
+        .set_default_error_handler(default_handler)
+        .add_node("fail_node", fail_node)
+        .add_edge(START, "fail_node")
+        .compile()
+    )
+
+    result = graph.invoke({"foo": ""})
+    assert result["foo"] == "handled_by_default"
+    assert captured["from_node_name"] == "fail_node"
+    assert isinstance(captured["from_node_error"], BaseException)
+
+
+def test_node_error_handler_takes_precedence_over_graph_default():
+    class State(TypedDict):
+        foo: str
+
+    calls: list[str] = []
+
+    def fail_node(state: State) -> State:
+        raise ValueError("node failed")
+
+    def default_handler(state: State, error: NodeError) -> State:
+        calls.append("default")
+        return {"foo": "default"}
+
+    def node_handler(state: State, error: NodeError) -> State:
+        calls.append("node")
+        return {"foo": "node"}
+
+    graph = (
+        StateGraph(State)
+        .set_default_error_handler(default_handler)
+        .add_node("fail_node", fail_node, error_handler=node_handler)
+        .add_edge(START, "fail_node")
+        .compile()
+    )
+
+    result = graph.invoke({"foo": ""})
+    assert result["foo"] == "node"
+    assert calls == ["node"]
+
+
+def test_graph_default_error_handler_runs_after_retry_exhaustion():
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+
+    def always_failing_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("Always fails")
+
+    def default_handler(state: State, error: NodeError) -> State:
+        return {"foo": f"handled_{error.node}"}
+
+    retry_policy = RetryPolicy(
+        max_attempts=2,
+        initial_interval=0.01,
+        jitter=False,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .set_default_error_handler(default_handler)
+        .add_node("always_failing", always_failing_node, retry_policy=retry_policy)
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke({"foo": ""})
+
+    assert attempts == 2
+    assert result["foo"] == "handled_always_failing"
+
+
+def test_graph_default_error_handler_can_be_disabled():
+    class State(TypedDict):
+        foo: str
+
+    def fail_node(state: State) -> State:
+        raise ValueError("no handler")
+
+    def default_handler(state: State, error: NodeError) -> State:
+        return {"foo": "handled"}
+
+    graph = (
+        StateGraph(State)
+        .set_default_error_handler(default_handler)
+        .set_default_error_handler(None)
+        .add_node("fail_node", fail_node)
+        .add_edge(START, "fail_node")
+        .compile()
+    )
+
+    with pytest.raises(ValueError, match="no handler"):
+        graph.invoke({"foo": ""})

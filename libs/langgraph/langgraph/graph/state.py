@@ -200,6 +200,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     context_schema: type[ContextT] | None
     input_schema: type[InputT]
     output_schema: type[OutputT]
+    default_error_handler: StateNode[Any, ContextT] | None
 
     def __init__(
         self,
@@ -245,6 +246,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self.managed = {}
         self.compiled = False
         self.waiting_edges = set()
+        self.default_error_handler = None
 
         self.state_schema = state_schema
         self.input_schema = cast(type[InputT], input_schema or state_schema)
@@ -292,6 +294,40 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                         )
                 else:
                     self.managed[key] = managed
+
+    def _register_error_handler_node(
+        self,
+        *,
+        node_name: str,
+        error_handler: StateNode[Any, ContextT],
+        input_schema: type[Any],
+    ) -> str:
+        handler_node_name = f"__error_handler__{node_name}"
+        if handler_node_name in self.nodes:
+            raise ValueError(
+                f"Auto-generated error handler node `{handler_node_name}` already exists."
+            )
+        self.nodes[handler_node_name] = StateNodeSpec[Any, ContextT](
+            coerce_to_runnable(error_handler, name=handler_node_name, trace=False),  # type: ignore[arg-type]
+            metadata=None,
+            input_schema=input_schema,
+            retry_policy=None,
+            cache_policy=None,
+            is_error_handler=True,
+        )
+        return handler_node_name
+
+    def _materialize_default_error_handlers(self) -> None:
+        if self.default_error_handler is None:
+            return
+        for node_name, spec in list(self.nodes.items()):
+            if spec.is_error_handler or spec.error_handler_node is not None:
+                continue
+            spec.error_handler_node = self._register_error_handler_node(
+                node_name=node_name,
+                error_handler=self.default_error_handler,
+                input_schema=spec.input_schema,
+            )
 
     @overload
     def add_node(
@@ -777,18 +813,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         )
         handler_node_name: str | None = None
         if error_handler is not None:
-            handler_node_name = f"__error_handler__{node}"
-            if handler_node_name in self.nodes:
-                raise ValueError(
-                    f"Auto-generated error handler node `{handler_node_name}` already exists."
-                )
-            self.nodes[handler_node_name] = StateNodeSpec[Any, ContextT](
-                coerce_to_runnable(error_handler, name=handler_node_name, trace=False),  # type: ignore[arg-type]
-                metadata=None,
+            handler_node_name = self._register_error_handler_node(
+                node_name=node,
+                error_handler=error_handler,
                 input_schema=resolved_input_schema,
-                retry_policy=None,
-                cache_policy=None,
-                is_error_handler=True,
             )
 
         if input_schema is not None:
@@ -1035,6 +1063,30 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         """
         return self.add_edge(key, END)
 
+    def set_default_error_handler(
+        self, error_handler: StateNode[Any, ContextT] | None
+    ) -> Self:
+        """Sets a graph-wide default error handler for nodes without one.
+
+        The default is used only for nodes that do not pass `error_handler` to
+        `add_node`. Node-level handlers always take precedence.
+
+        Parameters:
+            error_handler: A callable/runnable with the same signature as
+                `add_node(..., error_handler=...)`, or `None` to disable the
+                graph-wide default.
+
+        Returns:
+            Self: The instance of the graph, allowing for method chaining.
+        """
+        if self.compiled:
+            logger.warning(
+                "Setting a default error handler on a graph that has already been "
+                "compiled. This will not be reflected in the compiled graph."
+            )
+        self.default_error_handler = error_handler
+        return self
+
     def validate(self, interrupt: Sequence[str] | None = None) -> Self:
         # assemble sources
         all_sources = {src for src, _ in self._all_edges}
@@ -1165,6 +1217,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
+        self._materialize_default_error_handlers()
 
         # validate the graph
         self.validate(
