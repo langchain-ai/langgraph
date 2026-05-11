@@ -160,9 +160,6 @@ class PregelRunner:
         self.aschedule_error_handler = aschedule_error_handler
         self._handled_exception_ids: set[int] = set()
 
-    def _should_route_to_error_handler(self, task: PregelExecutableTask) -> bool:
-        return task.error_handler is not None
-
     def tick(
         self,
         tasks: Iterable[PregelExecutableTask],
@@ -213,7 +210,7 @@ class PregelRunner:
                 self.commit(t, exc)
                 if (
                     not isinstance(exc, GraphBubbleUp)
-                    and self._should_route_to_error_handler(t)
+                    and t.error_handler is not None
                     and self.schedule_error_handler is not None
                 ):
                     self._handled_exception_ids.add(id(exc))
@@ -286,7 +283,7 @@ class PregelRunner:
                         futures[get_waiter()] = None
                 elif (
                     (task_exc := _exception(fut))
-                    and self._should_route_to_error_handler(task)
+                    and task.error_handler is not None
                     and not isinstance(task_exc, GraphBubbleUp)
                 ):
                     self._handled_exception_ids.add(id(task_exc))
@@ -405,7 +402,7 @@ class PregelRunner:
                 self.commit(t, exc)
                 if (
                     not isinstance(exc, GraphBubbleUp)
-                    and self._should_route_to_error_handler(t)
+                    and t.error_handler is not None
                     and self.aschedule_error_handler is not None
                 ):
                     self._handled_exception_ids.add(id(exc))
@@ -485,7 +482,7 @@ class PregelRunner:
                         futures[get_waiter()] = None
                 elif (
                     (task_exc := _exception(fut))
-                    and self._should_route_to_error_handler(task)
+                    and task.error_handler is not None
                     and not isinstance(task_exc, GraphBubbleUp)
                 ):
                     self._handled_exception_ids.add(id(task_exc))
@@ -585,7 +582,7 @@ class PregelRunner:
             else:
                 # save error to checkpointer
                 task.writes.append((ERROR, exception))
-                if self._should_route_to_error_handler(task) and not isinstance(
+                if task.error_handler is not None and not isinstance(
                     exception, GraphBubbleUp
                 ):
                     # Mark early in commit path; loop-side routing may happen later.

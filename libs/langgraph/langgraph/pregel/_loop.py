@@ -23,6 +23,7 @@ from typing import (
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import Runnable, RunnableConfig
+
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
@@ -1460,13 +1461,11 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         handler = failed_task.error_handler or self.error_handler
         if handler is None:
             return None
-        handler_node_name = f"__error_handler__{failed_task.name}"
         writes = list(failed_task.writes)
         writes.append((ERROR_SOURCE_NODE, failed_task.name))
         self.put_writes(failed_task.id, writes)
         handler_task = prepare_node_error_handler_task(
             failed_task,
-            handler_node_name=handler_node_name,
             handler=handler,
             failed_error=error,
             checkpoint=self.checkpoint,
@@ -1480,7 +1479,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             checkpointer=self.checkpointer,
             manager=self.manager,
             retry_policy=self.retry_policy,
-            cache_policy=self.cache_policy,
         )
         self.tasks[handler_task.id] = handler_task
         if not self.is_replaying:
@@ -1488,6 +1486,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         for task in self.match_cached_writes():
             self.output_writes(task.id, task.writes, cached=True)
         return handler_task
+
+
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
@@ -1713,13 +1713,11 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         handler = failed_task.error_handler or self.error_handler
         if handler is None:
             return None
-        handler_node_name = f"__error_handler__{failed_task.name}"
         writes = list(failed_task.writes)
         writes.append((ERROR_SOURCE_NODE, failed_task.name))
         self.put_writes(failed_task.id, writes)
         handler_task = prepare_node_error_handler_task(
             failed_task,
-            handler_node_name=handler_node_name,
             handler=handler,
             failed_error=error,
             checkpoint=self.checkpoint,
@@ -1733,7 +1731,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             checkpointer=self.checkpointer,
             manager=self.manager,
             retry_policy=self.retry_policy,
-            cache_policy=self.cache_policy,
         )
         self.tasks[handler_task.id] = handler_task
         if not self.is_replaying:

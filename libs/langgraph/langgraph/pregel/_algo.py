@@ -1118,7 +1118,6 @@ def prepare_push_task_send(
 def prepare_node_error_handler_task(
     failed_task: PregelExecutableTask,
     *,
-    handler_node_name: str,
     handler: Runnable,
     failed_error: BaseException,
     checkpoint: Checkpoint,
@@ -1131,7 +1130,6 @@ def prepare_node_error_handler_task(
     store: BaseStore | None = None,
     checkpointer: BaseCheckpointSaver | None = None,
     manager: None | ParentRunManager | AsyncParentRunManager = None,
-    cache_policy: CachePolicy | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
 ) -> PregelExecutableTask:
     """Prepare an error handler task for a failed task.
@@ -1139,6 +1137,7 @@ def prepare_node_error_handler_task(
     The handler borrows the failed task's write pipeline (same state channels),
     so no separate node registration is needed.
     """
+    handler_node_name = f"__error_handler__{failed_task.name}"
     checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
     task_id_func = _xxhash_str if checkpoint["v"] > 1 else _uuid5_str
     configurable = config.get(CONF, {})
