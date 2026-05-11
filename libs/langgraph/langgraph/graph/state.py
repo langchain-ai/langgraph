@@ -279,21 +279,30 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         """Set default node policies that apply to every node in this graph.
 
         Per-node values passed to `add_node` always take precedence over these
-        defaults. Policies set here are **not** inherited by subgraphs.
+        defaults. Defaults are applied at `compile()` time. Policies set here
+        are **not** inherited by subgraphs.
+
+        `retry_policy` and `timeout` defaults apply to **all** nodes,
+        including error-handler nodes. `cache_policy` and `error_handler`
+        defaults only apply to regular nodes -- caching error-handler results
+        is unsafe, and handlers must never catch themselves.
 
         Args:
             retry_policy: Default retry policy for nodes that don't specify
-                their own via `add_node(..., retry_policy=...)`.
+                their own via `add_node(..., retry_policy=...)`. Also applies
+                to error-handler nodes.
             cache_policy: Default cache policy for nodes that don't specify
-                their own via `add_node(..., cache_policy=...)`.
+                their own via `add_node(..., cache_policy=...)`. Does **not**
+                apply to error-handler nodes.
             error_handler: Default error handler invoked when any regular node
                 raises and does not have its own `error_handler` set via
                 `add_node`. The handler is **not** invoked when an
                 error-handler node itself raises -- handler failures fail the
                 run.
             timeout: Default timeout policy for nodes that don't specify their
-                own via `add_node(..., timeout=...)`. Accepts a `TimeoutPolicy`,
-                a number of seconds (`float`), or a `timedelta`.
+                own via `add_node(..., timeout=...)`. Also applies to
+                error-handler nodes. Accepts a `TimeoutPolicy`, a number of
+                seconds (`float`), or a `timedelta`.
 
         Returns:
             Self: The builder instance, for chaining.
