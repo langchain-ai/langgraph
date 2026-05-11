@@ -2944,6 +2944,23 @@ def test_docker_tag_with_api_version(in_config: bool):
     assert tag == f"langchain/langgraph-server:{version}-py3.11"
 
 
+@pytest.mark.parametrize("in_config", [False, True])
+@pytest.mark.parametrize("version", ["0.9.0rc1", "0.9.0.dev1"])
+def test_docker_tag_with_prerelease_api_version(version: str, in_config: bool):
+    """Test docker_tag with prerelease and dev api_version values."""
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": version if in_config else None,
+        }
+    )
+
+    tag = docker_tag(config, api_version=version if not in_config else None)
+    assert tag == f"langchain/langgraph-api:{version}-py3.11"
+
+
 def test_config_to_docker_with_api_version():
     """Test config_to_docker function with api_version parameter."""
 

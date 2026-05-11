@@ -35,6 +35,12 @@ DISALLOWED_BUILD_COMMAND_CHARS = [
 # This blocks background execution (cmd &) while allowing command
 # chaining (cmd1 && cmd2) which is common in build commands.
 _SINGLE_AMPERSAND_RE = re.compile(r"(?<!&)&(?:&&)*(?!&)")
+_API_VERSION_PATTERN = re.compile(
+    r"^(?P<major>\d+)"
+    r"(?:\.(?P<minor>\d+))?"
+    r"(?:\.(?P<patch>\d+))?"
+    r"(?:(?:\.|)(?:[A-Za-z][0-9A-Za-z]*))?$"
+)
 
 
 def has_disallowed_build_command_content(command: str) -> bool:
@@ -123,6 +129,20 @@ def _parse_node_version(version_str: str) -> int:
         ) from None
 
 
+def _parse_api_version_parts(version_str: str) -> tuple[int, ...]:
+    """Parse an API version into numeric components.
+
+    Supports optional prerelease suffixes, e.g. `0.9.0rc1`.
+    """
+    version_core = version_str.split("-", 1)[0]
+    match = _API_VERSION_PATTERN.fullmatch(version_core)
+    if not match:
+        raise ValueError(
+            "Version must be major or major.minor or major.minor.patch."
+        )
+    return tuple(int(part) for part in match.groups() if part is not None)
+
+
 def _is_node_graph(spec: str | dict) -> bool:
     """Check if a graph is a Node.js graph based on the file extension."""
     if isinstance(spec, dict):
@@ -176,12 +196,12 @@ def validate_config(config: Config) -> Config:
             )
     if api_version:
         try:
-            parts = tuple(map(int, api_version.split("-")[0].split(".")))
+            parts = _parse_api_version_parts(api_version)
             if len(parts) > 3:
                 raise ValueError(
                     "Version must be major or major.minor or major.minor.patch."
                 )
-        except TypeError:
+        except (TypeError, ValueError):
             raise click.UsageError(
                 f"Invalid version format: {api_version}.\n\n"
                 "Pin to a minor version, e.g.:\n"
