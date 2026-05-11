@@ -1262,9 +1262,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 key for key, val in self.channels.items() if not is_managed_value(val)
             ]
         )
-        # Apply builder defaults to every regular node spec. Per-node values
-        # always win; error-handler nodes are skipped so a default retry/cache
-        # policy doesn't silently wrap the handler itself.
+        # Apply builder defaults to node specs. Per-node values always win.
+        # Error-handler routing and cache_policy are only assigned to regular
+        # nodes. Retry and timeout defaults also apply to error-handler nodes.
         defaults = self._node_defaults
         default_handler_name: str | None = None
         if defaults.error_handler is not None:
@@ -1287,13 +1287,19 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 is_error_handler=True,
             )
         for spec in self.nodes.values():
-            if spec.is_error_handler:
-                continue
-            if default_handler_name is not None and spec.error_handler_node is None:
+            if (
+                not spec.is_error_handler
+                and default_handler_name is not None
+                and spec.error_handler_node is None
+            ):
                 spec.error_handler_node = default_handler_name
             if defaults.retry_policy is not None and spec.retry_policy is None:
                 spec.retry_policy = defaults.retry_policy
-            if defaults.cache_policy is not None and spec.cache_policy is None:
+            if (
+                not spec.is_error_handler
+                and defaults.cache_policy is not None
+                and spec.cache_policy is None
+            ):
                 spec.cache_policy = defaults.cache_policy
             if defaults.timeout is not None and spec.timeout is None:
                 spec.timeout = defaults.timeout
