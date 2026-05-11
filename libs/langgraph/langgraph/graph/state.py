@@ -1286,21 +1286,32 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 cache_policy=None,
                 is_error_handler=True,
             )
+
+        # Apply builder defaults to node specs. Per-node values always win.
         for spec in self.nodes.values():
+            # error_handler: regular nodes only — handlers must never
+            # catch themselves or other handlers.
             if (
                 not spec.is_error_handler
                 and default_handler_name is not None
                 and spec.error_handler_node is None
             ):
                 spec.error_handler_node = default_handler_name
+            # retry: all nodes — handlers should be retried on transient
+            # failures just like regular nodes.
             if defaults.retry_policy is not None and spec.retry_policy is None:
                 spec.retry_policy = defaults.retry_policy
+            # cache: regular nodes only — caching an error-handler result
+            # is unsafe because the input (failed-node state) may differ
+            # across failures even when the cache key matches.
             if (
                 not spec.is_error_handler
                 and defaults.cache_policy is not None
                 and spec.cache_policy is None
             ):
                 spec.cache_policy = defaults.cache_policy
+            # timeout: all nodes — a stuck handler should be cancelled the
+            # same way a stuck regular node would be.
             if defaults.timeout is not None and spec.timeout is None:
                 spec.timeout = defaults.timeout
 
