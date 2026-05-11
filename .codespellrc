@@ -1,0 +1,7 @@
+[codespell]
+# Skip non-text files and generated content
+skip = .git,__pycache__,.mypy_cache,.ruff_cache,*.lock,*.json,*.csv,*.png,*.jpg,*.svg,*.ico,*.ipynb,.venv
+# Ignore words that are valid in the context of this project
+ignore-words-list = infor,nd,ans,stdio,jupyter,lets,lite,uis,deque,langgraph,langchain,pydantic,typing,async,await,coroutine,iterable,iterables,serializable,deserializable,checkpointer,checkpointing,stateful,statefulness,prebuilt,supervisor,supervisory,swarm,swarming,multiactor,multiactors,subgraph,subgraphs,workflow,workflows,streaming,streamable,streamed,streamer,streamers,thead
+# Check nested directories
+count =

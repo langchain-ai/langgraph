@@ -8071,7 +8071,7 @@ async def test_task_before_interrupt_resume(
 
         answers = []
         for i in range(n):
-            q = f"Whats the answer for topic {i + 1}?"
+            q = f"What's the answer for topic {i + 1}?"
             answers.append(await ask(q))
 
         return {"answers": answers}
@@ -8082,13 +8082,13 @@ async def test_task_before_interrupt_resume(
     result = await workflow.ainvoke(2, config=config)
     assert "__interrupt__" in result
     assert len(result["__interrupt__"]) == 1
-    assert result["__interrupt__"][0].value == "Whats the answer for topic 1?"
+    assert result["__interrupt__"][0].value == "What's the answer for topic 1?"
 
     # Resume with answer for topic 1 - should get second interrupt
     result = await workflow.ainvoke(Command(resume="answer1"), config=config)
     assert "__interrupt__" in result, f"Expected interrupt for topic 2, got: {result}"
     assert len(result["__interrupt__"]) == 1
-    assert result["__interrupt__"][0].value == "Whats the answer for topic 2?"
+    assert result["__interrupt__"][0].value == "What's the answer for topic 2?"
 
     # Resume with answer for topic 2 - should get final result
     result = await workflow.ainvoke(Command(resume="answer2"), config=config)
@@ -8200,7 +8200,7 @@ async def test_node_before_interrupt_resume_graph_api(
     def ask(state: State) -> dict:
         answers = []
         for topic in state["topics"]:
-            answer = interrupt(f"Whats the answer for {topic}?")
+            answer = interrupt(f"What's the answer for {topic}?")
             answers.append(answer)
         return {"answers": answers}
 
@@ -8220,13 +8220,13 @@ async def test_node_before_interrupt_resume_graph_api(
     result = await graph.ainvoke({"topics": ["a", "b"], "answers": []}, config=config)
     assert "__interrupt__" in result
     assert len(result["__interrupt__"]) == 1
-    assert result["__interrupt__"][0].value == "Whats the answer for topic 1?"
+    assert result["__interrupt__"][0].value == "What's the answer for topic 1?"
 
     # Resume with answer for topic 1 - should get second interrupt
     result = await graph.ainvoke(Command(resume="answer1"), config=config)
     assert "__interrupt__" in result, f"Expected interrupt for topic 2, got: {result}"
     assert len(result["__interrupt__"]) == 1
-    assert result["__interrupt__"][0].value == "Whats the answer for topic 2?"
+    assert result["__interrupt__"][0].value == "What's the answer for topic 2?"
 
     # Resume with answer for topic 2 - should complete
     result = await graph.ainvoke(Command(resume="answer2"), config=config)

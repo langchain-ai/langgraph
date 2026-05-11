@@ -57,6 +57,18 @@ lock-upgrade:
 		fi; \
 	done
 
+# Spell check all projects
+.PHONY: spell_check
+spell_check:
+	@echo "Running codespell on the entire repository..."
+	@codespell
+
+# Fix spelling errors across all projects
+.PHONY: spell_fix
+spell_fix:
+	@echo "Fixing codespell errors across the entire repository..."
+	@codespell -w
+
 # Test all projects
 .PHONY: test
 test:

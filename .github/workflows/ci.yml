@@ -113,6 +113,15 @@ jobs:
       - name: Run check_sdk_methods script
         run: python .github/scripts/check_sdk_methods.py
 
+  codespell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install codespell
+        run: pip install codespell
+      - name: Run codespell
+        run: codespell
+
   check-schema:
     needs: changes
     if: needs.changes.outputs.python == 'true'
@@ -164,6 +173,7 @@ jobs:
         test,
         test-langgraph,
         check-sdk-methods,
+        codespell,
         check-schema,
         integration-test,
       ]
