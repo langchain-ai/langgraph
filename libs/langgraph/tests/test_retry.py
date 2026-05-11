@@ -356,6 +356,47 @@ def test_graph_with_jitter_retry_policy():
     mock_sleep.assert_called_with(0.01 + 0.05)  # Sleep should include jitter
 
 
+def test_graph_with_jitter_retry_policy_caps_sleep_at_max_interval():
+    """Test jitter does not push retry sleep over max_interval."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempt_count = 0
+
+    def failing_node(state):
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count < 2:
+            raise ValueError("Intentional failure")
+        return {"foo": "success"}
+
+    retry_policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.5,
+        max_interval=0.5,
+        jitter=True,
+        retry_on=ValueError,
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, retry_policy=retry_policy)
+        .add_edge(START, "failing_node")
+        .compile()
+    )
+
+    with (
+        patch("random.uniform", return_value=1.0),
+        patch("time.sleep") as mock_sleep,
+    ):
+        result = graph.invoke({"foo": ""})
+
+    assert attempt_count == 2
+    assert result["foo"] == "success"
+    mock_sleep.assert_called_once_with(0.5)
+
+
 def test_graph_with_multiple_retry_policies():
     """Test a graph with multiple retry policies for a node."""
 
@@ -783,6 +824,37 @@ async def test_arun_with_retry_timeout_retries_when_retry_on_timeout():
     task = _make_task(FlakyProc(), timeout=_idle_timeout(0.05), retry_policy=(policy,))
     assert await arun_with_retry(task, retry_policy=None) == "ok"
     assert len(calls) == 2
+
+
+@pytest.mark.anyio
+async def test_arun_with_retry_jitter_caps_sleep_at_max_interval():
+    calls = 0
+
+    class FlakyProc:
+        async def ainvoke(self, input, config):
+            nonlocal calls
+            calls += 1
+            if calls < 2:
+                raise ValueError("Intentional failure")
+            return "ok"
+
+    policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.5,
+        max_interval=0.5,
+        jitter=True,
+        retry_on=ValueError,
+    )
+    task = _make_task(FlakyProc(), retry_policy=(policy,))
+
+    with (
+        patch("random.uniform", return_value=1.0),
+        patch("asyncio.sleep") as mock_sleep,
+    ):
+        assert await arun_with_retry(task, retry_policy=None) == "ok"
+
+    assert calls == 2
+    mock_sleep.assert_awaited_once_with(0.5)
 
 
 @pytest.mark.anyio
