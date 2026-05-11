@@ -20,6 +20,7 @@ from typing import (
 
 from langchain_core.callbacks import Callbacks
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
+from langchain_core.runnables import Runnable
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -32,6 +33,7 @@ from langgraph.store.base import BaseStore
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._config import merge_configs, patch_config
+from langgraph._internal._runnable import RunnableSeq
 from langgraph._internal._constants import (
     CACHE_NS_WRITES,
     CONF,
@@ -71,6 +73,7 @@ from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import NodeError
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
+from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
@@ -407,6 +410,7 @@ def prepare_next_tasks(
     updated_channels: set[str] | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
     cache_policy: CachePolicy | None = None,
+    error_handler: Runnable[Any, Any] | None = None,
 ) -> dict[str, PregelTask] | dict[str, PregelExecutableTask]:
     """Prepare the set of tasks that will make up the next Pregel step.
 
@@ -462,6 +466,7 @@ def prepare_next_tasks(
                 input_cache=input_cache,
                 cache_policy=cache_policy,
                 retry_policy=retry_policy,
+                error_handler=error_handler,
             ):
                 tasks.append(task)
 
@@ -508,6 +513,7 @@ def prepare_next_tasks(
             input_cache=input_cache,
             cache_policy=cache_policy,
             retry_policy=retry_policy,
+            error_handler=error_handler,
         ):
             tasks.append(task)
     return {t.id: t for t in tasks}
@@ -542,6 +548,7 @@ def prepare_single_task(
     input_cache: dict[INPUT_CACHE_KEY_TYPE, Any] | None = None,
     cache_policy: CachePolicy | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
+    error_handler: Runnable[Any, Any] | None = None,
 ) -> None | PregelTask | PregelExecutableTask:
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
@@ -756,6 +763,7 @@ def prepare_single_task(
                         writers=proc.flat_writers,
                         subgraphs=proc.subgraphs,
                         timeout=proc.timeout,
+                        error_handler=proc.error_handler or error_handler,
                     )
             else:
                 return PregelTask(task_id, name, task_path[:3])
@@ -1111,10 +1119,10 @@ def prepare_node_error_handler_task(
     failed_task: PregelExecutableTask,
     *,
     handler_node_name: str,
+    handler: Runnable,
     failed_error: BaseException,
     checkpoint: Checkpoint,
     pending_writes: list[PendingWrite],
-    processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
     config: RunnableConfig,
@@ -1125,15 +1133,12 @@ def prepare_node_error_handler_task(
     manager: None | ParentRunManager | AsyncParentRunManager = None,
     cache_policy: CachePolicy | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
-) -> PregelExecutableTask | None:
-    """Prepare an immediate node-level error handler task for a failed task."""
-    if handler_node_name not in processes:
-        return None
-    proc = processes[handler_node_name]
-    proc_node = proc.node
-    if proc_node is None:
-        return None
+) -> PregelExecutableTask:
+    """Prepare an error handler task for a failed task.
 
+    The handler borrows the failed task's write pipeline (same state channels),
+    so no separate node registration is needed.
+    """
     checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
     task_id_func = _xxhash_str if checkpoint["v"] > 1 else _uuid5_str
     configurable = config.get(CONF, {})
@@ -1159,27 +1164,17 @@ def prepare_node_error_handler_task(
         "langgraph_path": translated_task_path,
         "langgraph_checkpoint_ns": task_checkpoint_ns,
     }
-    if proc.metadata:
-        metadata.update(proc.metadata)
     writes: deque[tuple[str, Any]] = deque()
-
-    effective_retry_policy = proc.retry_policy or retry_policy
-    effective_cache_policy = proc.cache_policy or cache_policy
-    if effective_cache_policy:
-        args_key = effective_cache_policy.key_func(failed_task.input)
-        cache_key = CacheKey(
-            (
-                CACHE_NS_WRITES,
-                (identifier(proc) or "__dynamic__"),
-                handler_node_name,
-            ),
-            xxh3_128_hexdigest(
-                args_key.encode() if isinstance(args_key, str) else args_key
-            ),
-            effective_cache_policy.ttl,
-        )
+    # Mirror how regular node procs are built: combine handler with a write pipeline
+    # so run_with_retry invokes the full pipeline in one shot.
+    # - PULL node tasks: writers are in failed_task.writers → reuse them
+    # - PUSH functional tasks: writers are embedded in proc (empty writers list) →
+    #   add a RETURN write so the handler's result becomes the future's value.
+    handler_writers = failed_task.writers
+    if handler_writers:
+        handler_proc: Runnable = RunnableSeq(handler, *handler_writers)
     else:
-        cache_key = None
+        handler_proc = RunnableSeq(handler, ChannelWrite([ChannelWriteEntry(RETURN)]))
 
     scratchpad = _scratchpad(
         config[CONF].get(CONFIG_KEY_SCRATCHPAD),
@@ -1194,14 +1189,11 @@ def prepare_node_error_handler_task(
     runtime = runtime.override(
         store=store, previous=checkpoint["channel_values"].get(PREVIOUS, None)
     )
-    additional_config: RunnableConfig = {
-        "metadata": metadata,
-        "tags": proc.tags,
-    }
+    additional_config: RunnableConfig = {"metadata": metadata}
     return PregelExecutableTask(
         handler_node_name,
         failed_task.input,
-        proc_node,
+        handler_proc,
         writes,
         patch_config(
             merge_configs(config, additional_config),
@@ -1239,12 +1231,11 @@ def prepare_node_error_handler_task(
             },
         ),
         PUSH_TRIGGER,
-        effective_retry_policy,
-        cache_key,
+        retry_policy,
+        None,  # handlers don't cache
         task_id,
         translated_task_path,
-        writers=proc.flat_writers,
-        subgraphs=proc.subgraphs,
+        writers=handler_writers,  # for ParentCommand / subgraph routing
     )
 
 

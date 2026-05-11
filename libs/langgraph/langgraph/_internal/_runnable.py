@@ -342,6 +342,17 @@ class RunnableCallable(Runnable):
             # If the kwarg is accepted by the function, store the key / runtime attribute to inject
             self.func_accepts[kw] = (runtime_key, default)
 
+        # True when the function expects a "state" or "input" first arg.
+        # False only when ALL non-VAR_POSITIONAL params are injected kwargs, e.g.
+        # `def handler(error: NodeError) -> T` — passing input positionally would
+        # conflict with the kwarg injection.
+        injected_names = set(self.func_accepts)
+        self.takes_input: bool = not self.explode_args and any(
+            p.kind == inspect.Parameter.VAR_POSITIONAL
+            or (p.kind in VALID_KINDS and p.name not in injected_names)
+            for p in params.values()
+        )
+
     def __repr__(self) -> str:
         repr_args = {
             k: v
@@ -364,8 +375,11 @@ class RunnableCallable(Runnable):
         if self.explode_args:
             args, _kwargs = input
             kwargs = {**self.kwargs, **_kwargs, **kwargs}
-        else:
+        elif self.takes_input:
             args = (input,)
+            kwargs = {**self.kwargs, **kwargs}
+        else:
+            args = ()
             kwargs = {**self.kwargs, **kwargs}
 
         runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
@@ -438,8 +452,11 @@ class RunnableCallable(Runnable):
         if self.explode_args:
             args, _kwargs = input
             kwargs = {**self.kwargs, **_kwargs, **kwargs}
-        else:
+        elif self.takes_input:
             args = (input,)
+            kwargs = {**self.kwargs, **kwargs}
+        else:
+            args = ()
             kwargs = {**self.kwargs, **kwargs}
 
         runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)

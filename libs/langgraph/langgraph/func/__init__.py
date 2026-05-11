@@ -65,6 +65,7 @@ class _TaskFunction(Generic[P, T]):
         cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
         timeout: TimeoutPolicy | None = None,
         name: str | None = None,
+        error_handler: Callable[..., Any] | None = None,
     ) -> None:
         if name is not None:
             if hasattr(func, "__func__"):
@@ -81,17 +82,56 @@ class _TaskFunction(Generic[P, T]):
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.timeout = timeout
+        self._raw_error_handler = error_handler
+        self.error_handler = None  # not used for push tasks; see __call__
         functools.update_wrapper(self, func)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> SyncAsyncFuture[T]:
+        func = self._wrap_with_error_handler(self.func)
         return _call_with_options(
-            self.func,
+            func,
             args,
             kwargs,
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
             timeout=self.timeout,
         )
+
+    def _wrap_with_error_handler(
+        self, func: Callable[P, Awaitable[T]] | Callable[P, T]
+    ) -> Callable[P, Awaitable[T]] | Callable[P, T]:
+        if self._raw_error_handler is None:
+            return func
+        handler = self._raw_error_handler
+        task_name = getattr(func, "__name__", "task")
+        if is_async_callable(func):
+
+            async def awrapped(*args: Any, **kwargs: Any) -> Any:
+                try:
+                    return await func(*args, **kwargs)  # type: ignore[misc]
+                except Exception as exc:
+                    from langgraph.errors import NodeError
+
+                    node_error = NodeError(node=task_name, error=exc)
+                    if is_async_callable(handler):
+                        return await handler(*args, error=node_error, **kwargs)  # type: ignore[misc]
+                    return handler(*args, error=node_error, **kwargs)  # type: ignore[misc]
+
+            awrapped.__name__ = task_name  # type: ignore[attr-defined]
+            return awrapped  # type: ignore[return-value]
+        else:
+
+            def wrapped(*args: Any, **kwargs: Any) -> Any:
+                try:
+                    return func(*args, **kwargs)  # type: ignore[operator]
+                except Exception as exc:
+                    from langgraph.errors import NodeError
+
+                    node_error = NodeError(node=task_name, error=exc)
+                    return handler(*args, error=node_error, **kwargs)  # type: ignore[misc]
+
+            wrapped.__name__ = task_name  # type: ignore[attr-defined]
+            return wrapped  # type: ignore[return-value]
 
     def clear_cache(self, cache: BaseCache) -> None:
         """Clear the cache for this task."""
@@ -136,6 +176,7 @@ def task(
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
     timeout: float | timedelta | TimeoutPolicy | None = None,
+    error_handler: Callable[..., Any] | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> (
     Callable[[Callable[P, Awaitable[T]] | Callable[P, T]], _TaskFunction[P, T]]
@@ -243,6 +284,7 @@ def task(
             cache_policy=cache_policy,
             timeout=timeout_policy,
             name=name,
+            error_handler=error_handler,
         )
 
     if __func_or_none__ is not None:

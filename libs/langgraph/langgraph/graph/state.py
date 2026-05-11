@@ -65,7 +65,7 @@ from langgraph.errors import (
     create_error_message,
 )
 from langgraph.graph._branch import BranchSpec
-from langgraph.graph._node import StateNode, StateNodeSpec
+from langgraph.graph._node import ErrorHandlerNode, StateNode, StateNodeSpec
 from langgraph.managed.base import (
     ManagedValueSpec,
     is_managed_value,
@@ -772,24 +772,15 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         if destinations is not None:
             ends = destinations
 
-        resolved_input_schema: type[Any] = (
-            input_schema or inferred_input_schema or self.state_schema
-        )
-        handler_node_name: str | None = None
-        if error_handler is not None:
-            handler_node_name = f"__error_handler__{node}"
-            if handler_node_name in self.nodes:
-                raise ValueError(
-                    f"Auto-generated error handler node `{handler_node_name}` already exists."
-                )
-            self.nodes[handler_node_name] = StateNodeSpec[Any, ContextT](
-                coerce_to_runnable(error_handler, name=handler_node_name, trace=False),  # type: ignore[arg-type]
-                metadata=None,
-                input_schema=resolved_input_schema,
-                retry_policy=None,
-                cache_policy=None,
-                is_error_handler=True,
+        coerced_error_handler: Runnable[Any, Any] | None = (
+            coerce_to_runnable(  # type: ignore[arg-type]
+                error_handler,
+                name=f"__error_handler__{node}",
+                trace=False,
             )
+            if error_handler is not None
+            else None
+        )
 
         if input_schema is not None:
             self.nodes[node] = StateNodeSpec[NodeInputT, ContextT](
@@ -798,7 +789,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=input_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
-                error_handler_node=handler_node_name,
+                error_handler=coerced_error_handler,
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
@@ -810,7 +801,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=inferred_input_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
-                error_handler_node=handler_node_name,
+                error_handler=coerced_error_handler,
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
@@ -822,7 +813,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=self.state_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
-                error_handler_node=handler_node_name,
+                error_handler=coerced_error_handler,
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
@@ -1079,7 +1070,17 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         if interrupt:
             for node in interrupt:
                 if node not in self.nodes:
-                    raise ValueError(f"Interrupt node `{node}` not found")
+                    # __error_handler__<name> is a valid virtual task name when the
+                    # base node has an error_handler configured.
+                    if node.startswith("__error_handler__"):
+                        base = node[len("__error_handler__"):]
+                        if (
+                            base not in self.nodes
+                            or self.nodes[base].error_handler is None
+                        ):
+                            raise ValueError(f"Interrupt node `{node}` not found")
+                    else:
+                        raise ValueError(f"Interrupt node `{node}` not found")
         self.compiled = True
         return self
 
@@ -1094,6 +1095,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         debug: bool = False,
         name: str | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        error_handler: ErrorHandlerNode[Any, ContextT] | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1193,11 +1195,15 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 key for key, val in self.channels.items() if not is_managed_value(val)
             ]
         )
-        node_error_handler_map = {
-            node_name: spec.error_handler_node
-            for node_name, spec in self.nodes.items()
-            if spec.error_handler_node is not None
-        }
+        error_handler: Runnable[Any, Any] | None = (
+            coerce_to_runnable(  # type: ignore[arg-type]
+                error_handler,
+                name="__graph_error_handler__",
+                trace=False,
+            )
+            if error_handler is not None
+            else None
+        )
 
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
@@ -1220,7 +1226,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             debug=debug,
             store=store,
             cache=cache,
-            node_error_handler_map=node_error_handler_map,
+            error_handler=error_handler,
             name=name or "LangGraph",
             stream_transformers=transformers,
         )
@@ -1395,8 +1401,7 @@ class CompiledStateGraph(
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
-                is_error_handler=node.is_error_handler,
-                error_handler_node=node.error_handler_node,
+                error_handler=node.error_handler,
                 bound=node.runnable,  # type: ignore[arg-type]
                 timeout=node.timeout,
             )

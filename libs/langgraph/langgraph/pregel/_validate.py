@@ -99,12 +99,19 @@ def validate_graph(
 
     if interrupt_after_nodes != "*":
         for n in interrupt_after_nodes:
-            if n not in nodes:
+            if n not in nodes and not _is_valid_error_handler_interrupt(n, nodes):
                 raise ValueError(f"Node {n} not in nodes")
     if interrupt_before_nodes != "*":
         for n in interrupt_before_nodes:
-            if n not in nodes:
+            if n not in nodes and not _is_valid_error_handler_interrupt(n, nodes):
                 raise ValueError(f"Node {n} not in nodes")
+
+
+def _is_valid_error_handler_interrupt(name: str, nodes: Mapping[str, PregelNode]) -> bool:
+    if not name.startswith("__error_handler__"):
+        return False
+    base = name[len("__error_handler__"):]
+    return base in nodes and nodes[base].error_handler is not None
 
 
 def validate_keys(

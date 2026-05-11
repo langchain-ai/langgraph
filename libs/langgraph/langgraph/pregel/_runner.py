@@ -13,7 +13,6 @@ from collections.abc import (
     Collection,
     Iterable,
     Iterator,
-    Mapping,
     Sequence,
 )
 from functools import partial
@@ -143,7 +142,6 @@ class PregelRunner:
         put_writes: weakref.ref[Callable[[str, Sequence[tuple[str, Any]]], None]],
         use_astream: bool = False,
         node_finished: Callable[[str], None] | None = None,
-        node_error_handler_map: Mapping[str, str] | None = None,
         schedule_error_handler: Callable[
             [PregelExecutableTask, BaseException], PregelExecutableTask | None
         ]
@@ -158,19 +156,12 @@ class PregelRunner:
         self.put_writes = put_writes
         self.use_astream = use_astream
         self.node_finished = node_finished
-        self.node_error_handler_map = dict(node_error_handler_map or {})
-        self.error_handler_nodes = set(self.node_error_handler_map.values())
         self.schedule_error_handler = schedule_error_handler
         self.aschedule_error_handler = aschedule_error_handler
-        # Exception object ids that are already routed to graph-level error handler.
-        # These ids are consulted by stop/panic checks to avoid re-raising handled
-        # exceptions via the normal fatal path in the same run.
         self._handled_exception_ids: set[int] = set()
 
     def _should_route_to_error_handler(self, task: PregelExecutableTask) -> bool:
-        if task.name in self.error_handler_nodes:
-            return False
-        return task.name in self.node_error_handler_map
+        return task.error_handler is not None
 
     def tick(
         self,

@@ -22,7 +22,7 @@ from typing import (
 )
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
@@ -279,6 +279,7 @@ class PregelLoop:
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        error_handler: Runnable[Any, Any] | None = None,
         has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         self.stream = stream
@@ -303,6 +304,7 @@ class PregelLoop:
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
+        self.error_handler = error_handler
         self.durability = durability
         self._has_graph_lifecycle_callbacks = has_graph_lifecycle_callbacks
         self._graph_lifecycle_events = deque()
@@ -545,6 +547,7 @@ class PregelLoop:
                 manager=self.manager,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                error_handler=self.error_handler,
             ),
         ):
             # produce debug output
@@ -597,6 +600,7 @@ class PregelLoop:
             updated_channels=self.updated_channels,
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
+            error_handler=self.error_handler,
         )
 
         # produce debug output
@@ -1368,6 +1372,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        error_handler: Runnable[Any, Any] | None = None,
         has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         super().__init__(
@@ -1389,6 +1394,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             trigger_to_nodes=trigger_to_nodes,
             retry_policy=retry_policy,
             cache_policy=cache_policy,
+            error_handler=error_handler,
             durability=durability,
             has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
         )
@@ -1451,22 +1457,20 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     def schedule_error_handler(
         self, failed_task: PregelExecutableTask, error: BaseException
     ) -> PregelExecutableTask | None:
-        handler_node = self.nodes[failed_task.name].error_handler_node
-        if not handler_node:
+        handler = failed_task.error_handler or self.error_handler
+        if handler is None:
             return None
+        handler_node_name = f"__error_handler__{failed_task.name}"
         writes = list(failed_task.writes)
         writes.append((ERROR_SOURCE_NODE, failed_task.name))
-        self.put_writes(
-            failed_task.id,
-            writes,
-        )
+        self.put_writes(failed_task.id, writes)
         handler_task = prepare_node_error_handler_task(
             failed_task,
-            handler_node_name=handler_node,
+            handler_node_name=handler_node_name,
+            handler=handler,
             failed_error=error,
             checkpoint=self.checkpoint,
             pending_writes=self.checkpoint_pending_writes,
-            processes=self.nodes,
             channels=self.channels,
             managed=self.managed,
             config=failed_task.config,
@@ -1478,8 +1482,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
         )
-        if handler_task is None:
-            return None
         self.tasks[handler_task.id] = handler_task
         if not self.is_replaying:
             self._match_writes({handler_task.id: handler_task})
@@ -1621,6 +1623,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        error_handler: Runnable[Any, Any] | None = None,
         has_graph_lifecycle_callbacks: bool = False,
     ) -> None:
         super().__init__(
@@ -1642,6 +1645,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             trigger_to_nodes=trigger_to_nodes,
             retry_policy=retry_policy,
             cache_policy=cache_policy,
+            error_handler=error_handler,
             durability=durability,
             has_graph_lifecycle_callbacks=has_graph_lifecycle_callbacks,
         )
@@ -1706,22 +1710,20 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     async def aschedule_error_handler(
         self, failed_task: PregelExecutableTask, error: BaseException
     ) -> PregelExecutableTask | None:
-        handler_node = self.nodes[failed_task.name].error_handler_node
-        if not handler_node:
+        handler = failed_task.error_handler or self.error_handler
+        if handler is None:
             return None
+        handler_node_name = f"__error_handler__{failed_task.name}"
         writes = list(failed_task.writes)
         writes.append((ERROR_SOURCE_NODE, failed_task.name))
-        self.put_writes(
-            failed_task.id,
-            writes,
-        )
+        self.put_writes(failed_task.id, writes)
         handler_task = prepare_node_error_handler_task(
             failed_task,
-            handler_node_name=handler_node,
+            handler_node_name=handler_node_name,
+            handler=handler,
             failed_error=error,
             checkpoint=self.checkpoint,
             pending_writes=self.checkpoint_pending_writes,
-            processes=self.nodes,
             channels=self.channels,
             managed=self.managed,
             config=failed_task.config,
@@ -1733,8 +1735,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
         )
-        if handler_task is None:
-            return None
         self.tasks[handler_task.id] = handler_task
         if not self.is_replaying:
             self._match_writes({handler_task.id: handler_task})

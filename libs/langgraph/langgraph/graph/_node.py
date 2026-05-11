@@ -8,6 +8,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.store.base import BaseStore
 
 from langgraph._internal._typing import EMPTY_SEQ
+from langgraph.errors import NodeError
 from langgraph.runtime import Runtime
 from langgraph.types import CachePolicy, RetryPolicy, StreamWriter, TimeoutPolicy
 from langgraph.typing import ContextT, NodeInputT, NodeInputT_contra
@@ -64,6 +65,22 @@ class _NodeWithRuntime(Protocol[NodeInputT_contra, ContextT]):
     ) -> Any: ...
 
 
+class _NodeWithNodeError(Protocol[NodeInputT_contra]):
+    def __call__(self, state: NodeInputT_contra, *, error: NodeError) -> Any: ...
+
+
+class _NodeWithConfigNodeError(Protocol[NodeInputT_contra]):
+    def __call__(
+        self, state: NodeInputT_contra, *, config: RunnableConfig, error: NodeError
+    ) -> Any: ...
+
+
+class _NodeWithRuntimeNodeError(Protocol[NodeInputT_contra, ContextT]):
+    def __call__(
+        self, state: NodeInputT_contra, *, runtime: Runtime[ContextT], error: NodeError
+    ) -> Any: ...
+
+
 # TODO: we probably don't want to explicitly support the config / store signatures once
 # we move to adding a context arg. Maybe what we do is we add support for kwargs with param spec
 # this is purely for typing purposes though, so can easily change in the coming weeks.
@@ -80,6 +97,13 @@ StateNode: TypeAlias = (
     | Runnable[NodeInputT, Any]
 )
 
+ErrorHandlerNode: TypeAlias = (
+    StateNode[NodeInputT, ContextT]
+    | _NodeWithNodeError[NodeInputT]
+    | _NodeWithConfigNodeError[NodeInputT]
+    | _NodeWithRuntimeNodeError[NodeInputT, ContextT]
+)
+
 
 @dataclass(slots=True)
 class StateNodeSpec(Generic[NodeInputT, ContextT]):
@@ -88,8 +112,7 @@ class StateNodeSpec(Generic[NodeInputT, ContextT]):
     input_schema: type[NodeInputT]
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None
     cache_policy: CachePolicy | None
-    is_error_handler: bool = False
-    error_handler_node: str | None = None
+    error_handler: Runnable[Any, Any] | None = None
     ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
     defer: bool = False
     timeout: TimeoutPolicy | None = None

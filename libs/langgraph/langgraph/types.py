@@ -628,6 +628,7 @@ class PregelExecutableTask:
     writers: Sequence[Runnable] = ()
     subgraphs: Sequence[PregelProtocol] = ()
     timeout: TimeoutPolicy | None = None
+    error_handler: Runnable | None = None
 
 
 class StateSnapshot(NamedTuple):

@@ -2280,3 +2280,183 @@ def test_node_without_error_handler_still_fails_run():
 
     with pytest.raises(ValueError, match="no handler"):
         graph.invoke({"foo": ""})
+
+
+# ---------------------------------------------------------------------------
+# Structural invariants from the policy-style refactor
+# ---------------------------------------------------------------------------
+
+
+def test_error_handler_not_registered_as_node():
+    """After compile, no hidden __error_handler__* nodes should exist in the graph."""
+
+    class State(TypedDict):
+        foo: str
+
+    def failing_node(state: State) -> State:
+        raise ValueError("boom")
+
+    def handler(state: State, error: NodeError) -> State:
+        return {"foo": "handled"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, error_handler=handler)
+        .add_edge(START, "failing_node")
+        .compile()
+    )
+
+    hidden = [k for k in graph.nodes if k.startswith("__error_handler__")]
+    assert hidden == [], f"unexpected hidden nodes: {hidden}"
+
+
+def test_error_handler_stored_on_pregel_node():
+    """The error_handler callable should be a Runnable field on PregelNode, not a name pointer."""
+
+    class State(TypedDict):
+        foo: str
+
+    def failing_node(state: State) -> State:
+        raise ValueError("boom")
+
+    def handler(state: State) -> State:
+        return {"foo": "handled"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, error_handler=handler)
+        .add_edge(START, "failing_node")
+        .compile()
+    )
+
+    pregel_node = graph.nodes["failing_node"]
+    assert pregel_node.error_handler is not None, "error_handler should be set on PregelNode"
+    assert not hasattr(pregel_node, "error_handler_node"), "old string-pointer field should be gone"
+    assert not hasattr(pregel_node, "is_error_handler"), "is_error_handler flag should be gone"
+
+
+def test_error_handler_dispatched_from_task_field():
+    """error_handler on PregelExecutableTask drives dispatch — no node-map lookup needed."""
+
+    class State(TypedDict):
+        foo: str
+
+    def failing_node(state: State) -> State:
+        raise ValueError("boom")
+
+    def handler(state: State) -> State:
+        return {"foo": "handled"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, error_handler=handler)
+        .add_edge(START, "failing_node")
+        .compile()
+    )
+    result = graph.invoke({"foo": ""})
+    assert result["foo"] == "handled"
+
+
+# ---------------------------------------------------------------------------
+# Graph-level error handler
+# ---------------------------------------------------------------------------
+
+
+def test_graph_level_error_handler_used_when_no_per_node_handler():
+    """compile(error_handler=fallback) should catch failures from nodes without their own handler."""
+
+    class State(TypedDict):
+        foo: str
+
+    def failing_node(state: State) -> State:
+        raise RuntimeError("node failed")
+
+    def graph_handler(state: State, error: NodeError) -> State:
+        return {"foo": f"graph_handler_caught:{error.node}"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node)
+        .add_edge(START, "failing_node")
+        .compile(error_handler=graph_handler)
+    )
+
+    result = graph.invoke({"foo": ""})
+    assert result["foo"] == "graph_handler_caught:failing_node"
+
+
+def test_per_node_handler_takes_precedence_over_graph_level():
+    """When a node has its own error_handler, it should win over the graph-level fallback."""
+
+    class State(TypedDict):
+        foo: str
+
+    def failing_node(state: State) -> State:
+        raise RuntimeError("node failed")
+
+    def node_handler(state: State, error: NodeError) -> State:
+        return {"foo": "node_handler"}
+
+    def graph_handler(state: State, error: NodeError) -> State:
+        return {"foo": "graph_handler"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, error_handler=node_handler)
+        .add_edge(START, "failing_node")
+        .compile(error_handler=graph_handler)
+    )
+
+    result = graph.invoke({"foo": ""})
+    assert result["foo"] == "node_handler"
+
+
+# ---------------------------------------------------------------------------
+# Functional API
+# ---------------------------------------------------------------------------
+
+
+def test_task_error_handler_catches_task_failure():
+    """@task(error_handler=handler) should catch failures and return the handler's value."""
+
+    class State(TypedDict):
+        foo: str
+
+    def handler(x: str, error: NodeError) -> str:
+        return f"recovered:{error.node}:{x}"
+
+    @task(error_handler=handler)
+    def failing_task(x: str) -> str:
+        raise ValueError("task failed")
+
+    @entrypoint()
+    def wf(state: State) -> State:
+        result = failing_task(state["foo"]).result()
+        return {"foo": result}
+
+    result = wf.invoke({"foo": "input"})
+    assert result["foo"] == "recovered:failing_task:input"
+
+
+@NEEDS_CONTEXTVARS
+def test_task_error_handler_async():
+    """@task(error_handler=handler) works for async tasks."""
+    import asyncio
+
+    class State(TypedDict):
+        foo: str
+
+    def handler(x: str, error: NodeError) -> str:
+        return f"async_recovered:{error.node}:{x}"
+
+    @task(error_handler=handler)
+    async def failing_task(x: str) -> str:
+        raise ValueError("async task failed")
+
+    @entrypoint()
+    async def wf(state: State) -> State:
+        result = await failing_task(state["foo"])
+        return {"foo": result}
+
+    result = asyncio.run(wf.ainvoke({"foo": "input"}))
+    assert result["foo"] == "async_recovered:failing_task:input"
