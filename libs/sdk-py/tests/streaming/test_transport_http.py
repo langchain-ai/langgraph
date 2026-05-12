@@ -97,3 +97,65 @@ async def test_send_command_raises_http_error_on_4xx():
         sse = ProtocolSseTransport(client=client, thread_id="t-1")
         with pytest.raises(httpx.HTTPStatusError):
             await sse.send_command({"command_id": 1, "method": "noop", "params": {}})
+
+
+async def test_open_event_stream_yields_scripted_events():
+    from streaming._events import lifecycle_event, values_event
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_event(seq=0),
+            values_event(seq=1),
+        ]
+    )
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        handle = sse.open_event_stream(
+            {"channels": ["lifecycle", "values"], "namespaces": [[]]}
+        )
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        received = [e async for e in handle.events]
+        await handle.close()
+    methods = [e["method"] for e in received]
+    assert methods == ["lifecycle", "values"]
+
+
+async def test_open_event_stream_passes_since_in_body():
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    fake.script([])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        handle = sse.open_event_stream({"channels": ["values"], "since": 42})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        _ = [e async for e in handle.events]
+        await handle.close()
+    assert fake.stream_request_bodies[0]["since"] == 42
+    assert fake.stream_request_bodies[0]["channels"] == ["values"]
+
+
+async def test_open_event_stream_close_cancels_in_flight_iteration():
+    from streaming._events import lifecycle_event
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    fake.script(
+        [lifecycle_event(seq=i) for i in range(50)],
+    )
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        handle = sse.open_event_stream({"channels": ["lifecycle"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        agen = handle.events
+        first = await agen.__anext__()
+        await handle.close()
+        # Further iteration should terminate cleanly, not hang.
+        with pytest.raises(StopAsyncIteration):
+            await asyncio.wait_for(agen.__anext__(), timeout=1.0)
+    assert first["method"] == "lifecycle"

@@ -15,13 +15,28 @@ Task 8.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import orjson
 from langchain_protocol import Event
+
+from langgraph_sdk.sse import BytesLineDecoder, SSEDecoder
+
+
+def _build_event_stream_body(params: dict[str, Any]) -> dict[str, Any]:
+    body: dict[str, Any] = {"channels": params["channels"]}
+    if params.get("namespaces") is not None:
+        body["namespaces"] = params["namespaces"]
+    if params.get("depth") is not None:
+        body["depth"] = params["depth"]
+    since = params.get("since")
+    if isinstance(since, int):
+        body["since"] = since
+    return body
 
 
 @dataclass
@@ -87,6 +102,84 @@ class ProtocolSseTransport:
         if not isinstance(payload, dict) or "command_id" not in payload:
             raise RuntimeError("Protocol command did not return a valid response.")
         return payload
+
+    def open_event_stream(self, params: dict[str, Any]) -> EventStreamHandle:
+        """Open an independent filtered SSE event stream.
+
+        Posts `params` as a SubscribeParams body to `/threads/{thread_id}/stream/events`.
+        Returns an `EventStreamHandle` whose `events` async iterator yields typed
+        `Event` dicts as the server emits them. `handle.ready` resolves when
+        response headers arrive (or rejects on early failure).
+
+        Reconnect: pass `params["since"]` to filter outbound seqs server-side. The
+        cursor goes in the request body, not as a `Last-Event-ID` header.
+        """
+        if self._closed:
+            raise RuntimeError("Protocol transport is closed.")
+
+        loop = asyncio.get_running_loop()
+        ready: asyncio.Future[None] = loop.create_future()
+        queue: asyncio.Queue[Event | None] = asyncio.Queue()
+        cancel_event = asyncio.Event()
+
+        async def pump() -> None:
+            try:
+                async with self._client.stream(
+                    "POST",
+                    self._stream_url,
+                    content=orjson.dumps(_build_event_stream_body(params)),
+                    headers={
+                        "content-type": "application/json",
+                        "accept": "text/event-stream",
+                        "cache-control": "no-store",
+                    },
+                ) as response:
+                    response.raise_for_status()
+                    if not ready.done():
+                        ready.set_result(None)
+                    line_decoder = BytesLineDecoder()
+                    sse_decoder = SSEDecoder()
+                    async for chunk in response.aiter_bytes():
+                        if cancel_event.is_set():
+                            break
+                        for line in line_decoder.decode(chunk):
+                            part = sse_decoder.decode(bytes(line))
+                            if part is None:
+                                continue
+                            if isinstance(part.data, dict):
+                                await queue.put(cast("Event", part.data))
+                    # Drain any trailing buffered line, then fire any pending event.
+                    for line in line_decoder.flush():
+                        part = sse_decoder.decode(bytes(line))
+                        if part is not None and isinstance(part.data, dict):
+                            await queue.put(cast("Event", part.data))
+                    part = sse_decoder.decode(b"")
+                    if part is not None and isinstance(part.data, dict):
+                        await queue.put(cast("Event", part.data))
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                if not ready.done():
+                    ready.set_exception(err)
+            finally:
+                await queue.put(None)  # sentinel: end of stream
+
+        task = asyncio.create_task(pump())
+
+        async def aiter() -> AsyncIterator[Event]:
+            while True:
+                item = await queue.get()
+                if item is None or cancel_event.is_set():
+                    return
+                yield item
+
+        async def close() -> None:
+            cancel_event.set()
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, BaseException):
+                await task
+
+        return EventStreamHandle(events=aiter(), ready=ready, close=close)
 
     async def close(self) -> None:
         """Mark the transport closed. Idempotent."""
