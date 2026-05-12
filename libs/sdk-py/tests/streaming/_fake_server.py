@@ -34,6 +34,7 @@ class FakeServer:
         self.scripted_events: list[dict[str, Any]] = []
         self.stream_request_bodies: list[dict[str, Any]] = []
         self._stream_delay: float = 0.0
+        self._app: Starlette | None = None
 
     def script(self, events: list[dict[str, Any]], *, delay: float = 0.0) -> None:
         """Set the events the next /stream/events call will replay."""
@@ -42,6 +43,11 @@ class FakeServer:
 
     @property
     def app(self) -> Starlette:
+        if self._app is None:
+            self._app = self._build_app()
+        return self._app
+
+    def _build_app(self) -> Starlette:
         async def commands(request: Request) -> Response:
             body = orjson.loads(await request.body())
             self.received_commands.append(body)
@@ -69,9 +75,11 @@ class FakeServer:
         )
 
     async def _sse_body(self) -> AsyncIterator[bytes]:
+        # Why: script() rebinds scripted_events; in-flight iterators retain a
+        # reference to the prior list and are unaffected by later script() calls.
         for event in self.scripted_events:
             if self._stream_delay:
                 await asyncio.sleep(self._stream_delay)
             payload = orjson.dumps(event).decode()
-            yield f"id: {event.get('id', '')}\n".encode()
+            yield f"id: {event.get('event_id', '')}\n".encode()
             yield f"event: message\ndata: {payload}\n\n".encode()

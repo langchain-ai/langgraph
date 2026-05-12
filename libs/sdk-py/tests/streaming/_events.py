@@ -10,13 +10,14 @@ from typing import Any
 
 def _base(seq: int, method: str, namespace: list[str], data: Any) -> dict[str, Any]:
     return {
+        "type": "event",
         "method": method,
         "params": {
             "namespace": namespace,
             "data": data,
         },
         "seq": seq,
-        "id": f"evt-{seq}",
+        "event_id": f"evt-{seq}",
     }
 
 
