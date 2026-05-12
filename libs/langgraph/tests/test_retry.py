@@ -2754,6 +2754,8 @@ def test_error_handler_resumes_after_crash_multiple_nodes():
 
     def handler_a(state: State, error: NodeError) -> State:
         call_count["handler_a"] += 1
+        assert error.node == "a"
+        assert "a failed" in str(error.error)
         handler_a_started.set()
         if handler_should_fail[0]:
             raise RuntimeError("handler_a crash")
@@ -2761,6 +2763,8 @@ def test_error_handler_resumes_after_crash_multiple_nodes():
 
     def handler_b(state: State, error: NodeError) -> State:
         call_count["handler_b"] += 1
+        assert error.node == "b"
+        assert "b failed" in str(error.error)
         if handler_should_fail[0]:
             raise RuntimeError("handler_b crash")
         return {"results": [f"recovered_b:{error.node}"]}
