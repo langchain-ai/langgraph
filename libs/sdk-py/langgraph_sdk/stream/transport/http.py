@@ -17,7 +17,10 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any
 
+import httpx
+import orjson
 from langchain_protocol import Event
 
 
@@ -37,3 +40,49 @@ class EventStreamHandle:
     events: AsyncIterator[Event]
     ready: asyncio.Future[None]
     close: Callable[[], Awaitable[None]]
+
+
+class ProtocolSseTransport:
+    """v3 protocol transport bound to a single `thread_id`.
+
+    Commands go to `POST /threads/{thread_id}/commands` (JSON in, JSON out).
+    `open_event_stream` (landing in Task 8) opens filtered SSE streams against
+    `POST /threads/{thread_id}/stream/events`.
+    """
+
+    def __init__(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        thread_id: str,
+        commands_path: str | None = None,
+        stream_path: str | None = None,
+    ) -> None:
+        self._client = client
+        self.thread_id = thread_id
+        self._commands_url = commands_path or f"/threads/{thread_id}/commands"
+        self._stream_url = stream_path or f"/threads/{thread_id}/stream/events"
+        self._closed = False
+
+    async def send_command(self, command: dict[str, Any]) -> dict[str, Any] | None:
+        """POST a command. Returns the response JSON, or `None` for 202/204.
+
+        Raises:
+            httpx.HTTPStatusError: server returned >= 400.
+            RuntimeError: the transport has been closed via `close()`.
+        """
+        if self._closed:
+            raise RuntimeError("Protocol transport is closed.")
+        response = await self._client.post(
+            self._commands_url,
+            content=orjson.dumps(command),
+            headers={"content-type": "application/json"},
+        )
+        response.raise_for_status()
+        if response.status_code in (202, 204):
+            return None
+        return response.json()
+
+    async def close(self) -> None:
+        """Mark the transport closed. Idempotent."""
+        self._closed = True
