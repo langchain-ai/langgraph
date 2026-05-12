@@ -480,6 +480,9 @@ class PregelLoop:
                 isinstance(self.specs.get(c), DeltaChannel) for c, _ in writes_to_save
             ):
                 self._delta_write_futs.append(fut)
+            # ERROR_SOURCE_NODE is only appended by commit() when the task
+            # has an error handler (_should_route_to_error_handler), so this
+            # check naturally limits future collection to those tasks.
             if self._error_handler_write_futs is not None and any(
                 c == ERROR_SOURCE_NODE for c, _ in writes
             ):
