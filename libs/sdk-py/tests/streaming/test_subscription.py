@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from langgraph_sdk.stream.subscription import (
     infer_channel,
     is_prefix_match,
@@ -9,7 +11,6 @@ from langgraph_sdk.stream.subscription import (
 )
 from streaming._events import (
     custom_event,
-    input_requested_event,
     lifecycle_event,
     values_event,
 )
@@ -55,10 +56,27 @@ def test_namespace_matches_with_depth_limit():
     assert namespace_matches(["a", "b", "c"], [["a"]], 1) is False
 
 
-def test_infer_channel_for_each_method():
-    assert infer_channel(lifecycle_event()) == "lifecycle"  # ty:ignore[invalid-argument-type]
-    assert infer_channel(values_event()) == "values"  # ty:ignore[invalid-argument-type]
-    assert infer_channel(input_requested_event()) == "input"  # ty:ignore[invalid-argument-type]
+@pytest.mark.parametrize(
+    ("method", "expected_channel"),
+    [
+        ("values", "values"),
+        ("checkpoints", "checkpoints"),
+        ("updates", "updates"),
+        ("messages", "messages"),
+        ("tools", "tools"),
+        ("lifecycle", "lifecycle"),
+        ("tasks", "tasks"),
+        ("input.requested", "input"),
+    ],
+)
+def test_infer_channel_for_each_method(method, expected_channel):
+    event = {
+        "method": method,
+        "params": {"namespace": [], "data": {}},
+        "seq": 0,
+        "id": "e",
+    }
+    assert infer_channel(event) == expected_channel  # ty: ignore[invalid-argument-type]
 
 
 def test_infer_channel_custom_with_name_produces_namespaced_channel():
@@ -100,3 +118,8 @@ def test_matches_subscription_namespace_filter_applied():
         matches_subscription(values_event(namespace=["fetcher", "inner"]), sub) is True  # ty:ignore[invalid-argument-type]
     )
     assert matches_subscription(values_event(namespace=["other"]), sub) is False  # ty:ignore[invalid-argument-type]
+
+
+def test_matches_subscription_bare_custom_event_matches_bare_custom_filter():
+    sub = {"channels": ["custom"]}
+    assert matches_subscription(custom_event(name=""), sub) is True  # ty: ignore[invalid-argument-type]

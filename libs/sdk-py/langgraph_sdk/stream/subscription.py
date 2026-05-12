@@ -76,6 +76,7 @@ def infer_channel(event: Event) -> Channel | None:
         params = event.get("params") or {}
         data = params.get("data") if isinstance(params, dict) else None
         name = data.get("name") if isinstance(data, dict) else None
+        # JS uses != null; truthiness here treats name="" the same as missing.
         return f"custom:{name}" if name else "custom"
     if method == "input.requested":
         return "input"
