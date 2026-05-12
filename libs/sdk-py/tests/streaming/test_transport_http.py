@@ -402,3 +402,36 @@ def test_build_event_stream_body_omits_since_when_not_int():
 
     body = _build_event_stream_body({"channels": ["values"], "since": None})
     assert "since" not in body
+
+
+async def test_open_event_stream_raises_when_closed():
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        await sse.close()
+        with pytest.raises(RuntimeError, match="closed"):
+            sse.open_event_stream({"channels": ["lifecycle"]})
+
+
+async def test_transport_close_cancels_open_event_streams():
+    from streaming._events import lifecycle_event
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    fake.script([lifecycle_event(seq=i) for i in range(5)], delay=0.05)
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        handle = sse.open_event_stream({"channels": ["lifecycle"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        # Closing the transport must terminate the open stream within a bounded time.
+        await asyncio.wait_for(sse.close(), timeout=1.0)
+        # Drain any already-queued events; the stream must end (not hang).
+        async def drain() -> None:
+            async for _ in handle.events:
+                pass
+
+        await asyncio.wait_for(drain(), timeout=1.0)

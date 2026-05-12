@@ -196,8 +196,10 @@ class ProtocolSseTransport:
 
         async def close() -> None:
             cancel_event.set()
+            # Why: pump may be mid-`finally`; ensure consumer unblocks.
+            queue.put_nowait(None)
             task.cancel()
-            with contextlib.suppress(Exception, asyncio.CancelledError):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
 
         return EventStreamHandle(events=aiter(), ready=ready, done=done, close=close)

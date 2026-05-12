@@ -71,10 +71,11 @@ def test_namespace_matches_with_depth_limit():
 )
 def test_infer_channel_for_each_method(method, expected_channel):
     event = {
+        "type": "event",
         "method": method,
         "params": {"namespace": [], "data": {}},
         "seq": 0,
-        "id": "e",
+        "event_id": "e",
     }
     assert infer_channel(event) == expected_channel  # ty: ignore[invalid-argument-type]
 
@@ -91,10 +92,11 @@ def test_infer_channel_unknown_method_returns_none():
     assert (
         infer_channel(
             {
+                "type": "event",
                 "method": "unknown",
                 "params": {"namespace": [], "data": {}},
                 "seq": 0,
-                "id": "e",
+                "event_id": "e",
             }  # ty:ignore[invalid-argument-type]
         )
         is None
