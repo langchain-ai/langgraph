@@ -19,7 +19,10 @@ from __future__ import annotations
 import asyncio
 from typing import Protocol
 
+from langchain_protocol import Event
+
 from langgraph_sdk.stream.transport.http import ProtocolSseTransport
+from streaming._events import lifecycle_event
 
 
 class _ReplayableHarness(Protocol):
@@ -47,14 +50,12 @@ async def assert_transport_replays(
         AssertionError: when fewer than `buffered_count` events arrive (or
             arrive out of order) on the fresh stream before it closes.
     """
-    from streaming._events import lifecycle_event
-
     events = [lifecycle_event(seq=i) for i in range(buffered_count)]
     harness.script_buffered(events)
     handle = harness.transport.open_event_stream({"channels": ["lifecycle"]})
     await asyncio.wait_for(handle.ready, timeout=timeout)
 
-    received: list = []
+    received: list[Event] = []
 
     async def drain() -> None:
         async for event in handle.events:
