@@ -1,6 +1,7 @@
-"""Subscription matching: channel inference + namespace prefix filtering.
+"""Namespace prefix filtering for subscription matching.
 
 Direct port of `libs/sdk/src/client/stream/subscription.ts` from the JS SDK.
+Channel inference and full filter matching land in Task 3.
 """
 
 from __future__ import annotations
