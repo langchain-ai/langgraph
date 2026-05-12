@@ -8,8 +8,8 @@ Direct port of `libs/sdk/src/client/stream/transport/http.ts`.
 filtered SSE connection at `POST /threads/{thread_id}/stream/events` with the
 `SubscribeParams` in the request body.
 
-This file currently only ships the `EventStreamHandle` return type; the
-transport class itself lands in Tasks 7 and 8.
+`ProtocolSseTransport` is present (commands). `open_event_stream` lands in
+Task 8.
 """
 
 from __future__ import annotations
@@ -61,6 +61,7 @@ class ProtocolSseTransport:
         self._client = client
         self.thread_id = thread_id
         self._commands_url = commands_path or f"/threads/{thread_id}/commands"
+        # Used by open_event_stream in Task 8.
         self._stream_url = stream_path or f"/threads/{thread_id}/stream/events"
         self._closed = False
 
@@ -70,6 +71,7 @@ class ProtocolSseTransport:
         Raises:
             httpx.HTTPStatusError: server returned >= 400.
             RuntimeError: the transport has been closed via `close()`.
+            RuntimeError: server returned a response missing the protocol envelope.
         """
         if self._closed:
             raise RuntimeError("Protocol transport is closed.")
@@ -81,7 +83,10 @@ class ProtocolSseTransport:
         response.raise_for_status()
         if response.status_code in (202, 204):
             return None
-        return response.json()
+        payload = orjson.loads(response.content)
+        if not isinstance(payload, dict) or "command_id" not in payload:
+            raise RuntimeError("Protocol command did not return a valid response.")
+        return payload
 
     async def close(self) -> None:
         """Mark the transport closed. Idempotent."""

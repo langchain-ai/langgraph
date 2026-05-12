@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 
 import httpx
+import orjson
+import pytest
 
 from langgraph_sdk.stream.transport.http import EventStreamHandle, ProtocolSseTransport
 
@@ -50,8 +52,8 @@ async def test_send_command_returns_none_on_202():
 
     received: list[dict] = []
 
-    async def commands(_request):
-        received.append({})
+    async def commands(request):
+        received.append(orjson.loads(await request.body()))
         return Response(status_code=202)
 
     app = Starlette(
@@ -65,3 +67,33 @@ async def test_send_command_returns_none_on_202():
         )
     assert result is None
     assert len(received) == 1
+
+
+async def test_send_command_raises_when_closed():
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        await sse.close()
+        with pytest.raises(RuntimeError, match="closed"):
+            await sse.send_command({"command_id": 1, "method": "noop", "params": {}})
+
+
+async def test_send_command_raises_http_error_on_4xx():
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    async def commands(_request):
+        return JSONResponse({"error": "bad request"}, status_code=400)
+
+    app = Starlette(
+        routes=[Route("/threads/{thread_id}/commands", commands, methods=["POST"])]
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        with pytest.raises(httpx.HTTPStatusError):
+            await sse.send_command({"command_id": 1, "method": "noop", "params": {}})
