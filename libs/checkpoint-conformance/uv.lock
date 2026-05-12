@@ -279,7 +279,7 @@ wheels = [
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "4.1.0a4"
+version = "4.1.0"
 source = { editable = "../checkpoint" }
 dependencies = [
     { name = "langchain-core" },
