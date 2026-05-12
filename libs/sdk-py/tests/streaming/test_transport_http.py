@@ -339,3 +339,66 @@ async def test_cancel_event_prevents_post_cancel_flush():
         async for _ in handle.events:
             pytest.fail("event yielded after close()")
     assert len(received) == 1
+
+
+@pytest.mark.anyio
+async def test_open_event_stream_ready_rejects_on_5xx():
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    async def stream_events(_request):
+        return JSONResponse({"error": "boom"}, status_code=500)
+
+    app = Starlette(
+        routes=[
+            Route(
+                "/threads/{thread_id}/stream/events",
+                stream_events,
+                methods=["POST"],
+            )
+        ]
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        handle = sse.open_event_stream({"channels": ["lifecycle"]})
+        with pytest.raises(httpx.HTTPStatusError):
+            await asyncio.wait_for(handle.ready, timeout=1.0)
+        # Iterator should terminate cleanly (no hang).
+        with pytest.raises(StopAsyncIteration):
+            await asyncio.wait_for(handle.events.__anext__(), timeout=1.0)
+        await handle.close()
+
+
+def test_build_event_stream_body_minimal_channels_only():
+    from langgraph_sdk.stream.transport.http import _build_event_stream_body
+
+    body = _build_event_stream_body({"channels": ["values"]})
+    assert body == {"channels": ["values"]}
+
+
+def test_build_event_stream_body_includes_all_optional_fields():
+    from langgraph_sdk.stream.transport.http import _build_event_stream_body
+
+    body = _build_event_stream_body(
+        {
+            "channels": ["values", "messages"],
+            "namespaces": [["fetcher"]],
+            "depth": 2,
+            "since": 7,
+        }
+    )
+    assert body == {
+        "channels": ["values", "messages"],
+        "namespaces": [["fetcher"]],
+        "depth": 2,
+        "since": 7,
+    }
+
+
+def test_build_event_stream_body_omits_since_when_not_int():
+    from langgraph_sdk.stream.transport.http import _build_event_stream_body
+
+    body = _build_event_stream_body({"channels": ["values"], "since": None})
+    assert "since" not in body

@@ -80,6 +80,7 @@ class ProtocolSseTransport:
         self._stream_url = stream_path or f"/threads/{thread_id}/stream/events"
         self._max_queue_size = max_queue_size
         self._closed = False
+        self._event_streams: set[asyncio.Task[None]] = set()
 
     async def send_command(self, command: dict[str, Any]) -> dict[str, Any] | None:
         """POST a command. Returns the response JSON, or `None` for 202/204.
@@ -116,8 +117,8 @@ class ProtocolSseTransport:
 
         Posts `params` as a SubscribeParams body to `/threads/{thread_id}/stream/events`.
         Returns an `EventStreamHandle` whose `events` async iterator yields typed
-        `Event` dicts as the server emits them. `handle.ready` resolves when
-        response headers arrive (or rejects on early failure).
+        `Event` dicts as the server emits them. `handle.ready` resolves on a 2xx
+        response (rejects on HTTP error or transport failure before headers).
 
         Reconnect: pass `params["since"]` to filter outbound seqs server-side. The
         cursor goes in the request body, not as a `Last-Event-ID` header.
@@ -157,6 +158,7 @@ class ProtocolSseTransport:
                                 continue
                             if isinstance(part.data, dict):
                                 await queue.put(cast("Event", part.data))
+<<<<<<< HEAD
                     # Drain any trailing buffered line, then fire any pending event.
                     if not cancel_event.is_set():
                         for line in line_decoder.flush():
@@ -182,6 +184,8 @@ class ProtocolSseTransport:
                 await queue.put(None)  # sentinel: end of stream
 
         task = asyncio.create_task(pump())
+        self._event_streams.add(task)
+        task.add_done_callback(self._event_streams.discard)
 
         async def aiter() -> AsyncIterator[Event]:
             while True:
@@ -193,11 +197,19 @@ class ProtocolSseTransport:
         async def close() -> None:
             cancel_event.set()
             task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, BaseException):
+            with contextlib.suppress(Exception, asyncio.CancelledError):
                 await task
 
         return EventStreamHandle(events=aiter(), ready=ready, done=done, close=close)
 
     async def close(self) -> None:
-        """Mark the transport closed. Idempotent."""
+        """Cancel any open event streams and mark the transport closed. Idempotent."""
+        if self._closed:
+            return
         self._closed = True
+        tasks = list(self._event_streams)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await asyncio.gather(*tasks, return_exceptions=True)
