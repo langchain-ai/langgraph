@@ -2725,3 +2725,76 @@ def test_error_handler_resumes_after_crash():
     # exception type — verify the node name and that the error content matches.
     assert captured_errors[1].node == "fail"
     assert "boom" in str(captured_errors[1].error)
+
+
+def test_error_handler_resumes_after_crash_multiple_nodes():
+    """When multiple nodes fail in the same superstep and all have error handlers:
+    - error handlers start running while other nodes may still be in-flight
+    - resuming re-schedules each handler (not re-executes the original nodes)
+    """
+
+    class State(TypedDict):
+        results: Annotated[list[str], operator.add]
+
+    call_count = {"a": 0, "b": 0, "handler_a": 0, "handler_b": 0}
+    handler_a_started = threading.Event()
+
+    def node_a(state: State) -> State:
+        call_count["a"] += 1
+        raise RuntimeError("a failed")
+
+    def node_b(state: State) -> State:
+        call_count["b"] += 1
+        # Block until handler_a has started — proves the error handler runs
+        # concurrently with in-flight nodes in the same superstep.
+        assert handler_a_started.wait(timeout=5), "handler_a never started"
+        raise RuntimeError("b failed")
+
+    handler_should_fail = [True]
+
+    def handler_a(state: State, error: NodeError) -> State:
+        call_count["handler_a"] += 1
+        handler_a_started.set()
+        if handler_should_fail[0]:
+            raise RuntimeError("handler_a crash")
+        return {"results": [f"recovered_a:{error.node}"]}
+
+    def handler_b(state: State, error: NodeError) -> State:
+        call_count["handler_b"] += 1
+        if handler_should_fail[0]:
+            raise RuntimeError("handler_b crash")
+        return {"results": [f"recovered_b:{error.node}"]}
+
+    checkpointer = MemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("a", node_a, error_handler=handler_a)
+        .add_node("b", node_b, error_handler=handler_b)
+        .add_edge(START, "a")
+        .add_edge(START, "b")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "t1"}}
+
+    # First invoke: node_a fails immediately -> handler_a starts (sets event) ->
+    # node_b unblocks and fails -> handler_b starts -> both handlers crash
+    with pytest.raises(RuntimeError):
+        graph.invoke({"results": []}, config)
+
+    assert call_count["a"] == 1
+    assert call_count["b"] == 1
+    assert call_count["handler_a"] == 1
+    assert call_count["handler_b"] == 1
+
+    # Resume: both handlers should run again, NOT the original nodes
+    handler_should_fail[0] = False
+    handler_a_started.clear()
+    result = graph.invoke(None, config)
+
+    assert call_count["a"] == 1  # NOT re-executed
+    assert call_count["b"] == 1  # NOT re-executed
+    assert call_count["handler_a"] == 2  # ran again on resume
+    assert call_count["handler_b"] == 2  # ran again on resume
+    assert "recovered_a:a" in result["results"]
+    assert "recovered_b:b" in result["results"]
