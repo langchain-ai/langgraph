@@ -203,6 +203,12 @@ class PregelLoop:
     # `__enter__`; stays `None` only when no checkpointer.
     _delta_write_futs: list[Any] | None = None
 
+    # Same pattern as `_delta_write_futs` but for error-handler writes.
+    # When `put_writes` persists an ERROR_SOURCE_NODE marker, the future is
+    # appended here.  `schedule_error_handler` / `aschedule_error_handler`
+    # drain this list so the write is durable before the handler starts.
+    _error_handler_write_futs: list[Any] | None = None
+
     # Exit-mode accumulator: every delta-channel write produced during this
     # run (input writes from `_first` + per-superstep writes captured in
     # `after_tick`). At exit, `_put_exit_delta_writes` filters out channels
@@ -474,6 +480,13 @@ class PregelLoop:
                 isinstance(self.specs.get(c), DeltaChannel) for c, _ in writes_to_save
             ):
                 self._delta_write_futs.append(fut)
+            # ERROR_SOURCE_NODE is only appended by commit() when the task
+            # has an error handler (_should_route_to_error_handler), so this
+            # check naturally limits future collection to those tasks.
+            if self._error_handler_write_futs is not None and any(
+                c == ERROR_SOURCE_NODE for c, _ in writes
+            ):
+                self._error_handler_write_futs.append(fut)
         # output writes
         if hasattr(self, "tasks"):
             self.output_writes(task_id, writes)
@@ -553,7 +566,7 @@ class PregelLoop:
             self.tasks[pushed.id] = pushed
             # match any pending writes to the new task
             if not self.is_replaying:
-                self._match_writes({pushed.id: pushed})
+                self._reapply_writes_to_succeeded_nodes({pushed.id: pushed})
             # return the new task, to be started if not run before
             return pushed
 
@@ -631,7 +644,8 @@ class PregelLoop:
 
         # if there are pending writes from a previous loop, apply them
         if not self.is_replaying and self.checkpoint_pending_writes:
-            self._match_writes(self.tasks)
+            self._reapply_writes_to_succeeded_nodes(self.tasks)
+            self._resume_error_handlers_if_applicable()
 
         # before execution, check if we should interrupt
         if self.interrupt_before and should_interrupt(
@@ -698,12 +712,87 @@ class PregelLoop:
 
     # private
 
-    def _match_writes(self, tasks: Mapping[str, PregelExecutableTask]) -> None:
+    def _reapply_writes_to_succeeded_nodes(
+        self, tasks: Mapping[str, PregelExecutableTask]
+    ) -> None:
+        """Restore successful channel writes from checkpoint to in-memory tasks.
+
+        Skips control signals (ERROR, ERROR_SOURCE_NODE, INTERRUPT, RESUME)
+        so that failed/interrupted tasks remain with empty writes and will be
+        re-executed (or routed to error handlers) by the runner.
+        """
         for tid, k, v in self.checkpoint_pending_writes:
             if k in (ERROR, ERROR_SOURCE_NODE, INTERRUPT, RESUME):
                 continue
             if task := tasks.get(tid):
                 task.writes.append((k, v))
+
+    def _resume_error_handlers_if_applicable(self) -> None:
+        """On resume, schedule error handlers for tasks that failed in a prior run.
+
+        Called right after ``_reapply_writes_to_succeeded_nodes`` during ``tick()``.
+        At that point, ``_reapply_writes_to_succeeded_nodes`` has already skipped
+        ERROR / ERROR_SOURCE_NODE writes, so a previously-failed task still has
+        empty ``writes``.  Without intervention the runner (which executes only
+        tasks where ``not t.writes``) would re-run the original node.
+
+        This method prevents that re-execution for nodes that have an error
+        handler:
+
+        1. Scan ``checkpoint_pending_writes`` for ERROR_SOURCE_NODE markers
+           persisted by a prior ``commit()``.  Each marker means "this task
+           already failed and was routed to an error handler".
+        2. For each such task, write ``(ERROR, error)`` into ``task.writes``
+           so the task is no longer empty — the runner will skip it.
+        3. Prepare a fresh error-handler task and add it to ``self.tasks``.
+           Because the handler task starts with empty ``writes``, the runner
+           will pick it up and execute it.
+        """
+        # Phase 1: collect task-ids that have ERROR_SOURCE_NODE + ERROR pairs.
+        failed: dict[str, BaseException] = {}
+        for tid, chan, val in self.checkpoint_pending_writes:
+            if chan == ERROR_SOURCE_NODE:
+                error = next(
+                    (
+                        v
+                        for t, c, v in self.checkpoint_pending_writes
+                        if t == tid and c == ERROR
+                    ),
+                    None,
+                )
+                if error is not None:
+                    failed[tid] = error
+        # Phase 2: mark originals as done, schedule handler tasks.
+        for task_id, error in failed.items():
+            task = self.tasks.get(task_id)
+            if task is None:
+                continue
+            handler_node = self.nodes[task.name].error_handler_node
+            if not handler_node:
+                continue
+            # Non-empty writes → runner's `not t.writes` filter skips this task.
+            task.writes.append((ERROR, error))
+            # The handler task starts with empty writes → runner will execute it.
+            handler_task = prepare_node_error_handler_task(
+                task,
+                handler_node_name=handler_node,
+                failed_error=error,
+                checkpoint=self.checkpoint,
+                pending_writes=self.checkpoint_pending_writes,
+                processes=self.nodes,
+                channels=self.channels,
+                managed=self.managed,
+                config=task.config,
+                step=self.step,
+                stop=self.stop,
+                store=self.store,
+                checkpointer=self.checkpointer,
+                manager=self.manager,
+                retry_policy=self.retry_policy,
+                cache_policy=self.cache_policy,
+            )
+            if handler_task is not None:
+                self.tasks[handler_task.id] = handler_task
 
     def _pending_interrupts(self) -> set[str]:
         """Return the set of interrupt ids that are pending without corresponding resume values."""
@@ -1454,12 +1543,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         handler_node = self.nodes[failed_task.name].error_handler_node
         if not handler_node:
             return None
-        writes = list(failed_task.writes)
-        writes.append((ERROR_SOURCE_NODE, failed_task.name))
-        self.put_writes(
-            failed_task.id,
-            writes,
-        )
+        # ensure error + ERROR_SOURCE_NODE writes are durable before handler runs
+        if self._error_handler_write_futs:
+            futs, self._error_handler_write_futs = self._error_handler_write_futs, []
+            concurrent.futures.wait(futs)
         handler_task = prepare_node_error_handler_task(
             failed_task,
             handler_node_name=handler_node,
@@ -1482,7 +1569,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             return None
         self.tasks[handler_task.id] = handler_task
         if not self.is_replaying:
-            self._match_writes({handler_task.id: handler_task})
+            self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
         for task in self.match_cached_writes():
             self.output_writes(task.id, task.writes, cached=True)
         return handler_task
@@ -1564,6 +1651,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             else []
         )
         self._delta_write_futs = []
+        self._error_handler_write_futs = []
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
         )
@@ -1709,12 +1797,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         handler_node = self.nodes[failed_task.name].error_handler_node
         if not handler_node:
             return None
-        writes = list(failed_task.writes)
-        writes.append((ERROR_SOURCE_NODE, failed_task.name))
-        self.put_writes(
-            failed_task.id,
-            writes,
-        )
+        # ensure error + ERROR_SOURCE_NODE writes are durable before handler runs
+        if self._error_handler_write_futs:
+            futs, self._error_handler_write_futs = self._error_handler_write_futs, []
+            await asyncio.gather(*futs)
         handler_task = prepare_node_error_handler_task(
             failed_task,
             handler_node_name=handler_node,
@@ -1737,7 +1823,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             return None
         self.tasks[handler_task.id] = handler_task
         if not self.is_replaying:
-            self._match_writes({handler_task.id: handler_task})
+            self._reapply_writes_to_succeeded_nodes({handler_task.id: handler_task})
         for task in await self.amatch_cached_writes():
             self.output_writes(task.id, task.writes, cached=True)
         return handler_task
@@ -1822,6 +1908,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             else []
         )
         self._delta_write_futs = []
+        self._error_handler_write_futs = []
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
         )
