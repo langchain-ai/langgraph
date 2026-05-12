@@ -30,15 +30,13 @@ async def test_two_iterators_each_get_full_log():
 
 async def test_iterator_waits_for_new_items():
     buf: MultiCursorBuffer[int] = MultiCursorBuffer()
-
-    async def producer():
-        await asyncio.sleep(0)
-        buf.push(10)
-        buf.push(20)
-        buf.close()
-
     drain_task = asyncio.create_task(_drain(buf))
-    await producer()
+    # Yield so the drain task starts and parks at the tail.
+    await asyncio.sleep(0)
+    assert len(buf._wakeups) == 1, "cursor must have suspended before push"
+    buf.push(10)
+    buf.push(20)
+    buf.close()
     assert await drain_task == [10, 20]
 
 

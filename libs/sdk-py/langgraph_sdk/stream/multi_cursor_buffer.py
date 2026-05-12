@@ -9,19 +9,21 @@ the owning projection / handle; there is no eviction policy.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterable, AsyncIterator
 from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
 
-class MultiCursorBuffer(Generic[T]):
+class MultiCursorBuffer(AsyncIterable[T], Generic[T]):
     def __init__(self) -> None:
         self._items: list[T] = []
         self._wakeups: set[asyncio.Future[None]] = set()
         self._closed = False
 
     def push(self, item: T) -> None:
+        # Post-close pushes are accepted: cursors already terminated miss the item,
+        # but new cursors started later see the full log including it. Matches JS.
         self._items.append(item)
         self._wake_all()
 
