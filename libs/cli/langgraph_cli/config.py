@@ -137,9 +137,7 @@ def _parse_api_version_parts(version_str: str) -> tuple[int, ...]:
     version_core = version_str.split("-", 1)[0]
     match = _API_VERSION_PATTERN.fullmatch(version_core)
     if not match:
-        raise ValueError(
-            "Version must be major or major.minor or major.minor.patch."
-        )
+        raise ValueError("Version must be major or major.minor or major.minor.patch.")
     return tuple(int(part) for part in match.groups() if part is not None)
 
 
