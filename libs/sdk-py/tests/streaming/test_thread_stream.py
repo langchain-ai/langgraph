@@ -354,3 +354,15 @@ async def test_fresh_thread_happy_path_end_to_end():
     minted_id_paths = [p for p in posted_paths if thread.thread_id in p]
     assert any(p.endswith("/commands") for p in minted_id_paths)
     assert any(p.endswith("/stream/events") for p in minted_id_paths)
+
+
+async def test_aenter_raises_after_close():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        async with stream:
+            pass
+        # After exit, the stream is closed; re-entering must raise rather than
+        # silently constructing a new transport that would leak on the next exit.
+        with pytest.raises(RuntimeError, match="closed and cannot be re-entered"):
+            async with stream:
+                pass

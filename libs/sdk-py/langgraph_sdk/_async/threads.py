@@ -739,8 +739,10 @@ class ThreadsClient:
         When `thread_id` is None, a fresh UUIDv4 is minted client-side and
         included in the URL of subsequent `POST /threads/{thread_id}/...`
         calls. The server creates the thread row lazily on the first
-        `run.start` via the run payload's `if_not_exists: "create"`. The
-        v3 protocol response carries only `run_id`, never `thread_id`.
+        `run.start` (internal server detail — the SDK does not send any
+        `if_not_exists` flag). The v3 protocol response carries only
+        `run_id`, never `thread_id` — that's why the SDK mints the id
+        client-side.
 
         Args:
             thread_id: optional explicit thread identifier. Defaults to a

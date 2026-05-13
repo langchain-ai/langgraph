@@ -109,6 +109,8 @@ class AsyncThreadStream:
         self.run = RunModule(self)
 
     async def __aenter__(self) -> AsyncThreadStream:
+        if self._closed:
+            raise RuntimeError("AsyncThreadStream is closed and cannot be re-entered.")
         self._transport = ProtocolSseTransport(
             client=self._http_client,
             thread_id=self.thread_id,
