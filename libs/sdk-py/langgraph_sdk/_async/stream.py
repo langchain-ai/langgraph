@@ -12,6 +12,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
+
+from langgraph_sdk.stream.transport import ProtocolSseTransport
+
 
 class AsyncThreadStream:
     """Async context manager for one thread's v3 streaming session.
@@ -23,7 +27,7 @@ class AsyncThreadStream:
     def __init__(
         self,
         *,
-        client: Any,
+        client: httpx.AsyncClient,
         thread_id: str,
         assistant_id: str,
     ) -> None:
@@ -31,8 +35,13 @@ class AsyncThreadStream:
         self.thread_id = thread_id
         self.assistant_id = assistant_id
         self._closed = False
+        self._transport: ProtocolSseTransport | None = None
 
     async def __aenter__(self) -> AsyncThreadStream:
+        self._transport = ProtocolSseTransport(
+            client=self._http_client,
+            thread_id=self.thread_id,
+        )
         return self
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -43,3 +52,5 @@ class AsyncThreadStream:
         if self._closed:
             return
         self._closed = True
+        if self._transport is not None:
+            await self._transport.close()

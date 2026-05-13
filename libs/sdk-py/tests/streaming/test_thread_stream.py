@@ -9,36 +9,41 @@ import pytest
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._async.threads import ThreadsClient
+from streaming._fake_server import FakeServer
 
 
-def test_thread_stream_stores_thread_id_and_assistant_id():
-    stream = AsyncThreadStream(
-        client=None,  # transport not built until __aenter__
-        thread_id="t-1",
-        assistant_id="agent",
-    )
-    assert stream.thread_id == "t-1"
-    assert stream.assistant_id == "agent"
+async def test_thread_stream_stores_thread_id_and_assistant_id():
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        stream = AsyncThreadStream(
+            client=client,
+            thread_id="t-1",
+            assistant_id="agent",
+        )
+        assert stream.thread_id == "t-1"
+        assert stream.assistant_id == "agent"
 
 
 async def test_aenter_returns_self():
-    stream = AsyncThreadStream(client=None, thread_id="t-1", assistant_id="agent")
-    async with stream as entered:
-        assert entered is stream
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        stream = AsyncThreadStream(client=client, thread_id="t-1", assistant_id="agent")
+        async with stream as entered:
+            assert entered is stream
 
 
 async def test_aexit_marks_closed():
-    stream = AsyncThreadStream(client=None, thread_id="t-1", assistant_id="agent")
-    async with stream:
-        assert stream._closed is False
-    assert stream._closed is True
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        stream = AsyncThreadStream(client=client, thread_id="t-1", assistant_id="agent")
+        async with stream:
+            assert stream._closed is False
+        assert stream._closed is True
 
 
 async def test_close_is_idempotent():
-    stream = AsyncThreadStream(client=None, thread_id="t-1", assistant_id="agent")
-    await stream.close()
-    await stream.close()  # must not raise
-    assert stream._closed is True
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        stream = AsyncThreadStream(client=client, thread_id="t-1", assistant_id="agent")
+        await stream.close()
+        await stream.close()  # must not raise
+        assert stream._closed is True
 
 
 async def test_threads_stream_returns_async_thread_stream_with_explicit_id():
@@ -82,3 +87,32 @@ async def test_threads_stream_accepts_headers_kwarg():
             headers={"X-Foo": "bar"},
         )
         assert stream.thread_id == "t-1"
+
+
+async def test_aenter_constructs_transport_with_thread_id():
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        async with stream:
+            assert stream._transport is not None
+            assert stream._transport.thread_id == "t-1"
+
+
+async def test_aexit_closes_transport():
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        async with stream:
+            inner_transport = stream._transport
+        assert inner_transport is not None
+        assert inner_transport._closed is True
