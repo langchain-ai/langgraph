@@ -72,6 +72,16 @@ class RunModule:
         return await self._owner._send_command("run.start", params)
 
 
+async def _close_after(handle: EventStreamHandle, *, delay: float = 0.0) -> None:
+    """Close a handle, optionally after a brief delay. Used to detach
+    closing the old stream from the synchronous rotation step so the new
+    stream can absorb server-side replayed events first.
+    """
+    if delay:
+        await asyncio.sleep(delay)
+    await handle.close()
+
+
 class AsyncThreadStream:
     """Async context manager for one thread's v3 streaming session.
 
@@ -154,19 +164,51 @@ class AsyncThreadStream:
         """Remove a subscription from the registry. No-op if already absent."""
         self._subscriptions.pop(subscription_id, None)
 
-    def _ensure_shared_stream(self, params: dict[str, Any]) -> AsyncIterator[Event]:
-        """Open or reuse the shared SSE and return a deduped async iterator.
+    async def _reconcile_stream(self, candidate_filter: dict[str, Any]) -> None:
+        """Ensure the shared SSE covers `candidate_filter`. Rotate if not.
 
-        Intermediate API used by Task 3 tests; replaced by the public
-        `subscribe()` API in Task 5. No rotation yet — the first call's
-        filter is used verbatim.
+        Open-new-before-close-old: any events buffered server-side between
+        the two opens are replayed on the new SSE, and the per-thread
+        `_seen_event_ids` set dedupes the overlap. Awaits `new_stream.ready`
+        so the HTTP connection is established before returning, guaranteeing
+        that both old and new streams are simultaneously connected during
+        rotation (enabling correct peak-count tracking and dedup correctness).
         """
+        from langgraph_sdk.stream.subscription import filter_covers
+
         if self._transport is None:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
-        if self._shared_stream is None:
-            self._shared_stream = self._transport.open_event_stream(params)
-            self._shared_stream_filter = params
-        return self._dedup_iter(self._shared_stream.events)
+
+        if (
+            self._shared_stream is not None
+            and self._shared_stream_filter is not None
+            and filter_covers(self._shared_stream_filter, candidate_filter)
+        ):
+            return  # Existing stream is sufficient.
+
+        new_filter = self._compute_current_union(extra=candidate_filter)
+        new_stream = self._transport.open_event_stream(new_filter)
+        old_stream = self._shared_stream
+        self._shared_stream = new_stream
+        self._shared_stream_filter = new_filter
+        # Await the new stream's ready future so the HTTP connection is
+        # established before we schedule the old stream's close. This ensures
+        # old and new are simultaneously open during the rotation window.
+        await new_stream.ready
+        if old_stream is not None:
+            # Schedule the old stream's close as a separate task so the
+            # caller doesn't pay close() latency in the rotation hot path.
+            asyncio.create_task(_close_after(old_stream))  # noqa: RUF006
+
+    def _compute_current_union(
+        self, extra: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        from langgraph_sdk.stream.subscription import compute_union_filter
+
+        filters = [sub.params for sub in self._subscriptions.values()]
+        if extra is not None:
+            filters.append(extra)
+        return compute_union_filter(filters)
 
     async def _dedup_iter(self, source: AsyncIterator[Event]) -> AsyncIterator[Event]:
         async for event in source:
