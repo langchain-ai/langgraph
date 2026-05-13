@@ -9,6 +9,7 @@ import pytest
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._async.threads import ThreadsClient
+from streaming._events import lifecycle_event, values_event
 from streaming._fake_server import FakeServer
 
 
@@ -207,3 +208,72 @@ async def test_run_start_raises_on_error_envelope():
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             with pytest.raises(RuntimeError, match="invalid_argument"):
                 await thread.run.start(input={"x": 1})
+
+
+async def test_events_yields_raw_events_after_run_start():
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_event(seq=0),
+            values_event(seq=1),
+        ]
+    )
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            received = [e async for e in thread.events]
+    methods = [e["method"] for e in received]
+    assert methods == ["lifecycle", "values"]
+
+
+async def test_events_subscribes_to_all_channels():
+    fake = FakeServer()
+    fake.script([])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            _ = [e async for e in thread.events]
+    body = fake.stream_request_bodies[0]
+    assert set(body["channels"]) == {
+        "values",
+        "updates",
+        "messages",
+        "tools",
+        "lifecycle",
+        "input",
+        "checkpoints",
+        "tasks",
+        "custom",
+    }
+
+
+async def test_events_terminates_on_aexit():
+    import asyncio
+
+    import pytest
+
+    fake = FakeServer()
+    fake.script([lifecycle_event(seq=i) for i in range(5)])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        async with stream as thread:
+            await thread.run.start(input={})
+            handle_events = thread.events
+        # After __aexit__, further iteration must terminate cleanly.
+        with pytest.raises(StopAsyncIteration):
+            await asyncio.wait_for(handle_events.__anext__(), timeout=1.0)

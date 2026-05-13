@@ -10,11 +10,27 @@ Direct port of `libs/sdk/src/client/stream/index.ts` (skeleton subset).
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
+from langchain_protocol import Event
 
-from langgraph_sdk.stream.transport import ProtocolSseTransport
+from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
+
+# All public protocol channels — Phase 2 subscribes to everything for the raw
+# `events` surface. Projections in Phase 3+ will use narrower filters.
+_ALL_CHANNELS: list[str] = [
+    "values",
+    "updates",
+    "messages",
+    "tools",
+    "lifecycle",
+    "input",
+    "checkpoints",
+    "tasks",
+    "custom",
+]
 
 
 class RunModule:
@@ -63,6 +79,7 @@ class AsyncThreadStream:
         self.assistant_id = assistant_id
         self._closed = False
         self._transport: ProtocolSseTransport | None = None
+        self._events_handle: EventStreamHandle | None = None
         self._next_command_id = 1
         self.run = RunModule(self)
 
@@ -76,11 +93,29 @@ class AsyncThreadStream:
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         await self.close()
 
+    @property
+    def events(self) -> AsyncIterator[Event]:
+        """Raw async iterator of every `Event` the server emits for this thread.
+
+        Opens one SSE subscription on first access; the same iterator is returned
+        on subsequent accesses (consumed once). Terminates when the stream closes
+        (server hangup, `__aexit__`, or transport-level close).
+        """
+        if self._transport is None:
+            raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
+        if self._events_handle is None:
+            self._events_handle = self._transport.open_event_stream(
+                {"channels": _ALL_CHANNELS}
+            )
+        return self._events_handle.events
+
     async def close(self) -> None:
         """Tear down the thread stream. Idempotent."""
         if self._closed:
             return
         self._closed = True
+        if self._events_handle is not None:
+            await self._events_handle.close()
         if self._transport is not None:
             await self._transport.close()
 
