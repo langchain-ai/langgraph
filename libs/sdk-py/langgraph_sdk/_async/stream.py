@@ -9,13 +9,26 @@ Direct port of `libs/sdk/src/client/stream/index.ts`.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
 from langchain_protocol import Event
 
 from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
+
+@dataclass
+class _Subscription:
+    """Internal record for one active subscription on an `AsyncThreadStream`."""
+
+    id: int
+    params: dict[str, Any]
+    queue: asyncio.Queue = field(default_factory=asyncio.Queue)
+    # Why: asyncio.Queue[Event | None] as a subscript in the field annotation
+    # causes a type error with ty; bare asyncio.Queue is accepted.
+
 
 # All public protocol channels used by the raw `events` surface.
 _ALL_CHANNELS: list[str] = [
@@ -106,6 +119,8 @@ class AsyncThreadStream:
         self._transport: ProtocolSseTransport | None = None
         self._open_handles: list[EventStreamHandle] = []
         self._next_command_id = 1
+        self._next_subscription_id = 1
+        self._subscriptions: dict[int, _Subscription] = {}
         self.run = RunModule(self)
 
     async def __aenter__(self) -> AsyncThreadStream:
@@ -150,6 +165,17 @@ class AsyncThreadStream:
             await handle.close()
         if self._transport is not None:
             await self._transport.close()
+
+    def _register_subscription(self, params: dict[str, Any]) -> _Subscription:
+        """Allocate a subscription id and add it to the registry."""
+        sub = _Subscription(id=self._next_subscription_id, params=params)
+        self._next_subscription_id += 1
+        self._subscriptions[sub.id] = sub
+        return sub
+
+    def _unregister_subscription(self, subscription_id: int) -> None:
+        """Remove a subscription from the registry. No-op if already absent."""
+        self._subscriptions.pop(subscription_id, None)
 
     async def _send_command(
         self, method: str, params: dict[str, Any]
