@@ -116,3 +116,54 @@ async def test_aexit_closes_transport():
             inner_transport = stream._transport
         assert inner_transport is not None
         assert inner_transport._closed is True
+
+
+async def test_run_start_sends_command_with_assistant_id():
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            result = await thread.run.start(input={"x": 1})
+    assert result == {"run_id": "run-1"}
+    command = fake.received_commands[0]
+    assert command["method"] == "run.start"
+    assert command["params"]["assistant_id"] == "agent"
+    assert command["params"]["input"] == {"x": 1}
+    assert command["id"] == 1
+
+
+async def test_command_ids_are_monotonic():
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={"x": 1})
+            await thread.run.start(input={"x": 2})
+    assert [c["id"] for c in fake.received_commands] == [1, 2]
+
+
+async def test_run_start_forwards_config_and_metadata():
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(
+                input={"x": 1},
+                config={"recursion_limit": 5},
+                metadata={"trace": "abc"},
+            )
+    params = fake.received_commands[0]["params"]
+    assert params["config"] == {"recursion_limit": 5}
+    assert params["metadata"] == {"trace": "abc"}

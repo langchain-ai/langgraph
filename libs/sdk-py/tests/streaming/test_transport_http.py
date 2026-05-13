@@ -42,13 +42,13 @@ async def test_send_command_posts_json_and_returns_response():
         sse = ProtocolSseTransport(client=client, thread_id="t-1")
         result = await sse.send_command(
             {
-                "command_id": 7,
+                "id": 7,
                 "method": "run.start",
                 "params": {"input": {"x": 1}},
             }
         )
-    assert result == {"command_id": 7, "result": {"run_id": "run-1"}}
-    assert fake.received_commands[0]["command_id"] == 7
+    assert result == {"type": "success", "id": 7, "result": {"run_id": "run-1"}}
+    assert fake.received_commands[0]["id"] == 7
 
 
 async def test_send_command_returns_none_on_202():
@@ -68,9 +68,7 @@ async def test_send_command_returns_none_on_202():
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         sse = ProtocolSseTransport(client=client, thread_id="t-1")
-        result = await sse.send_command(
-            {"command_id": 1, "method": "noop", "params": {}}
-        )
+        result = await sse.send_command({"id": 1, "method": "noop", "params": {}})
     assert result is None
     assert len(received) == 1
 
@@ -84,7 +82,7 @@ async def test_send_command_raises_when_closed():
         sse = ProtocolSseTransport(client=client, thread_id="t-1")
         await sse.close()
         with pytest.raises(RuntimeError, match="closed"):
-            await sse.send_command({"command_id": 1, "method": "noop", "params": {}})
+            await sse.send_command({"id": 1, "method": "noop", "params": {}})
 
 
 async def test_send_command_raises_http_error_on_4xx():
@@ -102,7 +100,7 @@ async def test_send_command_raises_http_error_on_4xx():
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         sse = ProtocolSseTransport(client=client, thread_id="t-1")
         with pytest.raises(httpx.HTTPStatusError):
-            await sse.send_command({"command_id": 1, "method": "noop", "params": {}})
+            await sse.send_command({"id": 1, "method": "noop", "params": {}})
 
 
 async def test_open_event_stream_yields_scripted_events():

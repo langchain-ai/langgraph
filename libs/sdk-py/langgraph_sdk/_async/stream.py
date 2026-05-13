@@ -17,6 +17,33 @@ import httpx
 from langgraph_sdk.stream.transport import ProtocolSseTransport
 
 
+class RunModule:
+    """Command dispatcher for `run.start`.
+
+    Bound to one `AsyncThreadStream`; accesses its transport and id allocator.
+    """
+
+    def __init__(self, owner: AsyncThreadStream) -> None:
+        self._owner = owner
+
+    async def start(
+        self,
+        *,
+        input: Any = None,
+        config: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Send `run.start` to the server. Returns the result (`{"run_id": ...}`)."""
+        params: dict[str, Any] = {"assistant_id": self._owner.assistant_id}
+        if input is not None:
+            params["input"] = input
+        if config is not None:
+            params["config"] = config
+        if metadata is not None:
+            params["metadata"] = metadata
+        return await self._owner._send_command("run.start", params)
+
+
 class AsyncThreadStream:
     """Async context manager for one thread's v3 streaming session.
 
@@ -36,6 +63,8 @@ class AsyncThreadStream:
         self.assistant_id = assistant_id
         self._closed = False
         self._transport: ProtocolSseTransport | None = None
+        self._next_command_id = 1
+        self.run = RunModule(self)
 
     async def __aenter__(self) -> AsyncThreadStream:
         self._transport = ProtocolSseTransport(
@@ -54,3 +83,19 @@ class AsyncThreadStream:
         self._closed = True
         if self._transport is not None:
             await self._transport.close()
+
+    async def _send_command(
+        self, method: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Send a protocol command and return the `result` payload."""
+        if self._transport is None:
+            raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
+        command_id = self._next_command_id
+        self._next_command_id += 1
+        response = await self._transport.send_command(
+            {"id": command_id, "method": method, "params": params}
+        )
+        if response is None:
+            # 202/204 — no body. Caller gets an empty result.
+            return {}
+        return response.get("result", {})

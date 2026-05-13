@@ -108,7 +108,7 @@ class ProtocolSseTransport:
             raise RuntimeError(
                 "Protocol command did not return a valid response."
             ) from err
-        if not isinstance(payload, dict) or "command_id" not in payload:
+        if not isinstance(payload, dict) or "id" not in payload:
             raise RuntimeError("Protocol command did not return a valid response.")
         return payload
 

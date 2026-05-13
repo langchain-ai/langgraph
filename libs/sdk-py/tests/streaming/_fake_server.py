@@ -51,9 +51,13 @@ class FakeServer:
         async def commands(request: Request) -> Response:
             body = orjson.loads(await request.body())
             self.received_commands.append(body)
-            command_id = body.get("command_id")
+            command_id = body.get("id")
             return JSONResponse(
-                {"command_id": command_id, "result": {"run_id": "run-1"}}
+                {
+                    "type": "success",
+                    "id": command_id,
+                    "result": {"run_id": "run-1"},
+                }
             )
 
         async def stream_events(request: Request) -> Response:
