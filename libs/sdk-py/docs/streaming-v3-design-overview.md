@@ -65,6 +65,23 @@ Additive — `client.runs.stream(...)` and `client.threads.join_stream(...)` sta
 
 Each `AsyncThreadStream` holds one union-filter SSE (subscription set rotates as projections come and go) plus one always-on lifecycle SSE — two HTTP connections per active thread. `AsyncThreadStream` is transport-agnostic; SSE and WebSocket implement the same internal `TransportAdapter` contract.
 
+### 2.1 Nested handles — subgraphs and subagents
+
+`thread.subgraphs` and `thread.subagents` are streams of **invocations**, not static lists of registered components. Each iteration yields one handle scoped to one execution:
+
+```python
+async with client.threads.stream(assistant_id="agent") as thread:
+    await thread.run.start(input={...})
+
+    async for subgraph in thread.subgraphs:
+        async for message in subgraph.messages:
+            ...
+        async for call in subgraph.tool_calls:
+            ...
+```
+
+A `SubgraphHandle` (or `SubagentHandle`) exposes the same projection surface as the top-level thread — `messages`, `tool_calls`, `subgraphs`, `subagents`, media — filtered to events whose namespace matches that invocation's path. Nesting composes: a subgraph that itself invokes another subgraph yields a fresh handle from `subgraph.subgraphs`. There is no static registration step on the SDK side; the set of subgraphs/subagents that appear is discovered at runtime from event namespaces emitted by the graph.
+
 ---
 
 ## 3. User-facing surface
@@ -112,6 +129,19 @@ Differences:
 - Projections replace `stream_mode` — pick the typed iterable you need.
 - Reattach is automatic — `client.threads.stream(thread_id="existing-id", ...)` replays buffered events and goes live. Replaces `client.threads.join_stream(...)`.
 - The protocol is parsed once at the SDK boundary; projections expose Python objects, not raw frames.
+
+### 4.1 Available projections
+
+The complete set, all defined in `langgraph_sdk._async.stream`:
+
+- `thread.events` — raw `Event` dicts over every channel; untyped, useful for debug or to drop below the typed surface.
+- `thread.values` — state snapshots plus final state. Replaces `stream_mode="values"`.
+- `thread.messages` — `StreamingMessageHandle` typed over `langchain-core` `BaseMessage`. Replaces `stream_mode="messages"`.
+- `thread.tool_calls` — `ToolCallHandle` per tool invocation.
+- `thread.subgraphs` / `thread.subagents` — nested handles per invocation (see §2.1).
+- `thread.extensions["name"]` — per-extension events on `custom:<name>` channels. Replaces `stream_mode="custom"`.
+
+The set is closed at the SDK boundary; `extensions["name"]` is the open-ended escape hatch for server-side transformers that emit on custom channels.
 
 ---
 
