@@ -167,3 +167,43 @@ async def test_run_start_forwards_config_and_metadata():
     params = fake.received_commands[0]["params"]
     assert params["config"] == {"recursion_limit": 5}
     assert params["metadata"] == {"trace": "abc"}
+
+
+async def test_run_start_raises_outside_context_manager():
+    import pytest
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        with pytest.raises(RuntimeError, match="async with"):
+            await stream.run.start(input={"x": 1})
+
+
+async def test_run_start_raises_on_error_envelope():
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    async def commands(_request):
+        return JSONResponse(
+            {
+                "type": "error",
+                "id": 1,
+                "error": "invalid_argument",
+                "message": "run.start requires an assistant_id.",
+            }
+        )
+
+    app = Starlette(
+        routes=[Route("/threads/{thread_id}/commands", commands, methods=["POST"])]
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        import pytest
+
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            with pytest.raises(RuntimeError, match="invalid_argument"):
+                await thread.run.start(input={"x": 1})

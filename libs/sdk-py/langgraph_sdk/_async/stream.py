@@ -87,7 +87,12 @@ class AsyncThreadStream:
     async def _send_command(
         self, method: str, params: dict[str, Any]
     ) -> dict[str, Any]:
-        """Send a protocol command and return the `result` payload."""
+        """Send a protocol command and return the `result` payload.
+
+        Returns `{}` for 202/204 responses (no body). Raises `RuntimeError`
+        with the protocol code/message when the server returns an error
+        envelope (`{"type": "error", ...}`).
+        """
         if self._transport is None:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
         command_id = self._next_command_id
@@ -98,4 +103,9 @@ class AsyncThreadStream:
         if response is None:
             # 202/204 — no body. Caller gets an empty result.
             return {}
+        if response.get("type") == "error":
+            code = response.get("error", "unknown")
+            message = response.get("message", "")
+            raise RuntimeError(f"Protocol error [{code}]: {message}")
+        # TODO(phase3+): extract meta.applied_through_seq for reconnect cursor.
         return response.get("result", {})
