@@ -31,7 +31,7 @@ Additive — `client.runs.stream(...)` and `client.threads.join_stream(...)` sta
 │ Public surface — langgraph_sdk._async.stream                    │
 │                                                                  │
 │   AsyncThreadStream                                              │
-│     .run.start    .input.respond    .agent.get_tree              │
+│     .run.start    .run.respond    .agent.get_tree                │
 │     .events                                                      │
 │     .values  .messages  .tool_calls  .subgraphs  .subagents      │
 │     .extensions["name"]                                          │
