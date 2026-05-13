@@ -284,3 +284,37 @@ async def test_events_raises_outside_context_manager():
         stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
         with pytest.raises(RuntimeError, match="async with"):
             _ = stream.events
+
+
+async def test_fresh_thread_happy_path_end_to_end():
+    """User passes no thread_id; SDK mints one and uses it in all URLs.
+
+    Validates the full Phase 2 surface end-to-end:
+      - uuid4 minted at client.threads.stream()
+      - run.start posted to /threads/<minted-id>/commands
+      - events SSE opened at /threads/<minted-id>/stream/events
+      - scripted events delivered to the user iterator
+    """
+    fake = FakeServer()
+    fake.script([lifecycle_event(seq=0), values_event(seq=1)])
+
+    posted_paths: list[str] = []
+
+    class _PathSpyTransport(httpx.ASGITransport):
+        async def handle_async_request(self, request):
+            posted_paths.append(str(request.url.path))
+            return await super().handle_async_request(request)
+
+    spy = _PathSpyTransport(app=fake.app)
+    async with httpx.AsyncClient(transport=spy, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(assistant_id="agent") as thread:
+            assert uuid.UUID(thread.thread_id).version == 4
+            result = await thread.run.start(input={"x": 1})
+            assert result == {"run_id": "run-1"}
+            received = [e async for e in thread.events]
+    assert [e["method"] for e in received] == ["lifecycle", "values"]
+    # Both POSTs must include the minted thread_id in the path.
+    minted_id_paths = [p for p in posted_paths if thread.thread_id in p]
+    assert any(p.endswith("/commands") for p in minted_id_paths)
+    assert any(p.endswith("/stream/events") for p in minted_id_paths)
