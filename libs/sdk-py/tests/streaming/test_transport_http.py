@@ -429,6 +429,7 @@ async def test_transport_close_cancels_open_event_streams():
         await asyncio.wait_for(handle.ready, timeout=1.0)
         # Closing the transport must terminate the open stream within a bounded time.
         await asyncio.wait_for(sse.close(), timeout=1.0)
+
         # Drain any already-queued events; the stream must end (not hang).
         async def drain() -> None:
             async for _ in handle.events:
