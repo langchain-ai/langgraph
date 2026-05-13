@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, Literal, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import (
@@ -22,6 +23,9 @@ from langgraph_sdk.schema import (
     ThreadStreamMode,
     ThreadUpdateStateResponse,
 )
+
+if TYPE_CHECKING:
+    from langgraph_sdk._async.stream import AsyncThreadStream
 
 
 class SyncThreadsClient:
@@ -759,4 +763,38 @@ class SyncThreadsClient:
                 **(headers or {}),
             },
             params=query_params,
+        )
+
+    def stream(
+        self,
+        thread_id: str | None = None,
+        *,
+        assistant_id: str,
+        headers: Mapping[str, str] | None = None,  # noqa: ARG002
+    ) -> AsyncThreadStream:
+        """Open a v3 thread-centric streaming session.
+
+        When `thread_id` is None, a fresh UUIDv4 is minted client-side and
+        included in the URL of subsequent `POST /threads/{thread_id}/...`
+        calls. The server creates the thread row lazily on the first
+        `run.start` via the run payload's `if_not_exists: "create"`. The
+        v3 protocol response carries only `run_id`, never `thread_id`.
+
+        Args:
+            thread_id: optional explicit thread identifier. Defaults to a
+                fresh UUIDv4.
+            assistant_id: assistant the run will use. Required.
+            headers: optional per-request headers (reserved; unused in
+                Phase 2 — wiring lands when the run module gains custom-
+                header support).
+
+        Returns:
+            An `AsyncThreadStream` to use as an async context manager.
+        """
+        from langgraph_sdk._async.stream import AsyncThreadStream
+
+        return AsyncThreadStream(
+            client=self.http.client,
+            thread_id=thread_id or str(uuid.uuid4()),
+            assistant_id=assistant_id,
         )
