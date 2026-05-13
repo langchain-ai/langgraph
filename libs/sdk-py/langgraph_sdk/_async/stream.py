@@ -58,6 +58,33 @@ class RunModule:
         return await self._owner._send_command("run.start", params)
 
 
+class RunModule:
+    """Command dispatcher for `run.start`.
+
+    Bound to one `AsyncThreadStream`; accesses its transport and id allocator.
+    """
+
+    def __init__(self, owner: AsyncThreadStream) -> None:
+        self._owner = owner
+
+    async def start(
+        self,
+        *,
+        input: Any = None,
+        config: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Send `run.start` to the server. Returns the result (`{"run_id": ...}`)."""
+        params: dict[str, Any] = {"assistant_id": self._owner.assistant_id}
+        if input is not None:
+            params["input"] = input
+        if config is not None:
+            params["config"] = config
+        if metadata is not None:
+            params["metadata"] = metadata
+        return await self._owner._send_command("run.start", params)
+
+
 class AsyncThreadStream:
     """Async context manager for one thread's v3 streaming session.
 
