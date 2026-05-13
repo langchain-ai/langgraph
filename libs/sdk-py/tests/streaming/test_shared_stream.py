@@ -96,10 +96,14 @@ async def test_subscribe_yields_only_matching_events():
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             await thread.run.start(input={})
-            lifecycle_iter = thread.subscribe(["lifecycle"])
-            values_iter = thread.subscribe(["values"])
-            lifecycle_events = [e async for e in lifecycle_iter]
-            values_events = [e async for e in values_iter]
+
+            async def drain(channels):
+                return [e async for e in thread.subscribe(channels)]
+
+            lifecycle_events, values_events = await asyncio.gather(
+                drain(["lifecycle"]),
+                drain(["values"]),
+            )
     assert [e["seq"] for e in lifecycle_events] == [0, 2]
     assert [e["seq"] for e in values_events] == [1]
 
@@ -124,3 +128,23 @@ async def test_two_concurrent_subscribes_share_one_stream():
     assert len(results[1]) == 5
     # Both subscriptions share one SSE — only one POST to /stream/events.
     assert len(fake.stream_request_bodies) == 1
+
+
+async def test_subscribe_does_not_leak_when_iterator_unconsumed():
+    """Subscriptions register lazily on first __anext__, not at subscribe() call time.
+
+    Why: registering eagerly would leak the subscription if the caller
+    constructs the iterator but never iterates it. The lazy pattern ties
+    registration to the generator's lifecycle, which is bounded by aclose()
+    / exhaustion / cancellation.
+    """
+    fake = FakeServer()
+    fake.script([])
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            _ = thread.subscribe(["lifecycle"])  # construct but never iterate
+            # Subscription is not registered yet — the generator body hasn't run.
+            assert len(thread._subscriptions) == 0

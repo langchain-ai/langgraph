@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -186,12 +186,12 @@ class AsyncThreadStream:
             params["namespaces"] = namespaces
         if depth is not None:
             params["depth"] = depth
-        sub = self._register_subscription(params)
-        return self._subscription_iter(sub, params)
+        return self._subscription_iter(params)
 
     async def _subscription_iter(
-        self, sub: _Subscription, params: SubscribeParams
-    ) -> AsyncIterator[Event]:
+        self, params: SubscribeParams
+    ) -> AsyncGenerator[Event, None]:
+        sub = self._register_subscription(params)
         try:
             await self._reconcile_stream(params)
             self._ensure_fanout_running()
