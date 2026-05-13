@@ -5,6 +5,8 @@ Direct port of `libs/sdk/src/client/stream/subscription.ts` from the JS SDK.
 
 from __future__ import annotations
 
+from typing import Any
+
 from langchain_protocol import Channel, Event, Namespace, SubscribeParams
 
 
@@ -99,4 +101,80 @@ def matches_subscription(event: Event, definition: SubscribeParams) -> bool:
         namespace,
         definition.get("namespaces"),
         definition.get("depth"),
+    )
+
+
+def compute_union_filter(
+    subscriptions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Aggregate a set of subscription filters into one covering filter.
+
+    Direct port of `client/stream/index.ts:#computeUnionFilter`.
+
+    - Channels are unioned.
+    - Namespaces: if any subscription omits `namespaces` (wildcard), the union
+      is unscoped. Otherwise, the union is the concatenation.
+    - Depth: if any subscription omits `depth` (unbounded), the union is
+      unbounded. Otherwise, take the max.
+
+    Args:
+        subscriptions: list of `SubscribeParams`-shaped dicts.
+
+    Returns:
+        A `SubscribeParams`-shaped dict covering every input.
+    """
+    channels: set[str] = set()
+    namespaces: list[list[str]] | None = []
+    depth: int | None = 0
+
+    for sub in subscriptions:
+        for ch in sub.get("channels", []):
+            channels.add(ch)
+        if namespaces is not None:
+            sub_namespaces = sub.get("namespaces")
+            if sub_namespaces is None:
+                namespaces = None  # wildcard wins
+            else:
+                namespaces.extend(sub_namespaces)
+        if depth is not None:
+            sub_depth = sub.get("depth")
+            depth = None if sub_depth is None else max(depth, int(sub_depth))
+
+    result: dict[str, Any] = {"channels": sorted(channels)}
+    if namespaces is not None and namespaces:
+        result["namespaces"] = namespaces
+    if depth is not None and depth > 0:
+        result["depth"] = depth
+    return result
+
+
+def filter_covers(coverer: dict[str, Any], target: dict[str, Any]) -> bool:
+    """Whether `coverer` is a superset of `target`.
+
+    Used by the shared-stream rotation to decide whether the existing SSE's
+    filter is sufficient for a new subscription, or whether a rotation is
+    required. Direct port of `client/stream/index.ts:filterCovers`.
+    """
+    coverer_channels = set(coverer.get("channels", []))
+    target_channels = set(target.get("channels", []))
+    if not target_channels.issubset(coverer_channels):
+        return False
+
+    coverer_namespaces = coverer.get("namespaces")
+    target_namespaces = target.get("namespaces")
+    if coverer_namespaces is not None and target_namespaces is None:
+        return False
+    if coverer_namespaces is not None and target_namespaces is not None:
+        for tns in target_namespaces:
+            if not any(is_prefix_match(tns, cns) for cns in coverer_namespaces):
+                return False
+
+    coverer_depth = coverer.get("depth")
+    target_depth = target.get("depth")
+    if coverer_depth is not None and target_depth is None:
+        return False
+    return not (
+        coverer_depth is not None
+        and target_depth is not None
+        and target_depth > coverer_depth
     )

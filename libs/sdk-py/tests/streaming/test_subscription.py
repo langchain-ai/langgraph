@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from langgraph_sdk.stream.subscription import (
+    compute_union_filter,
+    filter_covers,
     infer_channel,
     is_prefix_match,
     matches_subscription,
@@ -125,3 +127,73 @@ def test_matches_subscription_namespace_filter_applied():
 def test_matches_subscription_bare_custom_event_matches_bare_custom_filter():
     sub = {"channels": ["custom"]}
     assert matches_subscription(custom_event(name=""), sub) is True  # ty: ignore[invalid-argument-type]
+
+
+def test_compute_union_filter_merges_channels():
+    a = {"channels": ["values"]}
+    b = {"channels": ["messages", "lifecycle"]}
+    result = compute_union_filter([a, b])
+    assert set(result["channels"]) == {"values", "messages", "lifecycle"}
+
+
+def test_compute_union_filter_drops_namespaces_when_any_subscription_is_unscoped():
+    a = {"channels": ["values"], "namespaces": [["fetcher"]]}
+    b = {"channels": ["messages"]}  # no namespaces == wildcard
+    result = compute_union_filter([a, b])
+    # If any subscription is unscoped, the union must be unscoped.
+    assert "namespaces" not in result or result.get("namespaces") is None
+
+
+def test_compute_union_filter_unions_namespaces_when_all_scoped():
+    a = {"channels": ["values"], "namespaces": [["fetcher"]]}
+    b = {"channels": ["messages"], "namespaces": [["scorer"]]}
+    result = compute_union_filter([a, b])
+    assert sorted(result["namespaces"]) == [["fetcher"], ["scorer"]]
+
+
+def test_compute_union_filter_takes_max_depth():
+    a = {"channels": ["values"], "depth": 1}
+    b = {"channels": ["messages"], "depth": 3}
+    result = compute_union_filter([a, b])
+    assert result["depth"] == 3
+
+
+def test_compute_union_filter_omits_depth_when_any_subscription_omits():
+    a = {"channels": ["values"], "depth": 2}
+    b = {"channels": ["messages"]}  # no depth == unbounded
+    result = compute_union_filter([a, b])
+    assert "depth" not in result or result.get("depth") is None
+
+
+def test_compute_union_filter_empty_input_returns_empty_channel_filter():
+    result = compute_union_filter([])
+    assert result == {"channels": []}
+
+
+def test_filter_covers_same_filter():
+    f = {"channels": ["values", "messages"]}
+    assert filter_covers(f, f) is True
+
+
+def test_filter_covers_superset_channels():
+    coverer = {"channels": ["values", "messages", "lifecycle"]}
+    target = {"channels": ["values", "messages"]}
+    assert filter_covers(coverer, target) is True
+
+
+def test_filter_covers_missing_channel():
+    coverer = {"channels": ["values"]}
+    target = {"channels": ["values", "messages"]}
+    assert filter_covers(coverer, target) is False
+
+
+def test_filter_covers_unscoped_covers_scoped():
+    coverer = {"channels": ["values"]}  # wildcard namespaces
+    target = {"channels": ["values"], "namespaces": [["fetcher"]]}
+    assert filter_covers(coverer, target) is True
+
+
+def test_filter_covers_scoped_does_not_cover_unscoped():
+    coverer = {"channels": ["values"], "namespaces": [["fetcher"]]}
+    target = {"channels": ["values"]}  # wildcard
+    assert filter_covers(coverer, target) is False
