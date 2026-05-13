@@ -277,3 +277,10 @@ async def test_events_terminates_on_aexit():
         # After __aexit__, further iteration must terminate cleanly.
         with pytest.raises(StopAsyncIteration):
             await asyncio.wait_for(handle_events.__anext__(), timeout=1.0)
+
+
+async def test_events_raises_outside_context_manager():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        with pytest.raises(RuntimeError, match="async with"):
+            _ = stream.events
