@@ -113,9 +113,10 @@ def compute_union_filter(
 
     - Channels are unioned.
     - Namespaces: if any subscription omits `namespaces` (wildcard), the union
-      is unscoped. Otherwise, the union is the concatenation.
+      is unscoped (omits the key). Otherwise, deduplicated union.
     - Depth: if any subscription omits `depth` (unbounded), the union is
-      unbounded. Otherwise, take the max.
+      unbounded (omits the key). Otherwise, take the max. `depth=0` is a
+      valid bounded value — never omit when all subscriptions provide it.
 
     Args:
         subscriptions: list of `SubscribeParams`-shaped dicts.
@@ -123,58 +124,85 @@ def compute_union_filter(
     Returns:
         A `SubscribeParams`-shaped dict covering every input.
     """
+    if not subscriptions:
+        return {"channels": []}
+
     channels: set[str] = set()
-    namespaces: list[list[str]] | None = []
-    depth: int | None = 0
+    wildcard_namespaces = False
+    namespace_map: dict[tuple[str, ...], list[str]] = {}
+    unbounded_depth = False
+    max_depth = 0
 
     for sub in subscriptions:
         for ch in sub.get("channels", []):
             channels.add(ch)
-        if namespaces is not None:
-            sub_namespaces = sub.get("namespaces")
-            if sub_namespaces is None:
-                namespaces = None  # wildcard wins
-            else:
-                namespaces.extend(sub_namespaces)
-        if depth is not None:
-            sub_depth = sub.get("depth")
-            depth = None if sub_depth is None else max(depth, int(sub_depth))
+
+        sub_namespaces = sub.get("namespaces")
+        if sub_namespaces is None:
+            wildcard_namespaces = True
+        elif not wildcard_namespaces:
+            for ns in sub_namespaces:
+                namespace_map[tuple(ns)] = ns
+
+        sub_depth = sub.get("depth")
+        if sub_depth is None:
+            unbounded_depth = True
+        elif not unbounded_depth and sub_depth > max_depth:
+            max_depth = sub_depth
 
     result: dict[str, Any] = {"channels": sorted(channels)}
-    if namespaces is not None and namespaces:
-        result["namespaces"] = namespaces
-    if depth is not None and depth > 0:
-        result["depth"] = depth
+    if not wildcard_namespaces and namespace_map:
+        result["namespaces"] = list(namespace_map.values())
+    if not unbounded_depth:
+        result["depth"] = max_depth
     return result
 
 
 def filter_covers(coverer: dict[str, Any], target: dict[str, Any]) -> bool:
     """Whether `coverer` is a superset of `target`.
 
-    Used by the shared-stream rotation to decide whether the existing SSE's
-    filter is sufficient for a new subscription, or whether a rotation is
-    required. Direct port of `client/stream/index.ts:filterCovers`.
+    Direct port of `client/stream/index.ts:filterCovers`. Depth coverage
+    accounts for namespace-prefix offset: a scoped coverer needs enough depth
+    to absorb the extra levels of any deeper target namespace prefix.
     """
     coverer_channels = set(coverer.get("channels", []))
-    target_channels = set(target.get("channels", []))
-    if not target_channels.issubset(coverer_channels):
-        return False
-
-    coverer_namespaces = coverer.get("namespaces")
-    target_namespaces = target.get("namespaces")
-    if coverer_namespaces is not None and target_namespaces is None:
-        return False
-    if coverer_namespaces is not None and target_namespaces is not None:
-        for tns in target_namespaces:
-            if not any(is_prefix_match(tns, cns) for cns in coverer_namespaces):
-                return False
+    for ch in target.get("channels", []):
+        if ch not in coverer_channels:
+            return False
 
     coverer_depth = coverer.get("depth")
     target_depth = target.get("depth")
-    if coverer_depth is not None and target_depth is None:
+    coverer_namespaces = coverer.get("namespaces")
+    target_namespaces = target.get("namespaces")
+
+    # Unscoped coverer covers any namespace; depth is a simple scalar check.
+    if coverer_namespaces is None:
+        if coverer_depth is None:
+            return True
+        if target_depth is None:
+            return False
+        return target_depth <= coverer_depth
+
+    # Scoped coverer cannot cover an unscoped target.
+    if target_namespaces is None:
         return False
-    return not (
-        coverer_depth is not None
-        and target_depth is not None
-        and target_depth > coverer_depth
-    )
+
+    # Each target namespace must be covered by SOME coverer namespace,
+    # AND the depth-with-offset must fit.
+    for tp in target_namespaces:
+        covered = False
+        for cp in coverer_namespaces:
+            if not is_prefix_match(tp, cp):
+                continue
+            if coverer_depth is None:
+                covered = True
+                break
+            if target_depth is None:
+                # target wants unbounded depth — coverer bounded can't cover.
+                continue
+            if len(tp) - len(cp) + target_depth <= coverer_depth:
+                covered = True
+                break
+        if not covered:
+            return False
+    return True

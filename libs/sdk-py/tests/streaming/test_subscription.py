@@ -197,3 +197,42 @@ def test_filter_covers_scoped_does_not_cover_unscoped():
     coverer = {"channels": ["values"], "namespaces": [["fetcher"]]}
     target = {"channels": ["values"]}  # wildcard
     assert filter_covers(coverer, target) is False
+
+
+def test_filter_covers_depth_with_namespace_offset():
+    # Coverer at depth 1 from ["agent"] reaches ["agent", X].
+    # Target needs depth 1 from ["agent", "tool"] — i.e., ["agent", "tool", X].
+    # That's 2 levels past coverer's prefix, but coverer only allows 1.
+    coverer = {"channels": ["values"], "namespaces": [["agent"]], "depth": 1}
+    target = {
+        "channels": ["values"],
+        "namespaces": [["agent", "tool"]],
+        "depth": 1,
+    }
+    assert filter_covers(coverer, target) is False
+
+
+def test_filter_covers_depth_with_offset_enough_depth():
+    # Same setup but coverer depth=2 absorbs the offset.
+    coverer = {"channels": ["values"], "namespaces": [["agent"]], "depth": 2}
+    target = {
+        "channels": ["values"],
+        "namespaces": [["agent", "tool"]],
+        "depth": 1,
+    }
+    assert filter_covers(coverer, target) is True
+
+
+def test_filter_covers_unscoped_coverer_with_bounded_depth():
+    # Coverer is unscoped; depth comparison is the simple scalar form.
+    coverer = {"channels": ["values"], "depth": 2}
+    target = {"channels": ["values"], "depth": 1}
+    assert filter_covers(coverer, target) is True
+    target_too_deep = {"channels": ["values"], "depth": 3}
+    assert filter_covers(coverer, target_too_deep) is False
+
+
+def test_filter_covers_bounded_coverer_does_not_cover_unbounded_target():
+    coverer = {"channels": ["values"], "depth": 2}
+    target = {"channels": ["values"]}  # unbounded
+    assert filter_covers(coverer, target) is False
