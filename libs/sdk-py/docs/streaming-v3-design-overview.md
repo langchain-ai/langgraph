@@ -65,7 +65,25 @@ Additive — `client.runs.stream(...)` and `client.threads.join_stream(...)` sta
 
 Each `AsyncThreadStream` holds one union-filter SSE (subscription set rotates as projections come and go) plus one always-on lifecycle SSE — two HTTP connections per active thread. `AsyncThreadStream` is transport-agnostic; SSE and WebSocket implement the same internal `TransportAdapter` contract.
 
-### 2.1 Nested handles — subgraphs and subagents
+---
+
+## 3. User-facing surface
+
+| API | Notes |
+|---|---|
+| `client.threads.stream(thread_id=None, *, assistant_id, headers=None)` | Entry point. Returns an `AsyncThreadStream` async context manager. Mints `uuid.uuid4()` when `thread_id` is None. |
+| `thread.run.start(input=, config=, metadata=)` | Dispatches `run.start`. Returns `{"run_id": "..."}`. |
+| `thread.run.respond(...)` | Resume after interrupt. |
+| `thread.agent.get_tree(...)` | Agent introspection. |
+| `thread.events` | Raw `AsyncIterator[Event]` over every channel. |
+| `thread.values` | `AsyncIterator[snapshot]` plus `Awaitable[final_state]`. |
+| `thread.messages` | `AsyncIterator[StreamingMessageHandle]` — typed over `langchain-core` `BaseMessage`. |
+| `thread.tool_calls` | `AsyncIterator[ToolCallHandle]`. |
+| `thread.subgraphs` / `thread.subagents` | Nested handles for graph composition. |
+| `thread.extensions["name"]` | Per-extension dispatch on `custom:<name>`. |
+| `thread.interrupted` / `thread.interrupts` | Lifecycle state, always current. |
+
+### 3.1 Nested handles — subgraphs and subagents
 
 `thread.subgraphs` and `thread.subagents` are streams of **invocations**, not static lists of registered components. Each iteration yields one handle scoped to one execution:
 
@@ -81,24 +99,6 @@ async with client.threads.stream(assistant_id="agent") as thread:
 ```
 
 A `SubgraphHandle` (or `SubagentHandle`) exposes the same projection surface as the top-level thread — `messages`, `tool_calls`, `subgraphs`, `subagents`, media — filtered to events whose namespace matches that invocation's path. Nesting composes: a subgraph that itself invokes another subgraph yields a fresh handle from `subgraph.subgraphs`. There is no static registration step on the SDK side; the set of subgraphs/subagents that appear is discovered at runtime from event namespaces emitted by the graph.
-
----
-
-## 3. User-facing surface
-
-| API | Notes |
-|---|---|
-| `client.threads.stream(thread_id=None, *, assistant_id, headers=None)` | Entry point. Returns an `AsyncThreadStream` async context manager. Mints `uuid.uuid4()` when `thread_id` is None. |
-| `thread.run.start(input=, config=, metadata=)` | Dispatches `run.start`. Returns `{"run_id": "..."}`. |
-| `thread.input.respond(...)` | Resume after interrupt. |
-| `thread.agent.get_tree(...)` | Agent introspection. |
-| `thread.events` | Raw `AsyncIterator[Event]` over every channel. |
-| `thread.values` | `AsyncIterator[snapshot]` plus `Awaitable[final_state]`. |
-| `thread.messages` | `AsyncIterator[StreamingMessageHandle]` — typed over `langchain-core` `BaseMessage`. |
-| `thread.tool_calls` | `AsyncIterator[ToolCallHandle]`. |
-| `thread.subgraphs` / `thread.subagents` | Nested handles for graph composition. |
-| `thread.extensions["name"]` | Per-extension dispatch on `custom:<name>`. |
-| `thread.interrupted` / `thread.interrupts` | Lifecycle state, always current. |
 
 ---
 
@@ -138,7 +138,7 @@ The complete set, all defined in `langgraph_sdk._async.stream`:
 - `thread.values` — state snapshots plus final state. Replaces `stream_mode="values"`.
 - `thread.messages` — `StreamingMessageHandle` typed over `langchain-core` `BaseMessage`. Replaces `stream_mode="messages"`.
 - `thread.tool_calls` — `ToolCallHandle` per tool invocation.
-- `thread.subgraphs` / `thread.subagents` — nested handles per invocation (see §2.1).
+- `thread.subgraphs` / `thread.subagents` — nested handles per invocation (see §3.1).
 - `thread.extensions["name"]` — per-extension events on `custom:<name>` channels. Replaces `stream_mode="custom"`.
 
 The set is closed at the SDK boundary; `extensions["name"]` is the open-ended escape hatch for server-side transformers that emit on custom channels.
@@ -151,4 +151,4 @@ The set is closed at the SDK boundary; `extensions["name"]` is the open-ended es
 - `langchain-core>=1.4.0,<2` — required by the messages projection to construct `BaseMessage` subclasses. Matches the JS SDK's hard-dep stance.
 - `httpx`, `orjson` — already required.
 - Python 3.10+.
-- Server: `langgraph-api` with `FF_V2_EVENT_STREAMING` enabled.
+- Server: `langgraph-api` with `FF_V2_EVENT_STREAMING` enabled and ≥ 0.9.0rc1.
