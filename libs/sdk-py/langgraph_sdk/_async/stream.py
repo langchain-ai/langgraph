@@ -10,12 +10,13 @@ Direct port of `libs/sdk/src/client/stream/index.ts`.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
-from langchain_protocol import Event
+from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
 
@@ -25,7 +26,7 @@ class _Subscription:
     """Internal record for one active subscription on an `AsyncThreadStream`."""
 
     id: int
-    params: dict[str, Any]
+    params: SubscribeParams
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
     # Why: asyncio.Queue[Event | None] as a subscript in the field annotation
     # causes a type error with ty; bare asyncio.Queue is accepted.
@@ -108,6 +109,7 @@ class AsyncThreadStream:
         self._seen_event_ids: set[str] = set()
         self._shared_stream: EventStreamHandle | None = None
         self._shared_stream_filter: dict[str, Any] | None = None
+        self._fanout_task: asyncio.Task[None] | None = None
         self.run = RunModule(self)
 
     async def __aenter__(self) -> AsyncThreadStream:
@@ -153,7 +155,7 @@ class AsyncThreadStream:
         if self._transport is not None:
             await self._transport.close()
 
-    def _register_subscription(self, params: dict[str, Any]) -> _Subscription:
+    def _register_subscription(self, params: SubscribeParams) -> _Subscription:
         """Allocate a subscription id and add it to the registry."""
         sub = _Subscription(id=self._next_subscription_id, params=params)
         self._next_subscription_id += 1
@@ -164,7 +166,84 @@ class AsyncThreadStream:
         """Remove a subscription from the registry. No-op if already absent."""
         self._subscriptions.pop(subscription_id, None)
 
-    async def _reconcile_stream(self, candidate_filter: dict[str, Any]) -> None:
+    def subscribe(
+        self,
+        channels: list[str],
+        *,
+        namespaces: list[list[str]] | None = None,
+        depth: int | None = None,
+    ) -> AsyncIterator[Event]:
+        """Open a typed subscription against the shared SSE.
+
+        Returns an async iterator that yields raw `Event` dicts matching the
+        given filter. Multiple concurrent subscribes share one HTTP connection
+        whose union expands or rotates as subscriptions come and go.
+        """
+        if self._transport is None:
+            raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
+        params: SubscribeParams = {"channels": list(channels)}
+        if namespaces is not None:
+            params["namespaces"] = namespaces
+        if depth is not None:
+            params["depth"] = depth
+        sub = self._register_subscription(params)
+        return self._subscription_iter(sub, params)
+
+    async def _subscription_iter(
+        self, sub: _Subscription, params: SubscribeParams
+    ) -> AsyncIterator[Event]:
+        try:
+            await self._reconcile_stream(params)
+            self._ensure_fanout_running()
+            while True:
+                item = await sub.queue.get()
+                if item is None:
+                    return
+                yield item
+        finally:
+            self._unregister_subscription(sub.id)
+
+    def _ensure_fanout_running(self) -> None:
+        if self._fanout_task is None or self._fanout_task.done():
+            self._fanout_task = asyncio.create_task(self._fanout())
+
+    async def _fanout(self) -> None:
+        """Single consumer of the shared SSE; routes events to subscriptions.
+
+        Why: rotation in `_reconcile_stream` replaces `_shared_stream` mid-loop.
+        Re-read `self._shared_stream` on each outer iteration so we always
+        consume from the current handle. The old handle's iterator exhausts
+        naturally after `_close_after` closes it.
+        """
+        from langgraph_sdk.stream.subscription import matches_subscription
+
+        while not self._closed:
+            shared = self._shared_stream
+            if shared is None:
+                return
+            try:
+                async for event in self._dedup_iter(shared.events):
+                    if self._closed:
+                        break
+                    for sub in list(self._subscriptions.values()):
+                        if matches_subscription(event, sub.params):
+                            sub.queue.put_nowait(event)
+            except Exception:
+                # Pump errored — close all subscription queues so consumers
+                # don't hang.
+                for sub in self._subscriptions.values():
+                    sub.queue.put_nowait(None)
+                raise
+            if self._shared_stream is shared:
+                # No rotation happened; stream genuinely ended.
+                break
+            # Rotation: loop again to pick up the new _shared_stream.
+
+        # Terminate consumers cleanly on shutdown / stream-end.
+        for sub in self._subscriptions.values():
+            sub.queue.put_nowait(None)
+
+    async def _reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
         """Ensure the shared SSE covers `candidate_filter`. Rotate if not.
 
         Open-new-before-close-old: any events buffered server-side between
@@ -182,7 +261,7 @@ class AsyncThreadStream:
         if (
             self._shared_stream is not None
             and self._shared_stream_filter is not None
-            and filter_covers(self._shared_stream_filter, candidate_filter)
+            and filter_covers(self._shared_stream_filter, dict(candidate_filter))
         ):
             return  # Existing stream is sufficient.
 
@@ -201,13 +280,15 @@ class AsyncThreadStream:
             asyncio.create_task(_close_after(old_stream))  # noqa: RUF006
 
     def _compute_current_union(
-        self, extra: dict[str, Any] | None = None
+        self, extra: SubscribeParams | None = None
     ) -> dict[str, Any]:
         from langgraph_sdk.stream.subscription import compute_union_filter
 
-        filters = [sub.params for sub in self._subscriptions.values()]
+        filters: list[dict[str, Any]] = [
+            dict(sub.params) for sub in self._subscriptions.values()
+        ]
         if extra is not None:
-            filters.append(extra)
+            filters.append(dict(extra))
         return compute_union_filter(filters)
 
     async def _dedup_iter(self, source: AsyncIterator[Event]) -> AsyncIterator[Event]:

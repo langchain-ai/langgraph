@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 
 from langgraph_sdk._async.http import HttpClient
@@ -77,4 +79,48 @@ async def test_no_rotation_when_existing_filter_covers_new_subscription():
             # New subscription is a subset — existing filter covers it.
             await thread._reconcile_stream({"channels": ["values"]})
     # No rotation: only one SSE request was opened.
+    assert len(fake.stream_request_bodies) == 1
+
+
+async def test_subscribe_yields_only_matching_events():
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_event(seq=0),
+            values_event(seq=1),
+            lifecycle_event(seq=2),
+        ]
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            lifecycle_iter = thread.subscribe(["lifecycle"])
+            values_iter = thread.subscribe(["values"])
+            lifecycle_events = [e async for e in lifecycle_iter]
+            values_events = [e async for e in values_iter]
+    assert [e["seq"] for e in lifecycle_events] == [0, 2]
+    assert [e["seq"] for e in values_events] == [1]
+
+
+async def test_two_concurrent_subscribes_share_one_stream():
+    fake = FakeServer()
+    fake.script([lifecycle_event(seq=i) for i in range(5)])
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+
+            async def drain(channels):
+                return [e async for e in thread.subscribe(channels)]
+
+            results = await asyncio.gather(
+                drain(["lifecycle"]),
+                drain(["lifecycle"]),
+            )
+    assert len(results[0]) == 5
+    assert len(results[1]) == 5
+    # Both subscriptions share one SSE — only one POST to /stream/events.
     assert len(fake.stream_request_bodies) == 1
