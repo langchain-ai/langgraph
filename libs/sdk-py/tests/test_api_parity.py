@@ -51,6 +51,9 @@ def _normalize_return_annotation(ann: object) -> str:
 # Methods that are intentionally async-only during the v3 streaming rollout.
 # These are deferred to Phase 8 (sync mirror) of the v3 streaming work; the
 # async surface lands phase-by-phase. Remove an entry once its sync mirror lands.
+#
+# Grep anchor: `ASYNC_ONLY_METHODS` — when Phase 8 lands the `_sync/stream.py`
+# mirror, grep for this constant and remove entries whose sync mirrors ship.
 ASYNC_ONLY_METHODS: dict[str, set[str]] = {
     "ThreadsClient": {"stream"},
 }

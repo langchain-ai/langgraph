@@ -67,3 +67,18 @@ async def test_threads_stream_requires_assistant_id():
         threads = ThreadsClient(HttpClient(raw))
         with pytest.raises(TypeError):
             threads.stream(thread_id="t-1")  # ty: ignore[missing-argument]
+
+
+async def test_threads_stream_accepts_headers_kwarg():
+    """Forward-compat: `headers` is accepted now even though it isn't plumbed yet."""
+    from langgraph_sdk._async.http import HttpClient
+    from langgraph_sdk._async.threads import ThreadsClient
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+            headers={"X-Foo": "bar"},
+        )
+        assert stream.thread_id == "t-1"

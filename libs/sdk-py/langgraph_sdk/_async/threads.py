@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Literal, overload
+from typing import Any, Literal, overload
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk.schema import (
     Checkpoint,
     Json,
@@ -23,9 +24,6 @@ from langgraph_sdk.schema import (
     ThreadStreamMode,
     ThreadUpdateStateResponse,
 )
-
-if TYPE_CHECKING:
-    from langgraph_sdk._async.stream import AsyncThreadStream
 
 
 class ThreadsClient:
@@ -755,11 +753,9 @@ class ThreadsClient:
         Returns:
             An `AsyncThreadStream` to use as an async context manager.
         """
-        from langgraph_sdk._async.stream import AsyncThreadStream
-
         return AsyncThreadStream(
             client=self.http.client,
-            thread_id=thread_id or str(uuid.uuid4()),
+            thread_id=thread_id if thread_id is not None else str(uuid.uuid4()),
             assistant_id=assistant_id,
         )
 
