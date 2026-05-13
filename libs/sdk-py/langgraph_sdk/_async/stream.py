@@ -19,6 +19,7 @@ from langchain_protocol import Event
 
 from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
 
+
 @dataclass
 class _Subscription:
     """Internal record for one active subscription on an `AsyncThreadStream`."""
@@ -71,33 +72,6 @@ class RunModule:
         return await self._owner._send_command("run.start", params)
 
 
-class RunModule:
-    """Command dispatcher for `run.start`.
-
-    Bound to one `AsyncThreadStream`; accesses its transport and id allocator.
-    """
-
-    def __init__(self, owner: AsyncThreadStream) -> None:
-        self._owner = owner
-
-    async def start(
-        self,
-        *,
-        input: Any = None,
-        config: dict[str, Any] | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Send `run.start` to the server. Returns the result (`{"run_id": ...}`)."""
-        params: dict[str, Any] = {"assistant_id": self._owner.assistant_id}
-        if input is not None:
-            params["input"] = input
-        if config is not None:
-            params["config"] = config
-        if metadata is not None:
-            params["metadata"] = metadata
-        return await self._owner._send_command("run.start", params)
-
-
 class AsyncThreadStream:
     """Async context manager for one thread's v3 streaming session.
 
@@ -121,6 +95,9 @@ class AsyncThreadStream:
         self._next_command_id = 1
         self._next_subscription_id = 1
         self._subscriptions: dict[int, _Subscription] = {}
+        self._seen_event_ids: set[str] = set()
+        self._shared_stream: EventStreamHandle | None = None
+        self._shared_stream_filter: dict[str, Any] | None = None
         self.run = RunModule(self)
 
     async def __aenter__(self) -> AsyncThreadStream:
@@ -176,6 +153,29 @@ class AsyncThreadStream:
     def _unregister_subscription(self, subscription_id: int) -> None:
         """Remove a subscription from the registry. No-op if already absent."""
         self._subscriptions.pop(subscription_id, None)
+
+    def _ensure_shared_stream(self, params: dict[str, Any]) -> AsyncIterator[Event]:
+        """Open or reuse the shared SSE and return a deduped async iterator.
+
+        Intermediate API used by Task 3 tests; replaced by the public
+        `subscribe()` API in Task 5. No rotation yet — the first call's
+        filter is used verbatim.
+        """
+        if self._transport is None:
+            raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
+        if self._shared_stream is None:
+            self._shared_stream = self._transport.open_event_stream(params)
+            self._shared_stream_filter = params
+        return self._dedup_iter(self._shared_stream.events)
+
+    async def _dedup_iter(self, source: AsyncIterator[Event]) -> AsyncIterator[Event]:
+        async for event in source:
+            event_id = event.get("event_id")
+            if event_id is not None:
+                if event_id in self._seen_event_ids:
+                    continue
+                self._seen_event_ids.add(event_id)
+            yield event
 
     async def _send_command(
         self, method: str, params: dict[str, Any]

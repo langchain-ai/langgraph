@@ -35,6 +35,8 @@ class FakeServer:
         self.stream_request_bodies: list[dict[str, Any]] = []
         self._stream_delay: float = 0.0
         self._app: Starlette | None = None
+        self.open_event_streams = 0
+        self._open_event_streams_max = 0
 
     def script(self, events: list[dict[str, Any]], *, delay: float = 0.0) -> None:
         """Set the events the next /stream/events call will replay."""
@@ -79,11 +81,23 @@ class FakeServer:
         )
 
     async def _sse_body(self) -> AsyncIterator[bytes]:
-        # Why: script() rebinds scripted_events; in-flight iterators retain a
-        # reference to the prior list and are unaffected by later script() calls.
-        for event in self.scripted_events:
-            if self._stream_delay:
-                await asyncio.sleep(self._stream_delay)
-            payload = orjson.dumps(event).decode()
-            yield f"id: {event.get('event_id', '')}\n".encode()
-            yield f"event: message\ndata: {payload}\n\n".encode()
+        self.open_event_streams += 1
+        self._open_event_streams_max = max(
+            self._open_event_streams_max, self.open_event_streams
+        )
+        try:
+            # Why: script() rebinds scripted_events; in-flight iterators retain
+            # a reference to the prior list and are unaffected by later
+            # script() calls.
+            for event in self.scripted_events:
+                if self._stream_delay:
+                    await asyncio.sleep(self._stream_delay)
+                payload = orjson.dumps(event).decode()
+                yield f"id: {event.get('event_id', '')}\n".encode()
+                yield f"event: message\ndata: {payload}\n\n".encode()
+        finally:
+            self.open_event_streams -= 1
+
+    @property
+    def peak_open_event_streams(self) -> int:
+        return self._open_event_streams_max
