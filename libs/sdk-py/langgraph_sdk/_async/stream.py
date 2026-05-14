@@ -193,6 +193,8 @@ class AsyncThreadStream:
     ) -> AsyncGenerator[Event, None]:
         sub = self._register_subscription(params)
         try:
+            if self._closed:
+                return
             await self._reconcile_stream(params)
             self._ensure_fanout_running()
             while True:
