@@ -104,6 +104,44 @@ class RunModule:
             if gate.done() and not gate.cancelled():
                 gate.exception()
 
+    async def respond(
+        self,
+        value: Any,
+        *,
+        interrupt_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Reply to a server-side interrupt and resume the run.
+
+        Args:
+            value: the response value forwarded as `params.value` on the wire.
+            interrupt_id: optional explicit id. When omitted, requires exactly
+                one outstanding interrupt and uses its id.
+
+        Raises:
+            RuntimeError: no outstanding interrupts, or `interrupt_id` is None
+                but multiple interrupts are outstanding.
+        """
+        if interrupt_id is None:
+            outstanding = self._owner.interrupts
+            if len(outstanding) == 0:
+                raise RuntimeError(
+                    "thread.run.respond: no outstanding interrupt. Provide an "
+                    "explicit `interrupt_id` or wait for `thread.interrupted`."
+                )
+            if len(outstanding) > 1:
+                ids = [p["interrupt_id"] for p in outstanding]
+                raise RuntimeError(
+                    f"thread.run.respond: ambiguous — {len(outstanding)} "
+                    f"outstanding interrupts ({ids!r}). Provide an explicit "
+                    "`interrupt_id`."
+                )
+            interrupt_id = outstanding[0]["interrupt_id"]
+        params = {
+            "interrupt_id": interrupt_id,
+            "value": value,
+        }
+        return await self._owner._send_command("input.respond", params)
+
 
 async def _close_after(handle: EventStreamHandle, *, delay: float = 0.0) -> None:
     """Close a handle, optionally after a brief delay. Used to detach

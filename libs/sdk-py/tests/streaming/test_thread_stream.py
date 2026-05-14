@@ -414,3 +414,67 @@ async def test_subscribe_waits_for_run_start_to_commit():
             # If the gate works, run.start completed before the subscription
             # opened its SSE (and thus before iteration finished).
             assert run_task.done()
+
+
+async def test_run_respond_dispatches_input_respond_command():
+    fake = FakeServer()
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            # Simulate one outstanding interrupt.
+            thread.interrupts.append(
+                {"interrupt_id": "i-1", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            await thread.run.respond("yes")
+    command = fake.received_commands[-1]
+    assert command["method"] == "input.respond"
+    assert command["params"]["interrupt_id"] == "i-1"
+    assert command["params"]["value"] == "yes"
+
+
+async def test_run_respond_with_explicit_interrupt_id():
+    fake = FakeServer()
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            thread.interrupts.extend(
+                [
+                    {"interrupt_id": "a", "value": None, "namespace": []},
+                    {"interrupt_id": "b", "value": None, "namespace": []},
+                ]
+            )
+            thread.interrupted = True
+            await thread.run.respond("pick", interrupt_id="b")
+    assert fake.received_commands[-1]["params"]["interrupt_id"] == "b"
+
+
+async def test_run_respond_raises_when_no_outstanding_interrupts():
+    import pytest
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            with pytest.raises(RuntimeError, match="no outstanding interrupt"):
+                await thread.run.respond("yes")
+
+
+async def test_run_respond_raises_when_ambiguous_interrupt_id():
+    import pytest
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.interrupts.extend(
+                [
+                    {"interrupt_id": "a", "value": None, "namespace": []},
+                    {"interrupt_id": "b", "value": None, "namespace": []},
+                ]
+            )
+            thread.interrupted = True
+            with pytest.raises(RuntimeError, match=r"ambiguous|interrupt_id"):
+                await thread.run.respond("yes")
