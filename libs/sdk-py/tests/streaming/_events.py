@@ -27,6 +27,31 @@ def lifecycle_event(
     return _base(seq, "lifecycle", namespace or [], data or {"phase": "started"})
 
 
+def lifecycle_started_event(
+    seq: int = 0, namespace: list[str] | None = None
+) -> dict[str, Any]:
+    """Lifecycle event with `phase="started"`."""
+    return _base(seq, "lifecycle", namespace or [], {"phase": "started"})
+
+
+def lifecycle_completed_event(
+    seq: int = 0, namespace: list[str] | None = None
+) -> dict[str, Any]:
+    """Lifecycle event with `phase="completed"`."""
+    return _base(seq, "lifecycle", namespace or [], {"phase": "completed"})
+
+
+def lifecycle_errored_event(
+    seq: int = 0,
+    namespace: list[str] | None = None,
+    error: str = "run errored",
+) -> dict[str, Any]:
+    """Lifecycle event with `phase="errored"` and an error message."""
+    return _base(
+        seq, "lifecycle", namespace or [], {"phase": "errored", "error": error}
+    )
+
+
 def values_event(
     seq: int = 0, namespace: list[str] | None = None, **data: Any
 ) -> dict[str, Any]:

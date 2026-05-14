@@ -501,3 +501,35 @@ async def test_default_headers_cannot_override_sse_fixed_headers():
     assert "application/json" in hdrs.get("content-type", "")
     assert "text/event-stream" in hdrs.get("accept", "")
     assert hdrs.get("cache-control") == "no-store"
+
+
+async def test_fake_server_state_endpoint():
+    """State endpoint returns the set state and increments the counter."""
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    fake.set_state({"foo": "bar"}, next=["node_a"])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/threads/t-1/state")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["values"] == {"foo": "bar"}
+    assert body["next"] == ["node_a"]
+    assert body["tasks"] == []
+    assert body["metadata"] == {}
+    assert body["checkpoint"] is None
+    assert body["created_at"] is None
+    assert fake.state_request_count == 1
+    assert len(fake.state_request_headers) == 1
+
+
+def test_values_event_builder_shape():
+    """values_event produces the expected shape with params.data as the snapshot."""
+    from streaming._events import values_event
+
+    evt = values_event(seq=1, values={"foo": 1})
+    assert evt["event_id"] == "evt-1"
+    assert evt["method"] == "values"
+    assert evt["params"]["data"] == {"values": {"foo": 1}}
+    assert evt["params"]["namespace"] == []
