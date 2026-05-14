@@ -341,6 +341,9 @@ class AsyncThreadStream:
         return response.get("result", {})
 
     def _ensure_lifecycle_watcher_running(self) -> None:
+        # Why: one-shot for Phase 3. No `.done()` check — if the watcher
+        # crashes it stays dead until the AsyncThreadStream is closed.
+        # Phase 9 (reconnect on transport drop) will add retry.
         if self._lifecycle_watcher_task is not None:
             return
         self._lifecycle_watcher_task = asyncio.create_task(
@@ -352,6 +355,11 @@ class AsyncThreadStream:
 
         Independent of the union-filter shared stream so that interrupts
         surface even when no other subscription is active.
+
+        TODO(phase-3-task-8): the watcher opens immediately when
+        `RunModule.start` is invoked, which races the server-side thread
+        creation. The run-start gate (next task) wraps this open so the
+        watcher waits until `run.start` has committed the thread.
         """
         if self._transport is None:
             return
@@ -366,6 +374,10 @@ class AsyncThreadStream:
                     return
                 self._apply_lifecycle_event(event)
         except (Exception, asyncio.CancelledError):
+            # Why: advisory-only watcher. Any error (HTTP failure, malformed
+            # event in `_apply_lifecycle_event`, cancellation on close) must
+            # not crash the caller. Phase 9 adds retry; for now we accept
+            # one-shot best-effort delivery.
             return
 
     def _apply_lifecycle_event(self, event: Event) -> None:
