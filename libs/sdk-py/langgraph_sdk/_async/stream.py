@@ -77,8 +77,27 @@ class RunModule:
             params["config"] = config
         if metadata is not None:
             params["metadata"] = metadata
-        self._owner._ensure_lifecycle_watcher_running()
-        return await self._owner._send_command("run.start", params)
+        loop = asyncio.get_running_loop()
+        gate: asyncio.Future[None] = loop.create_future()
+        self._owner._run_start_ready = gate
+        try:
+            self._owner._ensure_lifecycle_watcher_running()
+            result = await self._owner._send_command("run.start", params)
+            if not gate.done():
+                gate.set_result(None)
+            return result
+        except BaseException as err:
+            # Why: gate MUST reject on any exit type, including CancelledError,
+            # so awaiters see the failure rather than hanging indefinitely.
+            if not gate.done():
+                gate.set_exception(err)
+            raise
+        finally:
+            # Why: concurrent run.start calls (multitask_strategy="enqueue")
+            # can replace _run_start_ready before our finally fires.
+            # Identity-check before clearing so the later call's gate isn't stomped.
+            if self._owner._run_start_ready is gate:
+                self._owner._run_start_ready = None
 
 
 async def _close_after(handle: EventStreamHandle, *, delay: float = 0.0) -> None:
@@ -124,6 +143,7 @@ class AsyncThreadStream:
         self.interrupts: list[InterruptPayload] = []
         self._lifecycle_watcher_task: asyncio.Task[None] | None = None
         self._lifecycle_watcher_handle: EventStreamHandle | None = None
+        self._run_start_ready: asyncio.Future[None] | None = None
         self.run = RunModule(self)
 
     async def __aenter__(self) -> AsyncThreadStream:
@@ -274,6 +294,7 @@ class AsyncThreadStream:
         that both old and new streams are simultaneously connected during
         rotation (enabling correct peak-count tracking and dedup correctness).
         """
+        await self._await_run_start_gate()
         from langgraph_sdk.stream.subscription import filter_covers
 
         if self._transport is None:
@@ -346,6 +367,16 @@ class AsyncThreadStream:
             raise RuntimeError(f"Protocol error [{code}]: {message}")
         return response.get("result", {})
 
+    async def _await_run_start_gate(self) -> None:
+        """Wait for the current run.start to commit the thread server-side.
+
+        No-op when no run.start is in flight. Re-raises if run.start failed.
+        """
+        gate = self._run_start_ready
+        if gate is None:
+            return
+        await gate
+
     def _ensure_lifecycle_watcher_running(self) -> None:
         # Why: this watcher is intentionally one-shot. If it crashes, it stays
         # dead until the AsyncThreadStream is closed.
@@ -367,6 +398,7 @@ class AsyncThreadStream:
         if self._transport is None:
             return
         try:
+            await self._await_run_start_gate()
             handle = self._transport.open_event_stream(
                 {"channels": ["lifecycle", "input"]}
             )

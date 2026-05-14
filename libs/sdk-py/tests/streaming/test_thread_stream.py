@@ -387,3 +387,30 @@ async def test_unregister_subscription_removes_from_registry():
             sub = stream._register_subscription({"channels": ["values"]})
             stream._unregister_subscription(sub.id)
             assert sub.id not in stream._subscriptions
+
+
+async def test_subscribe_waits_for_run_start_to_commit():
+    """Subscribing before run.start commits must not race the server.
+
+    With the gate: subscribers wait for run.start to return before opening
+    their SSE. Without it, a fast subscribe would 404 against a thread the
+    server hasn't created yet.
+    """
+    import asyncio
+
+    fake = FakeServer()
+    fake.script([])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            # Kick run.start without awaiting — concurrently subscribe.
+            run_task = asyncio.create_task(thread.run.start(input={}))
+            sub_iter = thread.subscribe(["lifecycle"])
+            # Drain one event or hit EOF. The iterator's first __anext__
+            # awaits _reconcile_stream which awaits the gate.
+            async for _ in sub_iter:
+                break
+            # If the gate works, run.start completed before the subscription
+            # opened its SSE (and thus before iteration finished).
+            assert run_task.done()
