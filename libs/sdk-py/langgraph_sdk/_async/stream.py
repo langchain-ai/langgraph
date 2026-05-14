@@ -13,12 +13,20 @@ import asyncio
 import contextlib
 from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypedDict
 
 import httpx
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
+
+
+class InterruptPayload(TypedDict):
+    """Payload surfaced when the server requests human input for a thread."""
+
+    interrupt_id: str
+    value: Any
+    namespace: list[str]
 
 
 @dataclass
@@ -70,6 +78,7 @@ class RunModule:
             params["config"] = config
         if metadata is not None:
             params["metadata"] = metadata
+        self._owner._ensure_lifecycle_watcher_running()
         return await self._owner._send_command("run.start", params)
 
 
@@ -110,6 +119,10 @@ class AsyncThreadStream:
         self._shared_stream: EventStreamHandle | None = None
         self._shared_stream_filter: dict[str, Any] | None = None
         self._fanout_task: asyncio.Task[None] | None = None
+        self.interrupted: bool = False
+        self.interrupts: list[InterruptPayload] = []
+        self._lifecycle_watcher_task: asyncio.Task[None] | None = None
+        self._lifecycle_watcher_handle: EventStreamHandle | None = None
         self.run = RunModule(self)
 
     async def __aenter__(self) -> AsyncThreadStream:
@@ -326,3 +339,55 @@ class AsyncThreadStream:
             message = response.get("message", "")
             raise RuntimeError(f"Protocol error [{code}]: {message}")
         return response.get("result", {})
+
+    def _ensure_lifecycle_watcher_running(self) -> None:
+        if self._lifecycle_watcher_task is not None:
+            return
+        self._lifecycle_watcher_task = asyncio.create_task(
+            self._run_lifecycle_watcher()
+        )
+
+    async def _run_lifecycle_watcher(self) -> None:
+        """Always-on SSE consuming lifecycle + input channels.
+
+        Independent of the union-filter shared stream so that interrupts
+        surface even when no other subscription is active.
+        """
+        if self._transport is None:
+            return
+        try:
+            handle = self._transport.open_event_stream(
+                {"channels": ["lifecycle", "input"]}
+            )
+            self._lifecycle_watcher_handle = handle
+            await asyncio.wait_for(handle.ready, timeout=5.0)
+            async for event in handle.events:
+                if self._closed:
+                    return
+                self._apply_lifecycle_event(event)
+        except (Exception, asyncio.CancelledError):
+            return
+
+    def _apply_lifecycle_event(self, event: Event) -> None:
+        """Update `interrupted` / `interrupts` state from a lifecycle or input event."""
+        method = event.get("method")
+        if method == "input.requested":
+            params = event.get("params") or {}
+            data = params.get("data") if isinstance(params, dict) else None
+            interrupt_id = data.get("interrupt_id") if isinstance(data, dict) else None
+            if isinstance(interrupt_id, str):
+                payload: InterruptPayload = {
+                    "interrupt_id": interrupt_id,
+                    "value": data.get("value") if isinstance(data, dict) else None,
+                    "namespace": params.get("namespace") or []
+                    if isinstance(params, dict)
+                    else [],
+                }
+                self.interrupts.append(payload)
+                self.interrupted = True
+        elif method == "lifecycle":
+            params = event.get("params") or {}
+            data = params.get("data") if isinstance(params, dict) else None
+            phase = data.get("phase") if isinstance(data, dict) else None
+            if phase in ("completed", "errored"):
+                self.interrupted = False

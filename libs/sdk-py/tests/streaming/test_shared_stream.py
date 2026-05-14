@@ -78,8 +78,8 @@ async def test_no_rotation_when_existing_filter_covers_new_subscription():
             await thread._reconcile_stream({"channels": ["lifecycle", "values"]})
             # New subscription is a subset — existing filter covers it.
             await thread._reconcile_stream({"channels": ["values"]})
-    # No rotation: only one SSE request was opened.
-    assert len(fake.stream_request_bodies) == 1
+    # No rotation in the shared stream (1 shared SSE) plus 1 lifecycle watcher SSE = 2.
+    assert len(fake.stream_request_bodies) == 2
 
 
 async def test_subscribe_yields_only_matching_events():
@@ -126,8 +126,8 @@ async def test_two_concurrent_subscribes_share_one_stream():
             )
     assert len(results[0]) == 5
     assert len(results[1]) == 5
-    # Both subscriptions share one SSE — only one POST to /stream/events.
-    assert len(fake.stream_request_bodies) == 1
+    # Both subscriptions share one SSE (no rotation) plus 1 lifecycle watcher SSE = 2.
+    assert len(fake.stream_request_bodies) == 2
 
 
 async def test_subscribe_does_not_leak_when_iterator_unconsumed():
