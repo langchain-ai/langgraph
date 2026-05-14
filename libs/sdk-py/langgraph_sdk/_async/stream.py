@@ -98,6 +98,11 @@ class RunModule:
             # Identity-check before clearing so the later call's gate isn't stomped.
             if self._owner._run_start_ready is gate:
                 self._owner._run_start_ready = None
+            # Why: if the gate stored an exception that no awaiter consumed,
+            # retrieve it here to suppress asyncio's GC warning. The exception
+            # is already propagated to our caller via the `raise` above.
+            if gate.done() and not gate.cancelled():
+                gate.exception()
 
 
 async def _close_after(handle: EventStreamHandle, *, delay: float = 0.0) -> None:
