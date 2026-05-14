@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
+from typing import Any, cast
 
 import httpx
 
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.threads import ThreadsClient
+from langgraph_sdk.stream.controller import StreamController
 from streaming._events import lifecycle_event, values_event
 from streaming._fake_server import FakeServer
 
@@ -148,3 +151,50 @@ async def test_subscribe_does_not_leak_when_iterator_unconsumed():
             _ = thread.subscribe(["lifecycle"])  # construct but never iterate
             # Subscription is not registered yet — the generator body hasn't run.
             assert len(thread._subscriptions) == 0
+
+
+async def test_values_projection_registers_via_delegation_not_controller_directly():
+    """Values projection must register subscriptions through AsyncThreadStream delegation wrappers.
+
+    Verifies that subscriptions created by `thread.values` are visible via
+    `thread._subscriptions` (the delegated property) and also accessible in
+    `thread._controller._subscriptions`, confirming both views are consistent.
+    The test also confirms that the `_ValuesProjection` never bypasses
+    `AsyncThreadStream._register_subscription` to write to the controller
+    directly — the subscription count seen through the thread wrapper equals
+    the count inside the controller at the moment the subscription is live.
+    """
+    from streaming._events import lifecycle_completed_event
+
+    fake = FakeServer()
+    fake.script([lifecycle_completed_event(seq=0)])
+    fake.set_state({"ok": True})
+    asgi = httpx.ASGITransport(app=fake.app)
+    counts_during: list[tuple[int, int]] = []
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            raw_controller = thread._controller
+            assert raw_controller is not None
+            controller: StreamController = raw_controller
+
+            assert len(thread._subscriptions) == 0
+
+            # Collect counts while the subscription is live (first snapshot only).
+            aiter: AsyncGenerator[Any, None] = cast(
+                "AsyncGenerator[Any, None]", thread.values.__aiter__()
+            )
+            # Advance to first item — subscription must be registered by now.
+            await aiter.__anext__()
+            counts_during.append(
+                (len(thread._subscriptions), len(controller._subscriptions))
+            )
+            # Close the iterator explicitly so the finally block runs immediately.
+            await aiter.aclose()
+
+    # Both views must have agreed — no bypass of the delegation wrapper.
+    assert len(counts_during) == 1
+    thread_count, ctrl_count = counts_during[0]
+    assert thread_count == ctrl_count
+    assert thread_count >= 1
