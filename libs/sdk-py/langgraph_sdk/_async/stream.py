@@ -13,13 +13,14 @@ Direct port of `libs/sdk/src/client/stream/index.ts`.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterator
+import contextlib
+from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
-import httpx
 from langchain_protocol import Event, SubscribeParams
 
+from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
 
 
@@ -179,12 +180,14 @@ class AsyncThreadStream:
     def __init__(
         self,
         *,
-        client: httpx.AsyncClient,
+        http: HttpClient,
         thread_id: str,
         assistant_id: str,
+        headers: Mapping[str, str] | None = None,
         max_queue_size: int = 1024,
     ) -> None:
-        self._http_client = client
+        self._http = http
+        self._headers = dict(headers or {})
         self.thread_id = thread_id
         self.assistant_id = assistant_id
         self._max_queue_size = max_queue_size
@@ -209,8 +212,9 @@ class AsyncThreadStream:
         if self._closed:
             raise RuntimeError("AsyncThreadStream is closed and cannot be re-entered.")
         self._transport = ProtocolSseTransport(
-            client=self._http_client,
+            client=self._http.client,
             thread_id=self.thread_id,
+            headers=self._headers or None,
             max_queue_size=self._max_queue_size,
         )
         return self

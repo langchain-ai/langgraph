@@ -27,12 +27,16 @@ class FakeServer:
         received_commands: every command body posted to /commands, in order.
         scripted_events: events the next /stream/events call will replay.
         stream_request_bodies: bodies posted to /stream/events, in order.
+        command_request_headers: headers from each POST to /commands, in order.
+        stream_request_headers_list: headers from each POST to /stream/events, in order.
     """
 
     def __init__(self) -> None:
         self.received_commands: list[dict[str, Any]] = []
         self.scripted_events: list[dict[str, Any]] = []
         self.stream_request_bodies: list[dict[str, Any]] = []
+        self.command_request_headers: list[dict[str, str]] = []
+        self.stream_request_headers_list: list[dict[str, str]] = []
         self._stream_delay: float = 0.0
         self._app: Starlette | None = None
         self.open_event_streams = 0
@@ -53,6 +57,7 @@ class FakeServer:
         async def commands(request: Request) -> Response:
             body = orjson.loads(await request.body())
             self.received_commands.append(body)
+            self.command_request_headers.append(dict(request.headers))
             command_id = body.get("id")
             return JSONResponse(
                 {
@@ -64,6 +69,7 @@ class FakeServer:
 
         async def stream_events(request: Request) -> Response:
             self.stream_request_bodies.append(orjson.loads(await request.body()))
+            self.stream_request_headers_list.append(dict(request.headers))
             return StreamingResponse(
                 self._sse_body(),
                 media_type="text/event-stream",

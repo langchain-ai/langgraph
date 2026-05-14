@@ -16,7 +16,7 @@ from streaming._fake_server import FakeServer
 async def test_thread_stream_stores_thread_id_and_assistant_id():
     async with httpx.AsyncClient(base_url="http://test") as client:
         stream = AsyncThreadStream(
-            client=client,
+            http=HttpClient(client),
             thread_id="t-1",
             assistant_id="agent",
         )
@@ -26,14 +26,18 @@ async def test_thread_stream_stores_thread_id_and_assistant_id():
 
 async def test_aenter_returns_self():
     async with httpx.AsyncClient(base_url="http://test") as client:
-        stream = AsyncThreadStream(client=client, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(client), thread_id="t-1", assistant_id="agent"
+        )
         async with stream as entered:
             assert entered is stream
 
 
 async def test_aexit_marks_closed():
     async with httpx.AsyncClient(base_url="http://test") as client:
-        stream = AsyncThreadStream(client=client, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(client), thread_id="t-1", assistant_id="agent"
+        )
         async with stream:
             assert stream._closed is False
         assert stream._closed is True
@@ -41,7 +45,9 @@ async def test_aexit_marks_closed():
 
 async def test_close_is_idempotent():
     async with httpx.AsyncClient(base_url="http://test") as client:
-        stream = AsyncThreadStream(client=client, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(client), thread_id="t-1", assistant_id="agent"
+        )
         await stream.close()
         await stream.close()  # must not raise
         assert stream._closed is True
@@ -75,19 +81,43 @@ async def test_threads_stream_requires_assistant_id():
             threads.stream(thread_id="t-1")  # ty: ignore[missing-argument]
 
 
-async def test_threads_stream_accepts_headers_kwarg():
-    """`headers` is accepted as a kwarg even though it isn't forwarded yet."""
-    from langgraph_sdk._async.http import HttpClient
-    from langgraph_sdk._async.threads import ThreadsClient
+async def test_threads_stream_headers_forwarded_to_commands():
+    """Headers passed to `threads.stream()` are forwarded to /commands requests."""
+    from streaming._fake_server import FakeServer
 
-    async with httpx.AsyncClient(base_url="http://test") as raw:
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
         threads = ThreadsClient(HttpClient(raw))
-        stream = threads.stream(
+        async with threads.stream(
             thread_id="t-1",
             assistant_id="agent",
-            headers={"X-Foo": "bar"},
-        )
-        assert stream.thread_id == "t-1"
+            headers={"X-Custom-Header": "my-value"},
+        ) as thread:
+            await thread.run.start(input={})
+    assert fake.command_request_headers, "no command requests captured"
+    assert fake.command_request_headers[0].get("x-custom-header") == "my-value"
+
+
+async def test_threads_stream_headers_forwarded_to_stream_events():
+    """Headers passed to `threads.stream()` are forwarded to /stream/events requests."""
+    from streaming._events import lifecycle_event
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    fake.script([lifecycle_event(seq=0)])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+            headers={"X-Custom-Header": "my-value"},
+        ) as thread:
+            await thread.run.start(input={})
+            _ = [e async for e in thread.subscribe(["lifecycle"])]
+    assert fake.stream_request_headers_list, "no stream/events requests captured"
+    assert fake.stream_request_headers_list[0].get("x-custom-header") == "my-value"
 
 
 async def test_aenter_constructs_transport_with_thread_id():
@@ -174,7 +204,9 @@ async def test_run_start_raises_outside_context_manager():
     import pytest
 
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(raw), thread_id="t-1", assistant_id="agent"
+        )
         with pytest.raises(RuntimeError, match="async with"):
             await stream.run.start(input={"x": 1})
 
@@ -281,7 +313,9 @@ async def test_events_terminates_on_aexit():
 
 async def test_events_raises_outside_context_manager():
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(raw), thread_id="t-1", assistant_id="agent"
+        )
         with pytest.raises(RuntimeError, match="async with"):
             _ = stream.events
 
@@ -358,7 +392,9 @@ async def test_fresh_thread_happy_path_end_to_end():
 
 async def test_aenter_raises_after_close():
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(raw), thread_id="t-1", assistant_id="agent"
+        )
         async with stream:
             pass
         # After exit, the stream is closed; re-entering must raise rather than
@@ -370,7 +406,9 @@ async def test_aenter_raises_after_close():
 
 async def test_register_subscription_assigns_monotonic_ids():
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(raw), thread_id="t-1", assistant_id="agent"
+        )
         async with stream:
             sub_a = stream._register_subscription({"channels": ["values"]})
             sub_b = stream._register_subscription({"channels": ["messages"]})
@@ -382,7 +420,9 @@ async def test_register_subscription_assigns_monotonic_ids():
 
 async def test_unregister_subscription_removes_from_registry():
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(raw), thread_id="t-1", assistant_id="agent"
+        )
         async with stream:
             sub = stream._register_subscription({"channels": ["values"]})
             stream._unregister_subscription(sub.id)
@@ -456,8 +496,6 @@ async def test_run_respond_with_explicit_interrupt_id():
 
 
 async def test_run_respond_raises_when_no_outstanding_interrupts():
-    import pytest
-
     async with httpx.AsyncClient(base_url="http://test") as raw:
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
@@ -466,8 +504,6 @@ async def test_run_respond_raises_when_no_outstanding_interrupts():
 
 
 async def test_run_respond_raises_when_ambiguous_interrupt_id():
-    import pytest
-
     async with httpx.AsyncClient(base_url="http://test") as raw:
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
@@ -483,8 +519,6 @@ async def test_run_respond_raises_when_ambiguous_interrupt_id():
 
 
 async def test_run_respond_raises_when_explicit_interrupt_id_not_outstanding():
-    import pytest
-
     async with httpx.AsyncClient(base_url="http://test") as raw:
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:

@@ -732,7 +732,7 @@ class ThreadsClient:
         thread_id: str | None = None,
         *,
         assistant_id: str,
-        headers: Mapping[str, str] | None = None,  # noqa: ARG002
+        headers: Mapping[str, str] | None = None,
     ) -> AsyncThreadStream:
         """Open a v3 thread-centric streaming session.
 
@@ -748,16 +748,17 @@ class ThreadsClient:
             thread_id: optional explicit thread identifier. Defaults to a
                 fresh UUIDv4.
             assistant_id: assistant the run will use. Required.
-            headers: optional per-request headers. Reserved; not currently
-                forwarded.
+            headers: optional headers forwarded on every command and SSE
+                request for this stream session.
 
         Returns:
             An `AsyncThreadStream` to use as an async context manager.
         """
         return AsyncThreadStream(
-            client=self.http.client,
+            http=self.http,
             thread_id=thread_id if thread_id is not None else str(uuid.uuid4()),
             assistant_id=assistant_id,
+            headers=headers,
         )
 
     async def join_stream(

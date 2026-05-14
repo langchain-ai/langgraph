@@ -434,3 +434,70 @@ async def test_transport_close_cancels_open_event_streams():
                 pass
 
         await asyncio.wait_for(drain(), timeout=1.0)
+
+
+async def test_default_headers_forwarded_to_send_command():
+    """Headers passed at construction are sent on every command request."""
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(
+            client=client,
+            thread_id="t-1",
+            headers={"X-Trace-Id": "abc123"},
+        )
+        await sse.send_command({"id": 1, "method": "run.start", "params": {}})
+    assert fake.command_request_headers[0].get("x-trace-id") == "abc123"
+    # content-type must not be clobbered by default headers
+    assert "application/json" in fake.command_request_headers[0].get("content-type", "")
+
+
+async def test_default_headers_forwarded_to_open_event_stream():
+    """Headers passed at construction are sent on every SSE stream request."""
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    fake.script([])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(
+            client=client,
+            thread_id="t-1",
+            headers={"X-Trace-Id": "abc123"},
+        )
+        handle = sse.open_event_stream({"channels": ["lifecycle"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        _ = [e async for e in handle.events]
+        await handle.close()
+    assert fake.stream_request_headers_list[0].get("x-trace-id") == "abc123"
+    # Fixed SSE headers must not be clobbered by default headers
+    assert "text/event-stream" in fake.stream_request_headers_list[0].get("accept", "")
+
+
+async def test_default_headers_cannot_override_sse_fixed_headers():
+    """Caller-supplied default headers must not override content-type or accept."""
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    fake.script([])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(
+            client=client,
+            thread_id="t-1",
+            headers={
+                "content-type": "text/plain",
+                "accept": "application/json",
+                "cache-control": "max-age=3600",
+            },
+        )
+        handle = sse.open_event_stream({"channels": ["lifecycle"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        _ = [e async for e in handle.events]
+        await handle.close()
+    hdrs = fake.stream_request_headers_list[0]
+    assert "application/json" in hdrs.get("content-type", "")
+    assert "text/event-stream" in hdrs.get("accept", "")
+    assert hdrs.get("cache-control") == "no-store"
