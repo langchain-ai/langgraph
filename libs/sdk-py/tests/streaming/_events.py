@@ -243,3 +243,48 @@ def tool_error_event(
             "code": code,
         },
     )
+
+
+def tasks_start_event(
+    seq: int = 0,
+    namespace: list[str] | None = None,
+    *,
+    task_id: str = "task-1",
+    name: str = "node",
+    input: Any = None,
+) -> dict[str, Any]:
+    return _base(
+        seq,
+        "tasks",
+        namespace or [],
+        {
+            "id": task_id,
+            "name": name,
+            "input": input,
+            "triggers": [],
+        },
+    )
+
+
+def tasks_result_event(
+    seq: int = 0,
+    namespace: list[str] | None = None,
+    *,
+    task_id: str = "task-1",
+    name: str = "node",
+    result: Any = None,
+    error: str | None = None,
+    interrupts: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return _base(
+        seq,
+        "tasks",
+        namespace or [],
+        {
+            "id": task_id,
+            "name": name,
+            "result": result if result is not None else {},
+            "error": error,
+            "interrupts": interrupts or [],
+        },
+    )
