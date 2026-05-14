@@ -33,8 +33,8 @@ Additive — `client.runs.stream(...)` and `client.threads.join_stream(...)` sta
 │   AsyncThreadStream                                              │
 │     .run.start    .run.respond    .agent.get_tree                │
 │     .events                                                      │
-│     .values  .messages  .tool_calls  .subgraphs  .subagents      │
-│     .extensions["name"]                                          │
+│     .values  .output  .messages  .tool_calls                     │
+│     .subgraphs  .subagents  .extensions["name"]                  │
 │     .interrupted  .interrupts                                    │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -77,6 +77,7 @@ Each `AsyncThreadStream` holds one union-filter SSE (subscription set rotates as
 | `thread.agent.get_tree(...)` | Agent introspection. |
 | `thread.events` | Raw `AsyncIterator[Event]` over every channel. |
 | `thread.values` | `AsyncIterator[snapshot]` plus `Awaitable[final_state]`. |
+| `thread.output` | `Awaitable[final_state]`. Convenience — shares the `values` SSE; skip when you don't need intermediate snapshots. |
 | `thread.messages` | `AsyncIterator[StreamingMessageHandle]` — typed over `langchain-core` `BaseMessage`. |
 | `thread.tool_calls` | `AsyncIterator[ToolCallHandle]`. |
 | `thread.subgraphs` / `thread.subagents` | Nested handles for graph composition. |
@@ -136,6 +137,7 @@ The complete set, all defined in `langgraph_sdk._async.stream`:
 
 - `thread.events` — raw `Event` dicts over every channel; untyped, useful for debug or to drop below the typed surface.
 - `thread.values` — state snapshots plus final state. Replaces `stream_mode="values"`.
+- `thread.output` — `Awaitable[final_state]` only. Shares the `values` SSE; convenience for callers who don't need intermediate snapshots.
 - `thread.messages` — `StreamingMessageHandle` typed over `langchain-core` `BaseMessage`. Replaces `stream_mode="messages"`.
 - `thread.tool_calls` — `ToolCallHandle` per tool invocation.
 - `thread.subgraphs` / `thread.subagents` — nested handles per invocation (see §3.1).
