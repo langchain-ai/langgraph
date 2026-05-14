@@ -13,7 +13,7 @@ from langgraph.graph import StateGraph
 from langgraph.stream import StreamChannel, StreamTransformer
 from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
-from langgraph.stream.run_stream import GraphRunStream
+from langgraph.stream.run_stream import AsyncGraphRunStream, GraphRunStream
 from langgraph.stream.transformers import ValuesTransformer
 
 # ---------------------------------------------------------------------------
@@ -355,5 +355,171 @@ class TestInterleaveIntegration:
 
         with pytest.raises(RuntimeError, match="already has a subscriber"):
             list(run.interleave("values", "alpha"))
+
+        assert mux.extensions["values"]._subscribed is False
+
+
+class TestAsyncInterleaveArrivalOrder:
+    @pytest.mark.anyio
+    async def test_arrival_order_not_round_robin(self) -> None:
+        mux = StreamMux(
+            factories=[ValuesTransformer, _TwoChannelTransformer],
+            is_async=True,
+        )
+        alpha = mux.extensions["alpha"]
+        beta = mux.extensions["beta"]
+        run = AsyncGraphRunStream(None, mux, wire_pump=False)
+
+        push_script = [
+            ("alpha", "a1"),
+            ("alpha", "a2"),
+            ("beta", "b1"),
+            ("alpha", "a3"),
+            ("beta", "b2"),
+        ]
+        push_iter = iter(push_script)
+        channels = {"alpha": alpha, "beta": beta}
+
+        async def fake_pump() -> bool:
+            try:
+                name, item = next(push_iter)
+                channels[name].push(item)
+                return True
+            except StopIteration:
+                await mux.aclose()
+                return False
+
+        mux.bind_apump(fake_pump)
+
+        result = [pair async for pair in run.interleave("alpha", "beta")]
+        names = [name for name, _ in result]
+        items = [item for _, item in result]
+
+        assert items == ["a1", "a2", "b1", "a3", "b2"]
+        assert names == ["alpha", "alpha", "beta", "alpha", "beta"]
+
+    @pytest.mark.anyio
+    async def test_empty_projection(self) -> None:
+        mux = StreamMux(
+            factories=[ValuesTransformer, _TwoChannelTransformer],
+            is_async=True,
+        )
+        alpha = mux.extensions["alpha"]
+        run = AsyncGraphRunStream(None, mux, wire_pump=False)
+
+        push_script = ["a1", "a2"]
+        push_iter = iter(push_script)
+
+        async def fake_pump() -> bool:
+            try:
+                alpha.push(next(push_iter))
+                return True
+            except StopIteration:
+                await mux.aclose()
+                return False
+
+        mux.bind_apump(fake_pump)
+
+        result = [pair async for pair in run.interleave("alpha", "beta")]
+        assert result == [("alpha", "a1"), ("alpha", "a2")]
+
+    @pytest.mark.anyio
+    async def test_error_propagation(self) -> None:
+        mux = StreamMux(
+            factories=[ValuesTransformer, _TwoChannelTransformer],
+            is_async=True,
+        )
+        alpha = mux.extensions["alpha"]
+        beta = mux.extensions["beta"]
+        run = AsyncGraphRunStream(None, mux, wire_pump=False)
+        err = RuntimeError("boom")
+
+        push_script = [
+            ("alpha", "a1"),
+            ("beta", "b1"),
+        ]
+        push_iter = iter(push_script)
+        channels = {"alpha": alpha, "beta": beta}
+
+        async def fake_pump() -> bool:
+            try:
+                name, item = next(push_iter)
+                channels[name].push(item)
+                return True
+            except StopIteration:
+                alpha.fail(err)
+                beta.close()
+                return False
+
+        mux.bind_apump(fake_pump)
+
+        collected = []
+        with pytest.raises(RuntimeError, match="boom"):
+            async for pair in run.interleave("alpha", "beta"):
+                collected.append(pair)
+
+        assert ("alpha", "a1") in collected
+        assert ("beta", "b1") in collected
+
+
+class TestAsyncInterleaveIntegration:
+    @pytest.mark.anyio
+    async def test_interleave_values_and_messages(self) -> None:
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
+        tagged = [pair async for pair in run.interleave("values", "messages")]
+        names = [name for name, _ in tagged]
+        assert set(names).issubset({"values", "messages"})
+        assert names.count("values") >= 1
+
+    @pytest.mark.anyio
+    async def test_interleave_rejects_already_subscribed(self) -> None:
+        mux = StreamMux(
+            factories=[ValuesTransformer, _TwoChannelTransformer],
+            is_async=True,
+        )
+        alpha = mux.extensions["alpha"]
+        run = AsyncGraphRunStream(None, mux, wire_pump=False)
+
+        _ = alpha.__aiter__()
+        await mux.aclose()
+
+        with pytest.raises(RuntimeError, match="already has a subscriber"):
+            [pair async for pair in run.interleave("alpha")]
+
+    @pytest.mark.anyio
+    async def test_interleave_releases_projections_on_completion(self) -> None:
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
+        [pair async for pair in run.interleave("values", "messages")]
+        assert run.extensions["values"]._subscribed is False
+        assert run.extensions["messages"]._subscribed is False
+
+    @pytest.mark.anyio
+    async def test_interleave_releases_projections_on_early_break(self) -> None:
+        run = await _build_simple_graph().astream_events(
+            {"value": "x", "items": []}, version="v3"
+        )
+        agen = run.interleave("values", "messages")
+        await anext(agen)
+        await agen.aclose()
+        assert run.extensions["values"]._subscribed is False
+        assert run.extensions["messages"]._subscribed is False
+
+    @pytest.mark.anyio
+    async def test_interleave_releases_projections_on_validation_failure(self) -> None:
+        mux = StreamMux(
+            factories=[ValuesTransformer, _TwoChannelTransformer],
+            is_async=True,
+        )
+        alpha = mux.extensions["alpha"]
+        run = AsyncGraphRunStream(None, mux, wire_pump=False)
+        await mux.aclose()
+        alpha._subscribed = True
+
+        with pytest.raises(RuntimeError, match="already has a subscriber"):
+            [pair async for pair in run.interleave("values", "alpha")]
 
         assert mux.extensions["values"]._subscribed is False
