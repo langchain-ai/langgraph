@@ -1,8 +1,11 @@
 """Async thread-centric streaming surface for the v3 protocol.
 
 `AsyncThreadStream` is an async context manager that owns a
-`ProtocolSseTransport` for one thread, dispatches `run.start` commands,
-and exposes a raw `events` async iterable.
+`ProtocolSseTransport` for one thread, dispatches commands (`run.start`,
+`run.respond`), exposes typed subscriptions over a single shared SSE
+(`subscribe`, `events`), and surfaces lifecycle state (`interrupted`,
+`interrupts`) via an always-on lifecycle watcher SSE. Typed projections
+(`thread.values`, `thread.messages`, etc.) mirror the v3 protocol surface.
 
 Direct port of `libs/sdk/src/client/stream/index.ts`.
 """
@@ -479,4 +482,8 @@ class AsyncThreadStream:
             data = params.get("data") if isinstance(params, dict) else None
             phase = data.get("phase") if isinstance(data, dict) else None
             if phase in ("completed", "errored"):
+                # Why: interrupts describe current-run state. Clear on terminal
+                # lifecycle so a subsequent run.respond() can't fire against a
+                # stale prior-run interrupt_id.
                 self.interrupted = False
+                self.interrupts = []
