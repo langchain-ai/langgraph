@@ -484,6 +484,7 @@ name = "langgraph-sdk"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
+    { name = "langchain-core" },
     { name = "langchain-protocol" },
     { name = "orjson" },
 ]
@@ -519,6 +520,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.25.2" },
+    { name = "langchain-core", specifier = ">=1.4.0,<2" },
     { name = "langchain-protocol", specifier = ">=0.0.15" },
     { name = "orjson", specifier = ">=3.11.5" },
 ]

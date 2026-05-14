@@ -18,6 +18,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Generator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
 
+from langchain_core.language_models.chat_model_stream import AsyncChatModelStream
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._async.http import HttpClient
@@ -285,6 +286,255 @@ class _ValuesProjection:
             self._thread._unregister_subscription(sub.id)
 
 
+class _MessagesProjection:
+    """Typed projection for root-scope `thread.messages`.
+
+    Iterating yields one `AsyncChatModelStream` per message-start event.
+    Each iterator owns its own `messages` subscription and routes events
+    from the root namespace only.
+    """
+
+    def __init__(self, thread: AsyncThreadStream) -> None:
+        self._thread = thread
+
+    def __aiter__(self) -> AsyncIterator[AsyncChatModelStream]:
+        return self._messages_iter()
+
+    async def _messages_iter(self) -> AsyncGenerator[AsyncChatModelStream, None]:
+        if self._thread._transport is None:
+            raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
+        params: SubscribeParams = {
+            "channels": ["messages"],
+            "namespaces": [[]],
+            "depth": 0,
+        }
+        sub = self._thread._register_subscription(params)
+        active: dict[str, AsyncChatModelStream] = {}
+        try:
+            await self._thread._reconcile_stream(params)
+            self._thread._ensure_fanout_running()
+            while True:
+                item = await sub.queue.get()
+                if item is None:
+                    return
+                params_field = item.get("params") or {}
+                if not isinstance(params_field, dict):
+                    continue
+                if params_field.get("namespace") not in (None, []):
+                    continue
+                data = params_field.get("data")
+                if not isinstance(data, dict):
+                    continue
+                event_type = data.get("event")
+                if event_type == "message-start":
+                    message_id = _message_event_id(data)
+                    key = _message_route_key(data, fallback=message_id)
+                    metadata = (
+                        data.get("metadata")
+                        if isinstance(data.get("metadata"), dict)
+                        else {}
+                    )
+                    stream = AsyncChatModelStream(
+                        namespace=[],
+                        node=metadata.get("langgraph_node") if metadata else None,
+                        message_id=message_id,
+                    )
+                    active[key] = stream
+                    self._thread._register_active_message_stream(stream)
+                    stream.dispatch(data)
+                    yield stream
+                else:
+                    key = _message_route_key(data)
+                    stream = active.get(key)
+                    if stream is None and len(active) == 1:
+                        stream = next(iter(active.values()))
+                    if stream is None:
+                        continue
+                    stream.dispatch(data)
+                    if event_type in ("message-finish", "error"):
+                        self._thread._unregister_active_message_stream(stream)
+                        for route_key, candidate in list(active.items()):
+                            if candidate is stream:
+                                del active[route_key]
+        finally:
+            for stream in active.values():
+                self._thread._unregister_active_message_stream(stream)
+            self._thread._unregister_subscription(sub.id)
+
+
+def _message_event_id(data: dict[str, Any]) -> str | None:
+    message_id = data.get("id") or data.get("message_id")
+    return str(message_id) if message_id is not None else None
+
+
+def _message_route_key(data: dict[str, Any], fallback: str | None = None) -> str:
+    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    run_id = metadata.get("run_id") if metadata else None
+    message_id = _message_event_id(data)
+    if run_id is not None:
+        return f"run:{run_id}"
+    if message_id is not None:
+        return f"message:{message_id}"
+    if fallback is not None:
+        return f"message:{fallback}"
+    return "__single__"
+
+
+class ToolCallHandle:
+    """Async handle for one root-scope tool call."""
+
+    def __init__(
+        self,
+        *,
+        tool_call_id: str,
+        name: str,
+        input: Any = None,
+        namespace: list[str] | None = None,
+    ) -> None:
+        self.tool_call_id = tool_call_id
+        self.name = name
+        self.input = input
+        self.namespace = list(namespace or [])
+        self.done = False
+        self.error: BaseException | None = None
+        loop = asyncio.get_running_loop()
+        self.output: asyncio.Future[Any] = loop.create_future()
+        self._deltas: asyncio.Queue[str | None] = asyncio.Queue()
+
+    @property
+    def deltas(self) -> AsyncIterator[str]:
+        """Stream tool output deltas emitted before the terminal event."""
+        return self._delta_iter()
+
+    async def _delta_iter(self) -> AsyncGenerator[str, None]:
+        while True:
+            item = await self._deltas.get()
+            if item is None:
+                return  # errors surface via output, not deltas
+            yield item
+
+    def _push_delta(self, delta: str) -> None:
+        if self.done:
+            return
+        self._deltas.put_nowait(delta)
+
+    def _finish(self, output: Any) -> None:
+        if self.done:
+            return
+        self.done = True
+        if not self.output.done():
+            self.output.set_result(output)
+        self._deltas.put_nowait(None)
+
+    def _fail(self, err: BaseException) -> None:
+        if self.done:
+            return
+        self.done = True
+        self.error = err
+        if not self.output.done():
+            self.output.set_exception(err)
+        self._deltas.put_nowait(None)
+
+
+class _ToolCallsProjection:
+    """Typed projection for root-scope `thread.tool_calls`."""
+
+    def __init__(self, thread: AsyncThreadStream) -> None:
+        self._thread = thread
+
+    def __aiter__(self) -> AsyncIterator[ToolCallHandle]:
+        return self._tool_calls_iter()
+
+    async def _tool_calls_iter(self) -> AsyncGenerator[ToolCallHandle, None]:
+        if self._thread._transport is None:
+            raise RuntimeError("AsyncThreadStream not entered - use `async with`.")
+        params: SubscribeParams = {
+            "channels": ["tools"],
+            "namespaces": [[]],
+            "depth": 0,
+        }
+        sub = self._thread._register_subscription(params)
+        active: dict[str, ToolCallHandle] = {}
+        try:
+            await self._thread._reconcile_stream(params)
+            self._thread._ensure_fanout_running()
+            while True:
+                item = await sub.queue.get()
+                if item is None:
+                    return
+                params_field = item.get("params") or {}
+                if not isinstance(params_field, dict):
+                    continue
+                namespace = params_field.get("namespace") or []
+                if namespace != []:
+                    continue
+                data = params_field.get("data")
+                if not isinstance(data, dict):
+                    continue
+                event_type = data.get("event")
+                tool_call_id = data.get("tool_call_id")
+                if not isinstance(tool_call_id, str):
+                    continue
+
+                if event_type == "tool-started":
+                    tool_name = data.get("tool_name")
+                    if not isinstance(tool_name, str):
+                        tool_name = ""
+                    handle = ToolCallHandle(
+                        tool_call_id=tool_call_id,
+                        name=tool_name,
+                        input=data.get("input"),
+                        namespace=namespace,
+                    )
+                    active[tool_call_id] = handle
+                    self._thread._register_active_tool_call(handle)
+                    yield handle
+                elif event_type == "tool-output-delta":
+                    handle = active.get(tool_call_id)
+                    delta = data.get("delta")
+                    if handle is not None and isinstance(delta, str):
+                        handle._push_delta(delta)
+                elif event_type == "tool-finished":
+                    handle = active.pop(tool_call_id, None)
+                    if handle is not None:
+                        self._thread._unregister_active_tool_call(handle)
+                        handle._finish(data.get("output"))
+                elif event_type == "tool-error":
+                    handle = active.pop(tool_call_id, None)
+                    if handle is not None:
+                        self._thread._unregister_active_tool_call(handle)
+                        message = data.get("message")
+                        handle._fail(
+                            RuntimeError(
+                                str(message) if message else "Tool call errored"
+                            )
+                        )
+        finally:
+            # Wait for _run_done before failing remaining handles. The lifecycle
+            # watcher may call _fail_active_tool_calls before this iterator
+            # registers handles (if lifecycle_errored arrives first), so reading
+            # the terminal error directly from _run_done is the reliable path.
+            run_done = self._thread._run_done
+            if run_done is not None and not run_done.done():
+                with contextlib.suppress(
+                    asyncio.TimeoutError, asyncio.CancelledError, Exception
+                ):
+                    await asyncio.wait_for(asyncio.shield(run_done), timeout=1.0)
+            terminal_err: BaseException | None = None
+            if run_done is not None and run_done.done() and not run_done.cancelled():
+                terminal = run_done.result()
+                terminal_err = terminal.error
+            err = (
+                terminal_err
+                if terminal_err is not None
+                else RuntimeError("Tool call stream closed before terminal tool event.")
+            )
+            for handle in active.values():
+                self._thread._unregister_active_tool_call(handle)
+                handle._fail(err)
+            self._thread._unregister_subscription(sub.id)
+
+
 class AsyncThreadStream:
     """Async context manager for one thread's v3 streaming session.
 
@@ -332,9 +582,13 @@ class AsyncThreadStream:
         self._run_start_ready: asyncio.Future[None] | None = None
         self._run_seen: bool = False
         self._run_done: asyncio.Future[_RunTerminal] | None = None
+        self._active_message_streams: set[AsyncChatModelStream] = set()
+        self._active_tool_calls: set[ToolCallHandle] = set()
         self.run = RunModule(self)
         self.output = _OutputAwaitable(self)
         self.values = _ValuesProjection(self)
+        self.messages = _MessagesProjection(self)
+        self.tool_calls = _ToolCallsProjection(self)
 
     @property
     def _controller(self) -> AsyncThreadStream:
@@ -402,6 +656,8 @@ class AsyncThreadStream:
                 await self._lifecycle_watcher_task
         if self._lifecycle_watcher_handle is not None:
             await self._lifecycle_watcher_handle.close()
+        self._fail_active_message_streams(asyncio.CancelledError())
+        self._fail_active_tool_calls(asyncio.CancelledError())
         if self._fanout_task is not None:
             self._fanout_task.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
@@ -425,6 +681,28 @@ class AsyncThreadStream:
     def _unregister_subscription(self, subscription_id: int) -> None:
         """Remove a subscription from the registry. No-op if already absent."""
         self._subscriptions.pop(subscription_id, None)
+
+    def _register_active_message_stream(self, stream: AsyncChatModelStream) -> None:
+        self._active_message_streams.add(stream)
+
+    def _unregister_active_message_stream(self, stream: AsyncChatModelStream) -> None:
+        self._active_message_streams.discard(stream)
+
+    def _fail_active_message_streams(self, err: BaseException) -> None:
+        for stream in list(self._active_message_streams):
+            stream.fail(err)
+        self._active_message_streams.clear()
+
+    def _register_active_tool_call(self, handle: ToolCallHandle) -> None:
+        self._active_tool_calls.add(handle)
+
+    def _unregister_active_tool_call(self, handle: ToolCallHandle) -> None:
+        self._active_tool_calls.discard(handle)
+
+    def _fail_active_tool_calls(self, err: BaseException) -> None:
+        for handle in list(self._active_tool_calls):
+            handle._fail(err)
+        self._active_tool_calls.clear()
 
     def subscribe(
         self,
@@ -750,15 +1028,11 @@ class AsyncThreadStream:
                         error_msg = (
                             data.get("error") if isinstance(data, dict) else None
                         )
-                        run_done.set_result(
-                            _RunTerminal(
-                                status="errored",
-                                error=RuntimeError(
-                                    f"Run errored: {error_msg}"
-                                    if error_msg
-                                    else "Run errored"
-                                ),
-                            )
+                        error = RuntimeError(
+                            f"Run errored: {error_msg}" if error_msg else "Run errored"
                         )
+                        self._fail_active_message_streams(error)
+                        self._fail_active_tool_calls(error)
+                        run_done.set_result(_RunTerminal(status="errored", error=error))
                     else:
                         run_done.set_result(_RunTerminal(status="completed"))
