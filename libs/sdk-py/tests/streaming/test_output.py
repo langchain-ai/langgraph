@@ -47,12 +47,13 @@ async def test_output_with_lifecycle_replay():
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             await thread.run.start(input={})
-            # Poll until _run_done resolves so the lifecycle replay is processed.
-            for _ in range(20):
+            # Yield to the event loop until the lifecycle watcher has processed
+            # the completed event and resolved _run_done.
+            for _ in range(50):
                 run_done = thread._run_done
                 if run_done is not None and run_done.done():
                     break
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0)
             result = await thread.output
     assert result == {"counter": 42}
     assert fake.state_request_count == 1
@@ -73,6 +74,32 @@ async def test_output_completed_before_attach_returns_rest_state():
             result = await thread.output
     assert result == {"done": True}
     assert fake.state_request_count == 1
+
+
+async def test_output_explicit_thread_id_non_terminal_falls_through_to_lifecycle():
+    """Explicit thread_id, non-terminal state → falls through fast path and waits for lifecycle."""
+    fake = FakeServer()
+    # Non-terminal state: next has a pending node so the fast-path check fails.
+    # The same state is returned on the second fetch (after lifecycle fires).
+    fake.set_state(values={"result": "done"}, next=["still_running"])
+    # Script a lifecycle completion event — the watcher fires this to resolve _run_done.
+    fake.script([lifecycle_completed_event(seq=1)])
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        # Explicit thread_id triggers the fast-path check (no run.start called).
+        async with threads.stream(
+            thread_id="existing-2", assistant_id="agent"
+        ) as thread:
+            # _run_seen is False (no run.start), explicit_thread_id is True:
+            # _can_return_existing_state_immediately() returns True.
+            # First fetch returns non-terminal state → falls through to _wait_for_run_done.
+            # Lifecycle completed event resolves _run_done.
+            # Second fetch returns same state; values are returned.
+            result = await thread.output
+    assert result == {"result": "done"}
+    # Two fetches: one for the fast-path terminal check, one after lifecycle fires.
+    assert fake.state_request_count == 2
 
 
 async def test_output_does_not_open_values_stream():
