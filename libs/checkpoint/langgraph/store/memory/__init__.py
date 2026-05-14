@@ -244,7 +244,7 @@ class InMemoryStore(BaseStore):
                 return True
 
             return all(
-                _compare_values(item.value.get(key), filter_value)
+                _compare_values(_get_filter_value(item.value, key), filter_value)
                 for key, filter_value in op.filter.items()
             )
 
@@ -572,6 +572,16 @@ def _compare_values(item_value: Any, filter_value: Any) -> bool:
         )
     else:
         return item_value == filter_value
+
+
+def _get_filter_value(item_value: Any, key: str) -> Any:
+    """Resolve a filter key against an item value, supporting dotted paths."""
+    current = item_value
+    for part in key.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return None
+        current = current[part]
+    return current
 
 
 def _apply_operator(value: Any, operator: str, op_value: Any) -> bool:
