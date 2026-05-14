@@ -127,3 +127,17 @@ async def test_lifecycle_error_captured_for_output():
     assert terminal.status == "errored"
     assert terminal.error is not None
     assert "something went wrong" in str(terminal.error)
+
+
+async def test_run_start_sets_run_seen():
+    """run.start() sets _run_seen to True (even without lifecycle event)."""
+    fake = FakeServer()
+    fake.script([])  # No events; the command response is sufficient.
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            assert thread._run_seen is False
+            await thread.run.start(input={})
+            # _run_seen is set synchronously in run.start, before awaiting the result.
+            assert thread._run_seen is True
