@@ -83,8 +83,6 @@ async def test_threads_stream_requires_assistant_id():
 
 async def test_threads_stream_headers_forwarded_to_commands():
     """Headers passed to `threads.stream()` are forwarded to /commands requests."""
-    from streaming._fake_server import FakeServer
-
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
@@ -101,9 +99,6 @@ async def test_threads_stream_headers_forwarded_to_commands():
 
 async def test_threads_stream_headers_forwarded_to_stream_events():
     """Headers passed to `threads.stream()` are forwarded to /stream/events requests."""
-    from streaming._events import lifecycle_event
-    from streaming._fake_server import FakeServer
-
     fake = FakeServer()
     fake.script([lifecycle_event(seq=0)])
     transport = httpx.ASGITransport(app=fake.app)
@@ -118,6 +113,41 @@ async def test_threads_stream_headers_forwarded_to_stream_events():
             _ = [e async for e in thread.subscribe(["lifecycle"])]
     assert fake.stream_request_headers_list, "no stream/events requests captured"
     assert fake.stream_request_headers_list[0].get("x-custom-header") == "my-value"
+
+
+async def test_no_headers_by_default():
+    """When `headers` is omitted, `_headers` is an empty dict and no custom
+    headers appear in command or stream requests.
+    """
+    fake = FakeServer()
+    fake.script([lifecycle_event(seq=0)])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            assert thread._headers == {}
+            await thread.run.start(input={})
+            _ = [e async for e in thread.subscribe(["lifecycle"])]
+    # No custom header keys beyond the protocol-required / transport-required ones.
+    protocol_keys = {
+        "content-type",
+        "accept",
+        "cache-control",
+        "host",
+        "user-agent",
+        "accept-encoding",
+        "connection",
+        "transfer-encoding",
+        "content-length",
+    }
+    extra_command = {
+        k for k in fake.command_request_headers[0] if k.lower() not in protocol_keys
+    }
+    extra_stream = {
+        k for k in fake.stream_request_headers_list[0] if k.lower() not in protocol_keys
+    }
+    assert extra_command == set(), f"unexpected command headers: {extra_command}"
+    assert extra_stream == set(), f"unexpected stream headers: {extra_stream}"
 
 
 async def test_aenter_constructs_transport_with_thread_id():

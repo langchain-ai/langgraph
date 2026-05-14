@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -72,7 +72,7 @@ class ProtocolSseTransport:
         thread_id: str,
         commands_path: str | None = None,
         stream_path: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         max_queue_size: int = 1024,
     ) -> None:
         self._client = client

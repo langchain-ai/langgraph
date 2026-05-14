@@ -214,7 +214,7 @@ class AsyncThreadStream:
         self._transport = ProtocolSseTransport(
             client=self._http.client,
             thread_id=self.thread_id,
-            headers=self._headers or None,
+            headers=self._headers,
             max_queue_size=self._max_queue_size,
         )
         return self
