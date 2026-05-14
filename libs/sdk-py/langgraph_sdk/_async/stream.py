@@ -109,23 +109,25 @@ class RunModule:
 
     async def respond(
         self,
-        value: Any,
+        response: Any,
         *,
         interrupt_id: str | None = None,
     ) -> dict[str, Any]:
         """Reply to a server-side interrupt and resume the run.
 
         Args:
-            value: the response value forwarded as `params.value` on the wire.
+            response: the response value forwarded as `params.response` on the
+                wire (protocol field name).
             interrupt_id: optional explicit id. When omitted, requires exactly
                 one outstanding interrupt and uses its id.
 
         Raises:
-            RuntimeError: no outstanding interrupts, or `interrupt_id` is None
-                but multiple interrupts are outstanding.
+            RuntimeError: no outstanding interrupts; `interrupt_id` is None but
+                multiple interrupts are outstanding; or the explicit
+                `interrupt_id` doesn't match any outstanding interrupt.
         """
+        outstanding = self._owner.interrupts
         if interrupt_id is None:
-            outstanding = self._owner.interrupts
             if len(outstanding) == 0:
                 raise RuntimeError(
                     "thread.run.respond: no outstanding interrupt. Provide an "
@@ -138,10 +140,21 @@ class RunModule:
                     f"outstanding interrupts ({ids!r}). Provide an explicit "
                     "`interrupt_id`."
                 )
-            interrupt_id = outstanding[0]["interrupt_id"]
+            match = outstanding[0]
+        else:
+            match = next(
+                (p for p in outstanding if p["interrupt_id"] == interrupt_id),
+                None,
+            )
+            if match is None:
+                raise RuntimeError(
+                    f"thread.run.respond: interrupt_id {interrupt_id!r} does not "
+                    "match any outstanding interrupt in `thread.interrupts`."
+                )
         params = {
-            "interrupt_id": interrupt_id,
-            "value": value,
+            "interrupt_id": match["interrupt_id"],
+            "namespace": match["namespace"],
+            "response": response,
         }
         return await self._owner._send_command("input.respond", params)
 

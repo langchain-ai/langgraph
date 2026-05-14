@@ -432,7 +432,8 @@ async def test_run_respond_dispatches_input_respond_command():
     command = fake.received_commands[-1]
     assert command["method"] == "input.respond"
     assert command["params"]["interrupt_id"] == "i-1"
-    assert command["params"]["value"] == "yes"
+    assert command["params"]["response"] == "yes"
+    assert command["params"]["namespace"] == []
 
 
 async def test_run_respond_with_explicit_interrupt_id():
@@ -451,6 +452,7 @@ async def test_run_respond_with_explicit_interrupt_id():
             thread.interrupted = True
             await thread.run.respond("pick", interrupt_id="b")
     assert fake.received_commands[-1]["params"]["interrupt_id"] == "b"
+    assert fake.received_commands[-1]["params"]["namespace"] == []
 
 
 async def test_run_respond_raises_when_no_outstanding_interrupts():
@@ -478,3 +480,17 @@ async def test_run_respond_raises_when_ambiguous_interrupt_id():
             thread.interrupted = True
             with pytest.raises(RuntimeError, match=r"ambiguous|interrupt_id"):
                 await thread.run.respond("yes")
+
+
+async def test_run_respond_raises_when_explicit_interrupt_id_not_outstanding():
+    import pytest
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.interrupts.append(
+                {"interrupt_id": "a", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            with pytest.raises(RuntimeError, match="does not match"):
+                await thread.run.respond("yes", interrupt_id="nonexistent")
