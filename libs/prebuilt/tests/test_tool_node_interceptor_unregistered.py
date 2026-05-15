@@ -802,3 +802,71 @@ async def test_graceful_failure_even_when_handle_errors_disabled_async() -> None
         result[0].content
         == "Error: missing is not a valid tool, try one of [registered_tool]."
     )
+
+
+def test_wrap_tool_call_invalid_response_is_rejected_sync() -> None:
+    """Test that sync wrappers cannot return arbitrary invalid values."""
+
+    def invalid_interceptor(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> object:
+        return "not a tool response"
+
+    node = ToolNode(
+        [registered_tool],
+        wrap_tool_call=invalid_interceptor,  # type: ignore[arg-type]
+        handle_tool_errors=False,
+    )
+
+    with pytest.raises(TypeError, match="returned unexpected type"):
+        node.invoke(
+            [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "registered_tool",
+                            "args": {"x": 1},
+                            "id": "1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ],
+            config=_create_config_with_runtime(),
+        )
+
+
+async def test_awrap_tool_call_invalid_response_is_rejected_async() -> None:
+    """Test that async wrappers cannot return arbitrary invalid values."""
+
+    async def invalid_interceptor(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> object:
+        return "not a tool response"
+
+    node = ToolNode(
+        [registered_tool],
+        awrap_tool_call=invalid_interceptor,  # type: ignore[arg-type]
+        handle_tool_errors=False,
+    )
+
+    with pytest.raises(TypeError, match="returned unexpected type"):
+        await node.ainvoke(
+            [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "registered_tool",
+                            "args": {"x": 1},
+                            "id": "1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ],
+            config=_create_config_with_runtime(),
+        )
