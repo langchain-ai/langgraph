@@ -271,15 +271,14 @@ class StreamController:
                     self._filter_with_since(base_filter)
                 )
                 await new_stream.ready
-            except BaseException as exc:
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
                 last_err = exc
                 await asyncio.sleep(0.05)
                 continue
             self._shared_stream = new_stream
             return True
-        if last_err is not None:
-            for sub in self._subscriptions.values():
-                sub.queue.put_nowait(None)
         return False
 
     # ------------------------------------------------------------------
