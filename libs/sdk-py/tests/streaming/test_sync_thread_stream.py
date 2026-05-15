@@ -387,6 +387,24 @@ def test_sync_thread_agent_get_tree_raises_after_close():
             stream.agent.get_tree()
 
 
+def test_sync_extensions_projection_empty_name_raises():
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        with pytest.raises(ValueError, match="non-empty"):
+            stream.extensions[""]
+
+
+def test_sync_extensions_projection_closed_stream_yields_nothing():
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        # Enter and immediately exit so _controller is set but _closed is True.
+        with threads.stream(thread_id="t-1", assistant_id="agent") as stream:
+            pass
+        payloads = list(stream.extensions["progress"])
+    assert payloads == []
+
+
 def test_sync_threads_stream_mints_uuid4_when_thread_id_none():
     with httpx.Client(base_url="http://test") as raw:
         threads = SyncThreadsClient(SyncHttpClient(raw))
@@ -473,3 +491,62 @@ def test_sync_threads_stream_rejects_unknown_transport_option():
                 assistant_id="agent",
                 transport="bogus",  # ty: ignore[invalid-argument-type]
             )
+
+
+def test_v3_streaming_sync_surface_smoke():
+    from streaming._events import (
+        custom_event,
+        lifecycle_completed_event,
+        message_finish_event,
+        message_start_event,
+        message_text_delta_event,
+        message_text_finish_event,
+        tool_finished_event,
+        tool_started_event,
+        values_event,
+    )
+
+    def _mk_events(offset: int) -> list[dict]:
+        """Build a full event set with unique event_ids (seq = offset + position)."""
+        s = offset
+        return [
+            values_event(seq=s, values={"step": 1}),
+            message_start_event(seq=s + 1, message_id="msg-1"),
+            message_text_delta_event(seq=s + 2, text="hi"),
+            message_text_finish_event(seq=s + 3, text="hi"),
+            message_finish_event(seq=s + 4),
+            tool_started_event(seq=s + 5, tool_call_id="call-1", tool_name="search"),
+            tool_finished_event(seq=s + 6, tool_call_id="call-1", output={"ok": True}),
+            custom_event(seq=s + 7, name="progress", step=1),
+            lifecycle_completed_event(seq=s + 8),
+        ]
+
+    fake = SyncFakeServer()
+    fake.set_state({"final": True})
+    # Sequential consumers trigger multiple SSE rotations. Each rotation's
+    # event_ids must be unique so the client-side dedup set does not filter
+    # events from later rotations. The lifecycle watcher opens its own SSE
+    # independently, so we provide enough scripts for all rotations.
+    fake.script_sequence(
+        [SyncStreamScript(events=_mk_events(o)) for o in (100, 200, 300, 400, 500, 600)]
+    )
+    fake.scripted_events = _mk_events(700)  # fallback beyond the 6th SSE
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            start = thread.run.start(
+                input={"messages": [{"role": "user", "content": "hi"}]}
+            )
+            values_iter = iter(thread.values)
+            first_values = next(values_iter)
+            messages = list(thread.messages)
+            tool_calls = list(thread.tool_calls)
+            progress = list(thread.extensions["progress"])
+            final = thread.output
+
+    assert start == {"run_id": "run-1"}
+    assert first_values == fake.state["values"]
+    assert [str(m.text) for m in messages] == ["hi"]
+    assert tool_calls[0].name == "search"
+    assert progress == [{"name": "progress", "step": 1}]
+    assert final == {"final": True}

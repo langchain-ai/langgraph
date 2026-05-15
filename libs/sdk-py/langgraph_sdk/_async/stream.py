@@ -3,9 +3,10 @@
 `AsyncThreadStream` is an async context manager that owns a
 `ProtocolSseTransport` for one thread, dispatches commands (`run.start`,
 `run.respond`), exposes typed subscriptions over a single shared SSE
-(`subscribe`, `events`), and surfaces lifecycle state (`interrupted`,
-`interrupts`) via an always-on lifecycle watcher SSE. Typed projections
-(`thread.values`, `thread.messages`, etc.) mirror the v3 protocol surface.
+(`subscribe`, `events`), surfaces lifecycle state (`interrupted`,
+`interrupts`) via an always-on lifecycle watcher SSE, and provides typed
+projections (`thread.values`, `thread.messages`, `thread.tool_calls`,
+`thread.extensions`).
 
 Direct port of `libs/sdk/src/client/stream/index.ts`.
 """
@@ -59,7 +60,8 @@ class _Subscription:
     # causes a type error with ty; bare asyncio.Queue is accepted.
 
 
-# All public protocol channels used by the raw `events` surface.
+# All public protocol channels used by the raw `events`/`subscribe` surface.
+# Typed projections open narrower channel filters on the shared SSE.
 _ALL_CHANNELS: list[str] = [
     "values",
     "updates",
@@ -574,6 +576,7 @@ class ScopedStreamHandle:
         self.tool_calls = _HandleToolCallsProjection(self)
         self.subgraphs = _HandleSubgraphsProjection(self)
         self.subagents = self.subgraphs
+        self.extensions = _ExtensionsProjection(thread, namespace=list(path))
 
     def _push_event(self, event: Event) -> None:
         """Route a descendant event into the appropriate channel inbox.
@@ -1168,6 +1171,58 @@ class _ToolCallsProjection:
             self._thread._unregister_subscription(sub.id)
 
 
+class _ExtensionsProjection:
+    """Mapping from extension name to custom event payload stream."""
+
+    def __init__(self, thread: AsyncThreadStream, namespace: list[str]) -> None:
+        self._thread = thread
+        self._namespace = namespace
+
+    def __getitem__(self, name: str) -> _ExtensionProjection:
+        if not name:
+            raise ValueError("extension name must be non-empty.")
+        return _ExtensionProjection(self._thread, name=name, namespace=self._namespace)
+
+
+class _ExtensionProjection:
+    def __init__(
+        self,
+        thread: AsyncThreadStream,
+        *,
+        name: str,
+        namespace: list[str],
+    ) -> None:
+        self._thread = thread
+        self._name = name
+        self._namespace = namespace
+
+    def __aiter__(self) -> AsyncIterator[dict[str, Any]]:
+        return self._iter()
+
+    async def _iter(self) -> AsyncGenerator[dict[str, Any], None]:
+        params: SubscribeParams = {"channels": [f"custom:{self._name}"]}
+        if self._namespace:
+            params["namespaces"] = [self._namespace]
+        sub = self._thread._register_subscription(params)
+        try:
+            if self._thread._closed:
+                return
+            await self._thread._reconcile_stream(params)
+            self._thread._ensure_fanout_running()
+            while True:
+                item = await sub.queue.get()
+                if item is None:
+                    return
+                event_params = item.get("params") or {}
+                data = (
+                    event_params.get("data") if isinstance(event_params, dict) else None
+                )
+                if isinstance(data, dict):
+                    yield data
+        finally:
+            self._thread._unregister_subscription(sub.id)
+
+
 class AsyncThreadStream:
     """Async context manager for one thread's v3 streaming session.
 
@@ -1243,6 +1298,7 @@ class AsyncThreadStream:
         self.tool_calls = _ToolCallsProjection(self, namespace=[])
         self.subgraphs = _SubgraphsProjection(self, scope=())
         self.subagents = self.subgraphs
+        self.extensions = _ExtensionsProjection(self, namespace=[])
 
     @property
     def _controller(self) -> AsyncThreadStream:

@@ -33,3 +33,38 @@ input = {"messages": [{"role": "human", "content": "what's the weather in la"}]}
 async for chunk in client.runs.stream(thread['thread_id'], agent['assistant_id'], input=input):
     print(chunk)
 ```
+
+## Thread-Centric Streaming (v3)
+
+`client.threads.stream()` returns a context manager that owns the SSE session for one
+thread. Typed projections — values snapshots, message streams, tool calls, custom
+events — all share the same underlying connection.
+
+```python
+from langgraph_sdk import get_client
+import asyncio
+
+client = get_client()
+
+async with client.threads.stream(
+    thread_id="my-thread",
+    assistant_id="agent",
+) as thread:
+    await thread.run.start(input={"messages": [{"role": "user", "content": "hi"}]})
+
+    # Start all consumers concurrently so they share one SSE connection.
+    async def get_messages():
+        return [s async for s in thread.messages]
+
+    async def get_tool_calls():
+        return [c async for c in thread.tool_calls]
+
+    messages, tool_calls = await asyncio.gather(get_messages(), get_tool_calls())
+
+    for stream in messages:
+        print(await stream.text)          # accumulated text
+
+    final = await thread.output           # terminal state values
+```
+
+See [docs/streaming-v3.md](docs/streaming-v3.md) for the full API reference.

@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import re
 import uuid
+from typing import Any
 
 import httpx
 import pytest
@@ -55,6 +56,24 @@ async def test_thread_agent_get_tree_raises_after_close():
         await stream.close()
         with pytest.raises(RuntimeError, match="closed"):
             await stream.agent.get_tree()
+
+
+async def test_extensions_projection_empty_name_raises():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        with pytest.raises(ValueError, match="non-empty"):
+            stream.extensions[""]
+
+
+async def test_extensions_projection_closed_stream_yields_nothing():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        # Enter and immediately exit so _controller is set but _closed is True.
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as stream:
+            pass
+        payloads = [p async for p in stream.extensions["progress"]]
+    assert payloads == []
 
 
 async def test_thread_stream_stores_thread_id_and_assistant_id():
@@ -449,7 +468,7 @@ async def test_events_property_returns_fresh_iterator_each_access():
 async def test_fresh_thread_happy_path_end_to_end():
     """User passes no thread_id; SDK mints one and uses it in all URLs.
 
-    Validates the thread-stream surface end-to-end:
+    Validates core surface end-to-end:
       - uuid4 minted at client.threads.stream()
       - run.start posted to /threads/<minted-id>/commands
       - events SSE opened at /threads/<minted-id>/stream/events
@@ -879,3 +898,76 @@ async def test_threads_stream_rejects_unknown_transport_option():
                 assistant_id="agent",
                 transport="bogus",  # ty: ignore[invalid-argument-type]
             )
+
+
+async def test_v3_streaming_async_surface_smoke():
+    import asyncio
+
+    from streaming._events import (
+        custom_event,
+        lifecycle_completed_event,
+        message_finish_event,
+        message_start_event,
+        message_text_delta_event,
+        message_text_finish_event,
+        tool_finished_event,
+        tool_started_event,
+        values_event,
+    )
+
+    fake = FakeServer()
+    fake.set_state({"final": True})
+    fake.script(
+        [
+            values_event(seq=1, values={"step": 1}),
+            message_start_event(seq=2, message_id="msg-1"),
+            message_text_delta_event(seq=3, text="hi"),
+            message_text_finish_event(seq=4, text="hi"),
+            message_finish_event(seq=5),
+            tool_started_event(seq=6, tool_call_id="call-1", tool_name="search"),
+            tool_finished_event(seq=7, tool_call_id="call-1", output={"ok": True}),
+            custom_event(seq=8, name="progress", step=1),
+            lifecycle_completed_event(seq=9),
+        ]
+    )
+    async with httpx.AsyncClient(
+        transport=fake.transport, base_url="http://test"
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            start = await thread.run.start(
+                input={"messages": [{"role": "user", "content": "hi"}]}
+            )
+
+            # Start all consumers concurrently so their subscriptions are all
+            # registered before the first SSE reconciliation. This means ONE
+            # shared SSE opens with the union filter, dedup never rejects events.
+            async def _get_first_values() -> Any:
+                async for v in thread.values:
+                    return v
+
+            async def _get_message_streams():
+                return [s async for s in thread.messages]
+
+            async def _get_tool_calls():
+                return [call async for call in thread.tool_calls]
+
+            async def _get_progress():
+                return [p async for p in thread.extensions["progress"]]
+
+            first_values, message_streams, tool_calls, progress = await asyncio.gather(
+                _get_first_values(),
+                _get_message_streams(),
+                _get_tool_calls(),
+                _get_progress(),
+            )
+            # stream.text is already fully accumulated after gather completes.
+            message_texts = [await s.text for s in message_streams]
+            final = await thread.output
+
+    assert start == {"run_id": "run-1"}
+    assert first_values == fake.state["values"]
+    assert message_texts == ["hi"]
+    assert tool_calls[0].name == "search"
+    assert progress == [{"name": "progress", "step": 1}]
+    assert final == {"final": True}

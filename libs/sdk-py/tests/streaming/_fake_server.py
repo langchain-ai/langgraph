@@ -1,11 +1,11 @@
 """In-process ASGI fake of the v3 protocol endpoints.
 
-Used by transport and thread-streaming tests. Mirrors the production endpoints
-just closely enough to validate the client:
+Mirrors the production endpoints just closely enough to validate the client:
 
   - POST /threads/{thread_id}/commands
   - POST /threads/{thread_id}/stream/events
   - GET /threads/{thread_id}/state
+  - GET /assistants/{assistant_id}/graph
 """
 
 from __future__ import annotations
