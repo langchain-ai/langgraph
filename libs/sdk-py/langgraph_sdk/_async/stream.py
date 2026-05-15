@@ -341,9 +341,8 @@ class AsyncThreadStream:
         return response.get("result", {})
 
     def _ensure_lifecycle_watcher_running(self) -> None:
-        # Why: one-shot for Phase 3. No `.done()` check — if the watcher
-        # crashes it stays dead until the AsyncThreadStream is closed.
-        # Phase 9 (reconnect on transport drop) will add retry.
+        # Why: this watcher is intentionally one-shot on this branch. If it
+        # crashes, it stays dead until the AsyncThreadStream is closed.
         if self._lifecycle_watcher_task is not None:
             return
         self._lifecycle_watcher_task = asyncio.create_task(
@@ -376,8 +375,8 @@ class AsyncThreadStream:
         except (Exception, asyncio.CancelledError):
             # Why: advisory-only watcher. Any error (HTTP failure, malformed
             # event in `_apply_lifecycle_event`, cancellation on close) must
-            # not crash the caller. Phase 9 adds retry; for now we accept
-            # one-shot best-effort delivery.
+            # not crash the caller. On this branch we accept one-shot
+            # best-effort delivery.
             return
 
     def _apply_lifecycle_event(self, event: Event) -> None:
