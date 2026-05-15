@@ -66,5 +66,3 @@ async with client.threads.stream(
 
     final = await thread.output           # terminal state values
 ```
-
-See [docs/streaming-v3.md](docs/streaming-v3.md) for the full API reference.
