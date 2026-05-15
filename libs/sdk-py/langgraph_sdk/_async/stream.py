@@ -419,14 +419,6 @@ def _is_direct_child(namespace: list[str], scope: tuple[str, ...]) -> bool:
     )
 
 
-def _is_descendant(namespace: list[str], path: tuple[str, ...]) -> bool:
-    """True when `namespace` is strictly deeper than `path` (path is a prefix)."""
-    return (
-        len(namespace) > len(path)
-        and tuple(namespace[: len(path)]) == path
-    )
-
-
 def _subgraph_subscription_params(scope: tuple[str, ...]) -> SubscribeParams:
     # Subscribe to tasks + messages + tools without a depth limit so that all
     # descendant-namespace events are captured in one SSE and buffered into each
@@ -484,6 +476,8 @@ class ScopedStreamHandle:
         self._tasks_inbox.put_nowait(None)
 
     def _finish(self, status: SubgraphStatus, error: str | None = None) -> None:
+        if self.status != "started":
+            return
         self.status = status
         self.error = error
         self._close_inboxes()
@@ -528,6 +522,7 @@ class _HandleMessagesProjection:
                     message_id=message_id,
                 )
                 active[key] = stream
+                stream.dispatch(data)
                 yield stream
             else:
                 key = _message_route_key(data)
@@ -611,6 +606,50 @@ class _HandleSubgraphsProjection:
     def __aiter__(self) -> AsyncIterator["ScopedStreamHandle"]:
         return self._subgraphs_iter()
 
+    def _route_sibling_inboxes_to_grandchildren(
+        self,
+        active: "dict[tuple[str, ...], ScopedStreamHandle]",
+    ) -> None:
+        """Drain non-blocking events from parent's messages/tools inboxes to grandchildren.
+
+        Called after each tasks event so grandchild handles receive events that
+        were enqueued in the parent handle's inboxes before (or just after) the
+        grandchild was discovered.
+        """
+        parent = self._handle
+        for inbox_attr, grandchild_attr in (
+            ("_messages_inbox", "_messages_inbox"),
+            ("_tools_inbox", "_tools_inbox"),
+        ):
+            inbox: asyncio.Queue[Event | None] = getattr(parent, inbox_attr)
+            staging: list[Event | None] = []
+            # Drain without blocking.
+            while not inbox.empty():
+                staging.append(inbox.get_nowait())
+            for event in staging:
+                if event is None:
+                    # Re-queue the EOF sentinel — it belongs to the parent inbox consumer.
+                    inbox.put_nowait(None)
+                    continue
+                event_params = event.get("params") or {}
+                ns_tuple = tuple(_event_namespace(event_params))
+                routed = False
+                for child_path, grandchild in active.items():
+                    grandchild_len = len(grandchild.path)
+                    if (
+                        len(ns_tuple) >= grandchild_len
+                        and ns_tuple[:grandchild_len] == grandchild.path
+                    ):
+                        gc_inbox: asyncio.Queue[Event | None] = getattr(
+                            grandchild, grandchild_attr
+                        )
+                        gc_inbox.put_nowait(event)
+                        routed = True
+                        break
+                if not routed:
+                    # Not a grandchild event — put it back for the handle projection.
+                    inbox.put_nowait(event)
+
     async def _subgraphs_iter(self) -> AsyncGenerator["ScopedStreamHandle", None]:
         seen: set[tuple[str, ...]] = set()
         active: dict[tuple[str, ...], "ScopedStreamHandle"] = {}
@@ -626,10 +665,13 @@ class _HandleSubgraphsProjection:
             namespace = _event_namespace(params_field)
             data = params_field.get("data") if isinstance(params_field, dict) else None
             if not isinstance(data, dict):
+                # Still drain sibling inboxes even if this tasks event is malformed.
+                self._route_sibling_inboxes_to_grandchildren(active)
                 continue
             if "result" in data:
                 result_id = data.get("id")
                 if not result_id:
+                    self._route_sibling_inboxes_to_grandchildren(active)
                     continue
                 parent_path = tuple(namespace)
                 for child_path, child_handle in list(active.items()):
@@ -640,11 +682,14 @@ class _HandleSubgraphsProjection:
                     status, error = _terminal_from_tasks_result(data)
                     child_handle._finish(status, error)
                     del active[child_path]
+                self._route_sibling_inboxes_to_grandchildren(active)
                 continue
             if not _is_direct_child(namespace, scope):
+                self._route_sibling_inboxes_to_grandchildren(active)
                 continue
             path = tuple(namespace)
             if path in seen:
+                self._route_sibling_inboxes_to_grandchildren(active)
                 continue
             seen.add(path)
             graph_name, trigger_call_id = _parse_namespace_segment(path[-1])
@@ -655,6 +700,8 @@ class _HandleSubgraphsProjection:
                 trigger_call_id=trigger_call_id,
             )
             active[path] = child_handle
+            # Drain sibling inboxes now that the new grandchild is registered.
+            self._route_sibling_inboxes_to_grandchildren(active)
             yield child_handle
 
 
