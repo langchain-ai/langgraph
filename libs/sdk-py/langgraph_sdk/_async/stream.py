@@ -1,9 +1,8 @@
 """Async thread-centric streaming surface for the v3 protocol.
 
-Phase 2 skeleton: `AsyncThreadStream` is an async context manager that owns
-a `ProtocolSseTransport` for one thread, dispatches `run.start` commands,
-and exposes a raw `events` async iterable. No projections yet — those land
-in Phases 3+.
+`AsyncThreadStream` is an async context manager that owns a
+`ProtocolSseTransport` for one thread, dispatches `run.start` commands,
+and exposes a raw `events` async iterable.
 
 Direct port of `libs/sdk/src/client/stream/index.ts` (skeleton subset).
 """
