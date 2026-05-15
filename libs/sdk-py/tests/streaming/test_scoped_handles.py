@@ -19,7 +19,7 @@ from streaming._events import (
     tool_output_delta_event,
     tool_started_event,
 )
-from streaming._fake_server import FakeServer
+from streaming._fake_server import FakeServer, _StreamScript
 
 
 async def test_subgraphs_subscribes_to_tasks_channel():
@@ -577,3 +577,49 @@ def test_close_inboxes_enqueues_sentinel_on_iterated_inboxes():
     assert handle._messages_inbox.get_nowait() is None
     assert handle._tools_inbox.qsize() == 0
     assert handle._tasks_inbox.qsize() == 0
+
+
+async def test_subgraph_scoped_messages_survive_shared_stream_reconnect():
+    fake = FakeServer()
+    # Connection order (async): shared stream opens first (via _reconcile_stream),
+    # then the lifecycle watcher task runs. Three scripts are needed:
+    # 1. shared stream initial (fail_after=2 to trigger reconnect)
+    # 2. lifecycle watcher
+    # 3. shared stream reconnect (carries the message events)
+    fake.script_sequence(
+        [
+            _StreamScript(
+                events=[
+                    lifecycle_started_event(seq=0),
+                    tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+                ],
+                fail_after=2,
+            ),
+            _StreamScript(
+                events=[lifecycle_completed_event(seq=7)],
+            ),
+            _StreamScript(
+                events=[
+                    message_start_event(seq=2, namespace=["worker:abc"], message_id="child-msg", run_id="child-run"),
+                    message_text_delta_event(seq=3, namespace=["worker:abc"], text="child"),
+                    message_text_finish_event(seq=4, namespace=["worker:abc"], text="child"),
+                    message_finish_event(seq=5, namespace=["worker:abc"]),
+                    tasks_result_event(seq=6, namespace=[], task_id="abc", name="worker"),
+                    lifecycle_completed_event(seq=7),
+                ]
+            ),
+        ]
+    )
+    async with httpx.AsyncClient(
+        transport=fake.transport, base_url="http://test"
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            handles = [handle async for handle in thread.subgraphs]
+            child = handles[0]
+            chunks = [chunk async for chunk in child.messages]
+
+    assert child.path == ("worker:abc",)
+    assert [await chunk.text for chunk in chunks] == ["child"]
+    assert fake.stream_request_bodies[-1]["since"] >= 1

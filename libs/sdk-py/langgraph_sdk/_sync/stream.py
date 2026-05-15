@@ -1158,6 +1158,8 @@ class SyncThreadStream:
         self.interrupts: list[InterruptPayload] = []
         self._lifecycle_watcher_thread: threading.Thread | None = None
         self._lifecycle_watcher_handle: SyncEventStreamHandle | None = None
+        self._lifecycle_cursor: int | None = None
+        self._lifecycle_max_reconnect_attempts = 5
         self._run_seen: bool = False
         self._run_done: _BlockingResult | None = None
         self._active_message_streams: set[ChatModelStream] = set()
@@ -1362,28 +1364,52 @@ class SyncThreadStream:
         )
         self._lifecycle_watcher_thread.start()
 
+    def _observe_lifecycle_event(self, event: Event) -> None:
+        seq = event.get("seq")
+        if isinstance(seq, int) and (
+            self._lifecycle_cursor is None or seq > self._lifecycle_cursor
+        ):
+            self._lifecycle_cursor = seq
+
+    def _lifecycle_stream_params(self) -> dict[str, Any]:
+        params: dict[str, Any] = {"channels": ["lifecycle", "input"]}
+        if self._lifecycle_cursor is not None:
+            params["since"] = self._lifecycle_cursor
+        return params
+
     def _run_lifecycle_watcher(self) -> None:
         """Always-on thread consuming lifecycle + input channels."""
         if self._transport is None:
             return
-        try:
-            handle = self._transport.open_event_stream(
-                {"channels": ["lifecycle", "input"]}
-            )
-            self._lifecycle_watcher_handle = handle
-            for event in handle.events:
-                if self._closed:
+        reconnect_attempts = 0
+        while not self._closed:
+            try:
+                handle = self._transport.open_event_stream(self._lifecycle_stream_params())
+                self._lifecycle_watcher_handle = handle
+                for event in handle.events:
+                    if self._closed:
+                        return
+                    self._observe_lifecycle_event(event)
+                    self._apply_lifecycle_event(event)
+                err = handle.error()
+                if err is None:
                     return
-                self._apply_lifecycle_event(event)
-        except Exception as exc:
-            run_done = self._run_done
-            if run_done is not None and not run_done.done():
-                run_done.set_result(
-                    _RunTerminal(
-                        status="errored",
-                        error=RuntimeError(f"Lifecycle transport failed: {exc}"),
+                reconnect_attempts += 1
+                if reconnect_attempts > self._lifecycle_max_reconnect_attempts:
+                    raise err
+            except Exception as exc:
+                reconnect_attempts += 1
+                if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
+                    continue
+                run_done = self._run_done
+                if run_done is not None and not run_done.done():
+                    run_done.set_result(
+                        _RunTerminal(
+                            status="errored",
+                            error=RuntimeError(f"Lifecycle transport failed: {exc}"),
+                        )
                     )
-                )
+                return
 
     def _fetch_state(self) -> dict[str, Any]:
         """Fetch the current thread state from the REST endpoint."""

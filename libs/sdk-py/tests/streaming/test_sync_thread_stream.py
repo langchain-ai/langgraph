@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import threading
 import time
+import uuid
 from collections.abc import Iterator
 
 import httpx
@@ -350,3 +352,67 @@ def test_close_unblocks_active_subscription_before_lifecycle_join():
         f"consumer woke {elapsed:.3f}s after close() — "
         "controller.close() should precede the lifecycle thread join"
     )
+
+
+def test_sync_threads_stream_mints_uuid4_when_thread_id_none():
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        stream = threads.stream(assistant_id="agent")
+        assert re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+            stream.thread_id,
+        )
+        assert uuid.UUID(stream.thread_id).version == 4
+
+
+def test_sync_run_start_sends_command():
+    from streaming._events import lifecycle_completed_event
+
+    fake = SyncFakeServer()
+    fake.script([lifecycle_completed_event(seq=1)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            result = thread.run.start(input={"x": 1})
+
+    assert result == {"run_id": "run-1"}
+    assert fake.received_commands[0]["method"] == "run.start"
+    assert fake.received_commands[0]["params"]["assistant_id"] == "agent"
+
+
+def test_sync_events_iterates_raw_events():
+    from streaming._events import lifecycle_completed_event, values_event
+
+    fake = SyncFakeServer()
+    fake.script([values_event(seq=1, counter=1)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            events = list(thread.subscribe(["values"]))
+
+    assert events == [values_event(seq=1, counter=1)]
+
+
+def test_sync_lifecycle_watcher_reconnects_with_since_after_transport_drop():
+    from streaming._events import lifecycle_completed_event, lifecycle_event
+
+    fake = SyncFakeServer()
+    fake.set_state({"ok": True})
+    fake.script_sequence(
+        [
+            SyncStreamScript(
+                events=[lifecycle_event(seq=1, phase="running")],
+                fail_after=1,
+            ),
+            SyncStreamScript(events=[lifecycle_completed_event(seq=2)]),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="existing", assistant_id="agent") as thread:
+            terminal = thread._wait_for_run_done()
+
+    assert terminal.status == "completed"
+    assert terminal.error is None
+    assert fake.stream_request_bodies[1]["since"] == 1

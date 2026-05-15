@@ -27,7 +27,7 @@ from streaming._events import (
     tool_output_delta_event,
     tool_started_event,
 )
-from streaming._sync_fake_server import SyncFakeServer
+from streaming._sync_fake_server import SyncFakeServer, SyncStreamScript
 
 
 def test_sync_values_first_yield_is_rest_state_and_output_returns_final_state():
@@ -225,6 +225,54 @@ def test_sync_subgraph_scoped_messages_and_tool_calls():
     assert [call.tool_call_id for call in child_calls] == ["call-child"]
     assert list(child_calls[0].deltas) == ["delta"]
     assert child_calls[0].output == {"child": True}
+
+
+def test_sync_subgraph_scoped_messages_survive_shared_stream_reconnect():
+    fake = SyncFakeServer()
+    # Connection order (sync): lifecycle watcher thread opens first (it is started
+    # in __enter__ and races ahead during run.start), then the main thread opens
+    # the shared stream. Three scripts are needed:
+    # 1. lifecycle watcher
+    # 2. shared stream initial (fail_after=2 to trigger reconnect)
+    # 3. shared stream reconnect (carries the message events)
+    fake.script_sequence(
+        [
+            SyncStreamScript(
+                events=[
+                    lifecycle_started_event(seq=0),
+                    lifecycle_completed_event(seq=7),
+                ]
+            ),
+            SyncStreamScript(
+                events=[
+                    lifecycle_started_event(seq=0),
+                    tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+                ],
+                fail_after=2,
+            ),
+            SyncStreamScript(
+                events=[
+                    message_start_event(seq=2, namespace=["worker:abc"], message_id="child-msg", run_id="child-run"),
+                    message_text_delta_event(seq=3, namespace=["worker:abc"], text="child"),
+                    message_text_finish_event(seq=4, namespace=["worker:abc"], text="child"),
+                    message_finish_event(seq=5, namespace=["worker:abc"]),
+                    tasks_result_event(seq=6, namespace=[], task_id="abc", name="worker"),
+                    lifecycle_completed_event(seq=7),
+                ]
+            ),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            handles = list(thread.subgraphs)
+            child = handles[0]
+            chunks = list(child.messages)
+
+    assert child.path == ("worker:abc",)
+    assert [str(chunk.text) for chunk in chunks] == ["child"]
+    assert fake.stream_request_bodies[-1]["since"] >= 1
 
 
 # ---------------------------------------------------------------------------
