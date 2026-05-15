@@ -2,14 +2,11 @@
 
 Direct port of `libs/sdk/src/client/stream/transport/http.ts`.
 
-`ProtocolSseTransport` (landing in subsequent tasks) is bound to a single
-`thread_id` at construction. Commands go to `POST /threads/{thread_id}/commands`
-(JSON in, JSON out). Each `open_event_stream(params)` opens an independent
-filtered SSE connection at `POST /threads/{thread_id}/stream/events` with the
-`SubscribeParams` in the request body.
-
-`ProtocolSseTransport` is present (commands). `open_event_stream` lands in
-Task 8.
+`ProtocolSseTransport` is bound to a single `thread_id` at construction. Commands
+go to `POST /threads/{thread_id}/commands` (JSON in, JSON out). Each
+`open_event_stream(params)` opens an independent filtered SSE connection at
+`POST /threads/{thread_id}/stream/events` with the `SubscribeParams` in the
+request body.
 """
 
 from __future__ import annotations
@@ -61,7 +58,7 @@ class ProtocolSseTransport:
     """v3 protocol transport bound to a single `thread_id`.
 
     Commands go to `POST /threads/{thread_id}/commands` (JSON in, JSON out).
-    `open_event_stream` (landing in Task 8) opens filtered SSE streams against
+    `open_event_stream` opens filtered SSE streams against
     `POST /threads/{thread_id}/stream/events`.
     """
 
@@ -76,7 +73,6 @@ class ProtocolSseTransport:
         self._client = client
         self.thread_id = thread_id
         self._commands_url = commands_path or f"/threads/{thread_id}/commands"
-        # Used by open_event_stream in Task 8.
         self._stream_url = stream_path or f"/threads/{thread_id}/stream/events"
         self._closed = False
 
