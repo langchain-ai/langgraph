@@ -1179,6 +1179,8 @@ class AsyncThreadStream:
         self._interrupts_lock = asyncio.Lock()
         self._lifecycle_watcher_task: asyncio.Task[None] | None = None
         self._lifecycle_watcher_handle: EventStreamHandle | None = None
+        self._lifecycle_cursor: int | None = None
+        self._lifecycle_max_reconnect_attempts = 5
         self._run_start_ready: asyncio.Future[None] | None = None
         self._run_seen: bool = False
         self._run_done: asyncio.Future[_RunTerminal] | None = None
@@ -1495,6 +1497,7 @@ class AsyncThreadStream:
             code = response.get("error", "unknown")
             message = response.get("message", "")
             raise RuntimeError(f"Protocol error [{code}]: {message}")
+        # Any type other than "error" (typically "success") is treated as success.
         meta = response.get("meta")
         if isinstance(meta, dict):
             applied_through_seq = meta.get("applied_through_seq")
@@ -1518,74 +1521,65 @@ class AsyncThreadStream:
             await asyncio.wait_for(asyncio.shield(gate), timeout=timeout)
 
     def _ensure_lifecycle_watcher_running(self) -> None:
-        # Why: this watcher is intentionally one-shot. If it crashes, it stays
-        # dead until the AsyncThreadStream is closed.
         if self._lifecycle_watcher_task is not None:
             return
         self._lifecycle_watcher_task = asyncio.create_task(
             self._run_lifecycle_watcher()
         )
 
-    async def _run_lifecycle_watcher(self) -> None:
-        """Always-on SSE consuming lifecycle + input channels.
+    def _observe_lifecycle_event(self, event: Event) -> None:
+        seq = event.get("seq")
+        if isinstance(seq, int) and (
+            self._lifecycle_cursor is None or seq > self._lifecycle_cursor
+        ):
+            self._lifecycle_cursor = seq
 
-        Independent of the union-filter shared stream so that interrupts
-        surface even when no other subscription is active. Starts immediately
-        on session entry (before any run.start) so reattach and thread.output
-        work for existing runs.
-        """
+    def _lifecycle_stream_params(self) -> dict[str, Any]:
+        params: dict[str, Any] = {"channels": ["lifecycle", "input"]}
+        if self._lifecycle_cursor is not None:
+            params["since"] = self._lifecycle_cursor
+        return params
+
+    async def _run_lifecycle_watcher(self) -> None:
+        """Always-on SSE consuming lifecycle + input channels."""
         if self._transport is None:
             return
-        try:
-            handle = self._transport.open_event_stream(
-                {"channels": ["lifecycle", "input"]}
-            )
-            self._lifecycle_watcher_handle = handle
-            await asyncio.wait_for(handle.ready, timeout=5.0)
-            async for event in handle.events:
-                if self._closed:
+        reconnect_attempts = 0
+        while not self._closed:
+            try:
+                handle = self._transport.open_event_stream(
+                    self._lifecycle_stream_params()
+                )
+                self._lifecycle_watcher_handle = handle
+                await asyncio.wait_for(handle.ready, timeout=5.0)
+                async for event in handle.events:
+                    if self._closed:
+                        return
+                    self._observe_lifecycle_event(event)
+                    self._apply_lifecycle_event(event)
+                err = await handle.done
+                if err is None or isinstance(err, asyncio.CancelledError):
                     return
-                await self._apply_lifecycle_event(event)
-            # Why: iterator exhausted without `_run_done` being resolved by a
-            # terminal lifecycle event. Surface any transport error captured
-            # on `handle.done`, otherwise treat the clean EOF as errored so
-            # awaiters of `_run_done` (e.g. `thread.output`) don't hang.
-            err = await handle.done
-            run_done = self._run_done
-            if run_done is not None and not run_done.done():
-                if err is not None:
-                    run_done.set_result(
-                        _RunTerminal(
-                            status="errored",
-                            error=RuntimeError(f"Lifecycle transport failed: {err}"),
-                        )
-                    )
-                else:
-                    run_done.set_result(
-                        _RunTerminal(
-                            status="errored",
-                            error=RuntimeError(
-                                "lifecycle stream ended before terminal event"
-                            ),
-                        )
-                    )
-            return
-        except (Exception, asyncio.CancelledError) as exc:
-            # Why: advisory-only watcher. Any error (HTTP failure, malformed
-            # event in `_apply_lifecycle_event`, cancellation on close) must
-            # not crash the caller; the watcher is one-shot best-effort.
-            # Resolve _run_done with an error so thread.output doesn't wait
-            # forever when the lifecycle transport fails.
-            run_done = self._run_done
-            if run_done is not None and not run_done.done():
-                if not isinstance(exc, asyncio.CancelledError):
+                reconnect_attempts += 1
+                if reconnect_attempts > self._lifecycle_max_reconnect_attempts:
+                    raise err
+                await asyncio.sleep(0.05)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                reconnect_attempts += 1
+                if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
+                    await asyncio.sleep(0.05)
+                    continue
+                run_done = self._run_done
+                if run_done is not None and not run_done.done():
                     run_done.set_result(
                         _RunTerminal(
                             status="errored",
                             error=RuntimeError(f"Lifecycle transport failed: {exc}"),
                         )
                     )
-            return
+                return
 
     async def _fetch_state(self) -> dict[str, Any]:
         """Fetch the current thread state from the REST endpoint."""

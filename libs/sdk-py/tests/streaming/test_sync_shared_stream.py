@@ -49,3 +49,33 @@ def test_sync_send_command_applied_through_seq_seeds_shared_stream_since():
     ]
     assert len(values_requests) == 1
     assert values_requests[0]["since"] == 17
+
+
+def test_sync_shared_stream_reconnects_with_since_after_transport_drop():
+    fake = SyncFakeServer()
+    fake.script_sequence(
+        [
+            SyncStreamScript(
+                events=[values_event(seq=1, values={"counter": 1})],
+                fail_after=1,
+            ),
+            SyncStreamScript(events=[values_event(seq=2, values={"counter": 2})]),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        transport = SyncProtocolSseTransport(client=raw, thread_id="t-1")
+        controller = SyncStreamController(transport)
+        sub = controller.register_subscription({"channels": ["values"]})
+        controller.reconcile_stream({"channels": ["values"]})
+        controller.ensure_fanout_running()
+
+        first = sub.queue.get(timeout=1.0)
+        second = sub.queue.get(timeout=1.0)
+        end = sub.queue.get(timeout=1.0)
+        controller.close()
+        transport.close()
+
+    assert first["seq"] == 1
+    assert second["seq"] == 2
+    assert end is None
+    assert fake.stream_request_bodies[1]["since"] == 1
