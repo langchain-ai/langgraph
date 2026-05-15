@@ -35,9 +35,6 @@ def test_sync_transport_streams_events():
 
 
 def test_sync_open_event_stream_records_post_ready_error():
-    from streaming._events import values_event
-    from streaming._sync_fake_server import SyncFakeServer
-
     fake = SyncFakeServer()
     fake.script([values_event(seq=1)], fail_after=1)
     with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
