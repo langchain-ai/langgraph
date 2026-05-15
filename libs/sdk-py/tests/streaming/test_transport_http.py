@@ -14,6 +14,7 @@ async def test_event_stream_handle_constructs_with_open_state():
     loop = asyncio.get_running_loop()
     ready: asyncio.Future[None] = loop.create_future()
     done: asyncio.Future[BaseException | None] = loop.create_future()
+    done.set_result(None)
     closed = False
 
     async def aiter_events():
@@ -533,3 +534,38 @@ def test_values_event_builder_shape():
     assert evt["method"] == "values"
     assert evt["params"]["data"] == {"values": {"foo": 1}}
     assert evt["params"]["namespace"] == []
+
+
+async def test_open_event_stream_done_records_post_ready_error():
+    from streaming._events import values_event
+
+    event_data = values_event(seq=1)
+
+    class _FailAfterOneStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            import orjson
+
+            payload = orjson.dumps(event_data).decode()
+            yield f"id: {event_data.get('event_id', '')}\n".encode()
+            yield f"event: message\ndata: {payload}\n\n".encode()
+            raise RuntimeError("scripted async stream failure")
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=_FailAfterOneStream(),
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        handle = sse.open_event_stream({"channels": ["values"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        received = [event async for event in handle.events]
+        err = await asyncio.wait_for(handle.done, timeout=1.0)
+        await handle.close()
+
+    assert received == [values_event(seq=1)]
+    assert isinstance(err, RuntimeError)
+    assert "scripted async stream failure" in str(err)
