@@ -341,8 +341,8 @@ class AsyncThreadStream:
         return response.get("result", {})
 
     def _ensure_lifecycle_watcher_running(self) -> None:
-        # Why: this watcher is intentionally one-shot on this branch. If it
-        # crashes, it stays dead until the AsyncThreadStream is closed.
+        # Why: this watcher is intentionally one-shot. If it crashes, it stays
+        # dead until the AsyncThreadStream is closed.
         if self._lifecycle_watcher_task is not None:
             return
         self._lifecycle_watcher_task = asyncio.create_task(
@@ -373,8 +373,7 @@ class AsyncThreadStream:
         except (Exception, asyncio.CancelledError):
             # Why: advisory-only watcher. Any error (HTTP failure, malformed
             # event in `_apply_lifecycle_event`, cancellation on close) must
-            # not crash the caller. On this branch we accept one-shot
-            # best-effort delivery.
+            # not crash the caller; the watcher is one-shot best-effort.
             return
 
     def _apply_lifecycle_event(self, event: Event) -> None:
