@@ -1,7 +1,7 @@
 """In-process ASGI fake of the v3 protocol endpoints.
 
-Used by Phase 1 transport tests. Mirrors the production endpoints just
-closely enough to validate the client:
+Used by transport and thread-streaming tests. Mirrors the production endpoints
+just closely enough to validate the client:
 
   - POST /threads/{thread_id}/commands
   - POST /threads/{thread_id}/stream/events
