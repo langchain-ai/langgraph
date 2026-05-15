@@ -32,7 +32,9 @@ async def test_subgraphs_subscribes_to_tasks_channel():
             await thread.run.start(input={})
             _ = [handle async for handle in thread.subgraphs]
 
-    assert any("tasks" in body.get("channels", []) for body in fake.stream_request_bodies)
+    assert any(
+        "tasks" in body.get("channels", []) for body in fake.stream_request_bodies
+    )
 
 
 async def test_subgraphs_yields_handle_and_completes_status():
