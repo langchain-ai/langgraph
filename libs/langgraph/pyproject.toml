@@ -60,7 +60,7 @@ test = [
     "langgraph-checkpoint-postgres",
     "langgraph-sdk",
     "psycopg[binary]",
-    "uvloop==0.22.1",
+    "uvloop==0.22.1; sys_platform != 'win32'",
     "pyperf",
     "py-spy",
     "pycryptodome",

@@ -1420,7 +1420,7 @@ dev = [
     { name = "ruff" },
     { name = "syrupy" },
     { name = "types-requests" },
-    { name = "uvloop" },
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
 ]
 lint = [
     { name = "mypy" },
@@ -1449,7 +1449,7 @@ test = [
     { name = "pytest-xdist", extra = ["psutil"] },
     { name = "redis" },
     { name = "syrupy" },
-    { name = "uvloop" },
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
 ]
 
 [package.metadata]
@@ -1490,7 +1490,7 @@ dev = [
     { name = "ruff" },
     { name = "syrupy" },
     { name = "types-requests" },
-    { name = "uvloop", specifier = "==0.22.1" },
+    { name = "uvloop", marker = "sys_platform != 'win32'", specifier = "==0.22.1" },
 ]
 lint = [
     { name = "mypy" },
@@ -1520,7 +1520,7 @@ test = [
     { name = "pytest-xdist", extras = ["psutil"] },
     { name = "redis" },
     { name = "syrupy" },
-    { name = "uvloop", specifier = "==0.22.1" },
+    { name = "uvloop", marker = "sys_platform != 'win32'", specifier = "==0.22.1" },
 ]
 
 [[package]]
