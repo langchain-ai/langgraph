@@ -4,7 +4,7 @@
 `ProtocolSseTransport` for one thread, dispatches `run.start` commands,
 and exposes a raw `events` async iterable.
 
-Direct port of `libs/sdk/src/client/stream/index.ts` (skeleton subset).
+Direct port of `libs/sdk/src/client/stream/index.ts`.
 """
 
 from __future__ import annotations
@@ -140,5 +140,4 @@ class AsyncThreadStream:
             code = response.get("error", "unknown")
             message = response.get("message", "")
             raise RuntimeError(f"Protocol error [{code}]: {message}")
-        # Reconnect cursor seeding is added with transport retry support.
         return response.get("result", {})

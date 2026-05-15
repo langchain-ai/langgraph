@@ -1,4 +1,4 @@
-"""Public conformance helper for the §8.2 transport replay contract.
+"""Public conformance helper for the transport replay contract.
 
 Usage:
 

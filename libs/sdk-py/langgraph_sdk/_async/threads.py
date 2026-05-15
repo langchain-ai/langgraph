@@ -746,8 +746,8 @@ class ThreadsClient:
             thread_id: optional explicit thread identifier. Defaults to a
                 fresh UUIDv4.
             assistant_id: assistant the run will use. Required.
-            headers: optional per-request headers (reserved until the run
-                module gains custom-header support).
+            headers: optional per-request headers. Reserved; not currently
+                forwarded.
 
         Returns:
             An `AsyncThreadStream` to use as an async context manager.

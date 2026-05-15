@@ -48,8 +48,7 @@ def _normalize_return_annotation(ann: object) -> str:
     return s
 
 
-# Methods that are intentionally async-only while their sync mirrors are incomplete.
-# Remove an entry once its sync mirror ships.
+# Methods that exist only on the async client surface.
 ASYNC_ONLY_METHODS: dict[str, set[str]] = {
     "ThreadsClient": {"stream"},
 }
@@ -72,7 +71,7 @@ def test_sync_api_matches_async(async_cls, sync_cls):
     allowlist = ASYNC_ONLY_METHODS.get(async_cls.__name__, set())
     async_method_names = set(async_methods.keys()) - allowlist
 
-    # Method name parity (modulo temporary async-only allowlist).
+    # Method name parity (modulo the async-only allowlist).
     assert sync_methods.keys() == async_method_names, (
         f"Method sets differ: async-only={async_method_names - set(sync_methods)}, sync-only={set(sync_methods) - async_method_names}"
     )

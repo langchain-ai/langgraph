@@ -76,7 +76,7 @@ async def test_threads_stream_requires_assistant_id():
 
 
 async def test_threads_stream_accepts_headers_kwarg():
-    """Forward-compat: `headers` is accepted now even though it isn't plumbed yet."""
+    """`headers` is accepted as a kwarg even though it isn't forwarded yet."""
     from langgraph_sdk._async.http import HttpClient
     from langgraph_sdk._async.threads import ThreadsClient
 
