@@ -322,6 +322,18 @@ class _MessagesProjection:
     async def _messages_iter(self) -> AsyncGenerator[AsyncChatModelStream, None]:
         if self._thread._transport is None:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
+        # If the subgraphs projection already ran (and consumed messages events
+        # from the shared SSE), drain its root inbox rather than opening a new
+        # subscription. Dedup prevents the SSE from replaying those events.
+        root_inbox = (
+            self._thread._root_messages_inbox
+            if not self._namespace
+            else None
+        )
+        if root_inbox is not None:
+            async for stream in self._drain_inbox(root_inbox):
+                yield stream
+            return
         params = _exact_namespace_params(["messages"], self._namespace)
         sub = self._thread._register_subscription(params)
         active: dict[str, AsyncChatModelStream] = {}
@@ -373,6 +385,53 @@ class _MessagesProjection:
             for stream in active.values():
                 self._thread._unregister_active_message_stream(stream)
             self._thread._unregister_subscription(sub.id)
+
+    async def _drain_inbox(
+        self, inbox: "asyncio.Queue[Event | None]"
+    ) -> AsyncGenerator[AsyncChatModelStream, None]:
+        """Drain a pre-filled inbox of messages events, yielding one stream per message."""
+        from langchain_core.language_models.chat_model_stream import AsyncChatModelStream
+
+        active: dict[str, AsyncChatModelStream] = {}
+        while True:
+            item = await inbox.get()
+            if item is None:
+                return
+            params_field = item.get("params") or {}
+            data = params_field.get("data") if isinstance(params_field, dict) else None
+            if not isinstance(data, dict):
+                continue
+            event_type = data.get("event")
+            if event_type == "message-start":
+                message_id = _message_event_id(data)
+                key = _message_route_key(data, fallback=message_id)
+                metadata = (
+                    data.get("metadata")
+                    if isinstance(data.get("metadata"), dict)
+                    else {}
+                )
+                stream = AsyncChatModelStream(
+                    namespace=list(self._namespace),
+                    node=metadata.get("langgraph_node") if metadata else None,
+                    message_id=message_id,
+                )
+                active[key] = stream
+                self._thread._register_active_message_stream(stream)
+                stream.dispatch(data)
+                yield stream
+            else:
+                key = _message_route_key(data)
+                stream = active.get(key)
+                if stream is None and len(active) == 1:
+                    stream = next(iter(active.values()))
+                if stream is None:
+                    continue
+                stream.dispatch(data)
+                if event_type in ("message-finish", "error"):
+                    self._thread._unregister_active_message_stream(stream)
+                    for route_key, candidate in list(active.items()):
+                        if candidate is stream:
+                            del active[route_key]
 
 
 def _message_event_id(data: dict[str, Any]) -> str | None:
@@ -722,6 +781,13 @@ class _SubgraphsProjection:
         sub = self._thread._register_subscription(params)
         seen: set[tuple[str, ...]] = set()
         active: dict[tuple[str, ...], "ScopedStreamHandle"] = {}
+        # Activate root inbox so scope-level messages events consumed here are
+        # forwarded to `thread.messages` even after the shared SSE ends.
+        root_inbox: asyncio.Queue[Event | None] | None = (
+            self._thread._activate_root_messages_inbox()
+            if not self._scope
+            else None
+        )
         try:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
@@ -740,11 +806,24 @@ class _SubgraphsProjection:
                 # handle's channel inbox so sequential child-projection
                 # consumption works without opening a second SSE.
                 ns_tuple = tuple(namespace)
+                routed_to_child = False
                 for child_path, child_handle in active.items():
                     child_len = len(child_path)
                     if len(ns_tuple) >= child_len and ns_tuple[:child_len] == child_path:
                         child_handle._push_event(item)
+                        routed_to_child = True
                         break
+
+                # Scope-level messages events are not routed to any child; forward
+                # them to the root inbox so `thread.messages` can drain them after
+                # this projection finishes (dedup prevents the SSE from replaying).
+                if (
+                    not routed_to_child
+                    and root_inbox is not None
+                    and method == "messages"
+                    and tuple(namespace) == self._scope
+                ):
+                    root_inbox.put_nowait(item)
 
                 if method == "tasks":
                     if "result" in data:
@@ -767,6 +846,8 @@ class _SubgraphsProjection:
                 if handle.status == "started":
                     handle._finish("completed")
             self._thread._unregister_subscription(sub.id)
+            if root_inbox is not None:
+                root_inbox.put_nowait(None)
 
     def _apply_tasks_result(
         self,
@@ -992,6 +1073,10 @@ class AsyncThreadStream:
         self._run_done: asyncio.Future[_RunTerminal] | None = None
         self._active_message_streams: set[AsyncChatModelStream] = set()
         self._active_tool_calls: set[ToolCallHandle] = set()
+        # Root-scope inbox: populated by `_SubgraphsProjection` when it consumes
+        # messages events at namespace `[]` so that `thread.messages` can drain
+        # them even after the shared SSE has ended (dedup prevents replay).
+        self._root_messages_inbox: asyncio.Queue[Event | None] | None = None
         self.run = RunModule(self)
         self.output = _OutputAwaitable(self)
         self.values = _ValuesProjection(self)
@@ -1091,6 +1176,16 @@ class AsyncThreadStream:
     def _unregister_subscription(self, subscription_id: int) -> None:
         """Remove a subscription from the registry. No-op if already absent."""
         self._subscriptions.pop(subscription_id, None)
+
+    def _activate_root_messages_inbox(self) -> asyncio.Queue[Event | None]:
+        """Create the root-scope messages inbox if not already active and return it.
+
+        Called by `_SubgraphsProjection` at scope `()` to capture messages events
+        that arrive at namespace `[]` before `thread.messages` has subscribed.
+        """
+        if self._root_messages_inbox is None:
+            self._root_messages_inbox = asyncio.Queue()
+        return self._root_messages_inbox
 
     def _register_active_message_stream(self, stream: AsyncChatModelStream) -> None:
         self._active_message_streams.add(stream)

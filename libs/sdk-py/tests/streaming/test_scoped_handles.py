@@ -239,3 +239,41 @@ async def test_subagents_aliases_subgraphs_until_protocol_distinguishes_them():
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             assert thread.subagents is thread.subgraphs
             await thread.run.start(input={})
+
+
+async def test_root_and_child_projections_do_not_cross_talk():
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            message_start_event(seq=2, message_id="root-msg", run_id="root-run"),
+            message_text_delta_event(seq=3, text="root"),
+            message_text_finish_event(seq=4, text="root"),
+            message_finish_event(seq=5),
+            message_start_event(
+                seq=6,
+                namespace=["worker:abc"],
+                message_id="child-msg",
+                run_id="child-run",
+            ),
+            message_text_delta_event(seq=7, namespace=["worker:abc"], text="child"),
+            message_text_finish_event(seq=8, namespace=["worker:abc"], text="child"),
+            message_finish_event(seq=9, namespace=["worker:abc"]),
+            tasks_result_event(seq=10, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=11),
+        ]
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            [handle] = [h async for h in thread.subgraphs]
+            root_messages = [message async for message in thread.messages]
+            child_messages = [message async for message in handle.messages]
+
+    assert [message.message_id for message in root_messages] == ["root-msg"]
+    assert [await message.text for message in root_messages] == ["root"]
+    assert [message.message_id for message in child_messages] == ["child-msg"]
+    assert [await message.text for message in child_messages] == ["child"]
