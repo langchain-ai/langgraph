@@ -159,7 +159,9 @@ class FakeServer:
         script = (
             self._stream_scripts.pop(0)
             if self._stream_scripts
-            else _StreamScript(events=list(self.scripted_events), delay=self._stream_delay)
+            else _StreamScript(
+                events=list(self.scripted_events), delay=self._stream_delay
+            )
         )
         try:
             for index, event in enumerate(script.events, start=1):

@@ -262,7 +262,6 @@ class StreamController:
         base_filter = self._shared_stream_filter
         if base_filter is None:
             return False
-        last_err: BaseException | None = None
         for _ in range(self._max_reconnect_attempts):
             if self._closed:
                 return False
@@ -273,8 +272,7 @@ class StreamController:
                 await new_stream.ready
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
-                last_err = exc
+            except Exception:
                 await asyncio.sleep(0.05)
                 continue
             self._shared_stream = new_stream
