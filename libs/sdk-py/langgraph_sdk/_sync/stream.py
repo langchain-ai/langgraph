@@ -12,11 +12,13 @@ Sync mirror of `libs/sdk-py/langgraph_sdk/_async/stream.py`.
 from __future__ import annotations
 
 import contextlib
+import queue
 import threading
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
+from langchain_core.language_models.chat_model_stream import ChatModelStream
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._sync.http import SyncHttpClient
@@ -54,6 +56,42 @@ _ALL_CHANNELS: list[str] = [
     "tasks",
     "custom",
 ]
+
+
+def _exact_namespace_params(
+    channels: list[str],
+    namespace: list[str],
+) -> SubscribeParams:
+    return {
+        "channels": channels,
+        "namespaces": [list(namespace)],
+        "depth": 0,
+    }
+
+
+def _event_namespace(params_field: Any) -> list[str]:
+    if not isinstance(params_field, dict):
+        return []
+    namespace = params_field.get("namespace") or []
+    return list(namespace) if isinstance(namespace, list) else []
+
+
+def _message_event_id(data: dict[str, Any]) -> str | None:
+    message_id = data.get("id") or data.get("message_id")
+    return str(message_id) if message_id is not None else None
+
+
+def _message_route_key(data: dict[str, Any], fallback: str | None = None) -> str:
+    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    run_id = metadata.get("run_id") if metadata else None
+    message_id = _message_event_id(data)
+    if run_id is not None:
+        return f"run:{run_id}"
+    if message_id is not None:
+        return f"message:{message_id}"
+    if fallback is not None:
+        return f"message:{fallback}"
+    return "__single__"
 
 
 class _BlockingResult:
@@ -209,6 +247,341 @@ class _SyncValuesProjection:
             self._thread._unregister_subscription(sub.id)
 
 
+class _SyncMessagesProjection:
+    """Typed projection for root-scope `thread.messages`.
+
+    Iterating yields one `ChatModelStream` per message-start event. Each
+    stream is fully dispatched before being yielded so that `str(message.text)`
+    works immediately inside a `for` loop.
+    """
+
+    def __init__(
+        self, thread: SyncThreadStream, namespace: list[str] | None = None
+    ) -> None:
+        self._thread = thread
+        self._namespace = list(namespace or [])
+
+    def __iter__(self) -> Iterator[ChatModelStream]:
+        return self._messages_iter()
+
+    def _messages_iter(self) -> Iterator[ChatModelStream]:
+        if self._thread._transport is None:
+            raise RuntimeError("SyncThreadStream not entered — use `with`.")
+        root_inbox = self._thread._root_messages_inbox if not self._namespace else None
+        if root_inbox is not None:
+            yield from _drain_messages_inbox(root_inbox, self._namespace, self._thread)
+            return
+        params = _exact_namespace_params(["messages"], self._namespace)
+        sub = self._thread._register_subscription(params)
+        active: dict[str, ChatModelStream] = {}
+        try:
+            self._thread._reconcile_stream(params)
+            self._thread._ensure_fanout_running()
+            while True:
+                item = sub.queue.get()
+                if item is None:
+                    return
+                params_field = item.get("params") or {}
+                if _event_namespace(params_field) != self._namespace:
+                    continue
+                data = (
+                    params_field.get("data") if isinstance(params_field, dict) else None
+                )
+                if not isinstance(data, dict):
+                    continue
+                event_type = data.get("event")
+                if event_type == "message-start":
+                    message_id = _message_event_id(data)
+                    key = _message_route_key(data, fallback=message_id)
+                    metadata = (
+                        data.get("metadata")
+                        if isinstance(data.get("metadata"), dict)
+                        else {}
+                    )
+                    stream = ChatModelStream(
+                        namespace=list(self._namespace),
+                        node=metadata.get("langgraph_node") if metadata else None,
+                        message_id=message_id,
+                    )
+                    active[key] = stream
+                    self._thread._register_active_message_stream(stream)
+                    stream.dispatch(data)
+                    # Pre-dispatch all remaining events for this message so the
+                    # caller can access str(message.text) inside a for loop.
+                    while not stream._done:
+                        next_item = sub.queue.get()
+                        if next_item is None:
+                            sub.queue.put(None)
+                            break
+                        next_params = next_item.get("params") or {}
+                        next_data = (
+                            next_params.get("data")
+                            if isinstance(next_params, dict)
+                            else None
+                        )
+                        if not isinstance(next_data, dict):
+                            continue
+                        next_event_type = next_data.get("event")
+                        next_key = _message_route_key(next_data)
+                        target = active.get(next_key)
+                        if target is None and len(active) == 1:
+                            target = next(iter(active.values()))
+                        if target is not None:
+                            target.dispatch(next_data)
+                            if next_event_type in ("message-finish", "error"):
+                                self._thread._unregister_active_message_stream(target)
+                                for rk, cand in list(active.items()):
+                                    if cand is target:
+                                        del active[rk]
+                    yield stream
+                else:
+                    key = _message_route_key(data)
+                    stream = active.get(key)
+                    if stream is None and len(active) == 1:
+                        stream = next(iter(active.values()))
+                    if stream is None:
+                        continue
+                    stream.dispatch(data)
+                    if event_type in ("message-finish", "error"):
+                        self._thread._unregister_active_message_stream(stream)
+                        for route_key, candidate in list(active.items()):
+                            if candidate is stream:
+                                del active[route_key]
+        finally:
+            for s in active.values():
+                self._thread._unregister_active_message_stream(s)
+            self._thread._unregister_subscription(sub.id)
+
+
+def _drain_messages_inbox(
+    inbox: queue.Queue[Event | None],
+    namespace: list[str],
+    thread: SyncThreadStream,
+) -> Iterator[ChatModelStream]:
+    """Drain a pre-filled inbox of messages events, yielding one stream per message."""
+    active: dict[str, ChatModelStream] = {}
+    try:
+        while True:
+            item = inbox.get()
+            if item is None:
+                return
+            params_field = item.get("params") or {}
+            data = params_field.get("data") if isinstance(params_field, dict) else None
+            if not isinstance(data, dict):
+                continue
+            event_type = data.get("event")
+            if event_type == "message-start":
+                message_id = _message_event_id(data)
+                key = _message_route_key(data, fallback=message_id)
+                metadata = (
+                    data.get("metadata")
+                    if isinstance(data.get("metadata"), dict)
+                    else {}
+                )
+                stream = ChatModelStream(
+                    namespace=list(namespace),
+                    node=metadata.get("langgraph_node") if metadata else None,
+                    message_id=message_id,
+                )
+                active[key] = stream
+                thread._register_active_message_stream(stream)
+                stream.dispatch(data)
+                yield stream
+            else:
+                key = _message_route_key(data)
+                stream = active.get(key)
+                if stream is None and len(active) == 1:
+                    stream = next(iter(active.values()))
+                if stream is None:
+                    continue
+                stream.dispatch(data)
+                if event_type in ("message-finish", "error"):
+                    thread._unregister_active_message_stream(stream)
+                    for route_key, candidate in list(active.items()):
+                        if candidate is stream:
+                            del active[route_key]
+    finally:
+        for s in active.values():
+            thread._unregister_active_message_stream(s)
+
+
+class SyncToolCallHandle:
+    """Sync handle for one root-scope tool call."""
+
+    def __init__(
+        self,
+        *,
+        tool_call_id: str,
+        name: str,
+        input: Any = None,
+        namespace: list[str] | None = None,
+    ) -> None:
+        self.tool_call_id = tool_call_id
+        self.name = name
+        self.input = input
+        self.namespace = list(namespace or [])
+        self.done = False
+        self.error: BaseException | None = None
+        self._result: _BlockingResult = _BlockingResult()
+        self._deltas: queue.Queue[str | None] = queue.Queue()
+
+    @property
+    def output(self) -> Any:
+        """Block until the tool call completes and return its output."""
+        return self._result.result()
+
+    @property
+    def deltas(self) -> Iterator[str]:
+        """Iterate over tool output deltas emitted before the terminal event."""
+        return self._delta_iter()
+
+    def _delta_iter(self) -> Iterator[str]:
+        while True:
+            item = self._deltas.get()
+            if item is None:
+                return
+            yield item
+
+    def _push_delta(self, delta: str) -> None:
+        if self.done:
+            return
+        self._deltas.put_nowait(delta)
+
+    def _finish(self, output: Any) -> None:
+        if self.done:
+            return
+        self.done = True
+        self._result.set_result(output)
+        self._deltas.put_nowait(None)
+
+    def _fail(self, err: BaseException) -> None:
+        if self.done:
+            return
+        self.done = True
+        self.error = err
+        self._result.set_exception(err)
+        self._deltas.put_nowait(None)
+
+
+class _SyncToolCallsProjection:
+    """Typed projection for root-scope `thread.tool_calls`."""
+
+    def __init__(
+        self, thread: SyncThreadStream, namespace: list[str] | None = None
+    ) -> None:
+        self._thread = thread
+        self._namespace = list(namespace or [])
+
+    def __iter__(self) -> Iterator[SyncToolCallHandle]:
+        return self._tool_calls_iter()
+
+    def _tool_calls_iter(self) -> Iterator[SyncToolCallHandle]:
+        if self._thread._transport is None:
+            raise RuntimeError("SyncThreadStream not entered — use `with`.")
+        params = _exact_namespace_params(["tools"], self._namespace)
+        sub = self._thread._register_subscription(params)
+        active: dict[str, SyncToolCallHandle] = {}
+        try:
+            self._thread._reconcile_stream(params)
+            self._thread._ensure_fanout_running()
+            while True:
+                item = sub.queue.get()
+                if item is None:
+                    return
+                params_field = item.get("params") or {}
+                if _event_namespace(params_field) != self._namespace:
+                    continue
+                data = (
+                    params_field.get("data") if isinstance(params_field, dict) else None
+                )
+                if not isinstance(data, dict):
+                    continue
+                event_type = data.get("event")
+                tool_call_id = data.get("tool_call_id")
+                if not isinstance(tool_call_id, str):
+                    continue
+                if event_type == "tool-started":
+                    tool_name = data.get("tool_name")
+                    if not isinstance(tool_name, str):
+                        tool_name = ""
+                    handle = SyncToolCallHandle(
+                        tool_call_id=tool_call_id,
+                        name=tool_name,
+                        input=data.get("input"),
+                        namespace=list(self._namespace),
+                    )
+                    active[tool_call_id] = handle
+                    self._thread._register_active_tool_call(handle)
+                    # Pre-dispatch events until this tool call completes so that
+                    # `call.output` is resolved when the caller receives the handle.
+                    while not handle.done:
+                        next_item = sub.queue.get()
+                        if next_item is None:
+                            sub.queue.put(None)
+                            break
+                        next_params = next_item.get("params") or {}
+                        if _event_namespace(next_params) != self._namespace:
+                            continue
+                        next_data = (
+                            next_params.get("data")
+                            if isinstance(next_params, dict)
+                            else None
+                        )
+                        if not isinstance(next_data, dict):
+                            continue
+                        next_event_type = next_data.get("event")
+                        next_tcid = next_data.get("tool_call_id")
+                        if not isinstance(next_tcid, str):
+                            continue
+                        if next_event_type == "tool-output-delta":
+                            h = active.get(next_tcid)
+                            delta = next_data.get("delta")
+                            if h is not None and isinstance(delta, str):
+                                h._push_delta(delta)
+                        elif next_event_type == "tool-finished":
+                            h = active.pop(next_tcid, None)
+                            if h is not None:
+                                self._thread._unregister_active_tool_call(h)
+                                h._finish(next_data.get("output"))
+                        elif next_event_type == "tool-error":
+                            h = active.pop(next_tcid, None)
+                            if h is not None:
+                                self._thread._unregister_active_tool_call(h)
+                                message = next_data.get("message")
+                                h._fail(
+                                    RuntimeError(
+                                        str(message) if message else "Tool call errored"
+                                    )
+                                )
+                    yield handle
+                elif event_type == "tool-output-delta":
+                    h = active.get(tool_call_id)
+                    delta = data.get("delta")
+                    if h is not None and isinstance(delta, str):
+                        h._push_delta(delta)
+                elif event_type == "tool-finished":
+                    h = active.pop(tool_call_id, None)
+                    if h is not None:
+                        self._thread._unregister_active_tool_call(h)
+                        h._finish(data.get("output"))
+                elif event_type == "tool-error":
+                    h = active.pop(tool_call_id, None)
+                    if h is not None:
+                        self._thread._unregister_active_tool_call(h)
+                        message = data.get("message")
+                        h._fail(
+                            RuntimeError(
+                                str(message) if message else "Tool call errored"
+                            )
+                        )
+        finally:
+            err = RuntimeError("Tool call stream closed before terminal tool event.")
+            for h in active.values():
+                self._thread._unregister_active_tool_call(h)
+                h._fail(err)
+            self._thread._unregister_subscription(sub.id)
+
+
 class SyncThreadStream:
     """Synchronous context manager for one thread's v3 streaming session.
 
@@ -243,8 +616,13 @@ class SyncThreadStream:
         self._lifecycle_watcher_handle: SyncEventStreamHandle | None = None
         self._run_seen: bool = False
         self._run_done: _BlockingResult | None = None
+        self._active_message_streams: set[ChatModelStream] = set()
+        self._active_tool_calls: set[SyncToolCallHandle] = set()
+        self._root_messages_inbox: queue.Queue[Event | None] | None = None
         self.run = SyncRunModule(self)
         self.values = _SyncValuesProjection(self)
+        self.messages = _SyncMessagesProjection(self, namespace=[])
+        self.tool_calls = _SyncToolCallsProjection(self, namespace=[])
 
     def __enter__(self) -> SyncThreadStream:
         if self._closed:
@@ -314,6 +692,8 @@ class SyncThreadStream:
         if thread is not None and thread.is_alive():
             with contextlib.suppress(RuntimeError):
                 thread.join(timeout=1.0)
+        self._fail_active_message_streams(RuntimeError("SyncThreadStream closed"))
+        self._fail_active_tool_calls(RuntimeError("SyncThreadStream closed"))
         if self._transport is not None:
             self._transport.close()
 
@@ -338,6 +718,33 @@ class SyncThreadStream:
         if self._controller is None:
             raise RuntimeError("SyncThreadStream not entered — use `with`.")
         self._controller.reconcile_stream(candidate_filter)
+
+    def _activate_root_messages_inbox(self) -> queue.Queue[Event | None]:
+        if self._root_messages_inbox is None:
+            self._root_messages_inbox = queue.Queue()
+        return self._root_messages_inbox
+
+    def _register_active_message_stream(self, stream: ChatModelStream) -> None:
+        self._active_message_streams.add(stream)
+
+    def _unregister_active_message_stream(self, stream: ChatModelStream) -> None:
+        self._active_message_streams.discard(stream)
+
+    def _fail_active_message_streams(self, err: BaseException) -> None:
+        for stream in list(self._active_message_streams):
+            stream.fail(err)
+        self._active_message_streams.clear()
+
+    def _register_active_tool_call(self, handle: SyncToolCallHandle) -> None:
+        self._active_tool_calls.add(handle)
+
+    def _unregister_active_tool_call(self, handle: SyncToolCallHandle) -> None:
+        self._active_tool_calls.discard(handle)
+
+    def _fail_active_tool_calls(self, err: BaseException) -> None:
+        for handle in list(self._active_tool_calls):
+            handle._fail(err)
+        self._active_tool_calls.clear()
 
     def subscribe(
         self,
@@ -498,6 +905,8 @@ class SyncThreadStream:
                         error = RuntimeError(
                             f"Run errored: {error_msg}" if error_msg else "Run errored"
                         )
+                        self._fail_active_message_streams(error)
+                        self._fail_active_tool_calls(error)
                         run_done.set_result(_RunTerminal(status="errored", error=error))
                     else:
                         run_done.set_result(_RunTerminal(status="completed"))
