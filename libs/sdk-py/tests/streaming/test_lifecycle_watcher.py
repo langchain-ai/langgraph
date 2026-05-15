@@ -86,7 +86,7 @@ async def test_reattach_observes_terminal_state():
 
 
 async def test_terminal_lifecycle_clears_interrupts():
-    """Terminal lifecycle event clears interrupted/interrupts (Phase 3 behavior preserved)."""
+    """Terminal lifecycle event clears interrupted/interrupts."""
     fake = FakeServer()
     fake.script([lifecycle_event(seq=0, phase="completed")])
     asgi = httpx.ASGITransport(app=fake.app)
