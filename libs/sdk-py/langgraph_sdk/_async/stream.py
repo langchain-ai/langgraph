@@ -23,6 +23,7 @@ from langchain_core.language_models.chat_model_stream import AsyncChatModelStrea
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.transport import (
     AsyncProtocolTransport,
     EventStreamHandle,
@@ -88,6 +89,32 @@ def _event_namespace(params_field: Any) -> list[str]:
         return []
     namespace = params_field.get("namespace") or []
     return list(namespace) if isinstance(namespace, list) else []
+
+
+class _AgentModule:
+    """Assistant graph helpers scoped to one thread stream."""
+
+    def __init__(self, owner: AsyncThreadStream) -> None:
+        self._owner = owner
+
+    async def get_tree(
+        self,
+        *,
+        xray: int | bool = False,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        if self._owner._closed:
+            raise RuntimeError("AsyncThreadStream is closed.")
+        query_params: dict[str, Any] = {"xray": xray}
+        if params:
+            query_params.update(dict(params))
+        request_headers = {**self._owner._headers, **dict(headers or {})}
+        return await self._owner._http.get(
+            f"/assistants/{self._owner.assistant_id}/graph",
+            params=query_params,
+            headers=request_headers or None,
+        )
 
 
 class RunModule:
@@ -1209,6 +1236,7 @@ class AsyncThreadStream:
         # them even after the shared SSE has ended (dedup prevents replay).
         self._root_messages_inbox: asyncio.Queue[Event | None] | None = None
         self.run = RunModule(self)
+        self.agent = _AgentModule(self)
         self.output = _OutputAwaitable(self)
         self.values = _ValuesProjection(self)
         self.messages = _MessagesProjection(self, namespace=[])

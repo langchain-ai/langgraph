@@ -9,6 +9,7 @@ import uuid
 from collections.abc import Iterator
 
 import httpx
+import pytest
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk._sync.threads import SyncThreadsClient
@@ -352,6 +353,38 @@ def test_close_unblocks_active_subscription_before_lifecycle_join():
         f"consumer woke {elapsed:.3f}s after close() — "
         "controller.close() should precede the lifecycle thread join"
     )
+
+
+def test_sync_thread_agent_get_tree_fetches_assistant_graph():
+    fake = SyncFakeServer()
+    fake.set_graph(
+        {
+            "nodes": [{"id": "agent", "type": "runnable", "data": {"name": "agent"}}],
+            "edges": [{"source": "agent", "target": "__end__"}],
+        }
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+            headers={"X-Custom-Header": "my-value"},
+        ) as thread:
+            graph = thread.agent.get_tree(xray=True)
+
+    assert graph["nodes"][0]["id"] == "agent"
+    assert graph["edges"] == [{"source": "agent", "target": "__end__"}]
+    assert fake.graph_request_params == [{"xray": "true"}]
+    assert fake.graph_request_headers[0].get("x-custom-header") == "my-value"
+
+
+def test_sync_thread_agent_get_tree_raises_after_close():
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        stream.close()
+        with pytest.raises(RuntimeError, match="closed"):
+            stream.agent.get_tree()
 
 
 def test_sync_threads_stream_mints_uuid4_when_thread_id_none():

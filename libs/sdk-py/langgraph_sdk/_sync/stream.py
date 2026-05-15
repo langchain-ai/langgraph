@@ -22,6 +22,7 @@ from langchain_core.language_models.chat_model_stream import ChatModelStream
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.sync_controller import SyncStreamController, _SyncSubscription
 from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
@@ -155,6 +156,32 @@ class _BlockingResult:
 
     def done(self) -> bool:
         return self._event.is_set()
+
+
+class _SyncAgentModule:
+    """Assistant graph helpers scoped to one sync thread stream."""
+
+    def __init__(self, owner: SyncThreadStream) -> None:
+        self._owner = owner
+
+    def get_tree(
+        self,
+        *,
+        xray: int | bool = False,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        if self._owner._closed:
+            raise RuntimeError("SyncThreadStream is closed.")
+        query_params: dict[str, Any] = {"xray": xray}
+        if params:
+            query_params.update(dict(params))
+        request_headers = {**self._owner._headers, **dict(headers or {})}
+        return self._owner._http.get(
+            f"/assistants/{self._owner.assistant_id}/graph",
+            params=query_params,
+            headers=request_headers or None,
+        )
 
 
 class SyncRunModule:
@@ -1174,6 +1201,7 @@ class SyncThreadStream:
         self._active_tool_calls: set[SyncToolCallHandle] = set()
         self._root_messages_inbox: queue.Queue[Event | None] | None = None
         self.run = SyncRunModule(self)
+        self.agent = _SyncAgentModule(self)
         self.values = _SyncValuesProjection(self)
         self.messages = _SyncMessagesProjection(self, namespace=[])
         self.tool_calls = _SyncToolCallsProjection(self, namespace=[])

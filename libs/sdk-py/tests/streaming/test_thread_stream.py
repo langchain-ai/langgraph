@@ -24,6 +24,39 @@ from streaming._events import (
 from streaming._fake_server import FakeServer
 
 
+async def test_thread_agent_get_tree_fetches_assistant_graph():
+    fake = FakeServer()
+    fake.set_graph(
+        {
+            "nodes": [{"id": "agent", "type": "runnable", "data": {"name": "agent"}}],
+            "edges": [{"source": "agent", "target": "__end__"}],
+        }
+    )
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+            headers={"X-Custom-Header": "my-value"},
+        ) as thread:
+            graph = await thread.agent.get_tree(xray=True)
+
+    assert graph["nodes"][0]["id"] == "agent"
+    assert graph["edges"] == [{"source": "agent", "target": "__end__"}]
+    assert fake.graph_request_params == [{"xray": "true"}]
+    assert fake.graph_request_headers[0].get("x-custom-header") == "my-value"
+
+
+async def test_thread_agent_get_tree_raises_after_close():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        await stream.close()
+        with pytest.raises(RuntimeError, match="closed"):
+            await stream.agent.get_tree()
+
+
 async def test_thread_stream_stores_thread_id_and_assistant_id():
     async with httpx.AsyncClient(base_url="http://test") as client:
         stream = AsyncThreadStream(
