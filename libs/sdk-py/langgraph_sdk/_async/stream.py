@@ -66,6 +66,24 @@ _ALL_CHANNELS: list[str] = [
 ]
 
 
+def _exact_namespace_params(
+    channels: list[str],
+    namespace: list[str],
+) -> SubscribeParams:
+    return {
+        "channels": channels,
+        "namespaces": [list(namespace)],
+        "depth": 0,
+    }
+
+
+def _event_namespace(params_field: Any) -> list[str]:
+    if not isinstance(params_field, dict):
+        return []
+    namespace = params_field.get("namespace") or []
+    return list(namespace) if isinstance(namespace, list) else []
+
+
 class RunModule:
     """Command dispatcher for `run.start`.
 
@@ -294,8 +312,9 @@ class _MessagesProjection:
     from the root namespace only.
     """
 
-    def __init__(self, thread: AsyncThreadStream) -> None:
+    def __init__(self, thread: AsyncThreadStream, namespace: list[str] | None = None) -> None:
         self._thread = thread
+        self._namespace = list(namespace or [])
 
     def __aiter__(self) -> AsyncIterator[AsyncChatModelStream]:
         return self._messages_iter()
@@ -303,11 +322,7 @@ class _MessagesProjection:
     async def _messages_iter(self) -> AsyncGenerator[AsyncChatModelStream, None]:
         if self._thread._transport is None:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
-        params: SubscribeParams = {
-            "channels": ["messages"],
-            "namespaces": [[]],
-            "depth": 0,
-        }
+        params = _exact_namespace_params(["messages"], self._namespace)
         sub = self._thread._register_subscription(params)
         active: dict[str, AsyncChatModelStream] = {}
         try:
@@ -318,11 +333,9 @@ class _MessagesProjection:
                 if item is None:
                     return
                 params_field = item.get("params") or {}
-                if not isinstance(params_field, dict):
+                if _event_namespace(params_field) != self._namespace:
                     continue
-                if params_field.get("namespace") not in (None, []):
-                    continue
-                data = params_field.get("data")
+                data = params_field.get("data") if isinstance(params_field, dict) else None
                 if not isinstance(data, dict):
                     continue
                 event_type = data.get("event")
@@ -335,7 +348,7 @@ class _MessagesProjection:
                         else {}
                     )
                     stream = AsyncChatModelStream(
-                        namespace=[],
+                        namespace=list(self._namespace),
                         node=metadata.get("langgraph_node") if metadata else None,
                         message_id=message_id,
                     )
@@ -453,8 +466,9 @@ class ToolCallHandle:
 class _ToolCallsProjection:
     """Typed projection for root-scope `thread.tool_calls`."""
 
-    def __init__(self, thread: AsyncThreadStream) -> None:
+    def __init__(self, thread: AsyncThreadStream, namespace: list[str] | None = None) -> None:
         self._thread = thread
+        self._namespace = list(namespace or [])
 
     def __aiter__(self) -> AsyncIterator[ToolCallHandle]:
         return self._tool_calls_iter()
@@ -462,11 +476,7 @@ class _ToolCallsProjection:
     async def _tool_calls_iter(self) -> AsyncGenerator[ToolCallHandle, None]:
         if self._thread._transport is None:
             raise RuntimeError("AsyncThreadStream not entered - use `async with`.")
-        params: SubscribeParams = {
-            "channels": ["tools"],
-            "namespaces": [[]],
-            "depth": 0,
-        }
+        params = _exact_namespace_params(["tools"], self._namespace)
         sub = self._thread._register_subscription(params)
         active: dict[str, ToolCallHandle] = {}
         try:
@@ -477,12 +487,9 @@ class _ToolCallsProjection:
                 if item is None:
                     return
                 params_field = item.get("params") or {}
-                if not isinstance(params_field, dict):
+                if _event_namespace(params_field) != self._namespace:
                     continue
-                namespace = params_field.get("namespace") or []
-                if namespace != []:
-                    continue
-                data = params_field.get("data")
+                data = params_field.get("data") if isinstance(params_field, dict) else None
                 if not isinstance(data, dict):
                     continue
                 event_type = data.get("event")
@@ -498,7 +505,7 @@ class _ToolCallsProjection:
                         tool_call_id=tool_call_id,
                         name=tool_name,
                         input=data.get("input"),
-                        namespace=namespace,
+                        namespace=list(self._namespace),
                     )
                     active[tool_call_id] = handle
                     self._thread._register_active_tool_call(handle)
@@ -519,9 +526,7 @@ class _ToolCallsProjection:
                         self._thread._unregister_active_tool_call(handle)
                         message = data.get("message")
                         handle._fail(
-                            RuntimeError(
-                                str(message) if message else "Tool call errored"
-                            )
+                            RuntimeError(str(message) if message else "Tool call errored")
                         )
         finally:
             # Read terminal error from _run_done if it is already resolved.
@@ -597,8 +602,8 @@ class AsyncThreadStream:
         self.run = RunModule(self)
         self.output = _OutputAwaitable(self)
         self.values = _ValuesProjection(self)
-        self.messages = _MessagesProjection(self)
-        self.tool_calls = _ToolCallsProjection(self)
+        self.messages = _MessagesProjection(self, namespace=[])
+        self.tool_calls = _ToolCallsProjection(self, namespace=[])
 
     @property
     def _controller(self) -> AsyncThreadStream:
