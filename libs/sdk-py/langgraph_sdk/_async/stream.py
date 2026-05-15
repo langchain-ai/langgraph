@@ -1497,7 +1497,6 @@ class AsyncThreadStream:
             code = response.get("error", "unknown")
             message = response.get("message", "")
             raise RuntimeError(f"Protocol error [{code}]: {message}")
-        # Any type other than "error" (typically "success") is treated as success.
         meta = response.get("meta")
         if isinstance(meta, dict):
             applied_through_seq = meta.get("applied_through_seq")
