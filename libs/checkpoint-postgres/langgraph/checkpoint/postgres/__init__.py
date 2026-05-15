@@ -1,10 +1,15 @@
-from __future__ import annotations
 
+from __future__ import annotations
 import threading
+from typing import Any, Literal, Sequence
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+
 from collections import defaultdict
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any, cast
+from typing import Any, cast, Literal, Sequence
+
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -23,6 +28,8 @@ from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
+
+
 
 from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import (
@@ -46,13 +53,17 @@ class PostgresSaver(BasePostgresSaver):
         self,
         conn: _internal.Conn,
         pipe: Pipeline | None = None,
+        *,
+        allowed_msgpack_modules: Sequence[dict[str, Any]] | Literal[True] | None = None,
         serde: SerializerProtocol | None = None,
     ) -> None:
+        serde = serde or JsonPlusSerializer(allowed_msgpack_modules=allowed_msgpack_modules)
         super().__init__(serde=serde)
         if isinstance(conn, ConnectionPool) and pipe is not None:
             raise ValueError(
                 "Pipeline should be used only with a single Connection, not ConnectionPool."
             )
+        
 
         self.conn = conn
         self.pipe = pipe
@@ -62,7 +73,8 @@ class PostgresSaver(BasePostgresSaver):
     @classmethod
     @contextmanager
     def from_conn_string(
-        cls, conn_string: str, *, pipeline: bool = False
+        cls, conn_string: str, *, pipeline: bool = False, 
+        allowed_msgpack_modules: Sequence[dict[str, Any]] | Literal[True] | None = None,
     ) -> Iterator[PostgresSaver]:
         """Create a new PostgresSaver instance from a connection string.
 

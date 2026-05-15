@@ -1,4 +1,10 @@
+
 from __future__ import annotations
+import threading
+from typing import Any, Literal, Sequence
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+
 
 import json
 import random
@@ -21,7 +27,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
 
 from langgraph.checkpoint.sqlite._delta import (
     DELTA_STAGE1_SQL,
@@ -86,14 +92,19 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         self,
         conn: sqlite3.Connection,
         *,
+        allowed_msgpack_modules: Sequence[dict[str, Any]] | Literal[True] | None = None,
         serde: SerializerProtocol | None = None,
     ) -> None:
+        # 1. Intercept and configure BEFORE calling the parent
+        serde = serde or JsonPlusSerializer(allowed_msgpack_modules=allowed_msgpack_modules)
+        
+        # 2. Pass the configured serializer up to the parent
         super().__init__(serde=serde)
-        self.jsonplus_serde = JsonPlusSerializer()
+        
+        # 3. Standard database setup (no self.jsonplus_serde needed!)
         self.conn = conn
         self.is_setup = False
         self.lock = threading.Lock()
-
     @classmethod
     @contextmanager
     def from_conn_string(cls, conn_string: str) -> Iterator[SqliteSaver]:
