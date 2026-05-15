@@ -14,9 +14,9 @@ from typing import Any
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk.stream.subscription import compute_union_filter, filter_covers
-from langgraph_sdk.stream.transport.sync_http import (
+from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
-    SyncProtocolSseTransport,
+    SyncProtocolTransport,
 )
 
 _logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class SyncStreamController:
 
     def __init__(
         self,
-        transport: SyncProtocolSseTransport,
+        transport: SyncProtocolTransport,
         *,
         run_start_gate: threading.Event | None = None,
         run_start_timeout: float = _DEFAULT_RUN_START_TIMEOUT,
