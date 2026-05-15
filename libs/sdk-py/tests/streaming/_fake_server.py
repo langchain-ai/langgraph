@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any
 
 import orjson
@@ -19,6 +20,13 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
+
+
+@dataclass
+class _StreamScript:
+    events: list[dict[str, Any]]
+    delay: float = 0.0
+    fail_after: int | None = None
 
 
 class FakeServer:
@@ -48,11 +56,30 @@ class FakeServer:
         self.state: dict[str, Any] = {}
         self.state_request_count: int = 0
         self.state_request_headers: list[dict[str, str]] = []
+        self._stream_scripts: list[_StreamScript] = []
+        self._command_response: dict[str, Any] | None = None
 
-    def script(self, events: list[dict[str, Any]], *, delay: float = 0.0) -> None:
-        """Set the events the next /stream/events call will replay."""
+    def script(
+        self,
+        events: list[dict[str, Any]],
+        *,
+        delay: float = 0.0,
+        fail_after: int | None = None,
+    ) -> None:
+        """Set the events the next /stream/events calls will replay."""
         self.scripted_events = list(events)
         self._stream_delay = delay
+        self._stream_scripts = [
+            _StreamScript(events=list(events), delay=delay, fail_after=fail_after)
+        ]
+
+    def script_sequence(self, scripts: list[_StreamScript]) -> None:
+        """Set per-open stream scripts consumed in order by /stream/events."""
+        self._stream_scripts = list(scripts)
+
+    def script_command_response(self, response: dict[str, Any]) -> None:
+        """Set the command envelope returned by /commands."""
+        self._command_response = dict(response)
 
     def set_state(
         self,
@@ -82,6 +109,10 @@ class FakeServer:
             self.received_commands.append(body)
             self.command_request_headers.append(dict(request.headers))
             command_id = body.get("id")
+            if self._command_response is not None:
+                response = dict(self._command_response)
+                response["id"] = command_id
+                return JSONResponse(response)
             return JSONResponse(
                 {
                     "type": "success",
@@ -124,16 +155,20 @@ class FakeServer:
         self._open_event_streams_max = max(
             self._open_event_streams_max, self.open_event_streams
         )
+        script = (
+            self._stream_scripts.pop(0)
+            if self._stream_scripts
+            else _StreamScript(events=list(self.scripted_events), delay=self._stream_delay)
+        )
         try:
-            # Why: script() rebinds scripted_events; in-flight iterators retain
-            # a reference to the prior list and are unaffected by later
-            # script() calls.
-            for event in self.scripted_events:
-                if self._stream_delay:
-                    await asyncio.sleep(self._stream_delay)
+            for index, event in enumerate(script.events, start=1):
+                if script.delay:
+                    await asyncio.sleep(script.delay)
                 payload = orjson.dumps(event).decode()
                 yield f"id: {event.get('event_id', '')}\n".encode()
                 yield f"event: message\ndata: {payload}\n\n".encode()
+                if script.fail_after is not None and index >= script.fail_after:
+                    raise RuntimeError("scripted async stream failure")
         finally:
             self.open_event_streams -= 1
 
