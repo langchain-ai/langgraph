@@ -11,7 +11,7 @@ from langgraph_sdk._async.threads import ThreadsClient
 from langgraph_sdk.stream.controller import StreamController
 from langgraph_sdk.stream.transport.http import EventStreamHandle
 from streaming._events import lifecycle_event, values_event
-from streaming._fake_server import FakeServer
+from streaming._fake_server import FakeServer, _StreamScript
 
 
 async def test_shared_stream_serves_single_subscription():
@@ -324,3 +324,28 @@ async def test_shared_stream_reconnect_dedupes_replayed_overlap():
 
     assert [event["seq"] for event in received if event is not None] == [1, 2]
     assert received[-1] is None
+
+
+async def test_send_command_applied_through_seq_seeds_shared_stream_since():
+    fake = FakeServer()
+    fake.script_sequence([_StreamScript(events=[]), _StreamScript(events=[])])
+    fake.script_command_response(
+        {
+            "type": "success",
+            "id": None,
+            "result": {"run_id": "run-1"},
+            "meta": {"applied_through_seq": 17},
+        }
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            _ = [event async for event in thread.subscribe(["values"])]
+
+    values_requests = [
+        b for b in fake.stream_request_bodies if b.get("channels") == ["values"]
+    ]
+    assert len(values_requests) == 1
+    assert values_requests[0]["since"] == 17

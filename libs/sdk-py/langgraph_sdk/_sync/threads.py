@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Literal, overload
 
 from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.stream import SyncThreadStream
 from langgraph_sdk.schema import (
     Checkpoint,
     Json,
@@ -711,6 +713,33 @@ class SyncThreadsClient:
             json=payload,
             headers=headers,
             params=params,
+        )
+
+    def stream(
+        self,
+        thread_id: str | None = None,
+        *,
+        assistant_id: str,
+        headers: Mapping[str, str] | None = None,
+    ) -> SyncThreadStream:
+        """Open a v3 thread-centric streaming session.
+
+        Args:
+            thread_id: optional explicit thread identifier. Defaults to a
+                fresh UUIDv4.
+            assistant_id: assistant the run will use. Required.
+            headers: optional headers forwarded on every command and SSE
+                request for this stream session.
+
+        Returns:
+            A `SyncThreadStream` to use as a context manager.
+        """
+        return SyncThreadStream(
+            http=self.http,
+            thread_id=thread_id if thread_id is not None else str(uuid.uuid4()),
+            assistant_id=assistant_id,
+            headers=headers,
+            explicit_thread_id=thread_id is not None,
         )
 
     def join_stream(

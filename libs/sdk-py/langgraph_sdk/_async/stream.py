@@ -1480,6 +1480,11 @@ class AsyncThreadStream:
             code = response.get("error", "unknown")
             message = response.get("message", "")
             raise RuntimeError(f"Protocol error [{code}]: {message}")
+        meta = response.get("meta")
+        if isinstance(meta, dict):
+            applied_through_seq = meta.get("applied_through_seq")
+            if self._controller is not None:
+                self._controller.observe_applied_through_seq(applied_through_seq)
         return response.get("result", {})
 
     async def _await_run_start_gate(self, *, timeout: float | None = None) -> None:

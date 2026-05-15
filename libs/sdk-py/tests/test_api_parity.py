@@ -45,13 +45,11 @@ def _normalize_return_annotation(ann: object) -> str:
     s = re.sub(r"Generator\[([^,\]]+)(?:,[^\]]*)?\]", r"Iterator[\1]", s)
     s = re.sub(r"AsyncIterator\[(.+)\]", r"Iterator[\1]", s)
     s = re.sub(r"AsyncIterable\[(.+)\]", r"Iterable[\1]", s)
+    s = s.replace("AsyncThreadStream", "SyncThreadStream")
     return s
 
 
-# Methods that exist only on the async client surface.
-ASYNC_ONLY_METHODS: dict[str, set[str]] = {
-    "ThreadsClient": {"stream"},
-}
+ASYNC_ONLY_METHODS: dict[str, set[str]] = {}
 
 
 @pytest.mark.parametrize(
