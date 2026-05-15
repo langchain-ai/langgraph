@@ -416,3 +416,27 @@ def test_sync_lifecycle_watcher_reconnects_with_since_after_transport_drop():
     assert terminal.status == "completed"
     assert terminal.error is None
     assert fake.stream_request_bodies[1]["since"] == 1
+
+
+def test_sync_threads_stream_accepts_websocket_transport_option():
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        stream = threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+            transport="websocket",
+        )
+    assert stream._transport_kind == "websocket"
+
+
+def test_sync_threads_stream_rejects_unknown_transport_option():
+    import pytest
+
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with pytest.raises(ValueError, match="transport"):
+            threads.stream(
+                thread_id="t-1",
+                assistant_id="agent",
+                transport="bogus",  # ty: ignore[invalid-argument-type]
+            )

@@ -23,7 +23,12 @@ from langchain_core.language_models.chat_model_stream import AsyncChatModelStrea
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._async.http import HttpClient
-from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
+from langgraph_sdk.stream.transport import (
+    AsyncProtocolTransport,
+    EventStreamHandle,
+    ProtocolSseTransport,
+    ProtocolWebSocketTransport,
+)
 
 
 class InterruptPayload(TypedDict):
@@ -1153,6 +1158,7 @@ class AsyncThreadStream:
         max_queue_size: int = 1024,
         run_start_timeout: float | None = None,
         explicit_thread_id: bool = False,
+        transport_kind: Literal["sse", "websocket"] = "sse",
     ) -> None:
         self._http = http
         self._headers = dict(headers or {})
@@ -1161,8 +1167,9 @@ class AsyncThreadStream:
         self._max_queue_size = max_queue_size
         self._run_start_timeout = run_start_timeout
         self._explicit_thread_id = explicit_thread_id
+        self._transport_kind = transport_kind
         self._closed = False
-        self._transport: ProtocolSseTransport | None = None
+        self._transport: AsyncProtocolTransport | None = None
         self._open_handles: list[EventStreamHandle] = []
         self._next_command_id = 1
         self._next_subscription_id = 1
@@ -1221,7 +1228,12 @@ class AsyncThreadStream:
     async def __aenter__(self) -> AsyncThreadStream:
         if self._closed:
             raise RuntimeError("AsyncThreadStream is closed and cannot be re-entered.")
-        self._transport = ProtocolSseTransport(
+        transport_cls = (
+            ProtocolWebSocketTransport
+            if self._transport_kind == "websocket"
+            else ProtocolSseTransport
+        )
+        self._transport = transport_cls(
             client=self._http.client,
             thread_id=self.thread_id,
             headers=self._headers,

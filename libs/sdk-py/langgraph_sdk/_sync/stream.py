@@ -23,9 +23,11 @@ from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.stream.sync_controller import SyncStreamController, _SyncSubscription
-from langgraph_sdk.stream.transport.sync_http import (
+from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
     SyncProtocolSseTransport,
+    SyncProtocolTransport,
+    SyncProtocolWebSocketTransport,
 )
 
 
@@ -1146,6 +1148,7 @@ class SyncThreadStream:
         headers: Mapping[str, str] | None = None,
         run_start_timeout: float | None = None,
         explicit_thread_id: bool = False,
+        transport_kind: Literal["sse", "websocket"] = "sse",
     ) -> None:
         self._http = http
         self._headers = dict(headers or {})
@@ -1153,8 +1156,9 @@ class SyncThreadStream:
         self.assistant_id = assistant_id
         self._run_start_timeout = run_start_timeout
         self._explicit_thread_id = explicit_thread_id
+        self._transport_kind = transport_kind
         self._closed = False
-        self._transport: SyncProtocolSseTransport | None = None
+        self._transport: SyncProtocolTransport | None = None
         self._controller: SyncStreamController | None = None
         self._command_id_lock = threading.Lock()
         self._next_command_id = 1
@@ -1179,7 +1183,12 @@ class SyncThreadStream:
     def __enter__(self) -> SyncThreadStream:
         if self._closed:
             raise RuntimeError("SyncThreadStream is closed and cannot be re-entered.")
-        self._transport = SyncProtocolSseTransport(
+        transport_cls = (
+            SyncProtocolWebSocketTransport
+            if self._transport_kind == "websocket"
+            else SyncProtocolSseTransport
+        )
+        self._transport = transport_cls(
             client=self._http.client,
             thread_id=self.thread_id,
             headers=self._headers,

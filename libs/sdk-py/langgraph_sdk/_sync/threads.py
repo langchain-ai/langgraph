@@ -722,6 +722,7 @@ class SyncThreadsClient:
         assistant_id: str,
         headers: Mapping[str, str] | None = None,
         run_start_timeout: float | None = None,
+        transport: Literal["sse", "websocket"] = "sse",
     ) -> SyncThreadStream:
         """Open a v3 thread-centric streaming session.
 
@@ -731,10 +732,14 @@ class SyncThreadsClient:
             assistant_id: assistant the run will use. Required.
             headers: optional headers forwarded on every command and SSE
                 request for this stream session.
+            transport: event transport to use, `"sse"` (default) or
+                `"websocket"`.
 
         Returns:
             A `SyncThreadStream` to use as a context manager.
         """
+        if transport not in ("sse", "websocket"):
+            raise ValueError("transport must be 'sse' or 'websocket'.")
         return SyncThreadStream(
             http=self.http,
             thread_id=thread_id if thread_id is not None else str(uuid.uuid4()),
@@ -742,6 +747,7 @@ class SyncThreadsClient:
             headers=headers,
             run_start_timeout=run_start_timeout,
             explicit_thread_id=thread_id is not None,
+            transport_kind=transport,
         )
 
     def join_stream(
