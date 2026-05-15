@@ -58,6 +58,7 @@ class SyncFakeServer:
 
     def script_sequence(self, scripts: list[SyncStreamScript]) -> None:
         self._stream_scripts = list(scripts)
+        self.scripted_events = []
 
     def script_command_response(self, response: dict[str, Any]) -> None:
         self._command_response = dict(response)

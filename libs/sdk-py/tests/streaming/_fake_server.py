@@ -76,6 +76,7 @@ class FakeServer:
     def script_sequence(self, scripts: list[_StreamScript]) -> None:
         """Set per-open stream scripts consumed in order by /stream/events."""
         self._stream_scripts = list(scripts)
+        self.scripted_events = []
 
     def script_command_response(self, response: dict[str, Any]) -> None:
         """Set the command envelope returned by /commands."""
