@@ -520,6 +520,7 @@ def create_react_agent(
         warnings.warn(
             "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
             category=LangGraphDeprecatedSinceV10,
+            stacklevel=2,
         )
 
         if context_schema is None:
