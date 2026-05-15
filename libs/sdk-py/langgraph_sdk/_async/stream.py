@@ -393,45 +393,49 @@ class _MessagesProjection:
         from langchain_core.language_models.chat_model_stream import AsyncChatModelStream
 
         active: dict[str, AsyncChatModelStream] = {}
-        while True:
-            item = await inbox.get()
-            if item is None:
-                return
-            params_field = item.get("params") or {}
-            data = params_field.get("data") if isinstance(params_field, dict) else None
-            if not isinstance(data, dict):
-                continue
-            event_type = data.get("event")
-            if event_type == "message-start":
-                message_id = _message_event_id(data)
-                key = _message_route_key(data, fallback=message_id)
-                metadata = (
-                    data.get("metadata")
-                    if isinstance(data.get("metadata"), dict)
-                    else {}
-                )
-                stream = AsyncChatModelStream(
-                    namespace=list(self._namespace),
-                    node=metadata.get("langgraph_node") if metadata else None,
-                    message_id=message_id,
-                )
-                active[key] = stream
-                self._thread._register_active_message_stream(stream)
-                stream.dispatch(data)
-                yield stream
-            else:
-                key = _message_route_key(data)
-                stream = active.get(key)
-                if stream is None and len(active) == 1:
-                    stream = next(iter(active.values()))
-                if stream is None:
+        try:
+            while True:
+                item = await inbox.get()
+                if item is None:
+                    return
+                params_field = item.get("params") or {}
+                data = params_field.get("data") if isinstance(params_field, dict) else None
+                if not isinstance(data, dict):
                     continue
-                stream.dispatch(data)
-                if event_type in ("message-finish", "error"):
-                    self._thread._unregister_active_message_stream(stream)
-                    for route_key, candidate in list(active.items()):
-                        if candidate is stream:
-                            del active[route_key]
+                event_type = data.get("event")
+                if event_type == "message-start":
+                    message_id = _message_event_id(data)
+                    key = _message_route_key(data, fallback=message_id)
+                    metadata = (
+                        data.get("metadata")
+                        if isinstance(data.get("metadata"), dict)
+                        else {}
+                    )
+                    stream = AsyncChatModelStream(
+                        namespace=list(self._namespace),
+                        node=metadata.get("langgraph_node") if metadata else None,
+                        message_id=message_id,
+                    )
+                    active[key] = stream
+                    self._thread._register_active_message_stream(stream)
+                    stream.dispatch(data)
+                    yield stream
+                else:
+                    key = _message_route_key(data)
+                    stream = active.get(key)
+                    if stream is None and len(active) == 1:
+                        stream = next(iter(active.values()))
+                    if stream is None:
+                        continue
+                    stream.dispatch(data)
+                    if event_type in ("message-finish", "error"):
+                        self._thread._unregister_active_message_stream(stream)
+                        for route_key, candidate in list(active.items()):
+                            if candidate is stream:
+                                del active[route_key]
+        finally:
+            for stream in active.values():
+                self._thread._unregister_active_message_stream(stream)
 
 
 def _message_event_id(data: dict[str, Any]) -> str | None:
