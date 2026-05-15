@@ -355,10 +355,8 @@ class AsyncThreadStream:
         Independent of the union-filter shared stream so that interrupts
         surface even when no other subscription is active.
 
-        TODO(phase-3-task-8): the watcher opens immediately when
-        `RunModule.start` is invoked, which races the server-side thread
-        creation. The run-start gate (next task) wraps this open so the
-        watcher waits until `run.start` has committed the thread.
+        The watcher waits for the run-start gate before opening so it does not
+        race server-side thread creation.
         """
         if self._transport is None:
             return
