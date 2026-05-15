@@ -758,8 +758,51 @@ class _HandleSubgraphsProjection:
     def __aiter__(self) -> AsyncIterator[ScopedStreamHandle]:
         return self._subgraphs_iter()
 
+    def _route_sibling_inboxes_to_grandchildren(
+        self,
+        active: dict[tuple[str, ...], ScopedStreamHandle],
+    ) -> None:
+        """Drain non-blocking events from parent's messages/tools inboxes to grandchildren.
+
+        Called after each tasks event so grandchild handles receive events that
+        were enqueued in the parent handle's inboxes before (or just after) the
+        grandchild was discovered.
+        """
+        parent = self._handle
+        for inbox_attr, grandchild_attr in (
+            ("_messages_inbox", "_messages_inbox"),
+            ("_tools_inbox", "_tools_inbox"),
+        ):
+            inbox: asyncio.Queue[Event | None] = getattr(parent, inbox_attr)
+            staging: list[Event | None] = []
+            # Drain without blocking.
+            while not inbox.empty():
+                staging.append(inbox.get_nowait())
+            for event in staging:
+                if event is None:
+                    # Re-queue the EOF sentinel — it belongs to the parent inbox consumer.
+                    inbox.put_nowait(None)
+                    continue
+                event_params = event.get("params") or {}
+                ns_tuple = tuple(_event_namespace(event_params))
+                routed = False
+                for _child_path, grandchild in active.items():
+                    grandchild_len = len(grandchild.path)
+                    if (
+                        len(ns_tuple) >= grandchild_len
+                        and ns_tuple[:grandchild_len] == grandchild.path
+                    ):
+                        gc_inbox: asyncio.Queue[Event | None] = getattr(
+                            grandchild, grandchild_attr
+                        )
+                        gc_inbox.put_nowait(event)
+                        routed = True
+                        break
+                if not routed:
+                    # Not a grandchild event — put it back for the handle projection.
+                    inbox.put_nowait(event)
+
     async def _subgraphs_iter(self) -> AsyncGenerator[ScopedStreamHandle, None]:
-        self._handle._mark_iterated("tasks")
         seen: set[tuple[str, ...]] = set()
         active: dict[tuple[str, ...], ScopedStreamHandle] = {}
         scope = self._handle.path
