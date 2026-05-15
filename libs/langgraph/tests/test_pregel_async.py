@@ -25,6 +25,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from langchain_core.utils.aiter import aclosing
 from langgraph.cache.base import BaseCache
+from langgraph.cache.memory import InMemoryCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     ChannelVersions,
@@ -6861,6 +6862,37 @@ async def test_multiple_interrupts_functional_cache(
         "values": [2, "a", 2, "b", 4, "c", 4, "d", 6, "e", 6, "f"],
     }
     assert counter == 6
+
+
+@NEEDS_CONTEXTVARS
+async def test_functional_cache_does_not_replay_error_writes():
+    """Cached task errors must not be replayed as cached results."""
+
+    counter = 0
+
+    @task(cache_policy=CachePolicy())
+    def flaky(x: int) -> int:
+        nonlocal counter
+        counter += 1
+        if counter == 1:
+            raise RuntimeError("boom")
+        return 2 * x
+
+    @entrypoint(checkpointer=InMemorySaver(), cache=InMemoryCache())
+    def graph(state: dict) -> dict:
+        return {"value": flaky(state["x"]).result()}
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await graph.ainvoke(
+            {"x": 7},
+            {"configurable": {"thread_id": str(uuid.uuid4())}},
+        )
+
+    assert await graph.ainvoke(
+        {"x": 7},
+        {"configurable": {"thread_id": str(uuid.uuid4())}},
+    ) == {"value": 14}
+    assert counter == 2
 
 
 @NEEDS_CONTEXTVARS
