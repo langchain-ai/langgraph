@@ -395,6 +395,51 @@ def _message_route_key(data: dict[str, Any], fallback: str | None = None) -> str
     return "__single__"
 
 
+SubgraphStatus = Literal["started", "completed", "failed", "interrupted"]
+
+
+def _parse_namespace_segment(segment: str) -> tuple[str, str | None]:
+    name, sep, task_id = segment.partition(":")
+    return name, task_id if sep else None
+
+
+def _terminal_from_tasks_result(data: dict[str, Any]) -> tuple[SubgraphStatus, str | None]:
+    if data.get("interrupts"):
+        return "interrupted", None
+    error = data.get("error")
+    if error:
+        return "failed", str(error)
+    return "completed", None
+
+
+class ScopedStreamHandle:
+    """Scoped streaming handle for one discovered child invocation."""
+
+    def __init__(
+        self,
+        *,
+        thread: "AsyncThreadStream",
+        path: tuple[str, ...],
+        graph_name: str | None,
+        trigger_call_id: str | None,
+    ) -> None:
+        self._thread = thread
+        self.path = path
+        self.namespace = list(path)
+        self.graph_name = graph_name
+        self.trigger_call_id = trigger_call_id
+        self.status: SubgraphStatus = "started"
+        self.error: str | None = None
+        self.messages = _MessagesProjection(thread, namespace=self.namespace)
+        self.tool_calls = _ToolCallsProjection(thread, namespace=self.namespace)
+        self.subgraphs = _SubgraphsProjection(thread, scope=self.path)
+        self.subagents = self.subgraphs
+
+    def _finish(self, status: SubgraphStatus, error: str | None = None) -> None:
+        self.status = status
+        self.error = error
+
+
 class ToolCallHandle:
     """Async handle for one root-scope tool call."""
 
