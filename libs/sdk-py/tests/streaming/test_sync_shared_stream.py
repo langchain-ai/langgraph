@@ -75,6 +75,8 @@ def test_sync_shared_stream_reconnects_with_since_after_transport_drop():
         controller.close()
         transport.close()
 
+    assert first is not None
+    assert second is not None
     assert first["seq"] == 1
     assert second["seq"] == 2
     assert end is None

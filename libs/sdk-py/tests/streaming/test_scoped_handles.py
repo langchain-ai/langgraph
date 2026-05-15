@@ -591,7 +591,9 @@ async def test_subgraph_scoped_messages_survive_shared_stream_reconnect():
             _StreamScript(
                 events=[
                     lifecycle_started_event(seq=0),
-                    tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+                    tasks_start_event(
+                        seq=1, namespace=["worker:abc"], task_id="t-child"
+                    ),
                 ],
                 fail_after=2,
             ),
@@ -600,11 +602,22 @@ async def test_subgraph_scoped_messages_survive_shared_stream_reconnect():
             ),
             _StreamScript(
                 events=[
-                    message_start_event(seq=2, namespace=["worker:abc"], message_id="child-msg", run_id="child-run"),
-                    message_text_delta_event(seq=3, namespace=["worker:abc"], text="child"),
-                    message_text_finish_event(seq=4, namespace=["worker:abc"], text="child"),
+                    message_start_event(
+                        seq=2,
+                        namespace=["worker:abc"],
+                        message_id="child-msg",
+                        run_id="child-run",
+                    ),
+                    message_text_delta_event(
+                        seq=3, namespace=["worker:abc"], text="child"
+                    ),
+                    message_text_finish_event(
+                        seq=4, namespace=["worker:abc"], text="child"
+                    ),
                     message_finish_event(seq=5, namespace=["worker:abc"]),
-                    tasks_result_event(seq=6, namespace=[], task_id="abc", name="worker"),
+                    tasks_result_event(
+                        seq=6, namespace=[], task_id="abc", name="worker"
+                    ),
                     lifecycle_completed_event(seq=7),
                 ]
             ),

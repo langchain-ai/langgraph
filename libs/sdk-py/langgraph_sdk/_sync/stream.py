@@ -1384,7 +1384,9 @@ class SyncThreadStream:
         reconnect_attempts = 0
         while not self._closed:
             try:
-                handle = self._transport.open_event_stream(self._lifecycle_stream_params())
+                handle = self._transport.open_event_stream(
+                    self._lifecycle_stream_params()
+                )
                 self._lifecycle_watcher_handle = handle
                 for event in handle.events:
                     if self._closed:
