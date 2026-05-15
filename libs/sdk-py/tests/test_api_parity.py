@@ -48,12 +48,8 @@ def _normalize_return_annotation(ann: object) -> str:
     return s
 
 
-# Methods that are intentionally async-only during the v3 streaming rollout.
-# These are deferred to Phase 8 (sync mirror) of the v3 streaming work; the
-# async surface lands phase-by-phase. Remove an entry once its sync mirror lands.
-#
-# Grep anchor: `ASYNC_ONLY_METHODS` — when Phase 8 lands the `_sync/stream.py`
-# mirror, grep for this constant and remove entries whose sync mirrors ship.
+# Methods that are intentionally async-only while their sync mirrors are incomplete.
+# Remove an entry once its sync mirror ships.
 ASYNC_ONLY_METHODS: dict[str, set[str]] = {
     "ThreadsClient": {"stream"},
 }
@@ -76,7 +72,7 @@ def test_sync_api_matches_async(async_cls, sync_cls):
     allowlist = ASYNC_ONLY_METHODS.get(async_cls.__name__, set())
     async_method_names = set(async_methods.keys()) - allowlist
 
-    # Method name parity (modulo phased-rollout allowlist).
+    # Method name parity (modulo temporary async-only allowlist).
     assert sync_methods.keys() == async_method_names, (
         f"Method sets differ: async-only={async_method_names - set(sync_methods)}, sync-only={set(sync_methods) - async_method_names}"
     )

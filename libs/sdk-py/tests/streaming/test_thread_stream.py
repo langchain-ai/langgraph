@@ -289,7 +289,7 @@ async def test_events_raises_outside_context_manager():
 async def test_fresh_thread_happy_path_end_to_end():
     """User passes no thread_id; SDK mints one and uses it in all URLs.
 
-    Validates the full Phase 2 surface end-to-end:
+    Validates the thread-stream surface end-to-end:
       - uuid4 minted at client.threads.stream()
       - run.start posted to /threads/<minted-id>/commands
       - events SSE opened at /threads/<minted-id>/stream/events

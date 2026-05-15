@@ -18,8 +18,7 @@ from langchain_protocol import Event
 
 from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
 
-# All public protocol channels — Phase 2 subscribes to everything for the raw
-# `events` surface. Projections in Phase 3+ will use narrower filters.
+# All public protocol channels used by the raw `events` surface.
 _ALL_CHANNELS: list[str] = [
     "values",
     "updates",
@@ -142,5 +141,5 @@ class AsyncThreadStream:
             code = response.get("error", "unknown")
             message = response.get("message", "")
             raise RuntimeError(f"Protocol error [{code}]: {message}")
-        # TODO(phase3+): extract meta.applied_through_seq for reconnect cursor.
+        # Reconnect cursor seeding is added with transport retry support.
         return response.get("result", {})
