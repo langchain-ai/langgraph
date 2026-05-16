@@ -105,6 +105,31 @@ def test_binop() -> None:
     assert channel.get() == 10
 
 
+@pytest.mark.parametrize(
+    "overwrite",
+    [
+        Overwrite(10),
+        {"__overwrite__": 10},
+    ],
+)
+def test_binop_overwrite_rejects_subsequent_updates(overwrite: object) -> None:
+    channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(MISSING)
+
+    with pytest.raises(
+        InvalidUpdateError,
+        match="Cannot receive a regular update after an Overwrite value",
+    ):
+        channel.update([5, overwrite, 3])
+
+
+def test_binop_overwrite_allows_prior_updates() -> None:
+    channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(MISSING)
+
+    channel.update([5, Overwrite(10)])
+
+    assert channel.get() == 10
+
+
 def test_untracked_value() -> None:
     channel = UntrackedValue(dict).from_checkpoint(MISSING)
     assert channel.ValueType is dict

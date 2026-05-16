@@ -109,12 +109,9 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     def update(self, values: Sequence[Value]) -> bool:
         if not values:
             return False
-        if self.value is MISSING:
-            self.value = values[0]
-            values = values[1:]
         seen_overwrite: bool = False
         for value in values:
-            is_overwrite, overwrite_value = _get_overwrite(value)
+            is_overwrite, _ = _get_overwrite(value)
             if is_overwrite:
                 if seen_overwrite:
                     msg = create_error_message(
@@ -122,6 +119,23 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
                         error_code=ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE,
                     )
                     raise InvalidUpdateError(msg)
+                seen_overwrite = True
+            elif seen_overwrite:
+                msg = create_error_message(
+                    message="Cannot receive a regular update after an Overwrite value in the same super-step.",
+                    error_code=ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE,
+                )
+                raise InvalidUpdateError(msg)
+        if self.value is MISSING:
+            is_overwrite, overwrite_value = _get_overwrite(values[0])
+            self.value = overwrite_value if is_overwrite else values[0]
+            values = values[1:]
+            seen_overwrite = is_overwrite
+        else:
+            seen_overwrite = False
+        for value in values:
+            is_overwrite, overwrite_value = _get_overwrite(value)
+            if is_overwrite:
                 self.value = overwrite_value
                 seen_overwrite = True
                 continue

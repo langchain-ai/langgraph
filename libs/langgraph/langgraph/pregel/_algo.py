@@ -65,6 +65,7 @@ from langgraph._internal._constants import (
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
@@ -316,10 +317,15 @@ def apply_writes(
     updated_channels: set[str] = set()
     for chan, vals in pending_writes_by_channel.items():
         if chan in channels:
-            if channels[chan].update(vals) and next_version is not None:
+            channel = channels[chan]
+            if isinstance(channel, BinaryOperatorAggregate):
+                # Preserve the graph-level contract that one overwrite wins over
+                # concurrent reducer writes for the same channel.
+                vals = sorted(vals, key=lambda val: _get_overwrite(val)[0])
+            if channel.update(vals) and next_version is not None:
                 checkpoint["channel_versions"][chan] = next_version
                 # unavailable channels can't trigger tasks, so don't add them
-                if channels[chan].is_available():
+                if channel.is_available():
                     updated_channels.add(chan)
 
     # Channels that weren't updated in this step are notified of a new step
