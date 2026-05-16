@@ -10,7 +10,7 @@ from typing import (
 from uuid import UUID, uuid4
 
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from pydantic import BaseModel
 
@@ -102,19 +102,21 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             self.stream((meta[0], "messages", (message, meta[1])))
 
     def _find_and_emit_messages(self, meta: Meta, response: Any) -> None:
-        if isinstance(response, BaseMessage):
+        if isinstance(response, BaseMessage) and not isinstance(response, ToolMessage):
             self._emit(meta, response, dedupe=True)
         elif isinstance(response, Sequence):
             for value in response:
-                if isinstance(value, BaseMessage):
+                if isinstance(value, BaseMessage) and not isinstance(value, ToolMessage):
                     self._emit(meta, value, dedupe=True)
         else:
             for value in _state_values(response):
-                if isinstance(value, BaseMessage):
+                if isinstance(value, BaseMessage) and not isinstance(value, ToolMessage):
                     self._emit(meta, value, dedupe=True)
                 elif isinstance(value, Sequence):
                     for item in value:
-                        if isinstance(item, BaseMessage):
+                        if isinstance(item, BaseMessage) and not isinstance(
+                            item, ToolMessage
+                        ):
                             self._emit(meta, item, dedupe=True)
 
     def tap_output_aiter(
