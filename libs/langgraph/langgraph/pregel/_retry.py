@@ -631,7 +631,9 @@ def run_with_retry(
 
             # Apply jitter if configured
             sleep_time = (
-                interval + random.uniform(0, 1) if matching_policy.jitter else interval
+                min(matching_policy.max_interval, interval + random.uniform(0, 1))
+                if matching_policy.jitter
+                else interval
             )
             time.sleep(sleep_time)
 
@@ -769,7 +771,9 @@ async def arun_with_retry(
 
             # Apply jitter if configured
             sleep_time = (
-                interval + random.uniform(0, 1) if matching_policy.jitter else interval
+                min(matching_policy.max_interval, interval + random.uniform(0, 1))
+                if matching_policy.jitter
+                else interval
             )
             await asyncio.sleep(sleep_time)
 
