@@ -106,11 +106,15 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             self._emit(meta, response, dedupe=True)
         elif isinstance(response, Sequence):
             for value in response:
-                if isinstance(value, BaseMessage) and not isinstance(value, ToolMessage):
+                if isinstance(value, BaseMessage) and not isinstance(
+                    value, ToolMessage
+                ):
                     self._emit(meta, value, dedupe=True)
         else:
             for value in _state_values(response):
-                if isinstance(value, BaseMessage) and not isinstance(value, ToolMessage):
+                if isinstance(value, BaseMessage) and not isinstance(
+                    value, ToolMessage
+                ):
                     self._emit(meta, value, dedupe=True)
                 elif isinstance(value, Sequence):
                     for item in value:
