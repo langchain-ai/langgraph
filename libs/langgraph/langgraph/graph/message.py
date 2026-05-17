@@ -33,9 +33,27 @@ __all__ = (
     "REMOVE_ALL_MESSAGES",
 )
 
-Messages = list[MessageLikeRepresentation] | MessageLikeRepresentation
+Messages = Sequence[MessageLikeRepresentation] | MessageLikeRepresentation
 
 REMOVE_ALL_MESSAGES = "__remove_all__"
+
+
+def _is_message_sequence(messages: Messages) -> bool:
+    return (
+        isinstance(messages, Sequence)
+        and not isinstance(messages, (str, BaseMessage, dict))
+        and not (
+            isinstance(messages, tuple)
+            and len(messages) == 2
+            and all(isinstance(item, str) for item in messages)
+        )
+    )
+
+
+def _coerce_messages(messages: Messages) -> Sequence[MessageLikeRepresentation]:
+    if _is_message_sequence(messages):
+        return messages
+    return [cast(MessageLikeRepresentation, messages)]
 
 
 def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
@@ -186,10 +204,8 @@ def add_messages(
     """
     remove_all_idx = None
     # coerce to list
-    if not isinstance(left, list):
-        left = [left]  # type: ignore[assignment]
-    if not isinstance(right, list):
-        right = [right]  # type: ignore[assignment]
+    left = _coerce_messages(left)
+    right = _coerce_messages(right)
     # coerce to message
     left = [
         message_chunk_to_message(cast(BaseMessageChunk, m))

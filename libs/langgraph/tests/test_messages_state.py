@@ -52,6 +52,17 @@ def test_add_multiple_messages():
     assert result == expected_result
 
 
+def test_add_messages_accepts_sequence():
+    left = (HumanMessage(content="Hello", id="1"),)
+    right = (AIMessage(content="Hi there!", id="2"),)
+    result = add_messages(left, right)
+    expected_result = [
+        HumanMessage(content="Hello", id="1"),
+        AIMessage(content="Hi there!", id="2"),
+    ]
+    assert result == expected_result
+
+
 def test_update_existing_message():
     left = [HumanMessage(content="Hello", id="1")]
     right = HumanMessage(content="Hello again", id="1")
