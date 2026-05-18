@@ -119,6 +119,7 @@ class StreamController:
         self._shared_stream: EventStreamHandle | None = None
         self._shared_stream_filter: dict[str, Any] | None = None
         self._fanout_task: asyncio.Task[None] | None = None
+        self._rotation_close_tasks: set[asyncio.Task[None]] = set()
         self._closed = False
 
     # ------------------------------------------------------------------
@@ -146,7 +147,7 @@ class StreamController:
         return self._subscription_iter(params)
 
     async def close(self) -> None:
-        """Tear down the controller."""
+        """Tear down the controller, awaiting any pending rotation closes."""
         if self._closed:
             return
         self._closed = True
@@ -156,6 +157,8 @@ class StreamController:
                 await self._fanout_task
         if self._shared_stream is not None:
             await self._shared_stream.close()
+        if self._rotation_close_tasks:
+            await asyncio.gather(*self._rotation_close_tasks, return_exceptions=True)
 
     # ------------------------------------------------------------------
     # Subscription internals
@@ -265,7 +268,9 @@ class StreamController:
         self._shared_stream_filter = new_filter
         await new_stream.ready
         if old_stream is not None:
-            asyncio.create_task(_close_after(old_stream))  # noqa: RUF006
+            task = asyncio.create_task(_close_after(old_stream))
+            self._rotation_close_tasks.add(task)
+            task.add_done_callback(self._rotation_close_tasks.discard)
 
     def _compute_current_union(
         self, extra: SubscribeParams | None = None
