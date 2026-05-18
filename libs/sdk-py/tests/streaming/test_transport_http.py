@@ -275,3 +275,28 @@ async def test_clean_stream_end_done_resolves_with_none():
             pass
         err = await handle.done
         assert err is None
+
+
+@pytest.mark.anyio
+async def test_send_command_empty_200_body_raises_runtime_error_not_decoder_error():
+    """A 200 response with empty body must raise RuntimeError matching the
+    'did not return a valid response' contract, not orjson.JSONDecodeError."""
+    import httpx
+
+    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"")
+
+    mock = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=mock, base_url="http://example.com"
+    ) as client:
+        transport = ProtocolSseTransport(
+            client=client,
+            thread_id="t1",
+        )
+        with pytest.raises(RuntimeError, match="did not return a valid response"):
+            await transport.send_command(
+                {"command_id": 1, "method": "run.start", "params": {}}
+            )

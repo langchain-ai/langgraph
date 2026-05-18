@@ -99,7 +99,14 @@ class ProtocolSseTransport:
         response.raise_for_status()
         if response.status_code in (202, 204):
             return None
-        payload = orjson.loads(response.content)
+        if not response.content:
+            raise RuntimeError("Protocol command did not return a valid response.")
+        try:
+            payload = orjson.loads(response.content)
+        except orjson.JSONDecodeError as err:
+            raise RuntimeError(
+                "Protocol command did not return a valid response."
+            ) from err
         if not isinstance(payload, dict) or "command_id" not in payload:
             raise RuntimeError("Protocol command did not return a valid response.")
         return payload
