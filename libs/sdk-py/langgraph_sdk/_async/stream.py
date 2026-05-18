@@ -10,7 +10,6 @@ Direct port of `libs/sdk/src/client/stream/index.ts`.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, TypedDict
@@ -105,10 +104,12 @@ class AsyncThreadStream:
         client: httpx.AsyncClient,
         thread_id: str,
         assistant_id: str,
+        max_queue_size: int = 1024,
     ) -> None:
         self._http_client = client
         self.thread_id = thread_id
         self.assistant_id = assistant_id
+        self._max_queue_size = max_queue_size
         self._closed = False
         self._transport: ProtocolSseTransport | None = None
         self._open_handles: list[EventStreamHandle] = []
@@ -131,6 +132,7 @@ class AsyncThreadStream:
         self._transport = ProtocolSseTransport(
             client=self._http_client,
             thread_id=self.thread_id,
+            max_queue_size=self._max_queue_size,
         )
         return self
 
@@ -170,7 +172,11 @@ class AsyncThreadStream:
 
     def _register_subscription(self, params: SubscribeParams) -> _Subscription:
         """Allocate a subscription id and add it to the registry."""
-        sub = _Subscription(id=self._next_subscription_id, params=params)
+        sub = _Subscription(
+            id=self._next_subscription_id,
+            params=params,
+            queue=asyncio.Queue(maxsize=self._max_queue_size),
+        )
         self._next_subscription_id += 1
         self._subscriptions[sub.id] = sub
         return sub
