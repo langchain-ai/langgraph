@@ -11,7 +11,9 @@ from langgraph_sdk.stream.transport.http import EventStreamHandle, ProtocolSseTr
 
 
 async def test_event_stream_handle_constructs_with_open_state():
-    ready: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+    loop = asyncio.get_running_loop()
+    ready: asyncio.Future[None] = loop.create_future()
+    done: asyncio.Future[BaseException | None] = loop.create_future()
     closed = False
 
     async def aiter_events():
@@ -22,8 +24,11 @@ async def test_event_stream_handle_constructs_with_open_state():
         nonlocal closed
         closed = True
 
-    handle = EventStreamHandle(events=aiter_events(), ready=ready, close=closer)
+    handle = EventStreamHandle(
+        events=aiter_events(), ready=ready, done=done, close=closer
+    )
     assert handle.ready is ready
+    assert handle.done is done
     await handle.close()
     assert closed is True
 
@@ -208,3 +213,65 @@ async def test_pump_backpressures_when_queue_full():
     # Producer should have enqueued 2 items, then blocked waiting on a third
     # put. The third item was attempted but never completed.
     assert len(produced) == 2
+
+
+@pytest.mark.anyio
+async def test_mid_stream_error_after_ready_surfaces_on_done():
+    """If the SSE response body iteration raises after headers/ready, the
+    error must be exposed on handle.done so callers can distinguish a clean
+    end from a transport failure."""
+    import httpx
+
+    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        async def body():
+            yield b'event: message\ndata: {"jsonrpc": "2.0"}\n\n'
+            raise RuntimeError("simulated mid-stream drop")
+
+        return httpx.Response(200, content=body())
+
+    mock = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=mock, base_url="http://example.com"
+    ) as client:
+        transport = ProtocolSseTransport(
+            client=client,
+            thread_id="t1",
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+        await handle.ready
+        async for _ in handle.events:
+            pass
+        err = await handle.done
+        assert isinstance(err, RuntimeError)
+        assert "mid-stream drop" in str(err)
+
+
+@pytest.mark.anyio
+async def test_clean_stream_end_done_resolves_with_none():
+    """A stream that ends without error must resolve `done` with None."""
+    import httpx
+
+    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        async def body():
+            yield b'event: message\ndata: {"jsonrpc": "2.0"}\n\n'
+
+        return httpx.Response(200, content=body())
+
+    mock = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=mock, base_url="http://example.com"
+    ) as client:
+        transport = ProtocolSseTransport(
+            client=client,
+            thread_id="t1",
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+        await handle.ready
+        async for _ in handle.events:
+            pass
+        err = await handle.done
+        assert err is None

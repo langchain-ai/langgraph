@@ -45,12 +45,15 @@ class EventStreamHandle:
             stream closes (server hangup or `close()`).
         ready: resolves once HTTP response headers arrive; rejects on
             connection failure before headers.
+        done: resolves with `None` on clean end or cancellation, or with
+            the exception on a mid-stream transport error.
         close: invoke to cancel the underlying task and free the
             connection.
     """
 
     events: AsyncIterator[Event]
     ready: asyncio.Future[None]
+    done: asyncio.Future[BaseException | None]
     close: Callable[[], Awaitable[None]]
 
 
@@ -117,6 +120,7 @@ class ProtocolSseTransport:
 
         loop = asyncio.get_running_loop()
         ready: asyncio.Future[None] = loop.create_future()
+        done: asyncio.Future[BaseException | None] = loop.create_future()
         queue: asyncio.Queue[Event | None] = asyncio.Queue(maxsize=self._max_queue_size)
         cancel_event = asyncio.Event()
 
@@ -155,11 +159,18 @@ class ProtocolSseTransport:
                     if part is not None and isinstance(part.data, dict):
                         await queue.put(cast("Event", part.data))
             except asyncio.CancelledError:
+                if not done.done():
+                    done.set_result(None)
                 raise
-            except Exception as err:
+            except BaseException as err:
                 if not ready.done():
                     ready.set_exception(err)
+                if not done.done():
+                    done.set_result(err)
+                # Do not re-raise; the error is surfaced via `done`.
             finally:
+                if not done.done():
+                    done.set_result(None)
                 await queue.put(None)  # sentinel: end of stream
 
         task = asyncio.create_task(pump())
@@ -177,7 +188,7 @@ class ProtocolSseTransport:
             with contextlib.suppress(asyncio.CancelledError, BaseException):
                 await task
 
-        return EventStreamHandle(events=aiter(), ready=ready, close=close)
+        return EventStreamHandle(events=aiter(), ready=ready, done=done, close=close)
 
     async def close(self) -> None:
         """Mark the transport closed. Idempotent."""
