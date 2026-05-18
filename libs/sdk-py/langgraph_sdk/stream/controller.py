@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections import OrderedDict
 from collections.abc import AsyncGenerator, AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -21,6 +22,35 @@ from typing import Any
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk.stream.transport import EventStreamHandle
+
+# ---------------------------------------------------------------------------
+# Bounded LRU set for event-id dedup
+# ---------------------------------------------------------------------------
+
+
+class _SeenEventIds:
+    """LRU set of event ids with bounded memory."""
+
+    __slots__ = ("_data", "_maxsize")
+
+    def __init__(self, maxsize: int = 10_000) -> None:
+        self._data: OrderedDict[str, None] = OrderedDict()
+        self._maxsize = maxsize
+
+    def add(self, event_id: str) -> None:
+        if event_id in self._data:
+            self._data.move_to_end(event_id)
+            return
+        self._data[event_id] = None
+        if len(self._data) > self._maxsize:
+            self._data.popitem(last=False)
+
+    def __contains__(self, event_id: object) -> bool:
+        return event_id in self._data
+
+    def __iter__(self):
+        return iter(self._data)
+
 
 # ---------------------------------------------------------------------------
 # Per-subscription record
@@ -65,12 +95,13 @@ class StreamController:
     Responsibilities:
       - subscription registry (register / unregister)
       - shared-stream lifecycle (open on first subscribe, rotate on filter widen)
-      - dedup of replayed events via `_seen_event_ids`
+      - dedup of replayed events via a bounded LRU `_SeenEventIds`
       - fan-out from the shared stream to per-subscription queues
 
     Args:
         transport: the transport used to open event streams.
         max_queue_size: per-subscription queue bound (default 1024).
+        seen_event_ids_max: LRU cap for the dedup set (default 10_000).
     """
 
     def __init__(
@@ -78,10 +109,11 @@ class StreamController:
         *,
         transport: Any,
         max_queue_size: int = 1024,
+        seen_event_ids_max: int = 10_000,
     ) -> None:
         self._transport = transport
         self._max_queue_size = max_queue_size
-        self._seen_event_ids: set[str] = set()
+        self._seen_event_ids = _SeenEventIds(maxsize=seen_event_ids_max)
         self._next_subscription_id = 1
         self._subscriptions: dict[int, _Subscription] = {}
         self._shared_stream: EventStreamHandle | None = None
