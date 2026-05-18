@@ -312,7 +312,9 @@ class _MessagesProjection:
     from the root namespace only.
     """
 
-    def __init__(self, thread: AsyncThreadStream, namespace: list[str] | None = None) -> None:
+    def __init__(
+        self, thread: AsyncThreadStream, namespace: list[str] | None = None
+    ) -> None:
         self._thread = thread
         self._namespace = list(namespace or [])
 
@@ -325,11 +327,7 @@ class _MessagesProjection:
         # If the subgraphs projection already ran (and consumed messages events
         # from the shared SSE), drain its root inbox rather than opening a new
         # subscription. Dedup prevents the SSE from replaying those events.
-        root_inbox = (
-            self._thread._root_messages_inbox
-            if not self._namespace
-            else None
-        )
+        root_inbox = self._thread._root_messages_inbox if not self._namespace else None
         if root_inbox is not None:
             async for stream in self._drain_inbox(root_inbox):
                 yield stream
@@ -347,7 +345,9 @@ class _MessagesProjection:
                 params_field = item.get("params") or {}
                 if _event_namespace(params_field) != self._namespace:
                     continue
-                data = params_field.get("data") if isinstance(params_field, dict) else None
+                data = (
+                    params_field.get("data") if isinstance(params_field, dict) else None
+                )
                 if not isinstance(data, dict):
                     continue
                 event_type = data.get("event")
@@ -387,10 +387,12 @@ class _MessagesProjection:
             self._thread._unregister_subscription(sub.id)
 
     async def _drain_inbox(
-        self, inbox: "asyncio.Queue[Event | None]"
+        self, inbox: asyncio.Queue[Event | None]
     ) -> AsyncGenerator[AsyncChatModelStream, None]:
         """Drain a pre-filled inbox of messages events, yielding one stream per message."""
-        from langchain_core.language_models.chat_model_stream import AsyncChatModelStream
+        from langchain_core.language_models.chat_model_stream import (
+            AsyncChatModelStream,
+        )
 
         active: dict[str, AsyncChatModelStream] = {}
         try:
@@ -399,7 +401,9 @@ class _MessagesProjection:
                 if item is None:
                     return
                 params_field = item.get("params") or {}
-                data = params_field.get("data") if isinstance(params_field, dict) else None
+                data = (
+                    params_field.get("data") if isinstance(params_field, dict) else None
+                )
                 if not isinstance(data, dict):
                     continue
                 event_type = data.get("event")
@@ -466,7 +470,9 @@ def _parse_namespace_segment(segment: str) -> tuple[str, str | None]:
     return name, task_id if sep else None
 
 
-def _terminal_from_tasks_result(data: dict[str, Any]) -> tuple[SubgraphStatus, str | None]:
+def _terminal_from_tasks_result(
+    data: dict[str, Any],
+) -> tuple[SubgraphStatus, str | None]:
     if data.get("interrupts"):
         return "interrupted", None
     error = data.get("error")
@@ -476,10 +482,7 @@ def _terminal_from_tasks_result(data: dict[str, Any]) -> tuple[SubgraphStatus, s
 
 
 def _is_direct_child(namespace: list[str], scope: tuple[str, ...]) -> bool:
-    return (
-        len(namespace) == len(scope) + 1
-        and tuple(namespace[: len(scope)]) == scope
-    )
+    return len(namespace) == len(scope) + 1 and tuple(namespace[: len(scope)]) == scope
 
 
 def _subgraph_subscription_params(scope: tuple[str, ...]) -> SubscribeParams:
@@ -499,7 +502,7 @@ class ScopedStreamHandle:
     def __init__(
         self,
         *,
-        thread: "AsyncThreadStream",
+        thread: AsyncThreadStream,
         path: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
@@ -549,14 +552,16 @@ class ScopedStreamHandle:
 class _HandleMessagesProjection:
     """Messages projection that drains a `ScopedStreamHandle`'s messages inbox."""
 
-    def __init__(self, handle: "ScopedStreamHandle") -> None:
+    def __init__(self, handle: ScopedStreamHandle) -> None:
         self._handle = handle
 
     def __aiter__(self) -> AsyncIterator[Any]:
         return self._messages_iter()
 
     async def _messages_iter(self) -> AsyncGenerator[Any, None]:
-        from langchain_core.language_models.chat_model_stream import AsyncChatModelStream
+        from langchain_core.language_models.chat_model_stream import (
+            AsyncChatModelStream,
+        )
 
         active: dict[str, AsyncChatModelStream] = {}
         while True:
@@ -604,7 +609,7 @@ class _HandleMessagesProjection:
 class _HandleToolCallsProjection:
     """Tool calls projection that drains a `ScopedStreamHandle`'s tools inbox."""
 
-    def __init__(self, handle: "ScopedStreamHandle") -> None:
+    def __init__(self, handle: ScopedStreamHandle) -> None:
         self._handle = handle
 
     def __aiter__(self) -> AsyncIterator[Any]:
@@ -615,7 +620,9 @@ class _HandleToolCallsProjection:
         while True:
             item = await self._handle._tools_inbox.get()
             if item is None:
-                err = RuntimeError("Tool call stream closed before terminal tool event.")
+                err = RuntimeError(
+                    "Tool call stream closed before terminal tool event."
+                )
                 for handle in active.values():
                     handle._fail(err)
                 return
@@ -663,15 +670,15 @@ class _HandleToolCallsProjection:
 class _HandleSubgraphsProjection:
     """Subgraphs projection that drains a `ScopedStreamHandle`'s tasks inbox."""
 
-    def __init__(self, handle: "ScopedStreamHandle") -> None:
+    def __init__(self, handle: ScopedStreamHandle) -> None:
         self._handle = handle
 
-    def __aiter__(self) -> AsyncIterator["ScopedStreamHandle"]:
+    def __aiter__(self) -> AsyncIterator[ScopedStreamHandle]:
         return self._subgraphs_iter()
 
     def _route_sibling_inboxes_to_grandchildren(
         self,
-        active: "dict[tuple[str, ...], ScopedStreamHandle]",
+        active: dict[tuple[str, ...], ScopedStreamHandle],
     ) -> None:
         """Drain non-blocking events from parent's messages/tools inboxes to grandchildren.
 
@@ -697,7 +704,7 @@ class _HandleSubgraphsProjection:
                 event_params = event.get("params") or {}
                 ns_tuple = tuple(_event_namespace(event_params))
                 routed = False
-                for child_path, grandchild in active.items():
+                for _child_path, grandchild in active.items():
                     grandchild_len = len(grandchild.path)
                     if (
                         len(ns_tuple) >= grandchild_len
@@ -713,9 +720,9 @@ class _HandleSubgraphsProjection:
                     # Not a grandchild event — put it back for the handle projection.
                     inbox.put_nowait(event)
 
-    async def _subgraphs_iter(self) -> AsyncGenerator["ScopedStreamHandle", None]:
+    async def _subgraphs_iter(self) -> AsyncGenerator[ScopedStreamHandle, None]:
         seen: set[tuple[str, ...]] = set()
-        active: dict[tuple[str, ...], "ScopedStreamHandle"] = {}
+        active: dict[tuple[str, ...], ScopedStreamHandle] = {}
         scope = self._handle.path
         while True:
             item = await self._handle._tasks_inbox.get()
@@ -771,26 +778,24 @@ class _HandleSubgraphsProjection:
 class _SubgraphsProjection:
     """Discover direct child invocations for a namespace scope."""
 
-    def __init__(self, thread: "AsyncThreadStream", scope: tuple[str, ...] = ()) -> None:
+    def __init__(self, thread: AsyncThreadStream, scope: tuple[str, ...] = ()) -> None:
         self._thread = thread
         self._scope = scope
 
-    def __aiter__(self) -> AsyncIterator["ScopedStreamHandle"]:
+    def __aiter__(self) -> AsyncIterator[ScopedStreamHandle]:
         return self._subgraphs_iter()
 
-    async def _subgraphs_iter(self) -> AsyncGenerator["ScopedStreamHandle", None]:
+    async def _subgraphs_iter(self) -> AsyncGenerator[ScopedStreamHandle, None]:
         if self._thread._transport is None:
             raise RuntimeError("AsyncThreadStream not entered - use `async with`.")
         params = _subgraph_subscription_params(self._scope)
         sub = self._thread._register_subscription(params)
         seen: set[tuple[str, ...]] = set()
-        active: dict[tuple[str, ...], "ScopedStreamHandle"] = {}
+        active: dict[tuple[str, ...], ScopedStreamHandle] = {}
         # Activate root inbox so scope-level messages events consumed here are
         # forwarded to `thread.messages` even after the shared SSE ends.
         root_inbox: asyncio.Queue[Event | None] | None = (
-            self._thread._activate_root_messages_inbox()
-            if not self._scope
-            else None
+            self._thread._activate_root_messages_inbox() if not self._scope else None
         )
         try:
             await self._thread._reconcile_stream(params)
@@ -801,7 +806,9 @@ class _SubgraphsProjection:
                     return
                 params_field = item.get("params") or {}
                 namespace = _event_namespace(params_field)
-                data = params_field.get("data") if isinstance(params_field, dict) else None
+                data = (
+                    params_field.get("data") if isinstance(params_field, dict) else None
+                )
                 if not isinstance(data, dict):
                     continue
                 method = item.get("method")
@@ -813,7 +820,10 @@ class _SubgraphsProjection:
                 routed_to_child = False
                 for child_path, child_handle in active.items():
                     child_len = len(child_path)
-                    if len(ns_tuple) >= child_len and ns_tuple[:child_len] == child_path:
+                    if (
+                        len(ns_tuple) >= child_len
+                        and ns_tuple[:child_len] == child_path
+                    ):
                         child_handle._push_event(item)
                         routed_to_child = True
                         break
@@ -836,7 +846,9 @@ class _SubgraphsProjection:
                         path = tuple(namespace)
                         if path not in seen:
                             seen.add(path)
-                            graph_name, trigger_call_id = _parse_namespace_segment(path[-1])
+                            graph_name, trigger_call_id = _parse_namespace_segment(
+                                path[-1]
+                            )
                             handle = ScopedStreamHandle(
                                 thread=self._thread,
                                 path=path,
@@ -857,7 +869,7 @@ class _SubgraphsProjection:
         self,
         namespace: list[str],
         data: dict[str, Any],
-        active: "dict[tuple[str, ...], ScopedStreamHandle]",
+        active: dict[tuple[str, ...], ScopedStreamHandle],
     ) -> None:
         result_id = data.get("id")
         if not result_id:
@@ -944,7 +956,9 @@ class ToolCallHandle:
 class _ToolCallsProjection:
     """Typed projection for root-scope `thread.tool_calls`."""
 
-    def __init__(self, thread: AsyncThreadStream, namespace: list[str] | None = None) -> None:
+    def __init__(
+        self, thread: AsyncThreadStream, namespace: list[str] | None = None
+    ) -> None:
         self._thread = thread
         self._namespace = list(namespace or [])
 
@@ -967,7 +981,9 @@ class _ToolCallsProjection:
                 params_field = item.get("params") or {}
                 if _event_namespace(params_field) != self._namespace:
                     continue
-                data = params_field.get("data") if isinstance(params_field, dict) else None
+                data = (
+                    params_field.get("data") if isinstance(params_field, dict) else None
+                )
                 if not isinstance(data, dict):
                     continue
                 event_type = data.get("event")
@@ -1004,7 +1020,9 @@ class _ToolCallsProjection:
                         self._thread._unregister_active_tool_call(handle)
                         message = data.get("message")
                         handle._fail(
-                            RuntimeError(str(message) if message else "Tool call errored")
+                            RuntimeError(
+                                str(message) if message else "Tool call errored"
+                            )
                         )
         finally:
             # Read terminal error from _run_done if it is already resolved.
