@@ -158,7 +158,6 @@ class ProtocolSseTransport:
                                 continue
                             if isinstance(part.data, dict):
                                 await queue.put(cast("Event", part.data))
-<<<<<<< HEAD
                     # Drain any trailing buffered line, then fire any pending event.
                     if not cancel_event.is_set():
                         for line in line_decoder.flush():
