@@ -286,6 +286,23 @@ async def test_events_raises_outside_context_manager():
             _ = stream.events
 
 
+async def test_aexit_preserves_original_exception_if_close_raises():
+    """If the body of `async with` raises, AND close() also raises, the
+    body's exception must propagate. close()'s error is suppressed (chained
+    as context on close_err, but does not replace the original)."""
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        thread = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+
+        async def failing_close():
+            raise RuntimeError("close failed")
+
+        thread.close = failing_close  # ty:ignore[invalid-assignment]
+
+        with pytest.raises(ValueError, match="original"):
+            async with thread:
+                raise ValueError("original")
+
+
 async def test_events_property_returns_fresh_iterator_each_access():
     """Two separate accesses of `thread.events` must return independent
     subscriptions — the second access should produce a fresh iterator,

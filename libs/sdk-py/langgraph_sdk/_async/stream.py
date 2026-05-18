@@ -89,7 +89,13 @@ class AsyncThreadStream:
         return self
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
-        await self.close()
+        try:
+            await self.close()
+        except BaseException as close_err:
+            if exc is None:
+                raise
+            # Original exception takes precedence; chain close error as context.
+            close_err.__context__ = exc
 
     @property
     def events(self) -> AsyncIterator[Event]:
