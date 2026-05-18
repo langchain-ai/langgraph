@@ -109,12 +109,32 @@ def map_input(
                 logger.warning(f"Input channel {k} not found in {input_channels}")
 
 
+def _rekey_with_aliases(value: Any, output_alias_map: dict[str, str] | None) -> Any:
+    """Translate top-level keys in a dict from field names to aliases.
+
+    No-op when `output_alias_map` is falsy or the value is not a dict.
+    Used by the output-side handlers below so the wire format matches
+    the user's declared aliases when `serialize_by_alias=True` is set
+    on a Pydantic output schema.
+    """
+    if not output_alias_map or not isinstance(value, dict):
+        return value
+    return {output_alias_map.get(k, k): v for k, v in value.items()}
+
+
 def map_output_values(
     output_channels: str | Sequence[str],
     pending_writes: Literal[True] | Sequence[tuple[str, Any]],
     channels: Mapping[str, BaseChannel],
+    *,
+    output_alias_map: dict[str, str] | None = None,
 ) -> Iterator[dict[str, Any] | Any]:
-    """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
+    """Map pending writes (a sequence of tuples (channel, value)) to output chunk.
+
+    When `output_alias_map` is provided (Pydantic output schema with
+    `serialize_by_alias=True`), the yielded dict's keys are translated
+    from channel/field names to aliases.
+    """
     if isinstance(output_channels, str):
         if pending_writes is True or any(
             chan == output_channels for chan, _ in pending_writes
@@ -124,15 +144,23 @@ def map_output_values(
         if pending_writes is True or {
             c for c, _ in pending_writes if c in output_channels
         }:
-            yield read_channels(channels, output_channels)
+            yield _rekey_with_aliases(
+                read_channels(channels, output_channels), output_alias_map
+            )
 
 
 def map_output_updates(
     output_channels: str | Sequence[str],
     tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
     cached: bool = False,
+    *,
+    output_alias_map: dict[str, str] | None = None,
 ) -> Iterator[dict[str, Any | dict[str, Any]]]:
-    """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
+    """Map pending writes (a sequence of tuples (channel, value)) to output chunk.
+
+    When `output_alias_map` is provided, channel-keyed dicts inside each
+    node's update are rekeyed with aliases for user-facing output.
+    """
     output_tasks = [
         (t, ww)
         for t, ww in tasks
@@ -153,11 +181,17 @@ def map_output_updates(
             )
         elif any(chan in output_channels for chan, _ in writes):
             counts = Counter(chan for chan, _ in writes)
+
+            def _rekey_chan(chan: str) -> str:
+                if output_alias_map:
+                    return output_alias_map.get(chan, chan)
+                return chan
+
             if any(counts[chan] > 1 for chan in output_channels):
                 updated.extend(
                     (
                         task.name,
-                        {chan: value},
+                        {_rekey_chan(chan): value},
                     )
                     for chan, value in writes
                     if chan in output_channels
@@ -167,7 +201,7 @@ def map_output_updates(
                     (
                         task.name,
                         {
-                            chan: value
+                            _rekey_chan(chan): value
                             for chan, value in writes
                             if chan in output_channels
                         },

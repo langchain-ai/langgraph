@@ -597,3 +597,144 @@ def test_pydantic_alias_generator_to_camel():
     assert result["user_id"] == "u-1"
     assert result["display_name"] == "Alice"
     assert result["retry_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Output-side alias support (serialize_by_alias=True)
+# ---------------------------------------------------------------------------
+
+
+def test_output_keys_use_alias_when_serialize_by_alias_set():
+    """`invoke` return + `stream` chunks use alias keys when the output schema
+    sets ``model_config = ConfigDict(serialize_by_alias=True)``."""
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+            serialize_by_alias=True,
+        )
+        user_id: str
+        display_name: str
+
+    def node(state: State) -> dict:
+        return {"display_name": state.display_name + "!"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("n", node)
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile()
+    )
+
+    # invoke: top-level keys are aliases (camelCase), not field names.
+    result = graph.invoke({"userId": "u-1", "displayName": "Alice"})
+    assert "userId" in result and "displayName" in result
+    assert "user_id" not in result and "display_name" not in result
+    assert result["userId"] == "u-1"
+    assert result["displayName"] == "Alice!"
+
+    # stream(values): same keys on each yielded chunk.
+    chunks = list(
+        graph.stream({"userId": "u-1", "displayName": "Alice"}, stream_mode="values")
+    )
+    assert chunks, "expected at least one values chunk"
+    for chunk in chunks:
+        # Every dict-shaped chunk should use aliases.
+        if isinstance(chunk, dict) and chunk:
+            assert "userId" in chunk or "displayName" in chunk
+            assert "user_id" not in chunk
+            assert "display_name" not in chunk
+
+
+def test_output_keys_unchanged_without_serialize_by_alias():
+    """Without serialize_by_alias=True, output keys remain field names —
+    no behaviour change vs current main."""
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+            # serialize_by_alias intentionally absent
+        )
+        user_id: str
+
+    def node(state: State) -> dict:
+        return {"user_id": state.user_id + "-x"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("n", node)
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile()
+    )
+    result = graph.invoke({"userId": "u-1"})
+    # Output keyed by field name, not alias.
+    assert "user_id" in result
+    assert "userId" not in result
+    assert result["user_id"] == "u-1-x"
+
+
+def test_stream_updates_use_alias_when_serialize_by_alias_set():
+    """`stream_mode='updates'` chunks key channel updates by alias."""
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+            serialize_by_alias=True,
+        )
+        user_id: str
+        display_name: str = ""
+
+    def node(state: State) -> dict:
+        return {"display_name": "Bob"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("n", node)
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile()
+    )
+
+    update_chunks = list(graph.stream({"userId": "u-1"}, stream_mode="updates"))
+    # One update from node "n"; its dict should be keyed by alias.
+    payloads = [v for chunk in update_chunks for v in chunk.values()]
+    assert any(isinstance(p, dict) and "displayName" in p for p in payloads)
+    assert not any(isinstance(p, dict) and "display_name" in p for p in payloads)
+
+
+def test_get_state_snapshot_values_use_alias_when_serialize_by_alias_set():
+    """`StateSnapshot.values` uses alias keys when serialize_by_alias=True."""
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+            serialize_by_alias=True,
+        )
+        user_id: str
+        display_name: str
+
+    def node(state: State) -> dict:
+        return {"display_name": state.display_name + "!"}
+
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    graph = (
+        StateGraph(State)
+        .add_node("n", node)
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile(checkpointer=InMemorySaver())
+    )
+
+    config = {"configurable": {"thread_id": "t-1"}}
+    graph.invoke({"userId": "u-1", "displayName": "Alice"}, config=config)
+    snap = graph.get_state(config)
+
+    assert "userId" in snap.values and "displayName" in snap.values
+    assert "user_id" not in snap.values and "display_name" not in snap.values

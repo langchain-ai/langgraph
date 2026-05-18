@@ -1332,6 +1332,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         # Compute alias map for input schema (Pydantic models with aliased fields)
         input_alias_map = _get_pydantic_alias_map(self.input_schema) or None
+        # Reverse map (field_name -> alias) for output sites — only populated
+        # when the output schema sets `serialize_by_alias=True`.
+        output_alias_map = _get_pydantic_output_alias_map(self.output_schema) or None
 
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
@@ -1345,6 +1348,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             },
             input_channels=START,
             input_alias_map=input_alias_map,
+            output_alias_map=output_alias_map,
             stream_mode="updates",
             output_channels=output_channels,
             stream_channels=stream_channels,
@@ -1846,6 +1850,46 @@ def _get_pydantic_alias_map(schema: type[Any]) -> dict[str, str]:
             alias_map[alias] = field_name
 
     return alias_map
+
+
+def _get_pydantic_output_alias_map(schema: type[Any]) -> dict[str, str]:
+    """Reverse alias map (field_name -> alias) for output serialization.
+
+    Returns a non-empty mapping only when the schema's `model_config` sets
+    `serialize_by_alias=True` — mirroring Pydantic's own opt-in for
+    alias-keyed serialization on `.model_dump()`. When this returns a
+    non-empty dict, output sites (stream values, stream updates, state
+    snapshots) translate channel keys (field names) into the corresponding
+    aliases so the wire format matches the user-declared aliases.
+
+    Args:
+        schema: The schema class (Pydantic model or other type).
+
+    Returns:
+        A dict mapping field_name -> alias for fields that have an
+        alias, when the schema opts into alias-by-default serialization.
+        Empty dict otherwise.
+    """
+    if not (isclass(schema) and issubclass(schema, BaseModel)):
+        return {}
+
+    # model_config is a TypedDict in Pydantic v2 (dict-like); tolerate either form.
+    config = getattr(schema, "model_config", None) or {}
+    serialize_by_alias = (
+        config.get("serialize_by_alias", False)
+        if hasattr(config, "get")
+        else getattr(config, "serialize_by_alias", False)
+    )
+    if not serialize_by_alias:
+        return {}
+
+    out_map: dict[str, str] = {}
+    for field_name, field_info in schema.model_fields.items():
+        alias = field_info.alias
+        if alias is not None and alias != field_name:
+            out_map[field_name] = alias
+
+    return out_map
 
 
 def _get_channels(
