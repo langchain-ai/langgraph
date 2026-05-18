@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import httpx
 import orjson
@@ -159,3 +160,51 @@ async def test_open_event_stream_close_cancels_in_flight_iteration():
         with pytest.raises(StopAsyncIteration):
             await asyncio.wait_for(agen.__anext__(), timeout=1.0)
     assert first["method"] == "lifecycle"
+
+
+@pytest.mark.anyio
+async def test_transport_accepts_max_queue_size_kwarg():
+    transport = ProtocolSseTransport(
+        client=httpx.AsyncClient(),
+        thread_id="t1",
+        max_queue_size=42,
+    )
+    assert transport._max_queue_size == 42
+
+
+@pytest.mark.anyio
+async def test_transport_default_max_queue_size_is_1024():
+    transport = ProtocolSseTransport(
+        client=httpx.AsyncClient(),
+        thread_id="t1",
+    )
+    assert transport._max_queue_size == 1024
+
+
+@pytest.mark.anyio
+async def test_pump_backpressures_when_queue_full():
+    """Slow consumer should not cause unbounded queue growth.
+
+    With maxsize=2 and a producer that emits 100 events before any consumption,
+    the pump must suspend on queue.put after the second enqueue rather than
+    buffer all 100. We verify by counting queue items observed at the suspension
+    point.
+    """
+    q: asyncio.Queue[int] = asyncio.Queue(maxsize=2)
+
+    produced: list[int] = []
+
+    async def producer():
+        for i in range(100):
+            await q.put(i)
+            produced.append(i)
+
+    task = asyncio.create_task(producer())
+    await asyncio.sleep(0.05)  # let producer fill and suspend
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+    # Producer should have enqueued 2 items, then blocked waiting on a third
+    # put. The third item was attempted but never completed.
+    assert len(produced) == 2

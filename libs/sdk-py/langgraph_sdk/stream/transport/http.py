@@ -69,11 +69,13 @@ class ProtocolSseTransport:
         thread_id: str,
         commands_path: str | None = None,
         stream_path: str | None = None,
+        max_queue_size: int = 1024,
     ) -> None:
         self._client = client
         self.thread_id = thread_id
         self._commands_url = commands_path or f"/threads/{thread_id}/commands"
         self._stream_url = stream_path or f"/threads/{thread_id}/stream/events"
+        self._max_queue_size = max_queue_size
         self._closed = False
 
     async def send_command(self, command: dict[str, Any]) -> dict[str, Any] | None:
@@ -115,7 +117,7 @@ class ProtocolSseTransport:
 
         loop = asyncio.get_running_loop()
         ready: asyncio.Future[None] = loop.create_future()
-        queue: asyncio.Queue[Event | None] = asyncio.Queue()
+        queue: asyncio.Queue[Event | None] = asyncio.Queue(maxsize=self._max_queue_size)
         cancel_event = asyncio.Event()
 
         async def pump() -> None:
