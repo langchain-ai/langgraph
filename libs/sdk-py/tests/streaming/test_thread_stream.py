@@ -286,6 +286,25 @@ async def test_events_raises_outside_context_manager():
             _ = stream.events
 
 
+async def test_events_property_returns_fresh_iterator_each_access():
+    """Two separate accesses of `thread.events` must return independent
+    subscriptions — the second access should produce a fresh iterator,
+    even if both are accessed before either is drained."""
+    fake = FakeServer()
+    fake.script([])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            first_iter = thread.events
+            second_iter = thread.events
+            # Each property access must return a distinct iterator object.
+            assert first_iter is not second_iter
+
+
 async def test_fresh_thread_happy_path_end_to_end():
     """User passes no thread_id; SDK mints one and uses it in all URLs.
 

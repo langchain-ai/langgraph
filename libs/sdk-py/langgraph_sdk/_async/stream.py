@@ -77,7 +77,7 @@ class AsyncThreadStream:
         self.assistant_id = assistant_id
         self._closed = False
         self._transport: ProtocolSseTransport | None = None
-        self._events_handle: EventStreamHandle | None = None
+        self._open_handles: list[EventStreamHandle] = []
         self._next_command_id = 1
         self.run = RunModule(self)
 
@@ -93,27 +93,26 @@ class AsyncThreadStream:
 
     @property
     def events(self) -> AsyncIterator[Event]:
-        """Raw async iterator of every `Event` the server emits for this thread.
+        """Return a fresh subscription to ALL channels.
 
-        Opens one SSE subscription on first access; the same iterator is returned
-        on subsequent accesses (consumed once). Terminates when the stream closes
-        (server hangup, `__aexit__`, or transport-level close).
+        Each property access opens a new subscription; callers iterating twice
+        will see two independent streams (both filtered by the same channel union).
+        Terminates when the stream closes (server hangup, `__aexit__`, or
+        transport-level close).
         """
         if self._transport is None:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
-        if self._events_handle is None:
-            self._events_handle = self._transport.open_event_stream(
-                {"channels": _ALL_CHANNELS}
-            )
-        return self._events_handle.events
+        handle = self._transport.open_event_stream({"channels": _ALL_CHANNELS})
+        self._open_handles.append(handle)
+        return handle.events
 
     async def close(self) -> None:
         """Tear down the thread stream. Idempotent."""
         if self._closed:
             return
         self._closed = True
-        if self._events_handle is not None:
-            await self._events_handle.close()
+        for handle in self._open_handles:
+            await handle.close()
         if self._transport is not None:
             await self._transport.close()
 
