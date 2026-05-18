@@ -355,7 +355,7 @@ async def test_aexit_preserves_original_exception_if_close_raises():
     body's exception must propagate. close()'s error is suppressed (chained
     as context on close_err, but does not replace the original)."""
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        thread = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        thread = AsyncThreadStream(http=HttpClient(raw), thread_id="t-1", assistant_id="agent")
 
         async def failing_close():
             raise RuntimeError("close failed")
