@@ -105,7 +105,7 @@ class JsonPlusSerializer(SerializerProtocol):
         __unpack_ext_hook__: Callable[[int, bytes], Any] | None = None,
     ) -> None:
         if allowed_msgpack_modules is _lg_msgpack._SENTINEL:
-            if _lg_msgpack.STRICT_MSGPACK_ENABLED:
+            if _lg_msgpack.strict_msgpack_enabled():
                 # Strict: only SAFE_MSGPACK_TYPES are allowed.
                 allowed_msgpack_modules = None
             else:

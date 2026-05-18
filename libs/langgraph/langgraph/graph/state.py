@@ -1218,7 +1218,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         checkpointer = ensure_valid_checkpointer(checkpointer)
 
         serde_allowlist: set[tuple[str, ...]] | None = None
-        if _serde.STRICT_MSGPACK_ENABLED:
+        if _serde.strict_msgpack_enabled():
             schema_types: list[type[Any]] = [
                 self.state_schema,
                 self.input_schema,

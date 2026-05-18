@@ -607,7 +607,7 @@ class entrypoint(Generic[ContextT]):
             retry_policy=self.retry_policy or (),
             context_schema=self.context_schema,
         )
-        if _serde.STRICT_MSGPACK_ENABLED:
+        if _serde.strict_msgpack_enabled():
             serde_allowlist = _serde.build_serde_allowlist(
                 schemas=[input_type, output_type, save_type]
                 + ([self.context_schema] if self.context_schema is not None else []),

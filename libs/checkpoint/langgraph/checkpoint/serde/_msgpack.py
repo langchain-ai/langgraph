@@ -9,11 +9,21 @@ import os
 from collections.abc import Iterable
 from typing import cast
 
-STRICT_MSGPACK_ENABLED = os.getenv("LANGGRAPH_STRICT_MSGPACK", "false").lower() in (
-    "1",
-    "true",
-    "yes",
-)
+_STRICT_MSGPACK_TRUE_VALUES = frozenset({"1", "true", "yes"})
+
+
+def strict_msgpack_enabled() -> bool:
+    """Return the current ``LANGGRAPH_STRICT_MSGPACK`` setting.
+
+    This is evaluated at call time so that applications which set the
+    environment variable during startup (after ``_msgpack`` was imported
+    as a side effect of another import) still get strict deserialization.
+    """
+    return os.getenv("LANGGRAPH_STRICT_MSGPACK", "false").lower() in _STRICT_MSGPACK_TRUE_VALUES
+
+
+# Backwards-compatible snapshot for callers that imported the constant.
+STRICT_MSGPACK_ENABLED = strict_msgpack_enabled()
 
 
 _SENTINEL = cast(None, object())

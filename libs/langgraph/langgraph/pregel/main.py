@@ -836,7 +836,7 @@ class Pregel(
     def _apply_checkpointer_allowlist(
         self, checkpointer: BaseCheckpointSaver | None
     ) -> BaseCheckpointSaver | None:
-        if not _serde.STRICT_MSGPACK_ENABLED:
+        if not _serde.strict_msgpack_enabled():
             return checkpointer
         return _serde.apply_checkpointer_allowlist(checkpointer, self._serde_allowlist)
 

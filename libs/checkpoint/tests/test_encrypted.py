@@ -140,10 +140,11 @@ class TestEncryptedSerializerMsgpackAllowlist:
             )
             assert result is not None
 
-    def test_pydantic_warns_by_default(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_pydantic_warns_by_default(
+        self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Pydantic models not in allowlist should log warning but still deserialize."""
-        current = _lg_msgpack.STRICT_MSGPACK_ENABLED
-        _lg_msgpack.STRICT_MSGPACK_ENABLED = False
+        monkeypatch.setenv("LANGGRAPH_STRICT_MSGPACK", "false")
         serde = _make_encrypted_serde()
 
         obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
@@ -156,7 +157,6 @@ class TestEncryptedSerializerMsgpackAllowlist:
         assert "unregistered type" in caplog.text.lower()
         assert "allowed_msgpack_modules" in caplog.text
         assert result == obj
-        _lg_msgpack.STRICT_MSGPACK_ENABLED = current
 
     def test_strict_mode_blocks_unregistered(
         self, caplog: pytest.LogCaptureFixture

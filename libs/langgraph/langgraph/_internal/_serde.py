@@ -22,11 +22,14 @@ from pydantic import BaseModel
 from typing_extensions import NotRequired, Required, is_typeddict
 
 try:
-    from langgraph.checkpoint.serde._msgpack import (  # noqa: F401
-        STRICT_MSGPACK_ENABLED,
-    )
+    from langgraph.checkpoint.serde._msgpack import strict_msgpack_enabled  # noqa: F401
 except ImportError:
-    STRICT_MSGPACK_ENABLED = False
+
+    def strict_msgpack_enabled() -> bool:
+        return False
+
+
+STRICT_MSGPACK_ENABLED = strict_msgpack_enabled()
 
 _warned_allowlist_unsupported = False
 

@@ -641,10 +641,11 @@ def _reset_warned_types() -> None:
     _warned_blocked_types.clear()
 
 
-def test_msgpack_pydantic_warns_by_default(caplog: pytest.LogCaptureFixture) -> None:
+def test_msgpack_pydantic_warns_by_default(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Pydantic models not in allowlist should log warning but still deserialize."""
-    current = _lg_msgpack.STRICT_MSGPACK_ENABLED
-    _lg_msgpack.STRICT_MSGPACK_ENABLED = False
+    monkeypatch.setenv("LANGGRAPH_STRICT_MSGPACK", "false")
     serde = JsonPlusSerializer()
 
     obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
@@ -662,15 +663,13 @@ def test_msgpack_pydantic_warns_by_default(caplog: pytest.LogCaptureFixture) -> 
     result2 = serde.loads_typed(dumped)
     assert "unregistered type" not in caplog.text.lower()
     assert result2 == obj
-    _lg_msgpack.STRICT_MSGPACK_ENABLED = current
 
 
 def test_msgpack_env_strict_default(
-    caplog: pytest.LogCaptureFixture,
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Strict msgpack env should default to blocking unregistered types."""
-    current = _lg_msgpack.STRICT_MSGPACK_ENABLED
-    _lg_msgpack.STRICT_MSGPACK_ENABLED = True
+    monkeypatch.setenv("LANGGRAPH_STRICT_MSGPACK", "true")
     serde = JsonPlusSerializer()
 
     obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
@@ -681,7 +680,6 @@ def test_msgpack_env_strict_default(
 
     assert "blocked" in caplog.text.lower()
     assert result == obj.model_dump()
-    _lg_msgpack.STRICT_MSGPACK_ENABLED = current
 
 
 def test_msgpack_allowlist_silences_warning(caplog: pytest.LogCaptureFixture) -> None:
