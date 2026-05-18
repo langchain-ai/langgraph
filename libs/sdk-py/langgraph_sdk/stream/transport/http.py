@@ -67,11 +67,11 @@ class ProtocolSseTransport:
 
     def __init__(
         self,
-        *,
         client: httpx.AsyncClient,
         thread_id: str,
         commands_path: str | None = None,
         stream_path: str | None = None,
+        *,
         max_queue_size: int = 1024,
     ) -> None:
         self._client = client
