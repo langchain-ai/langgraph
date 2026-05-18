@@ -99,6 +99,44 @@ jobs:
     uses: ./.github/workflows/_test_langgraph.yml
     secrets: inherit
 
+  # Incremental Windows support: starts with libs/checkpoint (pure Python, minimal native deps).
+  # Future PRs can extend to other libs once this lands. See issue #5029.
+  test-windows:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
+    name: "cd libs/checkpoint (windows-latest) #${{ matrix.python-version }}"
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: libs/checkpoint
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.13"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: ./.github/actions/uv_setup
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache-suffix: test-libs-checkpoint-windows
+          working-directory: libs/checkpoint
+      - name: Install dependencies
+        run: uv sync --frozen --group test --no-dev
+      - name: Run tests
+        run: uv run pytest .
+      - name: Ensure the tests did not create any additional files
+        run: |
+          set -eu
+
+          STATUS="$(git status)"
+          echo "$STATUS"
+
+          echo "$STATUS" | grep 'nothing to commit, working tree clean'
+
   check-sdk-methods:
     needs: changes
     if: needs.changes.outputs.python == 'true'
@@ -163,6 +201,7 @@ jobs:
         lint,
         test,
         test-langgraph,
+        test-windows,
         check-sdk-methods,
         check-schema,
         integration-test,
