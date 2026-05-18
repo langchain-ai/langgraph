@@ -158,13 +158,14 @@ class ProtocolSseTransport:
                             if isinstance(part.data, dict):
                                 await queue.put(cast("Event", part.data))
                     # Drain any trailing buffered line, then fire any pending event.
-                    for line in line_decoder.flush():
-                        part = sse_decoder.decode(bytes(line))
+                    if not cancel_event.is_set():
+                        for line in line_decoder.flush():
+                            part = sse_decoder.decode(bytes(line))
+                            if part is not None and isinstance(part.data, dict):
+                                await queue.put(cast("Event", part.data))
+                        part = sse_decoder.decode(b"")
                         if part is not None and isinstance(part.data, dict):
                             await queue.put(cast("Event", part.data))
-                    part = sse_decoder.decode(b"")
-                    if part is not None and isinstance(part.data, dict):
-                        await queue.put(cast("Event", part.data))
             except asyncio.CancelledError:
                 if not done.done():
                     done.set_result(None)

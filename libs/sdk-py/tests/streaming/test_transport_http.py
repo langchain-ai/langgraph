@@ -300,3 +300,42 @@ async def test_send_command_empty_200_body_raises_runtime_error_not_decoder_erro
             await transport.send_command(
                 {"command_id": 1, "method": "run.start", "params": {}}
             )
+
+
+@pytest.mark.anyio
+async def test_cancel_event_prevents_post_cancel_flush():
+    """When the consumer cancels the handle mid-stream, the pump's decoder
+    flush MUST NOT emit additional events after the cancel point."""
+    import httpx
+
+    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
+
+    received: list = []
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        async def body():
+            yield b'event: message\ndata: {"seq": 1}\n\n'
+            yield b'event: message\ndata: {"seq": 2}\n\n'
+            yield b'event: message\ndata: {"seq": 3}\n\n'
+
+        return httpx.Response(200, content=body())
+
+    mock = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=mock, base_url="http://example.com"
+    ) as client:
+        transport = ProtocolSseTransport(
+            client=client,
+            thread_id="t1",
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+        await handle.ready
+        async for event in handle.events:
+            received.append(event)
+            if len(received) == 1:
+                await handle.close()
+                break
+        # After close, no further events should drain from the flush.
+        async for _ in handle.events:
+            pytest.fail("event yielded after close()")
+    assert len(received) == 1
