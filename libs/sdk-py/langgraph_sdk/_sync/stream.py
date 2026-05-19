@@ -174,7 +174,9 @@ class _SyncAgentModule:
     ) -> dict[str, list[dict[str, Any]]]:
         if self._owner._closed:
             raise RuntimeError("SyncThreadStream is closed.")
-        query_params: dict[str, Any] = {"xray": xray}
+        query_params: dict[str, Any] = {}
+        if xray:
+            query_params["xray"] = xray
         if params:
             query_params.update(dict(params))
         request_headers = {**self._owner._headers, **dict(headers or {})}
