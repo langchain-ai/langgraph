@@ -71,6 +71,7 @@ class ProtocolWebSocketTransport:
         done: asyncio.Future[BaseException | None] = loop.create_future()
         queue: asyncio.Queue[Event | None] = asyncio.Queue(maxsize=self._max_queue_size)
         cancel_event = asyncio.Event()
+        ws_holder: dict[str, Any] = {"ws": None}
 
         async def pump() -> None:
             try:
@@ -79,17 +80,21 @@ class ProtocolWebSocketTransport:
                     url,
                     additional_headers=websocket_headers(self._default_headers),
                 ) as websocket:
-                    await websocket.send(
-                        orjson.dumps(build_event_stream_body(params)).decode()
-                    )
-                    if not ready.done():
-                        ready.set_result(None)
-                    async for raw in websocket:
-                        if cancel_event.is_set():
-                            break
-                        payload = _decode_frame(raw, done)
-                        if payload is not None:
-                            await queue.put(cast("Event", payload))
+                    ws_holder["ws"] = websocket
+                    try:
+                        await websocket.send(
+                            orjson.dumps(build_event_stream_body(params)).decode()
+                        )
+                        if not ready.done():
+                            ready.set_result(None)
+                        async for raw in websocket:
+                            if cancel_event.is_set():
+                                break
+                            payload = _decode_frame(raw, done)
+                            if payload is not None:
+                                await queue.put(cast("Event", payload))
+                    finally:
+                        ws_holder["ws"] = None
             except asyncio.CancelledError as err:
                 if not done.done():
                     done.set_result(err)
@@ -127,6 +132,10 @@ class ProtocolWebSocketTransport:
 
         async def close() -> None:
             cancel_event.set()
+            ws = ws_holder.get("ws")
+            if ws is not None:
+                with contextlib.suppress(Exception):
+                    await ws.close(code=1000, reason="client close")
             queue.put_nowait(None)
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):

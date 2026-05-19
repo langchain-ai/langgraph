@@ -437,3 +437,51 @@ async def test_websocket_controller_reconnects_with_since_after_drop():
     assert end is None
     assert len(sent_urls) == 2
     assert orjson.loads(second_socket.sent[0])["since"] == 1
+
+
+async def test_async_close_sends_normal_close_frame():
+    """`handle.close()` sends a WebSocket close frame with code 1000 explicitly."""
+    import asyncio
+
+    # Use an event to distinguish an explicit close(code=1000) call from
+    # the implicit one in __aexit__ when the task is cancelled.
+    explicit_1000: list[bool] = []
+    ready_event = asyncio.Event()
+
+    class _TrackingWebSocket(_FakeAsyncWebSocket):
+        def __aiter__(self) -> AsyncIterator[str]:
+            return self._wait_forever()
+
+        async def _wait_forever(self) -> AsyncIterator[str]:  # type: ignore[override]
+            ready_event.set()
+            # Block until cancelled — never yield frames.
+            await asyncio.sleep(9999)
+            return
+            yield  # make it an async generator
+
+        async def close(  # type: ignore[override]
+            self,
+            code: int = 1000,
+            reason: str = "",  # noqa: ARG002
+        ) -> None:
+            explicit_1000.append(code == 1000)
+            self.closed = True
+
+    socket = _TrackingWebSocket([])
+
+    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+        _ = (url, additional_headers)
+        return socket
+
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        transport = ProtocolWebSocketTransport(
+            client=client, thread_id="t-1", connect=connect
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        await asyncio.wait_for(ready_event.wait(), timeout=1.0)
+        await handle.close()
+
+    # close() must have been called at least once with code=1000.
+    assert explicit_1000, "ws.close() was never called"
+    assert explicit_1000[0], "first ws.close() call did not use code=1000"
