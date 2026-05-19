@@ -679,6 +679,7 @@ class SyncScopedStreamHandle:
         path: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
+        max_queue_size: int = 0,
     ) -> None:
         self._thread = thread
         self.path = path
@@ -687,10 +688,17 @@ class SyncScopedStreamHandle:
         self.trigger_call_id = trigger_call_id
         self.status: SubgraphStatus = "started"
         self.error: str | None = None
+        self._max_queue_size = max_queue_size
         self._finish_lock = threading.Lock()
-        self._messages_inbox: queue.Queue[Event | None] = queue.Queue()
-        self._tools_inbox: queue.Queue[Event | None] = queue.Queue()
-        self._tasks_inbox: queue.Queue[Event | None] = queue.Queue()
+        self._messages_inbox: queue.Queue[Event | None] = queue.Queue(
+            maxsize=max_queue_size
+        )
+        self._tools_inbox: queue.Queue[Event | None] = queue.Queue(
+            maxsize=max_queue_size
+        )
+        self._tasks_inbox: queue.Queue[Event | None] = queue.Queue(
+            maxsize=max_queue_size
+        )
         # Descendant handles registered by _SyncHandleSubgraphsProjection when a
         # grandchild is discovered. _push_event fans out to each matching
         # descendant at dispatch time so events arrive in arrival order without
@@ -947,6 +955,7 @@ class _SyncHandleSubgraphsProjection:
                 path=path,
                 graph_name=graph_name or None,
                 trigger_call_id=trigger_call_id,
+                max_queue_size=self._handle._max_queue_size,
             )
             active[path] = child_handle
             # Register so future _push_event calls on this handle fan out to the

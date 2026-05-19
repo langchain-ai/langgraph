@@ -600,3 +600,53 @@ def test_sync_scoped_handle_finish_thread_safe_with_20_concurrent_calls():
         assert handle._messages_inbox.get_nowait() is None
         assert handle._tools_inbox.get_nowait() is None
         assert handle._tasks_inbox.get_nowait() is None
+
+
+# ---------------------------------------------------------------------------
+# Fix B: bound SyncScopedStreamHandle inboxes via max_queue_size
+# ---------------------------------------------------------------------------
+
+
+def test_sync_scoped_handle_inboxes_bounded_by_max_queue_size():
+    """SyncScopedStreamHandle with max_queue_size=N creates queues with maxsize=N."""
+    handle = SyncScopedStreamHandle(
+        thread=None,  # ty: ignore[invalid-argument-type]
+        path=("worker:1",),
+        graph_name="worker",
+        trigger_call_id="1",
+        max_queue_size=16,
+    )
+    assert handle._messages_inbox.maxsize == 16
+    assert handle._tools_inbox.maxsize == 16
+    assert handle._tasks_inbox.maxsize == 16
+
+
+def test_sync_child_handle_inherits_max_queue_size_from_parent():
+    """Grandchild SyncScopedStreamHandles created by _SyncHandleSubgraphsProjection
+    inherit the parent's max_queue_size so all queues are consistently bounded."""
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            tasks_start_event(
+                seq=2, namespace=["worker:abc", "tool:gc1"], task_id="t-gc1"
+            ),
+            tasks_result_event(
+                seq=3, namespace=["worker:abc"], task_id="gc1", name="tool"
+            ),
+            tasks_result_event(seq=4, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=5),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            [child] = list(thread.subgraphs)
+            [grandchild] = list(child.subgraphs)
+
+    # Grandchild queues must have the same maxsize as the parent queues.
+    assert grandchild._messages_inbox.maxsize == child._messages_inbox.maxsize
+    assert grandchild._tools_inbox.maxsize == child._tools_inbox.maxsize
+    assert grandchild._tasks_inbox.maxsize == child._tasks_inbox.maxsize
