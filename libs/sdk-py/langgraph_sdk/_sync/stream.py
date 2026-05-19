@@ -112,11 +112,13 @@ def _message_event_id(data: dict[str, Any]) -> str | None:
 
 
 def _message_route_key(data: dict[str, Any], fallback: str | None = None) -> str:
-    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
-    run_id = metadata.get("run_id") if metadata else None
+    """Return the routing key for a message-channel event in `active`.
+
+    Keys on `message_id` when available so concurrent messages that share the
+    same `run_id` (two AI turns in one agent step) route to independent streams
+    rather than colliding on a shared `run:<run_id>` slot.
+    """
     message_id = _message_event_id(data)
-    if run_id is not None:
-        return f"run:{run_id}"
     if message_id is not None:
         return f"message:{message_id}"
     if fallback is not None:
@@ -354,6 +356,8 @@ class _SyncMessagesProjection:
                         next_event_type = next_data.get("event")
                         next_key = _message_route_key(next_data)
                         target = active.get(next_key)
+                        if target is None and next_key == "__single__" and len(active) == 1:
+                            target = next(iter(active.values()))
                         if target is not None:
                             target.dispatch(next_data)
                             if next_event_type in ("message-finish", "error"):
@@ -365,9 +369,9 @@ class _SyncMessagesProjection:
                 else:
                     key = _message_route_key(data)
                     stream = active.get(key)
+                    if stream is None and key == "__single__" and len(active) == 1:
+                        stream = next(iter(active.values()))
                     if stream is None:
-                        # No active stream matches this event's key. Drop rather
-                        # than silently misroute to the only remaining stream.
                         continue
                     stream.dispatch(data)
                     if event_type in ("message-finish", "error"):
@@ -437,6 +441,8 @@ def _drain_messages_inbox(
                     next_event_type = next_data.get("event")
                     next_key = _message_route_key(next_data)
                     target = active.get(next_key)
+                    if target is None and next_key == "__single__" and len(active) == 1:
+                        target = next(iter(active.values()))
                     if target is not None:
                         target.dispatch(next_data)
                         if next_event_type in ("message-finish", "error"):
@@ -448,9 +454,9 @@ def _drain_messages_inbox(
             else:
                 key = _message_route_key(data)
                 stream = active.get(key)
+                if stream is None and key == "__single__" and len(active) == 1:
+                    stream = next(iter(active.values()))
                 if stream is None:
-                    # No active stream matches this event's key. Drop rather
-                    # than silently misroute to the only remaining stream.
                     continue
                 stream.dispatch(data)
                 if event_type in ("message-finish", "error"):
