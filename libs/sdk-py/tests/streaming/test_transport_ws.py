@@ -156,6 +156,80 @@ async def test_ws_close_code_4000_resolves_done_with_error():
     assert isinstance(err, ConnectionClosedError)
 
 
+class _RawFrameAsyncWebSocket:
+    """Fake websocket that yields arbitrary raw strings (not dicts)."""
+
+    def __init__(self, raw_frames: list[str]) -> None:
+        self.raw_frames = list(raw_frames)
+        self.sent: list[str] = []
+        self.closed = False
+
+    async def __aenter__(self) -> _RawFrameAsyncWebSocket:
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.closed = True
+
+    async def send(self, data: str | bytes) -> None:
+        self.sent.append(data.decode() if isinstance(data, bytes) else data)
+
+    def __aiter__(self) -> AsyncIterator[str]:
+        return self._iter()
+
+    async def _iter(self) -> AsyncIterator[str]:
+        for frame in self.raw_frames:
+            yield frame
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:  # noqa: ARG002
+        self.closed = True
+
+
+async def test_decode_frame_invalid_json_surfaces_error_on_done():
+    """A WS frame with invalid JSON resolves `done` with a RuntimeError."""
+    socket = _RawFrameAsyncWebSocket(["not-valid-json{{{"])
+
+    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+        _ = (url, additional_headers)
+        return socket
+
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        transport = ProtocolWebSocketTransport(
+            client=client, thread_id="t-1", connect=connect
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        received = [e async for e in handle.events]
+        err = await asyncio.wait_for(handle.done, timeout=1.0)
+        await handle.close()
+
+    assert received == []
+    assert isinstance(err, RuntimeError)
+    assert "not valid JSON" in str(err)
+
+
+async def test_decode_frame_non_dict_surfaces_error_on_done():
+    """A WS frame that is valid JSON but not an object resolves `done` with RuntimeError."""
+    socket = _RawFrameAsyncWebSocket(["[1, 2, 3]"])
+
+    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+        _ = (url, additional_headers)
+        return socket
+
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        transport = ProtocolWebSocketTransport(
+            client=client, thread_id="t-1", connect=connect
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        received = [e async for e in handle.events]
+        err = await asyncio.wait_for(handle.done, timeout=1.0)
+        await handle.close()
+
+    assert received == []
+    assert isinstance(err, RuntimeError)
+    assert "not a JSON object" in str(err)
+
+
 async def test_websocket_url_uses_ws_scheme_and_base_path():
     seen: list[tuple[str, list[tuple[str, str]] | None]] = []
     socket = _FakeAsyncWebSocket([])

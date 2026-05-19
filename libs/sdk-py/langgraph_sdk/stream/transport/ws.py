@@ -87,8 +87,8 @@ class ProtocolWebSocketTransport:
                     async for raw in websocket:
                         if cancel_event.is_set():
                             break
-                        payload = _decode_frame(raw)
-                        if isinstance(payload, dict):
+                        payload = _decode_frame(raw, done)
+                        if payload is not None:
                             await queue.put(cast("Event", payload))
             except asyncio.CancelledError as err:
                 if not done.done():
@@ -146,7 +146,24 @@ class ProtocolWebSocketTransport:
                 await asyncio.gather(*tasks, return_exceptions=True)
 
 
-def _decode_frame(raw: str | bytes | bytearray | memoryview) -> Any:
-    if isinstance(raw, str):
-        return orjson.loads(raw.encode())
-    return orjson.loads(bytes(raw))
+def _decode_frame(
+    raw: str | bytes | bytearray | memoryview,
+    done: asyncio.Future[BaseException | None],
+) -> dict[str, Any] | None:
+    """Decode a raw WS frame into an Event dict.
+
+    Returns None and sets `done` if the frame is invalid JSON or not a JSON object.
+    """
+    try:
+        payload = orjson.loads(raw.encode() if isinstance(raw, str) else bytes(raw))
+    except orjson.JSONDecodeError as err:
+        if not done.done():
+            done.set_result(RuntimeError(f"WS frame is not valid JSON: {err!r}"))
+        return None
+    if not isinstance(payload, dict):
+        if not done.done():
+            done.set_result(
+                RuntimeError(f"WS frame is not a JSON object: {type(payload).__name__}")
+            )
+        return None
+    return payload
