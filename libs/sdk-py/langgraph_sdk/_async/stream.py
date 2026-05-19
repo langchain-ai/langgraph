@@ -1174,16 +1174,26 @@ class _ToolCallsProjection:
 
 
 class _ExtensionsProjection:
-    """Mapping from extension name to custom event payload stream."""
+    """Mapping from extension name to custom event payload stream.
+
+    Repeated access for the same `name` returns the cached projection so that
+    callers receive the same subscription handle across multiple references to
+    `thread.extensions["foo"]` within one session.
+    """
 
     def __init__(self, thread: AsyncThreadStream, namespace: list[str]) -> None:
         self._thread = thread
         self._namespace = namespace
+        self._cache: dict[str, _ExtensionProjection] = {}
 
     def __getitem__(self, name: str) -> _ExtensionProjection:
         if not name:
             raise ValueError("extension name must be non-empty.")
-        return _ExtensionProjection(self._thread, name=name, namespace=self._namespace)
+        if name not in self._cache:
+            self._cache[name] = _ExtensionProjection(
+                self._thread, name=name, namespace=self._namespace
+            )
+        return self._cache[name]
 
 
 class _ExtensionProjection:

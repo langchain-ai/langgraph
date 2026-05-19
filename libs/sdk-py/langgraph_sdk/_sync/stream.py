@@ -1164,20 +1164,28 @@ class _SyncSubgraphsProjection:
 
 
 class _SyncExtensionsProjection:
-    """Mapping from extension name to custom event payload stream."""
+    """Mapping from extension name to custom event payload stream.
+
+    Repeated access for the same `name` returns the cached projection so that
+    callers receive the same subscription handle across multiple references to
+    `thread.extensions["foo"]` within one session.
+    """
 
     def __init__(self, thread: SyncThreadStream, namespace: list[str]) -> None:
         self._thread = thread
         self._namespace = namespace
+        self._cache: dict[str, _SyncExtensionProjection] = {}
 
     def __getitem__(self, name: str) -> _SyncExtensionProjection:
         if not name:
             raise ValueError("extension name must be non-empty.")
-        return _SyncExtensionProjection(
-            self._thread,
-            name=name,
-            namespace=self._namespace,
-        )
+        if name not in self._cache:
+            self._cache[name] = _SyncExtensionProjection(
+                self._thread,
+                name=name,
+                namespace=self._namespace,
+            )
+        return self._cache[name]
 
 
 class _SyncExtensionProjection:
