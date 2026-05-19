@@ -232,3 +232,37 @@ def test_sync_concurrent_commands_do_not_share_command_id():
         f"Expected 50 unique command ids, got {len(set(captured_ids))} unique "
         f"out of {len(captured_ids)} total: {sorted(captured_ids)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 9.5 — sync events returns fresh iterator per access
+# ---------------------------------------------------------------------------
+
+
+def test_sync_events_returns_fresh_iterator_each_access():
+    """Two accesses of `thread.events` yield independent subscriptions,
+    mirroring the async semantics where each access opens a new subscriber."""
+    fake = SyncFakeServer()
+    from streaming._events import values_event
+
+    event_1 = values_event(seq=1, counter=1)
+    fake.script_sequence(
+        [
+            SyncStreamScript(events=[]),  # lifecycle watcher
+            SyncStreamScript(events=[event_1]),  # first events access
+            SyncStreamScript(events=[event_1]),  # second events access
+        ]
+    )
+
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads_client = SyncThreadsClient(SyncHttpClient(raw))
+        with threads_client.stream(thread_id="t-5", assistant_id="agent") as thread:
+            # Pre-set gate.
+            if thread._controller and thread._controller._run_start_gate:
+                thread._controller._run_start_gate.set()
+
+            iter1 = thread.events
+            iter2 = thread.events
+
+            # They must be independent objects (different subscription iterators).
+            assert iter1 is not iter2
