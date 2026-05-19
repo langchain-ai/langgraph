@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Iterator
 
 import httpx
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk._sync.threads import SyncThreadsClient
+from langgraph_sdk.stream.transport.sync_http import (
+    SyncEventStreamHandle,
+    SyncProtocolSseTransport,
+)
 from streaming._sync_fake_server import SyncFakeServer, SyncStreamScript
 
 # ---------------------------------------------------------------------------
@@ -69,10 +74,7 @@ def test_sync_reconnect_uses_backoff_between_attempts(monkeypatch):
     monkeypatch.setattr(_ctrl_mod.time, "sleep", lambda d: sleeps.append(d))
 
     from langgraph_sdk.stream.sync_controller import SyncStreamController
-    from langgraph_sdk.stream.transport.sync_http import (
-        SyncEventStreamHandle,
-        SyncProtocolSseTransport,
-    )
+    from langgraph_sdk.stream.transport.sync_http import SyncProtocolSseTransport
 
     class _FailingTransport(SyncProtocolSseTransport):
         """Transport that always raises on open_event_stream."""
@@ -109,7 +111,6 @@ def test_sync_rotation_does_not_lose_buffered_events():
     are not dropped.  _drain_and_close dispatches remaining events from the
     old handle to subscribers before closing it."""
     import queue
-    from collections.abc import Iterator
     from typing import Any
 
     from langgraph_sdk.stream.sync_controller import SyncStreamController
@@ -175,3 +176,59 @@ def test_sync_rotation_does_not_lose_buffered_events():
 
     seqs = [e.get("seq") for e in received]
     assert 1 in seqs, f"event_a (seq=1) not received via drain; got seqs={seqs}"
+
+
+# ---------------------------------------------------------------------------
+# Task 9.4 — _next_command_id lock
+# ---------------------------------------------------------------------------
+
+
+def test_sync_concurrent_commands_do_not_share_command_id():
+    """50 concurrent threads calling _send_command must each get a unique id."""
+    from concurrent.futures import ThreadPoolExecutor
+    from typing import Any
+
+    captured_ids: list[int] = []
+    ids_lock = threading.Lock()
+
+    class _CapturingTransport(SyncProtocolSseTransport):
+        """Captures command ids; always returns success."""
+
+        def send_command(self, command: dict) -> dict:
+            with ids_lock:
+                captured_ids.append(command["id"])
+            return {"type": "success", "id": command["id"], "result": {}}
+
+        def open_event_stream(self, params: dict) -> SyncEventStreamHandle:  # noqa: ARG002
+            def _gen() -> Iterator[Any]:
+                return
+                yield
+
+            return SyncEventStreamHandle(
+                events=_gen(), error=lambda: None, close=lambda: None
+            )
+
+    fake = SyncFakeServer()
+    fake.script_sequence([SyncStreamScript(events=[])])
+
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads_client = SyncThreadsClient(SyncHttpClient(raw))
+        with threads_client.stream(thread_id="t-cmd", assistant_id="agent") as stream:
+            # Pre-set gate so _send_command doesn't wait.
+            if stream._controller and stream._controller._run_start_gate:
+                stream._controller._run_start_gate.set()
+            # Replace transport with capturing transport.
+            capture_transport = _CapturingTransport(client=raw, thread_id="t-cmd")
+            stream._transport = capture_transport
+
+            with ThreadPoolExecutor(max_workers=50) as ex:
+                futures = [
+                    ex.submit(stream._send_command, "noop", {}) for _ in range(50)
+                ]
+                for f in futures:
+                    f.result()
+
+    assert len(set(captured_ids)) == 50, (
+        f"Expected 50 unique command ids, got {len(set(captured_ids))} unique "
+        f"out of {len(captured_ids)} total: {sorted(captured_ids)}"
+    )

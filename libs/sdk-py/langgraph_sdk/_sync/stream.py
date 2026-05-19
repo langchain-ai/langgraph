@@ -233,6 +233,7 @@ class SyncThreadStream:
         self._closed = False
         self._transport: SyncProtocolSseTransport | None = None
         self._controller: SyncStreamController | None = None
+        self._command_id_lock = threading.Lock()
         self._next_command_id = 1
         self.interrupted: bool = False
         self.interrupts: list[InterruptPayload] = []
@@ -374,8 +375,9 @@ class SyncThreadStream:
         """Send a protocol command and return the `result` payload."""
         if self._transport is None:
             raise RuntimeError("SyncThreadStream not entered — use `with`.")
-        command_id = self._next_command_id
-        self._next_command_id += 1
+        with self._command_id_lock:
+            command_id = self._next_command_id
+            self._next_command_id += 1
         response = self._transport.send_command(
             {"id": command_id, "method": method, "params": params}
         )
