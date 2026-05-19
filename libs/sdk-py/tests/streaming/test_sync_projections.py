@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import httpx
 import pytest
 from langchain_core.language_models.chat_model_stream import ChatModelStream
+from langchain_protocol import Event
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk._sync.threads import SyncThreadsClient
@@ -271,3 +274,38 @@ def test_sync_tool_calls_run_error_fails_active_handle():
     assert len(calls) == 1
     with pytest.raises(RuntimeError, match="Run errored: run failed"):
         _ = calls[0].output
+
+
+# ---------------------------------------------------------------------------
+# Task 10.9 — _drain_messages_inbox must pre-dispatch before yielding
+# ---------------------------------------------------------------------------
+
+
+def test_sync_drain_messages_inbox_pre_dispatches_before_yield():
+    """When draining the root inbox, str(message.text) must work immediately on yield."""
+    fake = SyncFakeServer()
+    fake.script([lifecycle_completed_event(seq=10)])
+    fake.set_state({})
+    collected_texts: list[str] = []
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            # Activate the root inbox and populate it directly (simulating what
+            # a sync _SubgraphsProjection would do).
+            inbox = thread._activate_root_messages_inbox()
+            inbox.put(
+                cast(
+                    Event,
+                    message_start_event(seq=1, message_id="msg-x", run_id="run-x"),
+                )
+            )
+            inbox.put(cast(Event, message_text_delta_event(seq=2, text="hello")))
+            inbox.put(cast(Event, message_text_finish_event(seq=3, text="hello")))
+            inbox.put(cast(Event, message_finish_event(seq=4)))
+            inbox.put(None)  # EOF sentinel
+
+            # Read text immediately inside the for loop — this requires pre-dispatch.
+            for stream in thread.messages:
+                collected_texts.append(str(stream.text))
+
+    assert collected_texts == ["hello"]

@@ -358,7 +358,12 @@ def _drain_messages_inbox(
     namespace: list[str],
     thread: SyncThreadStream,
 ) -> Iterator[ChatModelStream]:
-    """Drain a pre-filled inbox of messages events, yielding one stream per message."""
+    """Drain a pre-filled inbox of messages events, yielding one stream per message.
+
+    Mirrors the pre-dispatch pattern in `_SyncMessagesProjection._messages_iter`:
+    each `message-start` triggers an inner loop that reads ahead until the stream
+    is `_done` before yielding, so callers can do `str(stream.text)` immediately.
+    """
     active: dict[str, ChatModelStream] = {}
     try:
         while True:
@@ -386,6 +391,33 @@ def _drain_messages_inbox(
                 active[key] = stream
                 thread._register_active_message_stream(stream)
                 stream.dispatch(data)
+                # Pre-dispatch all remaining events for this message so the
+                # caller can access str(stream.text) immediately inside a for loop.
+                while not stream._done:
+                    next_item = inbox.get()
+                    if next_item is None:
+                        inbox.put(None)
+                        break
+                    next_params = next_item.get("params") or {}
+                    next_data = (
+                        next_params.get("data")
+                        if isinstance(next_params, dict)
+                        else None
+                    )
+                    if not isinstance(next_data, dict):
+                        continue
+                    next_event_type = next_data.get("event")
+                    next_key = _message_route_key(next_data)
+                    target = active.get(next_key)
+                    if target is None and len(active) == 1:
+                        target = next(iter(active.values()))
+                    if target is not None:
+                        target.dispatch(next_data)
+                        if next_event_type in ("message-finish", "error"):
+                            thread._unregister_active_message_stream(target)
+                            for rk, cand in list(active.items()):
+                                if cand is target:
+                                    del active[rk]
                 yield stream
             else:
                 key = _message_route_key(data)
