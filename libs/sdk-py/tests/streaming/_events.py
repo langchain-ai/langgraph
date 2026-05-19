@@ -99,17 +99,16 @@ def message_text_delta_event(
     *,
     text: str,
     index: int = 0,
+    message_id: str | None = None,
 ) -> dict[str, Any]:
-    return _base(
-        seq,
-        "messages",
-        namespace or [],
-        {
-            "event": "content-block-delta",
-            "index": index,
-            "delta": {"type": "text-delta", "text": text},
-        },
-    )
+    data: dict[str, Any] = {
+        "event": "content-block-delta",
+        "index": index,
+        "delta": {"type": "text-delta", "text": text},
+    }
+    if message_id is not None:
+        data["id"] = message_id
+    return _base(seq, "messages", namespace or [], data)
 
 
 def message_text_finish_event(
@@ -137,20 +136,19 @@ def message_finish_event(
     *,
     input_tokens: int = 1,
     output_tokens: int = 1,
+    message_id: str | None = None,
 ) -> dict[str, Any]:
-    return _base(
-        seq,
-        "messages",
-        namespace or [],
-        {
-            "event": "message-finish",
-            "usage": {
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-            },
+    data: dict[str, Any] = {
+        "event": "message-finish",
+        "usage": {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
         },
-    )
+    }
+    if message_id is not None:
+        data["id"] = message_id
+    return _base(seq, "messages", namespace or [], data)
 
 
 def message_error_event(

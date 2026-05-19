@@ -141,3 +141,36 @@ async def test_messages_error_event_fails_active_stream():
     assert len(streams) == 1
     with pytest.raises(RuntimeError, match="model failed"):
         await streams[0].output
+
+
+async def test_messages_concurrent_same_run_id_route_independently():
+    """Two messages sharing a run_id must route to independent streams.
+
+    The old `_message_route_key` keyed on `run_id` when present, so both
+    message-start events mapped to the same `active` slot and the second
+    overwrote the first. Subsequent deltas and finish events all routed to
+    the wrong (or missing) stream.
+    """
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            # Both messages share run_id="run-1" (same agent turn)
+            message_start_event(seq=1, message_id="msg-A", run_id="run-1"),
+            message_start_event(seq=2, message_id="msg-B", run_id="run-1"),
+            message_text_delta_event(seq=3, text="alpha", message_id="msg-A"),
+            message_text_delta_event(seq=4, text="beta", message_id="msg-B"),
+            message_finish_event(seq=5, message_id="msg-A"),
+            message_finish_event(seq=6, message_id="msg-B"),
+            lifecycle_completed_event(seq=7),
+        ]
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            streams = [msg async for msg in thread.messages]
+
+    assert [s.message_id for s in streams] == ["msg-A", "msg-B"]
+    assert [await s.text for s in streams] == ["alpha", "beta"]

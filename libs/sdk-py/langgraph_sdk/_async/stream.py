@@ -368,11 +368,13 @@ def _message_event_id(data: dict[str, Any]) -> str | None:
 
 
 def _message_route_key(data: dict[str, Any], fallback: str | None = None) -> str:
-    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
-    run_id = metadata.get("run_id") if metadata else None
+    """Return the routing key for a message-channel event in `active`.
+
+    Keys on `message_id` when available so concurrent messages that share the
+    same `run_id` (two AI turns in one agent step) route to independent streams
+    rather than colliding on a shared `run:<run_id>` slot.
+    """
     message_id = _message_event_id(data)
-    if run_id is not None:
-        return f"run:{run_id}"
     if message_id is not None:
         return f"message:{message_id}"
     if fallback is not None:
