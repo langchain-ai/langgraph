@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import random
 from collections import OrderedDict
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
@@ -56,6 +57,8 @@ class _SeenEventIds:
 # ---------------------------------------------------------------------------
 # Per-subscription record
 # ---------------------------------------------------------------------------
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -238,8 +241,8 @@ class StreamController:
                     for sub in list(self._subscriptions.values()):
                         if matches_subscription(event, sub.params):
                             sub.queue.put_nowait(event)
-            except Exception:
-                pass  # transport drop — check shared.done below
+            except Exception as drop_err:
+                _logger.debug("transport drop in fanout: %r", drop_err)
 
             if self._shared_stream is shared:
                 err = await shared.done

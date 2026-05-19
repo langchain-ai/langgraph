@@ -267,6 +267,47 @@ async def test_reconnect_accepts_backoff_kwargs():
 
 
 @pytest.mark.anyio
+async def test_transport_drop_exception_logged_with_type(monkeypatch, caplog):
+    """Bare `pass` discarded exception types; the drop should at least log."""
+    import logging
+
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
+
+    loop = asyncio.get_running_loop()
+    ready: asyncio.Future[None] = loop.create_future()
+    ready.set_result(None)
+    done: asyncio.Future[BaseException | None] = loop.create_future()
+    done.set_result(RuntimeError("transport drop"))
+
+    async def _raises() -> AsyncIterator[Any]:
+        raise RuntimeError("transport drop")
+        yield  # pragma: no cover
+
+    old_handle = EventStreamHandle(
+        events=_raises(),
+        ready=ready,
+        done=done,
+        close=AsyncMock(),
+    )
+
+    transport = _always_error_transport()
+    controller = StreamController(
+        transport,
+        AsyncMock(),
+        max_reconnect_attempts=1,
+        reconnect_backoff_base=0.0,
+        reconnect_backoff_cap=0.0,
+    )
+    controller._shared_stream = old_handle
+    controller._shared_stream_filter = {"channels": ["lifecycle"]}
+
+    with caplog.at_level(logging.DEBUG, logger="langgraph_sdk.stream.controller"):
+        await controller._fanout()
+
+    assert any("transport drop" in rec.message for rec in caplog.records)
+
+
+@pytest.mark.anyio
 async def test_reconnect_closes_old_handle_before_opening_new(monkeypatch):
     """When the shared stream errors and triggers reconnect, the old
     EventStreamHandle's close() must be called."""
