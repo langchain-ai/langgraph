@@ -510,16 +510,12 @@ class _ToolCallsProjection:
                             )
                         )
         finally:
-            # Wait for _run_done before failing remaining handles. The lifecycle
-            # watcher may call _fail_active_tool_calls before this iterator
-            # registers handles (if lifecycle_errored arrives first), so reading
-            # the terminal error directly from _run_done is the reliable path.
+            # Read terminal error from _run_done if it is already resolved.
+            # We do NOT block here: callers who need a terminal observation
+            # should await `thread.output` directly. Blocking in iterator
+            # teardown would stall every early break or exception exit for
+            # up to the full shield-wait timeout (previously 1 s).
             run_done = self._thread._run_done
-            if run_done is not None and not run_done.done():
-                with contextlib.suppress(
-                    asyncio.TimeoutError, asyncio.CancelledError, Exception
-                ):
-                    await asyncio.wait_for(asyncio.shield(run_done), timeout=1.0)
             terminal_err: BaseException | None = None
             if run_done is not None and run_done.done() and not run_done.cancelled():
                 terminal = run_done.result()

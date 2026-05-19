@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import httpx
 import pytest
 
@@ -186,3 +188,37 @@ async def test_tool_calls_stream_end_fails_active_handle():
     assert len(calls) == 1
     with pytest.raises(RuntimeError, match="closed before terminal tool event"):
         await calls[0].output
+
+
+async def test_tool_calls_explicit_aclose_does_not_block_1s():
+    """Explicitly closing the tool_calls iterator must return in <500ms.
+
+    The old finally block did `await asyncio.wait_for(asyncio.shield(run_done),
+    timeout=1.0)` unconditionally. When the caller explicitly calls aclose() on
+    the generator before any lifecycle terminal event arrives, this caused a
+    mandatory 1-second stall per iterator close.
+    """
+    fake = FakeServer()
+    # Script has a started lifecycle and one tool, but NO terminal lifecycle.
+    # If the shield-wait is present, aclose() will block for 1s.
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tool_started_event(seq=1, tool_call_id="call-1"),
+        ]
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            # _tool_calls_iter() is an AsyncGenerator; cast so the type checker
+            # knows aclose() is available without a bare AsyncIterator protocol.
+            from collections.abc import AsyncGenerator
+
+            gen: AsyncGenerator = thread.tool_calls._tool_calls_iter()
+            _call = await gen.__anext__()  # receive the one tool-started handle
+            start = time.monotonic()
+            await gen.aclose()  # explicitly close — must not stall 1s
+            elapsed = time.monotonic() - start
+    assert elapsed < 0.5, f"tool_calls aclose() took {elapsed:.3f}s (expected <0.5s)"
