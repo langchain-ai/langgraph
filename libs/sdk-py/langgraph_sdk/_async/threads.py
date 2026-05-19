@@ -750,7 +750,7 @@ class ThreadsClient:
             thread_id: optional explicit thread identifier. Defaults to a
                 fresh UUIDv4.
             assistant_id: assistant the run will use. Required.
-            headers: optional headers forwarded on every command and SSE
+            headers: optional headers forwarded on every command and event
                 request for this stream session.
             run_start_timeout: optional seconds to wait for an in-flight
                 `run.start` before subscribing operations raise
