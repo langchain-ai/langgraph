@@ -192,6 +192,25 @@ async def test_websocket_transport_feeds_async_stream_controller():
     assert end is None
 
 
+async def test_ws_transport_accepts_max_queue_size_kwarg():
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        transport = ProtocolWebSocketTransport(
+            client=client,
+            thread_id="t-1",
+            max_queue_size=42,
+        )
+        assert transport._max_queue_size == 42
+
+
+async def test_ws_transport_default_max_queue_size_is_1024():
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        transport = ProtocolWebSocketTransport(
+            client=client,
+            thread_id="t-1",
+        )
+        assert transport._max_queue_size == 1024
+
+
 async def test_websocket_controller_reconnects_with_since_after_drop():
     from langgraph_sdk.stream.controller import StreamController
 

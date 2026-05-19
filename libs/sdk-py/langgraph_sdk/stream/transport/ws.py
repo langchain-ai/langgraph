@@ -32,6 +32,7 @@ class ProtocolWebSocketTransport:
         stream_path: str | None = None,
         headers: Mapping[str, str] | None = None,
         connect: Callable[..., Any] = websocket_connect,
+        max_queue_size: int = 1024,
     ) -> None:
         self._client = client
         self.thread_id = thread_id
@@ -39,6 +40,7 @@ class ProtocolWebSocketTransport:
         self._stream_path = stream_path or f"/threads/{thread_id}/stream/events"
         self._default_headers: dict[str, str] = dict(headers or {})
         self._connect = connect
+        self._max_queue_size = max_queue_size
         self._closed = False
         self._event_streams: set[asyncio.Task[None]] = set()
 
@@ -66,7 +68,7 @@ class ProtocolWebSocketTransport:
         loop = asyncio.get_running_loop()
         ready: asyncio.Future[None] = loop.create_future()
         done: asyncio.Future[BaseException | None] = loop.create_future()
-        queue: asyncio.Queue[Event | None] = asyncio.Queue()
+        queue: asyncio.Queue[Event | None] = asyncio.Queue(maxsize=self._max_queue_size)
         cancel_event = asyncio.Event()
 
         async def pump() -> None:
