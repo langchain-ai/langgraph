@@ -192,6 +192,31 @@ def test_sync_websocket_controller_reconnects_with_since_after_drop():
     assert orjson.loads(second_socket.sent[0])["since"] == 1
 
 
+def test_sync_ws_handshake_forwards_httpx_client_cookies():
+    """Cookies on the httpx.Client are forwarded to the WS handshake."""
+    captured_headers: list[list[tuple[str, str]]] = []
+    socket = _FakeSyncWebSocket([values_event(seq=1)])
+
+    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+        _ = url
+        captured_headers.append(list(additional_headers or []))
+        return socket
+
+    with httpx.Client(base_url="http://test") as client:
+        client.cookies.set("session", "abc123")
+        transport = SyncProtocolWebSocketTransport(
+            client=client, thread_id="t-1", connect=connect
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+        list(handle.events)
+        handle.close()
+
+    assert len(captured_headers) == 1
+    headers_dict = dict(captured_headers[0])
+    assert "Cookie" in headers_dict
+    assert "session=abc123" in headers_dict["Cookie"]
+
+
 def test_sync_close_before_iteration_closes_socket():
     """Calling `handle.close()` before iterating events must close the socket."""
     connect_calls: list[str] = []

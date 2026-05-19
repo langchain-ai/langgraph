@@ -485,3 +485,32 @@ async def test_async_close_sends_normal_close_frame():
     # close() must have been called at least once with code=1000.
     assert explicit_1000, "ws.close() was never called"
     assert explicit_1000[0], "first ws.close() call did not use code=1000"
+
+
+async def test_ws_handshake_forwards_httpx_client_cookies():
+    """Cookies set on the httpx.AsyncClient are forwarded to the WS handshake."""
+    captured_headers: list[list[tuple[str, str]]] = []
+    socket = _FakeAsyncWebSocket([])
+
+    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+        _ = url
+        captured_headers.append(list(additional_headers or []))
+        return socket
+
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        client.cookies.set("session", "abc123")
+        client.cookies.set("other", "xyz")
+        transport = ProtocolWebSocketTransport(
+            client=client, thread_id="t-1", connect=connect
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        _ = [e async for e in handle.events]
+        await handle.close()
+
+    assert len(captured_headers) == 1
+    headers_dict = dict(captured_headers[0])
+    assert "Cookie" in headers_dict
+    cookie_val = headers_dict["Cookie"]
+    assert "session=abc123" in cookie_val
+    assert "other=xyz" in cookie_val

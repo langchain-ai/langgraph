@@ -76,9 +76,13 @@ class ProtocolWebSocketTransport:
         async def pump() -> None:
             try:
                 url = build_websocket_url(self._client.base_url, self._stream_path)
+                handshake_headers = list(websocket_headers(self._default_headers))
+                cookie_header = _cookie_header(self._client)
+                if cookie_header:
+                    handshake_headers.append(("Cookie", cookie_header))
                 async with self._connect(
                     url,
-                    additional_headers=websocket_headers(self._default_headers),
+                    additional_headers=handshake_headers,
                 ) as websocket:
                     ws_holder["ws"] = websocket
                     try:
@@ -176,3 +180,11 @@ def _decode_frame(
             )
         return None
     return payload
+
+
+def _cookie_header(client: httpx.AsyncClient) -> str | None:
+    """Build a `Cookie` header value from the httpx client's cookie jar."""
+    cookies = dict(client.cookies)
+    if not cookies:
+        return None
+    return "; ".join(f"{k}={v}" for k, v in cookies.items())

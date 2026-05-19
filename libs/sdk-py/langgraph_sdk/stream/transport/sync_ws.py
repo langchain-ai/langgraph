@@ -64,12 +64,13 @@ class SyncProtocolWebSocketTransport:
         stream_error: BaseException | None = None
 
         url = build_websocket_url(self._client.base_url, self._stream_path)
+        handshake_headers = list(websocket_headers(self._default_headers))
+        cookie_header = _cookie_header(self._client)
+        if cookie_header:
+            handshake_headers.append(("Cookie", cookie_header))
         # Pre-enter the WebSocket context manager so close() can reach the socket
         # immediately, even before the caller has started iterating events().
-        ws_cm = self._connect(
-            url,
-            additional_headers=websocket_headers(self._default_headers),
-        )
+        ws_cm = self._connect(url, additional_headers=handshake_headers)
         websocket = ws_cm.__enter__()
 
         def events() -> Iterator[Event]:
@@ -109,3 +110,11 @@ def _decode_frame(raw: str | bytes | bytearray | memoryview) -> Any:
     if isinstance(raw, str):
         return orjson.loads(raw.encode())
     return orjson.loads(bytes(raw))
+
+
+def _cookie_header(client: httpx.Client) -> str | None:
+    """Build a `Cookie` header value from the httpx client's cookie jar."""
+    cookies = dict(client.cookies)
+    if not cookies:
+        return None
+    return "; ".join(f"{k}={v}" for k, v in cookies.items())
