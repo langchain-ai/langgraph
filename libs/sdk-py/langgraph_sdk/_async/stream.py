@@ -403,10 +403,21 @@ class ToolCallHandle:
         loop = asyncio.get_running_loop()
         self.output: asyncio.Future[Any] = loop.create_future()
         self._deltas: asyncio.Queue[str | None] = asyncio.Queue(maxsize=max_queue_size)
+        self._deltas_consumed = False
 
     @property
     def deltas(self) -> AsyncIterator[str]:
-        """Stream tool output deltas emitted before the terminal event."""
+        """Stream tool output deltas emitted before the terminal event.
+
+        Raises:
+            RuntimeError: if called more than once — the underlying queue is
+                single-consumer and cannot be fanned out safely.
+        """
+        if self._deltas_consumed:
+            raise RuntimeError(
+                "ToolCallHandle.deltas can only be iterated by a single consumer."
+            )
+        self._deltas_consumed = True
         return self._delta_iter()
 
     async def _delta_iter(self) -> AsyncGenerator[str, None]:

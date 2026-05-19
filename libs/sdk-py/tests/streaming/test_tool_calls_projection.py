@@ -245,3 +245,28 @@ def test_tool_call_handle_deltas_queue_is_bounded():
         assert handle_custom._deltas.maxsize == 8
 
     asyncio.run(_make())
+
+
+def test_tool_call_handle_deltas_single_consumer_guard():
+    """Accessing `handle.deltas` a second time must raise immediately.
+
+    `_deltas` is a single-consumer queue; fanning out to multiple consumers
+    would cause each consumer to miss events already consumed by the other.
+    The property must raise before returning the iterator so the caller
+    sees the error even without iterating.
+    """
+    import asyncio
+
+    async def _run() -> None:
+        from langgraph_sdk._async.stream import ToolCallHandle
+
+        handle = ToolCallHandle(tool_call_id="tc1", name="foo")
+
+        # First access: fine — returns the iterator.
+        _iter_1 = handle.deltas
+
+        # Second access: must raise immediately (before any iteration).
+        with pytest.raises(RuntimeError, match="single consumer"):
+            _ = handle.deltas
+
+    asyncio.run(_run())
