@@ -520,13 +520,23 @@ class ScopedStreamHandle:
         self._messages_inbox: asyncio.Queue[Event | None] = asyncio.Queue()
         self._tools_inbox: asyncio.Queue[Event | None] = asyncio.Queue()
         self._tasks_inbox: asyncio.Queue[Event | None] = asyncio.Queue()
+        # Descendant handles registered by _HandleSubgraphsProjection when a
+        # grandchild is discovered. _push_event fans out to each matching
+        # descendant at dispatch time so events arrive in arrival order without
+        # any drain-and-replay.
+        self._descendant_handles: dict[tuple[str, ...], ScopedStreamHandle] = {}
         self.messages = _HandleMessagesProjection(self)
         self.tool_calls = _HandleToolCallsProjection(self)
         self.subgraphs = _HandleSubgraphsProjection(self)
         self.subagents = self.subgraphs
 
     def _push_event(self, event: Event) -> None:
-        """Route a descendant event into the appropriate channel inbox."""
+        """Route a descendant event into the appropriate channel inbox.
+
+        Also fans out to any registered descendant handles whose path is a
+        prefix of the event namespace, so grandchild events are delivered at
+        push time rather than via a post-hoc drain-and-replay.
+        """
         method = event.get("method")
         if method == "messages":
             self._messages_inbox.put_nowait(event)
@@ -534,6 +544,44 @@ class ScopedStreamHandle:
             self._tools_inbox.put_nowait(event)
         elif method == "tasks":
             self._tasks_inbox.put_nowait(event)
+        # Fan out to descendant handles whose namespace is a prefix of the
+        # event namespace so they receive the event at push time.
+        if method in ("messages", "tools", "tasks"):
+            ns_tuple = tuple(_event_namespace(event.get("params") or {}))
+            for desc_path, desc_handle in self._descendant_handles.items():
+                desc_len = len(desc_path)
+                if len(ns_tuple) >= desc_len and ns_tuple[:desc_len] == desc_path:
+                    desc_handle._push_event(event)
+
+    def _register_descendant(self, handle: ScopedStreamHandle) -> None:
+        """Register a newly-discovered grandchild so future events are fanned out.
+
+        Also drains any events already buffered in this handle's inboxes whose
+        namespace matches the grandchild, so events that arrived before the
+        grandchild was discovered are forwarded in arrival order.
+        """
+        self._descendant_handles[handle.path] = handle
+        desc_len = len(handle.path)
+        for inbox_attr in (
+            "_messages_inbox",
+            "_tools_inbox",
+            "_tasks_inbox",
+        ):
+            inbox: asyncio.Queue[Event | None] = getattr(self, inbox_attr)
+            staging: list[Event | None] = []
+            while not inbox.empty():
+                staging.append(inbox.get_nowait())
+            for event in staging:
+                inbox.put_nowait(event)
+                if event is None:
+                    continue
+                ns_tuple = tuple(_event_namespace(event.get("params") or {}))
+                if len(ns_tuple) >= desc_len and ns_tuple[:desc_len] == handle.path:
+                    getattr(handle, inbox_attr).put_nowait(event)
+
+    def _unregister_descendant(self, path: tuple[str, ...]) -> None:
+        """Remove a grandchild after it reaches a terminal state."""
+        self._descendant_handles.pop(path, None)
 
     def _close_inboxes(self) -> None:
         """Signal EOF on all channel inboxes."""
@@ -676,50 +724,6 @@ class _HandleSubgraphsProjection:
     def __aiter__(self) -> AsyncIterator[ScopedStreamHandle]:
         return self._subgraphs_iter()
 
-    def _route_sibling_inboxes_to_grandchildren(
-        self,
-        active: dict[tuple[str, ...], ScopedStreamHandle],
-    ) -> None:
-        """Drain non-blocking events from parent's messages/tools inboxes to grandchildren.
-
-        Called after each tasks event so grandchild handles receive events that
-        were enqueued in the parent handle's inboxes before (or just after) the
-        grandchild was discovered.
-        """
-        parent = self._handle
-        for inbox_attr, grandchild_attr in (
-            ("_messages_inbox", "_messages_inbox"),
-            ("_tools_inbox", "_tools_inbox"),
-        ):
-            inbox: asyncio.Queue[Event | None] = getattr(parent, inbox_attr)
-            staging: list[Event | None] = []
-            # Drain without blocking.
-            while not inbox.empty():
-                staging.append(inbox.get_nowait())
-            for event in staging:
-                if event is None:
-                    # Re-queue the EOF sentinel — it belongs to the parent inbox consumer.
-                    inbox.put_nowait(None)
-                    continue
-                event_params = event.get("params") or {}
-                ns_tuple = tuple(_event_namespace(event_params))
-                routed = False
-                for _child_path, grandchild in active.items():
-                    grandchild_len = len(grandchild.path)
-                    if (
-                        len(ns_tuple) >= grandchild_len
-                        and ns_tuple[:grandchild_len] == grandchild.path
-                    ):
-                        gc_inbox: asyncio.Queue[Event | None] = getattr(
-                            grandchild, grandchild_attr
-                        )
-                        gc_inbox.put_nowait(event)
-                        routed = True
-                        break
-                if not routed:
-                    # Not a grandchild event — put it back for the handle projection.
-                    inbox.put_nowait(event)
-
     async def _subgraphs_iter(self) -> AsyncGenerator[ScopedStreamHandle, None]:
         seen: set[tuple[str, ...]] = set()
         active: dict[tuple[str, ...], ScopedStreamHandle] = {}
@@ -735,13 +739,10 @@ class _HandleSubgraphsProjection:
             namespace = _event_namespace(params_field)
             data = params_field.get("data") if isinstance(params_field, dict) else None
             if not isinstance(data, dict):
-                # Still drain sibling inboxes even if this tasks event is malformed.
-                self._route_sibling_inboxes_to_grandchildren(active)
                 continue
             if "result" in data:
                 result_id = data.get("id")
                 if not result_id:
-                    self._route_sibling_inboxes_to_grandchildren(active)
                     continue
                 parent_path = tuple(namespace)
                 for child_path, child_handle in list(active.items()):
@@ -752,14 +753,12 @@ class _HandleSubgraphsProjection:
                     status, error = _terminal_from_tasks_result(data)
                     child_handle._finish(status, error)
                     del active[child_path]
-                self._route_sibling_inboxes_to_grandchildren(active)
+                    self._handle._unregister_descendant(child_path)
                 continue
             if not _is_direct_child(namespace, scope):
-                self._route_sibling_inboxes_to_grandchildren(active)
                 continue
             path = tuple(namespace)
             if path in seen:
-                self._route_sibling_inboxes_to_grandchildren(active)
                 continue
             seen.add(path)
             graph_name, trigger_call_id = _parse_namespace_segment(path[-1])
@@ -770,8 +769,9 @@ class _HandleSubgraphsProjection:
                 trigger_call_id=trigger_call_id,
             )
             active[path] = child_handle
-            # Drain sibling inboxes now that the new grandchild is registered.
-            self._route_sibling_inboxes_to_grandchildren(active)
+            # Register so future _push_event calls on this handle fan out to the
+            # grandchild at push time, preserving arrival order without drain-and-replay.
+            self._handle._register_descendant(child_handle)
             yield child_handle
 
 

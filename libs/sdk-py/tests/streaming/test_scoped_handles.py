@@ -277,3 +277,152 @@ async def test_root_and_child_projections_do_not_cross_talk():
     assert [await message.text for message in root_messages] == ["root"]
     assert [message.message_id for message in child_messages] == ["child-msg"]
     assert [await message.text for message in child_messages] == ["child"]
+
+
+async def test_grandchild_sibling_routing_preserves_event_order():
+    """Events enqueued in a child handle's _messages_inbox before a grandchild
+    is discovered via child.subgraphs must be delivered in arrival order, not
+    reordered by the drain-and-replay path in _route_sibling_inboxes_to_grandchildren."""
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            # Child discovered by thread.subgraphs.
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            # Grandchild messages arrive *before* grandchild tasks-start.
+            message_start_event(
+                seq=2,
+                namespace=["worker:abc", "tool:gc1"],
+                message_id="msg-E1",
+                run_id="r1",
+            ),
+            message_text_delta_event(
+                seq=3, namespace=["worker:abc", "tool:gc1"], text="E1"
+            ),
+            message_text_finish_event(
+                seq=4, namespace=["worker:abc", "tool:gc1"], text="E1"
+            ),
+            message_finish_event(seq=5, namespace=["worker:abc", "tool:gc1"]),
+            message_start_event(
+                seq=6,
+                namespace=["worker:abc", "tool:gc1"],
+                message_id="msg-E2",
+                run_id="r2",
+            ),
+            message_text_delta_event(
+                seq=7, namespace=["worker:abc", "tool:gc1"], text="E2"
+            ),
+            message_text_finish_event(
+                seq=8, namespace=["worker:abc", "tool:gc1"], text="E2"
+            ),
+            message_finish_event(seq=9, namespace=["worker:abc", "tool:gc1"]),
+            message_start_event(
+                seq=10,
+                namespace=["worker:abc", "tool:gc1"],
+                message_id="msg-E3",
+                run_id="r3",
+            ),
+            message_text_delta_event(
+                seq=11, namespace=["worker:abc", "tool:gc1"], text="E3"
+            ),
+            message_text_finish_event(
+                seq=12, namespace=["worker:abc", "tool:gc1"], text="E3"
+            ),
+            message_finish_event(seq=13, namespace=["worker:abc", "tool:gc1"]),
+            # Grandchild tasks-start arrives *after* its messages.
+            tasks_start_event(
+                seq=14,
+                namespace=["worker:abc", "tool:gc1"],
+                task_id="t-grandchild",
+            ),
+            tasks_result_event(
+                seq=15, namespace=["worker:abc"], task_id="gc1", name="tool"
+            ),
+            tasks_result_event(seq=16, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=17),
+        ]
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            [child] = [h async for h in thread.subgraphs]
+            [grandchild] = [h async for h in child.subgraphs]
+            gc_messages = [m async for m in grandchild.messages]
+
+    assert [m.message_id for m in gc_messages] == ["msg-E1", "msg-E2", "msg-E3"]
+    texts = [await m.text for m in gc_messages]
+    assert texts == ["E1", "E2", "E3"]
+
+
+async def test_grandchild_events_dispatched_to_correct_sibling_not_first_match():
+    """When two sibling grandchildren exist, messages scoped to one grandchild
+    must not bleed into the other grandchild's inbox."""
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            # Two grandchildren discovered.
+            tasks_start_event(
+                seq=2, namespace=["worker:abc", "tool:gc1"], task_id="t-gc1"
+            ),
+            tasks_start_event(
+                seq=3, namespace=["worker:abc", "tool:gc2"], task_id="t-gc2"
+            ),
+            # Messages for gc1.
+            message_start_event(
+                seq=4,
+                namespace=["worker:abc", "tool:gc1"],
+                message_id="msg-gc1",
+                run_id="ra",
+            ),
+            message_text_delta_event(
+                seq=5, namespace=["worker:abc", "tool:gc1"], text="GC1"
+            ),
+            message_text_finish_event(
+                seq=6, namespace=["worker:abc", "tool:gc1"], text="GC1"
+            ),
+            message_finish_event(seq=7, namespace=["worker:abc", "tool:gc1"]),
+            # Messages for gc2.
+            message_start_event(
+                seq=8,
+                namespace=["worker:abc", "tool:gc2"],
+                message_id="msg-gc2",
+                run_id="rb",
+            ),
+            message_text_delta_event(
+                seq=9, namespace=["worker:abc", "tool:gc2"], text="GC2"
+            ),
+            message_text_finish_event(
+                seq=10, namespace=["worker:abc", "tool:gc2"], text="GC2"
+            ),
+            message_finish_event(seq=11, namespace=["worker:abc", "tool:gc2"]),
+            tasks_result_event(
+                seq=12, namespace=["worker:abc"], task_id="gc1", name="tool"
+            ),
+            tasks_result_event(
+                seq=13, namespace=["worker:abc"], task_id="gc2", name="tool"
+            ),
+            tasks_result_event(seq=14, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=15),
+        ]
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            [child] = [h async for h in thread.subgraphs]
+            grandchildren = [h async for h in child.subgraphs]
+            by_path = {h.path: h for h in grandchildren}
+            gc1_messages = [
+                m async for m in by_path[("worker:abc", "tool:gc1")].messages
+            ]
+            gc2_messages = [
+                m async for m in by_path[("worker:abc", "tool:gc2")].messages
+            ]
+
+    assert [m.message_id for m in gc1_messages] == ["msg-gc1"]
+    assert [m.message_id for m in gc2_messages] == ["msg-gc2"]
