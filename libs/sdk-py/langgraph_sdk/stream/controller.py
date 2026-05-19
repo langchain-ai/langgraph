@@ -277,6 +277,11 @@ class StreamController:
         Returns True if a new stream was successfully opened, False if all
         reconnect attempts were exhausted or the controller was closed.
         """
+        # We intentionally use the *current* shared_stream_filter (the latest
+        # computed union of all live subscriptions), not the filter that was
+        # active when this stream was originally opened. If subscriptions were
+        # added or removed during the drop window, the reconnect picks up the
+        # new shape.
         base_filter = self._shared_stream_filter
         if base_filter is None:
             return False
