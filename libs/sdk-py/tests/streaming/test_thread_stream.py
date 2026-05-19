@@ -11,7 +11,10 @@ import pytest
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._async.threads import ThreadsClient
-from langgraph_sdk.stream.transport import ProtocolSseTransport
+from langgraph_sdk.stream.transport import (
+    ProtocolSseTransport,
+    ProtocolWebSocketTransport,
+)
 from streaming._events import (
     lifecycle_completed_event,
     lifecycle_event,
@@ -170,6 +173,19 @@ async def test_aenter_constructs_transport_with_thread_id():
         async with stream:
             assert stream._transport is not None
             assert stream._transport.thread_id == "t-1"
+
+
+async def test_aenter_selects_websocket_transport():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(
+            thread_id="t-1", assistant_id="agent", transport="websocket"
+        )
+        async with stream:
+            assert isinstance(stream._transport, ProtocolWebSocketTransport)
 
 
 async def test_aexit_closes_transport():
