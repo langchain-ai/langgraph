@@ -921,9 +921,9 @@ async def test_v3_streaming_async_surface_smoke():
         [
             values_event(seq=1, values={"step": 1}),
             message_start_event(seq=2, message_id="msg-1"),
-            message_text_delta_event(seq=3, text="hi"),
-            message_text_finish_event(seq=4, text="hi"),
-            message_finish_event(seq=5),
+            message_text_delta_event(seq=3, text="hi", message_id="msg-1"),
+            message_text_finish_event(seq=4, text="hi", message_id="msg-1"),
+            message_finish_event(seq=5, message_id="msg-1"),
             tool_started_event(seq=6, tool_call_id="call-1", tool_name="search"),
             tool_finished_event(seq=7, tool_call_id="call-1", output={"ok": True}),
             custom_event(seq=8, name="progress", step=1),

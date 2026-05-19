@@ -506,47 +506,95 @@ def test_v3_streaming_sync_surface_smoke():
         values_event,
     )
 
-    def _mk_events(offset: int) -> list[dict]:
-        """Build a full event set with unique event_ids (seq = offset + position)."""
-        s = offset
-        return [
-            values_event(seq=s, values={"step": 1}),
-            message_start_event(seq=s + 1, message_id="msg-1"),
-            message_text_delta_event(seq=s + 2, text="hi"),
-            message_text_finish_event(seq=s + 3, text="hi"),
-            message_finish_event(seq=s + 4),
-            tool_started_event(seq=s + 5, tool_call_id="call-1", tool_name="search"),
-            tool_finished_event(seq=s + 6, tool_call_id="call-1", output={"ok": True}),
-            custom_event(seq=s + 7, name="progress", step=1),
-            lifecycle_completed_event(seq=s + 8),
-        ]
-
     fake = SyncFakeServer()
     fake.set_state({"final": True})
-    # Sequential consumers trigger multiple SSE rotations. Each rotation's
-    # event_ids must be unique so the client-side dedup set does not filter
-    # events from later rotations. The lifecycle watcher opens its own SSE
-    # independently, so we provide enough scripts for all rotations.
-    fake.script_sequence(
-        [SyncStreamScript(events=_mk_events(o)) for o in (100, 200, 300, 400, 500, 600)]
+    # Single script — projections consume events in parallel threads so all
+    # subscriptions are registered before SSE rotation could drop events.
+    # Mirrors the async smoke test's `asyncio.gather` pattern.
+    fake.script(
+        [
+            values_event(seq=1, values={"step": 1}),
+            message_start_event(seq=2, message_id="msg-1"),
+            message_text_delta_event(seq=3, text="hi", message_id="msg-1"),
+            message_text_finish_event(seq=4, text="hi", message_id="msg-1"),
+            message_finish_event(seq=5, message_id="msg-1"),
+            tool_started_event(seq=6, tool_call_id="call-1", tool_name="search"),
+            tool_finished_event(seq=7, tool_call_id="call-1", output={"ok": True}),
+            custom_event(seq=8, name="progress", step=1),
+            lifecycle_completed_event(seq=9),
+        ]
     )
-    fake.scripted_events = _mk_events(700)  # fallback beyond the 6th SSE
     with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
         threads = SyncThreadsClient(SyncHttpClient(raw))
         with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             start = thread.run.start(
                 input={"messages": [{"role": "user", "content": "hi"}]}
             )
-            values_iter = iter(thread.values)
-            first_values = next(values_iter)
-            messages = list(thread.messages)
-            tool_calls = list(thread.tool_calls)
-            progress = list(thread.extensions["progress"])
+
+            # Gate every reconcile_stream call on a barrier so that all four
+            # projection threads register their subscriptions before any
+            # reconcile widens (or rotates) the shared SSE. This mirrors the
+            # async smoke test's `asyncio.gather` pattern: every subscription
+            # is registered before the first SSE opens; one SSE covers all
+            # consumers and `_seen_event_ids` covers any subsequent reconnect.
+            controller = thread._controller
+            assert controller is not None
+            barrier = threading.Barrier(4)
+            real_reconcile = controller.reconcile_stream
+
+            def _gated_reconcile(candidate_filter):
+                barrier.wait(timeout=10)
+                return real_reconcile(candidate_filter)
+
+            controller.reconcile_stream = _gated_reconcile  # type: ignore[method-assign]
+
+            results: dict[str, object] = {}
+            errors: list[BaseException] = []
+
+            def _run_values() -> None:
+                try:
+                    for v in thread.values:
+                        results["values"] = v
+                        return
+                except BaseException as err:  # pragma: no cover - propagated
+                    errors.append(err)
+
+            def _run_messages() -> None:
+                try:
+                    results["messages"] = list(thread.messages)
+                except BaseException as err:  # pragma: no cover - propagated
+                    errors.append(err)
+
+            def _run_tools() -> None:
+                try:
+                    results["tools"] = list(thread.tool_calls)
+                except BaseException as err:  # pragma: no cover - propagated
+                    errors.append(err)
+
+            def _run_progress() -> None:
+                try:
+                    results["progress"] = list(thread.extensions["progress"])
+                except BaseException as err:  # pragma: no cover - propagated
+                    errors.append(err)
+
+            workers = [
+                threading.Thread(target=_run_values),
+                threading.Thread(target=_run_messages),
+                threading.Thread(target=_run_tools),
+                threading.Thread(target=_run_progress),
+            ]
+            for w in workers:
+                w.start()
+            for w in workers:
+                w.join(timeout=10)
+                assert not w.is_alive(), "smoke worker thread hung"
+            controller.reconcile_stream = real_reconcile  # type: ignore[method-assign]
+            assert not errors, errors
             final = thread.output
 
     assert start == {"run_id": "run-1"}
-    assert first_values == fake.state["values"]
-    assert [str(m.text) for m in messages] == ["hi"]
-    assert tool_calls[0].name == "search"
-    assert progress == [{"name": "progress", "step": 1}]
+    assert results["values"] == fake.state["values"]
+    assert [str(m.text) for m in results["messages"]] == ["hi"]
+    assert results["tools"][0].name == "search"
+    assert results["progress"] == [{"name": "progress", "step": 1}]
     assert final == {"final": True}
