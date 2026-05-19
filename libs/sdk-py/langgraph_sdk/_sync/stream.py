@@ -453,6 +453,7 @@ class SyncToolCallHandle:
         self.error: BaseException | None = None
         self._result: _BlockingResult = _BlockingResult()
         self._deltas: queue.Queue[str | None] = queue.Queue(maxsize=max_queue_size)
+        self._deltas_consumed: bool = False
 
     @property
     def output(self) -> Any:
@@ -461,7 +462,17 @@ class SyncToolCallHandle:
 
     @property
     def deltas(self) -> Iterator[str]:
-        """Iterate over tool output deltas emitted before the terminal event."""
+        """Iterate over tool output deltas emitted before the terminal event.
+
+        Raises:
+            RuntimeError: if called more than once — the underlying queue is
+                single-consumer and cannot be fanned out safely.
+        """
+        if self._deltas_consumed:
+            raise RuntimeError(
+                "SyncToolCallHandle.deltas can only be iterated by a single consumer."
+            )
+        self._deltas_consumed = True
         return self._delta_iter()
 
     def _delta_iter(self) -> Iterator[str]:

@@ -420,3 +420,28 @@ def test_sync_tool_call_handle_deltas_queue_is_bounded():
 
     handle_custom = SyncToolCallHandle(tool_call_id="tc2", name="bar", max_queue_size=8)
     assert handle_custom._deltas.maxsize == 8
+
+
+# ---------------------------------------------------------------------------
+# Fix D — enforce single consumer on SyncToolCallHandle.deltas
+# ---------------------------------------------------------------------------
+
+
+def test_sync_tool_call_handle_deltas_single_consumer_guard():
+    """Accessing `handle.deltas` a second time must raise immediately.
+
+    `_deltas` is a single-consumer queue; fanning out to multiple consumers
+    would cause each consumer to miss events already consumed by the other.
+    The property must raise before returning the iterator so the caller
+    sees the error even without iterating.
+    """
+    from langgraph_sdk._sync.stream import SyncToolCallHandle
+
+    handle = SyncToolCallHandle(tool_call_id="tc1", name="foo")
+
+    # First access: fine — returns the iterator.
+    _iter_1 = handle.deltas
+
+    # Second access: must raise immediately (before any iteration).
+    with pytest.raises(RuntimeError, match="single consumer"):
+        _ = handle.deltas
