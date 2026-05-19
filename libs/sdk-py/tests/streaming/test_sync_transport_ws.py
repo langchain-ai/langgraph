@@ -190,3 +190,24 @@ def test_sync_websocket_controller_reconnects_with_since_after_drop():
     assert second["seq"] == 2
     assert end is None
     assert orjson.loads(second_socket.sent[0])["since"] == 1
+
+
+def test_sync_close_before_iteration_closes_socket():
+    """Calling `handle.close()` before iterating events must close the socket."""
+    connect_calls: list[str] = []
+    socket = _FakeSyncWebSocket([values_event(seq=1)])
+
+    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+        _ = (url, additional_headers)
+        connect_calls.append(url)
+        return socket
+
+    with httpx.Client(base_url="http://test") as client:
+        transport = SyncProtocolWebSocketTransport(
+            client=client, thread_id="t-1", connect=connect
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+        # Close without consuming any events.
+        handle.close()
+
+    assert socket.closed

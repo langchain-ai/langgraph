@@ -62,29 +62,33 @@ class SyncProtocolWebSocketTransport:
             raise RuntimeError("Protocol transport is closed.")
         closed = False
         stream_error: BaseException | None = None
-        websocket = None
+
+        url = build_websocket_url(self._client.base_url, self._stream_path)
+        # Pre-enter the WebSocket context manager so close() can reach the socket
+        # immediately, even before the caller has started iterating events().
+        ws_cm = self._connect(
+            url,
+            additional_headers=websocket_headers(self._default_headers),
+        )
+        websocket = ws_cm.__enter__()
 
         def events() -> Iterator[Event]:
-            nonlocal stream_error, websocket
-            url = build_websocket_url(self._client.base_url, self._stream_path)
+            nonlocal stream_error
             try:
-                with self._connect(
-                    url,
-                    additional_headers=websocket_headers(self._default_headers),
-                ) as websocket:
-                    websocket.send(
-                        orjson.dumps(build_event_stream_body(params)).decode()
-                    )
-                    for raw in websocket:
-                        if closed:
-                            return
-                        payload = _decode_frame(raw)
-                        if isinstance(payload, dict):
-                            yield cast("Event", payload)
+                websocket.send(orjson.dumps(build_event_stream_body(params)).decode())
+                for raw in websocket:
+                    if closed:
+                        return
+                    payload = _decode_frame(raw)
+                    if isinstance(payload, dict):
+                        yield cast("Event", payload)
             except BaseException as exc:
                 if not closed:
                     stream_error = exc
                 raise
+            finally:
+                with contextlib.suppress(Exception):
+                    ws_cm.__exit__(None, None, None)
 
         def error() -> BaseException | None:
             return stream_error
@@ -92,9 +96,8 @@ class SyncProtocolWebSocketTransport:
         def close() -> None:
             nonlocal closed
             closed = True
-            if websocket is not None:
-                with contextlib.suppress(Exception):
-                    websocket.close()
+            with contextlib.suppress(Exception):
+                websocket.close()
 
         return SyncEventStreamHandle(events=events(), error=error, close=close)
 
