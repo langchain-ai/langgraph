@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import random
 from collections import OrderedDict
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -112,6 +113,8 @@ class StreamController:
         max_queue_size: int = 1024,
         seen_event_ids_max: int = 10_000,
         max_reconnect_attempts: int = 5,
+        reconnect_backoff_base: float = 0.1,
+        reconnect_backoff_cap: float = 2.0,
     ) -> None:
         self._transport = transport
         self._max_queue_size = max_queue_size
@@ -125,6 +128,8 @@ class StreamController:
         self._closed = False
         self._cursor: int | None = None
         self._max_reconnect_attempts = max_reconnect_attempts
+        self._reconnect_backoff_base = reconnect_backoff_base
+        self._reconnect_backoff_cap = reconnect_backoff_cap
 
     # ------------------------------------------------------------------
     # Public API
@@ -253,6 +258,14 @@ class StreamController:
         for sub in self._subscriptions.values():
             sub.queue.put_nowait(None)
 
+    async def _reconnect_sleep(self, attempt: int) -> None:
+        """Sleep with exponential backoff and jitter for reconnect attempt *attempt*."""
+        base = self._reconnect_backoff_base
+        cap = self._reconnect_backoff_cap
+        delay = min(cap, base * (2**attempt))
+        jitter = random.uniform(0, delay * 0.25)
+        await asyncio.sleep(delay + jitter)
+
     async def _reconnect_shared_stream(self) -> bool:
         """Attempt to reopen the shared stream after a transport drop.
 
@@ -262,7 +275,7 @@ class StreamController:
         base_filter = self._shared_stream_filter
         if base_filter is None:
             return False
-        for _ in range(self._max_reconnect_attempts):
+        for attempt in range(self._max_reconnect_attempts):
             if self._closed:
                 return False
             try:
@@ -273,7 +286,7 @@ class StreamController:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                await asyncio.sleep(0.05)
+                await self._reconnect_sleep(attempt)
                 continue
             self._shared_stream = new_stream
             return True
