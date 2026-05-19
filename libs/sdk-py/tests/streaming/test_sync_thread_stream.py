@@ -97,3 +97,81 @@ def test_sync_reconnect_uses_backoff_between_attempts(monkeypatch):
         assert sleep >= expected_base, (
             f"sleep[{i}]={sleep} < expected base {expected_base}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 9.3 — rotation drains buffered events from old stream
+# ---------------------------------------------------------------------------
+
+
+def test_sync_rotation_does_not_lose_buffered_events():
+    """When the shared stream rotates, old-stream events already in the queue
+    are not dropped.  _drain_and_close dispatches remaining events from the
+    old handle to subscribers before closing it."""
+    import queue
+    from collections.abc import Iterator
+    from typing import Any
+
+    from langgraph_sdk.stream.sync_controller import SyncStreamController
+    from langgraph_sdk.stream.transport.sync_http import (
+        SyncEventStreamHandle,
+        SyncProtocolSseTransport,
+    )
+    from streaming._events import values_event
+
+    event_a = values_event(seq=1, counter=1)
+
+    class _ScriptedTransport(SyncProtocolSseTransport):
+        """First call produces event_a; second call produces an empty stream."""
+
+        def open_event_stream(self, params: dict) -> SyncEventStreamHandle:  # noqa: ARG002
+            def _gen_a() -> Iterator[Any]:
+                yield event_a
+
+            def _gen_empty() -> Iterator[Any]:
+                return
+                yield  # pragma: no cover
+
+            # Alternate: first call → a, second → empty.
+            if not hasattr(self, "_call_count"):
+                self._call_count = 0
+            self._call_count += 1
+            events_gen: Iterator[Any] = (
+                _gen_a() if self._call_count == 1 else _gen_empty()
+            )
+            return SyncEventStreamHandle(
+                events=events_gen,
+                error=lambda: None,
+                close=lambda: None,
+            )
+
+    with httpx.Client(base_url="http://test") as raw:
+        transport = _ScriptedTransport(client=raw, thread_id="t-1")
+        controller = SyncStreamController(transport)
+        sub = controller.register_subscription({"channels": ["values"]})
+
+        # First reconcile — opens old stream (event_a available immediately).
+        controller.reconcile_stream({"channels": ["values"]})
+        # Do NOT start fanout; let reconcile_stream cause a rotation directly.
+
+        # Second reconcile: rotates to empty stream; drain thread handles old.
+        controller.reconcile_stream({"channels": ["values", "updates"]})
+
+        # Start fanout AFTER rotation (picks up the new empty stream).
+        controller.ensure_fanout_running()
+
+        # Allow drain thread to finish before collecting results.
+        controller.close()
+
+        received = []
+        while True:
+            try:
+                item = sub.queue.get_nowait()
+                if item is None:
+                    continue
+                received.append(item)
+            except queue.Empty:
+                break
+
+    seqs = [e.get("seq") for e in received]
+    assert 1 in seqs, f"event_a (seq=1) not received via drain; got seqs={seqs}"

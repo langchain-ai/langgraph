@@ -65,6 +65,7 @@ class SyncStreamController:
         self._max_reconnect_attempts = max_reconnect_attempts
         self._reconnect_backoff_base = reconnect_backoff_base
         self._reconnect_backoff_cap = reconnect_backoff_cap
+        self._drain_threads: set[threading.Thread] = set()
 
     def register_subscription(self, params: SubscribeParams) -> _SyncSubscription:
         with self._lock:
@@ -96,7 +97,14 @@ class SyncStreamController:
             )
             self._shared_stream_filter = new_filter
             if old_stream is not None:
-                old_stream.close()
+                drain_thread = threading.Thread(
+                    target=self._drain_and_close,
+                    args=(old_stream,),
+                    daemon=True,
+                    name="langgraph-sdk-sync-rotation-drain",
+                )
+                self._drain_threads.add(drain_thread)
+                drain_thread.start()
 
     def ensure_fanout_running(self) -> None:
         with self._lock:
@@ -178,6 +186,31 @@ class SyncStreamController:
             self._observe_event(event)
             yield event
 
+    def _drain_and_close(self, handle: SyncEventStreamHandle) -> None:
+        """Drain remaining events from an old handle before closing it.
+
+        Runs in a background thread spawned by `reconcile_stream` on rotation
+        so buffered events are not lost when the shared stream is replaced.
+        Events are dispatched to subscribers regardless of `_closed` so that
+        already-buffered events reach consumers before the handle is closed.
+        """
+        from langgraph_sdk.stream.subscription import matches_subscription
+
+        try:
+            for event in self._dedup_iter(handle.events):
+                with self._lock:
+                    subscriptions = list(self._subscriptions.values())
+                for sub in subscriptions:
+                    if matches_subscription(event, sub.params):
+                        sub.queue.put(event)
+        except Exception as err:
+            _logger.debug("rotation drain exception: %r", err)
+        finally:
+            with contextlib.suppress(Exception):
+                handle.close()
+            with self._lock:
+                self._drain_threads.discard(threading.current_thread())
+
     def _reconnect_sleep(self, attempt: int) -> None:
         """Sleep with exponential backoff + jitter before a reconnect attempt."""
         base = self._reconnect_backoff_base
@@ -228,3 +261,9 @@ class SyncStreamController:
         if thread is not None and thread.is_alive():
             with contextlib.suppress(RuntimeError):
                 thread.join(timeout=1.0)
+        with self._lock:
+            drain_threads = set(self._drain_threads)
+        for drain in drain_threads:
+            if drain.is_alive():
+                with contextlib.suppress(RuntimeError):
+                    drain.join(timeout=1.0)
