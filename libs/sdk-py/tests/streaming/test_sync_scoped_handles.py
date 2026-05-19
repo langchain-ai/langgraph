@@ -650,3 +650,61 @@ def test_sync_child_handle_inherits_max_queue_size_from_parent():
     assert grandchild._messages_inbox.maxsize == child._messages_inbox.maxsize
     assert grandchild._tools_inbox.maxsize == child._tools_inbox.maxsize
     assert grandchild._tasks_inbox.maxsize == child._tasks_inbox.maxsize
+
+
+# ---------------------------------------------------------------------------
+# Fix C: force-complete uses parent terminal status
+# ---------------------------------------------------------------------------
+
+
+def test_sync_force_complete_uses_failed_when_run_errored():
+    """If the lifecycle signals an errored run, scoped children that are still
+    'started' when the subgraphs iterator's finally block runs must be
+    force-finished as 'failed', not 'completed'."""
+    from streaming._events import lifecycle_errored_event
+
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            # No tasks_result — run errored before the child task finished.
+            lifecycle_errored_event(seq=2, error="boom"),
+        ]
+    )
+    handles: list[SyncScopedStreamHandle] = []
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            for handle in thread.subgraphs:
+                handles.append(handle)
+
+    assert len(handles) == 1
+    child = handles[0]
+    assert child.status == "failed"
+
+
+def test_sync_force_complete_uses_completed_when_run_completed():
+    """If the lifecycle signals a completed run, any subgraph child still
+    'started' at finally time is force-finished as 'completed' (normal case)."""
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            # No tasks_result — but lifecycle completed normally.
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    handles: list[SyncScopedStreamHandle] = []
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            for handle in thread.subgraphs:
+                handles.append(handle)
+
+    assert len(handles) == 1
+    child = handles[0]
+    assert child.status == "completed"

@@ -919,9 +919,24 @@ class _SyncHandleSubgraphsProjection:
         while True:
             item = self._handle._tasks_inbox.get()
             if item is None:
+                # Determine terminal status from the parent run's lifecycle result.
+                # If _run_done resolved as errored, force-complete remaining children
+                # as failed so callers see the correct terminal state.
+                terminal_status: SubgraphStatus = "completed"
+                run_done = self._handle._thread._run_done
+                if run_done is not None and run_done.done():
+                    try:
+                        result = run_done.result(timeout=0)
+                        if (
+                            isinstance(result, _RunTerminal)
+                            and result.status == "errored"
+                        ):
+                            terminal_status = "failed"
+                    except Exception:
+                        pass
                 for child in active.values():
                     if child.status == "started":
-                        child._finish("completed")
+                        child._finish(terminal_status)
                 return
             params_field = item.get("params") or {}
             namespace = _event_namespace(params_field)
@@ -1039,9 +1054,21 @@ class _SyncSubgraphsProjection:
                             active[path] = handle
                             yield handle
         finally:
+            # Determine terminal status from the run's lifecycle result.
+            # If _run_done resolved as errored, force-complete remaining children
+            # as failed so callers see the correct terminal state.
+            terminal_status: SubgraphStatus = "completed"
+            run_done = self._thread._run_done
+            if run_done is not None and run_done.done():
+                try:
+                    result = run_done.result(timeout=0)
+                    if isinstance(result, _RunTerminal) and result.status == "errored":
+                        terminal_status = "failed"
+                except Exception:
+                    pass
             for handle in active.values():
                 if handle.status == "started":
-                    handle._finish("completed")
+                    handle._finish(terminal_status)
             self._thread._unregister_subscription(sub.id)
             if root_inbox is not None:
                 root_inbox.put_nowait(None)
