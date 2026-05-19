@@ -546,7 +546,7 @@ def test_v3_streaming_sync_surface_smoke():
                 barrier.wait(timeout=10)
                 return real_reconcile(candidate_filter)
 
-            controller.reconcile_stream = _gated_reconcile  # type: ignore[method-assign]
+            controller.reconcile_stream = _gated_reconcile  # ty: ignore[invalid-assignment]
 
             results: dict[str, object] = {}
             errors: list[BaseException] = []
@@ -588,13 +588,17 @@ def test_v3_streaming_sync_surface_smoke():
             for w in workers:
                 w.join(timeout=10)
                 assert not w.is_alive(), "smoke worker thread hung"
-            controller.reconcile_stream = real_reconcile  # type: ignore[method-assign]
+            controller.reconcile_stream = real_reconcile  # ty: ignore[invalid-assignment]
             assert not errors, errors
             final = thread.output
 
     assert start == {"run_id": "run-1"}
     assert results["values"] == fake.state["values"]
-    assert [str(m.text) for m in results["messages"]] == ["hi"]
-    assert results["tools"][0].name == "search"
+    messages_result = results["messages"]
+    assert isinstance(messages_result, list)
+    assert [str(m.text) for m in messages_result] == ["hi"]  # ty: ignore[unresolved-attribute]
+    tools_result = results["tools"]
+    assert isinstance(tools_result, list)
+    assert tools_result[0].name == "search"  # ty: ignore[unresolved-attribute]
     assert results["progress"] == [{"name": "progress", "step": 1}]
     assert final == {"final": True}
