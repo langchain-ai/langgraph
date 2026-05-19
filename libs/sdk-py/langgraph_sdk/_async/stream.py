@@ -533,6 +533,10 @@ class ScopedStreamHandle:
         # descendant at dispatch time so events arrive in arrival order without
         # any drain-and-replay.
         self._descendant_handles: dict[tuple[str, ...], ScopedStreamHandle] = {}
+        # Track which inboxes have a consumer so _close_inboxes only sends a
+        # sentinel where it is needed. Inboxes with no consumer would otherwise
+        # accumulate a leaked None sentinel that is never drained.
+        self._iterated_inboxes: set[str] = set()
         self.messages = _HandleMessagesProjection(self)
         self.tool_calls = _HandleToolCallsProjection(self)
         self.subgraphs = _HandleSubgraphsProjection(self)
@@ -591,11 +595,31 @@ class ScopedStreamHandle:
         """Remove a grandchild after it reaches a terminal state."""
         self._descendant_handles.pop(path, None)
 
+    def _mark_iterated(self, kind: str) -> None:
+        """Record that an inbox has an active consumer.
+
+        If the handle is already closed (status != 'started'), immediately
+        enqueue a sentinel so the consumer's `await get()` terminates. This
+        handles sequential consumption (iterate after the handle is finished).
+
+        Must be called by each projection at the start of iteration.
+        """
+        self._iterated_inboxes.add(kind)
+        if self.status != "started":
+            # Handle already closed before this consumer started; send the
+            # sentinel now so the projection iterator can terminate.
+            getattr(self, f"_{kind}_inbox").put_nowait(None)
+
     def _close_inboxes(self) -> None:
-        """Signal EOF on all channel inboxes."""
-        self._messages_inbox.put_nowait(None)
-        self._tools_inbox.put_nowait(None)
-        self._tasks_inbox.put_nowait(None)
+        """Signal EOF only on channel inboxes that have an active consumer.
+
+        Inboxes without a consumer would accumulate a leaked None sentinel
+        that is never drained, so we skip them. For inboxes whose consumer
+        starts after this call, `_mark_iterated` sends the sentinel lazily.
+        """
+        for kind in ("messages", "tools", "tasks"):
+            if kind in self._iterated_inboxes:
+                getattr(self, f"_{kind}_inbox").put_nowait(None)
 
     def _finish(self, status: SubgraphStatus, error: str | None = None) -> None:
         if self.status != "started":
@@ -619,6 +643,7 @@ class _HandleMessagesProjection:
             AsyncChatModelStream,
         )
 
+        self._handle._mark_iterated("messages")
         active: dict[str, AsyncChatModelStream] = {}
         while True:
             item = await self._handle._messages_inbox.get()
@@ -672,6 +697,7 @@ class _HandleToolCallsProjection:
         return self._tool_calls_iter()
 
     async def _tool_calls_iter(self) -> AsyncGenerator[Any, None]:
+        self._handle._mark_iterated("tools")
         active: dict[str, ToolCallHandle] = {}
         while True:
             item = await self._handle._tools_inbox.get()
@@ -733,6 +759,7 @@ class _HandleSubgraphsProjection:
         return self._subgraphs_iter()
 
     async def _subgraphs_iter(self) -> AsyncGenerator[ScopedStreamHandle, None]:
+        self._handle._mark_iterated("tasks")
         seen: set[tuple[str, ...]] = set()
         active: dict[tuple[str, ...], ScopedStreamHandle] = {}
         scope = self._handle.path

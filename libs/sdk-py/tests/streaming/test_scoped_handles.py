@@ -534,3 +534,46 @@ async def test_force_complete_uses_completed_when_run_completed():
     assert len(handles) == 1
     child = handles[0]
     assert child.status == "completed"
+
+
+def test_close_inboxes_does_not_enqueue_on_uniterated_inboxes():
+    """_close_inboxes must not push a sentinel on inboxes that had no consumer."""
+    from unittest.mock import MagicMock
+
+    from langgraph_sdk._async.stream import ScopedStreamHandle
+
+    fake_thread = MagicMock()
+    handle = ScopedStreamHandle(
+        thread=fake_thread,
+        path=("worker:1",),
+        graph_name="worker",
+        trigger_call_id="1",
+    )
+    # No projection iterated — _close_inboxes should leave all queues empty.
+    handle._close_inboxes()
+    assert handle._messages_inbox.qsize() == 0
+    assert handle._tools_inbox.qsize() == 0
+    assert handle._tasks_inbox.qsize() == 0
+
+
+def test_close_inboxes_enqueues_sentinel_on_iterated_inboxes():
+    """_close_inboxes must push a None sentinel only on inboxes that had a consumer,
+    so projection iterators see the EOF signal."""
+    from unittest.mock import MagicMock
+
+    from langgraph_sdk._async.stream import ScopedStreamHandle
+
+    fake_thread = MagicMock()
+    handle = ScopedStreamHandle(
+        thread=fake_thread,
+        path=("worker:1",),
+        graph_name="worker",
+        trigger_call_id="1",
+    )
+    handle._mark_iterated("messages")
+    handle._close_inboxes()
+    # Only the messages inbox should have a sentinel.
+    assert handle._messages_inbox.qsize() == 1
+    assert handle._messages_inbox.get_nowait() is None
+    assert handle._tools_inbox.qsize() == 0
+    assert handle._tasks_inbox.qsize() == 0
