@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+from typing import Any
 
 import httpx
 
@@ -141,3 +143,78 @@ async def test_run_start_sets_run_seen():
             await thread.run.start(input={})
             # _run_seen is set synchronously in run.start, before awaiting the result.
             assert thread._run_seen is True
+
+
+async def test_lifecycle_clean_eof_resolves_run_done_with_errored():
+    """If the lifecycle SSE stream ends cleanly (server closes without a
+    terminal `completed` or `errored` event), `_run_done` must resolve with
+    an errored terminal so awaiters don't hang."""
+    import pytest
+
+    fake = FakeServer()
+    # Emit a non-terminal lifecycle event, then close cleanly without
+    # `completed` or `errored`.
+    fake.script([lifecycle_event(seq=0, phase="started")])
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = await asyncio.wait_for(run_done, timeout=2.0)
+    assert terminal.status == "errored"
+    assert terminal.error is not None
+    assert "ended before terminal" in str(terminal.error)
+    # Quiet unused-import warning under strict configs.
+    _ = pytest
+
+
+async def test_lifecycle_mid_iteration_error_resolves_run_done_with_error(
+    monkeypatch: Any,
+) -> None:
+    """If the transport reports an error via `handle.done` after iteration
+    exits without a terminal lifecycle event, `_run_done` propagates the
+    transport error rather than the generic clean-EOF message."""
+    from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
+
+    def synthetic_handle() -> EventStreamHandle:
+        loop = asyncio.get_running_loop()
+        ready: asyncio.Future[None] = loop.create_future()
+        ready.set_result(None)
+        done: asyncio.Future[BaseException | None] = loop.create_future()
+        done.set_result(RuntimeError("simulated transport error"))
+
+        async def empty_events() -> Any:
+            if False:
+                yield  # pragma: no cover  # make this an async generator
+            return
+
+        async def noop_close() -> None:
+            return
+
+        return EventStreamHandle(
+            events=empty_events(),
+            ready=ready,
+            done=done,
+            close=noop_close,
+        )
+
+    def patched_open(_self: ProtocolSseTransport, _params: Any) -> EventStreamHandle:
+        return synthetic_handle()
+
+    monkeypatch.setattr(ProtocolSseTransport, "open_event_stream", patched_open)
+
+    fake = FakeServer()
+    fake.script([])
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            run_done = thread._run_done
+            assert run_done is not None
+            terminal = await asyncio.wait_for(run_done, timeout=2.0)
+    assert terminal.status == "errored"
+    assert terminal.error is not None
+    assert "simulated transport error" in str(terminal.error)
+    # Quiet unused-import warnings under strict configs.
+    _ = contextlib

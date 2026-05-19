@@ -500,6 +500,30 @@ class AsyncThreadStream:
                 if self._closed:
                     return
                 self._apply_lifecycle_event(event)
+            # Why: iterator exhausted without `_run_done` being resolved by a
+            # terminal lifecycle event. Surface any transport error captured
+            # on `handle.done`, otherwise treat the clean EOF as errored so
+            # awaiters of `_run_done` (e.g. `thread.output`) don't hang.
+            err = await handle.done
+            run_done = self._run_done
+            if run_done is not None and not run_done.done():
+                if err is not None:
+                    run_done.set_result(
+                        _RunTerminal(
+                            status="errored",
+                            error=RuntimeError(f"Lifecycle transport failed: {err}"),
+                        )
+                    )
+                else:
+                    run_done.set_result(
+                        _RunTerminal(
+                            status="errored",
+                            error=RuntimeError(
+                                "lifecycle stream ended before terminal event"
+                            ),
+                        )
+                    )
+            return
         except (Exception, asyncio.CancelledError) as exc:
             # Why: advisory-only watcher. Any error (HTTP failure, malformed
             # event in `_apply_lifecycle_event`, cancellation on close) must
