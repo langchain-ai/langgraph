@@ -1555,9 +1555,23 @@ class AsyncThreadStream:
                     if self._closed:
                         return
                     self._observe_lifecycle_event(event)
-                    self._apply_lifecycle_event(event)
+                    await self._apply_lifecycle_event(event)
                 err = await handle.done
                 if err is None or isinstance(err, asyncio.CancelledError):
+                    # Clean EOF: stream ended without a terminal lifecycle
+                    # event. Resolve `_run_done` as errored so awaiters of
+                    # `thread.output` don't hang.
+                    if err is None:
+                        run_done = self._run_done
+                        if run_done is not None and not run_done.done():
+                            run_done.set_result(
+                                _RunTerminal(
+                                    status="errored",
+                                    error=RuntimeError(
+                                        "lifecycle stream ended before terminal event"
+                                    ),
+                                )
+                            )
                     return
                 reconnect_attempts += 1
                 if reconnect_attempts > self._lifecycle_max_reconnect_attempts:
