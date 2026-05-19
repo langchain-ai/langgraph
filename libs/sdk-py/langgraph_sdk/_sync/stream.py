@@ -324,8 +324,6 @@ class _SyncMessagesProjection:
                         next_event_type = next_data.get("event")
                         next_key = _message_route_key(next_data)
                         target = active.get(next_key)
-                        if target is None and len(active) == 1:
-                            target = next(iter(active.values()))
                         if target is not None:
                             target.dispatch(next_data)
                             if next_event_type in ("message-finish", "error"):
@@ -337,9 +335,9 @@ class _SyncMessagesProjection:
                 else:
                     key = _message_route_key(data)
                     stream = active.get(key)
-                    if stream is None and len(active) == 1:
-                        stream = next(iter(active.values()))
                     if stream is None:
+                        # No active stream matches this event's key. Drop rather
+                        # than silently misroute to the only remaining stream.
                         continue
                     stream.dispatch(data)
                     if event_type in ("message-finish", "error"):
@@ -409,8 +407,6 @@ def _drain_messages_inbox(
                     next_event_type = next_data.get("event")
                     next_key = _message_route_key(next_data)
                     target = active.get(next_key)
-                    if target is None and len(active) == 1:
-                        target = next(iter(active.values()))
                     if target is not None:
                         target.dispatch(next_data)
                         if next_event_type in ("message-finish", "error"):
@@ -422,9 +418,9 @@ def _drain_messages_inbox(
             else:
                 key = _message_route_key(data)
                 stream = active.get(key)
-                if stream is None and len(active) == 1:
-                    stream = next(iter(active.values()))
                 if stream is None:
+                    # No active stream matches this event's key. Drop rather
+                    # than silently misroute to the only remaining stream.
                     continue
                 stream.dispatch(data)
                 if event_type in ("message-finish", "error"):

@@ -77,9 +77,12 @@ def message_start_event(
     *,
     message_id: str = "msg-1",
     role: str = "ai",
-    run_id: str = "run-1",
+    run_id: str | None = None,
     node: str = "agent",
 ) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"langgraph_node": node}
+    if run_id is not None:
+        metadata["run_id"] = run_id
     return _base(
         seq,
         "messages",
@@ -88,7 +91,7 @@ def message_start_event(
             "event": "message-start",
             "id": message_id,
             "role": role,
-            "metadata": {"run_id": run_id, "langgraph_node": node},
+            "metadata": metadata,
         },
     )
 

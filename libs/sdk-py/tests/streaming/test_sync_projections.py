@@ -48,10 +48,10 @@ def test_sync_messages_yield_chat_model_stream():
     fake.script(
         [
             lifecycle_started_event(seq=0),
-            message_start_event(seq=1, message_id="msg-1", run_id="run-1"),
-            message_text_delta_event(seq=2, text="hi"),
-            message_text_finish_event(seq=3, text="hi"),
-            message_finish_event(seq=4),
+            message_start_event(seq=1, message_id="msg-1"),
+            message_text_delta_event(seq=2, text="hi", message_id="msg-1"),
+            message_text_finish_event(seq=3, text="hi", message_id="msg-1"),
+            message_finish_event(seq=4, message_id="msg-1"),
             lifecycle_completed_event(seq=5),
         ]
     )
@@ -128,14 +128,14 @@ def test_sync_messages_multiple_messages_are_distinct_streams():
     fake.script(
         [
             lifecycle_started_event(seq=0),
-            message_start_event(seq=1, message_id="msg-1", run_id="run-1"),
-            message_text_delta_event(seq=2, text="one"),
-            message_text_finish_event(seq=3, text="one"),
-            message_finish_event(seq=4),
-            message_start_event(seq=5, message_id="msg-2", run_id="run-2"),
-            message_text_delta_event(seq=6, text="two"),
-            message_text_finish_event(seq=7, text="two"),
-            message_finish_event(seq=8),
+            message_start_event(seq=1, message_id="msg-1"),
+            message_text_delta_event(seq=2, text="one", message_id="msg-1"),
+            message_text_finish_event(seq=3, text="one", message_id="msg-1"),
+            message_finish_event(seq=4, message_id="msg-1"),
+            message_start_event(seq=5, message_id="msg-2"),
+            message_text_delta_event(seq=6, text="two", message_id="msg-2"),
+            message_text_finish_event(seq=7, text="two", message_id="msg-2"),
+            message_finish_event(seq=8, message_id="msg-2"),
             lifecycle_completed_event(seq=9),
         ]
     )
@@ -156,7 +156,7 @@ def test_sync_messages_error_event_fails_active_stream():
         [
             lifecycle_started_event(seq=0),
             message_start_event(seq=1, message_id="msg-1"),
-            message_error_event(seq=2, message="model failed"),
+            message_error_event(seq=2, message="model failed", message_id="msg-1"),
             lifecycle_completed_event(seq=3),
         ]
     )
@@ -296,12 +296,22 @@ def test_sync_drain_messages_inbox_pre_dispatches_before_yield():
             inbox.put(
                 cast(
                     Event,
-                    message_start_event(seq=1, message_id="msg-x", run_id="run-x"),
+                    message_start_event(seq=1, message_id="msg-x"),
                 )
             )
-            inbox.put(cast(Event, message_text_delta_event(seq=2, text="hello")))
-            inbox.put(cast(Event, message_text_finish_event(seq=3, text="hello")))
-            inbox.put(cast(Event, message_finish_event(seq=4)))
+            inbox.put(
+                cast(
+                    Event,
+                    message_text_delta_event(seq=2, text="hello", message_id="msg-x"),
+                )
+            )
+            inbox.put(
+                cast(
+                    Event,
+                    message_text_finish_event(seq=3, text="hello", message_id="msg-x"),
+                )
+            )
+            inbox.put(cast(Event, message_finish_event(seq=4, message_id="msg-x")))
             inbox.put(None)  # EOF sentinel
 
             # Read text immediately inside the for loop — this requires pre-dispatch.
@@ -353,3 +363,38 @@ def test_sync_tool_calls_explicit_close_does_not_block_1s():
             elapsed = time.monotonic() - start
 
     assert elapsed < 0.2, f"tool_calls close() took {elapsed:.3f}s (expected <0.2s)"
+
+
+# ---------------------------------------------------------------------------
+# Fix B — drop len(active)==1 silent message routing fallback
+# ---------------------------------------------------------------------------
+
+
+def test_sync_messages_orphan_delta_without_matching_key_is_dropped():
+    """A delta whose message_id doesn't match any active stream must be dropped.
+
+    The old code fell back to routing the event to the only active stream when
+    `len(active) == 1`, causing orphan/mismatched deltas to silently corrupt
+    an unrelated stream's content.
+    """
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            message_start_event(seq=1, message_id="msg-A"),
+            # Delta with a mismatched message_id — must be dropped, not routed to msg-A.
+            message_text_delta_event(seq=2, text="orphan", message_id="msg-UNKNOWN"),
+            message_text_delta_event(seq=3, text="real", message_id="msg-A"),
+            message_finish_event(seq=4, message_id="msg-A"),
+            lifecycle_completed_event(seq=5),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            streams = list(thread.messages)
+
+    assert len(streams) == 1
+    # Only the correctly-keyed delta "real" must appear; "orphan" must be dropped.
+    assert str(streams[0].text) == "real"
