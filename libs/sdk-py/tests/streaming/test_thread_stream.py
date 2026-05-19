@@ -461,6 +461,61 @@ async def test_unregister_subscription_removes_from_registry():
             assert sub.id not in stream._subscriptions
 
 
+async def test_await_run_start_gate_honors_timeout():
+    """Gate must raise asyncio.TimeoutError if run.start never completes
+    within the configured timeout."""
+    import asyncio
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            # Install a never-resolving gate to simulate an in-flight
+            # run.start that will not complete within the timeout window.
+            loop = asyncio.get_running_loop()
+            thread._run_start_ready = loop.create_future()
+            with pytest.raises(asyncio.TimeoutError):
+                await thread._await_run_start_gate(timeout=0.1)
+            # Gate must still be pending after the timeout (no side effects).
+            assert thread._run_start_ready is not None
+            assert not thread._run_start_ready.done()
+
+
+async def test_await_run_start_gate_returns_when_gate_resolves_in_time():
+    """With a generous timeout and a gate that resolves promptly, the
+    gate returns without raising."""
+    import asyncio
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            loop = asyncio.get_running_loop()
+            gate: asyncio.Future[None] = loop.create_future()
+            thread._run_start_ready = gate
+            loop.call_later(0.01, lambda: gate.set_result(None))
+            await thread._await_run_start_gate(timeout=1.0)
+
+
+async def test_run_start_timeout_constructor_kwarg_forwarded_to_gate():
+    """`run_start_timeout` constructor kwarg is stored and consulted by
+    `_reconcile_stream` via `_await_run_start_gate`."""
+    import asyncio
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        stream = AsyncThreadStream(
+            http=HttpClient(raw),
+            thread_id="t-1",
+            assistant_id="agent",
+            run_start_timeout=0.1,
+        )
+        async with stream as thread:
+            loop = asyncio.get_running_loop()
+            # Install a never-resolving gate.
+            thread._run_start_ready = loop.create_future()
+            with pytest.raises(asyncio.TimeoutError):
+                # Reconcile must surface the timeout from the gate.
+                await thread._reconcile_stream({"channels": ["lifecycle"]})
+
+
 async def test_subscribe_waits_for_run_start_to_commit():
     """Subscribing before run.start commits must not race the server.
 

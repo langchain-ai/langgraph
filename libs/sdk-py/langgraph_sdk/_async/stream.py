@@ -193,12 +193,14 @@ class AsyncThreadStream:
         assistant_id: str,
         headers: Mapping[str, str] | None = None,
         max_queue_size: int = 1024,
+        run_start_timeout: float | None = None,
     ) -> None:
         self._http = http
         self._headers = dict(headers or {})
         self.thread_id = thread_id
         self.assistant_id = assistant_id
         self._max_queue_size = max_queue_size
+        self._run_start_timeout = run_start_timeout
         self._closed = False
         self._transport: ProtocolSseTransport | None = None
         self._open_handles: list[EventStreamHandle] = []
@@ -388,7 +390,7 @@ class AsyncThreadStream:
         that both old and new streams are simultaneously connected during
         rotation (enabling correct peak-count tracking and dedup correctness).
         """
-        await self._await_run_start_gate()
+        await self._await_run_start_gate(timeout=self._run_start_timeout)
         from langgraph_sdk.stream.subscription import filter_covers
 
         if self._transport is None:
@@ -461,15 +463,20 @@ class AsyncThreadStream:
             raise RuntimeError(f"Protocol error [{code}]: {message}")
         return response.get("result", {})
 
-    async def _await_run_start_gate(self) -> None:
+    async def _await_run_start_gate(self, *, timeout: float | None = None) -> None:
         """Wait for the current run.start to commit the thread server-side.
 
         No-op when no run.start is in flight. Re-raises if run.start failed.
+        Raises `asyncio.TimeoutError` if `timeout` is set and the gate does
+        not resolve in time; the gate itself is left intact for later callers.
         """
         gate = self._run_start_ready
-        if gate is None:
+        if gate is None or gate.done():
             return
-        await gate
+        if timeout is None:
+            await gate
+        else:
+            await asyncio.wait_for(asyncio.shield(gate), timeout=timeout)
 
     def _ensure_lifecycle_watcher_running(self) -> None:
         # Why: this watcher is intentionally one-shot. If it crashes, it stays
