@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import random
 from collections.abc import AsyncGenerator, AsyncIterator, Generator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
@@ -1181,6 +1182,15 @@ class AsyncThreadStream:
         self._lifecycle_watcher_handle: EventStreamHandle | None = None
         self._lifecycle_cursor: int | None = None
         self._lifecycle_max_reconnect_attempts = 5
+        # Shared-stream reconnect knobs: applied by `_fanout` after a post-ready
+        # transport drop so subscribers (messages/tools/tasks/values projections,
+        # subgraph child handles) survive a brief SSE disconnect without losing
+        # buffered events. Cursor (`_cursor`) is replayed as `since` so the
+        # server resumes from where the prior stream left off; per-event
+        # `event_id` dedup in `_dedup_iter` drops any overlap on the new stream.
+        self._shared_max_reconnect_attempts = 5
+        self._shared_reconnect_backoff_base = 0.1
+        self._shared_reconnect_backoff_cap = 2.0
         self._run_start_ready: asyncio.Future[None] | None = None
         self._run_seen: bool = False
         self._run_done: asyncio.Future[_RunTerminal] | None = None
@@ -1383,6 +1393,12 @@ class AsyncThreadStream:
         Re-read `self._shared_stream` on each outer iteration so we always
         consume from the current handle. The old handle's iterator exhausts
         naturally after `_close_after` closes it.
+
+        On a post-ready transport drop (non-cancelled error in `shared.done`),
+        attempts to reconnect up to `_shared_max_reconnect_attempts` times so
+        scoped projections (subgraph child handles, message streams) survive
+        without losing buffered events. The reconnect replays `since=<cursor>`
+        and `_dedup_iter` drops any overlap.
         """
         from langgraph_sdk.stream.subscription import matches_subscription
 
@@ -1399,19 +1415,70 @@ class AsyncThreadStream:
                         if matches_subscription(event, sub.params):
                             sub.queue.put_nowait(event)
             except Exception:
-                # Pump errored — close all subscription queues so consumers
-                # don't hang.
-                for sub in self._subscriptions.values():
-                    sub.queue.put_nowait(None)
-                raise
+                # Pump errored — fall through to error-handling/reconnect.
+                pass
             if self._shared_stream is shared:
-                # No rotation happened; stream genuinely ended.
+                # No rotation happened; the stream genuinely ended. Check
+                # `shared.done` for a post-ready drop and, if so, attempt to
+                # reconnect with `since=<cursor>` so subscribers don't lose
+                # buffered events on a transient transport failure.
+                err = await shared.done
+                if (
+                    err is not None
+                    and not isinstance(err, asyncio.CancelledError)
+                    and not self._closed
+                ):
+                    with contextlib.suppress(Exception):
+                        await shared.close()
+                    if await self._reconnect_shared_stream():
+                        continue
                 break
             # Rotation: loop again to pick up the new _shared_stream.
 
         # Terminate consumers cleanly on shutdown / stream-end.
         for sub in self._subscriptions.values():
             sub.queue.put_nowait(None)
+
+    async def _reconnect_sleep(self, attempt: int) -> None:
+        """Sleep with exponential backoff and jitter for reconnect attempt `attempt`."""
+        base = self._shared_reconnect_backoff_base
+        cap = self._shared_reconnect_backoff_cap
+        delay = min(cap, base * (2**attempt))
+        jitter = random.uniform(0, delay * 0.25)
+        await asyncio.sleep(delay + jitter)
+
+    async def _reconnect_shared_stream(self) -> bool:
+        """Attempt to reopen the shared stream after a post-ready transport drop.
+
+        Returns:
+            `True` if a new stream was opened (caller should resume fanout),
+            `False` if all reconnect attempts were exhausted or the controller
+            was closed in the meantime.
+        """
+        if self._transport is None:
+            return False
+        # Use the current shared-stream filter (latest computed union); if
+        # subscriptions changed during the drop, this picks up the new shape.
+        base_filter = self._shared_stream_filter
+        if base_filter is None:
+            return False
+        for attempt in range(self._shared_max_reconnect_attempts):
+            if self._closed:
+                return False
+            stream_params: dict[str, Any] = dict(base_filter)
+            if self._cursor is not None:
+                stream_params["since"] = self._cursor
+            try:
+                new_stream = self._transport.open_event_stream(stream_params)
+                await new_stream.ready
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                await self._reconnect_sleep(attempt)
+                continue
+            self._shared_stream = new_stream
+            return True
+        return False
 
     async def _reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
         """Ensure the shared SSE covers `candidate_filter`. Rotate if not.
