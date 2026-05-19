@@ -11,6 +11,7 @@ import httpx
 import orjson
 from langchain_protocol import Event
 from websockets.asyncio.client import connect as websocket_connect
+from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
 from langgraph_sdk.stream.transport.base import (
     EventStreamHandle,
@@ -93,6 +94,16 @@ class ProtocolWebSocketTransport:
                 if not done.done():
                     done.set_result(err)
                 raise
+            except ConnectionClosedOK:
+                # Server sent close code 1000 — clean end, not an error.
+                if not done.done():
+                    done.set_result(None)
+            except ConnectionClosedError as err:
+                # Abnormal close (1006) or application error (4xxx).
+                if not ready.done():
+                    ready.set_exception(err)
+                if not done.done():
+                    done.set_result(err)
             except Exception as err:
                 if not ready.done():
                     ready.set_exception(err)
