@@ -506,6 +506,7 @@ class ScopedStreamHandle:
         path: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
+        max_queue_size: int = 0,
     ) -> None:
         self._thread = thread
         self.path = path
@@ -514,12 +515,19 @@ class ScopedStreamHandle:
         self.trigger_call_id = trigger_call_id
         self.status: SubgraphStatus = "started"
         self.error: str | None = None
+        self._max_queue_size = max_queue_size
         # Per-channel inboxes: events captured by the parent _SubgraphsProjection
         # while the SSE was alive. Child projections drain these after the parent
         # finishes so sequential consumption works without a second SSE open.
-        self._messages_inbox: asyncio.Queue[Event | None] = asyncio.Queue()
-        self._tools_inbox: asyncio.Queue[Event | None] = asyncio.Queue()
-        self._tasks_inbox: asyncio.Queue[Event | None] = asyncio.Queue()
+        self._messages_inbox: asyncio.Queue[Event | None] = asyncio.Queue(
+            maxsize=max_queue_size
+        )
+        self._tools_inbox: asyncio.Queue[Event | None] = asyncio.Queue(
+            maxsize=max_queue_size
+        )
+        self._tasks_inbox: asyncio.Queue[Event | None] = asyncio.Queue(
+            maxsize=max_queue_size
+        )
         # Descendant handles registered by _HandleSubgraphsProjection when a
         # grandchild is discovered. _push_event fans out to each matching
         # descendant at dispatch time so events arrive in arrival order without
@@ -767,6 +775,7 @@ class _HandleSubgraphsProjection:
                 path=path,
                 graph_name=graph_name or None,
                 trigger_call_id=trigger_call_id,
+                max_queue_size=self._handle._max_queue_size,
             )
             active[path] = child_handle
             # Register so future _push_event calls on this handle fan out to the

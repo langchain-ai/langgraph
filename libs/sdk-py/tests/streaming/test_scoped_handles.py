@@ -426,3 +426,55 @@ async def test_grandchild_events_dispatched_to_correct_sibling_not_first_match()
 
     assert [m.message_id for m in gc1_messages] == ["msg-gc1"]
     assert [m.message_id for m in gc2_messages] == ["msg-gc2"]
+
+
+def test_scoped_handle_inboxes_bounded_by_max_queue_size():
+    """ScopedStreamHandle with max_queue_size=N creates queues with maxsize=N."""
+    from unittest.mock import MagicMock
+
+    from langgraph_sdk._async.stream import ScopedStreamHandle
+
+    fake_thread = MagicMock()
+    handle = ScopedStreamHandle(
+        thread=fake_thread,
+        path=("worker:1",),
+        graph_name="worker",
+        trigger_call_id="1",
+        max_queue_size=16,
+    )
+    assert handle._messages_inbox.maxsize == 16
+    assert handle._tools_inbox.maxsize == 16
+    assert handle._tasks_inbox.maxsize == 16
+
+
+async def test_child_handle_inherits_max_queue_size_from_parent():
+    """Grandchild ScopedStreamHandles created by _HandleSubgraphsProjection
+    inherit the parent's max_queue_size so all queues are consistently bounded."""
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            tasks_start_event(
+                seq=2, namespace=["worker:abc", "tool:gc1"], task_id="t-gc1"
+            ),
+            tasks_result_event(
+                seq=3, namespace=["worker:abc"], task_id="gc1", name="tool"
+            ),
+            tasks_result_event(seq=4, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=5),
+        ]
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            [child] = [h async for h in thread.subgraphs]
+            [grandchild] = [h async for h in child.subgraphs]
+
+    # Grandchild handles created by _HandleSubgraphsProjection must use the
+    # parent handle's max_queue_size (default 0 = unbounded in asyncio.Queue).
+    assert grandchild._messages_inbox.maxsize == child._messages_inbox.maxsize
+    assert grandchild._tools_inbox.maxsize == child._tools_inbox.maxsize
+    assert grandchild._tasks_inbox.maxsize == child._tasks_inbox.maxsize
