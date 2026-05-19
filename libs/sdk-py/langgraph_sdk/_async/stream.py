@@ -867,9 +867,18 @@ class _SubgraphsProjection:
                             active[path] = handle
                             yield handle
         finally:
+            # Determine terminal status from the parent run's lifecycle result.
+            # If _run_done resolved as errored, force-complete remaining children
+            # as errored so callers see the correct terminal state.
+            terminal_status: SubgraphStatus = "completed"
+            run_done = self._thread._run_done
+            if run_done is not None and run_done.done() and not run_done.cancelled():
+                result = run_done.result()
+                if isinstance(result, _RunTerminal) and result.status == "errored":
+                    terminal_status = "failed"
             for handle in active.values():
                 if handle.status == "started":
-                    handle._finish("completed")
+                    handle._finish(terminal_status)
             self._thread._unregister_subscription(sub.id)
             if root_inbox is not None:
                 root_inbox.put_nowait(None)
