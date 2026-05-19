@@ -605,6 +605,102 @@ async def test_run_respond_raises_when_ambiguous_interrupt_id():
                 await thread.run.respond("yes")
 
 
+async def test_run_respond_snapshots_interrupts_under_lock():
+    """`respond()` must take a snapshot of `interrupts` under the
+    `_interrupts_lock`, so a concurrent terminal-event clear cannot
+    invalidate the in-flight dispatch.
+
+    Verifies: if `_interrupts_lock` is held when `respond()` is called,
+    `respond()` blocks until the lock is released — proving it serializes
+    with the terminal-clear path that takes the same lock.
+    """
+    import asyncio
+
+    fake = FakeServer()
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            thread.interrupts.append(
+                {"interrupt_id": "i-1", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            # Take the interrupts lock externally to block `respond()`.
+            assert hasattr(thread, "_interrupts_lock"), (
+                "AsyncThreadStream must expose _interrupts_lock"
+            )
+            await thread._interrupts_lock.acquire()
+            try:
+                # `respond()` must NOT complete while we hold the lock.
+                task = asyncio.create_task(thread.run.respond("yes"))
+                # Give the task a chance to start and reach the lock.
+                await asyncio.sleep(0.05)
+                assert not task.done(), (
+                    "respond() should be blocked waiting for _interrupts_lock"
+                )
+            finally:
+                thread._interrupts_lock.release()
+            # Now `respond()` should complete.
+            await asyncio.wait_for(task, timeout=1.0)
+    command = fake.received_commands[-1]
+    assert command["method"] == "input.respond"
+    assert command["params"]["interrupt_id"] == "i-1"
+
+
+async def test_terminal_lifecycle_clear_acquires_interrupts_lock():
+    """Terminal lifecycle event clears `interrupts` under the same lock
+    that `respond()` uses, preventing TOCTOU between snapshot and
+    dispatch."""
+    import asyncio
+
+    fake = FakeServer()
+    # No scripted events; we exercise `_apply_lifecycle_event` directly.
+    fake.script([])
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.interrupts.append(
+                {"interrupt_id": "i-1", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            # Hold the lock; a completion event must block on it before
+            # clearing interrupts.
+            await thread._interrupts_lock.acquire()
+            try:
+                from typing import cast
+
+                from langchain_protocol import Event
+
+                terminal_event = cast(
+                    Event,
+                    {
+                        "type": "event",
+                        "method": "lifecycle",
+                        "params": {
+                            "namespace": [],
+                            "data": {"phase": "completed"},
+                        },
+                        "seq": 99,
+                        "event_id": "evt-99",
+                    },
+                )
+                clear_task = asyncio.create_task(
+                    thread._apply_lifecycle_event(terminal_event)
+                )
+                await asyncio.sleep(0.05)
+                # Interrupts must still be present — clear is blocked.
+                assert thread.interrupted is True
+                assert len(thread.interrupts) == 1
+                assert not clear_task.done()
+            finally:
+                thread._interrupts_lock.release()
+            await asyncio.wait_for(clear_task, timeout=1.0)
+            assert thread.interrupted is False
+            assert thread.interrupts == []
+
+
 async def test_run_respond_raises_when_explicit_interrupt_id_not_outstanding():
     async with httpx.AsyncClient(base_url="http://test") as raw:
         threads = ThreadsClient(HttpClient(raw))

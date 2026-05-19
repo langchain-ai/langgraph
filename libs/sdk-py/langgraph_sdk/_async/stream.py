@@ -135,37 +135,43 @@ class RunModule:
                 multiple interrupts are outstanding; or the explicit
                 `interrupt_id` doesn't match any outstanding interrupt.
         """
-        outstanding = self._owner.interrupts
-        if interrupt_id is None:
-            if len(outstanding) == 0:
-                raise RuntimeError(
-                    "thread.run.respond: no outstanding interrupt. Provide an "
-                    "explicit `interrupt_id` or wait for `thread.interrupted`."
+        # Why: take the `interrupts` snapshot AND dispatch the command under
+        # `_interrupts_lock`, so the lifecycle watcher's terminal-clear path
+        # cannot wipe `interrupts` between the snapshot and the wire send.
+        async with self._owner._interrupts_lock:
+            outstanding = list(self._owner.interrupts)
+            if interrupt_id is None:
+                if len(outstanding) == 0:
+                    raise RuntimeError(
+                        "thread.run.respond: no outstanding interrupt. Provide "
+                        "an explicit `interrupt_id` or wait for "
+                        "`thread.interrupted`."
+                    )
+                if len(outstanding) > 1:
+                    ids = [p["interrupt_id"] for p in outstanding]
+                    raise RuntimeError(
+                        f"thread.run.respond: ambiguous — {len(outstanding)} "
+                        f"outstanding interrupts ({ids!r}). Provide an explicit "
+                        "`interrupt_id`."
+                    )
+                match = outstanding[0]
+            else:
+                match = next(
+                    (p for p in outstanding if p["interrupt_id"] == interrupt_id),
+                    None,
                 )
-            if len(outstanding) > 1:
-                ids = [p["interrupt_id"] for p in outstanding]
-                raise RuntimeError(
-                    f"thread.run.respond: ambiguous — {len(outstanding)} "
-                    f"outstanding interrupts ({ids!r}). Provide an explicit "
-                    "`interrupt_id`."
-                )
-            match = outstanding[0]
-        else:
-            match = next(
-                (p for p in outstanding if p["interrupt_id"] == interrupt_id),
-                None,
-            )
-            if match is None:
-                raise RuntimeError(
-                    f"thread.run.respond: interrupt_id {interrupt_id!r} does not "
-                    "match any outstanding interrupt in `thread.interrupts`."
-                )
-        params = {
-            "interrupt_id": match["interrupt_id"],
-            "namespace": match["namespace"],
-            "response": response,
-        }
-        return await self._owner._send_command("input.respond", params)
+                if match is None:
+                    raise RuntimeError(
+                        f"thread.run.respond: interrupt_id {interrupt_id!r} does "
+                        "not match any outstanding interrupt in "
+                        "`thread.interrupts`."
+                    )
+            params = {
+                "interrupt_id": match["interrupt_id"],
+                "namespace": match["namespace"],
+                "response": response,
+            }
+            return await self._owner._send_command("input.respond", params)
 
 
 async def _close_after(handle: EventStreamHandle, *, delay: float = 0.0) -> None:
@@ -213,6 +219,11 @@ class AsyncThreadStream:
         self._fanout_task: asyncio.Task[None] | None = None
         self.interrupted: bool = False
         self.interrupts: list[InterruptPayload] = []
+        # Why: serialize the `interrupts` snapshot in `run.respond` with the
+        # terminal-clear path in `_apply_lifecycle_event`, so a respond() in
+        # flight cannot send a stale `interrupt_id` after the lifecycle watcher
+        # observes a `completed`/`errored` event.
+        self._interrupts_lock = asyncio.Lock()
         self._lifecycle_watcher_task: asyncio.Task[None] | None = None
         self._lifecycle_watcher_handle: EventStreamHandle | None = None
         self._run_start_ready: asyncio.Future[None] | None = None
@@ -506,7 +517,7 @@ class AsyncThreadStream:
             async for event in handle.events:
                 if self._closed:
                     return
-                self._apply_lifecycle_event(event)
+                await self._apply_lifecycle_event(event)
             # Why: iterator exhausted without `_run_done` being resolved by a
             # terminal lifecycle event. Surface any transport error captured
             # on `handle.done`, otherwise treat the clean EOF as errored so
@@ -548,7 +559,7 @@ class AsyncThreadStream:
                     )
             return
 
-    def _apply_lifecycle_event(self, event: Event) -> None:
+    async def _apply_lifecycle_event(self, event: Event) -> None:
         """Update `interrupted` / `interrupts` / `_run_done` from a lifecycle or input event."""
         method = event.get("method")
         if method == "input.requested":
@@ -563,8 +574,9 @@ class AsyncThreadStream:
                     if isinstance(params, dict)
                     else [],
                 }
-                self.interrupts.append(payload)
-                self.interrupted = True
+                async with self._interrupts_lock:
+                    self.interrupts.append(payload)
+                    self.interrupted = True
         elif method == "lifecycle":
             params = event.get("params") or {}
             data = params.get("data") if isinstance(params, dict) else None
@@ -576,9 +588,12 @@ class AsyncThreadStream:
             elif phase in ("completed", "errored"):
                 # Why: interrupts describe current-run state. Clear on terminal
                 # lifecycle so a subsequent run.respond() can't fire against a
-                # stale prior-run interrupt_id.
-                self.interrupted = False
-                self.interrupts = []
+                # stale prior-run interrupt_id. Acquire `_interrupts_lock` so
+                # any in-flight `run.respond` either completes against the
+                # pre-clear snapshot or sees the cleared state — never both.
+                async with self._interrupts_lock:
+                    self.interrupted = False
+                    self.interrupts = []
                 run_done = self._run_done
                 if run_done is not None and not run_done.done():
                     if phase == "errored":
