@@ -34,6 +34,13 @@ async for chunk in client.runs.stream(thread['thread_id'], agent['assistant_id']
     print(chunk)
 ```
 
+## Known Limitations
+
+- **WebSocket transport** requires `websockets>=14` and is only available on the async client (`AsyncThreadStream`). The sync client (`SyncThreadStream`) uses SSE exclusively.
+- **`thread.extensions[name]`** opens a new subscription each time the same name is accessed. Assign the projection to a variable and reuse it within a single session rather than re-indexing across multiple iterations.
+- **Sync streaming** drives the lifecycle watcher in a background thread. Long-lived sync sessions will hold that thread open until the context manager exits.
+- **Reconnect attempts** are limited to 5 by default for both the shared SSE fan-out and the lifecycle watcher. Persistent network partitions will surface as `RuntimeError` on in-flight projections.
+
 ## Thread-Centric Streaming (v3)
 
 `client.threads.stream()` returns a context manager that owns the SSE session for one
