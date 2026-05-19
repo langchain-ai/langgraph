@@ -222,3 +222,26 @@ async def test_tool_calls_explicit_aclose_does_not_block_1s():
             await gen.aclose()  # explicitly close — must not stall 1s
             elapsed = time.monotonic() - start
     assert elapsed < 0.5, f"tool_calls aclose() took {elapsed:.3f}s (expected <0.5s)"
+
+
+def test_tool_call_handle_deltas_queue_is_bounded():
+    """ToolCallHandle._deltas must be constructed with a bounded asyncio.Queue.
+
+    Unbounded queues allow producers to enqueue indefinitely, causing memory
+    growth when consumers are slow.
+    """
+    import asyncio
+
+    # We need a running loop to create the Future inside ToolCallHandle.__init__.
+    async def _make() -> None:
+        from langgraph_sdk._async.stream import ToolCallHandle
+
+        handle_default = ToolCallHandle(tool_call_id="tc1", name="foo")
+        assert handle_default._deltas.maxsize > 0, (
+            "default maxsize must be positive (bounded)"
+        )
+
+        handle_custom = ToolCallHandle(tool_call_id="tc2", name="bar", max_queue_size=8)
+        assert handle_custom._deltas.maxsize == 8
+
+    asyncio.run(_make())

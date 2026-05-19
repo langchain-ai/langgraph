@@ -392,6 +392,7 @@ class ToolCallHandle:
         name: str,
         input: Any = None,
         namespace: list[str] | None = None,
+        max_queue_size: int = 1024,
     ) -> None:
         self.tool_call_id = tool_call_id
         self.name = name
@@ -401,7 +402,7 @@ class ToolCallHandle:
         self.error: BaseException | None = None
         loop = asyncio.get_running_loop()
         self.output: asyncio.Future[Any] = loop.create_future()
-        self._deltas: asyncio.Queue[str | None] = asyncio.Queue()
+        self._deltas: asyncio.Queue[str | None] = asyncio.Queue(maxsize=max_queue_size)
 
     @property
     def deltas(self) -> AsyncIterator[str]:
