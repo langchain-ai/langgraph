@@ -117,17 +117,16 @@ def message_text_finish_event(
     *,
     text: str,
     index: int = 0,
+    message_id: str | None = None,
 ) -> dict[str, Any]:
-    return _base(
-        seq,
-        "messages",
-        namespace or [],
-        {
-            "event": "content-block-finish",
-            "index": index,
-            "content": {"type": "text", "text": text},
-        },
-    )
+    data: dict[str, Any] = {
+        "event": "content-block-finish",
+        "index": index,
+        "content": {"type": "text", "text": text},
+    }
+    if message_id is not None:
+        data["id"] = message_id
+    return _base(seq, "messages", namespace or [], data)
 
 
 def message_finish_event(
@@ -157,13 +156,12 @@ def message_error_event(
     *,
     message: str = "model failed",
     code: str = "provider_error",
+    message_id: str | None = None,
 ) -> dict[str, Any]:
-    return _base(
-        seq,
-        "messages",
-        namespace or [],
-        {"event": "error", "message": message, "code": code},
-    )
+    data: dict[str, Any] = {"event": "error", "message": message, "code": code}
+    if message_id is not None:
+        data["id"] = message_id
+    return _base(seq, "messages", namespace or [], data)
 
 
 def tool_started_event(

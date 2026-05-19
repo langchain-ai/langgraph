@@ -346,9 +346,9 @@ class _MessagesProjection:
                 else:
                     key = _message_route_key(data)
                     stream = active.get(key)
-                    if stream is None and len(active) == 1:
-                        stream = next(iter(active.values()))
                     if stream is None:
+                        # No active stream matches this event's key. Drop rather
+                        # than silently misroute to the only remaining stream.
                         continue
                     stream.dispatch(data)
                     if event_type in ("message-finish", "error"):

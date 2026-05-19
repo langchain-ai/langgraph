@@ -42,10 +42,12 @@ async def test_messages_yields_async_chat_model_stream_and_text_deltas():
         [
             lifecycle_started_event(seq=0),
             message_start_event(seq=1, message_id="msg-1", run_id="run-1"),
-            message_text_delta_event(seq=2, text="hel"),
-            message_text_delta_event(seq=3, text="lo"),
-            message_text_finish_event(seq=4, text="hello"),
-            message_finish_event(seq=5, input_tokens=2, output_tokens=3),
+            message_text_delta_event(seq=2, text="hel", message_id="msg-1"),
+            message_text_delta_event(seq=3, text="lo", message_id="msg-1"),
+            message_text_finish_event(seq=4, text="hello", message_id="msg-1"),
+            message_finish_event(
+                seq=5, input_tokens=2, output_tokens=3, message_id="msg-1"
+            ),
             lifecycle_completed_event(seq=6),
         ]
     )
@@ -79,13 +81,13 @@ async def test_messages_multiple_messages_are_distinct_streams():
         [
             lifecycle_started_event(seq=0),
             message_start_event(seq=1, message_id="msg-1", run_id="run-1"),
-            message_text_delta_event(seq=2, text="one"),
-            message_text_finish_event(seq=3, text="one"),
-            message_finish_event(seq=4),
+            message_text_delta_event(seq=2, text="one", message_id="msg-1"),
+            message_text_finish_event(seq=3, text="one", message_id="msg-1"),
+            message_finish_event(seq=4, message_id="msg-1"),
             message_start_event(seq=5, message_id="msg-2", run_id="run-2"),
-            message_text_delta_event(seq=6, text="two"),
-            message_text_finish_event(seq=7, text="two"),
-            message_finish_event(seq=8),
+            message_text_delta_event(seq=6, text="two", message_id="msg-2"),
+            message_text_finish_event(seq=7, text="two", message_id="msg-2"),
+            message_finish_event(seq=8, message_id="msg-2"),
             lifecycle_completed_event(seq=9),
         ]
     )
@@ -127,7 +129,7 @@ async def test_messages_error_event_fails_active_stream():
         [
             lifecycle_started_event(seq=0),
             message_start_event(seq=1, message_id="msg-1"),
-            message_error_event(seq=2, message="model failed"),
+            message_error_event(seq=2, message="model failed", message_id="msg-1"),
             lifecycle_completed_event(seq=3),
         ]
     )
@@ -174,3 +176,34 @@ async def test_messages_concurrent_same_run_id_route_independently():
 
     assert [s.message_id for s in streams] == ["msg-A", "msg-B"]
     assert [await s.text for s in streams] == ["alpha", "beta"]
+
+
+async def test_messages_orphan_delta_without_matching_key_is_dropped():
+    """A delta whose message_id doesn't match any active stream must be dropped.
+
+    The old code fell back to routing the event to the only active stream when
+    `len(active) == 1`, causing orphan/mismatched deltas to silently corrupt
+    an unrelated stream's content.
+    """
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            message_start_event(seq=1, message_id="msg-A"),
+            # Delta with a mismatched message_id — must be dropped, not routed to msg-A.
+            message_text_delta_event(seq=2, text="orphan", message_id="msg-UNKNOWN"),
+            message_text_delta_event(seq=3, text="real", message_id="msg-A"),
+            message_finish_event(seq=4, message_id="msg-A"),
+            lifecycle_completed_event(seq=5),
+        ]
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            streams = [msg async for msg in thread.messages]
+
+    assert len(streams) == 1
+    # Only the correctly-keyed delta "real" must appear; "orphan" must be dropped.
+    assert await streams[0].text == "real"
