@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import contextlib
+import logging
+import random
 import threading
+import time
 from dataclasses import dataclass, field
 from queue import Queue as _Queue
 from typing import Any
@@ -15,6 +18,8 @@ from langgraph_sdk.stream.transport.sync_http import (
     SyncEventStreamHandle,
     SyncProtocolSseTransport,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -38,6 +43,9 @@ class SyncStreamController:
         *,
         run_start_gate: threading.Event | None = None,
         run_start_timeout: float = _DEFAULT_RUN_START_TIMEOUT,
+        max_reconnect_attempts: int = 5,
+        reconnect_backoff_base: float = 0.1,
+        reconnect_backoff_cap: float = 10.0,
     ) -> None:
         self._transport = transport
         self._next_subscription_id = 1
@@ -54,6 +62,9 @@ class SyncStreamController:
         # run.start completes.
         self._run_start_gate = run_start_gate
         self._run_start_timeout = run_start_timeout
+        self._max_reconnect_attempts = max_reconnect_attempts
+        self._reconnect_backoff_base = reconnect_backoff_base
+        self._reconnect_backoff_cap = reconnect_backoff_cap
 
     def register_subscription(self, params: SubscribeParams) -> _SyncSubscription:
         with self._lock:
@@ -166,6 +177,42 @@ class SyncStreamController:
                 self._seen_event_ids.add(event_id)
             self._observe_event(event)
             yield event
+
+    def _reconnect_sleep(self, attempt: int) -> None:
+        """Sleep with exponential backoff + jitter before a reconnect attempt."""
+        base = self._reconnect_backoff_base
+        cap = self._reconnect_backoff_cap
+        delay = min(cap, base * (2**attempt))
+        jitter = random.uniform(0, delay * 0.25)
+        time.sleep(delay + jitter)
+
+    def _reconnect_shared_stream(self) -> bool:
+        """Attempt to reopen the shared stream after a transport drop.
+
+        Returns True if a new stream was successfully opened, False if all
+        reconnect attempts were exhausted or the controller was closed.
+        """
+        base_filter = self._shared_stream_filter
+        if base_filter is None:
+            return False
+        for attempt in range(self._max_reconnect_attempts):
+            if self._closed:
+                return False
+            if attempt > 0:
+                self._reconnect_sleep(attempt - 1)
+            try:
+                new_handle = self._transport.open_event_stream(
+                    self._filter_with_since(base_filter)
+                )
+                old = self._shared_stream
+                self._shared_stream = new_handle
+                if old is not None:
+                    with contextlib.suppress(Exception):
+                        old.close()
+                return True
+            except Exception as err:
+                _logger.debug("sync reconnect attempt %d failed: %r", attempt, err)
+        return False
 
     def close(self) -> None:
         with self._lock:
