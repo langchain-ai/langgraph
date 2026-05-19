@@ -292,8 +292,8 @@ async def test_transport_drop_exception_logged_with_type(monkeypatch, caplog):
 
     transport = _always_error_transport()
     controller = StreamController(
-        transport,
-        AsyncMock(),
+        transport=transport,
+        run_start_gate=AsyncMock(),
         max_reconnect_attempts=1,
         reconnect_backoff_base=0.0,
         reconnect_backoff_cap=0.0,
@@ -338,8 +338,8 @@ async def test_reconnect_closes_old_handle_before_opening_new(monkeypatch):
     # Transport always errors so reconnect exhausts all attempts and _fanout exits.
     transport = _always_error_transport()
     controller = StreamController(
-        transport,
-        AsyncMock(),
+        transport=transport,
+        run_start_gate=AsyncMock(),
         max_reconnect_attempts=1,
         reconnect_backoff_base=0.0,
         reconnect_backoff_cap=0.0,

@@ -191,6 +191,10 @@ class StreamController:
         """Remove a subscription from the registry. No-op if already absent."""
         self._subscriptions.pop(subscription_id, None)
 
+    # Public aliases used by tests and external callers.
+    register_subscription = _register_subscription
+    unregister_subscription = _unregister_subscription
+
     async def _subscription_iter(
         self, params: SubscribeParams
     ) -> AsyncGenerator[Event, None]:
@@ -215,6 +219,9 @@ class StreamController:
     def _ensure_fanout_running(self) -> None:
         if self._fanout_task is None or self._fanout_task.done():
             self._fanout_task = asyncio.create_task(self._fanout())
+
+    # Public alias.
+    ensure_fanout_running = _ensure_fanout_running
 
     async def _fanout(self) -> None:
         """Single consumer of the shared SSE; routes events to subscriptions.
@@ -335,6 +342,10 @@ class StreamController:
             task = asyncio.create_task(_close_after(old_stream))
             self._rotation_close_tasks.add(task)
             task.add_done_callback(self._rotation_close_tasks.discard)
+
+    async def reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
+        """Public alias for `_reconcile_stream`."""
+        return await self._reconcile_stream(candidate_filter)
 
     def _compute_current_union(
         self, extra: SubscribeParams | None = None

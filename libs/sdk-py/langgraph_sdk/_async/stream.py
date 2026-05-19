@@ -803,6 +803,7 @@ class _HandleSubgraphsProjection:
                     inbox.put_nowait(event)
 
     async def _subgraphs_iter(self) -> AsyncGenerator[ScopedStreamHandle, None]:
+        self._handle._mark_iterated("tasks")
         seen: set[tuple[str, ...]] = set()
         active: dict[tuple[str, ...], ScopedStreamHandle] = {}
         scope = self._handle.path
