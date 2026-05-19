@@ -177,7 +177,10 @@ async def test_values_projection_registers_via_delegation_not_controller_directl
             await thread.run.start(input={})
             raw_controller = thread._controller
             assert raw_controller is not None
-            controller: StreamController = raw_controller
+            # `_controller` returns `self` (AsyncThreadStream) as a duck-typed
+            # controller surface; StreamController is parallel groundwork
+            # used elsewhere.
+            controller: StreamController = raw_controller  # ty: ignore[invalid-assignment]
 
             assert len(thread._subscriptions) == 0
 
