@@ -223,12 +223,14 @@ class SyncThreadStream:
         thread_id: str,
         assistant_id: str,
         headers: Mapping[str, str] | None = None,
+        run_start_timeout: float | None = None,
         explicit_thread_id: bool = False,
     ) -> None:
         self._http = http
         self._headers = dict(headers or {})
         self.thread_id = thread_id
         self.assistant_id = assistant_id
+        self._run_start_timeout = run_start_timeout
         self._explicit_thread_id = explicit_thread_id
         self._closed = False
         self._transport: SyncProtocolSseTransport | None = None

@@ -721,6 +721,7 @@ class SyncThreadsClient:
         *,
         assistant_id: str,
         headers: Mapping[str, str] | None = None,
+        run_start_timeout: float | None = None,
     ) -> SyncThreadStream:
         """Open a v3 thread-centric streaming session.
 
@@ -739,6 +740,7 @@ class SyncThreadsClient:
             thread_id=thread_id if thread_id is not None else str(uuid.uuid4()),
             assistant_id=assistant_id,
             headers=headers,
+            run_start_timeout=run_start_timeout,
             explicit_thread_id=thread_id is not None,
         )
 
