@@ -443,6 +443,7 @@ class SyncToolCallHandle:
         name: str,
         input: Any = None,
         namespace: list[str] | None = None,
+        max_queue_size: int = 1024,
     ) -> None:
         self.tool_call_id = tool_call_id
         self.name = name
@@ -451,7 +452,7 @@ class SyncToolCallHandle:
         self.done = False
         self.error: BaseException | None = None
         self._result: _BlockingResult = _BlockingResult()
-        self._deltas: queue.Queue[str | None] = queue.Queue()
+        self._deltas: queue.Queue[str | None] = queue.Queue(maxsize=max_queue_size)
 
     @property
     def output(self) -> Any:

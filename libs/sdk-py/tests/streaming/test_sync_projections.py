@@ -398,3 +398,25 @@ def test_sync_messages_orphan_delta_without_matching_key_is_dropped():
     assert len(streams) == 1
     # Only the correctly-keyed delta "real" must appear; "orphan" must be dropped.
     assert str(streams[0].text) == "real"
+
+
+# ---------------------------------------------------------------------------
+# Fix C — bound SyncToolCallHandle._deltas via max_queue_size
+# ---------------------------------------------------------------------------
+
+
+def test_sync_tool_call_handle_deltas_queue_is_bounded():
+    """SyncToolCallHandle._deltas must be a bounded queue.
+
+    Unbounded queues allow producers to enqueue indefinitely, causing memory
+    growth when consumers are slow.
+    """
+    from langgraph_sdk._sync.stream import SyncToolCallHandle
+
+    handle_default = SyncToolCallHandle(tool_call_id="tc1", name="foo")
+    assert handle_default._deltas.maxsize > 0, (
+        "default maxsize must be positive (bounded)"
+    )
+
+    handle_custom = SyncToolCallHandle(tool_call_id="tc2", name="bar", max_queue_size=8)
+    assert handle_custom._deltas.maxsize == 8
