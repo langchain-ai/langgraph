@@ -11,7 +11,12 @@ import pytest
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._async.threads import ThreadsClient
-from streaming._events import lifecycle_event, values_event
+from streaming._events import (
+    lifecycle_completed_event,
+    lifecycle_event,
+    lifecycle_started_event,
+    values_event,
+)
 from streaming._fake_server import FakeServer
 
 
@@ -754,3 +759,50 @@ async def test_output_cancellation_does_not_trigger_new_fetch():
             )
             # No state GET should have been issued (lifecycle never completed).
             assert fake.state_request_count == 0
+
+
+async def test_output_with_timeout_raises_timeout_error():
+    """thread.output.with_timeout(s) raises TimeoutError when the lifecycle
+    never resolves within the budget."""
+    fake = FakeServer()
+    # Hold the stream open with a long inter-event delay so the lifecycle
+    # watcher parks on the iterator (mid-sleep before a non-terminal event)
+    # and `_run_done` never resolves before the timeout fires. Without the
+    # delay, a clean EOF would resolve `_run_done` with an errored
+    # `_RunTerminal` (per PR 7821) and `with_timeout` would raise that error
+    # instead of `asyncio.TimeoutError`.
+    fake.script([lifecycle_started_event(seq=0)], delay=10.0)
+    fake.set_state({"never": "reached"})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            with pytest.raises(asyncio.TimeoutError):
+                await thread.output.with_timeout(0.1)
+
+
+async def test_output_with_timeout_returns_value_when_lifecycle_completes_in_time():
+    """thread.output.with_timeout(s) returns the values dict when the lifecycle
+    resolves within the budget."""
+    fake = FakeServer()
+    fake.script([lifecycle_completed_event(seq=0)])
+    fake.set_state({"messages": ["hello"]})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            result = await thread.output.with_timeout(2.0)
+    assert result == {"messages": ["hello"]}
+
+
+async def test_output_with_timeout_returns_new_awaitable_not_self():
+    """with_timeout() returns a fresh awaitable, leaving the original untouched."""
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            bounded = thread.output.with_timeout(0.5)
+            assert bounded is not thread.output
+            assert bounded._timeout == 0.5
+            assert thread.output._timeout is None

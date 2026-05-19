@@ -188,14 +188,27 @@ class _OutputAwaitable:
     """Awaitable that waits for lifecycle completion then fetches durable thread state.
 
     Multiple awaiters share one underlying task (idempotent task caching).
+    Call `with_timeout(seconds)` to bound the wait on the lifecycle terminal.
     """
 
     def __init__(self, thread: AsyncThreadStream) -> None:
         self._thread = thread
         self._task: asyncio.Task[Any] | None = None
+        self._timeout: float | None = None
 
     def __await__(self):  # type: ignore[override]
         return self._get_task().__await__()
+
+    def with_timeout(self, timeout: float) -> _OutputAwaitable:
+        """Return a new awaitable that raises `asyncio.TimeoutError` after `timeout` seconds.
+
+        Bounds the wait for the lifecycle terminal (and only that wait); the
+        subsequent REST GET for terminal state is not bounded. Returns a
+        fresh `_OutputAwaitable` so the original `thread.output` is unaffected.
+        """
+        bounded = _OutputAwaitable(self._thread)
+        bounded._timeout = timeout
+        return bounded
 
     def _get_task(self) -> asyncio.Task[Any]:
         """Return the shared fetch task, creating it on first call.
@@ -220,7 +233,12 @@ class _OutputAwaitable:
                 return state["values"]
 
         # Normal path: wait for the lifecycle terminal signal.
-        terminal = await self._thread._wait_for_run_done()
+        if self._timeout is not None:
+            terminal = await asyncio.wait_for(
+                self._thread._wait_for_run_done(), timeout=self._timeout
+            )
+        else:
+            terminal = await self._thread._wait_for_run_done()
         if terminal.error is not None:
             raise terminal.error
         state = await self._thread._fetch_state()
