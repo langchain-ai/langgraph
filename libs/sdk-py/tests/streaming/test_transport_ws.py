@@ -583,3 +583,30 @@ async def test_ws_handshake_forwards_httpx_client_cookies():
     cookie_val = headers_dict["Cookie"]
     assert "session=abc123" in cookie_val
     assert "other=xyz" in cookie_val
+
+
+async def test_ws_server_initiated_mid_stream_close_surfaces_error():
+    """A server that closes mid-stream with code 1011 surfaces ConnectionClosedError on done."""
+    socket = _ClosingFakeAsyncWebSocket(
+        [values_event(seq=1)],
+        close_exc=ConnectionClosedError(None, Close(1011, "server error")),
+    )
+
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
+        _ = (url, additional_headers)
+        return socket
+
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        transport = ProtocolWebSocketTransport(
+            client=client, thread_id="t-1", connect=connect
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        received = [e async for e in handle.events]
+        err = await asyncio.wait_for(handle.done, timeout=1.0)
+        await handle.close()
+
+    assert received == [values_event(seq=1)]
+    assert isinstance(err, ConnectionClosedError)
