@@ -575,7 +575,25 @@ class _SyncToolCallsProjection:
                             )
                         )
         finally:
-            err = RuntimeError("Tool call stream closed before terminal tool event.")
+            # Wait briefly for lifecycle completion so that a run-error event that
+            # arrived just before stream end propagates to active handles instead of
+            # the generic "stream closed" error. Mirrors async _ToolCallsProjection.
+            run_done = self._thread._run_done
+            if run_done is not None and not run_done.done():
+                with contextlib.suppress(Exception):
+                    run_done.result(timeout=1.0)
+            terminal_err: BaseException | None = None
+            if run_done is not None and run_done.done():
+                try:
+                    terminal = run_done.result()
+                    terminal_err = terminal.error
+                except Exception:
+                    pass
+            err: BaseException = (
+                terminal_err
+                if terminal_err is not None
+                else RuntimeError("Tool call stream closed before terminal tool event.")
+            )
             for h in active.values():
                 self._thread._unregister_active_tool_call(h)
                 h._fail(err)
