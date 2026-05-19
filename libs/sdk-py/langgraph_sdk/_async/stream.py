@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncGenerator, AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, AsyncIterator, Generator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
 
@@ -184,6 +184,89 @@ async def _close_after(handle: EventStreamHandle, *, delay: float = 0.0) -> None
     await handle.close()
 
 
+class _OutputAwaitable:
+    """Awaitable that waits for lifecycle completion then fetches durable thread state.
+
+    Multiple awaiters share one underlying task (idempotent task caching).
+    """
+
+    def __init__(self, thread: AsyncThreadStream) -> None:
+        self._thread = thread
+        self._task: asyncio.Task[Any] | None = None
+
+    def __await__(self):  # type: ignore[override]
+        return self._get_task().__await__()
+
+    def _get_task(self) -> asyncio.Task[Any]:
+        """Return the shared fetch task, creating it on first call.
+
+        A cancelled task is intentionally NOT respawned: subsequent awaiters
+        receive `asyncio.CancelledError` from the shared task instead of
+        triggering a fresh REST GET. This preserves "one fetch per
+        `thread.output`" semantics even when callers wrap awaits with
+        `asyncio.wait_for` (which cancels the underlying task on timeout).
+        """
+        if self._task is None:
+            self._task = asyncio.create_task(self._fetch())
+        return self._task
+
+    async def _fetch(self) -> Any:
+        """Fetch terminal thread state, waiting for the lifecycle if needed."""
+        # Fast path: explicit thread_id with no run in flight — state may already
+        # be terminal so we can skip the lifecycle wait entirely.
+        if self._thread._can_return_existing_state_immediately():
+            state = await self._thread._fetch_state()
+            if self._thread._state_is_terminal(state):
+                return state["values"]
+
+        # Normal path: wait for the lifecycle terminal signal.
+        terminal = await self._thread._wait_for_run_done()
+        if terminal.error is not None:
+            raise terminal.error
+        state = await self._thread._fetch_state()
+        return state["values"]
+
+
+class _ValuesProjection:
+    """Typed projection for `thread.values` — yields state snapshots as they arrive.
+
+    Supports both `async for` (live stream of state snapshots) and `await`
+    (delegates to `thread.output` for the terminal state value).
+    """
+
+    def __init__(self, thread: AsyncThreadStream) -> None:
+        self._thread = thread
+
+    def __await__(self) -> Generator[Any, None, Any]:
+        return self._thread.output.__await__()
+
+    def __aiter__(self) -> AsyncIterator[Any]:
+        return self._values_iter()
+
+    async def _values_iter(self) -> AsyncGenerator[Any, None]:
+        if self._thread._transport is None:
+            raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
+        params: SubscribeParams = {"channels": ["values"]}
+        sub = self._thread._register_subscription(params)
+        try:
+            await self._thread._reconcile_stream(params)
+            self._thread._ensure_fanout_running()
+            state = await self._thread._fetch_state()
+            yield state["values"]
+            while True:
+                item = await sub.queue.get()
+                if item is None:
+                    return
+                params_field = item.get("params") or {}
+                data = (
+                    params_field.get("data") if isinstance(params_field, dict) else None
+                )
+                if data is not None:
+                    yield data
+        finally:
+            self._thread._unregister_subscription(sub.id)
+
+
 class AsyncThreadStream:
     """Async context manager for one thread's v3 streaming session.
 
@@ -200,6 +283,7 @@ class AsyncThreadStream:
         headers: Mapping[str, str] | None = None,
         max_queue_size: int = 1024,
         run_start_timeout: float | None = None,
+        explicit_thread_id: bool = False,
     ) -> None:
         self._http = http
         self._headers = dict(headers or {})
@@ -207,6 +291,7 @@ class AsyncThreadStream:
         self.assistant_id = assistant_id
         self._max_queue_size = max_queue_size
         self._run_start_timeout = run_start_timeout
+        self._explicit_thread_id = explicit_thread_id
         self._closed = False
         self._transport: ProtocolSseTransport | None = None
         self._open_handles: list[EventStreamHandle] = []
@@ -230,6 +315,17 @@ class AsyncThreadStream:
         self._run_seen: bool = False
         self._run_done: asyncio.Future[_RunTerminal] | None = None
         self.run = RunModule(self)
+        self.output = _OutputAwaitable(self)
+        self.values = _ValuesProjection(self)
+
+    @property
+    def _controller(self) -> AsyncThreadStream:
+        """Return self as the subscription controller (duck-type compatible with StreamController).
+
+        Exposes `_subscriptions` so tests can verify subscription counts via
+        `thread._controller._subscriptions` without requiring a separate controller object.
+        """
+        return self
 
     async def __aenter__(self) -> AsyncThreadStream:
         if self._closed:
@@ -558,6 +654,42 @@ class AsyncThreadStream:
                         )
                     )
             return
+
+    async def _fetch_state(self) -> dict[str, Any]:
+        """Fetch the current thread state from the REST endpoint."""
+        return await self._http.get(
+            f"/threads/{self.thread_id}/state",
+            headers=self._headers or None,
+        )
+
+    def _state_is_terminal(self, state: dict[str, Any]) -> bool:
+        """Return `True` if the thread state has no pending tasks or next nodes."""
+        return not state.get("next") and not state.get("tasks")
+
+    def _can_return_existing_state_immediately(self) -> bool:
+        """Return `True` if we can try the REST state before waiting on the lifecycle.
+
+        True only when the caller passed an explicit `thread_id` (not a minted
+        UUID) and no run has been seen yet, indicating a potential reattach to
+        an already-terminal thread.
+        """
+        return self._explicit_thread_id and not self._run_seen
+
+    async def _wait_for_run_done(self) -> _RunTerminal:
+        """Await `_run_done`, raising if the stream was never entered or no run exists.
+
+        Raises:
+            RuntimeError: stream not entered, or no run started and no explicit
+                thread_id was provided.
+        """
+        if self._run_done is None:
+            raise RuntimeError("AsyncThreadStream not entered — use async with")
+        if not self._run_seen and not self._explicit_thread_id:
+            raise RuntimeError(
+                "thread.output: no run has been started and no explicit thread_id "
+                "was provided. Call thread.run.start() first."
+            )
+        return await self._run_done
 
     async def _apply_lifecycle_event(self, event: Event) -> None:
         """Update `interrupted` / `interrupts` / `_run_done` from a lifecycle or input event."""

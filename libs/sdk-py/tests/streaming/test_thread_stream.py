@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import re
 import uuid
 
@@ -711,3 +713,44 @@ async def test_run_respond_raises_when_explicit_interrupt_id_not_outstanding():
             thread.interrupted = True
             with pytest.raises(RuntimeError, match="does not match"):
                 await thread.run.respond("yes", interrupt_id="nonexistent")
+
+
+async def test_output_cancellation_does_not_trigger_new_fetch():
+    """When the in-flight fetch task for thread.output is cancelled, a
+    subsequent call must NOT spawn a fresh task and issue a new REST GET;
+    `_get_task` should return the same (cancelled) task so awaiters share
+    the CancelledError outcome.
+    """
+    fake = FakeServer()
+    # No lifecycle terminal event — the fetch task will park on _run_done.
+    fake.script([])
+    fake.set_state({"messages": ["hello"]})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            output_awaitable = thread.output
+
+            # Materialize the underlying task and let it park on _run_done.
+            shared_task = output_awaitable._get_task()
+            for _ in range(20):
+                await asyncio.sleep(0)
+                if not shared_task.done():
+                    break
+
+            # Simulate an in-flight fetch being cancelled.
+            shared_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await shared_task
+            assert shared_task.done()
+            assert shared_task.cancelled()
+
+            # A subsequent _get_task() must return the SAME cancelled task —
+            # no respawn, no fresh REST fetch.
+            second_task = output_awaitable._get_task()
+            assert second_task is shared_task, (
+                "expected cancelled task to be reused; got a fresh task"
+            )
+            # No state GET should have been issued (lifecycle never completed).
+            assert fake.state_request_count == 0
