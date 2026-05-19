@@ -1,0 +1,389 @@
+"""Sync mirror of test_scoped_handles.py for SyncScopedStreamHandle."""
+
+from __future__ import annotations
+
+import threading
+from concurrent.futures import ThreadPoolExecutor, wait
+
+import httpx
+
+from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.stream import SyncScopedStreamHandle
+from langgraph_sdk._sync.threads import SyncThreadsClient
+from streaming._events import (
+    lifecycle_completed_event,
+    lifecycle_started_event,
+    message_finish_event,
+    message_start_event,
+    message_text_delta_event,
+    message_text_finish_event,
+    tasks_result_event,
+    tasks_start_event,
+    tool_finished_event,
+    tool_output_delta_event,
+    tool_started_event,
+)
+from streaming._sync_fake_server import SyncFakeServer
+
+# ---------------------------------------------------------------------------
+# Task 11.1: _finish idempotency — double-finish must not double-close inboxes
+# ---------------------------------------------------------------------------
+
+
+def test_sync_scoped_handle_finish_is_idempotent():
+    """Calling _finish twice must not enqueue a second sentinel on each inbox."""
+    handle = SyncScopedStreamHandle(
+        thread=None,  # ty: ignore[invalid-argument-type]
+        path=("worker:abc",),
+        graph_name="worker",
+        trigger_call_id="abc",
+    )
+    handle._finish("completed")
+    handle._finish("completed")  # second call must be a no-op
+
+    # Each inbox should have exactly one None sentinel from the first _finish.
+    assert handle._messages_inbox.qsize() == 1
+    assert handle._tools_inbox.qsize() == 1
+    assert handle._tasks_inbox.qsize() == 1
+    assert handle._messages_inbox.get_nowait() is None
+    assert handle._tools_inbox.get_nowait() is None
+    assert handle._tasks_inbox.get_nowait() is None
+
+
+def test_sync_scoped_handle_finish_concurrent_only_one_wins():
+    """Concurrent _finish calls from two threads: only the first must close inboxes."""
+    handle = SyncScopedStreamHandle(
+        thread=None,  # ty: ignore[invalid-argument-type]
+        path=("worker:abc",),
+        graph_name="worker",
+        trigger_call_id="abc",
+    )
+    barrier = threading.Barrier(2)
+    errors: list[Exception] = []
+
+    def _call_finish(status: str) -> None:
+        try:
+            barrier.wait()
+            handle._finish(status)  # ty: ignore[invalid-argument-type]
+        except Exception as exc:
+            errors.append(exc)
+
+    t1 = threading.Thread(target=_call_finish, args=("completed",))
+    t2 = threading.Thread(target=_call_finish, args=("failed",))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    assert not errors
+    # Each inbox must have exactly one None sentinel regardless of which thread won.
+    assert handle._messages_inbox.qsize() == 1
+    assert handle._tools_inbox.qsize() == 1
+    assert handle._tasks_inbox.qsize() == 1
+    assert handle.status in ("completed", "failed")
+
+
+# ---------------------------------------------------------------------------
+# Task 11.2: subgraphs yields handle with correct metadata and completion status
+# ---------------------------------------------------------------------------
+
+
+def test_sync_subgraphs_yields_handle_and_completes_status():
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            tasks_result_event(seq=2, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            handles = list(thread.subgraphs)
+
+    assert len(handles) == 1
+    handle = handles[0]
+    assert handle.path == ("worker:abc",)
+    assert handle.namespace == ["worker:abc"]
+    assert handle.graph_name == "worker"
+    assert handle.trigger_call_id == "abc"
+    assert handle.status == "completed"
+    assert handle.error is None
+
+
+def test_sync_subgraphs_failed_and_interrupted_statuses():
+    failed_fake = SyncFakeServer()
+    failed_fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            tasks_result_event(
+                seq=2, namespace=[], task_id="abc", name="worker", error="boom"
+            ),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    with httpx.Client(transport=failed_fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            [failed_handle] = list(thread.subgraphs)
+
+    interrupted_fake = SyncFakeServer()
+    interrupted_fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:def"], task_id="t-child"),
+            tasks_result_event(
+                seq=2,
+                namespace=[],
+                task_id="def",
+                name="worker",
+                interrupts=[{"value": "pause"}],
+            ),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    with httpx.Client(
+        transport=interrupted_fake.transport, base_url="http://test"
+    ) as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            [interrupted_handle] = list(thread.subgraphs)
+
+    assert failed_handle.status == "failed"
+    assert failed_handle.error == "boom"
+    assert interrupted_handle.status == "interrupted"
+    assert interrupted_handle.error is None
+
+
+# ---------------------------------------------------------------------------
+# Task 11.3: grandchild routing via _route_sibling_inboxes_to_grandchildren
+# ---------------------------------------------------------------------------
+
+
+def test_sync_subgraph_handles_are_recursive_for_grandchildren():
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            tasks_start_event(
+                seq=2,
+                namespace=["worker:abc", "tool:def"],
+                task_id="t-grandchild",
+            ),
+            tasks_result_event(
+                seq=3, namespace=["worker:abc"], task_id="def", name="tool"
+            ),
+            tasks_result_event(seq=4, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=5),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            [child] = list(thread.subgraphs)
+            [grandchild] = list(child.subgraphs)
+
+    assert child.path == ("worker:abc",)
+    assert grandchild.path == ("worker:abc", "tool:def")
+    assert grandchild.graph_name == "tool"
+    assert grandchild.trigger_call_id == "def"
+    assert grandchild.status == "completed"
+
+
+def test_sync_subgraph_messages_are_scoped_to_child_namespace():
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            message_start_event(
+                seq=2,
+                namespace=["worker:abc"],
+                message_id="msg-child",
+                run_id="run-child",
+            ),
+            message_text_delta_event(seq=3, namespace=["worker:abc"], text="child"),
+            message_text_finish_event(seq=4, namespace=["worker:abc"], text="child"),
+            message_finish_event(seq=5, namespace=["worker:abc"]),
+            tasks_result_event(seq=6, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=7),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            [handle] = list(thread.subgraphs)
+            child_messages = list(handle.messages)
+            root_messages = list(thread.messages)
+
+    assert [m.message_id for m in child_messages] == ["msg-child"]
+    assert [str(m.text) for m in child_messages] == ["child"]
+    assert root_messages == []
+
+
+def test_sync_subgraph_tool_calls_are_scoped_to_child_namespace():
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            tool_started_event(
+                seq=2,
+                namespace=["worker:abc"],
+                tool_call_id="call-child",
+                tool_name="search",
+            ),
+            tool_output_delta_event(
+                seq=3,
+                namespace=["worker:abc"],
+                tool_call_id="call-child",
+                delta="child-delta",
+            ),
+            tool_finished_event(
+                seq=4,
+                namespace=["worker:abc"],
+                tool_call_id="call-child",
+                output={"ok": True},
+            ),
+            tasks_result_event(seq=5, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=6),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            [handle] = list(thread.subgraphs)
+            child_calls = list(handle.tool_calls)
+            root_calls = list(thread.tool_calls)
+
+    assert [call.tool_call_id for call in child_calls] == ["call-child"]
+    assert list(child_calls[0].deltas) == ["child-delta"]
+    assert child_calls[0].output == {"ok": True}
+    assert root_calls == []
+
+
+# ---------------------------------------------------------------------------
+# Task 11.4: root/child cross-talk regression
+# ---------------------------------------------------------------------------
+
+
+def test_sync_root_and_child_projections_do_not_cross_talk():
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            message_start_event(seq=2, message_id="root-msg", run_id="root-run"),
+            message_text_delta_event(seq=3, text="root"),
+            message_text_finish_event(seq=4, text="root"),
+            message_finish_event(seq=5),
+            message_start_event(
+                seq=6,
+                namespace=["worker:abc"],
+                message_id="child-msg",
+                run_id="child-run",
+            ),
+            message_text_delta_event(seq=7, namespace=["worker:abc"], text="child"),
+            message_text_finish_event(seq=8, namespace=["worker:abc"], text="child"),
+            message_finish_event(seq=9, namespace=["worker:abc"]),
+            tasks_result_event(seq=10, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=11),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            [handle] = list(thread.subgraphs)
+            root_messages = list(thread.messages)
+            child_messages = list(handle.messages)
+
+    assert [m.message_id for m in root_messages] == ["root-msg"]
+    assert [str(m.text) for m in root_messages] == ["root"]
+    assert [m.message_id for m in child_messages] == ["child-msg"]
+    assert [str(m.text) for m in child_messages] == ["child"]
+
+
+def test_sync_subagents_aliases_subgraphs():
+    fake = SyncFakeServer()
+    fake.script([lifecycle_completed_event(seq=1)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            assert thread.subagents is thread.subgraphs
+            thread.run.start(input={})
+
+
+# ---------------------------------------------------------------------------
+# Task 11.5: _finish thread-safe status transition via threading.Lock
+# ---------------------------------------------------------------------------
+
+
+def _finish_one(
+    idx: int,
+    handle: SyncScopedStreamHandle,
+    barrier: threading.Barrier,
+    errors: list[Exception],
+    statuses: list[str],
+) -> None:
+    try:
+        barrier.wait()
+        status = statuses[idx % len(statuses)]
+        handle._finish(status)  # ty: ignore[invalid-argument-type]
+    except Exception as exc:
+        errors.append(exc)
+
+
+def test_sync_scoped_handle_finish_thread_safe_with_20_concurrent_calls():
+    """20 concurrent _finish calls must yield exactly one terminal status and one
+    sentinel per inbox (deterministic even under high contention).
+    """
+    n_workers = 20
+    statuses = ["completed", "failed", "interrupted"]
+
+    for _ in range(50):  # repeat to increase chance of catching races
+        handle = SyncScopedStreamHandle(
+            thread=None,  # ty: ignore[invalid-argument-type]
+            path=("worker:abc",),
+            graph_name="worker",
+            trigger_call_id="abc",
+        )
+        barrier = threading.Barrier(n_workers)
+        errors: list[Exception] = []
+
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            futures = [
+                pool.submit(_finish_one, i, handle, barrier, errors, statuses)
+                for i in range(n_workers)
+            ]
+            wait(futures)
+
+        assert not errors, f"Unexpected exception(s): {errors}"
+        # Status must be one of the valid terminal values (not "started").
+        assert handle.status in ("completed", "failed", "interrupted"), (
+            f"Unexpected status: {handle.status!r}"
+        )
+        # Each inbox must have exactly one None sentinel — the lock must ensure
+        # that _close_inboxes() is called exactly once.
+        assert handle._messages_inbox.qsize() == 1, (
+            f"messages_inbox has {handle._messages_inbox.qsize()} items (expected 1)"
+        )
+        assert handle._tools_inbox.qsize() == 1, (
+            f"tools_inbox has {handle._tools_inbox.qsize()} items (expected 1)"
+        )
+        assert handle._tasks_inbox.qsize() == 1, (
+            f"tasks_inbox has {handle._tasks_inbox.qsize()} items (expected 1)"
+        )
+        assert handle._messages_inbox.get_nowait() is None
+        assert handle._tools_inbox.get_nowait() is None
+        assert handle._tasks_inbox.get_nowait() is None

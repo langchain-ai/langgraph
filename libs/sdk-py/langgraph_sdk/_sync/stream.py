@@ -687,6 +687,7 @@ class SyncScopedStreamHandle:
         self.trigger_call_id = trigger_call_id
         self.status: SubgraphStatus = "started"
         self.error: str | None = None
+        self._finish_lock = threading.Lock()
         self._messages_inbox: queue.Queue[Event | None] = queue.Queue()
         self._tools_inbox: queue.Queue[Event | None] = queue.Queue()
         self._tasks_inbox: queue.Queue[Event | None] = queue.Queue()
@@ -712,10 +713,11 @@ class SyncScopedStreamHandle:
         self._tasks_inbox.put_nowait(None)
 
     def _finish(self, status: SubgraphStatus, error: str | None = None) -> None:
-        if self.status != "started":
-            return
-        self.status = status
-        self.error = error
+        with self._finish_lock:
+            if self.status != "started":
+                return
+            self.status = status
+            self.error = error
         self._close_inboxes()
 
 
