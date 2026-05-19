@@ -26,10 +26,19 @@ class _SyncSubscription:
     # as the field being defined (name shadowing), not the stdlib module.
 
 
+_DEFAULT_RUN_START_TIMEOUT: float = 30.0
+
+
 class SyncStreamController:
     """Owns the sync shared SSE handle, subscription registry, and fan-out thread."""
 
-    def __init__(self, transport: SyncProtocolSseTransport) -> None:
+    def __init__(
+        self,
+        transport: SyncProtocolSseTransport,
+        *,
+        run_start_gate: threading.Event | None = None,
+        run_start_timeout: float = _DEFAULT_RUN_START_TIMEOUT,
+    ) -> None:
         self._transport = transport
         self._next_subscription_id = 1
         self._subscriptions: dict[int, _SyncSubscription] = {}
@@ -40,6 +49,11 @@ class SyncStreamController:
         self._closed = False
         self._lock = threading.RLock()
         self._cursor: int | None = None
+        # When None, no gate is applied and reconcile_stream proceeds immediately.
+        # SyncThreadStream passes an un-set Event so subscriptions wait until
+        # run.start completes.
+        self._run_start_gate = run_start_gate
+        self._run_start_timeout = run_start_timeout
 
     def register_subscription(self, params: SubscribeParams) -> _SyncSubscription:
         with self._lock:
@@ -53,6 +67,10 @@ class SyncStreamController:
             self._subscriptions.pop(subscription_id, None)
 
     def reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
+        if self._run_start_gate is not None and not self._run_start_gate.wait(
+            timeout=self._run_start_timeout
+        ):
+            raise TimeoutError("Sync run.start gate timeout.")
         with self._lock:
             if (
                 self._shared_stream is not None

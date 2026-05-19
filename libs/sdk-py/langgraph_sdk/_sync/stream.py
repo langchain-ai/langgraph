@@ -111,6 +111,9 @@ class SyncRunModule:
             params["metadata"] = metadata
         result = self._owner._send_command("run.start", params)
         self._owner._run_seen = True
+        controller = self._owner._controller
+        if controller is not None and controller._run_start_gate is not None:
+            controller._run_start_gate.set()
         return result
 
     def respond(
@@ -248,7 +251,13 @@ class SyncThreadStream:
             thread_id=self.thread_id,
             headers=self._headers,
         )
-        self._controller = SyncStreamController(self._transport)
+        # Gate is unset; SyncRunModule.start (or an explicit set) clears it so
+        # that subscriptions opening before run.start block until the server
+        # has accepted the run command.
+        run_start_gate = threading.Event()
+        self._controller = SyncStreamController(
+            self._transport, run_start_gate=run_start_gate
+        )
         self._run_done = _BlockingResult()
         self._ensure_lifecycle_watcher_running()
         return self
