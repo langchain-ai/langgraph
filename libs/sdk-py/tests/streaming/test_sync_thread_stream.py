@@ -266,3 +266,87 @@ def test_sync_events_returns_fresh_iterator_each_access():
 
             # They must be independent objects (different subscription iterators).
             assert iter1 is not iter2
+
+
+# ---------------------------------------------------------------------------
+# Task 9.6 — close ordering: fail active streams before controller close
+# ---------------------------------------------------------------------------
+
+
+def test_close_unblocks_active_subscription_before_lifecycle_join():
+    """close() must send None to active subscriptions BEFORE joining the
+    lifecycle watcher thread, so callers wake quickly even if the watcher
+    thread blocks for up to 1s."""
+    import queue
+
+    # Gate that keeps the lifecycle watcher thread alive for 0.4s.
+    lifecycle_block = threading.Event()
+    unblock_times: list[float] = []
+    close_times: list[float] = []
+
+    class _BlockingFakeServer(SyncFakeServer):
+        """Lifecycle stream blocks until gate set; subscribe stream is empty."""
+
+        def _handle(self, request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path.endswith("/stream/events"):
+                import orjson
+
+                body = orjson.loads(request.content)
+                channels = body.get("channels", [])
+                if "lifecycle" in channels:
+                    # Block lifecycle watcher for 0.4s.
+                    lifecycle_block.wait(timeout=0.4)
+            return super()._handle(request)
+
+    fake = _BlockingFakeServer()
+    fake.script_sequence(
+        [
+            SyncStreamScript(events=[]),  # lifecycle watcher
+            SyncStreamScript(events=[]),  # subscribe fanout stream
+        ]
+    )
+
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads_client = SyncThreadsClient(SyncHttpClient(raw))
+        with threads_client.stream(thread_id="t-6", assistant_id="agent") as thread:
+            if thread._controller and thread._controller._run_start_gate:
+                thread._controller._run_start_gate.set()
+
+            assert thread._controller is not None
+            sub = thread._controller.register_subscription({"channels": ["values"]})
+            thread._controller.reconcile_stream({"channels": ["values"]})
+            thread._controller.ensure_fanout_running()
+
+            consumer_ready = threading.Event()
+
+            def _consume() -> None:
+                consumer_ready.set()
+                while True:
+                    try:
+                        item = sub.queue.get(timeout=2.0)
+                        if item is None:
+                            unblock_times.append(time.monotonic())
+                            return
+                    except queue.Empty:
+                        return
+
+            t = threading.Thread(target=_consume)
+            t.start()
+            consumer_ready.wait(timeout=1.0)
+            time.sleep(0.02)
+
+            close_times.append(time.monotonic())
+            # __exit__ calls close() here.
+
+    lifecycle_block.set()  # Unblock watcher so test can finish.
+    t.join(timeout=2.0)
+    assert not t.is_alive(), "consumer thread should have unblocked"
+    assert unblock_times, "consumer never received sentinel"
+    elapsed = unblock_times[0] - close_times[0]
+    # With controller closed BEFORE lifecycle join, sentinel arrives fast.
+    # Lifecycle watcher blocks for 0.4s but that should not delay the sentinel.
+    assert elapsed < 0.3, (
+        f"consumer woke {elapsed:.3f}s after close() — "
+        "controller.close() should precede the lifecycle thread join"
+    )

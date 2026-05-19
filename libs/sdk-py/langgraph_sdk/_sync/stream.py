@@ -299,6 +299,11 @@ class SyncThreadStream:
         run_done = self._run_done
         if run_done is not None and not run_done.done():
             run_done.set_exception(RuntimeError("SyncThreadStream closed"))
+        # Close the controller first so active subscription iterators receive
+        # their None sentinel immediately, before the lifecycle watcher join
+        # (which may block for up to 1s).
+        if self._controller is not None:
+            self._controller.close()
         handle = self._lifecycle_watcher_handle
         if handle is not None:
             with contextlib.suppress(Exception):
@@ -307,8 +312,6 @@ class SyncThreadStream:
         if thread is not None and thread.is_alive():
             with contextlib.suppress(RuntimeError):
                 thread.join(timeout=1.0)
-        if self._controller is not None:
-            self._controller.close()
         if self._transport is not None:
             self._transport.close()
 
