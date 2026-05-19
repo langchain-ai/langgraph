@@ -378,7 +378,7 @@ async def test_websocket_transport_feeds_async_stream_controller():
         async def gate() -> None:
             return None
 
-        controller = StreamController(transport, gate)
+        controller = StreamController(transport=transport, run_start_gate=gate)
         sub = controller.register_subscription({"channels": ["values"]})
         await controller.reconcile_stream({"channels": ["values"]})
         controller.ensure_fanout_running()
@@ -441,7 +441,7 @@ async def test_websocket_controller_reconnects_with_since_after_drop():
         async def gate() -> None:
             return None
 
-        controller = StreamController(transport, gate)
+        controller = StreamController(transport=transport, run_start_gate=gate)
         sub = controller.register_subscription({"channels": ["values"]})
         await controller.reconcile_stream({"channels": ["values"]})
         controller.ensure_fanout_running()
