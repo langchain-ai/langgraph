@@ -112,7 +112,7 @@ class StreamController:
         self,
         *,
         transport: Any,
-        run_start_gate: Callable[[], Awaitable[None]] | None = None,
+        run_start_gate: Callable[[], Awaitable[None]] | None = None,  # noqa: ARG002
         max_queue_size: int = 1024,
         seen_event_ids_max: int = 10_000,
         max_reconnect_attempts: int = 5,
