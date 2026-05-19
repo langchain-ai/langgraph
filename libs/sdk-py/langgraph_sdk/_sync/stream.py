@@ -356,7 +356,11 @@ class _SyncMessagesProjection:
                         next_event_type = next_data.get("event")
                         next_key = _message_route_key(next_data)
                         target = active.get(next_key)
-                        if target is None and next_key == "__single__" and len(active) == 1:
+                        if (
+                            target is None
+                            and next_key == "__single__"
+                            and len(active) == 1
+                        ):
                             target = next(iter(active.values()))
                         if target is not None:
                             target.dispatch(next_data)

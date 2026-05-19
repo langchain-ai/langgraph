@@ -381,7 +381,7 @@ def test_sync_run_start_sends_command():
 
 
 def test_sync_events_iterates_raw_events():
-    from streaming._events import lifecycle_completed_event, values_event
+    from streaming._events import values_event
 
     fake = SyncFakeServer()
     fake.script([values_event(seq=1, counter=1)])
