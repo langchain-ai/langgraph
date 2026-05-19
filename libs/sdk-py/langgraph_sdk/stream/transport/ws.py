@@ -34,6 +34,8 @@ class ProtocolWebSocketTransport:
         headers: Mapping[str, str] | None = None,
         connect: Callable[..., Any] = websocket_connect,
         max_queue_size: int = 1024,
+        ping_interval: float | None = 20.0,
+        ping_timeout: float | None = 20.0,
     ) -> None:
         self._client = client
         self.thread_id = thread_id
@@ -42,6 +44,8 @@ class ProtocolWebSocketTransport:
         self._default_headers: dict[str, str] = dict(headers or {})
         self._connect = connect
         self._max_queue_size = max_queue_size
+        self._ping_interval = ping_interval
+        self._ping_timeout = ping_timeout
         self._closed = False
         self._event_streams: set[asyncio.Task[None]] = set()
 
@@ -83,6 +87,8 @@ class ProtocolWebSocketTransport:
                 async with self._connect(
                     url,
                     additional_headers=handshake_headers,
+                    ping_interval=self._ping_interval,
+                    ping_timeout=self._ping_timeout,
                 ) as websocket:
                     ws_holder["ws"] = websocket
                     try:

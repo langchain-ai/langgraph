@@ -31,6 +31,8 @@ class SyncProtocolWebSocketTransport:
         stream_path: str | None = None,
         headers: Mapping[str, str] | None = None,
         connect: Callable[..., Any] = websocket_connect,
+        ping_interval: float | None = 20.0,
+        ping_timeout: float | None = 20.0,
     ) -> None:
         self._client = client
         self.thread_id = thread_id
@@ -38,6 +40,8 @@ class SyncProtocolWebSocketTransport:
         self._stream_path = stream_path or f"/threads/{thread_id}/stream/events"
         self._default_headers: dict[str, str] = dict(headers or {})
         self._connect = connect
+        self._ping_interval = ping_interval
+        self._ping_timeout = ping_timeout
         self._closed = False
 
     def send_command(self, command: dict[str, Any]) -> dict[str, Any] | None:
@@ -70,7 +74,12 @@ class SyncProtocolWebSocketTransport:
             handshake_headers.append(("Cookie", cookie_header))
         # Pre-enter the WebSocket context manager so close() can reach the socket
         # immediately, even before the caller has started iterating events().
-        ws_cm = self._connect(url, additional_headers=handshake_headers)
+        ws_cm = self._connect(
+            url,
+            additional_headers=handshake_headers,
+            ping_interval=self._ping_interval,
+            ping_timeout=self._ping_timeout,
+        )
         websocket = ws_cm.__enter__()
 
         def events() -> Iterator[Event]:

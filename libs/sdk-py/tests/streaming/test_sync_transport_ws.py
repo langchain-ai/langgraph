@@ -45,7 +45,9 @@ def test_sync_websocket_sends_subscribe_body_and_yields_events():
     event = values_event(seq=1, values={"counter": 1})
     socket = _FakeSyncWebSocket([event])
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -74,7 +76,9 @@ def test_sync_websocket_sends_subscribe_body_and_yields_events():
 def test_sync_websocket_records_post_ready_error():
     socket = _FakeSyncWebSocket([values_event(seq=1)], fail_after=1)
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -125,7 +129,9 @@ def test_sync_websocket_transport_feeds_sync_stream_controller():
         ]
     )
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -163,7 +169,9 @@ def test_sync_websocket_controller_reconnects_with_since_after_drop():
     second_socket = _FakeSyncWebSocket([values_event(seq=2, values={"counter": 2})])
     sockets = [first_socket, second_socket]
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return sockets.pop(0)
 
@@ -192,12 +200,47 @@ def test_sync_websocket_controller_reconnects_with_since_after_drop():
     assert orjson.loads(second_socket.sent[0])["since"] == 1
 
 
+def test_sync_ws_transport_forwards_ping_kwargs():
+    """ping_interval and ping_timeout are stored and forwarded to the connect callable."""
+    captured_kwargs: list[dict] = []
+    socket = _FakeSyncWebSocket([values_event(seq=1)])
+
+    def connect(
+        url: str,
+        additional_headers: list[tuple[str, str]] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        _ = (url, additional_headers)
+        captured_kwargs.append(kwargs)
+        return socket
+
+    with httpx.Client(base_url="http://test") as client:
+        transport = SyncProtocolWebSocketTransport(
+            client=client,
+            thread_id="t-1",
+            connect=connect,
+            ping_interval=15.0,
+            ping_timeout=20.0,
+        )
+        assert transport._ping_interval == 15.0
+        assert transport._ping_timeout == 20.0
+        handle = transport.open_event_stream({"channels": ["values"]})
+        list(handle.events)
+        handle.close()
+
+    assert len(captured_kwargs) == 1
+    assert captured_kwargs[0].get("ping_interval") == 15.0
+    assert captured_kwargs[0].get("ping_timeout") == 20.0
+
+
 def test_sync_ws_handshake_forwards_httpx_client_cookies():
     """Cookies on the httpx.Client are forwarded to the WS handshake."""
     captured_headers: list[list[tuple[str, str]]] = []
     socket = _FakeSyncWebSocket([values_event(seq=1)])
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = url
         captured_headers.append(list(additional_headers or []))
         return socket
@@ -222,7 +265,9 @@ def test_sync_close_before_iteration_closes_socket():
     connect_calls: list[str] = []
     socket = _FakeSyncWebSocket([values_event(seq=1)])
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         connect_calls.append(url)
         return socket

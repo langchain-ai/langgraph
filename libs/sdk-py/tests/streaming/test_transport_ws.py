@@ -91,7 +91,9 @@ async def test_ws_close_code_1000_resolves_done_with_none():
         close_exc=ConnectionClosedOK(Close(1000, "OK"), None),
     )
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -115,7 +117,9 @@ async def test_ws_close_code_1006_resolves_done_with_error():
         close_exc=ConnectionClosedError(None, Close(1006, "abnormal")),
     )
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -139,7 +143,9 @@ async def test_ws_close_code_4000_resolves_done_with_error():
         close_exc=ConnectionClosedError(None, Close(4000, "app error")),
     )
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -188,7 +194,9 @@ async def test_decode_frame_invalid_json_surfaces_error_on_done():
     """A WS frame with invalid JSON resolves `done` with a RuntimeError."""
     socket = _RawFrameAsyncWebSocket(["not-valid-json{{{"])
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -211,7 +219,9 @@ async def test_decode_frame_non_dict_surfaces_error_on_done():
     """A WS frame that is valid JSON but not an object resolves `done` with RuntimeError."""
     socket = _RawFrameAsyncWebSocket(["[1, 2, 3]"])
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -234,7 +244,9 @@ async def test_websocket_url_uses_ws_scheme_and_base_path():
     seen: list[tuple[str, list[tuple[str, str]] | None]] = []
     socket = _FakeAsyncWebSocket([])
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         seen.append((url, additional_headers))
         return socket
 
@@ -262,7 +274,9 @@ async def test_websocket_sends_subscribe_body_and_yields_events():
     event = values_event(seq=1, values={"counter": 1})
     socket = _FakeAsyncWebSocket([event])
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -292,7 +306,9 @@ async def test_websocket_sends_subscribe_body_and_yields_events():
 async def test_websocket_done_records_post_ready_error():
     socket = _FakeAsyncWebSocket([values_event(seq=1)], fail_after=1)
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -346,7 +362,9 @@ async def test_websocket_transport_feeds_async_stream_controller():
         ]
     )
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -406,7 +424,9 @@ async def test_websocket_controller_reconnects_with_since_after_drop():
     sockets = [first_socket, second_socket]
     sent_urls: list[str] = []
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = additional_headers
         sent_urls.append(url)
         return sockets.pop(0)
@@ -469,7 +489,9 @@ async def test_async_close_sends_normal_close_frame():
 
     socket = _TrackingWebSocket([])
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = (url, additional_headers)
         return socket
 
@@ -487,12 +509,59 @@ async def test_async_close_sends_normal_close_frame():
     assert explicit_1000[0], "first ws.close() call did not use code=1000"
 
 
+async def test_ws_transport_forwards_ping_kwargs():
+    """ping_interval and ping_timeout are stored and forwarded to websockets.connect."""
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        transport = ProtocolWebSocketTransport(
+            client=client,
+            thread_id="t-1",
+            ping_interval=15.0,
+            ping_timeout=20.0,
+        )
+        assert transport._ping_interval == 15.0
+        assert transport._ping_timeout == 20.0
+
+
+async def test_ws_transport_ping_kwargs_forwarded_to_connect():
+    """ping_interval and ping_timeout are passed through to the connect callable."""
+    captured_kwargs: list[dict[str, Any]] = []
+    socket = _FakeAsyncWebSocket([])
+
+    def connect(
+        url: str,
+        additional_headers: list[tuple[str, str]] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        _ = (url, additional_headers)
+        captured_kwargs.append(kwargs)
+        return socket
+
+    async with httpx.AsyncClient(base_url="http://test") as client:
+        transport = ProtocolWebSocketTransport(
+            client=client,
+            thread_id="t-1",
+            connect=connect,
+            ping_interval=15.0,
+            ping_timeout=20.0,
+        )
+        handle = transport.open_event_stream({"channels": ["values"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        _ = [e async for e in handle.events]
+        await handle.close()
+
+    assert len(captured_kwargs) == 1
+    assert captured_kwargs[0].get("ping_interval") == 15.0
+    assert captured_kwargs[0].get("ping_timeout") == 20.0
+
+
 async def test_ws_handshake_forwards_httpx_client_cookies():
     """Cookies set on the httpx.AsyncClient are forwarded to the WS handshake."""
     captured_headers: list[list[tuple[str, str]]] = []
     socket = _FakeAsyncWebSocket([])
 
-    def connect(url: str, additional_headers: list[tuple[str, str]] | None = None):
+    def connect(
+        url: str, additional_headers: list[tuple[str, str]] | None = None, **_kw: Any
+    ):
         _ = url
         captured_headers.append(list(additional_headers or []))
         return socket
