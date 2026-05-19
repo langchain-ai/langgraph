@@ -248,6 +248,8 @@ class StreamController:
                     and not isinstance(err, asyncio.CancelledError)
                     and not self._closed
                 ):
+                    with contextlib.suppress(Exception):
+                        await self._shared_stream.close()
                     reconnected = await self._reconnect_shared_stream()
                     if reconnected:
                         continue

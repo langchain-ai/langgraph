@@ -259,3 +259,54 @@ async def test_reconnect_accepts_backoff_kwargs():
     )
     assert controller._reconnect_backoff_base == 0.05
     assert controller._reconnect_backoff_cap == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Task 8.2: Close old handle before reconnect
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_reconnect_closes_old_handle_before_opening_new(monkeypatch):
+    """When the shared stream errors and triggers reconnect, the old
+    EventStreamHandle's close() must be called."""
+    # Suppress actual sleeps.
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
+
+    close_calls: list[str] = []
+
+    loop = asyncio.get_running_loop()
+    old_ready: asyncio.Future[None] = loop.create_future()
+    old_ready.set_result(None)
+    # done resolves with an error to trigger the reconnect path in _fanout.
+    old_done: asyncio.Future[BaseException | None] = loop.create_future()
+    old_done.set_result(RuntimeError("transport drop"))
+
+    async def _empty() -> AsyncIterator[Any]:
+        # Raise on the first iteration so _fanout exits the inner loop.
+        raise RuntimeError("transport drop")
+        yield  # pragma: no cover
+
+    old_handle = EventStreamHandle(
+        events=_empty(),
+        ready=old_ready,
+        done=old_done,
+        close=AsyncMock(side_effect=lambda: close_calls.append("old_closed")),
+    )
+
+    # Transport always errors so reconnect exhausts all attempts and _fanout exits.
+    transport = _always_error_transport()
+    controller = StreamController(
+        transport,
+        AsyncMock(),
+        max_reconnect_attempts=1,
+        reconnect_backoff_base=0.0,
+        reconnect_backoff_cap=0.0,
+    )
+    controller._shared_stream = old_handle
+    controller._shared_stream_filter = {"channels": ["lifecycle"]}
+
+    # _fanout drives reconnect; wait for it to complete.
+    await controller._fanout()
+
+    assert "old_closed" in close_calls
