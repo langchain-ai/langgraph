@@ -325,6 +325,219 @@ def test_sync_subagents_aliases_subgraphs():
 
 
 # ---------------------------------------------------------------------------
+# Fix A: sibling routing dispatches at push time, preserves order, fans out
+# ---------------------------------------------------------------------------
+
+
+def test_sync_scoped_handle_has_descendant_handles_dict():
+    """SyncScopedStreamHandle must expose _descendant_handles so push-time
+    fan-out can be registered without drain-and-replay."""
+    handle = SyncScopedStreamHandle(
+        thread=None,  # ty: ignore[invalid-argument-type]
+        path=("worker:abc",),
+        graph_name="worker",
+        trigger_call_id="abc",
+    )
+    # Must exist and be empty at construction.
+    assert hasattr(handle, "_descendant_handles")
+    assert isinstance(handle._descendant_handles, dict)
+    assert len(handle._descendant_handles) == 0
+
+
+def test_sync_register_descendant_forwards_buffered_events_in_order():
+    """_register_descendant must drain already-buffered events whose namespace
+    matches the new grandchild, push them into the grandchild, and preserve
+    the original arrival order in the parent inbox."""
+    from langchain_protocol import Event
+
+    parent = SyncScopedStreamHandle(
+        thread=None,  # ty: ignore[invalid-argument-type]
+        path=("worker:abc",),
+        graph_name="worker",
+        trigger_call_id="abc",
+    )
+    child_path = ("worker:abc", "tool:gc1")
+    grandchild = SyncScopedStreamHandle(
+        thread=None,  # ty: ignore[invalid-argument-type]
+        path=child_path,
+        graph_name="tool",
+        trigger_call_id="gc1",
+    )
+    # Put two grandchild-scoped events and one parent-scoped event into parent inbox.
+    evt_gc1: Event = message_start_event(
+        seq=1, namespace=list(child_path), message_id="m1", run_id="r1"
+    )  # ty: ignore[invalid-assignment]
+    evt_gc2: Event = message_start_event(
+        seq=2, namespace=list(child_path), message_id="m2", run_id="r2"
+    )  # ty: ignore[invalid-assignment]
+    evt_parent: Event = message_start_event(
+        seq=3, namespace=list(parent.path), message_id="m3", run_id="r3"
+    )  # ty: ignore[invalid-assignment]
+    parent._messages_inbox.put_nowait(evt_gc1)
+    parent._messages_inbox.put_nowait(evt_parent)
+    parent._messages_inbox.put_nowait(evt_gc2)
+
+    parent._register_descendant(grandchild)
+
+    # Grandchild inbox must have exactly the two grandchild events.
+    assert grandchild._messages_inbox.qsize() == 2
+    first = grandchild._messages_inbox.get_nowait()
+    second = grandchild._messages_inbox.get_nowait()
+    assert isinstance(first, dict) and isinstance(second, dict)
+    assert (first.get("params") or {}).get("data", {}).get("id") == "m1"
+    assert (second.get("params") or {}).get("data", {}).get("id") == "m2"
+
+    # Parent inbox must still contain all 3 events in original order.
+    assert parent._messages_inbox.qsize() == 3
+    items = [parent._messages_inbox.get_nowait() for _ in range(3)]
+    ids = [
+        (i.get("params") or {}).get("data", {}).get("id")
+        if isinstance(i, dict)
+        else None
+        for i in items
+    ]
+    assert ids == ["m1", "m3", "m2"]
+
+
+def test_sync_grandchild_sibling_routing_preserves_event_order():
+    """Events enqueued in a child handle's _messages_inbox before a grandchild
+    is discovered via child.subgraphs must be delivered in arrival order."""
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            # Grandchild messages arrive *before* grandchild tasks-start.
+            message_start_event(
+                seq=2,
+                namespace=["worker:abc", "tool:gc1"],
+                message_id="msg-E1",
+                run_id="r1",
+            ),
+            message_text_delta_event(
+                seq=3, namespace=["worker:abc", "tool:gc1"], text="E1"
+            ),
+            message_text_finish_event(
+                seq=4, namespace=["worker:abc", "tool:gc1"], text="E1"
+            ),
+            message_finish_event(seq=5, namespace=["worker:abc", "tool:gc1"]),
+            message_start_event(
+                seq=6,
+                namespace=["worker:abc", "tool:gc1"],
+                message_id="msg-E2",
+                run_id="r2",
+            ),
+            message_text_delta_event(
+                seq=7, namespace=["worker:abc", "tool:gc1"], text="E2"
+            ),
+            message_text_finish_event(
+                seq=8, namespace=["worker:abc", "tool:gc1"], text="E2"
+            ),
+            message_finish_event(seq=9, namespace=["worker:abc", "tool:gc1"]),
+            message_start_event(
+                seq=10,
+                namespace=["worker:abc", "tool:gc1"],
+                message_id="msg-E3",
+                run_id="r3",
+            ),
+            message_text_delta_event(
+                seq=11, namespace=["worker:abc", "tool:gc1"], text="E3"
+            ),
+            message_text_finish_event(
+                seq=12, namespace=["worker:abc", "tool:gc1"], text="E3"
+            ),
+            message_finish_event(seq=13, namespace=["worker:abc", "tool:gc1"]),
+            # Grandchild tasks-start arrives *after* its messages.
+            tasks_start_event(
+                seq=14,
+                namespace=["worker:abc", "tool:gc1"],
+                task_id="t-grandchild",
+            ),
+            tasks_result_event(
+                seq=15, namespace=["worker:abc"], task_id="gc1", name="tool"
+            ),
+            tasks_result_event(seq=16, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=17),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            [child] = list(thread.subgraphs)
+            [grandchild] = list(child.subgraphs)
+            gc_messages = list(grandchild.messages)
+
+    assert [m.message_id for m in gc_messages] == ["msg-E1", "msg-E2", "msg-E3"]
+    texts = [str(m.text) for m in gc_messages]
+    assert texts == ["E1", "E2", "E3"]
+
+
+def test_sync_grandchild_events_dispatched_to_correct_sibling():
+    """When two sibling grandchildren exist, messages scoped to one grandchild
+    must not bleed into the other grandchild's inbox."""
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            tasks_start_event(
+                seq=2, namespace=["worker:abc", "tool:gc1"], task_id="t-gc1"
+            ),
+            tasks_start_event(
+                seq=3, namespace=["worker:abc", "tool:gc2"], task_id="t-gc2"
+            ),
+            message_start_event(
+                seq=4,
+                namespace=["worker:abc", "tool:gc1"],
+                message_id="msg-gc1",
+                run_id="ra",
+            ),
+            message_text_delta_event(
+                seq=5, namespace=["worker:abc", "tool:gc1"], text="GC1"
+            ),
+            message_text_finish_event(
+                seq=6, namespace=["worker:abc", "tool:gc1"], text="GC1"
+            ),
+            message_finish_event(seq=7, namespace=["worker:abc", "tool:gc1"]),
+            message_start_event(
+                seq=8,
+                namespace=["worker:abc", "tool:gc2"],
+                message_id="msg-gc2",
+                run_id="rb",
+            ),
+            message_text_delta_event(
+                seq=9, namespace=["worker:abc", "tool:gc2"], text="GC2"
+            ),
+            message_text_finish_event(
+                seq=10, namespace=["worker:abc", "tool:gc2"], text="GC2"
+            ),
+            message_finish_event(seq=11, namespace=["worker:abc", "tool:gc2"]),
+            tasks_result_event(
+                seq=12, namespace=["worker:abc"], task_id="gc1", name="tool"
+            ),
+            tasks_result_event(
+                seq=13, namespace=["worker:abc"], task_id="gc2", name="tool"
+            ),
+            tasks_result_event(seq=14, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=15),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            [child] = list(thread.subgraphs)
+            grandchildren = list(child.subgraphs)
+            by_path = {h.path: h for h in grandchildren}
+            gc1_messages = list(by_path[("worker:abc", "tool:gc1")].messages)
+            gc2_messages = list(by_path[("worker:abc", "tool:gc2")].messages)
+
+    assert [m.message_id for m in gc1_messages] == ["msg-gc1"]
+    assert [m.message_id for m in gc2_messages] == ["msg-gc2"]
+
+
+# ---------------------------------------------------------------------------
 # Task 11.5: _finish thread-safe status transition via threading.Lock
 # ---------------------------------------------------------------------------
 
