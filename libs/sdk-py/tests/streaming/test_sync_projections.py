@@ -309,3 +309,47 @@ def test_sync_drain_messages_inbox_pre_dispatches_before_yield():
                 collected_texts.append(str(stream.text))
 
     assert collected_texts == ["hello"]
+
+
+# ---------------------------------------------------------------------------
+# Fix A — remove blocking 1s wait in tool_calls iterator finally
+# ---------------------------------------------------------------------------
+
+
+def test_sync_tool_calls_explicit_close_does_not_block_1s():
+    """Closing the tool_calls iterator must return in <200ms even without a terminal event.
+
+    The prior finally block called `run_done.result(timeout=1.0)` unconditionally,
+    causing a mandatory 1-second stall whenever the caller breaks out of the
+    iterator before a lifecycle terminal event arrives.
+    """
+    fake = SyncFakeServer()
+    # Script has a started lifecycle and one tool, but NO terminal lifecycle event.
+    # If the blocking wait is present, the iterator's finally will stall for 1s.
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tool_started_event(seq=1, tool_call_id="call-1"),
+        ]
+    )
+    import time
+    from collections.abc import Generator
+    from typing import cast
+
+    from langgraph_sdk._sync.stream import SyncToolCallHandle
+
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            gen = cast(
+                Generator[SyncToolCallHandle, None, None],
+                thread.tool_calls._tool_calls_iter(),
+            )
+            _handle = next(gen)  # receive the one tool-started handle
+            start = time.monotonic()
+            # Explicitly close the generator — must not stall 1s.
+            gen.close()
+            elapsed = time.monotonic() - start
+
+    assert elapsed < 0.2, f"tool_calls close() took {elapsed:.3f}s (expected <0.2s)"

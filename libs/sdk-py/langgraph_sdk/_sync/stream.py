@@ -607,13 +607,12 @@ class _SyncToolCallsProjection:
                             )
                         )
         finally:
-            # Wait briefly for lifecycle completion so that a run-error event that
-            # arrived just before stream end propagates to active handles instead of
-            # the generic "stream closed" error. Mirrors async _ToolCallsProjection.
+            # Read terminal error from _run_done if it is already resolved.
+            # We do NOT block here: callers who need a terminal observation
+            # should access `thread.output` directly. Blocking in iterator
+            # teardown would stall every early break or exception exit for
+            # up to the full wait timeout (previously 1 s).
             run_done = self._thread._run_done
-            if run_done is not None and not run_done.done():
-                with contextlib.suppress(Exception):
-                    run_done.result(timeout=1.0)
             terminal_err: BaseException | None = None
             if run_done is not None and run_done.done():
                 try:
