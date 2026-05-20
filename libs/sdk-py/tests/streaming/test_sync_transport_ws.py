@@ -65,9 +65,13 @@ def test_sync_websocket_sends_subscribe_body_and_yields_events():
         handle.close()
 
     assert orjson.loads(socket.sent[0]) == {
-        "channels": ["values"],
-        "namespaces": [[]],
-        "since": 7,
+        "id": 1,
+        "method": "subscription.subscribe",
+        "params": {
+            "channels": ["values"],
+            "namespaces": [[]],
+            "since": 7,
+        },
     }
     assert received == [event]
     assert err is None
@@ -197,7 +201,7 @@ def test_sync_websocket_controller_reconnects_with_since_after_drop():
     assert first["seq"] == 1
     assert second["seq"] == 2
     assert end is None
-    assert orjson.loads(second_socket.sent[0])["since"] == 1
+    assert orjson.loads(second_socket.sent[0])["params"]["since"] == 1
 
 
 def test_sync_ws_transport_forwards_ping_kwargs():

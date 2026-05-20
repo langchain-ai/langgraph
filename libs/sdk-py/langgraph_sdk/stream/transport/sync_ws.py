@@ -85,7 +85,17 @@ class SyncProtocolWebSocketTransport:
         def events() -> Iterator[Event]:
             nonlocal stream_error
             try:
-                websocket.send(orjson.dumps(build_event_stream_body(params)).decode())
+                # Wrap the initial subscribe in a ``subscription.subscribe``
+                # Protocol command envelope so the server's WS endpoint
+                # (see ``langgraph-api`` ``api/event_streaming.py``
+                # ``_thread_websocket``) accepts it. Bare subscribe bodies
+                # are rejected with ``invalid_argument``.
+                subscribe_command = {
+                    "id": 1,
+                    "method": "subscription.subscribe",
+                    "params": build_event_stream_body(params),
+                }
+                websocket.send(orjson.dumps(subscribe_command).decode())
                 for raw in websocket:
                     if closed:
                         return
