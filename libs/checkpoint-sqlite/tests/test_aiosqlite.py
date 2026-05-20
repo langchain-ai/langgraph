@@ -1,3 +1,6 @@
+import subprocess
+import sys
+import textwrap
 from typing import Any
 
 import pytest
@@ -188,3 +191,51 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_sync_put_methods_raise_instead_of_deadlocking_in_event_loop(
+        self,
+    ) -> None:
+        script = textwrap.dedent(
+            """
+            import asyncio
+            import sys
+
+            sys.path.insert(0, ".")
+
+            from langgraph.checkpoint.base import empty_checkpoint
+            from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+
+            async def main() -> None:
+                async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+                    await saver.setup()
+                    config = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
+
+                    try:
+                        saver.put(config, empty_checkpoint(), {}, {})
+                    except asyncio.InvalidStateError:
+                        pass
+                    else:
+                        raise AssertionError("put() should raise InvalidStateError")
+
+                    try:
+                        saver.put_writes(config, [("channel", "value")], "task-1")
+                    except asyncio.InvalidStateError:
+                        pass
+                    else:
+                        raise AssertionError("put_writes() should raise InvalidStateError")
+
+
+            asyncio.run(main())
+            """
+        )
+
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            cwd=".",
+            timeout=5,
+        )
+
+        assert completed.returncode == 0, completed.stderr or completed.stdout
