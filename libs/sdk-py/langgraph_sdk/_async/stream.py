@@ -1441,6 +1441,24 @@ class AsyncThreadStream:
             handle._fail(err)
         self._active_tool_calls.clear()
 
+    def _signal_paused(self) -> None:
+        """Wake every active projection iterator on interrupt (run pause).
+
+        Pushes the terminal sentinel (`None`) into every subscription queue
+        and the root messages inbox if active. Iterators see `None` and
+        return; the shared SSE keeps running so re-iteration after
+        `run.respond(...)` registers a fresh subscription and resumes.
+        """
+        # On a saturated queue the consumer is already behind; the iterator
+        # will still terminate when it drains to this point.
+        for sub in list(self._subscriptions.values()):
+            with contextlib.suppress(asyncio.QueueFull):
+                sub.queue.put_nowait(None)
+        root_inbox = self._root_messages_inbox
+        if root_inbox is not None:
+            with contextlib.suppress(asyncio.QueueFull):
+                root_inbox.put_nowait(None)
+
     def observe_applied_through_seq(self, seq: Any) -> None:
         """Advance the reconnect cursor from a command response meta sequence."""
         if isinstance(seq, int) and (self._cursor is None or seq > self._cursor):
@@ -1821,17 +1839,27 @@ class AsyncThreadStream:
                     else [],
                 }
                 async with self._interrupts_lock:
+                    was_interrupted = self.interrupted
                     self.interrupts.append(payload)
                     self.interrupted = True
+                # On the rising edge of `interrupted`, push the terminal
+                # sentinel into every active projection subscription so their
+                # iterators exit cleanly. The run is paused — not done — so
+                # the shared SSE and fanout keep running; a subsequent
+                # `async for snap in thread.values:` (or any other
+                # projection) registers a fresh subscription and resumes
+                # iteration once the consumer calls `run.respond(...)`.
+                if not was_interrupted:
+                    self._signal_paused()
         elif method == "lifecycle":
             params = event.get("params") or {}
             data = params.get("data") if isinstance(params, dict) else None
-            phase = data.get("phase") if isinstance(data, dict) else None
+            phase = data.get("event") if isinstance(data, dict) else None
             if phase in ("started", "running"):
                 # Mark that we have observed an active run so thread.output
                 # knows a run exists (handles reattach without run.start).
                 self._run_seen = True
-            elif phase in ("completed", "errored"):
+            elif phase in ("completed", "failed"):
                 # Why: interrupts describe current-run state. Clear on terminal
                 # lifecycle so a subsequent run.respond() can't fire against a
                 # stale prior-run interrupt_id. Acquire `_interrupts_lock` so
@@ -1842,7 +1870,7 @@ class AsyncThreadStream:
                     self.interrupts = []
                 run_done = self._run_done
                 if run_done is not None and not run_done.done():
-                    if phase == "errored":
+                    if phase == "failed":
                         error_msg = (
                             data.get("error") if isinstance(data, dict) else None
                         )

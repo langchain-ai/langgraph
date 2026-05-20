@@ -757,7 +757,7 @@ async def test_terminal_lifecycle_clear_acquires_interrupts_lock():
                         "method": "lifecycle",
                         "params": {
                             "namespace": [],
-                            "data": {"phase": "completed"},
+                            "data": {"event": "completed"},
                         },
                         "seq": 99,
                         "event_id": "evt-99",

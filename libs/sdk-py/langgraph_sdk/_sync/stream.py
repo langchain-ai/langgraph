@@ -1404,6 +1404,20 @@ class SyncThreadStream:
             handle._fail(err)
         self._active_tool_calls.clear()
 
+    def _signal_paused(self) -> None:
+        """Wake every active projection iterator on interrupt (run pause).
+
+        Delegates to the shared controller (subscription queues) and also
+        signals the root messages inbox if active. The shared SSE keeps
+        running so re-iteration after `run.respond(...)` registers a fresh
+        subscription and resumes.
+        """
+        if self._controller is not None:
+            self._controller.signal_paused()
+        root_inbox = self._root_messages_inbox
+        if root_inbox is not None:
+            root_inbox.put(None)
+
     def subscribe(
         self,
         channels: list[str],
@@ -1569,20 +1583,30 @@ class SyncThreadStream:
                     if isinstance(params, dict)
                     else [],
                 }
+                was_interrupted = self.interrupted
                 self.interrupts.append(payload)
                 self.interrupted = True
+                # On the rising edge of `interrupted`, push the terminal
+                # sentinel into every active projection subscription so their
+                # iterators exit cleanly. The run is paused — not done — so
+                # the shared SSE and fanout keep running; a subsequent
+                # `for snap in thread.values:` (or any other projection)
+                # registers a fresh subscription and resumes iteration once
+                # the consumer calls `run.respond(...)`.
+                if not was_interrupted:
+                    self._signal_paused()
         elif method == "lifecycle":
             params = event.get("params") or {}
             data = params.get("data") if isinstance(params, dict) else None
-            phase = data.get("phase") if isinstance(data, dict) else None
+            phase = data.get("event") if isinstance(data, dict) else None
             if phase in ("started", "running"):
                 self._run_seen = True
-            elif phase in ("completed", "errored"):
+            elif phase in ("completed", "failed"):
                 self.interrupted = False
                 self.interrupts = []
                 run_done = self._run_done
                 if run_done is not None and not run_done.done():
-                    if phase == "errored":
+                    if phase == "failed":
                         error_msg = (
                             data.get("error") if isinstance(data, dict) else None
                         )

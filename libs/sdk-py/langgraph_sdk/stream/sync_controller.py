@@ -78,6 +78,19 @@ class SyncStreamController:
         with self._lock:
             self._subscriptions.pop(subscription_id, None)
 
+    def signal_paused(self) -> None:
+        """Wake every active subscription iterator on interrupt (run pause).
+
+        Pushes the terminal sentinel (`None`) into every subscription queue.
+        Iterators see `None` and return; the shared SSE keeps running so
+        re-iteration after `run.respond(...)` registers a fresh subscription
+        and resumes.
+        """
+        with self._lock:
+            subs = list(self._subscriptions.values())
+        for sub in subs:
+            sub.queue.put(None)
+
     def reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
         if self._run_start_gate is not None and not self._run_start_gate.wait(
             timeout=self._run_start_timeout
