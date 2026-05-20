@@ -128,6 +128,17 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         self.loop = asyncio.get_running_loop()
         self.is_setup = False
 
+    def _ensure_sync_call_allowed(self, async_example: str) -> None:
+        try:
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface. "
+                    f"For example, use `{async_example}`."
+                )
+        except RuntimeError:
+            pass
+
     @classmethod
     @asynccontextmanager
     async def from_conn_string(
@@ -158,18 +169,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         Returns:
             The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
-        try:
-            # check if we are in the main thread, only bg threads can block
-            # we don't check in other methods to avoid the overhead
-            if asyncio.get_running_loop() is self.loop:
-                raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
-                    "different thread. From the main thread, use the async interface. "
-                    "For example, use `await checkpointer.aget_tuple(...)` or `await "
-                    "graph.ainvoke(...)`."
-                )
-        except RuntimeError:
-            pass
+        self._ensure_sync_call_allowed(
+            "await checkpointer.aget_tuple(...)` or `await graph.ainvoke(...)"
+        )
         return asyncio.run_coroutine_threadsafe(
             self.aget_tuple(config), self.loop
         ).result()
@@ -196,18 +198,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         Yields:
             An iterator of matching checkpoint tuples.
         """
-        try:
-            # check if we are in the main thread, only bg threads can block
-            # we don't check in other methods to avoid the overhead
-            if asyncio.get_running_loop() is self.loop:
-                raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
-                    "different thread. From the main thread, use the async interface. "
-                    "For example, use `checkpointer.alist(...)` or `await "
-                    "graph.ainvoke(...)`."
-                )
-        except RuntimeError:
-            pass
+        self._ensure_sync_call_allowed(
+            "checkpointer.alist(...)` or `await graph.ainvoke(...)"
+        )
         aiter_ = self.alist(config, filter=filter, before=before, limit=limit)
         while True:
             try:
@@ -239,6 +232,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
         """
+        self._ensure_sync_call_allowed(
+            "await checkpointer.aput(...)` or `await graph.ainvoke(...)"
+        )
         return asyncio.run_coroutine_threadsafe(
             self.aput(config, checkpoint, metadata, new_versions), self.loop
         ).result()
@@ -250,6 +246,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         task_id: str,
         task_path: str = "",
     ) -> None:
+        self._ensure_sync_call_allowed(
+            "await checkpointer.aput_writes(...)` or `await graph.ainvoke(...)"
+        )
         return asyncio.run_coroutine_threadsafe(
             self.aput_writes(config, writes, task_id, task_path), self.loop
         ).result()
@@ -263,18 +262,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         Returns:
             None
         """
-        try:
-            # check if we are in the main thread, only bg threads can block
-            # we don't check in other methods to avoid the overhead
-            if asyncio.get_running_loop() is self.loop:
-                raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
-                    "different thread. From the main thread, use the async interface. "
-                    "For example, use `checkpointer.alist(...)` or `await "
-                    "graph.ainvoke(...)`."
-                )
-        except RuntimeError:
-            pass
+        self._ensure_sync_call_allowed(
+            "await checkpointer.adelete_thread(...)` or `await graph.ainvoke(...)"
+        )
         return asyncio.run_coroutine_threadsafe(
             self.adelete_thread(thread_id), self.loop
         ).result()
@@ -285,7 +275,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         """Sync bridge to `aget_delta_channel_history`.
 
         Mirrors the same cross-thread guard as `get_tuple` /
-        `delete_thread` — calling from the loop thread raises rather than
+        `delete_thread` 鈥?calling from the loop thread raises rather than
         deadlocking.
         """
         try:
