@@ -548,12 +548,16 @@ def _is_direct_child(namespace: list[str], scope: tuple[str, ...]) -> bool:
 
 
 def _subgraph_subscription_params(scope: tuple[str, ...]) -> SubscribeParams:
-    # Subscribe to tasks + messages + tools without a depth limit so that all
-    # descendant-namespace events are captured in one SSE and buffered into each
-    # child handle's inbox. This avoids a second SSE open (and the dedup-set
-    # conflict that would prevent replaying already-seen event_ids).
+    # Subscribe to tasks + messages + tools + lifecycle without a depth limit
+    # so all descendant-namespace events are captured in one SSE and buffered
+    # into each child handle's inbox. ``lifecycle`` is included so child-
+    # namespace ``started`` events (the canonical signal for
+    # ``create_deep_agent``-style subagent discovery, matching JS behavior)
+    # reach ``_subgraphs_iter``; servers that surface child invocations via
+    # ``tasks`` events instead are also handled via the existing ``method ==
+    # "tasks"`` branch.
     return {
-        "channels": ["messages", "tasks", "tools"],
+        "channels": ["messages", "tasks", "tools", "lifecycle"],
         "namespaces": [list(scope)],
     }
 
@@ -1000,6 +1004,28 @@ class _SubgraphsProjection:
                             )
                             active[path] = handle
                             yield handle
+                elif (
+                    method == "lifecycle"
+                    and data.get("event") == "started"
+                    and _is_direct_child(namespace, self._scope)
+                ):
+                    # ``create_deep_agent`` and similar surfaces signal
+                    # subagent invocation via a child-namespace
+                    # ``lifecycle: started`` event rather than a ``tasks``
+                    # event. JS does the same (see ``langgraphjs``
+                    # ``stream/handles/subgraphs.ts``).
+                    path = tuple(namespace)
+                    if path not in seen:
+                        seen.add(path)
+                        graph_name, trigger_call_id = _parse_namespace_segment(path[-1])
+                        handle = ScopedStreamHandle(
+                            thread=self._thread,
+                            path=path,
+                            graph_name=graph_name or None,
+                            trigger_call_id=trigger_call_id,
+                        )
+                        active[path] = handle
+                        yield handle
         finally:
             # Determine terminal status from the parent run's lifecycle result.
             # If _run_done resolved as errored, force-complete remaining children

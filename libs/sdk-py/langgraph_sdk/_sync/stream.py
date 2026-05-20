@@ -104,8 +104,11 @@ def _is_direct_child(namespace: list[str], scope: tuple[str, ...]) -> bool:
 
 
 def _subgraph_subscription_params(scope: tuple[str, ...]) -> SubscribeParams:
+    # Includes ``lifecycle`` so child-namespace ``started`` events (the
+    # ``create_deep_agent`` subagent discovery signal, matching JS)
+    # reach ``_subgraphs_iter`` alongside ``tasks``-based discovery.
     return {
-        "channels": ["messages", "tasks", "tools"],
+        "channels": ["messages", "tasks", "tools", "lifecycle"],
         "namespaces": [list(scope)],
     }
 
@@ -1123,6 +1126,25 @@ class _SyncSubgraphsProjection:
                             )
                             active[path] = handle
                             yield handle
+                elif (
+                    method == "lifecycle"
+                    and data.get("event") == "started"
+                    and _is_direct_child(namespace, self._scope)
+                ):
+                    # ``create_deep_agent`` subagent discovery: child-
+                    # namespace ``lifecycle: started`` rather than ``tasks``.
+                    path = tuple(namespace)
+                    if path not in seen:
+                        seen.add(path)
+                        graph_name, trigger_call_id = _parse_namespace_segment(path[-1])
+                        handle = SyncScopedStreamHandle(
+                            thread=self._thread,
+                            path=path,
+                            graph_name=graph_name or None,
+                            trigger_call_id=trigger_call_id,
+                        )
+                        active[path] = handle
+                        yield handle
         finally:
             # Determine terminal status from the run's lifecycle result.
             # If _run_done resolved as errored, force-complete remaining children
