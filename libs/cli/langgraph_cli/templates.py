@@ -91,6 +91,35 @@ def _choose_template() -> str:
         return _choose_template()
 
 
+def _safe_extract(zip_file: ZipFile, path: str) -> None:
+    """Extract `zip_file` into `path`, refusing any entry that escapes it.
+
+    Hardens against CWE-22 / Zip Slip — a malicious archive can contain
+    entries like ``../../etc/passwd`` that, when passed through
+    ``ZipFile.extractall``, write to arbitrary locations the user can
+    write to. While the templates served from langchain-ai/* repos are
+    trusted, the helper is defended in depth so a future supply-chain
+    compromise, mis-configured proxy, or local-test fixture cannot
+    silently scribble outside the project directory.
+    """
+    real_dest = os.path.realpath(path)
+    for member in zip_file.namelist():
+        # Reject absolute paths and explicit drive prefixes outright.
+        if os.path.isabs(member) or member.startswith(("/", "\\")):
+            raise ValueError(
+                f"Refusing to extract archive entry with absolute path: {member!r}"
+            )
+        member_path = os.path.realpath(os.path.join(real_dest, member))
+        if (
+            os.path.commonpath([real_dest, member_path]) != real_dest
+            and member_path != real_dest
+        ):
+            raise ValueError(
+                f"Refusing to extract archive entry that escapes destination: {member!r}"
+            )
+    zip_file.extractall(path)
+
+
 def _download_repo_with_requests(repo_url: str, path: str) -> None:
     """Download a ZIP archive from the given URL and extracts it to the specified path.
 
@@ -104,7 +133,7 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
         with request.urlopen(repo_url) as response:
             if response.status == 200:
                 with ZipFile(BytesIO(response.read())) as zip_file:
-                    zip_file.extractall(path)
+                    _safe_extract(zip_file, path)
                     # Move extracted contents to path
                     for item in os.listdir(path):
                         if item.endswith("-main"):
@@ -118,6 +147,16 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
     except error.HTTPError as e:
         click.secho(
             f"❌ Error: Failed to download repository.\nDetails: {e}\n",
+            fg="red",
+            bold=True,
+            err=True,
+        )
+        sys.exit(1)
+    except ValueError as e:
+        # Raised by _safe_extract when an archive entry escapes the target
+        # directory — refuse to scribble outside `path`.
+        click.secho(
+            f"❌ Error: Refusing to extract malformed archive.\nDetails: {e}\n",
             fg="red",
             bold=True,
             err=True,
