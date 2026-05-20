@@ -433,9 +433,21 @@ class _MessagesProjection:
                 else:
                     key = _message_route_key(data)
                     stream = active.get(key)
+                    if stream is None and key == "__single__" and len(active) == 1:
+                        # Content-block events (content-block-start /
+                        # content-block-delta / content-block-finish /
+                        # message-finish) don't carry the message ``id``
+                        # on the wire, so ``_message_route_key`` returns
+                        # ``__single__`` while the active stream was
+                        # registered under ``message:<id>``. When exactly
+                        # one stream is active, that mismatch is
+                        # unambiguous -- the events belong to it.
+                        # Events that DO carry an explicit id which
+                        # doesn't match any active stream are still
+                        # dropped (orphan-delta safety, see
+                        # ``test_messages_orphan_delta_without_matching_key_is_dropped``).
+                        stream = next(iter(active.values()))
                     if stream is None:
-                        # No active stream matches this event's key. Drop rather
-                        # than silently misroute to the only remaining stream.
                         continue
                     stream.dispatch(data)
                     if event_type in ("message-finish", "error"):
