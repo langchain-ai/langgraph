@@ -93,6 +93,31 @@ def _event_namespace(params_field: Any) -> list[str]:
     return list(namespace) if isinstance(namespace, list) else []
 
 
+_ROOT_TERMINAL_LIFECYCLE_EVENTS = frozenset({"completed", "failed"})
+
+
+def _is_root_terminal_lifecycle(event: Any) -> bool:
+    """Return True for a root-namespace lifecycle event marking run end.
+
+    Matches the wire shape ``{method: "lifecycle", params: {namespace: [],
+    data: {event: "completed" | "failed"}}}``. Subgraph lifecycle events
+    (non-empty namespace) do not terminate the parent run.
+    """
+    if not isinstance(event, dict):
+        return False
+    if event.get("method") != "lifecycle":
+        return False
+    params = event.get("params") or {}
+    if not isinstance(params, dict):
+        return False
+    if params.get("namespace") or []:
+        return False
+    data = params.get("data") or {}
+    if not isinstance(data, dict):
+        return False
+    return data.get("event") in _ROOT_TERMINAL_LIFECYCLE_EVENTS
+
+
 class _AgentModule:
     """Assistant graph helpers scoped to one thread stream."""
 
@@ -1442,22 +1467,25 @@ class AsyncThreadStream:
         self._active_tool_calls.clear()
 
     def _signal_paused(self) -> None:
-        """Wake every active projection iterator on interrupt (run pause).
+        """Wake every active projection iterator on interrupt / run end.
 
-        Pushes the terminal sentinel (`None`) into every subscription queue
-        and the root messages inbox if active. Iterators see `None` and
-        return; the shared SSE keeps running so re-iteration after
-        `run.respond(...)` registers a fresh subscription and resumes.
+        Pushes the terminal sentinel (`None`) into every subscription
+        queue. Iterators see `None` and return; the shared SSE keeps
+        running so re-iteration after `run.respond(...)` registers a
+        fresh subscription and resumes.
+
+        `root_messages_inbox` is intentionally NOT signaled here: the
+        subgraphs projection that populates it is responsible for
+        pushing the terminal `None` in its own `finally` block, so any
+        message events it redirected to the inbox land before the
+        sentinel. Signaling root_inbox here would race the redirection
+        and could drop messages.
         """
         # On a saturated queue the consumer is already behind; the iterator
         # will still terminate when it drains to this point.
         for sub in list(self._subscriptions.values()):
             with contextlib.suppress(asyncio.QueueFull):
                 sub.queue.put_nowait(None)
-        root_inbox = self._root_messages_inbox
-        if root_inbox is not None:
-            with contextlib.suppress(asyncio.QueueFull):
-                root_inbox.put_nowait(None)
 
     def observe_applied_through_seq(self, seq: Any) -> None:
         """Advance the reconnect cursor from a command response meta sequence."""
@@ -1540,6 +1568,15 @@ class AsyncThreadStream:
                     for sub in list(self._subscriptions.values()):
                         if matches_subscription(event, sub.params):
                             sub.queue.put_nowait(event)
+                    # On root-terminal lifecycle, push the `None` sentinel
+                    # into all subscription queues so projection iterators
+                    # exit when the run ends naturally. Runs on the shared
+                    # SSE so the terminal is processed in seq order with
+                    # the projection events -- any in-flight values /
+                    # tools / messages events for this run are already
+                    # queued before None.
+                    if _is_root_terminal_lifecycle(event):
+                        self._signal_paused()
             except Exception:
                 # Pump errored — fall through to error-handling/reconnect.
                 pass
@@ -1656,6 +1693,16 @@ class AsyncThreadStream:
         ]
         if extra is not None:
             filters.append(dict(extra))
+        # Always include lifecycle in the shared SSE so the fanout consumer
+        # sees root-terminal events in seq order with the projection events.
+        # See `_is_root_terminal_lifecycle` -- the fanout uses it to push
+        # the `None` sentinel into sub queues when the run ends naturally,
+        # which is what makes projection iterators exit on a long-lived
+        # SSE that doesn't EOF after the run. Per-subscription filtering
+        # (`matches_subscription`) drops lifecycle events for any
+        # subscription that didn't ask for them, so user-visible queues
+        # don't see leaked events.
+        filters.append({"channels": ["lifecycle"]})
         return compute_union_filter(filters)
 
     async def _dedup_iter(self, source: AsyncIterator[Event]) -> AsyncIterator[Event]:

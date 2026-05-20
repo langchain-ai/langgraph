@@ -1405,18 +1405,17 @@ class SyncThreadStream:
         self._active_tool_calls.clear()
 
     def _signal_paused(self) -> None:
-        """Wake every active projection iterator on interrupt (run pause).
+        """Wake every active projection iterator on interrupt / run end.
 
-        Delegates to the shared controller (subscription queues) and also
-        signals the root messages inbox if active. The shared SSE keeps
-        running so re-iteration after `run.respond(...)` registers a fresh
-        subscription and resumes.
+        Delegates to the shared controller (subscription queues). The
+        root messages inbox is intentionally NOT signaled here: the
+        subgraphs projection that populates it is responsible for
+        pushing the terminal ``None`` in its own ``finally`` block, so
+        any message events it redirected to the inbox land before the
+        sentinel. Signaling root_inbox here would race the redirection.
         """
         if self._controller is not None:
             self._controller.signal_paused()
-        root_inbox = self._root_messages_inbox
-        if root_inbox is not None:
-            root_inbox.put(None)
 
     def subscribe(
         self,
