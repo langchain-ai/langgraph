@@ -8,7 +8,9 @@ import httpx
 import pytest
 from typing_extensions import assert_type
 
+from langgraph_sdk._async import http as async_http
 from langgraph_sdk._shared.utilities import _sse_to_v2_dict
+from langgraph_sdk._sync import http as sync_http
 from langgraph_sdk.client import HttpClient, SyncHttpClient
 from langgraph_sdk.schema import (
     CheckpointPayload,
@@ -288,6 +290,123 @@ async def test_http_client_stream_recovers_after_disconnect():
         StreamPart(event="values", data={"step": 2}, id="2"),
         StreamPart(event="end", data=None, id="2"),
     ]
+
+
+def test_sync_http_client_request_reconnect_strips_body_headers(monkeypatch):
+    reconnect_path = "/reconnect"
+    decode_count = 0
+    call_count = 0
+    original_decode = sync_http._decode_json
+
+    def flaky_decode(response: httpx.Response) -> Any:
+        nonlocal decode_count
+        decode_count += 1
+        if decode_count == 1:
+            raise httpx.RemoteProtocolError("incomplete response")
+        return original_decode(response)
+
+    monkeypatch.setattr(sync_http, "_decode_json", flaky_decode)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        request_headers = {key.lower(): value for key, value in request.headers.items()}
+        if call_count == 1:
+            assert request.method == "POST"
+            assert request.url.path == "/runs"
+            assert request_headers["content-type"] == "application/json"
+            assert "content-length" in request_headers
+            assert request_headers["x-client"] == "sdk-test"
+            assert request.read() == b'{"payload":"value"}'
+            return httpx.Response(
+                200,
+                headers={"Location": reconnect_path},
+                json={"pending": True},
+            )
+        if call_count == 2:
+            assert request.method == "GET"
+            assert request.url.path == reconnect_path
+            assert request_headers["x-client"] == "sdk-test"
+            assert "content-length" not in request_headers
+            assert "content-type" not in request_headers
+            assert request.read() == b""
+            return httpx.Response(200, json={"ok": True})
+        raise AssertionError("unexpected request")
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        with pytest.warns(UserWarning, match="attempting reconnect"):
+            result = http_client.request_reconnect(
+                "/runs",
+                "POST",
+                json={"payload": "value"},
+                headers={"X-Client": "sdk-test"},
+            )
+
+    assert call_count == 2
+    assert decode_count == 2
+    assert result == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_http_client_request_reconnect_strips_body_headers(monkeypatch):
+    reconnect_path = "/reconnect"
+    decode_count = 0
+    call_count = 0
+    original_decode = async_http._adecode_json
+
+    async def flaky_decode(response: httpx.Response) -> Any:
+        nonlocal decode_count
+        decode_count += 1
+        if decode_count == 1:
+            raise httpx.RemoteProtocolError("incomplete response")
+        return await original_decode(response)
+
+    monkeypatch.setattr(async_http, "_adecode_json", flaky_decode)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        request_headers = {key.lower(): value for key, value in request.headers.items()}
+        if call_count == 1:
+            assert request.method == "POST"
+            assert request.url.path == "/runs"
+            assert request_headers["content-type"] == "application/json"
+            assert "content-length" in request_headers
+            assert request_headers["x-client"] == "sdk-test"
+            assert await request.aread() == b'{"payload":"value"}'
+            return httpx.Response(
+                200,
+                headers={"Location": reconnect_path},
+                json={"pending": True},
+            )
+        if call_count == 2:
+            assert request.method == "GET"
+            assert request.url.path == reconnect_path
+            assert request_headers["x-client"] == "sdk-test"
+            assert "content-length" not in request_headers
+            assert "content-type" not in request_headers
+            assert await request.aread() == b""
+            return httpx.Response(200, json={"ok": True})
+        raise AssertionError("unexpected request")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        http_client = HttpClient(client)
+        with pytest.warns(UserWarning, match="attempting reconnect"):
+            result = await http_client.request_reconnect(
+                "/runs",
+                "POST",
+                json={"payload": "value"},
+                headers={"X-Client": "sdk-test"},
+            )
+
+    assert call_count == 2
+    assert decode_count == 2
+    assert result == {"ok": True}
 
 
 # --- _sse_to_v2_dict conversion ---

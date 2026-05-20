@@ -176,10 +176,15 @@ class HttpClient:
                     stacklevel=2,
                 )
                 await r.aclose()
+                reconnect_headers = {
+                    key: value
+                    for key, value in request_headers.items()
+                    if key.lower() not in {"content-length", "content-type"}
+                }
                 return await self.request_reconnect(
                     loc,
                     "GET",
-                    headers=request_headers,
+                    headers=reconnect_headers,
                     # don't pass on_response so it's only called once
                     reconnect_limit=reconnect_limit - 1,
                 )
