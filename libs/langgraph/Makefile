@@ -76,7 +76,7 @@ test:
 test_parallel:
 	make start-services &&\
 	make start-dev-server &&\
-	uv run pytest -n auto --dist worksteal $(TEST) -vv --lf; \
+	uv run pytest -n auto --dist worksteal $(TEST) -vv --lf --timeout=120 --timeout-method=thread; \
 	EXIT_CODE=$$?; \
 	make stop-services; \
 	make stop-dev-server; \

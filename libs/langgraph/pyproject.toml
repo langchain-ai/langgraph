@@ -53,6 +53,7 @@ test = [
     "pytest-watcher",
     "pytest-xdist[psutil]",
     "pytest-repeat",
+    "pytest-timeout",
     "langchain-core>=1.0.0",
     "langgraph-prebuilt",
     "langgraph-checkpoint",
