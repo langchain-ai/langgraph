@@ -2,8 +2,9 @@
 
 All scripts share the same expectations:
 
-- `langgraph-api==0.9.0rc1` is reachable at `BASE_URL` (default
-  http://localhost:2024 — set by `docker-compose.yml`).
+- A `langgraph-api` server is reachable at `BASE_URL` (default
+  http://localhost:2024 — set by `docker-compose.yml`, which builds
+  on `langchain/langgraph-api:latest-py3.12`).
 - The example graph (`integration/graph/streaming_graph.py:graph`) is
   registered under the assistant id `agent` (see `integration/langgraph.json`).
 
