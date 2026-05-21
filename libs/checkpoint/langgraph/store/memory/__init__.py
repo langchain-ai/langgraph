@@ -244,7 +244,7 @@ class InMemoryStore(BaseStore):
                 return True
 
             return all(
-                _compare_values(item.value.get(key), filter_value)
+                _compare_values(_resolve_path(item.value, key), filter_value)
                 for key, filter_value in op.filter.items()
             )
 
@@ -546,6 +546,25 @@ def _does_match(match_condition: MatchCondition, key: tuple[str, ...]) -> bool:
         return True
     else:
         raise ValueError(f"Unsupported match type: {match_type}")
+
+
+def _resolve_path(value: Any, key: str) -> Any:
+    """Resolve a filter key against an item value, walking dotted paths.
+
+    Mirrors the dotted-path semantics used by ``SqliteStore`` (via
+    ``json_extract(value, '$.<key>')``) so a filter like ``{"user.id": "abc"}``
+    matches a value of ``{"user": {"id": "abc"}}``. Returns ``None`` when any
+    segment of the path is missing or traverses a non-dict, preserving the
+    existing miss semantics of ``dict.get``.
+    """
+    if "." not in key:
+        return value.get(key) if isinstance(value, dict) else None
+    current: Any = value
+    for part in key.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return None
+        current = current[part]
+    return current
 
 
 def _compare_values(item_value: Any, filter_value: Any) -> bool:

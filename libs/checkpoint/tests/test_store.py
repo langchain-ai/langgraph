@@ -580,6 +580,74 @@ async def test_async_batch_store_deduplication(mocker: MockerFixture) -> None:
     abatch.reset_mock()
 
 
+def test_search_supports_dotted_filter_keys() -> None:
+    """Dotted filter keys should resolve nested values, matching SqliteStore.
+
+    See https://github.com/langchain-ai/langgraph/issues/7795. Previously
+    ``InMemoryStore`` treated ``"user.access-level"`` as a literal top-level
+    key, while ``SqliteStore`` already walked the dotted path via
+    ``json_extract``.
+    """
+    store = InMemoryStore()
+    store.put(
+        ("docs",),
+        "hyphen",
+        {"access-level": "public", "user": {"access-level": "nested"}},
+    )
+    store.put(("docs",), "digit", {"123abc": "ok", "user": {"123abc": "ok2"}})
+    store.put(
+        ("docs",),
+        "deep",
+        {"user": {"profile": {"id": "abc"}}},
+    )
+
+    # Top-level hyphenated key still matches literally
+    results = store.search(("docs",), filter={"access-level": "public"})
+    assert [r.key for r in results] == ["hyphen"]
+
+    # Nested hyphenated key via dotted path
+    results = store.search(("docs",), filter={"user.access-level": "nested"})
+    assert [r.key for r in results] == ["hyphen"]
+
+    # Top-level digit-starting key
+    results = store.search(("docs",), filter={"123abc": "ok"})
+    assert [r.key for r in results] == ["digit"]
+
+    # Nested digit-starting key via dotted path
+    results = store.search(("docs",), filter={"user.123abc": "ok2"})
+    assert [r.key for r in results] == ["digit"]
+
+    # Multi-level dotted path
+    results = store.search(("docs",), filter={"user.profile.id": "abc"})
+    assert [r.key for r in results] == ["deep"]
+
+    # Missing nested key does not match
+    results = store.search(("docs",), filter={"user.missing": "nope"})
+    assert results == []
+
+    # Dotted path through a non-dict does not match
+    store.put(("docs",), "scalar", {"user": "string-value"})
+    results = store.search(("docs",), filter={"user.access-level": "nested"})
+    assert [r.key for r in results] == ["hyphen"]
+
+
+def test_search_dotted_filter_keys_with_operators() -> None:
+    """Dotted filter keys should compose with comparison operators."""
+    store = InMemoryStore()
+    store.put(("docs",), "a", {"user": {"score": 10}})
+    store.put(("docs",), "b", {"user": {"score": 5}})
+    store.put(("docs",), "c", {"user": {"score": 1}})
+
+    results = store.search(("docs",), filter={"user.score": {"$gt": 4}})
+    assert sorted(r.key for r in results) == ["a", "b"]
+
+    results = store.search(("docs",), filter={"user.score": {"$lte": 5}})
+    assert sorted(r.key for r in results) == ["b", "c"]
+
+    results = store.search(("docs",), filter={"user.score": {"$ne": 5}})
+    assert sorted(r.key for r in results) == ["a", "c"]
+
+
 @pytest.fixture
 def fake_embeddings() -> CharacterEmbeddings:
     return CharacterEmbeddings(dims=500)
