@@ -30,7 +30,6 @@ from _common import (
     make_sync_client,
 )
 
-
 _EXPECTED_TERMINAL_ITEMS = ["streamed", "tool", "asked", "sub"]
 
 
@@ -69,7 +68,9 @@ async def run_async() -> None:
         await raw.aclose()
 
 
-def _drive_one_sync(threads: Any, label: str, results: dict[str, dict[str, Any]]) -> None:
+def _drive_one_sync(
+    threads: Any, label: str, results: dict[str, dict[str, Any]]
+) -> None:
     with threads.stream(assistant_id=ASSISTANT_ID) as thread:
         thread.run.start(input={"messages": [], "value": "init", "items": []})
         responder = auto_respond_sync(thread)
@@ -88,8 +89,10 @@ def run_sync() -> None:
         results: dict[str, dict[str, Any]] = {}
         workers = [
             threading.Thread(
-                target=_drive_one_sync, args=(threads, label, results),
-                daemon=True, name=f"sync-stream-{label}",
+                target=_drive_one_sync,
+                args=(threads, label, results),
+                daemon=True,
+                name=f"sync-stream-{label}",
             )
             for label in ("A", "B")
         ]

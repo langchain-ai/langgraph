@@ -39,7 +39,6 @@ from _common import (
     make_sync_client,
 )
 
-
 _EXPECTED_TERMINAL_ITEMS = ["streamed", "tool", "asked", "sub"]
 
 
@@ -154,7 +153,9 @@ def run_sync() -> None:
                         and controller is not None
                         and controller._shared_stream is not None
                     ):
-                        print(f"  dropping shared stream (cursor={controller._cursor})...")
+                        print(
+                            f"  dropping shared stream (cursor={controller._cursor})..."
+                        )
                         controller._shared_stream.close()
                         dropped = True
             except BaseException as err:

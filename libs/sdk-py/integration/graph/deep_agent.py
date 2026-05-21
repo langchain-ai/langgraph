@@ -17,11 +17,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
-from langchain_core.messages import AIMessage
-
 from deepagents import create_deep_agent
 from deepagents.middleware.subagents import SubAgent
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage
 
 
 class _FakeChatModelWithTools(FakeMessagesListChatModel):
@@ -33,7 +32,7 @@ class _FakeChatModelWithTools(FakeMessagesListChatModel):
     the desired `tool_calls`, so we ignore the tools list and return self.
     """
 
-    def bind_tools(self, tools: Any, **kwargs: Any) -> "_FakeChatModelWithTools":
+    def bind_tools(self, tools: Any, **kwargs: Any) -> _FakeChatModelWithTools:
         return self
 
 
@@ -64,7 +63,9 @@ _supervisor_model = _FakeChatModelWithTools(
 # Researcher turn 1: final message, no tool calls. Closes the subagent loop.
 _researcher_model = _FakeChatModelWithTools(
     responses=[
-        AIMessage(content="v3 streaming is event-typed and thread-centric.", id="res-1"),
+        AIMessage(
+            content="v3 streaming is event-typed and thread-centric.", id="res-1"
+        ),
     ]
 )
 

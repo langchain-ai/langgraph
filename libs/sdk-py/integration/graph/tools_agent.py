@@ -55,7 +55,7 @@ class _ToolBindingFakeChatModel(FakeMessagesListChatModel):
     message in one chunk, preserving ``tool_calls``.
     """
 
-    def bind_tools(self, tools: Any, **kwargs: Any) -> "_ToolBindingFakeChatModel":  # noqa: ARG002
+    def bind_tools(self, tools: Any, **kwargs: Any) -> _ToolBindingFakeChatModel:
         return self
 
 

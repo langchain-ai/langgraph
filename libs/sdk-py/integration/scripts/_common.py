@@ -16,23 +16,21 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import threading
 import os
+import threading
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
 if TYPE_CHECKING:
-    from langgraph_sdk._async.http import HttpClient as AsyncHttpClient
     from langgraph_sdk._async.threads import ThreadsClient as AsyncThreadsClient
-    from langgraph_sdk._sync.http import SyncHttpClient
     from langgraph_sdk._sync.threads import SyncThreadsClient
 
 BASE_URL = os.environ.get("LANGGRAPH_INTEGRATION_URL", "http://localhost:2024")
 ASSISTANT_ID = "agent"
 
 
-def make_async_client() -> tuple["AsyncThreadsClient", httpx.AsyncClient]:
+def make_async_client() -> tuple[AsyncThreadsClient, httpx.AsyncClient]:
     """Build an async ThreadsClient pointing at the integration API.
 
     Returns the client and the underlying httpx client so callers can close
@@ -54,7 +52,7 @@ def make_async_client() -> tuple["AsyncThreadsClient", httpx.AsyncClient]:
     return ThreadsClient(HttpClient(raw)), raw
 
 
-def make_sync_client() -> tuple["SyncThreadsClient", httpx.Client]:
+def make_sync_client() -> tuple[SyncThreadsClient, httpx.Client]:
     """Build a sync ThreadsClient pointing at the integration API."""
     from langgraph_sdk._sync.http import SyncHttpClient
     from langgraph_sdk._sync.threads import SyncThreadsClient

@@ -11,7 +11,9 @@ pytestmark = pytest.mark.integration
 
 async def test_websocket_async(async_threads) -> None:
     threads, _ = async_threads
-    async with threads.stream(assistant_id=ASSISTANT_ID, transport="websocket") as thread:
+    async with threads.stream(
+        assistant_id=ASSISTANT_ID, transport="websocket"
+    ) as thread:
         from langgraph_sdk.stream.transport import ProtocolWebSocketTransport
 
         assert isinstance(thread._transport, ProtocolWebSocketTransport)

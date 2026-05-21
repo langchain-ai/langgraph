@@ -41,7 +41,9 @@ async def run_async() -> None:
             snapshots: list[dict] = []
             async for snap in thread.values:
                 snapshots.append(snap)
-                print(f"  values snapshot: items={snap.get('items')!r} value={snap.get('value')!r}")
+                print(
+                    f"  values snapshot: items={snap.get('items')!r} value={snap.get('value')!r}"
+                )
 
             await responder
 
@@ -64,7 +66,9 @@ def run_sync() -> None:
             snapshots: list[dict] = []
             for snap in thread.values:
                 snapshots.append(snap)
-                print(f"  values snapshot: items={snap.get('items')!r} value={snap.get('value')!r}")
+                print(
+                    f"  values snapshot: items={snap.get('items')!r} value={snap.get('value')!r}"
+                )
 
             responder.join(timeout=5)
 

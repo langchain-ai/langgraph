@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import asyncio
 
-from _common import ASSISTANT_ID, check_api_reachable, header, make_async_client, make_sync_client
+from _common import (
+    ASSISTANT_ID,
+    check_api_reachable,
+    header,
+    make_async_client,
+    make_sync_client,
+)
 
 
 async def run_async() -> None:

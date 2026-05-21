@@ -33,7 +33,9 @@ def _sync_runs(raw):
 async def test_runs_create_get_list_async(async_threads) -> None:
     threads, raw = async_threads
     runs = _async_runs(raw)
-    thread = await threads.create(metadata={"suite": "integration", "label": "runs-async"})
+    thread = await threads.create(
+        metadata={"suite": "integration", "label": "runs-async"}
+    )
     tid = thread["thread_id"]
     try:
         created = await runs.create(
@@ -80,7 +82,9 @@ async def test_runs_wait_async(async_threads) -> None:
     """`wait` blocks until the run reaches a terminal state and returns its values."""
     threads, raw = async_threads
     runs = _async_runs(raw)
-    thread = await threads.create(metadata={"suite": "integration", "label": "wait-async"})
+    thread = await threads.create(
+        metadata={"suite": "integration", "label": "wait-async"}
+    )
     tid = thread["thread_id"]
     try:
         # `interrupt_before` makes the run pause before `ask_human` rather

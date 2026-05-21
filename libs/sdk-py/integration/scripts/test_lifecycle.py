@@ -15,7 +15,13 @@ from __future__ import annotations
 
 import asyncio
 
-from _common import ASSISTANT_ID, check_api_reachable, header, make_async_client, make_sync_client
+from _common import (
+    ASSISTANT_ID,
+    check_api_reachable,
+    header,
+    make_async_client,
+    make_sync_client,
+)
 
 
 async def run_async() -> None:
@@ -43,7 +49,9 @@ async def run_async() -> None:
 
             final = await thread.output
             print(f"  final output items: {final.get('items')!r}")
-            assert "asked" in final.get("items", []), "expected ask_human to have run after respond"
+            assert "asked" in final.get("items", []), (
+                "expected ask_human to have run after respond"
+            )
             print(f"  saw_interrupt before respond = {saw_interrupt}")
     finally:
         await raw.aclose()
@@ -71,7 +79,9 @@ def run_sync() -> None:
 
             final = thread.output
             print(f"  final output items: {final.get('items')!r}")
-            assert "asked" in final.get("items", []), "expected ask_human to have run after respond"
+            assert "asked" in final.get("items", []), (
+                "expected ask_human to have run after respond"
+            )
             print(f"  saw_interrupt before respond = {saw_interrupt}")
     finally:
         raw.close()

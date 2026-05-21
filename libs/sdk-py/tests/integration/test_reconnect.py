@@ -34,7 +34,9 @@ def _instrument_dedup_async(controller: Any) -> dict[str, int]:
             counter["yields"] += 1
             yield event
 
-    controller._dedup_iter = _counted.__get__(controller, type(controller))
+    # ty doesn't see through `@functools.wraps` to the descriptor protocol; this
+    # is the canonical method-binding pattern.
+    controller._dedup_iter = _counted.__get__(controller, type(controller))  # ty: ignore[unresolved-attribute]
     return counter
 
 
@@ -54,7 +56,9 @@ def _instrument_dedup_sync(controller: Any) -> dict[str, int]:
             counter["yields"] += 1
             yield event
 
-    controller._dedup_iter = _counted.__get__(controller, type(controller))
+    # ty doesn't see through `@functools.wraps` to the descriptor protocol; this
+    # is the canonical method-binding pattern.
+    controller._dedup_iter = _counted.__get__(controller, type(controller))  # ty: ignore[unresolved-attribute]
     return counter
 
 

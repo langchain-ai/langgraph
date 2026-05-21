@@ -28,7 +28,6 @@ import asyncio
 
 from _common import check_api_reachable, header, make_async_client, make_sync_client
 
-
 TOOLS_ASSISTANT_ID = "tools_agent"
 
 

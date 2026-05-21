@@ -23,11 +23,9 @@ hermetic.
 
 from __future__ import annotations
 
-import asyncio
 import operator
-from typing import Annotated, Any, TypedDict
-
 from collections.abc import AsyncIterator, Iterator
+from typing import Annotated, Any, TypedDict
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
@@ -227,7 +225,9 @@ def ask_human(state: AgentState) -> dict[str, Any]:
 
     answer = interrupt("Are we good?")
 
-    writer({"name": "progress", "step": "ask_human", "phase": "end", "answer": str(answer)})
+    writer(
+        {"name": "progress", "step": "ask_human", "phase": "end", "answer": str(answer)}
+    )
     return {
         "messages": [AIMessage(content=f"Human said: {answer}", id="ai-msg-3")],
         "items": ["asked"],

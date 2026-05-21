@@ -15,7 +15,9 @@ pytestmark = pytest.mark.integration
 
 async def test_threads_create_get_delete_async(async_threads) -> None:
     threads, _ = async_threads
-    created = await threads.create(metadata={"suite": "integration", "label": "crud-async"})
+    created = await threads.create(
+        metadata={"suite": "integration", "label": "crud-async"}
+    )
     tid = created["thread_id"]
     try:
         fetched = await threads.get(tid)
@@ -39,7 +41,9 @@ def test_threads_create_get_delete_sync(sync_threads) -> None:
 
 async def test_threads_search_async(async_threads) -> None:
     threads, _ = async_threads
-    created = await threads.create(metadata={"suite": "integration", "label": "search-async"})
+    created = await threads.create(
+        metadata={"suite": "integration", "label": "search-async"}
+    )
     tid = created["thread_id"]
     try:
         results = await threads.search(metadata={"label": "search-async"}, limit=10)
@@ -61,7 +65,9 @@ def test_threads_search_sync(sync_threads) -> None:
 
 async def test_threads_copy_async(async_threads) -> None:
     threads, _ = async_threads
-    src = await threads.create(metadata={"suite": "integration", "label": "copy-async-src"})
+    src = await threads.create(
+        metadata={"suite": "integration", "label": "copy-async-src"}
+    )
     src_id = src["thread_id"]
     try:
         copied = await threads.copy(src_id)
@@ -113,6 +119,6 @@ def test_threads_history_after_run_sync(sync_threads) -> None:
                 break
         if thread.interrupted:
             thread.run.respond("yes")
-        thread.output
+        _ = thread.output  # force terminal-state fetch; value unused
         history = threads.get_history(thread.thread_id, limit=20)
     assert history, "expected at least one checkpoint after a completed run"

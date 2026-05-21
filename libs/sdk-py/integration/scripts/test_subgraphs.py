@@ -63,7 +63,9 @@ async def run_async() -> None:
         header("async subgraphs / deep_agent (create_deep_agent + SubAgent)")
         async with threads.stream(assistant_id="deep_agent") as thread:
             await thread.run.start(
-                input={"messages": [{"role": "user", "content": "research the v3 spec"}]},
+                input={
+                    "messages": [{"role": "user", "content": "research the v3 spec"}]
+                },
             )
             children = await _drain_subgraphs(thread)
         print(f"  deep_agent: total subgraph handles: {len(children)}")
@@ -84,7 +86,9 @@ def run_sync() -> None:
         header("sync subgraphs / deep_agent")
         with threads.stream(assistant_id="deep_agent") as thread:
             thread.run.start(
-                input={"messages": [{"role": "user", "content": "research the v3 spec"}]},
+                input={
+                    "messages": [{"role": "user", "content": "research the v3 spec"}]
+                },
             )
             children = _drain_subgraphs_sync(thread)
         print(f"  deep_agent: total subgraph handles: {len(children)}")

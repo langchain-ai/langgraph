@@ -27,7 +27,6 @@ from _common import (
     make_sync_client,
 )
 
-
 _CANCEL_GRACE_SECONDS = 10.0
 
 
@@ -55,7 +54,9 @@ async def run_async() -> None:
     runs_client = RunsClient(HttpClient(raw))
     try:
         async with threads.stream(assistant_id=ASSISTANT_ID) as thread:
-            run_id_future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+            run_id_future: asyncio.Future[str] = (
+                asyncio.get_running_loop().create_future()
+            )
             start_result = await thread.run.start(
                 input={"messages": [], "value": "init", "items": []}
             )

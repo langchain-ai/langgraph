@@ -37,7 +37,9 @@ async def test_concurrent_streams_async(async_threads) -> None:
     )
 
 
-def _drive_one_sync(threads: Any, label: str, results: dict[str, dict[str, Any]]) -> None:
+def _drive_one_sync(
+    threads: Any, label: str, results: dict[str, dict[str, Any]]
+) -> None:
     with threads.stream(assistant_id=ASSISTANT_ID) as thread:
         thread.run.start(input={"messages": [], "value": "init", "items": []})
 
