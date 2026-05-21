@@ -1227,6 +1227,9 @@ class ToolNode(RunnableCallable):
     ) -> tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         input_type: Literal["list", "dict", "tool_calls"]
         if isinstance(input, list):
+            if not input:
+                msg = "No message found in input"
+                raise ValueError(msg)
             if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
                 input_type = "tool_calls"
                 tool_calls = cast("list[ToolCall]", input)
