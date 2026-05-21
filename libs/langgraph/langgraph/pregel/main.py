@@ -3846,6 +3846,72 @@ class Pregel(
         Returns:
             The output of the graph run. If `stream_mode` is `"values"`, it returns the latest output.
             If `stream_mode` is not `"values"`, it returns a list of output chunks.
+
+            When `version="v2"`, the return type narrows by `stream_mode`:
+
+            - `stream_mode="values"` returns a `GraphOutput[OutputT]` whose
+              `.value` holds the latest state and whose `.interrupts` is a
+              tuple of every `Interrupt` raised during the run.
+            - any other `stream_mode` returns a `list[StreamPart[StateT, OutputT]]`
+              of streamed chunks; interrupts are not aggregated onto a single
+              object and must be collected from the chunks themselves.
+
+        Interrupts:
+            Interrupt-handling shape depends on `stream_mode` when
+            `version="v2"`. With `stream_mode="values"` the returned
+            `GraphOutput.interrupts` is already a flat tuple of every
+            interrupt raised during the run. With `stream_mode="updates"`
+            (or any other non-`"values"` mode) the call returns a list of
+            stream parts and interrupts arrive as `__interrupt__` keys
+            inside individual `UpdatesStreamPart.data` entries; callers must
+            iterate the chunks to collect them.
+
+            ```python
+            from typing import TypedDict
+
+            from langgraph.checkpoint.memory import MemorySaver
+            from langgraph.graph import StateGraph, START, END
+            from langgraph.types import interrupt
+
+
+            class State(TypedDict):
+                value: str
+
+
+            def human_node(state: State):
+                answer = interrupt("Approve?")
+                return {"value": answer}
+
+
+            builder = StateGraph(State)
+            builder.add_node("human", human_node)
+            builder.add_edge(START, "human")
+            builder.add_edge("human", END)
+            graph = builder.compile(checkpointer=MemorySaver())
+
+            # stream_mode="values": interrupts are aggregated on the result.
+            result = graph.invoke(
+                {"value": "start"},
+                config={"configurable": {"thread_id": "demo-values"}},
+                stream_mode="values",
+                version="v2",
+            )
+            values_interrupts = result.interrupts
+
+            # stream_mode="updates": collect interrupts from the chunks.
+            chunks = graph.invoke(
+                {"value": "start"},
+                config={"configurable": {"thread_id": "demo-updates"}},
+                stream_mode="updates",
+                version="v2",
+            )
+            updates_interrupts = [
+                interrupt
+                for chunk in chunks
+                if "__interrupt__" in chunk["data"]
+                for interrupt in chunk["data"]["__interrupt__"]
+            ]
+            ```
         """
         output_keys = output_keys if output_keys is not None else self.output_channels
 
@@ -4023,6 +4089,72 @@ class Pregel(
         Returns:
             The output of the graph run. If `stream_mode` is `"values"`, it returns the latest output.
             If `stream_mode` is not `"values"`, it returns a list of output chunks.
+
+            When `version="v2"`, the return type narrows by `stream_mode`:
+
+            - `stream_mode="values"` returns a `GraphOutput[OutputT]` whose
+              `.value` holds the latest state and whose `.interrupts` is a
+              tuple of every `Interrupt` raised during the run.
+            - any other `stream_mode` returns a `list[StreamPart[StateT, OutputT]]`
+              of streamed chunks; interrupts are not aggregated onto a single
+              object and must be collected from the chunks themselves.
+
+        Interrupts:
+            Interrupt-handling shape depends on `stream_mode` when
+            `version="v2"`. With `stream_mode="values"` the returned
+            `GraphOutput.interrupts` is already a flat tuple of every
+            interrupt raised during the run. With `stream_mode="updates"`
+            (or any other non-`"values"` mode) the call returns a list of
+            stream parts and interrupts arrive as `__interrupt__` keys
+            inside individual `UpdatesStreamPart.data` entries; callers must
+            iterate the chunks to collect them.
+
+            ```python
+            from typing import TypedDict
+
+            from langgraph.checkpoint.memory import MemorySaver
+            from langgraph.graph import StateGraph, START, END
+            from langgraph.types import interrupt
+
+
+            class State(TypedDict):
+                value: str
+
+
+            def human_node(state: State):
+                answer = interrupt("Approve?")
+                return {"value": answer}
+
+
+            builder = StateGraph(State)
+            builder.add_node("human", human_node)
+            builder.add_edge(START, "human")
+            builder.add_edge("human", END)
+            graph = builder.compile(checkpointer=MemorySaver())
+
+            # stream_mode="values": interrupts are aggregated on the result.
+            result = graph.invoke(
+                {"value": "start"},
+                config={"configurable": {"thread_id": "demo-values"}},
+                stream_mode="values",
+                version="v2",
+            )
+            values_interrupts = result.interrupts
+
+            # stream_mode="updates": collect interrupts from the chunks.
+            chunks = graph.invoke(
+                {"value": "start"},
+                config={"configurable": {"thread_id": "demo-updates"}},
+                stream_mode="updates",
+                version="v2",
+            )
+            updates_interrupts = [
+                interrupt
+                for chunk in chunks
+                if "__interrupt__" in chunk["data"]
+                for interrupt in chunk["data"]["__interrupt__"]
+            ]
+            ```
         """
         output_keys = output_keys if output_keys is not None else self.output_channels
 
