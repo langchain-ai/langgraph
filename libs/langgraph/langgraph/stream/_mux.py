@@ -23,6 +23,26 @@ transformers can close over their config:
 """
 
 
+def _partition_before_builtins(
+    transformers: list[StreamTransformer],
+) -> list[StreamTransformer]:
+    """Stable partition: `before_builtins = True` first, others after.
+
+    Preserves the relative order within each lane. Used during
+    registration so transformers that opt in via the
+    `before_builtins` class attribute see events ahead of built-in
+    transformers supplied later in the same factory list.
+    """
+    pre: list[StreamTransformer] = []
+    rest: list[StreamTransformer] = []
+    for transformer in transformers:
+        if getattr(transformer, "before_builtins", False):
+            pre.append(transformer)
+        else:
+            rest.append(transformer)
+    return [*pre, *rest]
+
+
 class StreamMux:
     """Central event dispatcher for the streaming infrastructure.
 
@@ -61,6 +81,14 @@ class StreamMux:
         transformer's `init()` is called, projections are merged into
         `extensions`, `_native` keys are recorded in `native_keys`, and
         any StreamChannel instances are bound and (if named) wired.
+
+        Transformers with `StreamTransformer.before_builtins = True` are
+        registered ahead of the rest, preserving relative order within
+        each lane. This lets content-mutating transformers (PII
+        redaction, content filters, etc.) run before built-ins like
+        `MessagesTransformer` that eagerly snapshot text fields into
+        their projections. See `StreamTransformer.before_builtins` for
+        the contract and foot-guns.
 
         Args:
             transformers: Already-built transformer instances. Registered
@@ -116,10 +144,17 @@ class StreamMux:
         # via `_make_child`), then any pre-built `transformers=`
         # instances are registered as root-only — they aren't cloned
         # for child scopes.
+        #
+        # Within each group, transformers with `before_builtins = True`
+        # are registered before the rest so they observe (and may
+        # mutate) events ahead of built-in transformers like
+        # `MessagesTransformer`. The relative order *within* each lane
+        # is preserved from the supplied sequence.
         if factories is not None:
-            for factory in factories:
-                self._register(factory(scope))
-        for transformer in transformers or ():
+            factory_instances = [factory(scope) for factory in factories]
+            for transformer in _partition_before_builtins(factory_instances):
+                self._register(transformer)
+        for transformer in _partition_before_builtins(list(transformers or ())):
             self._register(transformer)
 
     def transformer_by_key(self, key: str) -> StreamTransformer | None:
