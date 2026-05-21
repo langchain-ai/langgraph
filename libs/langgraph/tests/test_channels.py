@@ -1,6 +1,6 @@
 import operator
 from collections.abc import Sequence
-from typing import Annotated
+from typing import Annotated, Any
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
@@ -103,6 +103,34 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_binop_overwrite_on_empty_channel() -> None:
+    """An Overwrite as the first write to an empty channel must be unwrapped.
+
+    For types that cannot be default-constructed (e.g. ``Any``) the channel
+    starts in the MISSING state. Seeding it from a raw Overwrite wrapper would
+    corrupt the value and break the next reducer application.
+    """
+    # Any() is not instantiable, so the channel starts MISSING.
+    channel = BinaryOperatorAggregate(Any, operator.add)
+
+    channel.update([Overwrite(["b"])])
+    assert channel.get() == ["b"]
+
+    # A subsequent normal write must reduce against the unwrapped value.
+    channel.update([["c"]])
+    assert channel.get() == ["b", "c"]
+
+    # A value followed by an Overwrite resets to the overwritten value.
+    channel = BinaryOperatorAggregate(Any, operator.add)
+    channel.update([["a"], Overwrite(["b"])])
+    assert channel.get() == ["b"]
+
+    # Two Overwrites in one super-step is still an error, even when seeding.
+    channel = BinaryOperatorAggregate(Any, operator.add)
+    with pytest.raises(InvalidUpdateError):
+        channel.update([Overwrite(["b"]), Overwrite(["c"])])
 
 
 def test_untracked_value() -> None:
