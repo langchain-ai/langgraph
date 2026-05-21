@@ -10,7 +10,7 @@ from typing import (
 from uuid import UUID, uuid4
 
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from pydantic import BaseModel
 
@@ -302,6 +302,35 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
     ) -> None:
         super().__init__(stream, subgraphs, parent_ns=parent_ns)
         self._streamed_run_ids: set[UUID] = set()
+
+    def _find_and_emit_messages(self, meta: Meta, response: Any) -> None:
+        """Like the v1 handler, but skip ToolMessage from node outputs.
+
+        Tool results belong on the tools channel / state in v3; v2-flagged streams
+        must not replay finalized ToolMessages as chat tokens (see MessagesTransformer).
+        Legacy v1-only `stream_mode="messages"` still emits ToolMessages (see subgraph
+        streaming tests).
+        """
+        if isinstance(response, BaseMessage) and not isinstance(response, ToolMessage):
+            self._emit(meta, response, dedupe=True)
+        elif isinstance(response, Sequence):
+            for value in response:
+                if isinstance(value, BaseMessage) and not isinstance(
+                    value, ToolMessage
+                ):
+                    self._emit(meta, value, dedupe=True)
+        else:
+            for value in _state_values(response):
+                if isinstance(value, BaseMessage) and not isinstance(
+                    value, ToolMessage
+                ):
+                    self._emit(meta, value, dedupe=True)
+                elif isinstance(value, Sequence):
+                    for item in value:
+                        if isinstance(item, BaseMessage) and not isinstance(
+                            item, ToolMessage
+                        ):
+                            self._emit(meta, item, dedupe=True)
 
     def on_llm_end(
         self,
