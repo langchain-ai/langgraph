@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any, Literal, overload
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk.schema import (
     Checkpoint,
     Json,
@@ -90,7 +91,7 @@ class ThreadsClient:
         if params:
             query_params.update(params)
         return await self.http.get(
-            f"/threads/{thread_id}",
+            f"/threads/{_quote_path_param(thread_id)}",
             headers=headers,
             params=query_params or None,
         )
@@ -254,7 +255,7 @@ class ThreadsClient:
         if return_minimal:
             request_headers["Prefer"] = "return=minimal"
         return await self.http.patch(
-            f"/threads/{thread_id}",
+            f"/threads/{_quote_path_param(thread_id)}",
             json=payload,
             headers=request_headers or None,
             params=params,
@@ -287,7 +288,9 @@ class ThreadsClient:
             ```
 
         """
-        await self.http.delete(f"/threads/{thread_id}", headers=headers, params=params)
+        await self.http.delete(
+            f"/threads/{_quote_path_param(thread_id)}", headers=headers, params=params
+        )
 
     async def search(
         self,
@@ -430,7 +433,10 @@ class ThreadsClient:
 
         """
         return await self.http.post(
-            f"/threads/{thread_id}/copy", json=None, headers=headers, params=params
+            f"/threads/{_quote_path_param(thread_id)}/copy",
+            json=None,
+            headers=headers,
+            params=params,
         )
 
     async def prune(
@@ -586,7 +592,7 @@ class ThreadsClient:
         """
         if checkpoint:
             return await self.http.post(
-                f"/threads/{thread_id}/state/checkpoint",
+                f"/threads/{_quote_path_param(thread_id)}/state/checkpoint",
                 json={"checkpoint": checkpoint, "subgraphs": subgraphs},
                 headers=headers,
                 params=params,
@@ -596,7 +602,7 @@ class ThreadsClient:
             if params:
                 get_params = {**get_params, **dict(params)}
             return await self.http.get(
-                f"/threads/{thread_id}/state/{checkpoint_id}",
+                f"/threads/{_quote_path_param(thread_id)}/state/{_quote_path_param(checkpoint_id)}",
                 params=get_params,
                 headers=headers,
             )
@@ -605,7 +611,7 @@ class ThreadsClient:
             if params:
                 get_params = {**get_params, **dict(params)}
             return await self.http.get(
-                f"/threads/{thread_id}/state",
+                f"/threads/{_quote_path_param(thread_id)}/state",
                 params=get_params,
                 headers=headers,
             )
@@ -670,7 +676,10 @@ class ThreadsClient:
         if as_node:
             payload["as_node"] = as_node
         return await self.http.post(
-            f"/threads/{thread_id}/state", json=payload, headers=headers, params=params
+            f"/threads/{_quote_path_param(thread_id)}/state",
+            json=payload,
+            headers=headers,
+            params=params,
         )
 
     async def get_history(
@@ -719,7 +728,7 @@ class ThreadsClient:
         if checkpoint:
             payload["checkpoint"] = checkpoint
         return await self.http.post(
-            f"/threads/{thread_id}/history",
+            f"/threads/{_quote_path_param(thread_id)}/history",
             json=payload,
             headers=headers,
             params=params,
@@ -763,7 +772,7 @@ class ThreadsClient:
         if params:
             query_params.update(params)
         return self.http.stream(
-            f"/threads/{thread_id}/stream",
+            f"/threads/{_quote_path_param(thread_id)}/stream",
             "GET",
             headers={
                 **({"Last-Event-ID": last_event_id} if last_event_id else {}),
