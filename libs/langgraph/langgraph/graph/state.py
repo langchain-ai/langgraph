@@ -919,6 +919,24 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         before executing the end node. When multiple start nodes are provided,
         the graph will wait for ALL of the start nodes to complete before executing the end node.
 
+        !!! note "List-form vs. separate calls have different semantics"
+            Passing a list of starts is **not** equivalent to making one call per start.
+            The two shapes produce materially different runtime behavior when the
+            upstream branches have different depths or run times.
+
+            - `add_edge([X, Y], Z)` registers a single **fan-in barrier**. `Z` is
+              scheduled exactly once, after both `X` and `Y` have completed.
+            - `add_edge(X, Z)` followed by `add_edge(Y, Z)` registers two
+              **independent triggers**. Each upstream completion schedules `Z`
+              on its own, so `Z` may execute more than once, possibly at
+              different graph depths, when the branches finish at different
+              times.
+
+            In symmetric graphs where both branches happen to complete in the
+            same super-step, both shapes can look identical in a single run.
+            The difference becomes visible on asymmetric-depth graphs (see the
+            example below).
+
         Args:
             start_key: The key(s) of the start node(s) of the edge.
             end_key: The key of the end node of the edge.
@@ -928,6 +946,55 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         Returns:
             Self: The instance of the `StateGraph`, allowing for method chaining.
+
+        Example: Fan-in barrier vs. independent triggers on an asymmetric-depth graph
+            ```python
+            from typing_extensions import TypedDict
+
+            from langgraph.graph import END, START, StateGraph
+
+
+            class State(TypedDict):
+                runs: list[str]
+
+
+            def make_node(name: str):
+                def node(state: State) -> State:
+                    return {"runs": state["runs"] + [name]}
+
+                return node
+
+
+            # Asymmetric depth: A is one hop from START, B2 is two hops from START.
+            # Independent triggers -> C runs twice (once per upstream completion).
+            independent = StateGraph(State)
+            independent.add_node("A", make_node("A"))
+            independent.add_node("B", make_node("B"))
+            independent.add_node("B2", make_node("B2"))
+            independent.add_node("C", make_node("C"))
+            independent.add_edge(START, "A")
+            independent.add_edge(START, "B")
+            independent.add_edge("B", "B2")
+            independent.add_edge("A", "C")   # trigger 1
+            independent.add_edge("B2", "C")  # trigger 2
+            independent.add_edge("C", END)
+            result = independent.compile().invoke({"runs": []})
+            # result["runs"].count("C") == 2
+
+            # Fan-in barrier -> C runs once, after both A and B2 complete.
+            barrier = StateGraph(State)
+            barrier.add_node("A", make_node("A"))
+            barrier.add_node("B", make_node("B"))
+            barrier.add_node("B2", make_node("B2"))
+            barrier.add_node("C", make_node("C"))
+            barrier.add_edge(START, "A")
+            barrier.add_edge(START, "B")
+            barrier.add_edge("B", "B2")
+            barrier.add_edge(["A", "B2"], "C")  # single barrier
+            barrier.add_edge("C", END)
+            result = barrier.compile().invoke({"runs": []})
+            # result["runs"].count("C") == 1
+            ```
         """
         if self.compiled:
             logger.warning(
