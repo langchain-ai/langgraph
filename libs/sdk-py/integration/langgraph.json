@@ -1,0 +1,10 @@
+{
+  "$schema": "https://langgra.ph/schema.json",
+  "dependencies": ["./graph"],
+  "graphs": {
+    "agent": "./graph/streaming_graph.py:graph",
+    "tools_agent": "./graph/tools_agent.py:graph",
+    "deep_agent": "./graph/deep_agent.py:graph"
+  },
+  "env": {}
+}

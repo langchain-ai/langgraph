@@ -53,8 +53,11 @@ dev = [
 include = ["langgraph_sdk"]
 
 [tool.pytest.ini_options]
-addopts = "--strict-markers --strict-config --durations=5 -vv"
+addopts = "--strict-markers --strict-config --durations=5 -vv -m 'not integration'"
 asyncio_mode = "auto"
+markers = [
+    "integration: end-to-end tests that require a running langgraph-api stack at http://localhost:2024. Excluded from `make test` by default; opt in with `pytest -m integration` (and the autouse fixture skips if the API is unreachable).",
+]
 
 [tool.uv]
 default-groups = ['dev']
