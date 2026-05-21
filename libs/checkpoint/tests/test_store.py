@@ -717,6 +717,48 @@ async def test_async_vector_update_with_embedding(
     assert not any(r.key == "doc4" for r in results_new)
 
 
+@pytest.mark.parametrize(
+    ("operator", "expected"),
+    [
+        ("$gt", {"high"}),
+        ("$gte", {"equal", "high"}),
+        ("$lt", {"low"}),
+        ("$lte", {"low", "equal"}),
+    ],
+)
+def test_search_comparison_skips_non_comparable_values(
+    operator: str, expected: set[str]
+) -> None:
+    """Items missing the key or holding a non-numeric value are excluded.
+
+    They must not raise and abort the whole search, matching the NULL-safe
+    behavior of the Postgres backend.
+    """
+    store = InMemoryStore()
+    store.put(("docs",), "low", {"score": 1})
+    store.put(("docs",), "equal", {"score": 5})
+    store.put(("docs",), "high", {"score": 10})
+    store.put(("docs",), "missing", {"title": "no score field"})
+    store.put(("docs",), "non_numeric", {"score": "high"})
+
+    results = store.search(("docs",), filter={"score": {operator: 5}})
+
+    assert {item.key for item in results} == expected
+
+
+async def test_async_search_comparison_skips_non_comparable_values() -> None:
+    """Async search excludes non-comparable values instead of raising."""
+    store = InMemoryStore()
+    store.put(("docs",), "low", {"score": 1})
+    store.put(("docs",), "high", {"score": 10})
+    store.put(("docs",), "missing", {"title": "no score field"})
+    store.put(("docs",), "non_numeric", {"score": "high"})
+
+    results = await store.asearch(("docs",), filter={"score": {"$gt": 5}})
+
+    assert {item.key for item in results} == {"high"}
+
+
 def test_vector_search_with_filters(fake_embeddings: CharacterEmbeddings) -> None:
     """Test combining vector search with filters."""
     inmem_store = InMemoryStore(

@@ -578,14 +578,22 @@ def _apply_operator(value: Any, operator: str, op_value: Any) -> bool:
     """Apply a comparison operator, matching PostgreSQL's JSONB behavior."""
     if operator == "$eq":
         return value == op_value
-    elif operator == "$gt":
-        return float(value) > float(op_value)
-    elif operator == "$gte":
-        return float(value) >= float(op_value)
-    elif operator == "$lt":
-        return float(value) < float(op_value)
-    elif operator == "$lte":
-        return float(value) <= float(op_value)
+    elif operator in ("$gt", "$gte", "$lt", "$lte"):
+        # Values that can't be coerced to a number (e.g. a missing key arrives
+        # as None, or a non-numeric string) simply don't match, mirroring the
+        # NULL-safe behavior of the Postgres backend rather than raising.
+        try:
+            a, b = float(value), float(op_value)
+        except (TypeError, ValueError):
+            return False
+        if operator == "$gt":
+            return a > b
+        elif operator == "$gte":
+            return a >= b
+        elif operator == "$lt":
+            return a < b
+        else:
+            return a <= b
     elif operator == "$ne":
         return value != op_value
     else:
