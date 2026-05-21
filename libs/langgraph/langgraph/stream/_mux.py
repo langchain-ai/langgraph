@@ -62,6 +62,14 @@ class StreamMux:
         `extensions`, `_native` keys are recorded in `native_keys`, and
         any StreamChannel instances are bound and (if named) wired.
 
+        Transformers with `StreamTransformer.before_builtins = True` are
+        registered ahead of the rest, preserving relative order within
+        each lane. This lets content-mutating transformers (PII
+        redaction, content filters, etc.) run before built-ins like
+        `MessagesTransformer` that eagerly snapshot text fields into
+        their projections. See `StreamTransformer.before_builtins` for
+        the contract and foot-guns.
+
         Args:
             transformers: Already-built transformer instances. Registered
                 only on this mux — they are NOT cloned into child
@@ -112,14 +120,31 @@ class StreamMux:
         self._pump_fn: Callable[[], bool] | None = None
         self._apump_fn: Callable[[], Awaitable[bool]] | None = None
 
-        # Factories run first (they propagate to child mini-muxes
-        # via `_make_child`), then any pre-built `transformers=`
-        # instances are registered as root-only — they aren't cloned
-        # for child scopes.
+        # Factories run first (they propagate to child mini-muxes via
+        # `_make_child`), then any pre-built `transformers=` instances
+        # are registered as root-only — they aren't cloned for child
+        # scopes. Within each group, transformers with
+        # `before_builtins = True` are registered ahead of the rest so
+        # they observe (and may mutate) events before built-ins like
+        # `MessagesTransformer`. The order *within* each lane matches
+        # the supplied sequence.
+        pre: list[StreamTransformer] = []
+        rest: list[StreamTransformer] = []
         if factories is not None:
             for factory in factories:
-                self._register(factory(scope))
+                transformer = factory(scope)
+                (
+                    pre if getattr(transformer, "before_builtins", False) else rest
+                ).append(transformer)
+            for transformer in (*pre, *rest):
+                self._register(transformer)
+            pre.clear()
+            rest.clear()
         for transformer in transformers or ():
+            (pre if getattr(transformer, "before_builtins", False) else rest).append(
+                transformer
+            )
+        for transformer in (*pre, *rest):
             self._register(transformer)
 
     def transformer_by_key(self, key: str) -> StreamTransformer | None:
