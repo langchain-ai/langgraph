@@ -1646,6 +1646,9 @@ def tools_condition(
         language models.
     """
     if isinstance(state, list):
+        if not state:
+            msg = f"No messages found in input state to tool_edge: {state}"
+            raise ValueError(msg)
         ai_message = state[-1]
     elif (isinstance(state, dict) and (messages := state.get(messages_key, []))) or (
         messages := getattr(state, messages_key, [])
