@@ -167,7 +167,7 @@ def map_output_updates(
     for node, value in grouped.items():
         if len(value) == 0:
             grouped[node] = None
-        if len(value) == 1:
+        elif len(value) == 1:
             grouped[node] = value[0]
     if cached:
         grouped["__metadata__"] = {"cached": cached}
