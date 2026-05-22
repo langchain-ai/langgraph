@@ -220,7 +220,10 @@ def test_unregistered_tool_error_when_interceptor_calls_execute() -> None:
     )
     # Should get validation error message
     assert result[0].status == "error"
-    assert "is not a valid tool" in result[0].content
+    assert (
+        result[0].content
+        == "Error: unregistered_tool is not a valid tool, try one of [registered_tool]."
+    )
     assert result[0].tool_call_id == "2"
 
 
@@ -576,3 +579,226 @@ def test_interceptor_verifies_tool_is_none_for_unregistered() -> None:
     assert len(captured_requests) == 1
     assert captured_requests[0].tool is not None
     assert captured_requests[0].tool.name == "registered_tool"
+
+
+def test_wrap_tool_call_override_unregistered_tool_with_custom_impl() -> None:
+    """Test that wrap_tool_call can provide custom implementation for unregistered tool."""
+    called = False
+
+    @dec_tool
+    def custom_tool_impl() -> str:
+        """Custom tool implementation."""
+        nonlocal called
+        called = True
+        return "custom result"
+
+    def hook(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        if request.tool_call["name"] == "custom_tool":
+            assert request.tool is None  # Unregistered tools have tool=None
+            return execute(request.override(tool=custom_tool_impl))
+        return execute(request)
+
+    node = ToolNode([registered_tool], wrap_tool_call=hook)
+
+    result = node.invoke(
+        [
+            AIMessage(
+                "",
+                tool_calls=[
+                    {"name": "custom_tool", "args": {}, "id": "1", "type": "tool_call"}
+                ],
+            )
+        ],
+        config=_create_config_with_runtime(),
+    )
+
+    assert called
+    assert result[0].content == "custom result"
+    assert result[0].tool_call_id == "1"
+
+
+async def test_awrap_tool_call_override_unregistered_tool_with_custom_impl() -> None:
+    """Test that awrap_tool_call can provide custom implementation for unregistered tool."""
+    called = False
+
+    @dec_tool
+    def custom_async_tool_impl() -> str:
+        """Custom async tool implementation."""
+        nonlocal called
+        called = True
+        return "async custom result"
+
+    async def hook(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> ToolMessage | Command:
+        if request.tool_call["name"] == "custom_async_tool":
+            assert request.tool is None  # Unregistered tools have tool=None
+            return await execute(request.override(tool=custom_async_tool_impl))
+        return await execute(request)
+
+    node = ToolNode([registered_tool], awrap_tool_call=hook)
+
+    result = await node.ainvoke(
+        [
+            AIMessage(
+                "",
+                tool_calls=[
+                    {
+                        "name": "custom_async_tool",
+                        "args": {},
+                        "id": "1",
+                        "type": "tool_call",
+                    }
+                ],
+            )
+        ],
+        config=_create_config_with_runtime(),
+    )
+
+    assert called
+    assert result[0].content == "async custom result"
+    assert result[0].tool_call_id == "1"
+
+
+def test_graceful_failure_when_hook_does_not_override_unregistered_tool_sync() -> None:
+    """Test graceful failure when hook doesn't override unregistered tool."""
+
+    def passthrough_hook(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        return execute(request)
+
+    node = ToolNode(
+        [registered_tool],
+        wrap_tool_call=passthrough_hook,
+        handle_tool_errors=True,
+    )
+
+    result = node.invoke(
+        [
+            AIMessage(
+                "",
+                tool_calls=[
+                    {"name": "nonexistent", "args": {}, "id": "1", "type": "tool_call"}
+                ],
+            )
+        ],
+        config=_create_config_with_runtime(),
+    )
+
+    assert result[0].status == "error"
+    assert result[0].tool_call_id == "1"
+    assert (
+        result[0].content
+        == "Error: nonexistent is not a valid tool, try one of [registered_tool]."
+    )
+
+
+def test_graceful_failure_even_when_handle_errors_disabled_sync() -> None:
+    """Test that unregistered tool validation returns error even with handle_tool_errors=False."""
+
+    def passthrough_hook(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        return execute(request)
+
+    node = ToolNode(
+        [registered_tool],
+        wrap_tool_call=passthrough_hook,
+        handle_tool_errors=False,
+    )
+
+    result = node.invoke(
+        [
+            AIMessage(
+                "",
+                tool_calls=[
+                    {"name": "missing", "args": {}, "id": "1", "type": "tool_call"}
+                ],
+            )
+        ],
+        config=_create_config_with_runtime(),
+    )
+
+    assert result[0].status == "error"
+    assert (
+        result[0].content
+        == "Error: missing is not a valid tool, try one of [registered_tool]."
+    )
+
+
+async def test_graceful_failure_when_hook_does_not_override_unregistered_tool_async() -> (
+    None
+):
+    """Test graceful failure when async hook doesn't override unregistered tool."""
+
+    async def passthrough_hook(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> ToolMessage | Command:
+        return await execute(request)
+
+    node = ToolNode(
+        [registered_tool],
+        awrap_tool_call=passthrough_hook,
+        handle_tool_errors=True,
+    )
+
+    result = await node.ainvoke(
+        [
+            AIMessage(
+                "",
+                tool_calls=[
+                    {"name": "unknown", "args": {}, "id": "1", "type": "tool_call"}
+                ],
+            )
+        ],
+        config=_create_config_with_runtime(),
+    )
+
+    assert result[0].status == "error"
+    assert result[0].tool_call_id == "1"
+    assert (
+        result[0].content
+        == "Error: unknown is not a valid tool, try one of [registered_tool]."
+    )
+
+
+async def test_graceful_failure_even_when_handle_errors_disabled_async() -> None:
+    """Test that async unregistered tool validation returns error even with handle_tool_errors=False."""
+
+    async def passthrough_hook(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> ToolMessage | Command:
+        return await execute(request)
+
+    node = ToolNode(
+        [registered_tool],
+        awrap_tool_call=passthrough_hook,
+        handle_tool_errors=False,
+    )
+
+    result = await node.ainvoke(
+        [
+            AIMessage(
+                "",
+                tool_calls=[
+                    {"name": "missing", "args": {}, "id": "1", "type": "tool_call"}
+                ],
+            )
+        ],
+        config=_create_config_with_runtime(),
+    )
+
+    assert result[0].status == "error"
+    assert (
+        result[0].content
+        == "Error: missing is not a valid tool, try one of [registered_tool]."
+    )

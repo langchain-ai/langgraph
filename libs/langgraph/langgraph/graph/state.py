@@ -6,6 +6,8 @@ import typing
 import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
+from dataclasses import dataclass, is_dataclass
+from datetime import timedelta
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
@@ -14,6 +16,7 @@ from typing import (
     Any,
     Generic,
     Literal,
+    TypeVar,
     Union,
     cast,
     get_args,
@@ -29,6 +32,7 @@ from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
+from langgraph._internal import _serde
 from langgraph._internal._constants import (
     INTERRUPT,
     NS_END,
@@ -42,9 +46,11 @@ from langgraph._internal._fields import (
 )
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
+from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.named_barrier_value import (
@@ -78,6 +84,8 @@ from langgraph.types import (
     Command,
     RetryPolicy,
     Send,
+    TimeoutPolicy,
+    ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
@@ -87,6 +95,17 @@ __all__ = ("StateGraph", "CompiledStateGraph")
 logger = logging.getLogger(__name__)
 
 _CHANNEL_BRANCH_TO = "branch:to:{}"
+_DEFAULT_ERROR_HANDLER_NODE = "__default_error_handler__"
+
+
+@dataclass(slots=True)
+class _NodeDefaults:
+    """Default node policies applied to every node at compile time."""
+
+    retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None
+    cache_policy: CachePolicy | None = None
+    error_handler: StateNode[Any, Any] | None = None
+    timeout: TimeoutPolicy | None = None
 
 
 def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
@@ -127,6 +146,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     Args:
         state_schema: The schema class that defines the state.
         context_schema: The schema class that defines the runtime context.
+
             Use this to expose immutable context data to your nodes, like `user_id`, `db_conn`, etc.
         input_schema: The schema class that defines the input to the graph.
         output_schema: The schema class that defines the output from the graph.
@@ -242,9 +262,76 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self.output_schema = cast(type[OutputT], output_schema or state_schema)
         self.context_schema = context_schema
 
+        self._node_defaults: _NodeDefaults = _NodeDefaults()
+
         self._add_schema(self.state_schema)
         self._add_schema(self.input_schema, allow_managed=False)
         self._add_schema(self.output_schema, allow_managed=False)
+
+    def set_node_defaults(
+        self,
+        *,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
+    ) -> Self:
+        """Set default node policies that apply to every node in this graph.
+
+        Per-node values passed to `add_node` always take precedence over these
+        defaults. Defaults are applied at `compile()` time. Policies set here
+        are **not** inherited by subgraphs.
+
+        `retry_policy` and `timeout` defaults apply to **all** nodes,
+        including error-handler nodes. `cache_policy` and `error_handler`
+        defaults only apply to regular nodes -- caching error-handler results
+        is unsafe, and handlers must never catch themselves.
+
+        Args:
+            retry_policy: Default retry policy for nodes that don't specify
+                their own via `add_node(..., retry_policy=...)`. Also applies
+                to error-handler nodes.
+            cache_policy: Default cache policy for nodes that don't specify
+                their own via `add_node(..., cache_policy=...)`. Does **not**
+                apply to error-handler nodes.
+            error_handler: Default error handler invoked when any regular node
+                raises and does not have its own `error_handler` set via
+                `add_node`. The handler is **not** invoked when an
+                error-handler node itself raises -- handler failures fail the
+                run.
+            timeout: Default timeout policy for nodes that don't specify their
+                own via `add_node(..., timeout=...)`. Also applies to
+                error-handler nodes. Accepts a `TimeoutPolicy`, a number of
+                seconds (`float`), or a `timedelta`.
+
+        Returns:
+            Self: The builder instance, for chaining.
+
+        Example:
+            ```python
+            graph = (
+                StateGraph(State)
+                .set_node_defaults(
+                    retry_policy=RetryPolicy(max_attempts=3),
+                    error_handler=my_fallback_handler,
+                )
+                .add_node("a", node_a)
+                .add_node("b", node_b, retry_policy=custom_retry)  # overrides default
+                .add_edge(START, "a")
+                .compile()
+            )
+            ```
+        """
+        defaults = self._node_defaults
+        if retry_policy is not None:
+            defaults.retry_policy = retry_policy
+        if cache_policy is not None:
+            defaults.cache_policy = cache_policy
+        if error_handler is not None:
+            defaults.error_handler = error_handler
+        if timeout is not None:
+            defaults.timeout = coerce_timeout_policy(timeout)
+        return self
 
     @property
     def _all_edges(self) -> set[tuple[str, str]]:
@@ -294,11 +381,62 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
+
         Will take the name of the function/runnable as the node name.
+
+        Args:
+            node: The function or runnable this node will run.
+            defer: Whether to defer the execution of the node until the run is about to end.
+            metadata: The metadata associated with the node.
+            input_schema: The input schema for the node. (Default: the graph's state schema)
+            retry_policy: The retry policy for the node.
+
+                If a sequence is provided, the first matching policy will be applied.
+            cache_policy: The cache policy for the node.
+            destinations: Destinations that indicate where a node can route to.
+
+                Useful for edgeless graphs with nodes that return `Command` objects.
+
+                If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+
+                If a `tuple` is provided, the values will be used as the target node names.
+
+                !!! warning
+
+                    This is only used for graph rendering and doesn't have any effect on the graph execution.
+
+        Example:
+            ```python
+            from typing_extensions import TypedDict
+
+            from langchain_core.runnables import RunnableConfig
+            from langgraph.graph import START, StateGraph
+
+
+            class State(TypedDict):
+                x: int
+
+
+            def my_node(state: State, config: RunnableConfig) -> State:
+                return {"x": state["x"] + 1}
+
+
+            builder = StateGraph(State)
+            builder.add_node(my_node)  # node name will be 'my_node'
+            builder.add_edge(START, "my_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
+            ```
+
+        Returns:
+            Self: The instance of the `StateGraph`, allowing for method chaining.
         """
         ...
 
@@ -312,11 +450,66 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the `StateGraph`, input schema is specified.
+        """Add a new node to the `StateGraph` where input schema is specified.
+
         Will take the name of the function/runnable as the node name.
+
+        Args:
+            node: The function or runnable this node will run.
+            defer: Whether to defer the execution of the node until the run is about to end.
+            metadata: The metadata associated with the node.
+            input_schema: The input schema for the node.
+            retry_policy: The retry policy for the node.
+
+                If a sequence is provided, the first matching policy will be applied.
+            cache_policy: The cache policy for the node.
+            destinations: Destinations that indicate where a node can route to.
+
+                Useful for edgeless graphs with nodes that return `Command` objects.
+
+                If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+
+                If a `tuple` is provided, the values will be used as the target node names.
+
+                !!! warning
+
+                    This is only used for graph rendering and doesn't have any effect on the graph execution.
+
+        Example:
+            ```python
+            from typing_extensions import TypedDict
+
+            from langchain_core.runnables import RunnableConfig
+            from langgraph.graph import START, StateGraph
+
+
+            class State(TypedDict):
+                x: int
+
+
+            class NodeInput(TypedDict):
+                x: int
+
+
+            def my_node(state: NodeInput, config: RunnableConfig) -> State:
+                return {"x": state["x"] + 1}
+
+
+            builder = StateGraph(State)
+            builder.add_node(my_node, input_schema=NodeInput)  # node name will be 'my_node'
+            builder.add_edge(START, "my_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
+            ```
+
+        Returns:
+            Self: The instance of the `StateGraph`, allowing for method chaining.
         """
         ...
 
@@ -331,10 +524,62 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the `StateGraph`, input schema is inferred as the state schema."""
+        """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
+
+        Args:
+            node: The name of the node.
+            action: The function or runnable this node will run.
+            defer: Whether to defer the execution of the node until the run is about to end.
+            metadata: The metadata associated with the node.
+            input_schema: The input schema for the node. (Default: the graph's state schema)
+            retry_policy: The retry policy for the node.
+
+                If a sequence is provided, the first matching policy will be applied.
+            cache_policy: The cache policy for the node.
+            destinations: Destinations that indicate where a node can route to.
+
+                Useful for edgeless graphs with nodes that return `Command` objects.
+
+                If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+
+                If a `tuple` is provided, the values will be used as the target node names.
+
+                !!! warning
+
+                    This is only used for graph rendering and doesn't have any effect on the graph execution.
+
+        Example:
+            ```python
+            from typing_extensions import TypedDict
+
+            from langchain_core.runnables import RunnableConfig
+            from langgraph.graph import START, StateGraph
+
+
+            class State(TypedDict):
+                x: int
+
+
+            def my_node(state: State, config: RunnableConfig) -> State:
+                return {"x": state["x"] + 1}
+
+
+            builder = StateGraph(State)
+            builder.add_node("my_fair_node", my_node)
+            builder.add_edge(START, "my_fair_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
+            ```
+
+        Returns:
+            Self: The instance of the `StateGraph`, allowing for method chaining.
+        """
         ...
 
     @overload
@@ -348,10 +593,70 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the `StateGraph`, input schema is specified."""
+        """Add a new node to the `StateGraph`, input schema is specified.
+
+        Args:
+            node: The function or runnable this node will run.
+
+                If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
+            action: The action associated with the node.
+
+                Will be used as the node function or runnable if `node` is a string (node name).
+            defer: Whether to defer the execution of the node until the run is about to end.
+            metadata: The metadata associated with the node.
+            input_schema: The input schema for the node.
+            retry_policy: The retry policy for the node.
+
+                If a sequence is provided, the first matching policy will be applied.
+            cache_policy: The cache policy for the node.
+            destinations: Destinations that indicate where a node can route to.
+
+                Useful for edgeless graphs with nodes that return `Command` objects.
+
+                If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+
+                If a `tuple` is provided, the values will be used as the target node names.
+
+                !!! warning
+
+                    This is only used for graph rendering and doesn't have any effect on the graph execution.
+
+        Example:
+            ```python
+            from typing_extensions import TypedDict
+
+            from langchain_core.runnables import RunnableConfig
+            from langgraph.graph import START, StateGraph
+
+
+            class State(TypedDict):
+                x: int
+
+
+            class NodeInput(TypedDict):
+                x: int
+
+
+            def my_node(state: NodeInput, config: RunnableConfig) -> State:
+                return {"x": state["x"] + 1}
+
+
+            builder = StateGraph(State)
+            builder.add_node("my_fair_node", my_node, input_schema=NodeInput)
+            builder.add_edge(START, "my_fair_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
+            ```
+
+        Returns:
+            Self: The instance of the `StateGraph`, allowing for method chaining.
+        """
         ...
 
     def add_node(
@@ -364,30 +669,47 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: type[NodeInputT] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
+        error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`.
 
         Args:
             node: The function or runnable this node will run.
+
                 If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
             action: The action associated with the node.
+
                 Will be used as the node function or runnable if `node` is a string (node name).
             defer: Whether to defer the execution of the node until the run is about to end.
             metadata: The metadata associated with the node.
-            input_schema: The input schema for the node. (default: the graph's state schema)
+            input_schema: The input schema for the node. (Default: the graph's state schema)
             retry_policy: The retry policy for the node.
+
                 If a sequence is provided, the first matching policy will be applied.
             cache_policy: The cache policy for the node.
+            error_handler: Optional node-level error handler callable for this node.
             destinations: Destinations that indicate where a node can route to.
-                This is useful for edgeless graphs with nodes that return `Command` objects.
+
+                Useful for edgeless graphs with nodes that return `Command` objects.
+
                 If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+
                 If a `tuple` is provided, the values will be used as the target node names.
 
-                !!! note
+                !!! warning
 
                     This is only used for graph rendering and doesn't have any effect on the graph execution.
+            timeout: Timeout for each node attempt. A number or `timedelta` is
+                a hard wall-clock cap and is not refreshed. Use `TimeoutPolicy`
+                to configure both a wall-clock `run_timeout` and an
+                `idle_timeout` refreshed by progress signals. When exceeded, a
+                [`NodeTimeoutError`][langgraph.errors.NodeTimeoutError] is raised
+                and the retry policy (if any) decides whether to retry. Timeouts
+                are supported only for async nodes; sync nodes cannot be safely
+                cancelled in-process.
 
         Example:
             ```python
@@ -441,6 +763,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
             if input_schema is None:
                 input_schema = cast(type[NodeInputT] | None, input_)
+        timeout = coerce_timeout_policy(timeout)
 
         if not isinstance(node, str):
             action = node
@@ -527,6 +850,25 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         if destinations is not None:
             ends = destinations
 
+        resolved_input_schema: type[Any] = (
+            input_schema or inferred_input_schema or self.state_schema
+        )
+        handler_node_name: str | None = None
+        if error_handler is not None:
+            handler_node_name = f"__error_handler__{node}"
+            if handler_node_name in self.nodes:
+                raise ValueError(
+                    f"Auto-generated error handler node `{handler_node_name}` already exists."
+                )
+            self.nodes[handler_node_name] = StateNodeSpec[Any, ContextT](
+                coerce_to_runnable(error_handler, name=handler_node_name, trace=False),  # type: ignore[arg-type]
+                metadata=None,
+                input_schema=resolved_input_schema,
+                retry_policy=None,
+                cache_policy=None,
+                is_error_handler=True,
+            )
+
         if input_schema is not None:
             self.nodes[node] = StateNodeSpec[NodeInputT, ContextT](
                 coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
@@ -534,8 +876,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=input_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
+                timeout=timeout,
             )
         elif inferred_input_schema is not None:
             self.nodes[node] = StateNodeSpec(
@@ -544,8 +888,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=inferred_input_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
+                timeout=timeout,
             )
         else:
             self.nodes[node] = StateNodeSpec[StateT, ContextT](
@@ -554,8 +900,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=self.state_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
+                timeout=timeout,
             )
 
         input_schema = input_schema or inferred_input_schema
@@ -631,11 +979,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         Args:
             source: The starting node. This conditional edge will run when
                 exiting this node.
-            path: The callable that determines the next
-                node or nodes. If not specifying `path_map` it should return one or
-                more nodes. If it returns `'END'`, the graph will stop execution.
-            path_map: Optional mapping of paths to node
-                names. If omitted the paths returned by `path` should be node names.
+            path: The callable that determines the next node or nodes.
+
+                If not specifying `path_map` it should return one or more nodes.
+
+                If it returns `'END'`, the graph will stop execution.
+            path_map: Optional mapping of paths to node names.
+
+                If omitted the paths returned by `path` should be node names.
 
         Returns:
             Self: The instance of the graph, allowing for method chaining.
@@ -676,7 +1027,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         Args:
             nodes: A sequence of `StateNode` (callables that accept a `state` arg) or `(name, StateNode)` tuples.
+
                 If no names are provided, the name will be inferred from the node object (e.g. a `Runnable` or a `Callable` name).
+
                 Each node will be executed in the order provided.
 
         Raises:
@@ -733,11 +1086,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         """Sets a conditional entry point in the graph.
 
         Args:
-            path: The callable that determines the next
-                node or nodes. If not specifying `path_map` it should return one or
-                more nodes. If it returns END, the graph will stop execution.
-            path_map: Optional mapping of paths to node
-                names. If omitted the paths returned by `path` should be node names.
+            path: The callable that determines the next node or nodes.
+
+                If not specifying `path_map` it should return one or more nodes.
+
+                If it returns END, the graph will stop execution.
+            path_map: Optional mapping of paths to node names.
+
+                If omitted the paths returned by `path` should be node names.
 
         Returns:
             Self: The instance of the graph, allowing for method chaining.
@@ -802,7 +1158,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             for node in interrupt:
                 if node not in self.nodes:
                     raise ValueError(f"Interrupt node `{node}` not found")
-
         self.compiled = True
         return self
 
@@ -816,6 +1171,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -824,18 +1180,66 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         Args:
             checkpointer: A checkpoint saver object or flag.
+
                 If provided, this `Checkpointer` serves as a fully versioned "short-term memory" for the graph,
                 allowing it to be paused, resumed, and replayed from any point.
+
                 If `None`, it may inherit the parent graph's checkpointer when used as a subgraph.
+
                 If `False`, it will not use or inherit any checkpointer.
+
+                **Important**: When a checkpointer is enabled, you should pass a `thread_id`
+                in the config when invoking the graph:
+
+                ```python
+                config = {"configurable": {"thread_id": "my-thread"}}
+                graph.invoke(inputs, config)
+                ```
+
+                The `thread_id` is the key used to store and retrieve checkpoints. Use a
+                unique ID for independent runs, or reuse the same ID to accumulate state
+                across invocations (e.g., for conversation memory).
+
             interrupt_before: An optional list of node names to interrupt before.
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
+            transformers: Optional sequence of `StreamTransformer` classes or
+                configured factories. Classes and factories are instantiated
+                per run whenever `stream_events(version="v3")` / `astream_events(version="v3")` is called and are
+                propagated to subgraph scopes. Custom factories should follow
+                the standard `StreamTransformer` constructor shape by
+                accepting `scope` as their first argument. Appended after the
+                built-in stream transformers.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
         """
+        checkpointer = ensure_valid_checkpointer(checkpointer)
+
+        serde_allowlist: set[tuple[str, ...]] | None = None
+        if _serde.STRICT_MSGPACK_ENABLED:
+            schema_types: list[type[Any]] = [
+                self.state_schema,
+                self.input_schema,
+                self.output_schema,
+            ]
+            if self.context_schema is not None:
+                schema_types.append(self.context_schema)
+            for node in self.nodes.values():
+                schema_types.append(node.input_schema)
+            for branches in self.branches.values():
+                for branch in branches.values():
+                    if branch.input_schema is not None:
+                        schema_types.append(branch.input_schema)
+            serde_allowlist = _serde.build_serde_allowlist(
+                schemas=schema_types,
+                channels=self.channels,
+            )
+            checkpointer = _serde.apply_checkpointer_allowlist(
+                checkpointer, serde_allowlist
+            )
+
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -867,6 +1271,64 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 key for key, val in self.channels.items() if not is_managed_value(val)
             ]
         )
+        # Apply builder defaults to node specs. Per-node values always win.
+        # Error-handler routing and cache_policy are only assigned to regular
+        # nodes. Retry and timeout defaults also apply to error-handler nodes.
+        defaults = self._node_defaults
+        default_handler_name: str | None = None
+        if defaults.error_handler is not None:
+            if _DEFAULT_ERROR_HANDLER_NODE in self.nodes:
+                raise ValueError(
+                    f"Auto-generated default error handler node "
+                    f"`{_DEFAULT_ERROR_HANDLER_NODE}` already exists."
+                )
+            default_handler_name = _DEFAULT_ERROR_HANDLER_NODE
+            self.nodes[default_handler_name] = StateNodeSpec[Any, ContextT](
+                coerce_to_runnable(
+                    defaults.error_handler,  # type: ignore[arg-type]
+                    name=default_handler_name,
+                    trace=False,
+                ),
+                metadata=None,
+                input_schema=self.state_schema,
+                retry_policy=None,
+                cache_policy=None,
+                is_error_handler=True,
+            )
+
+        # Apply builder defaults to node specs. Per-node values always win.
+        for spec in self.nodes.values():
+            # error_handler: regular nodes only — handlers must never
+            # catch themselves or other handlers.
+            if (
+                not spec.is_error_handler
+                and default_handler_name is not None
+                and spec.error_handler_node is None
+            ):
+                spec.error_handler_node = default_handler_name
+            # retry: all nodes — handlers should be retried on transient
+            # failures just like regular nodes.
+            if defaults.retry_policy is not None and spec.retry_policy is None:
+                spec.retry_policy = defaults.retry_policy
+            # cache: regular nodes only — caching an error-handler result
+            # is unsafe because the input (failed-node state) may differ
+            # across failures even when the cache key matches.
+            if (
+                not spec.is_error_handler
+                and defaults.cache_policy is not None
+                and spec.cache_policy is None
+            ):
+                spec.cache_policy = defaults.cache_policy
+            # timeout: all nodes — a stuck handler should be cancelled the
+            # same way a stuck regular node would be.
+            if defaults.timeout is not None and spec.timeout is None:
+                spec.timeout = defaults.timeout
+
+        node_error_handler_map = {
+            node_name: spec.error_handler_node
+            for node_name, spec in self.nodes.items()
+            if not spec.is_error_handler and spec.error_handler_node is not None
+        }
 
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
@@ -889,12 +1351,29 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             debug=debug,
             store=store,
             cache=cache,
+            node_error_handler_map=node_error_handler_map,
             name=name or "LangGraph",
+            stream_transformers=transformers,
         )
+        compiled._serde_allowlist = serde_allowlist
 
         compiled.attach_node(START, None)
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
+
+        # Record output/state mappers for v2 stream coercion (pydantic/dataclass only)
+        compiled._output_mapper = _pick_mapper(
+            list(output_channels)
+            if isinstance(output_channels, list)
+            else [output_channels],
+            self.output_schema,
+        )
+        compiled._state_mapper = _pick_mapper(
+            list(stream_channels)
+            if isinstance(stream_channels, list)
+            else [stream_channels],
+            self.state_schema,
+        )
 
         for start, end in self.edges:
             compiled.attach_edge(start, end)
@@ -915,6 +1394,8 @@ class CompiledStateGraph(
 ):
     builder: StateGraph[StateT, ContextT, InputT, OutputT]
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
+    _output_mapper: Callable[[Any], Any] | None
+    _state_mapper: Callable[[Any], Any] | None
 
     def __init__(
         self,
@@ -1045,7 +1526,10 @@ class CompiledStateGraph(
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
+                is_error_handler=node.is_error_handler,
+                error_handler_node=node.error_handler_node,
                 bound=node.runnable,  # type: ignore[arg-type]
+                timeout=node.timeout,
             )
         else:
             raise RuntimeError
@@ -1236,12 +1720,15 @@ def _pick_mapper(
 ) -> Callable[[Any], Any] | None:
     if state_keys == ["__root__"]:
         return None
-    if isclass(schema) and issubclass(schema, dict):
-        return None
-    return partial(_coerce_state, schema)
+    if isclass(schema) and (issubclass(schema, BaseModel) or is_dataclass(schema)):
+        return partial(_coerce_state, schema)
+    return None
 
 
-def _coerce_state(schema: type[Any], input: dict[str, Any]) -> dict[str, Any]:
+_S = TypeVar("_S")
+
+
+def _coerce_state(schema: type[_S], input: dict[str, Any]) -> _S:
     return schema(**input)
 
 
@@ -1378,6 +1865,20 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
         # Search through all annotated medata to find channel annotations
         for item in meta:
             if isinstance(item, BaseChannel):
+                if isinstance(item, DeltaChannel) and hasattr(typ, "__origin__"):
+                    origin = typ.__origin__
+                    # Unwrap parameterized Required[X]/NotRequired[X] to X
+                    # (e.g. Annotated[NotRequired[dict[...]], ...]).
+                    if hasattr(origin, "__origin__") and origin.__origin__ in (
+                        Required,
+                        NotRequired,
+                    ):
+                        origin = origin.__args__[0]
+                    item = item.__class__(
+                        item.reducer,
+                        origin,
+                        snapshot_frequency=item.snapshot_frequency,
+                    )
                 return item
             elif isclass(item) and issubclass(item, BaseChannel):
                 # ex, Annotated[int, EphemeralValue, SomeOtherAnnotation]

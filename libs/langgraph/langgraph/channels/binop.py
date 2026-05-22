@@ -22,10 +22,9 @@ __all__ = ("BinaryOperatorAggregate",)
 def _strip_extras(t):  # type: ignore[no-untyped-def]
     """Strips Annotated, Required and NotRequired from a given type."""
     if hasattr(t, "__origin__"):
+        if t.__origin__ in (Required, NotRequired):
+            return _strip_extras(t.__args__[0])
         return _strip_extras(t.__origin__)
-    if hasattr(t, "__origin__") and t.__origin__ in (Required, NotRequired):
-        return _strip_extras(t.__args__[0])
-
     return t
 
 
@@ -33,9 +32,20 @@ def _get_overwrite(value: Any) -> tuple[bool, Any]:
     """Inspects the given value and returns (is_overwrite, overwrite_value)."""
     if isinstance(value, Overwrite):
         return True, value.value
-    if isinstance(value, dict) and set(value.keys()) == {OVERWRITE}:
+    if isinstance(value, dict) and len(value) == 1 and OVERWRITE in value:
         return True, value[OVERWRITE]
     return False, None
+
+
+def _operators_equal(a: Callable, b: Callable) -> bool:
+    """Return True if two reducer operators should be considered equal.
+
+    Lambdas all share the name '<lambda>' so identity comparison is
+    unreliable; treat any pairing that includes a lambda as equal.
+    """
+    if a.__name__ == "<lambda>" or b.__name__ == "<lambda>":
+        return True
+    return a is b
 
 
 class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
@@ -68,11 +78,8 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
             self.value = MISSING
 
     def __eq__(self, value: object) -> bool:
-        return isinstance(value, BinaryOperatorAggregate) and (
-            value.operator is self.operator
-            if value.operator.__name__ != "<lambda>"
-            and self.operator.__name__ != "<lambda>"
-            else True
+        return isinstance(value, BinaryOperatorAggregate) and _operators_equal(
+            self.operator, value.operator
         )
 
     @property

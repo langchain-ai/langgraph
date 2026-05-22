@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import dataclasses
 import decimal
 import importlib
@@ -10,7 +11,7 @@ import pickle
 import re
 import sys
 from collections import deque
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from inspect import isclass
@@ -22,135 +23,216 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import ormsgpack
 from langchain_core.load.load import Reviver
 
+from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
 from langgraph.checkpoint.serde.base import SerializerProtocol
-from langgraph.checkpoint.serde.types import SendProtocol
+from langgraph.checkpoint.serde.event_hooks import emit_serde_event
+from langgraph.checkpoint.serde.types import (
+    SendProtocol,
+    _DeltaSnapshot,
+)
 from langgraph.store.base import Item
 
-LC_REVIVER = Reviver()
+if TYPE_CHECKING:
+    from langgraph.checkpoint.serde._msgpack import (
+        AllowedMsgpackModules,
+    )
+
+LC_REVIVER = Reviver(allowed_objects="core")
 EMPTY_BYTES = b""
 logger = logging.getLogger(__name__)
+
+# Dedup log warnings across process lifetime; cap bounds state if types are
+# dynamically generated (also acts as a circuit breaker on warning volume).
+# Dedup is best-effort: racing threads may each emit once for the same key,
+# and warnings are silently dropped once _MAX_WARNED_TYPES is reached.
+_MAX_WARNED_TYPES = 1000
+_warned_unregistered_types: set[tuple[str, str]] = set()
+_warned_blocked_types: set[tuple[str, str]] = set()
+
+
+def _is_safe_json_type(id_list: list[str]) -> bool:
+    """Return True if an lc=2 id refers to a type in SAFE_MSGPACK_TYPES.
+
+    Safe types bypass the ``allowed_json_modules`` gate so that old "json" format
+    checkpoints (written before the msgpack migration) can be resumed without
+    requiring users to configure an explicit allowlist.
+    """
+    if len(id_list) < 2:
+        return False
+    module_name = ".".join(id_list[:-1])
+    return (module_name, id_list[-1]) in _lg_msgpack.SAFE_MSGPACK_TYPES
+
+
+def _warn_once(
+    seen: set[tuple[str, str]], key: tuple[str, str], msg: str, *args: object
+) -> None:
+    if key in seen or len(seen) >= _MAX_WARNED_TYPES:
+        return
+    seen.add(key)
+    logger.warning(msg, *args)
 
 
 class JsonPlusSerializer(SerializerProtocol):
     """Serializer that uses ormsgpack, with optional fallbacks.
 
-    Security note: this serializer is intended for use within the BaseCheckpointSaver
-    class and called within the Pregel loop. It should not be used on untrusted
-    python objects. If an attacker can write directly to your checkpoint database,
-    they may be able to trigger code execution when data is deserialized.
+    !!! warning
+
+        Security note: This serializer is intended for use within the `BaseCheckpointSaver`
+        class and called within the Pregel loop. It should not be used on untrusted
+        python objects. If an attacker can write directly to your checkpoint database,
+        they may be able to trigger code execution when data is deserialized.
+
+        Set the environment variable ``LANGGRAPH_STRICT_MSGPACK=true`` to restrict
+        deserialization to a built-in allowlist of safe types.  You can also pass
+        an explicit ``allowed_msgpack_modules`` to the constructor.
     """
 
     def __init__(
         self,
         *,
         pickle_fallback: bool = False,
-        allowed_json_modules: Sequence[tuple[str, ...]] | Literal[True] | None = None,
+        allowed_json_modules: Iterable[tuple[str, ...]] | Literal[True] | None = None,
+        allowed_msgpack_modules: (
+            AllowedMsgpackModules | Literal[True] | None
+        ) = _lg_msgpack._SENTINEL,
         __unpack_ext_hook__: Callable[[int, bytes], Any] | None = None,
     ) -> None:
+        if allowed_msgpack_modules is _lg_msgpack._SENTINEL:
+            if _lg_msgpack.STRICT_MSGPACK_ENABLED:
+                # Strict: only SAFE_MSGPACK_TYPES are allowed.
+                allowed_msgpack_modules = None
+            else:
+                # Permissive (default): all types allowed with a warning.
+                # Set LANGGRAPH_STRICT_MSGPACK=true to lock this down.
+                allowed_msgpack_modules = True
         self.pickle_fallback = pickle_fallback
-        self._allowed_modules = (
-            {mod_and_name for mod_and_name in allowed_json_modules}
-            if allowed_json_modules and allowed_json_modules is not True
-            else (allowed_json_modules if allowed_json_modules is True else None)
+        self._allowed_json_modules: set[tuple[str, ...]] | Literal[True] | None = (
+            _normalize_allowlist(allowed_json_modules)
         )
+        self._allowed_msgpack_modules = _normalize_allowlist(allowed_msgpack_modules)
+
+        self._custom_unpack_ext_hook = __unpack_ext_hook__ is not None
         self._unpack_ext_hook = (
             __unpack_ext_hook__
             if __unpack_ext_hook__ is not None
-            else _msgpack_ext_hook
+            else _create_msgpack_ext_hook(self._allowed_msgpack_modules)
         )
 
-    def _encode_constructor_args(
-        self,
-        constructor: Callable | type[Any],
-        *,
-        method: None | str | Sequence[None | str] = None,
-        args: Sequence[Any] | None = None,
-        kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        out = {
-            "lc": 2,
-            "type": "constructor",
-            "id": (*constructor.__module__.split("."), constructor.__name__),
-        }
-        if method is not None:
-            out["method"] = method
-        if args is not None:
-            out["args"] = args
-        if kwargs is not None:
-            out["kwargs"] = kwargs
-        return out
+    def with_msgpack_allowlist(
+        self, extra_allowlist: Iterable[tuple[str, ...] | type]
+    ) -> JsonPlusSerializer:
+        """Return a new serializer with a merged msgpack allowlist."""
+        base_allowlist = self._allowed_msgpack_modules
+        if base_allowlist is True or base_allowlist is False:
+            return self
+        elif base_allowlist:
+            base_allowlist = set(base_allowlist)
+        else:
+            base_allowlist = set()
+        extra = _normalize_module_keys(tuple(extra_allowlist))
+        merged = base_allowlist | extra
+        if merged == base_allowlist:
+            return self
+        allowed_msgpack_modules: AllowedMsgpackModules | Literal[True] | None
+        if merged:
+            allowed_msgpack_modules = tuple(merged)
+        elif isinstance(self._allowed_msgpack_modules, set):
+            allowed_msgpack_modules = tuple(self._allowed_msgpack_modules)
+        else:
+            allowed_msgpack_modules = self._allowed_msgpack_modules
+
+        clone = copy.copy(self)
+        clone._allowed_json_modules = _normalize_allowlist(self._allowed_json_modules)
+        clone._allowed_msgpack_modules = _normalize_allowlist(allowed_msgpack_modules)
+        if not clone._custom_unpack_ext_hook:
+            clone._unpack_ext_hook = _create_msgpack_ext_hook(
+                clone._allowed_msgpack_modules
+            )
+        return clone
 
     def _reviver(self, value: dict[str, Any]) -> Any:
-        if self._allowed_modules and (
+        if (
             value.get("lc", None) == 2
             and value.get("type", None) == "constructor"
             and value.get("id", None) is not None
         ):
-            try:
-                return self._revive_lc2(value)
-            except InvalidModuleError as e:
-                logger.warning(
-                    "Object %s is not in the deserialization allowlist.\n%s",
-                    value["id"],
-                    e.message,
-                )
+            id_list = value["id"]
+            is_safe = _is_safe_json_type(id_list)
+            if self._allowed_json_modules or is_safe:
+                try:
+                    return self._revive_lc2(value)
+                except InvalidModuleError as e:
+                    if not is_safe:
+                        logger.warning(
+                            "Object %s is not in the deserialization allowlist.\n%s",
+                            value["id"],
+                            e.message,
+                        )
 
         return LC_REVIVER(value)
 
     def _revive_lc2(self, value: dict[str, Any]) -> Any:
-        self._check_allowed_modules(value)
+        self._check_allowed_json_modules(value)
 
         [*module, name] = value["id"]
+        # The `method` field on lc:2 envelopes is intentionally ignored.
+        # Revival is restricted to the default constructor (no `getattr`
+        # dispatch on attacker-influenced names). The framework's own
+        # encoder has not emitted `method=` since the msgpack migration,
+        # and the only legacy emission was `method=(None, "construct")`
+        # for pydantic models, where the first entry (`None`) already
+        # meant "default constructor", which is what we do here.
         try:
             mod = importlib.import_module(".".join(module))
             cls = getattr(mod, name)
-            method = value.get("method")
-            if isinstance(method, str):
-                methods = [getattr(cls, method)]
-            elif isinstance(method, list):
-                methods = [cls if m is None else getattr(cls, m) for m in method]
-            else:
-                methods = [cls]
+            if isclass(cls) and issubclass(cls, BaseException):
+                return None
             args = value.get("args")
             kwargs = value.get("kwargs")
-            for method in methods:
-                try:
-                    if isclass(method) and issubclass(method, BaseException):
-                        return None
-                    if args and kwargs:
-                        return method(*args, **kwargs)
-                    elif args:
-                        return method(*args)
-                    elif kwargs:
-                        return method(**kwargs)
-                    else:
-                        return method()
-                except Exception:
-                    continue
-        except Exception:
+            if args and kwargs:
+                return cls(*args, **kwargs)
+            elif args:
+                return cls(*args)
+            elif kwargs:
+                return cls(**kwargs)
+            else:
+                return cls()
+        except Exception as exc:
+            # Method-field dispatch has been removed (GHSA-fjqc-hq36-qh5p), so
+            # legacy pydantic payloads emitting `method=[None, "construct"]`
+            # no longer fall back to `cls.construct(**kwargs)` when the
+            # default constructor rejects the serialized kwargs. Surface a
+            # one-line warning so operators can spot payloads that now revive
+            # to `None` instead of silently degrading to the raw envelope.
+            logger.warning(
+                "Failed to revive lc:2 envelope %s "
+                "(legacy_method_field=%s, error=%s); returning None",
+                ".".join((*module, name)),
+                "method" in value,
+                type(exc).__name__,
+            )
             return None
 
-    def _check_allowed_modules(self, value: dict[str, Any]) -> None:
+    def _check_allowed_json_modules(self, value: dict[str, Any]) -> None:
         needed = tuple(value["id"])
-        method = value.get("method")
-        if isinstance(method, list):
-            method_display = ",".join(m or "<init>" for m in method)
-        elif isinstance(method, str):
-            method_display = method
-        else:
-            method_display = "<init>"
-
         dotted = ".".join(needed)
-        if not self._allowed_modules:
+        # Safe types (the same set already allowed for msgpack deserialization) are
+        # permitted without an explicit allowlist — they are known-safe LangGraph and
+        # LangChain types.  This restores backwards-compat for old "json" checkpoints
+        # that pre-date the msgpack migration without reopening the broader security gate.
+        if _is_safe_json_type(list(needed)):
+            return
+
+        if not self._allowed_json_modules:
             raise InvalidModuleError(
-                f"Refused to deserialize JSON constructor: {dotted} (method: {method_display}). "
+                f"Refused to deserialize JSON constructor: {dotted}. "
                 "No allowed_json_modules configured.\n\n"
                 "Unblock with ONE of:\n"
                 f"  • JsonPlusSerializer(allowed_json_modules=[{needed!r}, ...])\n"
@@ -159,13 +241,13 @@ class JsonPlusSerializer(SerializerProtocol):
                 "or plain-JSON representations revived without import-time side effects."
             )
 
-        if self._allowed_modules is True:
+        if self._allowed_json_modules is True:
             return
-        if needed in self._allowed_modules:
+        if needed in self._allowed_json_modules:
             return
 
         raise InvalidModuleError(
-            f"Refused to deserialize JSON constructor: {dotted} (method: {method_display}). "
+            f"Refused to deserialize JSON constructor: {dotted}. "
             "Symbol is not in the deserialization allowlist.\n\n"
             "Add exactly this symbol to unblock:\n"
             f"  JsonPlusSerializer(allowed_json_modules=[{needed!r}, ...])\n"
@@ -217,10 +299,13 @@ EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
+EXT_DELTA_SNAPSHOT = 7
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
-    if hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
+    if isinstance(obj, _DeltaSnapshot):
+        return ormsgpack.Ext(EXT_DELTA_SNAPSHOT, _msgpack_enc(obj.value))
+    elif hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
         return ormsgpack.Ext(
             EXT_PYDANTIC_V2,
             _msgpack_enc(
@@ -392,10 +477,13 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             ),
         )
     elif isinstance(obj, SendProtocol):
+        args: tuple[Any, ...] = (obj.node, obj.arg)
+        if (timeout := getattr(obj, "timeout", None)) is not None:
+            args = (obj.node, obj.arg, timeout)
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, (obj.node, obj.arg)),
+                (obj.__class__.__module__, obj.__class__.__name__, args),
             ),
         )
     elif dataclasses.is_dataclass(obj):
@@ -446,92 +534,218 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
 
 
-def _msgpack_ext_hook(code: int, data: bytes) -> Any:
-    if code == EXT_CONSTRUCTOR_SINGLE_ARG:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, arg
-            return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
-        except Exception:
-            return
-    elif code == EXT_CONSTRUCTOR_POS_ARGS:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, args
-            return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
-        except Exception:
-            return
-    elif code == EXT_CONSTRUCTOR_KW_ARGS:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, args
-            return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
-        except Exception:
-            return
-    elif code == EXT_METHOD_SINGLE_ARG:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, arg, method
-            return getattr(getattr(importlib.import_module(tup[0]), tup[1]), tup[3])(
-                tup[2]
-            )
-        except Exception:
-            return
-    elif code == EXT_PYDANTIC_V1:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, kwargs
-            cls = getattr(importlib.import_module(tup[0]), tup[1])
-            try:
-                return cls(**tup[2])
-            except Exception:
-                return cls.construct(**tup[2])
-        except Exception:
-            # for pydantic objects we can't find/reconstruct
-            # let's return the kwargs dict instead
-            try:
-                return tup[2]
-            except NameError:
-                return
-    elif code == EXT_PYDANTIC_V2:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, kwargs, method
-            cls = getattr(importlib.import_module(tup[0]), tup[1])
-            try:
-                return cls(**tup[2])
-            except Exception:
-                return cls.model_construct(**tup[2])
-        except Exception:
-            # for pydantic objects we can't find/reconstruct
-            # let's return the kwargs dict instead
-            try:
-                return tup[2]
-            except NameError:
-                return
-    elif code == EXT_NUMPY_ARRAY:
-        try:
-            import numpy as _np
+def _send_from_args(args: Sequence[Any]) -> Any:
+    # ya we have a cyclic import here ¯\_(ツ)_/¯
+    from langgraph.types import Send  # type: ignore
 
-            dtype_str, shape, order, buf = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+    if len(args) == 2:
+        return Send(*args)
+    return Send(args[0], args[1], timeout=args[2])
+
+
+def _create_msgpack_ext_hook(
+    allowed_modules: set[tuple[str, ...]] | Literal[True] | None,
+) -> Callable[[int, bytes], Any]:
+    """Create msgpack ext hook with allowlist.
+
+    Args:
+        allowed_modules: Set of (module, name) tuples that are allowed to be
+        deserialized, or True to allow all with warnings for unregistered types, or None to only allow safe types.
+
+    Returns:
+        An ext_hook function for use with ormsgpack.unpackb.
+    """
+
+    def _check_allowed(module: str, name: str) -> bool:
+        """Check if type is allowed. Returns True if allowed, False if blocked."""
+        key = (module, name)
+
+        if key in _lg_msgpack.SAFE_MSGPACK_TYPES:
+            return True
+
+        if allowed_modules is True:
+            # default is to warn but allow unregistered types
+            emit_serde_event(
+                {
+                    "kind": "msgpack_unregistered_allowed",
+                    "module": module,
+                    "name": name,
+                }
             )
-            arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
-            return arr.reshape(shape, order=order)
-        except Exception:
-            return
+            _warn_once(
+                _warned_unregistered_types,
+                key,
+                "Deserializing unregistered type %s.%s from checkpoint. "
+                "This will be blocked in a future version. "
+                "Set LANGGRAPH_STRICT_MSGPACK=true to block now, or add "
+                "to allowed_msgpack_modules to allow explicitly: [(%r, %r)]",
+                module,
+                name,
+                module,
+                name,
+            )
+            return True
+        if allowed_modules is not None:
+            if key in allowed_modules:
+                return True
+        # strict mode blocks unregistered types
+        emit_serde_event(
+            {
+                "kind": "msgpack_blocked",
+                "module": module,
+                "name": name,
+            }
+        )
+        _warn_once(
+            _warned_blocked_types,
+            key,
+            "Blocked deserialization of %s.%s - not in allowed_msgpack_modules. "
+            "Add to allowed_msgpack_modules to allow: [(%r, %r)]",
+            module,
+            name,
+            module,
+            name,
+        )
+        return False
+
+    def _check_allowed_method(module: str, name: str, method: str) -> bool:
+        """Check if a method invocation is allowed."""
+        key = (module, name, method)
+        if key in _lg_msgpack.SAFE_MSGPACK_METHODS:
+            return True
+        emit_serde_event(
+            {
+                "kind": "msgpack_method_blocked",
+                "module": module,
+                "name": name,
+                "method": method,
+            }
+        )
+        logger.warning(
+            "Blocked deserialization of method call %s.%s.%s - "
+            "not in allowed methods set.",
+            module,
+            name,
+            method,
+        )
+        return False
+
+    def ext_hook(code: int, data: bytes) -> Any:
+        if code == EXT_DELTA_SNAPSHOT:
+            return _DeltaSnapshot(
+                ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+            )
+        elif code == EXT_CONSTRUCTOR_SINGLE_ARG:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed(tup[0], tup[1]):
+                    # We default to returning the raw data. If the user
+                    # is using this in the context of a pydantic state, etc., then
+                    # it would be validated upon construction.
+                    return tup[2]
+                # module, name, arg
+                return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+            except Exception:
+                return None
+        elif code == EXT_CONSTRUCTOR_POS_ARGS:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed(tup[0], tup[1]):
+                    return tup[2]
+                if tup[0] == "langgraph.types" and tup[1] == "Send":
+                    return _send_from_args(tup[2])
+                # module, name, args
+                return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
+            except Exception:
+                return None
+        elif code == EXT_CONSTRUCTOR_KW_ARGS:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed(tup[0], tup[1]):
+                    return tup[2]
+                # module, name, kwargs
+                return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+            except Exception:
+                return None
+        elif code == EXT_METHOD_SINGLE_ARG:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed_method(tup[0], tup[1], tup[3]):
+                    return tup[2]
+                # module, name, arg, method
+                return getattr(
+                    getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
+                )(tup[2])
+            except Exception:
+                return None
+        elif code == EXT_PYDANTIC_V1:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed(tup[0], tup[1]):
+                    return tup[2]
+                # module, name, kwargs
+                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                try:
+                    return cls(**tup[2])
+                except Exception:
+                    return cls.construct(**tup[2])
+            except Exception:
+                # for pydantic objects we can't find/reconstruct
+                # let's return the kwargs dict instead
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
+        elif code == EXT_PYDANTIC_V2:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed(tup[0], tup[1]):
+                    return tup[2]
+                # module, name, kwargs, method
+                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                try:
+                    return cls(**tup[2])
+                except Exception:
+                    return cls.model_construct(**tup[2])
+            except Exception:
+                # for pydantic objects we can't find/reconstruct
+                # let's return the kwargs dict instead
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
+        elif code == EXT_NUMPY_ARRAY:
+            try:
+                import numpy as _np
+
+                dtype_str, shape, order, buf = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
+                return arr.reshape(shape, order=order)
+            except Exception:
+                return None
+        return None
+
+    return ext_hook
+
+
+# Aliasing in case anyone imported it directly
+_msgpack_ext_hook = _create_msgpack_ext_hook(allowed_modules=None)
 
 
 def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
@@ -559,9 +773,7 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
                 option=ormsgpack.OPT_NON_STR_KEYS,
             )
             if tup[0] == "langgraph.types" and tup[1] == "Send":
-                from langgraph.types import Send  # type: ignore
-
-                return Send(*tup[2])
+                return _send_from_args(tup[2])
             # module, name, args
             return tup[2]
         except Exception:
@@ -646,3 +858,26 @@ _option = (
 
 def _msgpack_enc(data: Any) -> bytes:
     return ormsgpack.packb(data, default=_msgpack_default, option=_option)
+
+
+def _normalize_allowlist(
+    allowlist: AllowedMsgpackModules | Literal[True] | None,
+) -> set[tuple[str, ...]] | Literal[True] | None:
+    if allowlist is True:
+        return allowlist
+    elif allowlist:
+        return _normalize_module_keys(allowlist)
+    else:
+        return None
+
+
+def _normalize_module_keys(
+    modules: AllowedMsgpackModules,
+) -> set[tuple[str, ...]]:
+    normalized: set[tuple[str, ...]] = set()
+    for module in modules:
+        if isclass(module):
+            normalized.add((module.__module__, module.__name__))
+        else:
+            normalized.add(cast(tuple[str, ...], module))
+    return normalized

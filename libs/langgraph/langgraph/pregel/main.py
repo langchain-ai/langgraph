@@ -16,17 +16,21 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from dataclasses import is_dataclass
+from dataclasses import is_dataclass, replace
+from datetime import timedelta
 from functools import partial
 from inspect import isclass
 from typing import (
     Any,
     Generic,
+    Literal,
     cast,
     get_type_hints,
+    overload,
 )
 from uuid import UUID, uuid5
 
+from langchain_core._api import beta
 from langchain_core.globals import get_debug
 from langchain_core.runnables import (
     RunnableSequence,
@@ -38,6 +42,7 @@ from langchain_core.runnables.config import (
     get_callback_manager_for_config,
 )
 from langchain_core.runnables.graph import Graph
+from langchain_core.runnables.schema import StreamEvent
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -48,6 +53,7 @@ from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import Self, Unpack, deprecated, is_typeddict
 
+from langgraph._internal import _serde
 from langgraph._internal._config import (
     ensure_config,
     merge_configs,
@@ -70,6 +76,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_STREAM_MESSAGES_V2,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     ERROR,
@@ -92,13 +99,21 @@ from langgraph._internal._runnable import (
     RunnableSeq,
     coerce_to_runnable,
 )
+from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
+from langgraph.callbacks import (
+    GraphInterruptEvent,
+    GraphResumeEvent,
+    get_async_graph_callback_manager_for_config,
+    get_sync_graph_callback_manager_for_config,
+)
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
 from langgraph.constants import END
 from langgraph.errors import (
     ErrorCode,
+    GraphDrained,
     GraphRecursionError,
     InvalidUpdateError,
     create_error_message,
@@ -113,6 +128,7 @@ from langgraph.pregel._algo import (
 )
 from langgraph.pregel._call import identifier
 from langgraph.pregel._checkpoint import (
+    achannels_from_checkpoint,
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
@@ -120,28 +136,57 @@ from langgraph.pregel._checkpoint import (
 )
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
-from langgraph.pregel._loop import AsyncPregelLoop, SyncPregelLoop
-from langgraph.pregel._messages import StreamMessagesHandler
+from langgraph.pregel._loop import (
+    AsyncPregelLoop,
+    SyncPregelLoop,
+)
+from langgraph.pregel._messages import (
+    StreamMessagesHandler,
+    StreamMessagesHandlerV2,
+)
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
 from langgraph.pregel._runner import PregelRunner
-from langgraph.pregel._utils import get_new_channel_versions
+from langgraph.pregel._tools import StreamToolCallHandler
+from langgraph.pregel._utils import (
+    get_new_channel_versions,
+    validate_timeout_supported,
+)
 from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
-from langgraph.runtime import DEFAULT_RUNTIME, Runtime
+from langgraph.runtime import (
+    DEFAULT_RUNTIME,
+    BaseUser,
+    RunControl,
+    Runtime,
+    ServerInfo,
+)
+from langgraph.stream._mux import StreamMux
+from langgraph.stream._types import StreamTransformer
+from langgraph.stream.run_stream import AsyncGraphRunStream, GraphRunStream
+from langgraph.stream.transformers import (
+    LifecycleTransformer,
+    MessagesTransformer,
+    SubgraphTransformer,
+    ValuesTransformer,
+)
 from langgraph.types import (
     All,
     CachePolicy,
     Checkpointer,
     Command,
     Durability,
+    GraphOutput,
     Interrupt,
     Send,
     StateSnapshot,
     StateUpdate,
     StreamMode,
+    StreamPart,
+    TimeoutPolicy,
+    ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
@@ -166,6 +211,7 @@ class NodeBuilder:
         "_bound",
         "_retry_policy",
         "_cache_policy",
+        "_timeout",
     )
 
     _channels: str | list[str]
@@ -176,6 +222,7 @@ class NodeBuilder:
     _bound: Runnable
     _retry_policy: list[RetryPolicy]
     _cache_policy: CachePolicy | None
+    _timeout: TimeoutPolicy | None
 
     def __init__(
         self,
@@ -188,6 +235,7 @@ class NodeBuilder:
         self._bound = DEFAULT_BOUND
         self._retry_policy = []
         self._cache_policy = None
+        self._timeout = None
 
     def subscribe_only(
         self,
@@ -210,8 +258,10 @@ class NodeBuilder:
         *channels: str,
         read: bool = True,
     ) -> Self:
-        """Add channels to subscribe to. Node will be invoked when any of these
-        channels are updated, with a dict of the channel values as input.
+        """Add channels to subscribe to.
+
+        Node will be invoked when any of these channels are updated, with a dict of the
+        channel values as input.
 
         Args:
             channels: Channel name(s) to subscribe to
@@ -270,8 +320,8 @@ class NodeBuilder:
         """Add channel writes.
 
         Args:
-            *channels: Channel names to write to
-            **kwargs: Channel name and value mappings
+            *channels: Channel names to write to.
+            **kwargs: Channel name and value mappings.
 
         Returns:
             Self for chaining
@@ -304,6 +354,11 @@ class NodeBuilder:
         self._cache_policy = policy
         return self
 
+    def set_timeout(self, timeout: float | timedelta | TimeoutPolicy | None) -> Self:
+        """Set the per-attempt timeout policy for this node."""
+        self._timeout = coerce_timeout_policy(timeout)
+        return self
+
     def build(self) -> PregelNode:
         """Builds the node."""
         return PregelNode(
@@ -315,7 +370,79 @@ class NodeBuilder:
             bound=self._bound,
             retry_policy=self._retry_policy,
             cache_policy=self._cache_policy,
+            timeout=self._timeout,
         )
+
+
+# Kwargs that ``stream_events(version="v3")`` / ``astream_events(version="v3")``
+# manage internally and must not be overridden by callers. ``stream_mode`` is
+# derived from the transformer mux; ``subgraphs`` is forced True so nested
+# namespaces flow through scoped muxes. Forwarding either to the inner
+# ``stream(...)`` would silently break v3's invariants, so we raise instead.
+_V3_INVARIANT_KWARGS: tuple[str, ...] = ("stream_mode", "subgraphs")
+
+
+def _reject_v3_invariant_kwargs(kwargs: dict[str, Any]) -> None:
+    collisions = [k for k in _V3_INVARIANT_KWARGS if k in kwargs]
+    if collisions:
+        raise TypeError(
+            "stream_events(version='v3') / astream_events(version='v3') do "
+            f"not accept {', '.join(collisions)}; v3 owns these "
+            "(stream_mode is built from the transformer mux, subgraphs is "
+            "forced True so nested namespaces flow through scoped muxes)."
+        )
+
+
+def _collect_stream_modes(mux: Any) -> list[StreamMode]:
+    """Return the union of `required_stream_modes` across registered transformers.
+
+    Transformers declare the stream modes they need to function, and
+    `stream_events(version="v3")` asks the graph for exactly that union — no hardcoded
+    default set. If zero transformers declare a given mode, the graph
+    does not stream events for it.
+    """
+    modes: set[StreamMode] = set()
+    for transformer in mux._transformers:
+        modes.update(
+            cast(
+                "tuple[StreamMode, ...]",
+                getattr(transformer, "required_stream_modes", ()),
+            )
+        )
+    return list(modes)
+
+
+def _normalize_stream_transformer_factories(
+    specs: Sequence[Callable[[tuple[str, ...]], Any]] | None,
+) -> list[Callable[[tuple[str, ...]], Any]]:
+    """Normalize stream transformer specs to scoped factories.
+
+    A stream transformer spec is a callable that accepts
+    `scope: tuple[str, ...]` and returns a fresh `StreamTransformer`.
+    Transformer classes work when their constructor follows the same
+    shape. Pre-built instances are rejected because they cannot be
+    cloned into subgraph scopes.
+    """
+    factories: list[Callable[[tuple[str, ...]], Any]] = []
+    for spec in specs or ():
+        if isinstance(spec, StreamTransformer):
+            raise TypeError(
+                "stream_events(version='v3') transformers must be scope-aware callables, "
+                f"got pre-built instance {type(spec).__name__}. Pass the "
+                "transformer class or a factory like "
+                "`lambda scope: MyTransformer(scope, ...)`."
+            )
+        if not callable(spec):
+            raise TypeError(
+                "stream_events(version='v3') transformers must be scope-aware callables, "
+                f"got {type(spec).__name__}."
+            )
+
+        def factory(scope: tuple[str, ...], _spec: Callable[..., Any] = spec) -> Any:
+            return _spec(scope)
+
+        factories.append(factory)
+    return factories
 
 
 class Pregel(
@@ -375,12 +502,12 @@ class Pregel(
     ### Advanced channels: Context and BinaryOperatorAggregate
 
     - `Context`: exposes the value of a context manager, managing its lifecycle.
-      Useful for accessing external resources that require setup and/or teardown. eg.
-      `client = Context(httpx.Client)`
+        Useful for accessing external resources that require setup and/or teardown. e.g.
+        `client = Context(httpx.Client)`
     - `BinaryOperatorAggregate`: stores a persistent value, updated by applying
-       a binary operator to the current value and each update
-       sent to the channel, useful for computing aggregates over multiple steps. eg.
-      `total = BinaryOperatorAggregate(int, operator.add)`
+        a binary operator to the current value and each update
+        sent to the channel, useful for computing aggregates over multiple steps. e.g.
+        `total = BinaryOperatorAggregate(int, operator.add)`
 
     ## Examples
 
@@ -495,7 +622,7 @@ class Pregel(
         {"c": ["foofoo", "foofoofoofoo"]}
         ```
 
-    Example: Using a BinaryOperatorAggregate channel
+    Example: Using a `BinaryOperatorAggregate` channel
         ```python
         from langgraph.channels import EphemeralValue, BinaryOperatorAggregate
         from langgraph.pregel import Pregel, NodeBuilder
@@ -541,8 +668,9 @@ class Pregel(
 
     Example: Introducing a cycle
         This example demonstrates how to introduce a cycle in the graph, by having
-        a chain write to a channel it subscribes to. Execution will continue
-        until a None value is written to the channel.
+        a chain write to a channel it subscribes to.
+
+        Execution will continue until a `None` value is written to the channel.
 
         ```python
         from langgraph.channels import EphemeralValue
@@ -623,6 +751,7 @@ class Pregel(
     name: str = "LangGraph"
 
     trigger_to_nodes: Mapping[str, Sequence[str]]
+    node_error_handler_map: Mapping[str, str]
 
     def __init__(
         self,
@@ -639,7 +768,7 @@ class Pregel(
         input_channels: str | Sequence[str],
         step_timeout: float | None = None,
         debug: bool | None = None,
-        checkpointer: BaseCheckpointSaver | None = None,
+        checkpointer: Checkpointer = None,
         store: BaseStore | None = None,
         cache: BaseCache | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] = (),
@@ -647,7 +776,9 @@ class Pregel(
         context_schema: type[ContextT] | None = None,
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
+        node_error_handler_map: Mapping[str, str] | None = None,
         name: str = "LangGraph",
+        stream_transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         if (
@@ -661,6 +792,8 @@ class Pregel(
 
             if context_schema is None:
                 context_schema = cast(type[ContextT], config_type)
+
+        checkpointer = ensure_valid_checkpointer(checkpointer)
 
         self.nodes = {
             k: v.build() if isinstance(v, NodeBuilder) else v for k, v in nodes.items()
@@ -691,9 +824,21 @@ class Pregel(
         self.context_schema = context_schema
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
+        self.node_error_handler_map = node_error_handler_map or {}
         self.name = name
+        self.stream_transformers: tuple[Callable[[tuple[str, ...]], Any], ...] = tuple(
+            stream_transformers or ()
+        )
+        self._serde_allowlist: set[tuple[str, ...]] | None = None
         if auto_validate:
             self.validate()
+
+    def _apply_checkpointer_allowlist(
+        self, checkpointer: BaseCheckpointSaver | None
+    ) -> BaseCheckpointSaver | None:
+        if not _serde.STRICT_MSGPACK_ENABLED:
+            return checkpointer
+        return _serde.apply_checkpointer_allowlist(checkpointer, self._serde_allowlist)
 
     def get_graph(
         self, config: RunnableConfig | None = None, *, xray: int | bool = False
@@ -784,6 +929,9 @@ class Pregel(
         )
 
     def validate(self) -> Self:
+        for name, node in self.nodes.items():
+            if node.timeout is not None:
+                validate_timeout_supported(node.node or node.bound, name=name)
         validate_graph(
             self.nodes,
             {k: v for k, v in self.channels.items() if isinstance(v, BaseChannel)},
@@ -978,6 +1126,11 @@ class Pregel(
         for name, node in self.get_subgraphs(namespace=namespace, recurse=recurse):
             yield name, node
 
+    # Mappers for v2 stream coercion (pydantic/dataclass).
+    # Set by CompiledStateGraph; None for base Pregel.
+    _output_mapper: Callable[[Any], Any] | None = None
+    _state_mapper: Callable[[Any], Any] | None = None
+
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a saved checkpoint to new channel layout."""
         if checkpoint["v"] < 4 and checkpoint.get("pending_sends"):
@@ -1014,6 +1167,10 @@ class Pregel(
         channels, managed = channels_from_checkpoint(
             self.channels,
             saved.checkpoint,
+            saver=self.checkpointer
+            if isinstance(self.checkpointer, BaseCheckpointSaver)
+            else None,
+            config=saved.config,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
@@ -1130,9 +1287,13 @@ class Pregel(
 
         step = saved.metadata.get("step", -1) + 1
         stop = step + 2
-        channels, managed = channels_from_checkpoint(
+        channels, managed = await achannels_from_checkpoint(
             self.channels,
             saved.checkpoint,
+            saver=self.checkpointer
+            if isinstance(self.checkpointer, BaseCheckpointSaver)
+            else None,
+            config=saved.config,
         )
         # tasks for this checkpoint
         next_tasks = prepare_next_tasks(
@@ -1233,6 +1394,8 @@ class Pregel(
         checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
+        if isinstance(checkpointer, BaseCheckpointSaver):
+            checkpointer = self._apply_checkpointer_allowlist(checkpointer)
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -1275,6 +1438,8 @@ class Pregel(
         checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
+        if isinstance(checkpointer, BaseCheckpointSaver):
+            checkpointer = self._apply_checkpointer_allowlist(checkpointer)
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -1323,6 +1488,8 @@ class Pregel(
         checkpointer: BaseCheckpointSaver | None = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
+        if isinstance(checkpointer, BaseCheckpointSaver):
+            checkpointer = self._apply_checkpointer_allowlist(checkpointer)
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -1374,6 +1541,8 @@ class Pregel(
         checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
+        if isinstance(checkpointer, BaseCheckpointSaver):
+            checkpointer = self._apply_checkpointer_allowlist(checkpointer)
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -1426,7 +1595,8 @@ class Pregel(
         Args:
             config: The config to apply the updates to.
             supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
-                        Each update is a tuple of the form `(values, as_node, task_id)` where `task_id` is optional.
+
+                Each update is a tuple of the form `(values, as_node, task_id)` where `task_id` is optional.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -1439,6 +1609,8 @@ class Pregel(
         checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
+        if isinstance(checkpointer, BaseCheckpointSaver):
+            checkpointer = self._apply_checkpointer_allowlist(checkpointer)
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -1492,6 +1664,11 @@ class Pregel(
             channels, managed = channels_from_checkpoint(
                 self.channels,
                 checkpoint,
+                saver=self.checkpointer
+                if saved is not None
+                and isinstance(self.checkpointer, BaseCheckpointSaver)
+                else None,
+                config=saved.config if saved is not None else None,
             )
             values, as_node = updates[0][:2]
 
@@ -1869,7 +2046,8 @@ class Pregel(
         Args:
             config: The config to apply the updates to.
             supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
-                        Each update is a tuple of the form `(values, as_node, task_id)` where `task_id` is optional.
+
+                Each update is a tuple of the form `(values, as_node, task_id)` where `task_id` is optional.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -1882,6 +2060,8 @@ class Pregel(
         checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
+        if isinstance(checkpointer, BaseCheckpointSaver):
+            checkpointer = self._apply_checkpointer_allowlist(checkpointer)
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -1932,9 +2112,14 @@ class Pregel(
             )
             if saved:
                 checkpoint_config = patch_configurable(config, saved.config[CONF])
-            channels, managed = channels_from_checkpoint(
+            channels, managed = await achannels_from_checkpoint(
                 self.channels,
                 checkpoint,
+                saver=self.checkpointer
+                if saved is not None
+                and isinstance(self.checkpointer, BaseCheckpointSaver)
+                else None,
+                config=saved.config if saved is not None else None,
             )
             values, as_node = updates[0][:2]
             # no values, just clear all tasks
@@ -2370,6 +2555,8 @@ class Pregel(
             raise RuntimeError("checkpointer=True cannot be used for root graphs.")
         else:
             checkpointer = self.checkpointer
+        if isinstance(checkpointer, BaseCheckpointSaver):
+            checkpointer = self._apply_checkpointer_allowlist(checkpointer)
         if checkpointer and not config.get(CONF):
             raise ValueError(
                 "Checkpointer requires one or more of the following 'configurable' "
@@ -2396,6 +2583,7 @@ class Pregel(
             durability,
         )
 
+    @overload
     def stream(
         self,
         input: InputT | Command | None,
@@ -2408,8 +2596,49 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
+        version: Literal["v2"],
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> Iterator[StreamPart[StateT, OutputT]]: ...
+
+    @overload
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        subgraphs: bool = False,
+        debug: bool | None = None,
+        version: Literal["v1"] = ...,
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> Iterator[dict[str, Any] | Any]: ...
+
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        subgraphs: bool = False,
+        debug: bool | None = None,
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[dict[str, Any] | Any]:
         """Stream graph steps for a single input.
@@ -2420,6 +2649,7 @@ class Pregel(
             context: The static context to use for the run.
                 !!! version-added "Added in version 0.6.0"
             stream_mode: The mode to stream output, defaults to `self.stream_mode`.
+
                 Options are:
 
                 - `"values"`: Emit all values in the state after each step, including interrupts.
@@ -2428,7 +2658,7 @@ class Pregel(
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
-                    Will be emitted as 2-tuples `(LLM token, metadata)`.
+                    - Will be emitted as 2-tuples `(LLM token, metadata)`.
                 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
                 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
@@ -2437,17 +2667,22 @@ class Pregel(
                 The streamed outputs will be tuples of `(mode, data)`.
 
                 See [LangGraph streaming guide](https://docs.langchain.com/oss/python/langgraph/streaming) for more details.
-            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes.
+
+                Does not affect the output of the graph in any way.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             durability: The durability mode for the graph execution, defaults to `"async"`.
+
                 Options are:
 
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
-            subgraphs: Whether to stream events from inside subgraphs, defaults to False.
+            control: Optional run control used to request cooperative drain.
+            subgraphs: Whether to stream events from inside subgraphs, defaults to `False`.
+
                 If `True`, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
                 where `namespace` is a tuple with the path to the node where a subgraph is invoked,
@@ -2484,13 +2719,7 @@ class Pregel(
         stream = SyncQueue()
 
         config = ensure_config(self.config, config)
-        callback_manager = get_callback_manager_for_config(config)
-        run_manager = callback_manager.on_chain_start(
-            None,
-            input,
-            name=config.get("run_name", self.get_name()),
-            run_id=config.get("run_id"),
-        )
+        run_manager = None
         try:
             # assign defaults
             (
@@ -2511,6 +2740,36 @@ class Pregel(
                 interrupt_after=interrupt_after,
                 durability=durability,
             )
+            callback_manager = get_callback_manager_for_config(config)
+            if "messages" in stream_modes and version != "v2":
+                # Strip any inherited v2 messages handler so a v1 stream
+                # does not get routed through the content-block event
+                # protocol. Leave v1 handlers in place — an outer
+                # stream(stream_mode="messages", subgraphs=True) relies
+                # on its inheritable handler to observe events emitted
+                # by inner stream(stream_mode="messages") calls.
+                callback_manager.handlers = [
+                    h
+                    for h in callback_manager.handlers
+                    if not isinstance(h, StreamMessagesHandlerV2)
+                ]
+                callback_manager.inheritable_handlers = [
+                    h
+                    for h in callback_manager.inheritable_handlers
+                    if not isinstance(h, StreamMessagesHandlerV2)
+                ]
+            if "ls_integration" not in callback_manager.metadata:
+                callback_manager.add_metadata({"ls_integration": "langgraph"})
+            run_manager = callback_manager.on_chain_start(
+                None,
+                input,
+                name=config.get("run_name", self.get_name()),
+                run_id=config.get("run_id"),
+            )
+            graph_callback_manager = get_sync_graph_callback_manager_for_config(
+                config,
+                run_id=run_manager.run_id,
+            )
             if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
@@ -2522,11 +2781,30 @@ class Pregel(
             # set up messages stream mode
             if "messages" in stream_modes:
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                use_stream_messages_v2 = bool(
+                    version == "v2" and config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
+                )
+                messages_handler_cls = (
+                    StreamMessagesHandlerV2
+                    if use_stream_messages_v2
+                    else StreamMessagesHandler
+                )
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(
+                    messages_handler_cls(
                         stream.put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
+                    )
+                )
+
+            # set up tools stream mode
+            if "tools" in stream_modes:
+                ns_tools = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                run_manager.inheritable_handlers.append(
+                    StreamToolCallHandler(
+                        stream.put,
+                        subgraphs,
+                        parent_ns=tuple(ns_tools.split(NS_SEP)) if ns_tools else None,
                     )
                 )
 
@@ -2556,15 +2834,36 @@ class Pregel(
             if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
+            # build server_info from metadata + parent runtime
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            server_info = _build_server_info(config, parent_runtime)
+
             runtime = Runtime(
                 context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
+                execution_info=None,
+                server_info=server_info,
+                control=control or parent_runtime.control or RunControl(),
             )
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
+
+            # resolve mappers for v2 stream coercion
+            _output_mapper = self._output_mapper if version == "v2" else None
+            _state_mapper = self._state_mapper if version == "v2" else None
+
+            def emit_graph_lifecycle_events(loop: SyncPregelLoop) -> None:
+                while (event := loop._pop_lifecycle_event()) is not None:
+                    if isinstance(event, GraphResumeEvent):
+                        graph_callback_manager.on_resume(
+                            replace(event, run_id=graph_callback_manager.run_id)
+                        )
+                    else:
+                        graph_callback_manager.on_interrupt(
+                            replace(event, run_id=graph_callback_manager.run_id)
+                        )
 
             with SyncPregelLoop(
                 input,
@@ -2586,7 +2885,9 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
             ) as loop:
+                emit_graph_lifecycle_events(loop)
                 # create runner
                 runner = PregelRunner(
                     submit=config[CONF].get(
@@ -2594,6 +2895,8 @@ class Pregel(
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
+                    node_error_handler_map=self.node_error_handler_map,
+                    schedule_error_handler=loop.schedule_error_handler,
                 )
                 # enable subgraph streaming
                 if subgraphs:
@@ -2638,15 +2941,31 @@ class Pregel(
                     ):
                         # emit output
                         yield from _output(
-                            stream_mode, print_mode, subgraphs, stream.get, queue.Empty
+                            stream_mode,
+                            print_mode,
+                            subgraphs,
+                            stream.get,
+                            queue.Empty,
+                            version,
+                            _output_mapper,
+                            _state_mapper,
                         )
                     loop.after_tick()
+                    emit_graph_lifecycle_events(loop)
                     # wait for checkpoint
                     if durability_ == "sync":
                         loop._put_checkpoint_fut.result()
+            emit_graph_lifecycle_events(loop)
             # emit output
             yield from _output(
-                stream_mode, print_mode, subgraphs, stream.get, queue.Empty
+                stream_mode,
+                print_mode,
+                subgraphs,
+                stream.get,
+                queue.Empty,
+                version,
+                _output_mapper,
+                _state_mapper,
             )
             # handle exit
             if loop.status == "out_of_steps":
@@ -2659,11 +2978,56 @@ class Pregel(
                     error_code=ErrorCode.GRAPH_RECURSION_LIMIT,
                 )
                 raise GraphRecursionError(msg)
+            elif loop.status == "draining":
+                if loop.control is None:
+                    raise RuntimeError("Draining status requires run control")
+                raise GraphDrained(loop.control.drain_reason or "shutdown")
             # set final channel values as run output
             run_manager.on_chain_end(loop.output)
         except BaseException as e:
-            run_manager.on_chain_error(e)
+            if run_manager is not None:
+                run_manager.on_chain_error(e)
             raise
+
+    @overload
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        subgraphs: bool = False,
+        debug: bool | None = None,
+        version: Literal["v2"],
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> AsyncIterator[StreamPart[StateT, OutputT]]: ...
+
+    @overload
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        subgraphs: bool = False,
+        debug: bool | None = None,
+        version: Literal["v1"] = ...,
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
     async def astream(
         self,
@@ -2677,8 +3041,10 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Asynchronously stream graph steps for a single input.
@@ -2689,6 +3055,7 @@ class Pregel(
             context: The static context to use for the run.
                 !!! version-added "Added in version 0.6.0"
             stream_mode: The mode to stream output, defaults to `self.stream_mode`.
+
                 Options are:
 
                 - `"values"`: Emit all values in the state after each step, including interrupts.
@@ -2697,7 +3064,7 @@ class Pregel(
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
-                    Will be emitted as 2-tuples `(LLM token, metadata)`.
+                    - Will be emitted as 2-tuples `(LLM token, metadata)`.
                 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
                 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
@@ -2706,17 +3073,22 @@ class Pregel(
                 The streamed outputs will be tuples of `(mode, data)`.
 
                 See [LangGraph streaming guide](https://docs.langchain.com/oss/python/langgraph/streaming) for more details.
-            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes.
+
+                Does not affect the output of the graph in any way.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             durability: The durability mode for the graph execution, defaults to `"async"`.
+
                 Options are:
 
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
-            subgraphs: Whether to stream events from inside subgraphs, defaults to False.
+            control: Optional run control used to request cooperative drain.
+            subgraphs: Whether to stream events from inside subgraphs, defaults to `False`.
+
                 If `True`, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
                 where `namespace` is a tuple with the path to the node where a subgraph is invoked,
@@ -2758,27 +3130,7 @@ class Pregel(
         )
 
         config = ensure_config(self.config, config)
-        callback_manager = get_async_callback_manager_for_config(config)
-        run_manager = await callback_manager.on_chain_start(
-            None,
-            input,
-            name=config.get("run_name", self.get_name()),
-            run_id=config.get("run_id"),
-        )
-        # if running from astream_log() run each proc with streaming
-        do_stream = (
-            next(
-                (
-                    True
-                    for h in run_manager.handlers
-                    if isinstance(h, _StreamingCallbackHandler)
-                    and not isinstance(h, StreamMessagesHandler)
-                ),
-                False,
-            )
-            if _StreamingCallbackHandler is not None
-            else False
-        )
+        run_manager = None
         try:
             # assign defaults
             (
@@ -2799,6 +3151,50 @@ class Pregel(
                 interrupt_after=interrupt_after,
                 durability=durability,
             )
+            callback_manager = get_async_callback_manager_for_config(config)
+            if "messages" in stream_modes and version != "v2":
+                # Strip any inherited v2 messages handler so a v1 stream
+                # does not get routed through the content-block event
+                # protocol. Leave v1 handlers in place — an outer
+                # astream(stream_mode="messages", subgraphs=True) relies
+                # on its inheritable handler to observe events emitted
+                # by inner astream(stream_mode="messages") calls.
+                callback_manager.handlers = [
+                    h
+                    for h in callback_manager.handlers
+                    if not isinstance(h, StreamMessagesHandlerV2)
+                ]
+                callback_manager.inheritable_handlers = [
+                    h
+                    for h in callback_manager.inheritable_handlers
+                    if not isinstance(h, StreamMessagesHandlerV2)
+                ]
+            if "ls_integration" not in callback_manager.metadata:
+                callback_manager.add_metadata({"ls_integration": "langgraph"})
+            run_manager = await callback_manager.on_chain_start(
+                None,
+                input,
+                name=config.get("run_name", self.get_name()),
+                run_id=config.get("run_id"),
+            )
+            graph_callback_manager = get_async_graph_callback_manager_for_config(
+                config,
+                run_id=run_manager.run_id,
+            )
+            # if running from astream_log() run each proc with streaming
+            do_stream = (
+                next(
+                    (
+                        True
+                        for h in run_manager.handlers
+                        if isinstance(h, _StreamingCallbackHandler)
+                        and not isinstance(h, StreamMessagesHandler)
+                    ),
+                    False,
+                )
+                if _StreamingCallbackHandler is not None
+                else False
+            )
             if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
@@ -2811,11 +3207,30 @@ class Pregel(
             if "messages" in stream_modes:
                 # namespace can be None in a root level graph?
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                use_stream_messages_v2 = bool(
+                    version == "v2" and config[CONF].get(CONFIG_KEY_STREAM_MESSAGES_V2)
+                )
+                messages_handler_cls = (
+                    StreamMessagesHandlerV2
+                    if use_stream_messages_v2
+                    else StreamMessagesHandler
+                )
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(
+                    messages_handler_cls(
                         stream_put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
+                    )
+                )
+
+            # set up tools stream mode
+            if "tools" in stream_modes:
+                ns_tools = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                run_manager.inheritable_handlers.append(
+                    StreamToolCallHandler(
+                        stream_put,
+                        subgraphs,
+                        parent_ns=tuple(ns_tools.split(NS_SEP)) if ns_tools else None,
                     )
                 )
 
@@ -2860,15 +3275,47 @@ class Pregel(
             if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
+            # build server_info from metadata + parent runtime
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            server_info = _build_server_info(config, parent_runtime)
+
             runtime = Runtime(
                 context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
+                execution_info=None,
+                server_info=server_info,
+                control=control or parent_runtime.control or RunControl(),
             )
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
+
+            # resolve mappers for v2 stream coercion
+            _output_mapper = self._output_mapper if version == "v2" else None
+            _state_mapper = self._state_mapper if version == "v2" else None
+
+            async def aemit_graph_lifecycle_events(loop: AsyncPregelLoop) -> None:
+                while (event := loop._pop_lifecycle_event()) is not None:
+                    if isinstance(event, GraphResumeEvent):
+                        await graph_callback_manager.on_resume(
+                            GraphResumeEvent(
+                                run_id=graph_callback_manager.run_id,
+                                status=event.status,
+                                checkpoint_id=event.checkpoint_id,
+                                checkpoint_ns=event.checkpoint_ns,
+                            )
+                        )
+                    else:
+                        await graph_callback_manager.on_interrupt(
+                            GraphInterruptEvent(
+                                run_id=graph_callback_manager.run_id,
+                                status=event.status,
+                                checkpoint_id=event.checkpoint_id,
+                                checkpoint_ns=event.checkpoint_ns,
+                                interrupts=event.interrupts,
+                            )
+                        )
 
             async with AsyncPregelLoop(
                 input,
@@ -2890,7 +3337,9 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                has_graph_lifecycle_callbacks=bool(graph_callback_manager.handlers),
             ) as loop:
+                await aemit_graph_lifecycle_events(loop)
                 # create runner
                 runner = PregelRunner(
                     submit=config[CONF].get(
@@ -2899,6 +3348,8 @@ class Pregel(
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     use_astream=do_stream,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
+                    node_error_handler_map=self.node_error_handler_map,
+                    aschedule_error_handler=loop.aschedule_error_handler,
                 )
                 # enable subgraph streaming
                 if subgraphs:
@@ -2966,9 +3417,13 @@ class Pregel(
                                 subgraphs,
                                 stream.get_nowait,
                                 asyncio.QueueEmpty,
+                                version,
+                                _output_mapper,
+                                _state_mapper,
                             ):
                                 yield o
                         loop.after_tick()
+                        await aemit_graph_lifecycle_events(loop)
                         # wait for checkpoint
                         if durability_ == "sync":
                             await cast(asyncio.Future, loop._put_checkpoint_fut)
@@ -2977,6 +3432,8 @@ class Pregel(
                     if _cleanup_waiter is not None:
                         await _cleanup_waiter()
 
+            await aemit_graph_lifecycle_events(loop)
+
             # emit output
             for o in _output(
                 stream_mode,
@@ -2984,6 +3441,9 @@ class Pregel(
                 subgraphs,
                 stream.get_nowait,
                 asyncio.QueueEmpty,
+                version,
+                _output_mapper,
+                _state_mapper,
             ):
                 yield o
             # handle exit
@@ -2997,11 +3457,348 @@ class Pregel(
                     error_code=ErrorCode.GRAPH_RECURSION_LIMIT,
                 )
                 raise GraphRecursionError(msg)
+            elif loop.status == "draining":
+                if loop.control is None:
+                    raise RuntimeError("Draining status requires run control")
+                raise GraphDrained(loop.control.drain_reason or "shutdown")
             # set final channel values as run output
             await run_manager.on_chain_end(loop.output)
         except BaseException as e:
-            await asyncio.shield(run_manager.on_chain_error(e))
+            if run_manager is not None:
+                await asyncio.shield(run_manager.on_chain_error(e))
             raise
+
+    @beta(message="The v3 streaming protocol on Pregel is experimental.")
+    def _pregel_stream_v3(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Internal v3 sync streaming implementation. Public entry: stream_events(version='v3').
+
+        Extra keyword arguments are forwarded to the underlying ``stream(...)``
+        call. The dispatcher in ``stream_events`` rejects ``stream_mode`` and
+        ``subgraphs`` since v3 owns them (``stream_mode`` is derived from the
+        transformer mux; ``subgraphs`` is always True so nested namespaces
+        flow through scoped muxes).
+
+        !!! warning
+
+            The v3 streaming protocol is experimental and may change.
+        """
+        parent_ns = _resolve_parent_ns(self.config, config)
+        compiled_factories = _normalize_stream_transformer_factories(
+            self.stream_transformers
+        )
+        extra_factories = _normalize_stream_transformer_factories(transformers)
+        mux = StreamMux(
+            factories=[
+                ValuesTransformer,
+                MessagesTransformer,
+                LifecycleTransformer,
+                SubgraphTransformer,
+                *compiled_factories,
+                *extra_factories,
+            ],
+            scope=parent_ns,
+            is_async=False,
+        )
+        graph_iter = iter(
+            self.stream(
+                input,
+                patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
+                stream_mode=_collect_stream_modes(mux),
+                subgraphs=True,
+                version="v2",
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                control=control,
+                **kwargs,
+            )
+        )
+        return GraphRunStream(graph_iter, mux)
+
+    @beta(message="The v3 streaming protocol on Pregel is experimental.")
+    async def _apregel_stream_v3(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Internal v3 async streaming implementation. Public entry: astream_events(version='v3').
+
+        Extra keyword arguments are forwarded to the underlying ``astream(...)``
+        call. The dispatcher in ``astream_events`` rejects ``stream_mode`` and
+        ``subgraphs`` since v3 owns them (``stream_mode`` is derived from the
+        transformer mux; ``subgraphs`` is always True so nested namespaces
+        flow through scoped muxes).
+
+        !!! warning
+
+            The v3 streaming protocol is experimental and may change.
+        """
+        parent_ns = _resolve_parent_ns(self.config, config)
+        compiled_factories = _normalize_stream_transformer_factories(
+            self.stream_transformers
+        )
+        extra_factories = _normalize_stream_transformer_factories(transformers)
+        mux = StreamMux(
+            factories=[
+                ValuesTransformer,
+                MessagesTransformer,
+                LifecycleTransformer,
+                SubgraphTransformer,
+                *compiled_factories,
+                *extra_factories,
+            ],
+            scope=parent_ns,
+            is_async=True,
+        )
+        graph_aiter = self.astream(
+            input,
+            patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
+            stream_mode=_collect_stream_modes(mux),
+            subgraphs=True,
+            version="v2",
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+            control=control,
+            **kwargs,
+        ).__aiter__()
+        return AsyncGraphRunStream(graph_aiter, mux)
+
+    @overload
+    def stream_events(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v1", "v2"] = "v2",
+        **kwargs: Any,
+    ) -> Iterator[StreamEvent]: ...
+
+    @overload
+    def stream_events(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v3"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
+    ) -> Any: ...
+
+    def stream_events(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v1", "v2", "v3"] = "v2",
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Stream events from this graph.
+
+        For `version="v1"` / `"v2"`, yields `StreamEvent` dicts (see
+        `Runnable.stream_events`). For `version="v3"`, returns a
+        `GraphRunStream` whose typed projections the caller drives by
+        iterating — no background thread.
+
+        !!! warning
+
+            The `version="v3"` API is experimental and may change.
+
+        Builds a `StreamMux` from the built-in transformers, this
+        graph's compile-time `stream_transformers`, and any additional
+        `transformers=` supplied at the call site. `run.output`,
+        `run.interrupted`, and `run.interrupts` work regardless of
+        which transformers are registered.
+
+        Note:
+            Nesting v1 `stream(stream_mode="messages")` inside a node
+            of a `stream_events(version="v3")` run is not fully
+            supported. The outer v3 messages handler reroutes
+            `BaseChatModel.invoke` through the v2 event protocol, so
+            the inner v1 handler does not see `on_llm_new_token`
+            chunks. The inner stream still yields a finalized message
+            via `on_llm_end`. Use `stream_events(version="v3")` for the
+            inner graph as well, or call `chat_model.stream(...)`
+            explicitly, to get token-level streaming.
+
+        Args:
+            input: Graph input.
+            config: Optional runnable config.
+            version: Streaming-event schema version. `"v3"` selects the
+                content-block-centric streaming protocol.
+            interrupt_before: Nodes to interrupt before, if any. Only
+                used for `version="v3"`.
+            interrupt_after: Nodes to interrupt after, if any. Only
+                used for `version="v3"`.
+            control: Optional run control used to request cooperative
+                drain. Only used for `version="v3"`.
+            transformers: Extra transformer classes or configured
+                factories appended after compile-time
+                `stream_transformers`. Factories are called as
+                `factory(scope)` so they can propagate to subgraph
+                scopes. Only used for `version="v3"`.
+            **kwargs: For `version="v1"`/`"v2"`, forwarded to
+                `Runnable.stream_events`. For `version="v3"`, forwarded
+                to the underlying `stream(...)` call (e.g. `context`,
+                `durability`, `output_keys`, `print_mode`, `debug`).
+                `stream_mode` and `subgraphs` are not accepted under
+                `version="v3"` and raise `TypeError` if supplied; v3
+                owns them.
+
+        Returns:
+            For `version="v3"`, a `GraphRunStream` the caller iterates
+            to drive the run. Otherwise an `Iterator[StreamEvent]`.
+        """
+        if version == "v3":
+            _reject_v3_invariant_kwargs(kwargs)
+            return self._pregel_stream_v3(
+                input,
+                config,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                control=control,
+                transformers=transformers,
+                **kwargs,
+            )
+        return super().stream_events(input, config, version=version, **kwargs)
+
+    @overload
+    def astream_events(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v1", "v2"] = "v2",
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]: ...
+
+    @overload
+    def astream_events(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v3"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
+    ) -> Awaitable[Any]: ...
+
+    def astream_events(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v1", "v2", "v3"] = "v2",
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: RunControl | None = None,
+        transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent] | Awaitable[Any]:
+        """Async variant of `stream_events`.
+
+        For `version="v3"`, returns an `AsyncGraphRunStream` whose
+        projections can be awaited concurrently; each subscribed cursor
+        drives the pump when its buffer is empty. The same nesting
+        limitation as the sync path applies — see `stream_events` for
+        details.
+
+        !!! warning
+
+            The `version="v3"` API is experimental and may change.
+
+        See `stream_events` for full argument and return documentation.
+        """
+        if version == "v3":
+            _reject_v3_invariant_kwargs(kwargs)
+            return self._apregel_stream_v3(
+                input,
+                config,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                control=control,
+                transformers=transformers,
+                **kwargs,
+            )
+        return super().astream_events(input, config, version=version, **kwargs)
+
+    @overload
+    def invoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["values"] = ...,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> GraphOutput[OutputT]: ...
+
+    @overload
+    def invoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> list[StreamPart[StateT, OutputT]]: ...
+
+    @overload
+    def invoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode = "values",
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        version: Literal["v1"] = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any: ...
 
     def invoke(
         self,
@@ -3015,6 +3812,8 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Run the graph with a single input and config.
@@ -3025,16 +3824,23 @@ class Pregel(
             context: The static context to use for the run.
                 !!! version-added "Added in version 0.6.0"
             stream_mode: The stream mode for the graph run.
-            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes.
+
+                Does not affect the output of the graph in any way.
             output_keys: The output keys to retrieve from the graph run.
             interrupt_before: The nodes to interrupt the graph run before.
             interrupt_after: The nodes to interrupt the graph run after.
             durability: The durability mode for the graph execution, defaults to `"async"`.
+
                 Options are:
 
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
+            control: Optional run control used to request cooperative drain.
+            version: The streaming format version. `"v1"` (default) returns the
+                traditional format, `"v2"` returns `StreamPart` typed dicts when
+                `stream_mode` is not `"values"`.
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
@@ -3047,39 +3853,66 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
-        for chunk in self.stream(
-            input,
-            config,
-            context=context,
-            stream_mode=["updates", "values"]
-            if stream_mode == "values"
-            else stream_mode,
-            print_mode=print_mode,
-            output_keys=output_keys,
-            interrupt_before=interrupt_before,
-            interrupt_after=interrupt_after,
-            durability=durability,
-            **kwargs,
-        ):
-            if stream_mode == "values":
-                if len(chunk) == 2:
-                    mode, payload = cast(tuple[StreamMode, Any], chunk)
+        if version == "v2":
+            # v2: values stream parts carry interrupts directly
+            for chunk in self.stream(
+                input,
+                config,
+                context=context,
+                stream_mode="values" if stream_mode == "values" else stream_mode,
+                print_mode=print_mode,
+                output_keys=output_keys,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                durability=durability,
+                control=control,
+                version=version,
+                **kwargs,
+            ):
+                if stream_mode == "values":
+                    latest = chunk["data"]
+                    if chunk_ints := chunk.get("interrupts", ()):
+                        interrupts.extend(chunk_ints)  # type: ignore[arg-type]
                 else:
-                    _, mode, payload = cast(
-                        tuple[tuple[str, ...], StreamMode, Any], chunk
-                    )
-                if (
-                    mode == "updates"
-                    and isinstance(payload, dict)
-                    and (ints := payload.get(INTERRUPT)) is not None
-                ):
-                    interrupts.extend(ints)
-                elif mode == "values":
-                    latest = payload
-            else:
-                chunks.append(chunk)
+                    chunks.append(chunk)
+        else:
+            # v1: collect interrupts from updates stream
+            for chunk in self.stream(
+                input,
+                config,
+                context=context,
+                stream_mode=(
+                    ["updates", "values"] if stream_mode == "values" else stream_mode
+                ),
+                print_mode=print_mode,
+                output_keys=output_keys,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                durability=durability,
+                control=control,
+                **kwargs,
+            ):
+                if stream_mode == "values":
+                    if len(chunk) == 2:
+                        mode, payload = cast(tuple[StreamMode, Any], chunk)
+                    else:
+                        _, mode, payload = cast(
+                            tuple[tuple[str, ...], StreamMode, Any], chunk
+                        )
+                    if (
+                        mode == "updates"
+                        and isinstance(payload, dict)
+                        and (ints := payload.get(INTERRUPT)) is not None
+                    ):
+                        interrupts.extend(ints)
+                    elif mode == "values":
+                        latest = payload
+                else:
+                    chunks.append(chunk)
 
         if stream_mode == "values":
+            if version == "v2":
+                return GraphOutput(value=latest, interrupts=tuple(interrupts))
             if interrupts:
                 return (
                     {**latest, INTERRUPT: interrupts}
@@ -3089,6 +3922,60 @@ class Pregel(
             return latest
         else:
             return chunks
+
+    @overload
+    async def ainvoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["values"] = ...,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> GraphOutput[OutputT]: ...
+
+    @overload
+    async def ainvoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> list[StreamPart[StateT, OutputT]]: ...
+
+    @overload
+    async def ainvoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode = "values",
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        version: Literal["v1"] = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any: ...
 
     async def ainvoke(
         self,
@@ -3102,6 +3989,8 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        control: RunControl | None = None,
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Asynchronously run the graph with a single input and config.
@@ -3112,16 +4001,23 @@ class Pregel(
             context: The static context to use for the run.
                 !!! version-added "Added in version 0.6.0"
             stream_mode: The stream mode for the graph run.
-            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes.
+
+                Does not affect the output of the graph in any way.
             output_keys: The output keys to retrieve from the graph run.
             interrupt_before: The nodes to interrupt the graph run before.
             interrupt_after: The nodes to interrupt the graph run after.
             durability: The durability mode for the graph execution, defaults to `"async"`.
+
                 Options are:
 
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
+            control: Optional run control used to request cooperative drain.
+            version: The streaming format version. `"v1"` (default) returns the
+                traditional format, `"v2"` returns `StreamPart` typed dicts when
+                `stream_mode` is not `"values"`.
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
@@ -3134,39 +4030,66 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
-        async for chunk in self.astream(
-            input,
-            config,
-            context=context,
-            stream_mode=["updates", "values"]
-            if stream_mode == "values"
-            else stream_mode,
-            print_mode=print_mode,
-            output_keys=output_keys,
-            interrupt_before=interrupt_before,
-            interrupt_after=interrupt_after,
-            durability=durability,
-            **kwargs,
-        ):
-            if stream_mode == "values":
-                if len(chunk) == 2:
-                    mode, payload = cast(tuple[StreamMode, Any], chunk)
+        if version == "v2":
+            # v2: values stream parts carry interrupts directly
+            async for chunk in self.astream(
+                input,
+                config,
+                context=context,
+                stream_mode="values" if stream_mode == "values" else stream_mode,
+                print_mode=print_mode,
+                output_keys=output_keys,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                durability=durability,
+                control=control,
+                version=version,
+                **kwargs,
+            ):
+                if stream_mode == "values":
+                    latest = chunk["data"]
+                    if chunk_ints := chunk.get("interrupts", ()):
+                        interrupts.extend(chunk_ints)  # type: ignore[arg-type]
                 else:
-                    _, mode, payload = cast(
-                        tuple[tuple[str, ...], StreamMode, Any], chunk
-                    )
-                if (
-                    mode == "updates"
-                    and isinstance(payload, dict)
-                    and (ints := payload.get(INTERRUPT)) is not None
-                ):
-                    interrupts.extend(ints)
-                elif mode == "values":
-                    latest = payload
-            else:
-                chunks.append(chunk)
+                    chunks.append(chunk)
+        else:
+            # v1: collect interrupts from updates stream
+            async for chunk in self.astream(
+                input,
+                config,
+                context=context,
+                stream_mode=(
+                    ["updates", "values"] if stream_mode == "values" else stream_mode
+                ),
+                print_mode=print_mode,
+                output_keys=output_keys,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                durability=durability,
+                control=control,
+                **kwargs,
+            ):
+                if stream_mode == "values":
+                    if len(chunk) == 2:
+                        mode, payload = cast(tuple[StreamMode, Any], chunk)
+                    else:
+                        _, mode, payload = cast(
+                            tuple[tuple[str, ...], StreamMode, Any], chunk
+                        )
+                    if (
+                        mode == "updates"
+                        and isinstance(payload, dict)
+                        and (ints := payload.get(INTERRUPT)) is not None
+                    ):
+                        interrupts.extend(ints)
+                    elif mode == "values":
+                        latest = payload
+                else:
+                    chunks.append(chunk)
 
         if stream_mode == "values":
+            if version == "v2":
+                return GraphOutput(value=latest, interrupts=tuple(interrupts))
             if interrupts:
                 return (
                     {**latest, INTERRUPT: interrupts}
@@ -3231,6 +4154,9 @@ def _output(
     stream_subgraphs: bool,
     getter: Callable[[], tuple[tuple[str, ...], str, Any]],
     empty_exc: type[Exception],
+    version: Literal["v1", "v2"] = "v1",
+    output_mapper: Callable[[Any], Any] | None = None,
+    state_mapper: Callable[[Any], Any] | None = None,
 ) -> Iterator:
     while True:
         try:
@@ -3258,7 +4184,23 @@ def _output(
                     )
                 )
         if mode in stream_mode:
-            if stream_subgraphs and isinstance(stream_mode, list):
+            if version == "v2":
+                if mode == "values":
+                    # pop __interrupt__ into typed field, coerce data
+                    ints: tuple[Interrupt, ...] = ()
+                    if isinstance(payload, dict):
+                        ints = payload.pop(INTERRUPT, ())
+                        if output_mapper:
+                            payload = output_mapper(payload)
+                    yield {"type": mode, "ns": ns, "data": payload, "interrupts": ints}
+                elif mode in ("checkpoints", "debug"):
+                    # coerce state values in checkpoint/debug payloads
+                    if state_mapper:
+                        _coerce_checkpoint_values(payload, state_mapper)
+                    yield {"type": mode, "ns": ns, "data": payload}
+                else:
+                    yield {"type": mode, "ns": ns, "data": payload}
+            elif stream_subgraphs and isinstance(stream_mode, list):
                 yield (ns, mode, payload)
             elif isinstance(stream_mode, list):
                 yield (mode, payload)
@@ -3266,6 +4208,80 @@ def _output(
                 yield (ns, payload)
             else:
                 yield payload
+
+
+def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> None:
+    """Coerce `values` dicts inside checkpoint or debug payloads in-place.
+
+    Skips the initial checkpoint (where next contains ``__start__``) because
+    not all channels are populated yet and coercion would fail.
+    """
+    _START = "__start__"
+    # debug wrapper: {"type": "checkpoint", "payload": {"values": dict, ...}}
+    if (
+        isinstance(payload, dict)
+        and payload.get("type") == "checkpoint"
+        and isinstance(payload.get("payload"), dict)
+        and isinstance(payload["payload"].get("values"), dict)
+        and _START not in payload["payload"].get("next", ())
+    ):
+        payload["payload"]["values"] = mapper(payload["payload"]["values"])
+    # direct checkpoint payload: {"values": dict, ...}
+    elif (
+        isinstance(payload, dict)
+        and isinstance(payload.get("values"), dict)
+        and _START not in payload.get("next", ())
+    ):
+        payload["values"] = mapper(payload["values"])
+
+
+def _resolve_parent_ns(
+    graph_config: RunnableConfig | None, call_config: RunnableConfig | None
+) -> tuple[str, ...]:
+    """Return the checkpoint namespace the caller is running under.
+
+    `stream_events(version="v3")` uses this to scope its native projections
+    (`ValuesTransformer`, `MessagesTransformer`) to events emitted at
+    the run's own level. A root call resolves to `()`; a call made
+    from inside a node carries the outer graph's task namespace so the
+    projection still matches its own root-level events.
+    """
+    merged = ensure_config(graph_config, call_config)
+    ns = merged.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS)
+    if not ns:
+        return ()
+    return tuple(ns.split(NS_SEP))
+
+
+def _build_server_info(
+    config: RunnableConfig, parent_runtime: Runtime[Any]
+) -> ServerInfo | None:
+    """Build ServerInfo from config configurable.
+
+    The server puts assistant_id/graph_id in config configurable and the
+    authenticated user dict in configurable["langgraph_auth_user"].
+    """
+    configurable = config.get(CONF) or {}
+    assistant_id = configurable.get("assistant_id")
+    graph_id = configurable.get("graph_id")
+
+    # Read authenticated user from configurable (set by LangGraph Server).
+    # We prefer isinstance(BaseUser) but fall back to hasattr("identity")
+    # because the server's ProxyUser provides `permissions` via __getattr__,
+    # which Python's runtime_checkable Protocol check doesn't see.
+    auth_user_data = configurable.get("langgraph_auth_user")
+    user: BaseUser | None = None
+    if auth_user_data is not None:
+        if isinstance(auth_user_data, BaseUser) or hasattr(auth_user_data, "identity"):
+            user = cast(BaseUser, auth_user_data)
+
+    if assistant_id is not None or graph_id is not None or user is not None:
+        return ServerInfo(
+            assistant_id=str(assistant_id) if assistant_id else "",
+            graph_id=str(graph_id) if graph_id else "",
+            user=user,
+        )
+    return None
 
 
 def _coerce_context(

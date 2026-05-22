@@ -10,6 +10,7 @@ from bench.fanout_to_subgraph import fanout_to_subgraph, fanout_to_subgraph_sync
 from bench.pydantic_state import pydantic_state
 from bench.react_agent import react_agent
 from bench.sequential import create_sequential
+from bench.serde_allowlist import collect_allowlist_large, collect_allowlist_small
 from bench.wide_dict import wide_dict
 from bench.wide_state import wide_state
 from langgraph.graph import StateGraph
@@ -513,3 +514,7 @@ compilation_benchmarks = (
 
 for name, graph in compilation_benchmarks:
     r.bench_func(name + "_compilation", compile_graph, graph)
+
+# Serde allowlist collection
+r.bench_func("serde_allowlist_small", collect_allowlist_small)
+r.bench_func("serde_allowlist_large", collect_allowlist_large)

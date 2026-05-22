@@ -1,4 +1,4 @@
-.PHONY: test test_watch lint format
+.PHONY: test test_watch lint type format
 
 ######################
 # TESTING AND COVERAGE
@@ -32,6 +32,9 @@ lint lint_diff lint_package lint_tests:
 	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE)
 	[ "$(PYTHON_FILES)" = "" ] || uv run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
 
+type:
+	mkdir -p $(MYPY_CACHE) && uv run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
+
 format format_diff:
 	uv run ruff format $(PYTHON_FILES)
-	uv run ruff check --select I --fix $(PYTHON_FILES)
+	uv run ruff check --fix $(PYTHON_FILES)

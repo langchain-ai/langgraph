@@ -1,4 +1,4 @@
-.PHONY: lint format test
+.PHONY: lint type format test
 
 test:
 	uv run pytest tests
@@ -17,7 +17,10 @@ lint lint_diff:
 	uv run ruff check .
 	[ "$(PYTHON_FILES)" = "" ] || uv run ruff format $(PYTHON_FILES) --diff
 	[ "$(PYTHON_FILES)" = "" ] || uv run ruff check --select I $(PYTHON_FILES)
-	uvx ty check .
+	uv run ty check .
+
+type:
+	uv run ty check .
 
 format format_diff:
 	uv run ruff check --select I --fix $(PYTHON_FILES)

@@ -164,12 +164,11 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         grouped_ops, num_ops = _group_ops(ops)
         results: list[Result] = [None] * num_ops
 
-        async with _ainternal.get_connection(self.conn) as conn:
-            if self.pipe:
-                async with self.pipe:
-                    await self._execute_batch(grouped_ops, results, conn)
-            else:
-                await self._execute_batch(grouped_ops, results, conn)
+        if self.pipe:
+            async with self.pipe:
+                await self._execute_batch(grouped_ops, results)
+        else:
+            await self._execute_batch(grouped_ops, results)
 
         return results
 
@@ -266,6 +265,27 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                             k: v(self) if v is not None and callable(v) else v
                             for k, v in migration.params.items()
                         }
+                        if "dims" in params:
+                            try:
+                                params["dims"] = int(params["dims"])
+                            except Exception as e:
+                                raise ValueError(
+                                    f"Invalid dims for vector index: {params['dims']}"
+                                ) from e
+                        if "vector_type" in params:
+                            vt = str(params["vector_type"])
+                            if vt not in ("vector", "halfvec"):
+                                raise ValueError(
+                                    f"Invalid vector_type for pgvector: {vt}"
+                                )
+                            params["vector_type"] = vt
+                        if "index_type" in params:
+                            it = str(params["index_type"])
+                            if it not in ("hnsw", "ivfflat"):
+                                raise ValueError(
+                                    f"Invalid index_type for pgvector: {it}"
+                                )
+                            params["index_type"] = it
                         sql = sql % params
                     await cur.execute(sql)
                     await cur.execute(
@@ -389,8 +409,10 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         self,
         grouped_ops: dict,
         results: list[Result],
-        conn: AsyncConnection[DictRow],
+        conn: AsyncConnection[DictRow] | None = None,
     ) -> None:
+        # Keep `conn` for compatibility with subclasses overriding this private hook.
+        # All database I/O goes through `_cursor()`, which owns connection acquisition.
         async with self._cursor(pipeline=True) as cur:
             if GetOp in grouped_ops:
                 await self._batch_get_ops(
@@ -529,6 +551,11 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                 Will be applied regardless of whether the PostgresStore instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
+        is_pooled_conn = isinstance(self.conn, AsyncConnectionPool)
+        # With AsyncConnectionPool, each _cursor() call checks out its own connection.
+        # The pool does not hand out the same connection concurrently, so a shared lock
+        # across calls is unnecessary here.
+        lock = asyncio.Lock() if is_pooled_conn else self.lock
         async with _ainternal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
@@ -545,21 +572,21 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
                     async with (
-                        self.lock,
+                        lock,
                         conn.pipeline(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
                         yield cur
                 else:
                     async with (
-                        self.lock,
+                        lock,
                         conn.transaction(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
                         yield cur
             else:
                 async with (
-                    self.lock,
+                    lock,
                     conn.cursor(binary=True, row_factory=dict_row) as cur,
                 ):
                     yield cur

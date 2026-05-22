@@ -88,8 +88,8 @@ def add_messages(
         If a message in `right` has the same ID as a message in `left`, the
             message from `right` will replace the message from `left`.
 
-    Example:
-        ```python title="Basic usage"
+    Example: Basic usage
+        ```python
         from langchain_core.messages import AIMessage, HumanMessage
 
         msgs1 = [HumanMessage(content="Hello", id="1")]
@@ -98,14 +98,16 @@ def add_messages(
         # [HumanMessage(content='Hello', id='1'), AIMessage(content='Hi there!', id='2')]
         ```
 
-        ```python title="Overwrite existing message"
+    Example: Overwrite existing message
+        ```python
         msgs1 = [HumanMessage(content="Hello", id="1")]
         msgs2 = [HumanMessage(content="Hello again", id="1")]
         add_messages(msgs1, msgs2)
         # [HumanMessage(content='Hello again', id='1')]
         ```
 
-        ```python title="Use in a StateGraph"
+    Example: Use in a StateGraph
+        ```python
         from typing import Annotated
         from typing_extensions import TypedDict
         from langgraph.graph import StateGraph
@@ -124,7 +126,8 @@ def add_messages(
         # {'messages': [AIMessage(content='Hello', id=...)]}
         ```
 
-        ```python title="Use OpenAI message format"
+    Example: Use OpenAI message format
+        ```python
         from typing import Annotated
         from typing_extensions import TypedDict
         from langgraph.graph import StateGraph, add_messages
@@ -239,6 +242,71 @@ def add_messages(
         pass
 
     return merged
+
+
+def _messages_delta_reducer(
+    state: list[AnyMessage], writes: list[list[AnyMessage]]
+) -> list[AnyMessage]:
+    """**Experimental.** Batch reducer for use with `DeltaChannel`.
+
+    Processes all writes in one pass — dedup by ID, `RemoveMessage`
+    tombstoning — without calling `add_messages`.
+
+    This reducer is batching-invariant, as required by `DeltaChannel`:
+    `reducer(reducer(state, xs), ys) == reducer(state, xs + ys)`.
+
+    Raw dict / string / tuple inputs are coerced to typed `BaseMessage`
+    objects so that HTTP-driven graphs work without a separate coercion
+    step. This is not full `add_messages` parity — `REMOVE_ALL_MESSAGES`,
+    unknown-id `RemoveMessage` errors, missing-id UUID assignment, and
+    `BaseMessageChunk` conversion are not handled here.
+
+    Example::
+
+        from typing import Annotated
+        from langgraph.channels.delta import DeltaChannel
+        from langgraph.graph.message import _messages_delta_reducer
+
+        class State(TypedDict):
+            messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+    """
+
+    # Each write is either a list of message-likes or a single message-like
+    # (BaseMessage / dict / str / tuple). Only lists flatten; everything
+    # else is one message.
+    flat: list[Any] = []
+    for w in writes:
+        if isinstance(w, list):
+            flat.extend(w)
+        else:
+            flat.append(w)
+    # Steady state: the reducer's own output is already typed, so skip
+    # `convert_to_messages` on state when the first element is a BaseMessage.
+    # Only raw input (initial dicts, deserialized blobs) hits the slow path.
+    if state and isinstance(state[0], BaseMessage):
+        state_msgs = state
+    else:
+        state_msgs = cast("list[AnyMessage]", convert_to_messages(state))
+    msgs = cast("list[AnyMessage]", convert_to_messages(flat))
+
+    index: dict[str, int] = {
+        m.id: i for i, m in enumerate(state_msgs) if m.id is not None
+    }
+    result: list[AnyMessage | None] = list(state_msgs)
+    for msg in msgs:
+        mid = msg.id
+        if mid is None:
+            result.append(msg)
+        elif isinstance(msg, RemoveMessage):
+            if mid in index:
+                result[index[mid]] = None
+                del index[mid]
+        elif mid in index:
+            result[index[mid]] = msg
+        else:
+            index[mid] = len(result)
+            result.append(msg)
+    return [m for m in result if m is not None]
 
 
 @deprecated(

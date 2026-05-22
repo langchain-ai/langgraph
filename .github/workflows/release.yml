@@ -25,14 +25,15 @@ jobs:
       tag: ${{ steps.check-version.outputs.tag }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          enable-cache: true
           cache-suffix: "release"
+          enable-cache: false
+          working-directory: ${{ inputs.working-directory }}
 
       # We want to keep this build stage *separate* from the release stage,
       # so that there's no sharing of permissions between them.
@@ -50,7 +51,7 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
 
       - name: Upload build
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: dist
           path: ${{ inputs.working-directory }}/dist/
@@ -86,7 +87,7 @@ jobs:
     outputs:
       release-body: ${{ steps.generate-release-body.outputs.release-body }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: langchain-ai/langgraph
           path: langgraph
@@ -157,7 +158,7 @@ jobs:
       - test-pypi-publish
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       # We explicitly *don't* set up caching here. This ensures our tests are
       # maximally sensitive to catching breakage.
@@ -173,10 +174,11 @@ jobs:
       #   used in the real world.
 
       - name: Set up Python
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          enable-cache: true
+          enable-cache: false
+          working-directory: ${{ inputs.working-directory }}
 
       - name: Import published package
         shell: bash
@@ -260,22 +262,23 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          enable-cache: true
           cache-suffix: "release"
+          enable-cache: false
+          working-directory: ${{ inputs.working-directory }}
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: ${{ inputs.working-directory }}/dist/
 
       - name: Publish package distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
           packages-dir: ${{ inputs.working-directory }}/dist/
           verbose: true
@@ -301,26 +304,28 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: astral-sh/setup-uv@v7
+        uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          enable-cache: true
           cache-suffix: "release"
+          enable-cache: false
+          working-directory: ${{ inputs.working-directory }}
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: ${{ inputs.working-directory }}/dist/
 
       - name: Create Tag
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
         with:
           artifacts: "dist/*"
           token: ${{ secrets.GITHUB_TOKEN }}
           generateReleaseNotes: false
           tag: ${{needs.build.outputs.tag}}
+          name: ${{ needs.build.outputs.pkg-name }}==${{ needs.build.outputs.version }}
           body: ${{ needs.release-notes.outputs.release-body }}
           commit: ${{ github.sha }}
