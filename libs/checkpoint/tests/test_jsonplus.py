@@ -494,6 +494,57 @@ def test_lc2_json_legacy_pydantic_method_list_falls_back_to_default() -> None:
     assert result.content == "legacy"
 
 
+def test_lc2_json_legacy_construct_payload_logs_warning_when_default_init_rejects(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Legacy `method=[None, "construct"]` envelopes whose kwargs the default
+    `__init__` rejects now revive to `None` and emit an observable warning.
+
+    Pre-October-2025 langgraph emitted pydantic payloads with
+    `method=[None, "construct"]` so the reviver could fall back to
+    `cls.construct(**kwargs)` when the default constructor raised a
+    validation error. That fallback was removed with method-field dispatch
+    (GHSA-fjqc-hq36-qh5p), so these payloads now silently fail validation. A
+    `logger.warning` makes the regression observable to operators instead of
+    letting the envelope quietly degrade to its raw-dict form.
+    """
+    serde = JsonPlusSerializer()
+    load = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["langchain_core", "messages", "ai", "AIMessage"],
+        # Legacy two-entry method tuple: try default ctor, fall back to construct.
+        "method": [None, "construct"],
+        # ``type="not-a-real-message-type"`` fails AIMessage's Literal["ai"]
+        # validator under the default constructor. Before the GHSA patch this
+        # would have fallen back to ``cls.construct(**kwargs)``; now it must
+        # return None and log.
+        "kwargs": {"content": "legacy", "type": "not-a-real-message-type"},
+    }
+
+    with caplog.at_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus"):
+        result = serde._revive_lc2(load)
+
+    assert result is None, (
+        "Legacy method=[None, 'construct'] payloads with kwargs the default "
+        "ctor rejects must now return None (no construct() fallback)."
+    )
+
+    matching = [
+        r
+        for r in caplog.records
+        if r.name == "langgraph.checkpoint.serde.jsonplus"
+        and r.levelno == logging.WARNING
+        and "langchain_core.messages.ai.AIMessage" in r.getMessage()
+        and "legacy_method_field=True" in r.getMessage()
+    ]
+    assert matching, (
+        "Expected a WARNING from langgraph.checkpoint.serde.jsonplus "
+        "referencing the class id and legacy_method_field=True; "
+        f"got records: {[(r.name, r.levelname, r.getMessage()) for r in caplog.records]}"
+    )
+
+
 def test_lc2_json_safe_type_pickle_payload_does_not_execute() -> None:
     """End-to-end: a `parse_raw` pickle gadget payload on a SAFE type must not run.
 

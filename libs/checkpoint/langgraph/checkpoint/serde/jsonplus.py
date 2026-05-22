@@ -204,7 +204,20 @@ class JsonPlusSerializer(SerializerProtocol):
                 return cls(**kwargs)
             else:
                 return cls()
-        except Exception:
+        except Exception as exc:
+            # Method-field dispatch has been removed (GHSA-fjqc-hq36-qh5p), so
+            # legacy pydantic payloads emitting `method=[None, "construct"]`
+            # no longer fall back to `cls.construct(**kwargs)` when the
+            # default constructor rejects the serialized kwargs. Surface a
+            # one-line warning so operators can spot payloads that now revive
+            # to `None` instead of silently degrading to the raw envelope.
+            logger.warning(
+                "Failed to revive lc:2 envelope %s "
+                "(legacy_method_field=%s, error=%s); returning None",
+                ".".join((*module, name)),
+                "method" in value,
+                type(exc).__name__,
+            )
             return None
 
     def _check_allowed_json_modules(self, value: dict[str, Any]) -> None:
