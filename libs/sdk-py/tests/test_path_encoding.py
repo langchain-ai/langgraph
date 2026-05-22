@@ -66,6 +66,16 @@ class TestQuotePathParam:
         assert _quote_path_param(uid) == str(uid)
         assert _quote_path_param(42) == "42"
 
+    def test_none_value_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="must not be None"):
+            _quote_path_param(None)
+
+    def test_bytes_value_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="must not be bytes"):
+            _quote_path_param(b"bytes")
+        with pytest.raises(TypeError, match="must not be bytes"):
+            _quote_path_param(bytearray(b"bytes"))
+
 
 def _wire_path(request: httpx.Request) -> str:
     """Return the path as it goes on the wire (preserves percent-encoding)."""
@@ -221,6 +231,96 @@ class TestAsyncPathEncoding:
         assert wire.startswith("/runs/crons/")
         segment = wire[len("/runs/crons/") :]
         assert "/" not in segment
+
+    async def test_threads_get_state_with_pivot_checkpoint_id_stays_on_state(
+        self,
+    ) -> None:
+        captured: list[str] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(_wire_path(request))
+            return httpx.Response(200, json={})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            threads_client = ThreadsClient(HttpClient(client))
+            await threads_client.get_state(thread_id="tid-1", checkpoint_id="../runs")
+
+        assert len(captured) == 1
+        wire = captured[0]
+        # Wire path must stay on `/threads/{tid}/state/...`, not pivot to
+        # `/threads/tid-1/runs`.
+        assert wire.startswith("/threads/tid-1/state/")
+        # Strip query string before checking the checkpoint segment.
+        path_only = wire.split("?", 1)[0]
+        segment = path_only[len("/threads/tid-1/state/") :]
+        assert "/" not in segment
+        assert segment == "..%2Fruns"
+
+    async def test_assistants_get_subgraphs_with_pivot_namespace_stays_on_subgraphs(
+        self,
+    ) -> None:
+        captured: list[str] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(_wire_path(request))
+            return httpx.Response(200, json={})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            assistants_client = AssistantsClient(HttpClient(client))
+            await assistants_client.get_subgraphs("aid-1", namespace="../foo")
+
+        assert len(captured) == 1
+        wire = captured[0]
+        # Wire path must stay on `/assistants/{aid}/subgraphs/...`.
+        assert wire.startswith("/assistants/aid-1/subgraphs/")
+        # Strip query string before checking the namespace segment.
+        path_only = wire.split("?", 1)[0]
+        segment = path_only[len("/assistants/aid-1/subgraphs/") :]
+        assert "/" not in segment
+        assert segment == "..%2Ffoo"
+
+    async def test_bare_double_dot_thread_id_survives_to_wire(self) -> None:
+        """The all-dot encoding branch must survive httpx's relative-path collapse."""
+        captured: list[str] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(_wire_path(request))
+            return httpx.Response(200, json={"thread_id": "anything"})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            threads_client = ThreadsClient(HttpClient(client))
+            await threads_client.get("..")
+
+        assert len(captured) == 1
+        # The all-dot identifier is fully percent-encoded so httpx does NOT
+        # collapse it client-side as a relative-path traversal.
+        assert captured[0].endswith("/threads/%2E%2E")
+
+    async def test_bare_single_dot_thread_id_survives_to_wire(self) -> None:
+        captured: list[str] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(_wire_path(request))
+            return httpx.Response(200, json={"thread_id": "anything"})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            threads_client = ThreadsClient(HttpClient(client))
+            await threads_client.get(".")
+
+        assert len(captured) == 1
+        assert captured[0].endswith("/threads/%2E")
 
     async def test_uuid_identifier_lands_on_intended_path(self) -> None:
         """Legitimate UUID identifiers round-trip without encoding artifacts."""

@@ -211,7 +211,16 @@ def _quote_path_param(value: Any) -> str:
     A properly formed identifier (for example, a standard UUID, which contains
     no dots or reserved characters) round-trips through this function
     unchanged.
+
+    Raises:
+        TypeError: If `value` is `None` or a `bytes`/`bytearray` instance.
+            Coercing those would produce misleading paths (e.g. `/threads/None`),
+            so surface the caller bug instead.
     """
+    if value is None:
+        raise TypeError("path parameter must not be None")
+    if isinstance(value, (bytes, bytearray)):
+        raise TypeError("path parameter must not be bytes; pass a str or uuid.UUID")
     quoted = quote(str(value), safe="")
     # Bare "." or ".." (or any all-dot string) acts as a relative-path segment
     # that some HTTP stacks (including ``httpx``) collapse client-side before
