@@ -188,3 +188,32 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+
+@pytest.mark.asyncio
+async def test_put_raises_in_loop_sync_call() -> None:
+    """put() and put_writes() must raise InvalidStateError when called
+    synchronously from within the saver's own event loop.
+
+    Previously these two methods were missing the in-loop guard that all other
+    sync bridge methods have, causing them to deadlock the event loop instead
+    of raising a fast, descriptive error (issue #7857).
+    """
+    import asyncio
+    from langgraph.checkpoint.base import create_checkpoint, empty_checkpoint
+
+    async def _run() -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            await saver.setup()
+            config = {"configurable": {"thread_id": "t1", "checkpoint_ns": ""}}
+            chkpnt = create_checkpoint(empty_checkpoint(), {}, 1)
+
+            # put() must raise, not deadlock
+            with pytest.raises(asyncio.InvalidStateError):
+                saver.put(config, chkpnt, {"source": "loop", "step": 1, "writes": None, "parents": {}}, {})
+
+            # put_writes() must raise, not deadlock
+            with pytest.raises(asyncio.InvalidStateError):
+                saver.put_writes(config, [("ch", "val")], "task-1")
+
+    await _run()
