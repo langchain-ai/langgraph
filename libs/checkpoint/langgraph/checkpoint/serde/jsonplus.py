@@ -302,7 +302,21 @@ EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
 
 
+# Exact-type fast dispatch. Populated below once all encoder helpers are
+# defined. `_msgpack_default` consults this with `type(obj)` (O(1)) before
+# falling through to the legacy isinstance ladder, which still handles
+# subclasses, duck-typed pydantic models, dataclasses, and ndarray.
+_FAST_TYPE_DISPATCH: dict[type, Callable[[Any], ormsgpack.Ext]] = {}
+
+
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
+    # O(1) exact-type fast path. Hits ~all common cases on the checkpoint
+    # serialize hot path (UUID, datetime, Decimal, set, deque, IP addrs,
+    # Enum, _DeltaSnapshot). Subclass / duck-typed cases fall through to
+    # the isinstance ladder below.
+    fast = _FAST_TYPE_DISPATCH.get(type(obj))
+    if fast is not None:
+        return fast(obj)
     if isinstance(obj, _DeltaSnapshot):
         return ormsgpack.Ext(EXT_DELTA_SNAPSHOT, _msgpack_enc(obj.value))
     elif hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
@@ -532,6 +546,117 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         return repr(obj)
     else:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
+
+
+def _ext_delta_snapshot(obj: Any) -> ormsgpack.Ext:
+    return ormsgpack.Ext(EXT_DELTA_SNAPSHOT, _msgpack_enc(obj.value))
+
+
+def _ext_uuid(obj: Any) -> ormsgpack.Ext:
+    return ormsgpack.Ext(
+        EXT_CONSTRUCTOR_SINGLE_ARG,
+        _msgpack_enc(
+            (obj.__class__.__module__, obj.__class__.__name__, obj.hex),
+        ),
+    )
+
+
+def _ext_decimal(obj: Any) -> ormsgpack.Ext:
+    return ormsgpack.Ext(
+        EXT_CONSTRUCTOR_SINGLE_ARG,
+        _msgpack_enc(
+            (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
+        ),
+    )
+
+
+def _ext_set_like(obj: Any) -> ormsgpack.Ext:
+    return ormsgpack.Ext(
+        EXT_CONSTRUCTOR_SINGLE_ARG,
+        _msgpack_enc(
+            (obj.__class__.__module__, obj.__class__.__name__, tuple(obj)),
+        ),
+    )
+
+
+def _ext_ipaddr(obj: Any) -> ormsgpack.Ext:
+    return ormsgpack.Ext(
+        EXT_CONSTRUCTOR_SINGLE_ARG,
+        _msgpack_enc(
+            (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
+        ),
+    )
+
+
+def _ext_datetime(obj: Any) -> ormsgpack.Ext:
+    return ormsgpack.Ext(
+        EXT_METHOD_SINGLE_ARG,
+        _msgpack_enc(
+            (
+                obj.__class__.__module__,
+                obj.__class__.__name__,
+                obj.isoformat(),
+                "fromisoformat",
+            ),
+        ),
+    )
+
+
+def _ext_timedelta(obj: Any) -> ormsgpack.Ext:
+    return ormsgpack.Ext(
+        EXT_CONSTRUCTOR_POS_ARGS,
+        _msgpack_enc(
+            (
+                obj.__class__.__module__,
+                obj.__class__.__name__,
+                (obj.days, obj.seconds, obj.microseconds),
+            ),
+        ),
+    )
+
+
+def _ext_date(obj: Any) -> ormsgpack.Ext:
+    return ormsgpack.Ext(
+        EXT_CONSTRUCTOR_POS_ARGS,
+        _msgpack_enc(
+            (
+                obj.__class__.__module__,
+                obj.__class__.__name__,
+                (obj.year, obj.month, obj.day),
+            ),
+        ),
+    )
+
+
+def _ext_zoneinfo(obj: Any) -> ormsgpack.Ext:
+    return ormsgpack.Ext(
+        EXT_CONSTRUCTOR_SINGLE_ARG,
+        _msgpack_enc(
+            (obj.__class__.__module__, obj.__class__.__name__, obj.key),
+        ),
+    )
+
+
+# Populate the fast-dispatch table. Keys must be EXACT types — subclasses
+# fall through to the isinstance ladder in _msgpack_default. We register
+# concrete classes only (e.g. pathlib.PosixPath / WindowsPath, not the
+# abstract pathlib.Path) so the table never short-circuits a user subclass.
+_FAST_TYPE_DISPATCH[_DeltaSnapshot] = _ext_delta_snapshot
+_FAST_TYPE_DISPATCH[UUID] = _ext_uuid
+_FAST_TYPE_DISPATCH[decimal.Decimal] = _ext_decimal
+_FAST_TYPE_DISPATCH[set] = _ext_set_like
+_FAST_TYPE_DISPATCH[frozenset] = _ext_set_like
+_FAST_TYPE_DISPATCH[deque] = _ext_set_like
+_FAST_TYPE_DISPATCH[IPv4Address] = _ext_ipaddr
+_FAST_TYPE_DISPATCH[IPv4Interface] = _ext_ipaddr
+_FAST_TYPE_DISPATCH[IPv4Network] = _ext_ipaddr
+_FAST_TYPE_DISPATCH[IPv6Address] = _ext_ipaddr
+_FAST_TYPE_DISPATCH[IPv6Network] = _ext_ipaddr
+_FAST_TYPE_DISPATCH[IPv6Interface] = _ext_ipaddr
+_FAST_TYPE_DISPATCH[datetime] = _ext_datetime
+_FAST_TYPE_DISPATCH[date] = _ext_date
+_FAST_TYPE_DISPATCH[timedelta] = _ext_timedelta
+_FAST_TYPE_DISPATCH[ZoneInfo] = _ext_zoneinfo
 
 
 def _send_from_args(args: Sequence[Any]) -> Any:
