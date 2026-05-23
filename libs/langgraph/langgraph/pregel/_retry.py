@@ -624,14 +624,13 @@ def run_with_retry(
             # sleep before retrying
             interval = matching_policy.initial_interval
             # Apply backoff factor based on attempt count
-            interval = min(
-                matching_policy.max_interval,
-                interval * (matching_policy.backoff_factor ** (attempts - 1)),
-            )
+            interval *= matching_policy.backoff_factor ** (attempts - 1)
 
-            # Apply jitter if configured
+            # Apply jitter if configured, then cap at max_interval
             sleep_time = (
-                interval + random.uniform(0, 1) if matching_policy.jitter else interval
+                min(matching_policy.max_interval, interval + random.uniform(0, 1))
+                if matching_policy.jitter
+                else min(matching_policy.max_interval, interval)
             )
             time.sleep(sleep_time)
 
@@ -762,14 +761,13 @@ async def arun_with_retry(
             # sleep before retrying
             interval = matching_policy.initial_interval
             # Apply backoff factor based on attempt count
-            interval = min(
-                matching_policy.max_interval,
-                interval * (matching_policy.backoff_factor ** (attempts - 1)),
-            )
+            interval *= matching_policy.backoff_factor ** (attempts - 1)
 
-            # Apply jitter if configured
+            # Apply jitter if configured, then cap at max_interval
             sleep_time = (
-                interval + random.uniform(0, 1) if matching_policy.jitter else interval
+                min(matching_policy.max_interval, interval + random.uniform(0, 1))
+                if matching_policy.jitter
+                else min(matching_policy.max_interval, interval)
             )
             await asyncio.sleep(sleep_time)
 
