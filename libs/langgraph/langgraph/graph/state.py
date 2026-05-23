@@ -8,7 +8,7 @@ from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
 from dataclasses import dataclass, is_dataclass
 from datetime import timedelta
-from functools import partial
+from functools import lru_cache, partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
 from types import NoneType as NoneType
@@ -1798,26 +1798,76 @@ def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
         return [("__root__", input)]
 
 
-def _get_channels(
-    schema: type[dict],
-) -> tuple[dict[str, BaseChannel], dict[str, ManagedValueSpec], dict[str, Any]]:
+@lru_cache(maxsize=256)
+def _resolve_schema_channels(
+    schema: type,
+) -> tuple[
+    tuple[tuple[str, BaseChannel], ...],
+    tuple[tuple[str, ManagedValueSpec], ...],
+    tuple[tuple[str, Any], ...],
+]:
+    """Cached, expensive part of `_get_channels`.
+
+    `get_type_hints(..., include_extras=True)` is the dominant cost in
+    `StateGraph.compile()` for TypedDict / dataclass state schemas, and
+    it runs once per compile. Caching by `type` is safe because two
+    compiles of the same schema produce identical channel *specs*.
+
+    Returns tuples of `(name, template)` so the cached object is
+    hashable / immutable; the caller deep-copies the channels (so
+    per-compile `.key` assignment and runtime state don't leak across
+    compiles).
+    """
     if not hasattr(schema, "__annotations__"):
         return (
-            {"__root__": _get_channel("__root__", schema, allow_managed=False)},
-            {},
-            {},
+            (("__root__", _get_channel("__root__", schema, allow_managed=False)),),
+            (),
+            (),
         )
 
     type_hints = get_type_hints(schema, include_extras=True)
-    all_keys = {
-        name: _get_channel(name, typ)
+    all_keys = [
+        (name, _get_channel(name, typ))
         for name, typ in type_hints.items()
         if name != "__slots__"
-    }
+    ]
+    channels = tuple((k, v) for k, v in all_keys if isinstance(v, BaseChannel))
+    managed = tuple((k, v) for k, v in all_keys if is_managed_value(v))
+    return channels, managed, tuple(type_hints.items())
+
+
+def _get_channels(
+    schema: type[dict],
+) -> tuple[dict[str, BaseChannel], dict[str, ManagedValueSpec], dict[str, Any]]:
+    try:
+        channels_t, managed_t, hints_t = _resolve_schema_channels(schema)
+    except TypeError:
+        # Unhashable schema (e.g. a parameterized generic alias that some
+        # users pass in). Fall back to the uncached path so behavior is
+        # preserved.
+        if not hasattr(schema, "__annotations__"):
+            return (
+                {"__root__": _get_channel("__root__", schema, allow_managed=False)},
+                {},
+                {},
+            )
+        type_hints = get_type_hints(schema, include_extras=True)
+        all_keys = {
+            name: _get_channel(name, typ)
+            for name, typ in type_hints.items()
+            if name != "__slots__"
+        }
+        return (
+            {k: v for k, v in all_keys.items() if isinstance(v, BaseChannel)},
+            {k: v for k, v in all_keys.items() if is_managed_value(v)},
+            type_hints,
+        )
+    # Channels are mutated downstream (`.key` assignment, runtime state)
+    # so we hand back fresh copies — the cached template stays clean.
     return (
-        {k: v for k, v in all_keys.items() if isinstance(v, BaseChannel)},
-        {k: v for k, v in all_keys.items() if is_managed_value(v)},
-        type_hints,
+        {k: v.copy() for k, v in channels_t},
+        dict(managed_t),
+        dict(hints_t),
     )
 
 
