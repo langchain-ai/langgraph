@@ -70,3 +70,26 @@ class TestHandlerValidation:
             @encryption.encrypt.blob  # ty: ignore[invalid-argument-type]
             async def wrong_params(ctx):
                 return ctx
+
+    def test_context_handler_must_be_async(self):
+        """Sync context handlers raise TypeError."""
+        encryption = Encryption()
+
+        with pytest.raises(TypeError, match="Context handler must be an async function"):
+
+            @encryption.context
+            def sync_context(_user, ctx):
+                return ctx.metadata
+
+    def test_context_handler_must_have_two_params(self):
+        """Context handlers must accept user and context."""
+        encryption = Encryption()
+
+        with pytest.raises(
+            TypeError,
+            match=r"Context handler must accept exactly 2 parameters \(user, ctx\)",
+        ):
+
+            @encryption.context  # ty: ignore[invalid-argument-type]
+            async def wrong_context_params(ctx):
+                return ctx.metadata

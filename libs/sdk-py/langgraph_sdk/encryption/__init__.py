@@ -38,7 +38,11 @@ class DuplicateHandlerError(Exception):
     pass
 
 
-def _validate_handler(fn: typing.Callable, handler_type: str) -> None:
+def _validate_handler(
+    fn: typing.Callable,
+    handler_type: str,
+    parameter_names: str = "(ctx, data)",
+) -> None:
     """Validate that a handler function has the correct signature.
 
     Args:
@@ -60,7 +64,7 @@ def _validate_handler(fn: typing.Callable, handler_type: str) -> None:
     if len(params) != 2:
         raise TypeError(
             f"{handler_type} must accept exactly 2 parameters "
-            f"(ctx, data), got {len(params)}"
+            f"{parameter_names}, got {len(params)}"
         )
 
 
@@ -418,6 +422,7 @@ class Encryption:
         Returns:
             The registered handler function
         """
+        _validate_handler(fn, "Context handler", "(user, ctx)")
         self._context_handler = fn
         return fn
 
