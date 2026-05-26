@@ -431,13 +431,14 @@ def ensure_message_ids(value: Any) -> None:
     BaseMessages; every get_state() replay then produces a different UUID and
     the same message appears with a different ID in each LangSmith trace.
 
-    Handles two input shapes:
+    Handles three input shapes:
     - BaseMessage objects: assign a UUID if id is None.
-    - Dicts with a known "role" (OpenAI-style) or "type" (LangChain format):
-      coerce to a typed BaseMessage via convert_to_messages, then assign a UUID
-      if needed. The list element is replaced in-place so the shared list
-      reference seen by checkpoint_pending_writes and the background thread both
-      get the typed message.
+    - Dicts with a known "role" (OpenAI-style) or "type" (LangChain format) at
+      the root level: stamp "id" into the dict in-place. The reducer's
+      convert_to_messages call will forward the id to the resulting BaseMessage.
+    - Lists of the above: apply the same logic to each element, replacing dict
+      items with coerced BaseMessages so the shared list reference seen by
+      checkpoint_pending_writes and the background thread both get typed messages.
 
     Mutating synchronously here (before the background thread is submitted) is
     safe: the serialised bytes always reflect the post-coercion state.
@@ -445,6 +446,9 @@ def ensure_message_ids(value: Any) -> None:
     if isinstance(value, BaseMessage):
         if value.id is None:
             value.id = str(uuid4())
+    elif isinstance(value, dict) and _is_message_dict(value):
+        if not value.get("id"):
+            value["id"] = str(uuid4())
     elif isinstance(value, list):
         for i, item in enumerate(value):
             if isinstance(item, BaseMessage):
