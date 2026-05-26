@@ -10,22 +10,21 @@ IDs unstable across calls.
 The fix: defer DeltaChannel writes in put_writes() and flush them in after_tick()
 *after* apply_writes() has run, so in-place mutations are always captured.
 """
+
 from __future__ import annotations
 
+import uuid
 from typing import Annotated, Any
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
-
-pytestmark = pytest.mark.anyio
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
-import uuid
-
-from langchain_core.messages import RemoveMessage
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import END, START, StateGraph
+
+pytestmark = pytest.mark.anyio
 
 
 def _reducer_with_id_assignment(
@@ -75,7 +74,11 @@ def _reducer_with_id_assignment(
 def _build_graph(checkpointer: Any) -> Any:
     State = TypedDict(  # noqa: UP013
         "State",
-        {"messages": Annotated[list, DeltaChannel(_reducer_with_id_assignment, snapshot_frequency=50)]},
+        {
+            "messages": Annotated[
+                list, DeltaChannel(_reducer_with_id_assignment, snapshot_frequency=50)
+            ]
+        },
     )  # type: ignore[call-overload]
 
     def agent(state: dict) -> dict:
