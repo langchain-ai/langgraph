@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.messages.utils import convert_to_messages
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from pydantic import BaseModel
 
@@ -405,3 +406,56 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
                     self.seen.add(msg_id)
             v2_meta = {**meta[1], "run_id": str(run_id)}
             self.stream((meta[0], "messages", (event, v2_meta)))
+
+
+# Known role values (OpenAI-style) and type values (LangChain serialisation)
+# that identify a dict as a message. Checked before coercing to BaseMessage so
+# we don't accidentally touch unrelated dicts that happen to have a "role" key.
+_MESSAGE_ROLES: frozenset[str] = frozenset(
+    {"user", "human", "assistant", "ai", "tool", "system", "function"}
+)
+_MESSAGE_TYPES: frozenset[str] = frozenset(
+    {"human", "ai", "tool", "system", "function", "remove"}
+)
+
+
+def _is_message_dict(item: dict) -> bool:
+    return item.get("role") in _MESSAGE_ROLES or item.get("type") in _MESSAGE_TYPES
+
+
+def ensure_message_ids(value: Any) -> None:
+    """Coerce message-like write values to typed BaseMessages with stable IDs.
+
+    Called in put_writes() before DeltaChannel writes are submitted to the
+    checkpointer. Without this the checkpoint may store raw dicts or id=None
+    BaseMessages; every get_state() replay then produces a different UUID and
+    the same message appears with a different ID in each LangSmith trace.
+
+    Handles three input shapes:
+    - BaseMessage objects: assign a UUID if id is None.
+    - Dicts with a known "role" (OpenAI-style) or "type" (LangChain format) at
+      the root level: stamp "id" into the dict in-place. The reducer's
+      convert_to_messages call will forward the id to the resulting BaseMessage.
+    - Lists of the above: apply the same logic to each element, replacing dict
+      items with coerced BaseMessages so the shared list reference seen by
+      checkpoint_pending_writes and the background thread both get typed messages.
+
+    Mutating synchronously here (before the background thread is submitted) is
+    safe: the serialised bytes always reflect the post-coercion state.
+    """
+    if isinstance(value, BaseMessage):
+        if value.id is None:
+            value.id = str(uuid4())
+    elif isinstance(value, dict) and _is_message_dict(value):
+        if not value.get("id"):
+            value["id"] = str(uuid4())
+    elif isinstance(value, list):
+        for i, item in enumerate(value):
+            if isinstance(item, BaseMessage):
+                if item.id is None:
+                    item.id = str(uuid4())
+            elif isinstance(item, dict) and _is_message_dict(item):
+                msg = convert_to_messages([item])[0]
+                if msg.id is None:
+                    msg.id = str(uuid4())
+                value[i] = msg
