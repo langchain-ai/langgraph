@@ -116,7 +116,8 @@ def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
     warnings.warn(
         f"Invalid state_schema: {schema}. Expected a type or Annotated[type, reducer]. "
         "Please provide a valid schema to ensure correct updates.\n"
-        " See: https://langchain-ai.github.io/langgraph/reference/graphs/#stategraph"
+        " See: https://langchain-ai.github.io/langgraph/reference/graphs/#stategraph",
+        stacklevel=2,
     )
 
 
@@ -752,6 +753,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
                 category=LangGraphDeprecatedSinceV05,
+                stacklevel=2,
             )
             if retry_policy is None:
                 retry_policy = retry  # type: ignore[assignment]
@@ -760,6 +762,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             warnings.warn(
                 "`input` is deprecated and will be removed. Please use `input_schema` instead.",
                 category=LangGraphDeprecatedSinceV05,
+                stacklevel=2,
             )
             if input_schema is None:
                 input_schema = cast(type[NodeInputT] | None, input_)

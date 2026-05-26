@@ -2773,6 +2773,7 @@ class Pregel(
             if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
+                    stacklevel=2,
                 )
             # set up subgraph checkpointing
             if self.checkpointer is True:
@@ -3198,6 +3199,7 @@ class Pregel(
             if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
+                    stacklevel=2,
                 )
             # set up subgraph checkpointing
             if self.checkpointer is True:
