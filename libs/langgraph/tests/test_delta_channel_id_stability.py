@@ -106,3 +106,35 @@ async def test_delta_channel_message_gets_id_and_stays_stable_async() -> None:
     assert len(set(ids)) == 1, (
         f"Async path: HumanMessage id unstable across aget_state() calls: {ids}"
     )
+
+
+def test_delta_channel_dict_style_message_gets_stable_id() -> None:
+    """Dict-style inputs (API / over-the-wire format) must also get stable IDs.
+
+    When the graph is invoked via the LangGraph API the input arrives as a raw
+    dict {"role": "user", "content": "..."} rather than a BaseMessage object.
+    ensure_message_ids() must coerce those dicts to typed BaseMessages and
+    stamp a UUID so the checkpoint never stores an id-less message.
+    """
+    saver = InMemorySaver()
+    graph = _build_graph(saver)
+    config = {"configurable": {"thread_id": "dict-id-stability"}}
+
+    # Invoke with a raw dict (the format LangGraph API sends)
+    graph.invoke({"messages": [{"role": "user", "content": "hello"}]}, config)
+
+    ids = [
+        next(
+            m.id
+            for m in graph.get_state(config).values["messages"]
+            if isinstance(m, HumanMessage)
+        )
+        for _ in range(3)
+    ]
+
+    assert ids[0] is not None, (
+        "dict-style message should have been coerced and assigned a UUID"
+    )
+    assert len(set(ids)) == 1, (
+        f"dict-style HumanMessage id must be stable across get_state() calls; got {ids}"
+    )

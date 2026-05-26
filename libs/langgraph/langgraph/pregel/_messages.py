@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.messages.utils import convert_to_messages
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from pydantic import BaseModel
 
@@ -408,21 +409,34 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
 
 
 def ensure_message_ids(value: Any) -> None:
-    """Assign a stable UUID to any id=None BaseMessage objects in-place.
+    """Coerce message-like write values to typed BaseMessages with stable IDs.
 
     Called in put_writes() before DeltaChannel writes are submitted to the
-    checkpointer. Without this, a reducer that assigns IDs inside apply_writes()
-    races with the background serialisation thread: the checkpoint may capture
-    id=None, and every get_state() replay produces a different UUID.
+    checkpointer. Without this the checkpoint may store raw dicts or id=None
+    BaseMessages; every get_state() replay then produces a different UUID and
+    the same message appears with a different ID in each LangSmith trace.
 
-    Mutating here (rather than in the reducer or after apply_writes) is safe
-    because put_writes() runs synchronously before the background thread
-    starts, so the serialised bytes always see the assigned ID.
+    Handles two input shapes:
+    - BaseMessage objects: assign a UUID if id is None.
+    - Dicts with a "role" or "type" key (OpenAI-style / API input): coerce to
+      a typed BaseMessage via convert_to_messages, then assign a UUID if needed.
+      The list element is replaced in-place so the shared list reference seen
+      by checkpoint_pending_writes and the background thread both get the typed
+      message.
+
+    Mutating synchronously here (before the background thread is submitted) is
+    safe: the serialised bytes always reflect the post-coercion state.
     """
     if isinstance(value, BaseMessage):
         if value.id is None:
             value.id = str(uuid4())
     elif isinstance(value, list):
-        for item in value:
-            if isinstance(item, BaseMessage) and item.id is None:
-                item.id = str(uuid4())
+        for i, item in enumerate(value):
+            if isinstance(item, BaseMessage):
+                if item.id is None:
+                    item.id = str(uuid4())
+            elif isinstance(item, dict) and ("role" in item or "type" in item):
+                msg = convert_to_messages([item])[0]
+                if msg.id is None:
+                    msg.id = str(uuid4())
+                value[i] = msg
