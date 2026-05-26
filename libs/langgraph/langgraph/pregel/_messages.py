@@ -419,7 +419,10 @@ def ensure_message_ids(value: Any) -> None:
     because put_writes() runs synchronously before the background thread
     starts, so the serialised bytes always see the assigned ID.
     """
-    if isinstance(value, list):
+    if isinstance(value, BaseMessage):
+        if value.id is None:
+            value.id = str(uuid4())
+    elif isinstance(value, list):
         for item in value:
             if isinstance(item, BaseMessage) and item.id is None:
                 item.id = str(uuid4())
