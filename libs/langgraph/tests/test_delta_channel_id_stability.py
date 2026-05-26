@@ -1,23 +1,17 @@
-"""DeltaChannel write-ordering: reducer mutations must be captured before persistence.
+"""ensure_message_ids() assigns stable UUIDs to id=None BaseMessages
+before DeltaChannel writes are serialised to the checkpoint.
 
-With durability="durable" (default), put_writes() submits checkpoint writes on a
-background thread before apply_writes() runs. For DeltaChannel, the reducer runs
-inside apply_writes() and may assign IDs to messages in-place. If the background
-thread serializes the write first, it captures id=None; every subsequent get_state()
-call replays that id=None through the reducer and gets a fresh UUID — making message
-IDs unstable across calls.
-
-The fix: defer DeltaChannel writes in put_writes() and flush them in after_tick()
-*after* apply_writes() has run, so in-place mutations are always captured.
+Without this, the checkpoint stores id=None and every get_state() replay
+produces a different UUID — the same HumanMessage appears with a different
+ID in each LangSmith trace / on every resumed invocation.
 """
 
 from __future__ import annotations
 
-import uuid
 from typing import Annotated, Any
 
 import pytest
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
@@ -27,48 +21,17 @@ from langgraph.graph import END, START, StateGraph
 pytestmark = pytest.mark.anyio
 
 
-def _reducer_with_id_assignment(
+def _append_reducer(
     state: list[AnyMessage], writes: list[list[AnyMessage]]
 ) -> list[AnyMessage]:
-    """Minimal delta reducer that assigns UUIDs to id=None messages in-place.
-
-    This mirrors the pattern used in deepagents' _messages_delta_reducer and
-    any reducer that stamps IDs on arrival. The in-place mutation is what makes
-    the write-ordering race observable: if the background thread serializes
-    before apply_writes() runs the reducer, id=None is captured in the
-    checkpoint and every replay produces a fresh UUID.
-    """
-    flat: list[AnyMessage] = []
+    """Simple append — no ID assignment. IDs come from ensure_message_ids()."""
+    result = list(state)
     for w in writes:
         if isinstance(w, list):
-            flat.extend(w)
+            result.extend(w)
         else:
-            flat.append(w)  # type: ignore[arg-type]
-
-    index: dict[str, int] = {}
-    result: list[AnyMessage | None] = []
-    for m in state:
-        if m.id is None:
-            m.id = str(uuid.uuid4())
-        index[m.id] = len(result)
-        result.append(m)
-    for msg in flat:
-        mid = msg.id
-        if mid is None:
-            msg.id = str(uuid.uuid4())  # in-place mutation — the key ingredient
-            mid = msg.id
-            index[mid] = len(result)
-            result.append(msg)
-        elif isinstance(msg, RemoveMessage):
-            if mid in index:
-                result[index[mid]] = None
-                del index[mid]
-        elif mid in index:
-            result[index[mid]] = msg
-        else:
-            index[mid] = len(result)
-            result.append(msg)
-    return [m for m in result if m is not None]
+            result.append(w)  # type: ignore[arg-type]
+    return result
 
 
 def _build_graph(checkpointer: Any) -> Any:
@@ -76,7 +39,7 @@ def _build_graph(checkpointer: Any) -> Any:
         "State",
         {
             "messages": Annotated[
-                list, DeltaChannel(_reducer_with_id_assignment, snapshot_frequency=50)
+                list, DeltaChannel(_append_reducer, snapshot_frequency=50)
             ]
         },
     )  # type: ignore[call-overload]
@@ -93,18 +56,17 @@ def _build_graph(checkpointer: Any) -> Any:
     )
 
 
-def test_delta_channel_human_message_id_stable_across_get_state_calls() -> None:
-    """get_state() must return the same HumanMessage id on every call.
+def test_delta_channel_message_gets_id_and_stays_stable() -> None:
+    """Messages written with id=None must receive a stable UUID.
 
-    Without the fix, the default durability mode serializes the write before
-    apply_writes() assigns the id, so every get_state() replays id=None through
-    the reducer and gets a different UUID.
+    ensure_message_ids() is called in put_writes() before the background
+    thread serialises DeltaChannel writes. The checkpoint stores the
+    assigned UUID, so every get_state() replay sees the same ID.
     """
     saver = InMemorySaver()
     graph = _build_graph(saver)
     config = {"configurable": {"thread_id": "id-stability"}}
 
-    # Default durability (no argument) — this is the common case for open-source users.
     graph.invoke({"messages": [HumanMessage(content="hello")]}, config)
 
     ids = [
@@ -116,17 +78,15 @@ def test_delta_channel_human_message_id_stable_across_get_state_calls() -> None:
         for _ in range(3)
     ]
 
-    assert ids[0] is not None, "reducer should have assigned a message ID"
+    assert ids[0] is not None, "ensure_message_ids should have assigned a UUID"
     assert len(set(ids)) == 1, (
         f"HumanMessage id must be stable across get_state() calls; "
-        f"got different ids on each call: {ids}. "
-        "This means id=None was serialized to the checkpoint and the reducer "
-        "assigned a fresh UUID on every replay."
+        f"got {ids}. The checkpoint is storing id=None."
     )
 
 
-async def test_delta_channel_human_message_id_stable_async() -> None:
-    """Same check for the async (AsyncPregelLoop) path."""
+async def test_delta_channel_message_gets_id_and_stays_stable_async() -> None:
+    """Same check via ainvoke (AsyncPregelLoop path)."""
     saver = InMemorySaver()
     graph = _build_graph(saver)
     config = {"configurable": {"thread_id": "id-stability-async"}}
@@ -142,7 +102,7 @@ async def test_delta_channel_human_message_id_stable_async() -> None:
         for _ in range(3)
     ]
 
-    assert ids[0] is not None
+    assert ids[0] is not None, "ensure_message_ids should have assigned a UUID"
     assert len(set(ids)) == 1, (
         f"Async path: HumanMessage id unstable across aget_state() calls: {ids}"
     )
