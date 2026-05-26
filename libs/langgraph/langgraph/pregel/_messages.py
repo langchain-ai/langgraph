@@ -408,6 +408,21 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
             self.stream((meta[0], "messages", (event, v2_meta)))
 
 
+# Known role values (OpenAI-style) and type values (LangChain serialisation)
+# that identify a dict as a message. Checked before coercing to BaseMessage so
+# we don't accidentally touch unrelated dicts that happen to have a "role" key.
+_MESSAGE_ROLES: frozenset[str] = frozenset(
+    {"user", "human", "assistant", "ai", "tool", "system", "function"}
+)
+_MESSAGE_TYPES: frozenset[str] = frozenset(
+    {"human", "ai", "tool", "system", "function", "remove"}
+)
+
+
+def _is_message_dict(item: dict) -> bool:
+    return item.get("role") in _MESSAGE_ROLES or item.get("type") in _MESSAGE_TYPES
+
+
 def ensure_message_ids(value: Any) -> None:
     """Coerce message-like write values to typed BaseMessages with stable IDs.
 
@@ -418,11 +433,11 @@ def ensure_message_ids(value: Any) -> None:
 
     Handles two input shapes:
     - BaseMessage objects: assign a UUID if id is None.
-    - Dicts with a "role" or "type" key (OpenAI-style / API input): coerce to
-      a typed BaseMessage via convert_to_messages, then assign a UUID if needed.
-      The list element is replaced in-place so the shared list reference seen
-      by checkpoint_pending_writes and the background thread both get the typed
-      message.
+    - Dicts with a known "role" (OpenAI-style) or "type" (LangChain format):
+      coerce to a typed BaseMessage via convert_to_messages, then assign a UUID
+      if needed. The list element is replaced in-place so the shared list
+      reference seen by checkpoint_pending_writes and the background thread both
+      get the typed message.
 
     Mutating synchronously here (before the background thread is submitted) is
     safe: the serialised bytes always reflect the post-coercion state.
@@ -435,7 +450,7 @@ def ensure_message_ids(value: Any) -> None:
             if isinstance(item, BaseMessage):
                 if item.id is None:
                     item.id = str(uuid4())
-            elif isinstance(item, dict) and ("role" in item or "type" in item):
+            elif isinstance(item, dict) and _is_message_dict(item):
                 msg = convert_to_messages([item])[0]
                 if msg.id is None:
                     msg.id = str(uuid4())
