@@ -405,3 +405,21 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
                     self.seen.add(msg_id)
             v2_meta = {**meta[1], "run_id": str(run_id)}
             self.stream((meta[0], "messages", (event, v2_meta)))
+
+
+def ensure_message_ids(value: Any) -> None:
+    """Assign a stable UUID to any id=None BaseMessage objects in-place.
+
+    Called in put_writes() before DeltaChannel writes are submitted to the
+    checkpointer. Without this, a reducer that assigns IDs inside apply_writes()
+    races with the background serialisation thread: the checkpoint may capture
+    id=None, and every get_state() replay produces a different UUID.
+
+    Mutating here (rather than in the reducer or after apply_writes) is safe
+    because put_writes() runs synchronously before the background thread
+    starts, so the serialised bytes always see the assigned ID.
+    """
+    if isinstance(value, list):
+        for item in value:
+            if isinstance(item, BaseMessage) and item.id is None:
+                item.id = str(uuid4())
