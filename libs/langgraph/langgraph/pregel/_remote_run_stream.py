@@ -39,6 +39,24 @@ class _RemoteGraphRunStream:
         self._closed = False
         self._events_iter: Iterator[Any] | None = None
 
+    def __enter__(self) -> _RemoteGraphRunStream:
+        if self._closed:
+            raise RuntimeError("_RemoteGraphRunStream already closed")
+        self._sdk.__enter__()
+        try:
+            result = self._sdk.run.start(**self._start_kwargs)
+        except BaseException:
+            self._sdk.__exit__(*sys.exc_info())
+            raise
+        self._run_id = result["run_id"]
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._sdk.__exit__(exc_type, exc, tb)
+
 
 class _AsyncRemoteGraphRunStream:
     """Async adapter: AsyncThreadStream -> AsyncGraphRunStream surface."""
