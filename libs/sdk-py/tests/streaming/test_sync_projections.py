@@ -20,6 +20,8 @@ from streaming._events import (
     message_start_event,
     message_text_delta_event,
     message_text_finish_event,
+    tasks_result_event,
+    tasks_start_event,
     tool_error_event,
     tool_finished_event,
     tool_output_delta_event,
@@ -169,6 +171,60 @@ def test_sync_messages_error_event_fails_active_stream():
     assert len(streams) == 1
     with pytest.raises(RuntimeError, match="model failed"):
         _ = streams[0].output
+
+
+def test_sync_subgraph_scoped_messages_and_tool_calls():
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tasks_start_event(seq=1, namespace=["worker:abc"], task_id="t-child"),
+            message_start_event(
+                seq=2,
+                namespace=["worker:abc"],
+                message_id="msg-child",
+                run_id="run-child",
+            ),
+            message_text_delta_event(seq=3, namespace=["worker:abc"], text="child"),
+            message_text_finish_event(seq=4, namespace=["worker:abc"], text="child"),
+            message_finish_event(seq=5, namespace=["worker:abc"]),
+            tool_started_event(
+                seq=6,
+                namespace=["worker:abc"],
+                tool_call_id="call-child",
+                tool_name="search",
+            ),
+            tool_output_delta_event(
+                seq=7,
+                namespace=["worker:abc"],
+                tool_call_id="call-child",
+                delta="delta",
+            ),
+            tool_finished_event(
+                seq=8,
+                namespace=["worker:abc"],
+                tool_call_id="call-child",
+                output={"child": True},
+            ),
+            tasks_result_event(seq=9, namespace=[], task_id="abc", name="worker"),
+            lifecycle_completed_event(seq=10),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            [handle] = list(thread.subgraphs)
+            child_messages = list(handle.messages)
+            child_calls = list(handle.tool_calls)
+
+    assert handle.status == "completed"
+    assert handle.path == ("worker:abc",)
+    assert [message.message_id for message in child_messages] == ["msg-child"]
+    assert [str(message.text) for message in child_messages] == ["child"]
+    assert [call.tool_call_id for call in child_calls] == ["call-child"]
+    assert list(child_calls[0].deltas) == ["delta"]
+    assert child_calls[0].output == {"child": True}
 
 
 # ---------------------------------------------------------------------------
