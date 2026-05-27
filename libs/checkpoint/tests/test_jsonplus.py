@@ -398,6 +398,193 @@ def test_deserde_invalid_module() -> None:
     serde.loads_typed(("json", json.dumps(load).encode("utf-8")))
 
 
+def test_lc2_json_method_field_is_ignored() -> None:
+    """The `method` field on lc=2 envelopes is ignored.
+
+    Regression test for GHSA-fjqc-hq36-qh5p: `_revive_lc2` previously resolved
+    `getattr(cls, method)` from the envelope, which let an attacker pivot a
+    safe pydantic class (e.g., AIMessage) to `parse_raw(..., allow_pickle=True)`
+    and reach `pickle.loads`. Revival now uses only the default constructor.
+
+    Verifies that an envelope carrying ``method="parse_raw"`` does not dispatch
+    to that method: the result is whatever ``AIMessage(*args, **kwargs)`` would
+    produce, which proves the default constructor ran instead of ``parse_raw``.
+    """
+    from langchain_core.messages import AIMessage
+
+    serde = JsonPlusSerializer()
+    load = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["langchain_core", "messages", "ai", "AIMessage"],
+        "method": "parse_raw",
+        "args": ["default-ctor-ran"],
+        "kwargs": {"content_type": "application/pickle", "allow_pickle": True},
+    }
+    result = serde._revive_lc2(load)
+    # Default constructor accepts `content` as first positional arg. If parse_raw
+    # had been invoked instead, it would have attempted JSON/pickle parsing and
+    # raised (or executed the pickle gadget); neither would produce this result.
+    assert isinstance(result, AIMessage)
+    assert result.content == "default-ctor-ran"
+
+
+def test_lc2_json_method_field_is_ignored_for_allowlisted_types() -> None:
+    """The `method` field is ignored even when the class is explicitly allowlisted.
+
+    A user who configures ``allowed_json_modules`` for a class no longer gets
+    method dispatch as a side effect. Revival is restricted to the default
+    constructor regardless of how the class reached the revival path.
+    """
+    from langchain_core.messages import AIMessage
+
+    serde = JsonPlusSerializer(
+        allowed_json_modules=[("langchain_core.messages.ai", "AIMessage")]
+    )
+    load = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["langchain_core", "messages", "ai", "AIMessage"],
+        "method": "parse_raw",
+        "args": ["default-ctor-ran"],
+    }
+    result = serde._revive_lc2(load)
+    assert isinstance(result, AIMessage)
+    assert result.content == "default-ctor-ran"
+
+
+def test_lc2_json_safe_type_init_still_works() -> None:
+    """SAFE-type lc=2 revival without a `method` field still constructs the class."""
+    from langchain_core.messages import AIMessage
+
+    serde = JsonPlusSerializer()
+    load = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["langchain_core", "messages", "ai", "AIMessage"],
+        "kwargs": {"content": "hi", "type": "ai"},
+    }
+    result = serde._revive_lc2(load)
+    assert isinstance(result, AIMessage)
+    assert result.content == "hi"
+
+
+def test_lc2_json_legacy_pydantic_method_list_falls_back_to_default() -> None:
+    """Legacy ``method=(None, "construct")`` envelopes still revive via the default ctor.
+
+    Pre-October-2025 langgraph emitted pydantic models with
+    ``method=(None, "construct")`` meaning "try default constructor, fall back
+    to pydantic ``construct``". The first entry (``None``) was always the
+    default constructor, which is what we now do unconditionally. Envelopes of
+    this shape continue to revive correctly as long as the default constructor
+    accepts the serialized kwargs.
+    """
+    from langchain_core.messages import AIMessage
+
+    serde = JsonPlusSerializer()
+    load = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["langchain_core", "messages", "ai", "AIMessage"],
+        "method": [None, "construct"],
+        "kwargs": {"content": "legacy", "type": "ai"},
+    }
+    result = serde._revive_lc2(load)
+    assert isinstance(result, AIMessage)
+    assert result.content == "legacy"
+
+
+def test_lc2_json_legacy_construct_payload_logs_warning_when_default_init_rejects(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Legacy `method=[None, "construct"]` envelopes whose kwargs the default
+    `__init__` rejects now revive to `None` and emit an observable warning.
+
+    Pre-October-2025 langgraph emitted pydantic payloads with
+    `method=[None, "construct"]` so the reviver could fall back to
+    `cls.construct(**kwargs)` when the default constructor raised a
+    validation error. That fallback was removed with method-field dispatch
+    (GHSA-fjqc-hq36-qh5p), so these payloads now silently fail validation. A
+    `logger.warning` makes the regression observable to operators instead of
+    letting the envelope quietly degrade to its raw-dict form.
+    """
+    serde = JsonPlusSerializer()
+    load = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["langchain_core", "messages", "ai", "AIMessage"],
+        # Legacy two-entry method tuple: try default ctor, fall back to construct.
+        "method": [None, "construct"],
+        # ``type="not-a-real-message-type"`` fails AIMessage's Literal["ai"]
+        # validator under the default constructor. Before the GHSA patch this
+        # would have fallen back to ``cls.construct(**kwargs)``; now it must
+        # return None and log.
+        "kwargs": {"content": "legacy", "type": "not-a-real-message-type"},
+    }
+
+    with caplog.at_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus"):
+        result = serde._revive_lc2(load)
+
+    assert result is None, (
+        "Legacy method=[None, 'construct'] payloads with kwargs the default "
+        "ctor rejects must now return None (no construct() fallback)."
+    )
+
+    matching = [
+        r
+        for r in caplog.records
+        if r.name == "langgraph.checkpoint.serde.jsonplus"
+        and r.levelno == logging.WARNING
+        and "langchain_core.messages.ai.AIMessage" in r.getMessage()
+        and "legacy_method_field=True" in r.getMessage()
+    ]
+    assert matching, (
+        "Expected a WARNING from langgraph.checkpoint.serde.jsonplus "
+        "referencing the class id and legacy_method_field=True; "
+        f"got records: {[(r.name, r.levelname, r.getMessage()) for r in caplog.records]}"
+    )
+
+
+def test_lc2_json_safe_type_pickle_payload_does_not_execute() -> None:
+    """End-to-end: a `parse_raw` pickle gadget payload on a SAFE type must not run.
+
+    With method dispatch removed from `_revive_lc2`, the gadget bytes are never
+    passed to `parse_raw` and therefore never reach `pickle.loads`.
+    """
+    import os
+    import pickle
+    import tempfile
+
+    marker = tempfile.NamedTemporaryFile(
+        prefix="lc2_block_proof_", suffix=".out", delete=False
+    ).name
+    os.remove(marker)  # ensure absent before the test runs
+
+    class _Gadget:
+        def __reduce__(self) -> tuple:
+            return (os.system, (f"touch {marker}",))
+
+    gadget_bytes = pickle.dumps(_Gadget(), protocol=0).decode("latin1")
+    envelope = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["langchain_core", "messages", "ai", "AIMessage"],
+        "method": "parse_raw",
+        "args": [gadget_bytes],
+        "kwargs": {"content_type": "application/pickle", "allow_pickle": True},
+    }
+
+    serde = JsonPlusSerializer()
+    try:
+        serde.loads_typed(("json", json.dumps(envelope).encode()))
+    except Exception:
+        pass
+
+    assert not os.path.exists(marker), (
+        "Pickle gadget executed via parse_raw on AIMessage lc=2 envelope"
+    )
+
+
 def test_serde_jsonplus_bytearray() -> None:
     serde = JsonPlusSerializer()
 
