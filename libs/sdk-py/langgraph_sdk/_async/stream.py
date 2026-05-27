@@ -93,6 +93,31 @@ def _event_namespace(params_field: Any) -> list[str]:
     return list(namespace) if isinstance(namespace, list) else []
 
 
+_ROOT_TERMINAL_LIFECYCLE_EVENTS = frozenset({"completed", "failed"})
+
+
+def _is_root_terminal_lifecycle(event: Any) -> bool:
+    """Return True for a root-namespace lifecycle event marking run end.
+
+    Matches the wire shape ``{method: "lifecycle", params: {namespace: [],
+    data: {event: "completed" | "failed"}}}``. Subgraph lifecycle events
+    (non-empty namespace) do not terminate the parent run.
+    """
+    if not isinstance(event, dict):
+        return False
+    if event.get("method") != "lifecycle":
+        return False
+    params = event.get("params") or {}
+    if not isinstance(params, dict):
+        return False
+    if params.get("namespace") or []:
+        return False
+    data = params.get("data") or {}
+    if not isinstance(data, dict):
+        return False
+    return data.get("event") in _ROOT_TERMINAL_LIFECYCLE_EVENTS
+
+
 class _AgentModule:
     """Assistant graph helpers scoped to one thread stream."""
 
@@ -408,9 +433,21 @@ class _MessagesProjection:
                 else:
                     key = _message_route_key(data)
                     stream = active.get(key)
+                    if stream is None and key == "__single__" and len(active) == 1:
+                        # Content-block events (content-block-start /
+                        # content-block-delta / content-block-finish /
+                        # message-finish) don't carry the message ``id``
+                        # on the wire, so ``_message_route_key`` returns
+                        # ``__single__`` while the active stream was
+                        # registered under ``message:<id>``. When exactly
+                        # one stream is active, that mismatch is
+                        # unambiguous -- the events belong to it.
+                        # Events that DO carry an explicit id which
+                        # doesn't match any active stream are still
+                        # dropped (orphan-delta safety, see
+                        # ``test_messages_orphan_delta_without_matching_key_is_dropped``).
+                        stream = next(iter(active.values()))
                     if stream is None:
-                        # No active stream matches this event's key. Drop rather
-                        # than silently misroute to the only remaining stream.
                         continue
                     stream.dispatch(data)
                     if event_type in ("message-finish", "error"):
@@ -523,12 +560,16 @@ def _is_direct_child(namespace: list[str], scope: tuple[str, ...]) -> bool:
 
 
 def _subgraph_subscription_params(scope: tuple[str, ...]) -> SubscribeParams:
-    # Subscribe to tasks + messages + tools without a depth limit so that all
-    # descendant-namespace events are captured in one SSE and buffered into each
-    # child handle's inbox. This avoids a second SSE open (and the dedup-set
-    # conflict that would prevent replaying already-seen event_ids).
+    # Subscribe to tasks + messages + tools + lifecycle without a depth limit
+    # so all descendant-namespace events are captured in one SSE and buffered
+    # into each child handle's inbox. ``lifecycle`` is included so child-
+    # namespace ``started`` events (the canonical signal for
+    # ``create_deep_agent``-style subagent discovery, matching JS behavior)
+    # reach ``_subgraphs_iter``; servers that surface child invocations via
+    # ``tasks`` events instead are also handled via the existing ``method ==
+    # "tasks"`` branch.
     return {
-        "channels": ["messages", "tasks", "tools"],
+        "channels": ["messages", "tasks", "tools", "lifecycle"],
         "namespaces": [list(scope)],
     }
 
@@ -975,6 +1016,28 @@ class _SubgraphsProjection:
                             )
                             active[path] = handle
                             yield handle
+                elif (
+                    method == "lifecycle"
+                    and data.get("event") == "started"
+                    and _is_direct_child(namespace, self._scope)
+                ):
+                    # ``create_deep_agent`` and similar surfaces signal
+                    # subagent invocation via a child-namespace
+                    # ``lifecycle: started`` event rather than a ``tasks``
+                    # event. JS does the same (see ``langgraphjs``
+                    # ``stream/handles/subgraphs.ts``).
+                    path = tuple(namespace)
+                    if path not in seen:
+                        seen.add(path)
+                        graph_name, trigger_call_id = _parse_namespace_segment(path[-1])
+                        handle = ScopedStreamHandle(
+                            thread=self._thread,
+                            path=path,
+                            graph_name=graph_name or None,
+                            trigger_call_id=trigger_call_id,
+                        )
+                        active[path] = handle
+                        yield handle
         finally:
             # Determine terminal status from the parent run's lifecycle result.
             # If _run_done resolved as errored, force-complete remaining children
@@ -1441,6 +1504,27 @@ class AsyncThreadStream:
             handle._fail(err)
         self._active_tool_calls.clear()
 
+    def _signal_paused(self) -> None:
+        """Wake every active projection iterator on interrupt / run end.
+
+        Pushes the terminal sentinel (`None`) into every subscription
+        queue. Iterators see `None` and return; the shared SSE keeps
+        running so re-iteration after `run.respond(...)` registers a
+        fresh subscription and resumes.
+
+        `root_messages_inbox` is intentionally NOT signaled here: the
+        subgraphs projection that populates it is responsible for
+        pushing the terminal `None` in its own `finally` block, so any
+        message events it redirected to the inbox land before the
+        sentinel. Signaling root_inbox here would race the redirection
+        and could drop messages.
+        """
+        # On a saturated queue the consumer is already behind; the iterator
+        # will still terminate when it drains to this point.
+        for sub in list(self._subscriptions.values()):
+            with contextlib.suppress(asyncio.QueueFull):
+                sub.queue.put_nowait(None)
+
     def observe_applied_through_seq(self, seq: Any) -> None:
         """Advance the reconnect cursor from a command response meta sequence."""
         if isinstance(seq, int) and (self._cursor is None or seq > self._cursor):
@@ -1522,6 +1606,15 @@ class AsyncThreadStream:
                     for sub in list(self._subscriptions.values()):
                         if matches_subscription(event, sub.params):
                             sub.queue.put_nowait(event)
+                    # On root-terminal lifecycle, push the `None` sentinel
+                    # into all subscription queues so projection iterators
+                    # exit when the run ends naturally. Runs on the shared
+                    # SSE so the terminal is processed in seq order with
+                    # the projection events -- any in-flight values /
+                    # tools / messages events for this run are already
+                    # queued before None.
+                    if _is_root_terminal_lifecycle(event):
+                        self._signal_paused()
             except Exception:
                 # Pump errored — fall through to error-handling/reconnect.
                 pass
@@ -1638,6 +1731,16 @@ class AsyncThreadStream:
         ]
         if extra is not None:
             filters.append(dict(extra))
+        # Always include lifecycle in the shared SSE so the fanout consumer
+        # sees root-terminal events in seq order with the projection events.
+        # See `_is_root_terminal_lifecycle` -- the fanout uses it to push
+        # the `None` sentinel into sub queues when the run ends naturally,
+        # which is what makes projection iterators exit on a long-lived
+        # SSE that doesn't EOF after the run. Per-subscription filtering
+        # (`matches_subscription`) drops lifecycle events for any
+        # subscription that didn't ask for them, so user-visible queues
+        # don't see leaked events.
+        filters.append({"channels": ["lifecycle"]})
         return compute_union_filter(filters)
 
     async def _dedup_iter(self, source: AsyncIterator[Event]) -> AsyncIterator[Event]:
@@ -1821,17 +1924,27 @@ class AsyncThreadStream:
                     else [],
                 }
                 async with self._interrupts_lock:
+                    was_interrupted = self.interrupted
                     self.interrupts.append(payload)
                     self.interrupted = True
+                # On the rising edge of `interrupted`, push the terminal
+                # sentinel into every active projection subscription so their
+                # iterators exit cleanly. The run is paused — not done — so
+                # the shared SSE and fanout keep running; a subsequent
+                # `async for snap in thread.values:` (or any other
+                # projection) registers a fresh subscription and resumes
+                # iteration once the consumer calls `run.respond(...)`.
+                if not was_interrupted:
+                    self._signal_paused()
         elif method == "lifecycle":
             params = event.get("params") or {}
             data = params.get("data") if isinstance(params, dict) else None
-            phase = data.get("phase") if isinstance(data, dict) else None
+            phase = data.get("event") if isinstance(data, dict) else None
             if phase in ("started", "running"):
                 # Mark that we have observed an active run so thread.output
                 # knows a run exists (handles reattach without run.start).
                 self._run_seen = True
-            elif phase in ("completed", "errored"):
+            elif phase in ("completed", "failed"):
                 # Why: interrupts describe current-run state. Clear on terminal
                 # lifecycle so a subsequent run.respond() can't fire against a
                 # stale prior-run interrupt_id. Acquire `_interrupts_lock` so
@@ -1842,7 +1955,7 @@ class AsyncThreadStream:
                     self.interrupts = []
                 run_done = self._run_done
                 if run_done is not None and not run_done.done():
-                    if phase == "errored":
+                    if phase == "failed":
                         error_msg = (
                             data.get("error") if isinstance(data, dict) else None
                         )

@@ -92,9 +92,22 @@ class ProtocolWebSocketTransport:
                 ) as websocket:
                     ws_holder["ws"] = websocket
                     try:
-                        await websocket.send(
-                            orjson.dumps(build_event_stream_body(params)).decode()
-                        )
+                        # The server's WS endpoint (``ApiWebSocketRoute`` in
+                        # ``langgraph-api`` ``api/event_streaming.py``) treats
+                        # every inbound frame as a Protocol command and
+                        # rejects bare subscribe bodies with
+                        # ``invalid_argument``. Wrap the initial subscribe
+                        # in a ``subscription.subscribe`` command envelope.
+                        # The id is constant (one auto-subscribe per WS
+                        # connection); the resulting success response is
+                        # delivered to the event queue and ignored by the
+                        # SDK fanout (no ``method`` field).
+                        subscribe_command = {
+                            "id": 1,
+                            "method": "subscription.subscribe",
+                            "params": build_event_stream_body(params),
+                        }
+                        await websocket.send(orjson.dumps(subscribe_command).decode())
                         if not ready.done():
                             ready.set_result(None)
                         async for raw in websocket:
