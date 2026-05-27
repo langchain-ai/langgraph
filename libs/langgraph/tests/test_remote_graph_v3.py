@@ -187,3 +187,72 @@ async def test_aenter_unwinds_sdk_cm_when_run_start_raises():
     sdk_thread.__aenter__.assert_awaited_once()
     sdk_thread.__aexit__.assert_awaited_once()
     assert adapter._run_id is None
+
+
+@pytest.mark.anyio
+async def test_async_output_interrupted_interrupts_passthrough():
+    adapter, _, sdk_thread = _make_async_adapter()
+
+    async def _fake_output_awaitable():
+        return {"foo": 1}
+
+    sdk_thread.output = _fake_output_awaitable()
+    sdk_thread.interrupted = True
+    sdk_thread.interrupts = [{"interrupt_id": "i1", "namespace": [], "value": "v"}]
+    async with adapter as stream:
+        assert await stream.output == {"foo": 1}
+        assert await stream.interrupted is True
+        assert await stream.interrupts == [
+            {"interrupt_id": "i1", "namespace": [], "value": "v"}
+        ]
+
+
+@pytest.mark.anyio
+async def test_aiter_caches_first_subscription():
+    adapter, _, sdk_thread = _make_async_adapter()
+
+    class _FakeAsyncEvents:
+        def __init__(self, items):
+            self._items = list(items)
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if not self._items:
+                raise StopAsyncIteration
+            return self._items.pop(0)
+
+    sdk_thread.events = _FakeAsyncEvents([object(), object()])
+    async with adapter as stream:
+        first = stream.__aiter__()
+        second = stream.__aiter__()
+        assert first is second
+
+
+@pytest.mark.anyio
+async def test_async_abort_cancels_run_and_closes_sdk():
+    adapter, client, sdk_thread = _make_async_adapter()
+    async with adapter as stream:
+        await stream.abort()
+        client.runs.cancel.assert_awaited_once_with(
+            "thread-abc", "run-xyz", wait=False
+        )
+        sdk_thread.close.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_async_abort_before_aenter_skips_cancel():
+    adapter, client, sdk_thread = _make_async_adapter()
+    await adapter.abort()
+    client.runs.cancel.assert_not_awaited()
+    sdk_thread.close.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_async_abort_swallows_cancel_failure():
+    adapter, client, sdk_thread = _make_async_adapter()
+    client.runs.cancel.side_effect = RuntimeError("cancel boom")
+    async with adapter as stream:
+        await stream.abort()
+        sdk_thread.close.assert_awaited_once()

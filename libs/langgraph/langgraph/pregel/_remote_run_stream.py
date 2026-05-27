@@ -137,3 +137,36 @@ class _AsyncRemoteGraphRunStream:
             return
         self._closed = True
         await self._sdk.__aexit__(exc_type, exc, tb)
+
+    @property
+    def output(self) -> Any:
+        return self._sdk.output
+
+    @property
+    async def interrupted(self) -> bool:
+        return self._sdk.interrupted
+
+    @property
+    async def interrupts(self) -> list[Any]:
+        return list(self._sdk.interrupts)
+
+    async def abort(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        if self._run_id is not None:
+            try:
+                await self._client.runs.cancel(
+                    self._sdk.thread_id, self._run_id, wait=False
+                )
+            except Exception:
+                logger.debug("abort: runs.cancel failed", exc_info=True)
+        try:
+            await self._sdk.close()
+        except Exception:
+            logger.debug("abort: sdk.close failed", exc_info=True)
+
+    def __aiter__(self) -> AsyncIterator[Any]:
+        if self._events_aiter is None:
+            self._events_aiter = self._sdk.events.__aiter__()
+        return self._events_aiter
