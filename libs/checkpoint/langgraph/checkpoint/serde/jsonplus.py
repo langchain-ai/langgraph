@@ -157,27 +157,6 @@ class JsonPlusSerializer(SerializerProtocol):
             )
         return clone
 
-    def _encode_constructor_args(
-        self,
-        constructor: Callable | type[Any],
-        *,
-        method: None | str | Sequence[None | str] = None,
-        args: Sequence[Any] | None = None,
-        kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        out = {
-            "lc": 2,
-            "type": "constructor",
-            "id": (*constructor.__module__.split("."), constructor.__name__),
-        }
-        if method is not None:
-            out["method"] = method
-        if args is not None:
-            out["args"] = args
-        if kwargs is not None:
-            out["kwargs"] = kwargs
-        return out
-
     def _reviver(self, value: dict[str, Any]) -> Any:
         if (
             value.get("lc", None) == 2
@@ -203,45 +182,46 @@ class JsonPlusSerializer(SerializerProtocol):
         self._check_allowed_json_modules(value)
 
         [*module, name] = value["id"]
+        # The `method` field on lc:2 envelopes is intentionally ignored.
+        # Revival is restricted to the default constructor (no `getattr`
+        # dispatch on attacker-influenced names). The framework's own
+        # encoder has not emitted `method=` since the msgpack migration,
+        # and the only legacy emission was `method=(None, "construct")`
+        # for pydantic models, where the first entry (`None`) already
+        # meant "default constructor", which is what we do here.
         try:
             mod = importlib.import_module(".".join(module))
             cls = getattr(mod, name)
-            method = value.get("method")
-            if isinstance(method, str):
-                methods = [getattr(cls, method)]
-            elif isinstance(method, list):
-                methods = [cls if m is None else getattr(cls, m) for m in method]
-            else:
-                methods = [cls]
+            if isclass(cls) and issubclass(cls, BaseException):
+                return None
             args = value.get("args")
             kwargs = value.get("kwargs")
-            for method in methods:
-                try:
-                    if isclass(method) and issubclass(method, BaseException):
-                        return None
-                    if args and kwargs:
-                        return method(*args, **kwargs)
-                    elif args:
-                        return method(*args)
-                    elif kwargs:
-                        return method(**kwargs)
-                    else:
-                        return method()
-                except Exception:
-                    continue
-        except Exception:
+            if args and kwargs:
+                return cls(*args, **kwargs)
+            elif args:
+                return cls(*args)
+            elif kwargs:
+                return cls(**kwargs)
+            else:
+                return cls()
+        except Exception as exc:
+            # Method-field dispatch has been removed (GHSA-fjqc-hq36-qh5p), so
+            # legacy pydantic payloads emitting `method=[None, "construct"]`
+            # no longer fall back to `cls.construct(**kwargs)` when the
+            # default constructor rejects the serialized kwargs. Surface a
+            # one-line warning so operators can spot payloads that now revive
+            # to `None` instead of silently degrading to the raw envelope.
+            logger.warning(
+                "Failed to revive lc:2 envelope %s "
+                "(legacy_method_field=%s, error=%s); returning None",
+                ".".join((*module, name)),
+                "method" in value,
+                type(exc).__name__,
+            )
             return None
 
     def _check_allowed_json_modules(self, value: dict[str, Any]) -> None:
         needed = tuple(value["id"])
-        method = value.get("method")
-        if isinstance(method, list):
-            method_display = ",".join(m or "<init>" for m in method)
-        elif isinstance(method, str):
-            method_display = method
-        else:
-            method_display = "<init>"
-
         dotted = ".".join(needed)
         # Safe types (the same set already allowed for msgpack deserialization) are
         # permitted without an explicit allowlist — they are known-safe LangGraph and
@@ -252,7 +232,7 @@ class JsonPlusSerializer(SerializerProtocol):
 
         if not self._allowed_json_modules:
             raise InvalidModuleError(
-                f"Refused to deserialize JSON constructor: {dotted} (method: {method_display}). "
+                f"Refused to deserialize JSON constructor: {dotted}. "
                 "No allowed_json_modules configured.\n\n"
                 "Unblock with ONE of:\n"
                 f"  • JsonPlusSerializer(allowed_json_modules=[{needed!r}, ...])\n"
@@ -267,7 +247,7 @@ class JsonPlusSerializer(SerializerProtocol):
             return
 
         raise InvalidModuleError(
-            f"Refused to deserialize JSON constructor: {dotted} (method: {method_display}). "
+            f"Refused to deserialize JSON constructor: {dotted}. "
             "Symbol is not in the deserialization allowlist.\n\n"
             "Add exactly this symbol to unblock:\n"
             f"  JsonPlusSerializer(allowed_json_modules=[{needed!r}, ...])\n"
