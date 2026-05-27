@@ -8,7 +8,7 @@ from langchain_core.language_models.chat_model_stream import (
     AsyncChatModelStream,
     ChatModelStream,
 )
-from langchain_core.messages import AIMessageChunk, BaseMessage
+from langchain_core.messages import AIMessageChunk, BaseMessage, ToolMessage
 from langchain_protocol.protocol import MessagesData
 from typing_extensions import NotRequired, TypedDict
 
@@ -203,6 +203,7 @@ class MessagesTransformer(StreamTransformer):
         # Correlate protocol events back to a ChatModelStream by run_id
         # (attached to the event's metadata by StreamMessagesHandler).
         self._by_run: dict[str, ChatModelStream] = {}
+        self._ignored_runs: set[str] = set()
         self._pump_fn: Callable[[], bool] | None = None
         self._apump_fn: Callable[[], Awaitable[bool]] | None = None
         # Cached as a list once for cheap equality with the protocol
@@ -276,8 +277,10 @@ class MessagesTransformer(StreamTransformer):
             self._route_protocol_event(
                 cast("MessagesData", payload), run_id=run_id, node=node
             )
-        elif isinstance(payload, BaseMessage) and not isinstance(
-            payload, AIMessageChunk
+        elif (
+            isinstance(payload, BaseMessage)
+            and not isinstance(payload, AIMessageChunk)
+            and not isinstance(payload, ToolMessage)
         ):
             self._route_whole_message(payload, node=node)
         # Legacy AIMessageChunk tuples (from on_llm_new_token) are ignored;
@@ -295,6 +298,11 @@ class MessagesTransformer(StreamTransformer):
     ) -> None:
         event_type = event.get("event")
         if event_type == "message-start":
+            # Tool results are exposed on the tools projection and state
+            # snapshots; run.messages is the chat-token projection.
+            if event.get("role") == "tool":
+                self._ignored_runs.add(run_id)
+                return
             message_id = event.get("message_id")
             stream = self._make_stream(
                 namespace=[],
@@ -304,6 +312,9 @@ class MessagesTransformer(StreamTransformer):
             self._by_run[run_id] = stream
             self._log.push(stream)
             stream.dispatch(event)
+        elif run_id in self._ignored_runs:
+            if event_type == "message-finish":
+                self._ignored_runs.discard(run_id)
         elif run_id in self._by_run:
             stream = self._by_run[run_id]
             stream.dispatch(event)
@@ -319,12 +330,14 @@ class MessagesTransformer(StreamTransformer):
     def finalize(self) -> None:
         """Clear any routing state — streams close themselves via `message-finish`."""
         self._by_run.clear()
+        self._ignored_runs.clear()
 
     def fail(self, err: BaseException) -> None:
         """Propagate run error to any streams still open when the graph fails."""
         for stream in list(self._by_run.values()):
             stream.fail(err)
         self._by_run.clear()
+        self._ignored_runs.clear()
 
 
 SubgraphStatus = Literal["started", "completed", "failed", "interrupted", "drained"]
