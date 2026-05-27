@@ -15,12 +15,14 @@ from unittest.mock import MagicMock, patch
 
 import langsmith
 import pytest
+from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tracers import LangChainTracer
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph._internal._config import (
     _is_not_empty,
+    _merge_callbacks,
     ensure_config,
     get_callback_manager_for_config,
 )
@@ -427,3 +429,60 @@ def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
         "thread_id": "th-123",
         "user_id": "uid-1",
     }
+
+
+class _TrackingCB(BaseCallbackHandler):
+    """Minimal callback handler used only as a sentinel for merge tests."""
+
+    def __init__(self, tag: str) -> None:
+        self.tag = tag
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _TrackingCB) and self.tag == other.tag
+
+    def __hash__(self) -> int:
+        return hash(self.tag)
+
+
+def test_merge_callbacks_none_base_list_new() -> None:
+    cb = _TrackingCB("a")
+    merged = _merge_callbacks(None, [cb])
+    assert merged == [cb]
+
+
+def test_merge_callbacks_list_base_list_new() -> None:
+    a, b = _TrackingCB("a"), _TrackingCB("b")
+    merged = _merge_callbacks([a], [b])
+    assert merged == [a, b]
+
+
+def test_merge_callbacks_list_base_manager_new() -> None:
+    a = _TrackingCB("a")
+    mgr = CallbackManager(handlers=[_TrackingCB("b")])
+    merged = _merge_callbacks([a], mgr)
+    assert isinstance(merged, CallbackManager)
+    assert _TrackingCB("a") in merged.handlers
+    assert _TrackingCB("b") in merged.handlers
+
+
+def test_merge_callbacks_manager_base_list_new() -> None:
+    mgr = CallbackManager(handlers=[_TrackingCB("a")])
+    b = _TrackingCB("b")
+    merged = _merge_callbacks(mgr, [b])
+    assert isinstance(merged, CallbackManager)
+    assert _TrackingCB("a") in merged.handlers
+    assert _TrackingCB("b") in merged.handlers
+
+
+def test_merge_callbacks_manager_base_manager_new() -> None:
+    mgr_a = CallbackManager(handlers=[_TrackingCB("a")])
+    mgr_b = CallbackManager(handlers=[_TrackingCB("b")])
+    merged = _merge_callbacks(mgr_a, mgr_b)
+    assert isinstance(merged, CallbackManager)
+    assert _TrackingCB("a") in merged.handlers
+    assert _TrackingCB("b") in merged.handlers
+
+
+def test_merge_callbacks_none_base_none_new() -> None:
+    merged = _merge_callbacks(None, None)
+    assert merged is None

@@ -79,6 +79,35 @@ def patch_checkpoint_map(
         return config
 
 
+def _merge_callbacks(base: Callbacks, new: Callbacks) -> Callbacks:
+    """Merge two callbacks values (None / list / BaseCallbackManager).
+
+    Six cases total (3 base types x 2 non-None new types). Mirrors the inline
+    callbacks merge in `merge_configs` and the logic in PR #7424.
+    """
+    if new is None:
+        return base
+    if base is None:
+        return new.copy() if isinstance(new, (list, BaseCallbackManager)) else new
+    if isinstance(new, list):
+        if isinstance(base, list):
+            return base + new
+        if isinstance(base, BaseCallbackManager):
+            mngr = base.copy()
+            for cb in new:
+                mngr.add_handler(cb, inherit=True)
+            return mngr
+    elif isinstance(new, BaseCallbackManager):
+        if isinstance(base, list):
+            mngr = new.copy()
+            for cb in base:
+                mngr.add_handler(cb, inherit=True)
+            return mngr
+        if isinstance(base, BaseCallbackManager):
+            return base.merge(new)
+    raise NotImplementedError(f"Unsupported callback types: {type(base)}, {type(new)}")
+
+
 def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
     """Merge multiple configs into one.
 
