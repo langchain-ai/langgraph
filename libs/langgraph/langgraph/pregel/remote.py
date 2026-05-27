@@ -1084,21 +1084,55 @@ class RemoteGraph(PregelProtocol):
             metadata=kwargs.get("metadata"),
         )
 
-    async def astream_events(
+    def astream_events(
         self,
         input: Any,
         config: RunnableConfig | None = None,
         *,
-        version: Literal["v1", "v2"],
-        include_names: Sequence[All] | None = None,
-        include_types: Sequence[All] | None = None,
-        include_tags: Sequence[All] | None = None,
-        exclude_names: Sequence[All] | None = None,
-        exclude_types: Sequence[All] | None = None,
-        exclude_tags: Sequence[All] | None = None,
+        version: Literal["v1", "v2", "v3"] = "v2",
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: Any = None,
+        transformers: Sequence[Any] | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
-    ) -> AsyncIterator[dict[str, Any]]:
-        raise NotImplementedError
+    ) -> Any:
+        """Async-stream events from this remote graph.
+
+        For `version="v3"`, returns an `_AsyncRemoteGraphRunStream`. For
+        `version="v1"`/`"v2"`, raises NotImplementedError (use `astream`).
+        """
+        if version != "v3":
+            raise NotImplementedError(
+                f"RemoteGraph.astream_events(version={version!r}) is not "
+                "implemented; use astream() for v1/v2 streaming or "
+                "version='v3'."
+            )
+        self._reject_v3_unsupported(
+            control=control,
+            transformers=transformers,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+            extra_kwargs=kwargs,
+        )
+        client = self._validate_client()
+        sanitized = self._sanitize_config(merge_configs(self.config, config))
+        thread_id = sanitized.get("configurable", {}).pop("thread_id", None)
+        merged_headers = (
+            _merge_tracing_headers(headers) if self.distributed_tracing else headers
+        )
+        sdk_thread = client.threads.stream(
+            thread_id=thread_id,
+            assistant_id=self.assistant_id,
+            headers=merged_headers,
+        )
+        return _AsyncRemoteGraphRunStream(
+            client=client,
+            sdk_thread=sdk_thread,
+            input=_translate_command_input(input),
+            config=sanitized,
+            metadata=kwargs.get("metadata"),
+        )
 
     @overload
     def invoke(

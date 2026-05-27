@@ -542,3 +542,39 @@ def test_stream_events_non_v3_delegates_to_super():
     except Exception:
         pass
     sync_client_attr.threads.stream.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_astream_events_v3_constructs_sdk_thread():
+    client = MagicMock()
+    sdk_thread = MagicMock()
+    client.threads.stream.return_value = sdk_thread
+    rg = RemoteGraph("agent", client=client, sync_client=MagicMock())
+    result = rg.astream_events(
+        {"x": 1},
+        config={"configurable": {"thread_id": "t1"}},
+        version="v3",
+    )
+    assert isinstance(result, _AsyncRemoteGraphRunStream)
+    call = client.threads.stream.call_args
+    assert call.kwargs["thread_id"] == "t1"
+    assert call.kwargs["assistant_id"] == "agent"
+
+
+@pytest.mark.anyio
+async def test_astream_events_v3_rejects_unsupported_kwargs():
+    client = MagicMock()
+    rg = RemoteGraph("agent", client=client, sync_client=MagicMock())
+    with pytest.raises(NotImplementedError, match="transformers"):
+        rg.astream_events({"x": 1}, version="v3", transformers=[object()])
+    client.threads.stream.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_astream_events_non_v3_raises_not_implemented():
+    rg = RemoteGraph("agent", client=MagicMock(), sync_client=MagicMock())
+    with pytest.raises(NotImplementedError, match="not implemented"):
+        result = rg.astream_events({"x": 1}, version="v2")
+        if hasattr(result, "__aiter__"):
+            async for _ in result:
+                pass
