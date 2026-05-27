@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, tzinfo
 from typing import Any
 
-from langgraph_sdk._shared.utilities import _resolve_timezone
+from langgraph_sdk._shared.utilities import _quote_path_param, _resolve_timezone
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import (
     All,
@@ -156,7 +156,7 @@ class SyncCronClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(
-            f"/threads/{thread_id}/runs/crons",
+            f"/threads/{_quote_path_param(thread_id)}/runs/crons",
             json=payload,
             headers=headers,
             params=params,
@@ -304,7 +304,9 @@ class SyncCronClient:
             ```
 
         """
-        self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
+        self.http.delete(
+            f"/runs/crons/{_quote_path_param(cron_id)}", headers=headers, params=params
+        )
 
     def update(
         self,
@@ -391,7 +393,7 @@ class SyncCronClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.patch(
-            f"/runs/crons/{cron_id}",
+            f"/runs/crons/{_quote_path_param(cron_id)}",
             json=payload,
             headers=headers,
             params=params,
