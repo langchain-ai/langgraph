@@ -849,6 +849,41 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_pushed_image_digest(
+    runner,
+    *,
+    remote_image: str,
+    docker_config_dir: str | None,
+    verbose: bool,
+) -> str:
+    """Return ``{registry}/{repo}@sha256:<hex>`` for a freshly-pushed image.
+
+    Reads ``RepoDigests`` via ``docker image inspect`` — the local daemon
+    records the registry's manifest digest there after a successful push.
+    Falls back to ``remote_image`` with a warning if no matching digest is
+    found, rather than failing the deploy.
+    """
+    # rsplit preserves ``:port`` in the registry host.
+    repo_no_tag = remote_image.rsplit(":", 1)[0]
+    args: list[str] = ["docker"]
+    if docker_config_dir:
+        args += ["--config", docker_config_dir]
+    args += ["image", "inspect", "--format", "{{json .RepoDigests}}", remote_image]
+    stdout, _ = runner.run(subp_exec(*args, collect=True, verbose=verbose))
+    try:
+        digests = json_mod.loads(stdout or "[]") or []
+    except json_mod.JSONDecodeError:
+        digests = []
+    for d in digests:
+        if isinstance(d, str) and d.startswith(f"{repo_no_tag}@sha256:"):
+            return d
+    _get_emitter().warn(
+        f"Could not resolve image digest for {remote_image}; "
+        "falling back to the tag-based reference. Re-run with --verbose for details."
+    )
+    return remote_image
+
+
 def _run_local_build(
     *,
     client: HostBackendClient,
@@ -1015,9 +1050,16 @@ def _run_local_build(
                         raise
         step += 1
 
+        resolved_image = _resolve_pushed_image_digest(
+            runner,
+            remote_image=remote_image,
+            docker_config_dir=None,
+            verbose=verbose,
+        )
+
         # -- Step: Update deployment --
         _log_deploy_step(step, f"Updating deployment {deployment_id}")
-        updated = client.update_deployment(deployment_id, remote_image, secrets=secrets)
+        updated = client.update_deployment(deployment_id, resolved_image, secrets=secrets)
 
     return BuildResult(
         updated=updated if isinstance(updated, dict) else {},
