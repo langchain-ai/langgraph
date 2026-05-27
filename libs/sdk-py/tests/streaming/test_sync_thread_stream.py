@@ -9,6 +9,7 @@ import uuid
 from collections.abc import Iterator
 
 import httpx
+import pytest
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk._sync.threads import SyncThreadsClient
@@ -354,6 +355,56 @@ def test_close_unblocks_active_subscription_before_lifecycle_join():
     )
 
 
+def test_sync_thread_agent_get_tree_fetches_assistant_graph():
+    fake = SyncFakeServer()
+    fake.set_graph(
+        {
+            "nodes": [{"id": "agent", "type": "runnable", "data": {"name": "agent"}}],
+            "edges": [{"source": "agent", "target": "__end__"}],
+        }
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+            headers={"X-Custom-Header": "my-value"},
+        ) as thread:
+            graph = thread.agent.get_tree(xray=True)
+
+    assert graph["nodes"][0]["id"] == "agent"
+    assert graph["edges"] == [{"source": "agent", "target": "__end__"}]
+    assert fake.graph_request_params == [{"xray": "true"}]
+    assert fake.graph_request_headers[0].get("x-custom-header") == "my-value"
+
+
+def test_sync_thread_agent_get_tree_raises_after_close():
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        stream.close()
+        with pytest.raises(RuntimeError, match="closed"):
+            stream.agent.get_tree()
+
+
+def test_sync_extensions_projection_empty_name_raises():
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        with pytest.raises(ValueError, match="non-empty"):
+            stream.extensions[""]
+
+
+def test_sync_extensions_projection_closed_stream_yields_nothing():
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        # Enter and immediately exit so _controller is set but _closed is True.
+        with threads.stream(thread_id="t-1", assistant_id="agent") as stream:
+            pass
+        payloads = list(stream.extensions["progress"])
+    assert payloads == []
+
+
 def test_sync_threads_stream_mints_uuid4_when_thread_id_none():
     with httpx.Client(base_url="http://test") as raw:
         threads = SyncThreadsClient(SyncHttpClient(raw))
@@ -416,3 +467,138 @@ def test_sync_lifecycle_watcher_reconnects_with_since_after_transport_drop():
     assert terminal.status == "completed"
     assert terminal.error is None
     assert fake.stream_request_bodies[1]["since"] == 1
+
+
+def test_sync_threads_stream_accepts_websocket_transport_option():
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        stream = threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+            transport="websocket",
+        )
+    assert stream._transport_kind == "websocket"
+
+
+def test_sync_threads_stream_rejects_unknown_transport_option():
+    import pytest
+
+    with httpx.Client(base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with pytest.raises(ValueError, match="transport"):
+            threads.stream(
+                thread_id="t-1",
+                assistant_id="agent",
+                transport="bogus",  # ty: ignore[invalid-argument-type]
+            )
+
+
+def test_v3_streaming_sync_surface_smoke():
+    from streaming._events import (
+        custom_event,
+        lifecycle_completed_event,
+        message_finish_event,
+        message_start_event,
+        message_text_delta_event,
+        message_text_finish_event,
+        tool_finished_event,
+        tool_started_event,
+        values_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({"final": True})
+    # Single script — projections consume events in parallel threads so all
+    # subscriptions are registered before SSE rotation could drop events.
+    # Mirrors the async smoke test's `asyncio.gather` pattern.
+    fake.script(
+        [
+            values_event(seq=1, values={"step": 1}),
+            message_start_event(seq=2, message_id="msg-1"),
+            message_text_delta_event(seq=3, text="hi", message_id="msg-1"),
+            message_text_finish_event(seq=4, text="hi", message_id="msg-1"),
+            message_finish_event(seq=5, message_id="msg-1"),
+            tool_started_event(seq=6, tool_call_id="call-1", tool_name="search"),
+            tool_finished_event(seq=7, tool_call_id="call-1", output={"ok": True}),
+            custom_event(seq=8, name="progress", step=1),
+            lifecycle_completed_event(seq=9),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            start = thread.run.start(
+                input={"messages": [{"role": "user", "content": "hi"}]}
+            )
+
+            # Gate every reconcile_stream call on a barrier so that all four
+            # projection threads register their subscriptions before any
+            # reconcile widens (or rotates) the shared SSE. This mirrors the
+            # async smoke test's `asyncio.gather` pattern: every subscription
+            # is registered before the first SSE opens; one SSE covers all
+            # consumers and `_seen_event_ids` covers any subsequent reconnect.
+            controller = thread._controller
+            assert controller is not None
+            barrier = threading.Barrier(4)
+            real_reconcile = controller.reconcile_stream
+
+            def _gated_reconcile(candidate_filter):
+                barrier.wait(timeout=10)
+                return real_reconcile(candidate_filter)
+
+            controller.reconcile_stream = _gated_reconcile  # ty: ignore[invalid-assignment]
+
+            results: dict[str, object] = {}
+            errors: list[BaseException] = []
+
+            def _run_values() -> None:
+                try:
+                    for v in thread.values:
+                        results["values"] = v
+                        return
+                except BaseException as err:  # pragma: no cover - propagated
+                    errors.append(err)
+
+            def _run_messages() -> None:
+                try:
+                    results["messages"] = list(thread.messages)
+                except BaseException as err:  # pragma: no cover - propagated
+                    errors.append(err)
+
+            def _run_tools() -> None:
+                try:
+                    results["tools"] = list(thread.tool_calls)
+                except BaseException as err:  # pragma: no cover - propagated
+                    errors.append(err)
+
+            def _run_progress() -> None:
+                try:
+                    results["progress"] = list(thread.extensions["progress"])
+                except BaseException as err:  # pragma: no cover - propagated
+                    errors.append(err)
+
+            workers = [
+                threading.Thread(target=_run_values),
+                threading.Thread(target=_run_messages),
+                threading.Thread(target=_run_tools),
+                threading.Thread(target=_run_progress),
+            ]
+            for w in workers:
+                w.start()
+            for w in workers:
+                w.join(timeout=10)
+                assert not w.is_alive(), "smoke worker thread hung"
+            controller.reconcile_stream = real_reconcile  # ty: ignore[invalid-assignment]
+            assert not errors, errors
+            final = thread.output
+
+    assert start == {"run_id": "run-1"}
+    assert results["values"] == fake.state["values"]
+    messages_result = results["messages"]
+    assert isinstance(messages_result, list)
+    assert [str(m.text) for m in messages_result] == ["hi"]  # ty: ignore[unresolved-attribute]
+    tools_result = results["tools"]
+    assert isinstance(tools_result, list)
+    assert tools_result[0].name == "search"  # ty: ignore[unresolved-attribute]
+    assert results["progress"] == [{"name": "progress", "step": 1}]
+    assert final == {"final": True}

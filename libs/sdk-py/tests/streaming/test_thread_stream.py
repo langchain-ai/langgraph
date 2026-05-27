@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import re
 import uuid
+from typing import Any
 
 import httpx
 import pytest
@@ -11,6 +12,10 @@ import pytest
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._async.threads import ThreadsClient
+from langgraph_sdk.stream.transport import (
+    ProtocolSseTransport,
+    ProtocolWebSocketTransport,
+)
 from streaming._events import (
     lifecycle_completed_event,
     lifecycle_event,
@@ -18,6 +23,57 @@ from streaming._events import (
     values_event,
 )
 from streaming._fake_server import FakeServer
+
+
+async def test_thread_agent_get_tree_fetches_assistant_graph():
+    fake = FakeServer()
+    fake.set_graph(
+        {
+            "nodes": [{"id": "agent", "type": "runnable", "data": {"name": "agent"}}],
+            "edges": [{"source": "agent", "target": "__end__"}],
+        }
+    )
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+            headers={"X-Custom-Header": "my-value"},
+        ) as thread:
+            graph = await thread.agent.get_tree(xray=True)
+
+    assert graph["nodes"][0]["id"] == "agent"
+    assert graph["edges"] == [{"source": "agent", "target": "__end__"}]
+    assert fake.graph_request_params == [{"xray": "true"}]
+    assert fake.graph_request_headers[0].get("x-custom-header") == "my-value"
+
+
+async def test_thread_agent_get_tree_raises_after_close():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        await stream.close()
+        with pytest.raises(RuntimeError, match="closed"):
+            await stream.agent.get_tree()
+
+
+async def test_extensions_projection_empty_name_raises():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(thread_id="t-1", assistant_id="agent")
+        with pytest.raises(ValueError, match="non-empty"):
+            stream.extensions[""]
+
+
+async def test_extensions_projection_closed_stream_yields_nothing():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        # Enter and immediately exit so _controller is set but _closed is True.
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as stream:
+            pass
+        payloads = [p async for p in stream.extensions["progress"]]
+    assert payloads == []
 
 
 async def test_thread_stream_stores_thread_id_and_assistant_id():
@@ -171,6 +227,19 @@ async def test_aenter_constructs_transport_with_thread_id():
             assert stream._transport.thread_id == "t-1"
 
 
+async def test_aenter_selects_websocket_transport():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(
+            thread_id="t-1", assistant_id="agent", transport="websocket"
+        )
+        async with stream:
+            assert isinstance(stream._transport, ProtocolWebSocketTransport)
+
+
 async def test_aexit_closes_transport():
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
@@ -183,6 +252,7 @@ async def test_aexit_closes_transport():
         async with stream:
             inner_transport = stream._transport
         assert inner_transport is not None
+        assert isinstance(inner_transport, ProtocolSseTransport)
         assert inner_transport._closed is True
 
 
@@ -398,7 +468,7 @@ async def test_events_property_returns_fresh_iterator_each_access():
 async def test_fresh_thread_happy_path_end_to_end():
     """User passes no thread_id; SDK mints one and uses it in all URLs.
 
-    Validates the thread-stream surface end-to-end:
+    Validates core surface end-to-end:
       - uuid4 minted at client.threads.stream()
       - run.start posted to /threads/<minted-id>/commands
       - events SSE opened at /threads/<minted-id>/stream/events
@@ -687,7 +757,7 @@ async def test_terminal_lifecycle_clear_acquires_interrupts_lock():
                         "method": "lifecycle",
                         "params": {
                             "namespace": [],
-                            "data": {"phase": "completed"},
+                            "data": {"event": "completed"},
                         },
                         "seq": 99,
                         "event_id": "evt-99",
@@ -806,3 +876,98 @@ async def test_output_with_timeout_returns_new_awaitable_not_self():
             assert bounded is not thread.output
             assert bounded._timeout == 0.5
             assert thread.output._timeout is None
+
+
+async def test_threads_stream_accepts_websocket_transport_option():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+            transport="websocket",
+        )
+    assert stream._transport_kind == "websocket"
+
+
+async def test_threads_stream_rejects_unknown_transport_option():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        with pytest.raises(ValueError, match="transport"):
+            threads.stream(
+                thread_id="t-1",
+                assistant_id="agent",
+                transport="bogus",  # ty: ignore[invalid-argument-type]
+            )
+
+
+async def test_v3_streaming_async_surface_smoke():
+    import asyncio
+
+    from streaming._events import (
+        custom_event,
+        lifecycle_completed_event,
+        message_finish_event,
+        message_start_event,
+        message_text_delta_event,
+        message_text_finish_event,
+        tool_finished_event,
+        tool_started_event,
+        values_event,
+    )
+
+    fake = FakeServer()
+    fake.set_state({"final": True})
+    fake.script(
+        [
+            values_event(seq=1, values={"step": 1}),
+            message_start_event(seq=2, message_id="msg-1"),
+            message_text_delta_event(seq=3, text="hi", message_id="msg-1"),
+            message_text_finish_event(seq=4, text="hi", message_id="msg-1"),
+            message_finish_event(seq=5, message_id="msg-1"),
+            tool_started_event(seq=6, tool_call_id="call-1", tool_name="search"),
+            tool_finished_event(seq=7, tool_call_id="call-1", output={"ok": True}),
+            custom_event(seq=8, name="progress", step=1),
+            lifecycle_completed_event(seq=9),
+        ]
+    )
+    async with httpx.AsyncClient(
+        transport=fake.transport, base_url="http://test"
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            start = await thread.run.start(
+                input={"messages": [{"role": "user", "content": "hi"}]}
+            )
+
+            # Start all consumers concurrently so their subscriptions are all
+            # registered before the first SSE reconciliation. This means ONE
+            # shared SSE opens with the union filter, dedup never rejects events.
+            async def _get_first_values() -> Any:
+                async for v in thread.values:
+                    return v
+
+            async def _get_message_streams():
+                return [s async for s in thread.messages]
+
+            async def _get_tool_calls():
+                return [call async for call in thread.tool_calls]
+
+            async def _get_progress():
+                return [p async for p in thread.extensions["progress"]]
+
+            first_values, message_streams, tool_calls, progress = await asyncio.gather(
+                _get_first_values(),
+                _get_message_streams(),
+                _get_tool_calls(),
+                _get_progress(),
+            )
+            # stream.text is already fully accumulated after gather completes.
+            message_texts = [await s.text for s in message_streams]
+            final = await thread.output
+
+    assert start == {"run_id": "run-1"}
+    assert first_values == fake.state["values"]
+    assert message_texts == ["hi"]
+    assert tool_calls[0].name == "search"
+    assert progress == [{"name": "progress", "step": 1}]
+    assert final == {"final": True}

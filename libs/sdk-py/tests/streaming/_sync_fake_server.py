@@ -44,6 +44,12 @@ class SyncFakeServer:
         self.transport = httpx.MockTransport(self._handle)
         self._stream_scripts: list[SyncStreamScript] = []
         self._command_response: dict[str, Any] | None = None
+        self.graph_response: dict[str, Any] = {
+            "nodes": [{"id": "agent", "type": "runnable", "data": {"name": "agent"}}],
+            "edges": [],
+        }
+        self.graph_request_params: list[dict[str, str]] = []
+        self.graph_request_headers: list[dict[str, str]] = []
 
     def script(
         self,
@@ -59,6 +65,9 @@ class SyncFakeServer:
     def script_sequence(self, scripts: list[SyncStreamScript]) -> None:
         self._stream_scripts = list(scripts)
         self.scripted_events = []
+
+    def set_graph(self, graph: dict[str, Any]) -> None:
+        self.graph_response = dict(graph)
 
     def script_command_response(self, response: dict[str, Any]) -> None:
         self._command_response = dict(response)
@@ -109,6 +118,10 @@ class SyncFakeServer:
                 headers={"content-type": "text/event-stream"},
                 stream=_SseByteStream(script),
             )
+        if path.endswith("/graph") and "/assistants/" in path:
+            self.graph_request_params.append(dict(request.url.params))
+            self.graph_request_headers.append(dict(request.headers))
+            return httpx.Response(200, json=self.graph_response)
         if path.endswith("/state"):
             self.state_request_count += 1
             self.state_request_headers.append(dict(request.headers))

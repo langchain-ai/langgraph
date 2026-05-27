@@ -1,11 +1,11 @@
 """In-process ASGI fake of the v3 protocol endpoints.
 
-Used by transport and thread-streaming tests. Mirrors the production endpoints
-just closely enough to validate the client:
+Mirrors the production endpoints just closely enough to validate the client:
 
   - POST /threads/{thread_id}/commands
   - POST /threads/{thread_id}/stream/events
   - GET /threads/{thread_id}/state
+  - GET /assistants/{assistant_id}/graph
 """
 
 from __future__ import annotations
@@ -92,6 +92,12 @@ class FakeServer:
         self._stream_scripts: list[_StreamScript] = []
         self._command_response: dict[str, Any] | None = None
         self.transport: httpx.MockTransport = httpx.MockTransport(self._handle_request)
+        self.graph_response: dict[str, Any] = {
+            "nodes": [{"id": "agent", "type": "runnable", "data": {"name": "agent"}}],
+            "edges": [],
+        }
+        self.graph_request_params: list[dict[str, str]] = []
+        self.graph_request_headers: list[dict[str, str]] = []
 
     def script(
         self,
@@ -115,6 +121,10 @@ class FakeServer:
     def script_command_response(self, response: dict[str, Any]) -> None:
         """Set the command envelope returned by /commands."""
         self._command_response = dict(response)
+
+    def set_graph(self, graph: dict[str, Any]) -> None:
+        """Store the graph returned by GET /assistants/{assistant_id}/graph."""
+        self.graph_response = dict(graph)
 
     def set_state(
         self,
@@ -169,6 +179,11 @@ class FakeServer:
             self.state_request_headers.append(dict(request.headers))
             return JSONResponse(self.state)
 
+        async def assistant_graph(request: Request) -> Response:
+            self.graph_request_params.append(dict(request.query_params))
+            self.graph_request_headers.append(dict(request.headers))
+            return JSONResponse(self.graph_response)
+
         return Starlette(
             routes=[
                 Route("/threads/{thread_id}/commands", commands, methods=["POST"]),
@@ -180,6 +195,11 @@ class FakeServer:
                 Route(
                     "/threads/{thread_id}/state",
                     thread_state,
+                    methods=["GET"],
+                ),
+                Route(
+                    "/assistants/{assistant_id}/graph",
+                    assistant_graph,
                     methods=["GET"],
                 ),
             ]

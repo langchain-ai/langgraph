@@ -295,9 +295,13 @@ async def test_websocket_sends_subscribe_body_and_yields_events():
         await handle.close()
 
     assert orjson.loads(socket.sent[0]) == {
-        "channels": ["values"],
-        "namespaces": [[]],
-        "since": 7,
+        "id": 1,
+        "method": "subscription.subscribe",
+        "params": {
+            "channels": ["values"],
+            "namespaces": [[]],
+            "since": 7,
+        },
     }
     assert received == [event]
     assert err is None
@@ -456,7 +460,7 @@ async def test_websocket_controller_reconnects_with_since_after_drop():
     assert second["seq"] == 2
     assert end is None
     assert len(sent_urls) == 2
-    assert orjson.loads(second_socket.sent[0])["since"] == 1
+    assert orjson.loads(second_socket.sent[0])["params"]["since"] == 1
 
 
 async def test_async_close_sends_normal_close_frame():
