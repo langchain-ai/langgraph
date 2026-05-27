@@ -84,6 +84,14 @@ echo "Pin compatible versions in your dependencies and try again."; \
 exit 1 \
 )"""
         )
+    elif pip_installer == "pip":
+        commands.append(
+            """RUN python -m pip check || ( \
+echo "Dependency resolution check failed. One or more installed packages are incompatible."; \
+echo "Pin compatible versions in your dependencies and try again."; \
+exit 1 \
+)"""
+        )
     commands.append(
         """# -- End dependency validation --
 # -- Removing build deps from the final image ~<:===~~~ --"""
