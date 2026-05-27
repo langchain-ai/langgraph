@@ -23,7 +23,7 @@ from typing import Any
 
 from langchain_protocol import Event, SubscribeParams
 
-from langgraph_sdk.stream.transport import EventStreamHandle
+from langgraph_sdk.stream.transport import AsyncProtocolTransport, EventStreamHandle
 
 # ---------------------------------------------------------------------------
 # Bounded LRU set for event-id dedup
@@ -103,7 +103,10 @@ class StreamController:
       - fan-out from the shared stream to per-subscription queues
 
     Args:
-        transport: the transport used to open event streams.
+        transport: the `AsyncProtocolTransport` bound to this thread session.
+        run_start_gate: zero-argument async callable that resolves once the
+            current `run.start` has committed server-side (no-op when no
+            run is in flight).
         max_queue_size: per-subscription queue bound (default 1024).
         seen_event_ids_max: LRU cap for the dedup set (default 10_000).
     """
@@ -111,7 +114,7 @@ class StreamController:
     def __init__(
         self,
         *,
-        transport: Any,
+        transport: AsyncProtocolTransport,
         run_start_gate: Callable[[], Awaitable[None]] | None = None,  # noqa: ARG002
         max_queue_size: int = 1024,
         seen_event_ids_max: int = 10_000,

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
+from collections.abc import Iterator, Mapping
 from typing import Any, cast
 
 import httpx
@@ -12,16 +11,10 @@ import orjson
 from langchain_protocol import Event
 
 from langgraph_sdk.sse import BytesLineDecoder, SSEDecoder
-from langgraph_sdk.stream.transport.http import _build_event_stream_body
-
-
-@dataclass
-class SyncEventStreamHandle:
-    """Handle for one filtered synchronous SSE stream."""
-
-    events: Iterator[Event]
-    error: Callable[[], BaseException | None]
-    close: Callable[[], None]
+from langgraph_sdk.stream.transport.base import (
+    SyncEventStreamHandle,
+    build_event_stream_body,
+)
 
 
 class SyncProtocolSseTransport:
@@ -73,7 +66,7 @@ class SyncProtocolSseTransport:
         request = self._client.build_request(
             "POST",
             self._stream_url,
-            content=orjson.dumps(_build_event_stream_body(params)),
+            content=orjson.dumps(build_event_stream_body(params)),
             headers=sse_headers,
         )
         stream_cm = self._client.send(request, stream=True)
