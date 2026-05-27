@@ -98,8 +98,8 @@ async def test_with_config_tags_preserved_on_invoke() -> None:
     config supplies its own tags.
 
     Pre-fix: ensure_config overwrites the entire tags list.
-    Post-fix: tags are concatenated and deduplicated (matching
-    merge_configs behavior).
+    Post-fix: tags are concatenated (matching merge_configs behavior;
+    no deduplication, no sorting).
     """
     builder = StateGraph(dict)
     captured: list = []
