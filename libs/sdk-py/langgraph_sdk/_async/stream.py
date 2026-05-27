@@ -1182,6 +1182,7 @@ class AsyncThreadStream:
         self._run_start_ready: asyncio.Future[None] | None = None
         self._run_seen: bool = False
         self._run_done: asyncio.Future[_RunTerminal] | None = None
+        self._cursor: int | None = None
         self._active_message_streams: set[AsyncChatModelStream] = set()
         self._active_tool_calls: set[ToolCallHandle] = set()
         # Root-scope inbox: populated by `_SubgraphsProjection` when it consumes
@@ -1320,6 +1321,16 @@ class AsyncThreadStream:
             handle._fail(err)
         self._active_tool_calls.clear()
 
+    def observe_applied_through_seq(self, seq: Any) -> None:
+        """Advance the reconnect cursor from a command response meta sequence."""
+        if isinstance(seq, int) and (self._cursor is None or seq > self._cursor):
+            self._cursor = seq
+
+    def _observe_event(self, event: Event) -> None:
+        seq = event.get("seq")
+        if isinstance(seq, int) and (self._cursor is None or seq > self._cursor):
+            self._cursor = seq
+
     def subscribe(
         self,
         channels: list[str],
@@ -1381,6 +1392,7 @@ class AsyncThreadStream:
                 async for event in self._dedup_iter(shared.events):
                     if self._closed:
                         break
+                    self._observe_event(event)
                     for sub in list(self._subscriptions.values()):
                         if matches_subscription(event, sub.params):
                             sub.queue.put_nowait(event)
@@ -1423,7 +1435,10 @@ class AsyncThreadStream:
             return  # Existing stream is sufficient.
 
         new_filter = self._compute_current_union(extra=candidate_filter)
-        new_stream = self._transport.open_event_stream(new_filter)
+        stream_params: dict[str, Any] = dict(new_filter)
+        if self._cursor is not None:
+            stream_params["since"] = self._cursor
+        new_stream = self._transport.open_event_stream(stream_params)
         old_stream = self._shared_stream
         self._shared_stream = new_stream
         self._shared_stream_filter = new_filter
@@ -1480,6 +1495,11 @@ class AsyncThreadStream:
             code = response.get("error", "unknown")
             message = response.get("message", "")
             raise RuntimeError(f"Protocol error [{code}]: {message}")
+        meta = response.get("meta")
+        if isinstance(meta, dict):
+            applied_through_seq = meta.get("applied_through_seq")
+            if self._controller is not None:
+                self._controller.observe_applied_through_seq(applied_through_seq)
         return response.get("result", {})
 
     async def _await_run_start_gate(self, *, timeout: float | None = None) -> None:
