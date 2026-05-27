@@ -6,7 +6,7 @@ import time
 from typing import Annotated, Any
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import tool
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
@@ -127,6 +127,42 @@ class TestToolCallTransformerUnit:
         assert stream.output == "done"
         assert stream.error is None
         assert "tc1" not in transformer._active
+
+    def test_finish_unwraps_tool_message_output(self) -> None:
+        mux, transformer = _mux()
+        mux.push(_tool_event("tool-started", "tc1", tool_name="echo"))
+        stream = transformer._active["tc1"]
+        mux.push(
+            _tool_event(
+                "tool-finished",
+                "tc1",
+                output=ToolMessage(content="done", tool_call_id="tc1"),
+            )
+        )
+        assert stream.completed is True
+        assert stream.output == "done"
+
+    def test_finish_unwraps_serialized_tool_message_output(self) -> None:
+        mux, transformer = _mux()
+        mux.push(_tool_event("tool-started", "tc1", tool_name="echo"))
+        stream = transformer._active["tc1"]
+        mux.push(
+            _tool_event(
+                "tool-finished",
+                "tc1",
+                output={
+                    "lc": 1,
+                    "type": "constructor",
+                    "id": ["langchain_core", "messages", "ToolMessage"],
+                    "kwargs": {
+                        "content": "serialized done",
+                        "tool_call_id": "tc1",
+                    },
+                },
+            )
+        )
+        assert stream.completed is True
+        assert stream.output == "serialized done"
 
     def test_error_closes_stream(self) -> None:
         mux, transformer = _mux()

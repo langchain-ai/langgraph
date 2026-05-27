@@ -91,11 +91,28 @@ class StreamTransformer(ABC):
             which modes a `stream_events(version="v3")` run requests from the graph.
             Empty tuple means the transformer consumes only synthetic
             events (or is purely passive).
+        before_builtins: Opt-in for transformers that must run *before*
+            built-in transformers like `MessagesTransformer` and
+            `ToolCallTransformer`. The mux partitions factories by this
+            flag at registration time: `before_builtins = True`
+            transformers are registered first, then everything else in
+            the order supplied. Within each lane, registration order is
+            preserved. This is the supported hook for content-mutating
+            transformers (PII redaction, profanity filters, etc.) whose
+            mutations must land before built-ins eagerly snapshot text
+            fields into their projections. **Foot-gun:** transformers
+            in this lane see `tasks` events before `LifecycleTransformer`
+            and `SubgraphTransformer` consume them — mutating
+            `event["params"]["namespace"]` or the data dict's
+            `id` / `result` / `error` / `interrupts` fields will desync
+            their bookkeeping. Observe freely; mutate only fields no
+            built-in reads (e.g. `delta.text` on `messages` events).
     """
 
     requires_async: ClassVar[bool] = False
     supports_sync: ClassVar[bool] = False
     required_stream_modes: ClassVar[tuple[str, ...]] = ()
+    before_builtins: ClassVar[bool] = False
 
     def __init__(self, scope: tuple[str, ...] = ()) -> None:
         """Initialize the transformer with its mux's scope.

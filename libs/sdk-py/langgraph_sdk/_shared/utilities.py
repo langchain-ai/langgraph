@@ -8,7 +8,7 @@ import re
 from collections.abc import Mapping
 from datetime import tzinfo
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -196,6 +196,39 @@ def _validate_reconnect_location(base_url: httpx.URL, location: str) -> str:
 
 def _provided_vals(d: Mapping[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
+
+
+def _quote_path_param(value: Any) -> str:
+    """Encode a value for safe interpolation into a request path segment.
+
+    Path segments are encoded with ``safe=""`` so that ``/`` and other reserved
+    characters are escaped. Standalone dot-segments (``.`` and ``..``) are also
+    encoded because some URL-handling stacks (including ``httpx``) collapse
+    them client-side as relative-path traversal before transmission. The value
+    is coerced to ``str`` so callers can pass ``uuid.UUID`` and similar types
+    directly without changing call sites.
+
+    A properly formed identifier (for example, a standard UUID, which contains
+    no dots or reserved characters) round-trips through this function
+    unchanged.
+
+    Raises:
+        TypeError: If `value` is `None` or a `bytes`/`bytearray` instance.
+            Coercing those would produce misleading paths (e.g. `/threads/None`),
+            so surface the caller bug instead.
+    """
+    if value is None:
+        raise TypeError("path parameter must not be None")
+    if isinstance(value, (bytes, bytearray)):
+        raise TypeError("path parameter must not be bytes; pass a str or uuid.UUID")
+    quoted = quote(str(value), safe="")
+    # Bare "." or ".." (or any all-dot string) acts as a relative-path segment
+    # that some HTTP stacks (including ``httpx``) collapse client-side before
+    # transmission. Encode the dots so the segment becomes opaque to that
+    # logic. Mixed values like "agent.v1" are unaffected.
+    if quoted and all(c == "." for c in quoted):
+        quoted = "%2E" * len(quoted)
+    return quoted
 
 
 _registered_transports: list[httpx.ASGITransport] = []
