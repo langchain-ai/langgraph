@@ -342,7 +342,8 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                     # bound via with_config(...) (e.g. ls_agent_type) are
                     # preserved when later configs (e.g. invoke-time) only
                     # specify a subset of keys like thread_id.
-                    empty[k] = {**cast(dict, empty.get(k) or {}), **cast(dict, v)}
+                    existing = empty.get(k)
+                    empty[k] = {**cast(dict, existing), **cast(dict, v)} if existing else cast(dict, v).copy()
                 elif k == "callbacks":
                     empty["callbacks"] = _merge_callbacks(
                         empty.get("callbacks"), cast(Callbacks, v)
@@ -351,15 +352,14 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                     # Shallow-merge metadata dicts across configs so values
                     # bound via with_config(...) (e.g. user_id) are preserved
                     # when later configs supply other metadata keys.
-                    empty["metadata"] = {
-                        **cast(dict, empty.get("metadata") or {}),
-                        **cast(dict, v),
-                    }
+                    existing = empty.get("metadata")
+                    empty["metadata"] = {**cast(dict, existing), **cast(dict, v)} if existing else cast(dict, v).copy()
                 elif k == "tags":
                     # Concatenate tags across configs so values bound via
                     # with_config(...) are preserved when later configs
                     # supply additional tags. Matches merge_configs.
-                    empty["tags"] = [*(empty.get("tags") or []), *cast(list, v)]
+                    existing = empty.get("tags")
+                    empty["tags"] = [*cast(list, existing), *cast(list, v)] if existing else list(cast(list, v))
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
