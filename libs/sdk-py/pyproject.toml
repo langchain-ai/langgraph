@@ -53,8 +53,11 @@ dev = [
 include = ["langgraph_sdk"]
 
 [tool.pytest.ini_options]
-addopts = "--strict-markers --strict-config --durations=5 -vv"
+addopts = "--strict-markers --strict-config --durations=5 -vv -m 'not integration'"
 asyncio_mode = "auto"
+markers = [
+    "integration: end-to-end tests that require a running langgraph-api stack at http://localhost:2024. Excluded from `make test` by default; opt in with `pytest -m integration` (and the autouse fixture skips if the API is unreachable).",
+]
 
 [tool.uv]
 default-groups = ['dev']
@@ -85,7 +88,13 @@ ignore = [
   "B904",   # raise without from inside except (sometimes intentional)
   "SIM102", # nested if statements (sometimes clearer)
 ]
-per-file-ignores = { "tests/**" = ["S101", "B017"] }
+per-file-ignores = { "tests/**" = ["S101", "B017"], "integration/**" = ["S101", "T20", "B017", "ARG001", "ARG002"] }
+
+[tool.ty.src]
+# The `integration/` graphs run inside the docker image (with `deepagents`
+# and other graph-only deps installed there) and are not part of the SDK
+# package surface, so we don't typecheck them in the sdk-py venv.
+exclude = ["integration"]
 
 [tool.ty.rules]
 no-matching-overload = "ignore"

@@ -1,0 +1,91 @@
+name: langgraph-v3-integration
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    command: ["postgres", "-c", "shared_preload_libraries=vector", "-c", "max_connections=150"]
+    ports:
+      - "5443:5432"
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 5s
+      timeout: 1s
+      retries: 5
+      start_period: 10s
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: redis-cli ping
+      interval: 5s
+      timeout: 1s
+      retries: 5
+      start_period: 2s
+    tmpfs:
+      - /data
+
+  api:
+    # Thin layer on top of langchain/langgraph-api:latest-py3.12 —
+    # see ./Dockerfile. The base image bundles langgraph-api +
+    # langgraph_runtime_postgres + langgraph_license + the Go core-server,
+    # so we only add graph deps (deepagents) and the graph files on top.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: langgraph-v3-integration-api:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database + cache (the production-shape postgres+redis runtime).
+      # Recent langgraph-api reads DATABASE_URI first and falls back to
+      # POSTGRES_URI; set both so older code paths also work.
+      DATABASE_URI: postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable
+      POSTGRES_URI: postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable
+      REDIS_URI: redis://redis:6379
+      LANGGRAPH_RUNTIME_EDITION: postgres
+
+      LANGGRAPH_AUTH_TYPE: noop
+      LANGSMITH_TRACING: "false"
+
+      PORT: "8000"
+
+      # Required for the v3 thread-centric streaming protocol. Without this
+      # flag the API falls back to the legacy v2 streaming surface and the
+      # client's v3 endpoints (POST /threads/{id}/stream/events, /commands,
+      # etc.) won't be exposed.
+      FF_OPTIMIZED_STREAMING: "true"
+
+      # Tell langgraph-api which graphs to register. The langgraph CLI sets
+      # this from langgraph.json; we're bypassing the CLI (running uvicorn
+      # directly) so we set it manually.
+      LANGSERVE_GRAPHS: '{"agent":"/app/graph/streaming_graph.py:graph","tools_agent":"/app/graph/tools_agent.py:graph","deep_agent":"/app/graph/deep_agent.py:graph"}'
+
+      # The published langgraph-api image is the `licensed` variant and
+      # requires a real LANGSMITH_API_KEY (or LANGGRAPH_CLOUD_LICENSE_KEY)
+      # at runtime. Passed through from the host shell / CI secrets.
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGGRAPH_CLOUD_LICENSE_KEY: ${LANGGRAPH_CLOUD_LICENSE_KEY:-}
+    # Mount the graph + config so edits don't require a rebuild.
+    volumes:
+      - ./graph:/app/graph:ro
+      - ./langgraph.json:/app/langgraph.json:ro
+    ports:
+      - "2024:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8000/ok || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
