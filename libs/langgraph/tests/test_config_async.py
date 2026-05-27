@@ -91,3 +91,26 @@ async def test_with_config_metadata_preserved_on_invoke() -> None:
         "bound metadata key was dropped by ensure_config overwrite"
     )
     assert captured.get("correlation_id") == "C1", "invoke-time key not present"
+
+
+async def test_with_config_tags_preserved_on_invoke() -> None:
+    """Tags bound via .with_config(...) must survive when invoke-time
+    config supplies its own tags.
+
+    Pre-fix: ensure_config overwrites the entire tags list.
+    Post-fix: tags are concatenated and deduplicated (matching
+    merge_configs behavior).
+    """
+    builder = StateGraph(dict)
+    captured: list = []
+
+    def node(state, config):  # noqa: ANN001
+        captured.extend(config.get("tags") or [])
+        return state
+
+    builder.add_node("node", node)
+    builder.add_edge("__start__", "node")
+    graph = builder.compile().with_config({"tags": ["bound"]})
+    await graph.ainvoke({}, {"tags": ["invoke"]})
+    assert "bound" in captured, "bound tag was dropped by ensure_config overwrite"
+    assert "invoke" in captured, "invoke-time tag not present"

@@ -355,6 +355,11 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                         **cast(dict, empty.get("metadata") or {}),
                         **cast(dict, v),
                     }
+                elif k == "tags":
+                    # Concatenate tags across configs so values bound via
+                    # with_config(...) are preserved when later configs
+                    # supply additional tags. Matches merge_configs.
+                    empty["tags"] = [*(empty.get("tags") or []), *cast(list, v)]
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
