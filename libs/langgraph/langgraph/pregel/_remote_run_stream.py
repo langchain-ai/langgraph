@@ -170,3 +170,45 @@ class _AsyncRemoteGraphRunStream:
         if self._events_aiter is None:
             self._events_aiter = self._sdk.events.__aiter__()
         return self._events_aiter
+
+    def _resolve_projection(self, name: str) -> AsyncIterator[Any]:
+        builtin = {
+            "messages": self._sdk.messages,
+            "tool_calls": self._sdk.tool_calls,
+            "values": self._sdk.values,
+            "subgraphs": self._sdk.subgraphs,
+        }
+        source = builtin[name] if name in builtin else self._sdk.extensions[name]
+        return source.__aiter__()
+
+    async def interleave(
+        self, *names: str
+    ) -> AsyncIterator[tuple[str, Any]]:
+        if not names:
+            return
+        sources = {n: self._resolve_projection(n) for n in names}
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+
+        async def _drain(channel: str, src: AsyncIterator[Any]) -> None:
+            try:
+                async for item in src:
+                    await queue.put((channel, item))
+            finally:
+                await queue.put(_SENTINEL)
+
+        drainers = [
+            asyncio.create_task(_drain(n, src)) for n, src in sources.items()
+        ]
+        pending = len(drainers)
+        try:
+            while pending > 0:
+                item = await queue.get()
+                if item is _SENTINEL:
+                    pending -= 1
+                    continue
+                yield item
+        finally:
+            for t in drainers:
+                if not t.done():
+                    t.cancel()
+            await asyncio.gather(*drainers, return_exceptions=True)
