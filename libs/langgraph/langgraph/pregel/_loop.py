@@ -115,6 +115,7 @@ from langgraph.pregel._io import (
     map_output_values,
     read_channels,
 )
+from langgraph.pregel._messages import ensure_message_ids
 from langgraph.pregel._read import PregelNode
 from langgraph.pregel._utils import get_new_channel_versions, is_xxh3_128_hexdigest
 from langgraph.pregel.debug import (
@@ -447,6 +448,14 @@ class PregelLoop:
 
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
+        # Assign stable IDs to any id=None BaseMessages in DeltaChannel writes
+        # before the background thread serialises them. Without this, reducers
+        # that assign IDs inside apply_writes() race with serialisation and
+        # store id=None, causing get_state() replays to produce a different UUID
+        # on every call.
+        for c, v in writes_to_save:
+            if isinstance(self.specs.get(c), DeltaChannel):
+                ensure_message_ids(v)
         if self.durability != "exit" and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
