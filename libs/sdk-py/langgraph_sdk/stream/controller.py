@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
+import random
 from collections import OrderedDict
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -55,6 +57,8 @@ class _SeenEventIds:
 # ---------------------------------------------------------------------------
 # Per-subscription record
 # ---------------------------------------------------------------------------
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -108,8 +112,12 @@ class StreamController:
         self,
         *,
         transport: Any,
+        run_start_gate: Callable[[], Awaitable[None]] | None = None,  # noqa: ARG002
         max_queue_size: int = 1024,
         seen_event_ids_max: int = 10_000,
+        max_reconnect_attempts: int = 5,
+        reconnect_backoff_base: float = 0.1,
+        reconnect_backoff_cap: float = 2.0,
     ) -> None:
         self._transport = transport
         self._max_queue_size = max_queue_size
@@ -121,6 +129,10 @@ class StreamController:
         self._fanout_task: asyncio.Task[None] | None = None
         self._rotation_close_tasks: set[asyncio.Task[None]] = set()
         self._closed = False
+        self._cursor: int | None = None
+        self._max_reconnect_attempts = max_reconnect_attempts
+        self._reconnect_backoff_base = reconnect_backoff_base
+        self._reconnect_backoff_cap = reconnect_backoff_cap
 
     # ------------------------------------------------------------------
     # Public API
@@ -179,6 +191,10 @@ class StreamController:
         """Remove a subscription from the registry. No-op if already absent."""
         self._subscriptions.pop(subscription_id, None)
 
+    # Public aliases used by tests and external callers.
+    register_subscription = _register_subscription
+    unregister_subscription = _unregister_subscription
+
     async def _subscription_iter(
         self, params: SubscribeParams
     ) -> AsyncGenerator[Event, None]:
@@ -204,6 +220,9 @@ class StreamController:
         if self._fanout_task is None or self._fanout_task.done():
             self._fanout_task = asyncio.create_task(self._fanout())
 
+    # Public alias.
+    ensure_fanout_running = _ensure_fanout_running
+
     async def _fanout(self) -> None:
         """Single consumer of the shared SSE; routes events to subscriptions.
 
@@ -211,6 +230,10 @@ class StreamController:
         Re-read `self._shared_stream` on each outer iteration so we always
         consume from the current handle. The old handle's iterator exhausts
         naturally after `_close_after` closes it.
+
+        On a post-ready transport drop (non-cancelled error in `shared.done`),
+        attempts to reconnect up to `_max_reconnect_attempts` times before
+        giving up and closing subscriber queues.
         """
         from langgraph_sdk.stream.subscription import matches_subscription
 
@@ -225,20 +248,66 @@ class StreamController:
                     for sub in list(self._subscriptions.values()):
                         if matches_subscription(event, sub.params):
                             sub.queue.put_nowait(event)
-            except Exception:
-                # Pump errored — close all subscription queues so consumers
-                # don't hang.
-                for sub in self._subscriptions.values():
-                    sub.queue.put_nowait(None)
-                raise
+            except Exception as drop_err:
+                _logger.debug("transport drop in fanout: %r", drop_err)
+
             if self._shared_stream is shared:
-                # No rotation happened; stream genuinely ended.
+                err = await shared.done
+                if (
+                    err is not None
+                    and not isinstance(err, asyncio.CancelledError)
+                    and not self._closed
+                ):
+                    with contextlib.suppress(Exception):
+                        await self._shared_stream.close()
+                    reconnected = await self._reconnect_shared_stream()
+                    if reconnected:
+                        continue
                 break
             # Rotation: loop again to pick up the new _shared_stream.
 
         # Terminate consumers cleanly on shutdown / stream-end.
         for sub in self._subscriptions.values():
             sub.queue.put_nowait(None)
+
+    async def _reconnect_sleep(self, attempt: int) -> None:
+        """Sleep with exponential backoff and jitter for reconnect attempt *attempt*."""
+        base = self._reconnect_backoff_base
+        cap = self._reconnect_backoff_cap
+        delay = min(cap, base * (2**attempt))
+        jitter = random.uniform(0, delay * 0.25)
+        await asyncio.sleep(delay + jitter)
+
+    async def _reconnect_shared_stream(self) -> bool:
+        """Attempt to reopen the shared stream after a transport drop.
+
+        Returns True if a new stream was successfully opened, False if all
+        reconnect attempts were exhausted or the controller was closed.
+        """
+        # We intentionally use the *current* shared_stream_filter (the latest
+        # computed union of all live subscriptions), not the filter that was
+        # active when this stream was originally opened. If subscriptions were
+        # added or removed during the drop window, the reconnect picks up the
+        # new shape.
+        base_filter = self._shared_stream_filter
+        if base_filter is None:
+            return False
+        for attempt in range(self._max_reconnect_attempts):
+            if self._closed:
+                return False
+            try:
+                new_stream = self._transport.open_event_stream(
+                    self._filter_with_since(base_filter)
+                )
+                await new_stream.ready
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                await self._reconnect_sleep(attempt)
+                continue
+            self._shared_stream = new_stream
+            return True
+        return False
 
     # ------------------------------------------------------------------
     # Stream rotation
@@ -262,7 +331,9 @@ class StreamController:
             return  # Existing stream is sufficient.
 
         new_filter = self._compute_current_union(extra=candidate_filter)
-        new_stream = self._transport.open_event_stream(new_filter)
+        new_stream = self._transport.open_event_stream(
+            self._filter_with_since(new_filter)
+        )
         old_stream = self._shared_stream
         self._shared_stream = new_stream
         self._shared_stream_filter = new_filter
@@ -271,6 +342,10 @@ class StreamController:
             task = asyncio.create_task(_close_after(old_stream))
             self._rotation_close_tasks.add(task)
             task.add_done_callback(self._rotation_close_tasks.discard)
+
+    async def reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
+        """Public alias for `_reconcile_stream`."""
+        return await self._reconcile_stream(candidate_filter)
 
     def _compute_current_union(
         self, extra: SubscribeParams | None = None
@@ -285,7 +360,28 @@ class StreamController:
         return compute_union_filter(filters)
 
     # ------------------------------------------------------------------
-    # Dedup
+    # Cursor tracking
+    # ------------------------------------------------------------------
+
+    def observe_applied_through_seq(self, seq: Any) -> None:
+        """Advance the reconnect cursor from a command response meta sequence."""
+        self._observe_seq(seq)
+
+    def _observe_event(self, event: Event) -> None:
+        self._observe_seq(event.get("seq"))
+
+    def _observe_seq(self, seq: Any) -> None:
+        if isinstance(seq, int) and (self._cursor is None or seq > self._cursor):
+            self._cursor = seq
+
+    def _filter_with_since(self, params: dict[str, Any]) -> dict[str, Any]:
+        out = dict(params)
+        if self._cursor is not None:
+            out["since"] = self._cursor
+        return out
+
+    # ------------------------------------------------------------------
+    # Dedup iterator
     # ------------------------------------------------------------------
 
     async def _dedup_iter(self, source: AsyncIterator[Event]) -> AsyncIterator[Event]:
@@ -295,4 +391,5 @@ class StreamController:
                 if event_id in self._seen_event_ids:
                     continue
                 self._seen_event_ids.add(event_id)
+            self._observe_event(event)
             yield event

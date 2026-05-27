@@ -45,8 +45,8 @@ class EventStreamHandle:
             stream closes (server hangup or `close()`).
         ready: resolves once HTTP response headers arrive; rejects on
             connection failure before headers.
-        done: resolves with `None` on clean end or cancellation, or with
-            the exception on a mid-stream transport error.
+        done: resolves to `None` on clean end, or the post-ready stream
+            exception that ended the pump.
         close: invoke to cancel the underlying task and free the
             connection.
     """
@@ -174,16 +174,15 @@ class ProtocolSseTransport:
                         part = sse_decoder.decode(b"")
                         if part is not None and isinstance(part.data, dict):
                             await queue.put(cast("Event", part.data))
-            except asyncio.CancelledError:
+            except asyncio.CancelledError as err:
                 if not done.done():
-                    done.set_result(None)
+                    done.set_result(err)
                 raise
             except BaseException as err:
                 if not ready.done():
                     ready.set_exception(err)
                 if not done.done():
                     done.set_result(err)
-                # Do not re-raise; the error is surfaced via `done`.
             finally:
                 if not done.done():
                     done.set_result(None)

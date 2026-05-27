@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from typing import Any
+from unittest.mock import AsyncMock
+
 import pytest
 
 from langgraph_sdk.stream.controller import StreamController, _SeenEventIds
+from langgraph_sdk.stream.transport.http import EventStreamHandle
 
 # ---------------------------------------------------------------------------
 # Task 3.1: bounded subscription queues
@@ -152,3 +158,196 @@ async def test_close_awaits_pending_rotation_closes():
     # close() must block until the rotation close completes.
     await controller.close()
     assert rotation_close_done.is_set()
+
+
+# ---------------------------------------------------------------------------
+# Reconnect helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_handle(
+    *,
+    error: BaseException | None = None,
+) -> EventStreamHandle:
+    """Build a minimal EventStreamHandle that closes immediately."""
+    loop = asyncio.get_running_loop()
+    ready: asyncio.Future[None] = loop.create_future()
+    ready.set_result(None)
+    done: asyncio.Future[BaseException | None] = loop.create_future()
+    done.set_result(error)
+
+    async def _aiter() -> AsyncIterator[Any]:
+        if False:
+            yield  # pragma: no cover
+
+    return EventStreamHandle(
+        events=_aiter(),
+        ready=ready,
+        done=done,
+        close=AsyncMock(),
+    )
+
+
+def _always_error_transport(error_type: type[Exception] = RuntimeError) -> Any:
+    """Return a fake transport whose open_event_stream always raises."""
+
+    class _Transport:
+        def open_event_stream(self, _params: dict[str, Any]) -> EventStreamHandle:
+            raise error_type("scripted transport error")
+
+    return _Transport()
+
+
+def _error_then_succeed_transport(fail_count: int) -> Any:
+    """Return a fake transport that fails *fail_count* times then succeeds."""
+    calls = [0]
+
+    class _Transport:
+        def open_event_stream(self, _params: dict[str, Any]) -> EventStreamHandle:
+            calls[0] += 1
+            if calls[0] <= fail_count:
+                raise RuntimeError(f"scripted error #{calls[0]}")
+            return _make_handle()
+
+    return _Transport()
+
+
+# ---------------------------------------------------------------------------
+# Task 8.1: Exp+jitter backoff
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_reconnect_uses_exp_backoff_with_jitter(monkeypatch):
+    """Reconnect attempts should sleep increasing durations with jitter,
+    not a fixed 50ms."""
+    sleeps: list[float] = []
+
+    async def fake_sleep(d: float) -> None:
+        sleeps.append(d)
+
+    monkeypatch.setattr("asyncio.sleep", fake_sleep)
+
+    transport = _always_error_transport()
+    controller = StreamController(
+        transport=transport,
+        run_start_gate=AsyncMock(),
+        max_reconnect_attempts=3,
+        reconnect_backoff_base=0.1,
+        reconnect_backoff_cap=2.0,
+    )
+    # Seed filter so reconnect doesn't bail early.
+    controller._shared_stream_filter = {"channels": ["lifecycle"]}
+
+    await controller._reconnect_shared_stream()
+
+    # Should have slept once per attempt.
+    assert len(sleeps) == 3
+    # All sleeps within [base, cap + 25% jitter].
+    assert all(0.1 <= s <= 2.5 for s in sleeps)
+
+
+@pytest.mark.anyio
+async def test_reconnect_accepts_backoff_kwargs():
+    """StreamController must accept reconnect_backoff_base and _cap kwargs."""
+    controller = StreamController(
+        transport=_always_error_transport(),
+        run_start_gate=AsyncMock(),
+        max_reconnect_attempts=1,
+        reconnect_backoff_base=0.05,
+        reconnect_backoff_cap=1.0,
+    )
+    assert controller._reconnect_backoff_base == 0.05
+    assert controller._reconnect_backoff_cap == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Task 8.2: Close old handle before reconnect
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_transport_drop_exception_logged_with_type(monkeypatch, caplog):
+    """Bare `pass` discarded exception types; the drop should at least log."""
+    import logging
+
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
+
+    loop = asyncio.get_running_loop()
+    ready: asyncio.Future[None] = loop.create_future()
+    ready.set_result(None)
+    done: asyncio.Future[BaseException | None] = loop.create_future()
+    done.set_result(RuntimeError("transport drop"))
+
+    async def _raises() -> AsyncIterator[Any]:
+        raise RuntimeError("transport drop")
+        yield  # pragma: no cover
+
+    old_handle = EventStreamHandle(
+        events=_raises(),
+        ready=ready,
+        done=done,
+        close=AsyncMock(),
+    )
+
+    transport = _always_error_transport()
+    controller = StreamController(
+        transport=transport,
+        run_start_gate=AsyncMock(),
+        max_reconnect_attempts=1,
+        reconnect_backoff_base=0.0,
+        reconnect_backoff_cap=0.0,
+    )
+    controller._shared_stream = old_handle
+    controller._shared_stream_filter = {"channels": ["lifecycle"]}
+
+    with caplog.at_level(logging.DEBUG, logger="langgraph_sdk.stream.controller"):
+        await controller._fanout()
+
+    assert any("transport drop" in rec.message for rec in caplog.records)
+
+
+@pytest.mark.anyio
+async def test_reconnect_closes_old_handle_before_opening_new(monkeypatch):
+    """When the shared stream errors and triggers reconnect, the old
+    EventStreamHandle's close() must be called."""
+    # Suppress actual sleeps.
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
+
+    close_calls: list[str] = []
+
+    loop = asyncio.get_running_loop()
+    old_ready: asyncio.Future[None] = loop.create_future()
+    old_ready.set_result(None)
+    # done resolves with an error to trigger the reconnect path in _fanout.
+    old_done: asyncio.Future[BaseException | None] = loop.create_future()
+    old_done.set_result(RuntimeError("transport drop"))
+
+    async def _empty() -> AsyncIterator[Any]:
+        # Raise on the first iteration so _fanout exits the inner loop.
+        raise RuntimeError("transport drop")
+        yield  # pragma: no cover
+
+    old_handle = EventStreamHandle(
+        events=_empty(),
+        ready=old_ready,
+        done=old_done,
+        close=AsyncMock(side_effect=lambda: close_calls.append("old_closed")),
+    )
+
+    # Transport always errors so reconnect exhausts all attempts and _fanout exits.
+    transport = _always_error_transport()
+    controller = StreamController(
+        transport=transport,
+        run_start_gate=AsyncMock(),
+        max_reconnect_attempts=1,
+        reconnect_backoff_base=0.0,
+        reconnect_backoff_cap=0.0,
+    )
+    controller._shared_stream = old_handle
+    controller._shared_stream_filter = {"channels": ["lifecycle"]}
+
+    # _fanout drives reconnect; wait for it to complete.
+    await controller._fanout()
+
+    assert "old_closed" in close_calls
