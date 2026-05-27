@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Literal, overload
 
+from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk._sync.stream import SyncThreadStream
 from langgraph_sdk.schema import (
@@ -90,7 +91,7 @@ class SyncThreadsClient:
         if params:
             query_params.update(params)
         return self.http.get(
-            f"/threads/{thread_id}",
+            f"/threads/{_quote_path_param(thread_id)}",
             headers=headers,
             params=query_params or None,
         )
@@ -252,7 +253,7 @@ class SyncThreadsClient:
         if return_minimal:
             request_headers["Prefer"] = "return=minimal"
         return self.http.patch(
-            f"/threads/{thread_id}",
+            f"/threads/{_quote_path_param(thread_id)}",
             json=payload,
             headers=request_headers or None,
             params=params,
@@ -284,7 +285,9 @@ class SyncThreadsClient:
             ```
 
         """
-        self.http.delete(f"/threads/{thread_id}", headers=headers, params=params)
+        self.http.delete(
+            f"/threads/{_quote_path_param(thread_id)}", headers=headers, params=params
+        )
 
     def search(
         self,
@@ -423,7 +426,10 @@ class SyncThreadsClient:
 
         """
         return self.http.post(
-            f"/threads/{thread_id}/copy", json=None, headers=headers, params=params
+            f"/threads/{_quote_path_param(thread_id)}/copy",
+            json=None,
+            headers=headers,
+            params=params,
         )
 
     def prune(
@@ -578,7 +584,7 @@ class SyncThreadsClient:
         """
         if checkpoint:
             return self.http.post(
-                f"/threads/{thread_id}/state/checkpoint",
+                f"/threads/{_quote_path_param(thread_id)}/state/checkpoint",
                 json={"checkpoint": checkpoint, "subgraphs": subgraphs},
                 headers=headers,
                 params=params,
@@ -588,7 +594,7 @@ class SyncThreadsClient:
             if params:
                 get_params = {**get_params, **dict(params)}
             return self.http.get(
-                f"/threads/{thread_id}/state/{checkpoint_id}",
+                f"/threads/{_quote_path_param(thread_id)}/state/{_quote_path_param(checkpoint_id)}",
                 params=get_params,
                 headers=headers,
             )
@@ -597,7 +603,7 @@ class SyncThreadsClient:
             if params:
                 get_params = {**get_params, **dict(params)}
             return self.http.get(
-                f"/threads/{thread_id}/state",
+                f"/threads/{_quote_path_param(thread_id)}/state",
                 params=get_params,
                 headers=headers,
             )
@@ -659,7 +665,10 @@ class SyncThreadsClient:
         if as_node:
             payload["as_node"] = as_node
         return self.http.post(
-            f"/threads/{thread_id}/state", json=payload, headers=headers, params=params
+            f"/threads/{_quote_path_param(thread_id)}/state",
+            json=payload,
+            headers=headers,
+            params=params,
         )
 
     def get_history(
@@ -709,7 +718,7 @@ class SyncThreadsClient:
         if checkpoint:
             payload["checkpoint"] = checkpoint
         return self.http.post(
-            f"/threads/{thread_id}/history",
+            f"/threads/{_quote_path_param(thread_id)}/history",
             json=payload,
             headers=headers,
             params=params,
@@ -783,7 +792,7 @@ class SyncThreadsClient:
         if params:
             query_params.update(params)
         return self.http.stream(
-            f"/threads/{thread_id}/stream",
+            f"/threads/{_quote_path_param(thread_id)}/stream",
             "GET",
             headers={
                 **({"Last-Event-ID": last_event_id} if last_event_id else {}),
