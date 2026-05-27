@@ -34,13 +34,13 @@ def remote_tools_agent() -> RemoteGraph:
 
 
 async def test_async_happy_path_yields_output(remote_tools_agent: RemoteGraph) -> None:
-    """tools_agent completes without interrupt; output must be non-None."""
+    """tools_agent completes without interrupt; ``await stream.output`` drives
+    the run to terminal via the lifecycle watcher (no explicit event iteration
+    needed — the SSE subscription stays open by design after run completion)."""
     async with remote_tools_agent.astream_events(
         _TOOLS_AGENT_INPUT,
         version="v3",
     ) as stream:
-        async for _ in stream:
-            pass
         output = await stream.output
         assert output is not None
         assert (await stream.interrupted) is False
@@ -49,39 +49,44 @@ async def test_async_happy_path_yields_output(remote_tools_agent: RemoteGraph) -
 async def test_async_interrupt_path_surfaces_interrupts(
     remote_agent: RemoteGraph,
 ) -> None:
-    """agent graph hits ask_human; interrupted must be True with >= 1 interrupt."""
+    """agent graph hits ask_human; interrupted must be True with >= 1 interrupt.
+
+    Note: interrupts pause the run but DON'T resolve `_run_done` (only
+    `completed` / `failed` lifecycle phases do), so `await stream.output`
+    would hang. We drain a projection until the interrupt sentinel fires.
+    `interleave('values')` yields snapshots and terminates via the paused
+    sentinel pushed in `_signal_paused` on the rising edge of `interrupted`.
+    """
     async with remote_agent.astream_events(
         _AGENT_INPUT,
         version="v3",
     ) as stream:
-        async for _ in stream:
-            # The SSE stream ends when the run pauses at the interrupt; the
-            # loop exits naturally at that point.
-            pass
+        async for _name, _item in stream.interleave("values"):
+            if stream._sdk.interrupted:
+                break
         assert (await stream.interrupted) is True
         interrupts = await stream.interrupts
         assert len(interrupts) >= 1
 
 
 def test_sync_happy_path_yields_output(remote_tools_agent: RemoteGraph) -> None:
-    """Sync stream: tools_agent completes; output must be non-None."""
+    """Sync stream: tools_agent completes; ``stream.output`` (sync property)
+    blocks until terminal."""
     with remote_tools_agent.stream_events(
         _TOOLS_AGENT_INPUT,
         version="v3",
     ) as stream:
-        for _ in stream:
-            pass
-        assert stream.output is not None
+        output = stream.output
+        assert output is not None
         assert stream.interrupted is False
 
 
 async def test_abort_mid_run_cancels_server_side(remote_tools_agent: RemoteGraph) -> None:
-    """Abort after first event; reaching end without exception = abort + cleanup worked."""
+    """Abort immediately after run.start; reaching the end without exception
+    confirms abort + __aexit__ cleanup worked."""
     async with remote_tools_agent.astream_events(
         _TOOLS_AGENT_INPUT,
         version="v3",
     ) as stream:
-        async for _ in stream:
-            break
         await stream.abort()
     # Reaching here without unhandled exceptions confirms abort + __aexit__ succeeded.
