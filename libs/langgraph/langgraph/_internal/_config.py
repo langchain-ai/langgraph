@@ -338,7 +338,11 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         for k, v in config.items():
             if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
-                    empty[k] = cast(dict, v).copy()
+                    # Shallow-merge configurable dicts across configs so values
+                    # bound via with_config(...) (e.g. ls_agent_type) are
+                    # preserved when later configs (e.g. invoke-time) only
+                    # specify a subset of keys like thread_id.
+                    empty[k] = {**cast(dict, empty.get(k) or {}), **cast(dict, v)}
                 elif k == "callbacks":
                     empty["callbacks"] = _merge_callbacks(
                         empty.get("callbacks"), cast(Callbacks, v)
