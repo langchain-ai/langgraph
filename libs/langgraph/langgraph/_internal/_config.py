@@ -339,6 +339,10 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
             if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
                     empty[k] = cast(dict, v).copy()
+                elif k == "callbacks":
+                    empty["callbacks"] = _merge_callbacks(
+                        empty.get("callbacks"), cast(Callbacks, v)
+                    )
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
