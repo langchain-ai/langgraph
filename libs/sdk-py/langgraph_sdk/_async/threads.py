@@ -8,6 +8,7 @@ from typing import Any, Literal, overload
 
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.stream import AsyncThreadStream
+from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk.schema import (
     Checkpoint,
     Json,
