@@ -16,6 +16,7 @@ source = { editable = "apps/agent" }
 dependencies = [
     { name = "langchain-core" },
     { name = "langgraph" },
+    { name = "langgraph-checkpoint-postgres" },
     { name = "shared" },
 ]
 
@@ -23,6 +24,7 @@ dependencies = [
 requires-dist = [
     { name = "langchain-core", specifier = ">=0.2.14" },
     { name = "langgraph", specifier = ">=0.6.0,<2" },
+    { name = "langgraph-checkpoint-postgres", specifier = ">=3.0.0" },
     { name = "shared", editable = "libs/shared" },
 ]
 
