@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import random
 from collections.abc import AsyncGenerator, AsyncIterator, Generator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
@@ -1179,6 +1180,17 @@ class AsyncThreadStream:
         self._interrupts_lock = asyncio.Lock()
         self._lifecycle_watcher_task: asyncio.Task[None] | None = None
         self._lifecycle_watcher_handle: EventStreamHandle | None = None
+        self._lifecycle_cursor: int | None = None
+        self._lifecycle_max_reconnect_attempts = 5
+        # Shared-stream reconnect knobs: applied by `_fanout` after a post-ready
+        # transport drop so subscribers (messages/tools/tasks/values projections,
+        # subgraph child handles) survive a brief SSE disconnect without losing
+        # buffered events. Cursor (`_cursor`) is replayed as `since` so the
+        # server resumes from where the prior stream left off; per-event
+        # `event_id` dedup in `_dedup_iter` drops any overlap on the new stream.
+        self._shared_max_reconnect_attempts = 5
+        self._shared_reconnect_backoff_base = 0.1
+        self._shared_reconnect_backoff_cap = 2.0
         self._run_start_ready: asyncio.Future[None] | None = None
         self._run_seen: bool = False
         self._run_done: asyncio.Future[_RunTerminal] | None = None
@@ -1381,6 +1393,12 @@ class AsyncThreadStream:
         Re-read `self._shared_stream` on each outer iteration so we always
         consume from the current handle. The old handle's iterator exhausts
         naturally after `_close_after` closes it.
+
+        On a post-ready transport drop (non-cancelled error in `shared.done`),
+        attempts to reconnect up to `_shared_max_reconnect_attempts` times so
+        scoped projections (subgraph child handles, message streams) survive
+        without losing buffered events. The reconnect replays `since=<cursor>`
+        and `_dedup_iter` drops any overlap.
         """
         from langgraph_sdk.stream.subscription import matches_subscription
 
@@ -1397,19 +1415,70 @@ class AsyncThreadStream:
                         if matches_subscription(event, sub.params):
                             sub.queue.put_nowait(event)
             except Exception:
-                # Pump errored — close all subscription queues so consumers
-                # don't hang.
-                for sub in self._subscriptions.values():
-                    sub.queue.put_nowait(None)
-                raise
+                # Pump errored — fall through to error-handling/reconnect.
+                pass
             if self._shared_stream is shared:
-                # No rotation happened; stream genuinely ended.
+                # No rotation happened; the stream genuinely ended. Check
+                # `shared.done` for a post-ready drop and, if so, attempt to
+                # reconnect with `since=<cursor>` so subscribers don't lose
+                # buffered events on a transient transport failure.
+                err = await shared.done
+                if (
+                    err is not None
+                    and not isinstance(err, asyncio.CancelledError)
+                    and not self._closed
+                ):
+                    with contextlib.suppress(Exception):
+                        await shared.close()
+                    if await self._reconnect_shared_stream():
+                        continue
                 break
             # Rotation: loop again to pick up the new _shared_stream.
 
         # Terminate consumers cleanly on shutdown / stream-end.
         for sub in self._subscriptions.values():
             sub.queue.put_nowait(None)
+
+    async def _reconnect_sleep(self, attempt: int) -> None:
+        """Sleep with exponential backoff and jitter for reconnect attempt `attempt`."""
+        base = self._shared_reconnect_backoff_base
+        cap = self._shared_reconnect_backoff_cap
+        delay = min(cap, base * (2**attempt))
+        jitter = random.uniform(0, delay * 0.25)
+        await asyncio.sleep(delay + jitter)
+
+    async def _reconnect_shared_stream(self) -> bool:
+        """Attempt to reopen the shared stream after a post-ready transport drop.
+
+        Returns:
+            `True` if a new stream was opened (caller should resume fanout),
+            `False` if all reconnect attempts were exhausted or the controller
+            was closed in the meantime.
+        """
+        if self._transport is None:
+            return False
+        # Use the current shared-stream filter (latest computed union); if
+        # subscriptions changed during the drop, this picks up the new shape.
+        base_filter = self._shared_stream_filter
+        if base_filter is None:
+            return False
+        for attempt in range(self._shared_max_reconnect_attempts):
+            if self._closed:
+                return False
+            stream_params: dict[str, Any] = dict(base_filter)
+            if self._cursor is not None:
+                stream_params["since"] = self._cursor
+            try:
+                new_stream = self._transport.open_event_stream(stream_params)
+                await new_stream.ready
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                await self._reconnect_sleep(attempt)
+                continue
+            self._shared_stream = new_stream
+            return True
+        return False
 
     async def _reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
         """Ensure the shared SSE covers `candidate_filter`. Rotate if not.
@@ -1518,74 +1587,79 @@ class AsyncThreadStream:
             await asyncio.wait_for(asyncio.shield(gate), timeout=timeout)
 
     def _ensure_lifecycle_watcher_running(self) -> None:
-        # Why: this watcher is intentionally one-shot. If it crashes, it stays
-        # dead until the AsyncThreadStream is closed.
         if self._lifecycle_watcher_task is not None:
             return
         self._lifecycle_watcher_task = asyncio.create_task(
             self._run_lifecycle_watcher()
         )
 
-    async def _run_lifecycle_watcher(self) -> None:
-        """Always-on SSE consuming lifecycle + input channels.
+    def _observe_lifecycle_event(self, event: Event) -> None:
+        seq = event.get("seq")
+        if isinstance(seq, int) and (
+            self._lifecycle_cursor is None or seq > self._lifecycle_cursor
+        ):
+            self._lifecycle_cursor = seq
 
-        Independent of the union-filter shared stream so that interrupts
-        surface even when no other subscription is active. Starts immediately
-        on session entry (before any run.start) so reattach and thread.output
-        work for existing runs.
-        """
+    def _lifecycle_stream_params(self) -> dict[str, Any]:
+        params: dict[str, Any] = {"channels": ["lifecycle", "input"]}
+        if self._lifecycle_cursor is not None:
+            params["since"] = self._lifecycle_cursor
+        return params
+
+    async def _run_lifecycle_watcher(self) -> None:
+        """Always-on SSE consuming lifecycle + input channels."""
         if self._transport is None:
             return
-        try:
-            handle = self._transport.open_event_stream(
-                {"channels": ["lifecycle", "input"]}
-            )
-            self._lifecycle_watcher_handle = handle
-            await asyncio.wait_for(handle.ready, timeout=5.0)
-            async for event in handle.events:
-                if self._closed:
+        reconnect_attempts = 0
+        while not self._closed:
+            try:
+                handle = self._transport.open_event_stream(
+                    self._lifecycle_stream_params()
+                )
+                self._lifecycle_watcher_handle = handle
+                await asyncio.wait_for(handle.ready, timeout=5.0)
+                async for event in handle.events:
+                    if self._closed:
+                        return
+                    self._observe_lifecycle_event(event)
+                    await self._apply_lifecycle_event(event)
+                err = await handle.done
+                if err is None or isinstance(err, asyncio.CancelledError):
+                    # Clean EOF: stream ended without a terminal lifecycle
+                    # event. Resolve `_run_done` as errored so awaiters of
+                    # `thread.output` don't hang.
+                    if err is None:
+                        run_done = self._run_done
+                        if run_done is not None and not run_done.done():
+                            run_done.set_result(
+                                _RunTerminal(
+                                    status="errored",
+                                    error=RuntimeError(
+                                        "lifecycle stream ended before terminal event"
+                                    ),
+                                )
+                            )
                     return
-                await self._apply_lifecycle_event(event)
-            # Why: iterator exhausted without `_run_done` being resolved by a
-            # terminal lifecycle event. Surface any transport error captured
-            # on `handle.done`, otherwise treat the clean EOF as errored so
-            # awaiters of `_run_done` (e.g. `thread.output`) don't hang.
-            err = await handle.done
-            run_done = self._run_done
-            if run_done is not None and not run_done.done():
-                if err is not None:
-                    run_done.set_result(
-                        _RunTerminal(
-                            status="errored",
-                            error=RuntimeError(f"Lifecycle transport failed: {err}"),
-                        )
-                    )
-                else:
-                    run_done.set_result(
-                        _RunTerminal(
-                            status="errored",
-                            error=RuntimeError(
-                                "lifecycle stream ended before terminal event"
-                            ),
-                        )
-                    )
-            return
-        except (Exception, asyncio.CancelledError) as exc:
-            # Why: advisory-only watcher. Any error (HTTP failure, malformed
-            # event in `_apply_lifecycle_event`, cancellation on close) must
-            # not crash the caller; the watcher is one-shot best-effort.
-            # Resolve _run_done with an error so thread.output doesn't wait
-            # forever when the lifecycle transport fails.
-            run_done = self._run_done
-            if run_done is not None and not run_done.done():
-                if not isinstance(exc, asyncio.CancelledError):
+                reconnect_attempts += 1
+                if reconnect_attempts > self._lifecycle_max_reconnect_attempts:
+                    raise err
+                await asyncio.sleep(0.05)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                reconnect_attempts += 1
+                if reconnect_attempts <= self._lifecycle_max_reconnect_attempts:
+                    await asyncio.sleep(0.05)
+                    continue
+                run_done = self._run_done
+                if run_done is not None and not run_done.done():
                     run_done.set_result(
                         _RunTerminal(
                             status="errored",
                             error=RuntimeError(f"Lifecycle transport failed: {exc}"),
                         )
                     )
-            return
+                return
 
     async def _fetch_state(self) -> dict[str, Any]:
         """Fetch the current thread state from the REST endpoint."""

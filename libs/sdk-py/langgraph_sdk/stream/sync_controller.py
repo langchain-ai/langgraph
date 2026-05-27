@@ -137,17 +137,40 @@ class SyncStreamController:
                         if matches_subscription(event, sub.params):
                             sub.queue.put(event)
             except Exception:
-                with self._lock:
-                    for sub in self._subscriptions.values():
-                        sub.queue.put(None)
-                raise
+                pass  # transport drop — attempt reconnect below
+
             with self._lock:
-                if self._shared_stream is shared:
-                    break
+                if self._shared_stream is not shared:
+                    continue  # rotation happened; pick up new stream
+                # No rotation — check if this was a transport drop
+            err = shared.error()
+            if err is not None and not self._closed:
+                if self._reconnect_shared_stream():
+                    continue
+            break
 
         with self._lock:
             for sub in self._subscriptions.values():
                 sub.queue.put(None)
+
+    def _reconnect_shared_stream(self) -> bool:
+        with self._lock:
+            base_filter = self._shared_stream_filter
+        if base_filter is None:
+            return False
+        for _ in range(self._max_reconnect_attempts):
+            with self._lock:
+                if self._closed:
+                    return False
+                params = self._filter_with_since(base_filter)
+            try:
+                new_stream = self._transport.open_event_stream(params)
+            except Exception:
+                continue
+            with self._lock:
+                self._shared_stream = new_stream
+            return True
+        return False
 
     def _compute_current_union(
         self, extra: SubscribeParams | None = None

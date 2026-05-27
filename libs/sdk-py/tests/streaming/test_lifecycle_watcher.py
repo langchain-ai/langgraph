@@ -10,8 +10,12 @@ import httpx
 
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.threads import ThreadsClient
-from streaming._events import input_requested_event, lifecycle_event
-from streaming._fake_server import FakeServer
+from streaming._events import (
+    input_requested_event,
+    lifecycle_completed_event,
+    lifecycle_event,
+)
+from streaming._fake_server import FakeServer, _StreamScript
 
 
 async def test_interrupted_starts_false():
@@ -218,3 +222,35 @@ async def test_lifecycle_mid_iteration_error_resolves_run_done_with_error(
     assert "simulated transport error" in str(terminal.error)
     # Quiet unused-import warnings under strict configs.
     _ = contextlib
+
+
+async def test_lifecycle_watcher_reconnects_with_since_after_transport_drop():
+    fake = FakeServer()
+    fake.set_state({"ok": True})
+    fake.script_sequence(
+        [
+            _StreamScript(
+                events=[lifecycle_event(seq=1, phase="running")],
+                fail_after=1,
+            ),
+            _StreamScript(events=[lifecycle_completed_event(seq=2)]),
+        ]
+    )
+    async with httpx.AsyncClient(
+        transport=fake.transport, base_url="http://test"
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="existing", assistant_id="agent") as thread:
+            for _ in range(20):
+                run_done = thread._run_done
+                if run_done is not None and run_done.done():
+                    break
+                await asyncio.sleep(0.05)
+            assert thread._run_done is not None
+            terminal = thread._run_done.result()
+
+    assert terminal.status == "completed"
+    assert terminal.error is None
+    assert fake.stream_request_bodies[0]["channels"] == ["lifecycle", "input"]
+    assert fake.stream_request_bodies[1]["channels"] == ["lifecycle", "input"]
+    assert fake.stream_request_bodies[1]["since"] == 1
