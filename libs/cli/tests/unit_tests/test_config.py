@@ -1386,6 +1386,9 @@ def test_get_pip_cleanup_lines_selects_check_command_by_installer():
     )
     assert "RUN uv pip check --system" in cleanup_uv
     assert "python -m pip check" not in cleanup_uv
+    assert cleanup_uv.index("RUN uv pip check --system") < cleanup_uv.index(
+        "RUN mkdir -p /api/langgraph_api"
+    )
 
     cleanup_pip = _get_pip_cleanup_lines(
         install_cmd="pip install",
@@ -1394,6 +1397,9 @@ def test_get_pip_cleanup_lines_selects_check_command_by_installer():
     )
     assert "RUN python -m pip check" in cleanup_pip
     assert "uv pip check --system" not in cleanup_pip
+    assert cleanup_pip.index("RUN python -m pip check") < cleanup_pip.index(
+        "RUN mkdir -p /api/langgraph_api"
+    )
 
 
 def test_config_to_docker_uv_lock():
@@ -2518,7 +2524,7 @@ def test_config_to_compose_simple_config():
 def test_config_to_compose_env_vars():
     graphs = {"agent": "./agent.py:graph"}
     expected_compose_stdin = f"""                        OPENAI_API_KEY: "key"
-        
+
         pull_policy: build
         build:
             context: .
@@ -2601,7 +2607,7 @@ def test_config_to_compose_env_file():
 def test_config_to_compose_watch():
     graphs = {"agent": "./agent.py:graph"}
     expected_compose_stdin = f"""\
-        
+
         pull_policy: build
         build:
             context: .
@@ -2627,7 +2633,7 @@ def test_config_to_compose_watch():
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
                 WORKDIR /deps/outer-unit_tests/unit_tests
-        
+
         develop:
             watch:
                 - path: test_config.json
@@ -2674,7 +2680,7 @@ def test_config_to_compose_end_to_end():
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
                 WORKDIR /deps/outer-unit_tests/unit_tests
-        
+
         develop:
             watch:
                 - path: test_config.json
