@@ -2,9 +2,10 @@
 
 `SyncThreadStream` is a synchronous context manager that owns a
 `SyncProtocolSseTransport` for one thread, dispatches commands (`run.start`,
-`run.respond`), exposes subscriptions over a single shared SSE, and surfaces
-lifecycle state (`interrupted`, `interrupts`) via an always-on lifecycle watcher
-thread.
+`run.respond`), exposes typed subscriptions over a single shared SSE,
+surfaces lifecycle state (`interrupted`, `interrupts`) via an always-on
+lifecycle watcher thread, and provides typed projections (`thread.values`,
+`thread.messages`, `thread.tool_calls`, `thread.extensions`).
 
 Sync mirror of `libs/sdk-py/langgraph_sdk/_async/stream.py`.
 """
@@ -22,6 +23,7 @@ from langchain_core.language_models.chat_model_stream import ChatModelStream
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.sync_controller import SyncStreamController, _SyncSubscription
 from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
@@ -102,8 +104,11 @@ def _is_direct_child(namespace: list[str], scope: tuple[str, ...]) -> bool:
 
 
 def _subgraph_subscription_params(scope: tuple[str, ...]) -> SubscribeParams:
+    # Includes ``lifecycle`` so child-namespace ``started`` events (the
+    # ``create_deep_agent`` subagent discovery signal, matching JS)
+    # reach ``_subgraphs_iter`` alongside ``tasks``-based discovery.
     return {
-        "channels": ["messages", "tasks", "tools"],
+        "channels": ["messages", "tasks", "tools", "lifecycle"],
         "namespaces": [list(scope)],
     }
 
@@ -155,6 +160,34 @@ class _BlockingResult:
 
     def done(self) -> bool:
         return self._event.is_set()
+
+
+class _SyncAgentModule:
+    """Assistant graph helpers scoped to one sync thread stream."""
+
+    def __init__(self, owner: SyncThreadStream) -> None:
+        self._owner = owner
+
+    def get_tree(
+        self,
+        *,
+        xray: int | bool = False,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        if self._owner._closed:
+            raise RuntimeError("SyncThreadStream is closed.")
+        query_params: dict[str, Any] = {}
+        if xray:
+            query_params["xray"] = xray
+        if params:
+            query_params.update(dict(params))
+        request_headers = {**self._owner._headers, **dict(headers or {})}
+        return self._owner._http.get(
+            f"/assistants/{self._owner.assistant_id}/graph",
+            params=query_params,
+            headers=request_headers or None,
+        )
 
 
 class SyncRunModule:
@@ -724,6 +757,7 @@ class SyncScopedStreamHandle:
         self.tool_calls = _SyncHandleToolCallsProjection(self)
         self.subgraphs = _SyncHandleSubgraphsProjection(self)
         self.subagents = self.subgraphs
+        self.extensions = _SyncExtensionsProjection(thread, namespace=list(path))
 
     def _push_event(self, event: Event) -> None:
         """Route a descendant event into the appropriate channel inbox.
@@ -1092,6 +1126,25 @@ class _SyncSubgraphsProjection:
                             )
                             active[path] = handle
                             yield handle
+                elif (
+                    method == "lifecycle"
+                    and data.get("event") == "started"
+                    and _is_direct_child(namespace, self._scope)
+                ):
+                    # ``create_deep_agent`` subagent discovery: child-
+                    # namespace ``lifecycle: started`` rather than ``tasks``.
+                    path = tuple(namespace)
+                    if path not in seen:
+                        seen.add(path)
+                        graph_name, trigger_call_id = _parse_namespace_segment(path[-1])
+                        handle = SyncScopedStreamHandle(
+                            thread=self._thread,
+                            path=path,
+                            graph_name=graph_name or None,
+                            trigger_call_id=trigger_call_id,
+                        )
+                        active[path] = handle
+                        yield handle
         finally:
             # Determine terminal status from the run's lifecycle result.
             # If _run_done resolved as errored, force-complete remaining children
@@ -1130,6 +1183,70 @@ class _SyncSubgraphsProjection:
             status, error = _terminal_from_tasks_result(data)
             handle._finish(status, error)
             del active[child_path]
+
+
+class _SyncExtensionsProjection:
+    """Mapping from extension name to custom event payload stream.
+
+    Repeated access for the same `name` returns the cached projection so that
+    callers receive the same subscription handle across multiple references to
+    `thread.extensions["foo"]` within one session.
+    """
+
+    def __init__(self, thread: SyncThreadStream, namespace: list[str]) -> None:
+        self._thread = thread
+        self._namespace = namespace
+        self._cache: dict[str, _SyncExtensionProjection] = {}
+
+    def __getitem__(self, name: str) -> _SyncExtensionProjection:
+        if not name:
+            raise ValueError("extension name must be non-empty.")
+        if name not in self._cache:
+            self._cache[name] = _SyncExtensionProjection(
+                self._thread,
+                name=name,
+                namespace=self._namespace,
+            )
+        return self._cache[name]
+
+
+class _SyncExtensionProjection:
+    def __init__(
+        self,
+        thread: SyncThreadStream,
+        *,
+        name: str,
+        namespace: list[str],
+    ) -> None:
+        self._thread = thread
+        self._name = name
+        self._namespace = namespace
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        return self._iter()
+
+    def _iter(self) -> Iterator[dict[str, Any]]:
+        params: SubscribeParams = {"channels": [f"custom:{self._name}"]}
+        if self._namespace:
+            params["namespaces"] = [self._namespace]
+        sub = self._thread._register_subscription(params)
+        try:
+            if self._thread._closed:
+                return
+            self._thread._reconcile_stream(params)
+            self._thread._ensure_fanout_running()
+            while True:
+                item = sub.queue.get()
+                if item is None:
+                    return
+                event_params = item.get("params") or {}
+                data = (
+                    event_params.get("data") if isinstance(event_params, dict) else None
+                )
+                if isinstance(data, dict):
+                    yield data
+        finally:
+            self._thread._unregister_subscription(sub.id)
 
 
 class SyncThreadStream:
@@ -1174,11 +1291,13 @@ class SyncThreadStream:
         self._active_tool_calls: set[SyncToolCallHandle] = set()
         self._root_messages_inbox: queue.Queue[Event | None] | None = None
         self.run = SyncRunModule(self)
+        self.agent = _SyncAgentModule(self)
         self.values = _SyncValuesProjection(self)
         self.messages = _SyncMessagesProjection(self, namespace=[])
         self.tool_calls = _SyncToolCallsProjection(self, namespace=[])
         self.subgraphs = _SyncSubgraphsProjection(self, scope=())
         self.subagents = self.subgraphs
+        self.extensions = _SyncExtensionsProjection(self, namespace=[])
 
     def __enter__(self) -> SyncThreadStream:
         if self._closed:
@@ -1306,6 +1425,19 @@ class SyncThreadStream:
         for handle in list(self._active_tool_calls):
             handle._fail(err)
         self._active_tool_calls.clear()
+
+    def _signal_paused(self) -> None:
+        """Wake every active projection iterator on interrupt / run end.
+
+        Delegates to the shared controller (subscription queues). The
+        root messages inbox is intentionally NOT signaled here: the
+        subgraphs projection that populates it is responsible for
+        pushing the terminal ``None`` in its own ``finally`` block, so
+        any message events it redirected to the inbox land before the
+        sentinel. Signaling root_inbox here would race the redirection.
+        """
+        if self._controller is not None:
+            self._controller.signal_paused()
 
     def subscribe(
         self,
@@ -1472,20 +1604,30 @@ class SyncThreadStream:
                     if isinstance(params, dict)
                     else [],
                 }
+                was_interrupted = self.interrupted
                 self.interrupts.append(payload)
                 self.interrupted = True
+                # On the rising edge of `interrupted`, push the terminal
+                # sentinel into every active projection subscription so their
+                # iterators exit cleanly. The run is paused — not done — so
+                # the shared SSE and fanout keep running; a subsequent
+                # `for snap in thread.values:` (or any other projection)
+                # registers a fresh subscription and resumes iteration once
+                # the consumer calls `run.respond(...)`.
+                if not was_interrupted:
+                    self._signal_paused()
         elif method == "lifecycle":
             params = event.get("params") or {}
             data = params.get("data") if isinstance(params, dict) else None
-            phase = data.get("phase") if isinstance(data, dict) else None
+            phase = data.get("event") if isinstance(data, dict) else None
             if phase in ("started", "running"):
                 self._run_seen = True
-            elif phase in ("completed", "errored"):
+            elif phase in ("completed", "failed"):
                 self.interrupted = False
                 self.interrupts = []
                 run_done = self._run_done
                 if run_done is not None and not run_done.done():
-                    if phase == "errored":
+                    if phase == "failed":
                         error_msg = (
                             data.get("error") if isinstance(data, dict) else None
                         )

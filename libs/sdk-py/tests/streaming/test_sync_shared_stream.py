@@ -44,8 +44,12 @@ def test_sync_send_command_applied_through_seq_seeds_shared_stream_since():
             thread.run.start(input={})
             assert list(thread.subscribe(["values"])) == []
 
+    # The shared SSE filter is a union of subscription params plus
+    # ``lifecycle`` (added by ``_compute_current_union`` for projection-
+    # iterator termination on root-terminal). Match any request whose
+    # channels include ``values``.
     values_requests = [
-        b for b in fake.stream_request_bodies if b.get("channels") == ["values"]
+        b for b in fake.stream_request_bodies if "values" in (b.get("channels") or [])
     ]
     assert len(values_requests) == 1
     assert values_requests[0]["since"] == 17
