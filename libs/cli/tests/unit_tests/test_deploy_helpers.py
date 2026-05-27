@@ -3,6 +3,7 @@ import io
 import json
 import os
 import sys
+from unittest.mock import MagicMock
 
 import click
 import httpx
@@ -16,6 +17,7 @@ from langgraph_cli.deploy import (
     _env_without_deployment_name,
     _parse_env_from_config,
     _resolve_env_path,
+    _resolve_pushed_image_digest,
     _smith_dashboard_base_url,
     normalize_image_tag,
     normalize_name,
@@ -532,3 +534,156 @@ class TestSmithDashboardBaseUrl:
             _smith_dashboard_base_url("https://custom.example.com")
             == "https://smith.langchain.com"
         )
+
+
+class TestResolvePushedImageDigest:
+    """Tests for ``_resolve_pushed_image_digest`` — runner is mocked to
+    return the ``(stdout, stderr)`` tuple that ``subp_exec(collect=True)``
+    would produce.
+    """
+
+    @staticmethod
+    def _runner(stdout: str | None) -> MagicMock:
+        # Close the unawaited subp_exec coroutine to silence gc warnings.
+        runner = MagicMock()
+
+        def _run(coro, *args, **kwargs):
+            if hasattr(coro, "close"):
+                coro.close()
+            return (stdout, "")
+
+        runner.run.side_effect = _run
+        return runner
+
+    def test_happy_path_returns_digest(self):
+        runner = self._runner('["us-central1-docker.pkg.dev/proj/repo@sha256:abc123"]')
+        out = _resolve_pushed_image_digest(
+            runner,
+            remote_image="us-central1-docker.pkg.dev/proj/repo:latest",
+            docker_config_dir=None,
+            verbose=False,
+        )
+        assert out == "us-central1-docker.pkg.dev/proj/repo@sha256:abc123"
+
+    def test_filters_to_matching_repo(self):
+        # Same image ID can hold digests for multiple repos — pick the one
+        # matching the just-pushed repo.
+        runner = self._runner(
+            json.dumps(
+                [
+                    "other-registry.example.com/some/repo@sha256:000000",
+                    "us-central1-docker.pkg.dev/proj/repo@sha256:abc123",
+                ]
+            )
+        )
+        out = _resolve_pushed_image_digest(
+            runner,
+            remote_image="us-central1-docker.pkg.dev/proj/repo:v1.2.3",
+            docker_config_dir=None,
+            verbose=False,
+        )
+        assert out == "us-central1-docker.pkg.dev/proj/repo@sha256:abc123"
+
+    def test_empty_repodigests_falls_back_with_warning(self, mocker):
+        emitter = mocker.MagicMock()
+        mocker.patch("langgraph_cli.deploy._get_emitter", return_value=emitter)
+        runner = self._runner("[]")
+        remote = "us-central1-docker.pkg.dev/proj/repo:latest"
+        out = _resolve_pushed_image_digest(
+            runner,
+            remote_image=remote,
+            docker_config_dir=None,
+            verbose=False,
+        )
+        assert out == remote
+        assert emitter.warn.called
+        assert remote in emitter.warn.call_args.args[0]
+
+    def test_null_repodigests_falls_back_with_warning(self, mocker):
+        # ``docker inspect --format '{{json .RepoDigests}}'`` emits ``null``
+        # when the field is absent.
+        emitter = mocker.MagicMock()
+        mocker.patch("langgraph_cli.deploy._get_emitter", return_value=emitter)
+        runner = self._runner("null")
+        remote = "us-central1-docker.pkg.dev/proj/repo:latest"
+        out = _resolve_pushed_image_digest(
+            runner,
+            remote_image=remote,
+            docker_config_dir=None,
+            verbose=False,
+        )
+        assert out == remote
+        assert emitter.warn.called
+
+    def test_no_matching_repo_falls_back_with_warning(self, mocker):
+        # No matching digest for the pushed repo — warn and fall back to the
+        # tag-based ref rather than failing the deploy.
+        emitter = mocker.MagicMock()
+        mocker.patch("langgraph_cli.deploy._get_emitter", return_value=emitter)
+        runner = self._runner('["other-registry.example.com/some/repo@sha256:000000"]')
+        remote = "us-central1-docker.pkg.dev/proj/repo:latest"
+        out = _resolve_pushed_image_digest(
+            runner,
+            remote_image=remote,
+            docker_config_dir=None,
+            verbose=False,
+        )
+        assert out == remote
+        assert emitter.warn.called
+
+    def test_registry_with_port_in_host(self):
+        # Only the rightmost ``:`` (the ``:latest`` tag) should be stripped.
+        runner = self._runner('["localhost:5000/repo@sha256:deadbeef"]')
+        out = _resolve_pushed_image_digest(
+            runner,
+            remote_image="localhost:5000/repo:latest",
+            docker_config_dir=None,
+            verbose=False,
+        )
+        assert out == "localhost:5000/repo@sha256:deadbeef"
+
+    @staticmethod
+    def _capturing_runner(stdout: str) -> tuple[MagicMock, dict]:
+        """Like ``_runner`` but exposes the coroutine for arg introspection.
+        Caller must close ``captured["coro"]``.
+        """
+        runner = MagicMock()
+        captured: dict = {}
+
+        def _run(coro, *args, **kwargs):
+            captured["coro"] = coro
+            return (stdout, "")
+
+        runner.run.side_effect = _run
+        return runner, captured
+
+    def test_passes_docker_config_dir(self):
+        runner, captured = self._capturing_runner(
+            '["us-central1-docker.pkg.dev/proj/repo@sha256:abc"]'
+        )
+        _resolve_pushed_image_digest(
+            runner,
+            remote_image="us-central1-docker.pkg.dev/proj/repo:latest",
+            docker_config_dir="/tmp/some-cfg",
+            verbose=False,
+        )
+        frame_locals = captured["coro"].cr_frame.f_locals
+        assert frame_locals["cmd"] == "docker"
+        assert "--config" in frame_locals["args"]
+        cfg_idx = frame_locals["args"].index("--config")
+        assert frame_locals["args"][cfg_idx + 1] == "/tmp/some-cfg"
+        captured["coro"].close()
+
+    def test_omits_docker_config_dir_when_none(self):
+        runner, captured = self._capturing_runner(
+            '["us-central1-docker.pkg.dev/proj/repo@sha256:abc"]'
+        )
+        _resolve_pushed_image_digest(
+            runner,
+            remote_image="us-central1-docker.pkg.dev/proj/repo:latest",
+            docker_config_dir=None,
+            verbose=False,
+        )
+        frame_locals = captured["coro"].cr_frame.f_locals
+        assert "--config" not in frame_locals["args"]
+        captured["coro"].close()
