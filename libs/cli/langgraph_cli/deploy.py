@@ -1059,7 +1059,9 @@ def _run_local_build(
 
         # -- Step: Update deployment --
         _log_deploy_step(step, f"Updating deployment {deployment_id}")
-        updated = client.update_deployment(deployment_id, resolved_image, secrets=secrets)
+        updated = client.update_deployment(
+            deployment_id, resolved_image, secrets=secrets
+        )
 
     return BuildResult(
         updated=updated if isinstance(updated, dict) else {},

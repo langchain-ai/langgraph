@@ -586,9 +586,7 @@ class TestResolvePushedImageDigest:
 
     def test_empty_repodigests_falls_back_with_warning(self, mocker):
         emitter = mocker.MagicMock()
-        mocker.patch(
-            "langgraph_cli.deploy._get_emitter", return_value=emitter
-        )
+        mocker.patch("langgraph_cli.deploy._get_emitter", return_value=emitter)
         runner = self._runner("[]")
         remote = "us-central1-docker.pkg.dev/proj/repo:latest"
         out = _resolve_pushed_image_digest(
@@ -605,9 +603,7 @@ class TestResolvePushedImageDigest:
         # ``docker inspect --format '{{json .RepoDigests}}'`` emits ``null``
         # when the field is absent.
         emitter = mocker.MagicMock()
-        mocker.patch(
-            "langgraph_cli.deploy._get_emitter", return_value=emitter
-        )
+        mocker.patch("langgraph_cli.deploy._get_emitter", return_value=emitter)
         runner = self._runner("null")
         remote = "us-central1-docker.pkg.dev/proj/repo:latest"
         out = _resolve_pushed_image_digest(
@@ -623,9 +619,7 @@ class TestResolvePushedImageDigest:
         # No matching digest for the pushed repo — warn and fall back to the
         # tag-based ref rather than failing the deploy.
         emitter = mocker.MagicMock()
-        mocker.patch(
-            "langgraph_cli.deploy._get_emitter", return_value=emitter
-        )
+        mocker.patch("langgraph_cli.deploy._get_emitter", return_value=emitter)
         runner = self._runner('["other-registry.example.com/some/repo@sha256:000000"]')
         remote = "us-central1-docker.pkg.dev/proj/repo:latest"
         out = _resolve_pushed_image_digest(
