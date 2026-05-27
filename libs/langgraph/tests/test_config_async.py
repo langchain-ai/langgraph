@@ -67,3 +67,27 @@ async def test_with_config_configurable_preserved_on_invoke() -> None:
         "bound configurable key was dropped by ensure_config overwrite"
     )
     assert captured.get("thread_id") == "T1", "invoke-time key not present"
+
+
+async def test_with_config_metadata_preserved_on_invoke() -> None:
+    """A metadata key bound via .with_config(...) must survive when
+    invoke-time config supplies a different metadata key.
+
+    Pre-fix: ensure_config overwrites the entire metadata dict.
+    Post-fix: the two dicts are shallow-merged per key.
+    """
+    builder = StateGraph(dict)
+    captured: dict = {}
+
+    def node(state, config):  # noqa: ANN001
+        captured.update(config.get("metadata") or {})
+        return state
+
+    builder.add_node("node", node)
+    builder.add_edge("__start__", "node")
+    graph = builder.compile().with_config({"metadata": {"user_id": "U1"}})
+    await graph.ainvoke({}, {"metadata": {"correlation_id": "C1"}})
+    assert captured.get("user_id") == "U1", (
+        "bound metadata key was dropped by ensure_config overwrite"
+    )
+    assert captured.get("correlation_id") == "C1", "invoke-time key not present"

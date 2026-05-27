@@ -347,6 +347,14 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                     empty["callbacks"] = _merge_callbacks(
                         empty.get("callbacks"), cast(Callbacks, v)
                     )
+                elif k == "metadata":
+                    # Shallow-merge metadata dicts across configs so values
+                    # bound via with_config(...) (e.g. user_id) are preserved
+                    # when later configs supply other metadata keys.
+                    empty["metadata"] = {
+                        **cast(dict, empty.get("metadata") or {}),
+                        **cast(dict, v),
+                    }
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
