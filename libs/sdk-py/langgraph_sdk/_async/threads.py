@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any, Literal, overload
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk.schema import (
     Checkpoint,
@@ -732,6 +734,52 @@ class ThreadsClient:
             json=payload,
             headers=headers,
             params=params,
+        )
+
+    def stream(
+        self,
+        thread_id: str | None = None,
+        *,
+        assistant_id: str,
+        headers: Mapping[str, str] | None = None,
+        run_start_timeout: float | None = None,
+        transport: Literal["sse", "websocket"] = "sse",
+    ) -> AsyncThreadStream:
+        """Open a v3 thread-centric streaming session.
+
+        When `thread_id` is None, a fresh UUIDv4 is minted client-side and
+        included in the URL of subsequent `POST /threads/{thread_id}/...`
+        calls. The server creates the thread row lazily on the first
+        `run.start` (internal server detail — the SDK does not send any
+        `if_not_exists` flag). The v3 protocol response carries only
+        `run_id`, never `thread_id` — that's why the SDK mints the id
+        client-side.
+
+        Args:
+            thread_id: optional explicit thread identifier. Defaults to a
+                fresh UUIDv4.
+            assistant_id: assistant the run will use. Required.
+            headers: optional headers forwarded on every command and event
+                request for this stream session.
+            run_start_timeout: optional seconds to wait for an in-flight
+                `run.start` before subscribing operations raise
+                `asyncio.TimeoutError`. Defaults to `None` (wait forever).
+            transport: event transport to use — `"sse"` (default) or
+                `"websocket"`.
+
+        Returns:
+            An `AsyncThreadStream` to use as an async context manager.
+        """
+        if transport not in ("sse", "websocket"):
+            raise ValueError("transport must be 'sse' or 'websocket'.")
+        return AsyncThreadStream(
+            http=self.http,
+            thread_id=thread_id if thread_id is not None else str(uuid.uuid4()),
+            assistant_id=assistant_id,
+            headers=headers,
+            run_start_timeout=run_start_timeout,
+            explicit_thread_id=thread_id is not None,
+            transport_kind=transport,
         )
 
     async def join_stream(

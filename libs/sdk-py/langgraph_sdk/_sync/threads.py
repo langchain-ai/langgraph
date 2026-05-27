@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Literal, overload
 
 from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.stream import SyncThreadStream
 from langgraph_sdk.schema import (
     Checkpoint,
     Json,
@@ -720,6 +722,41 @@ class SyncThreadsClient:
             json=payload,
             headers=headers,
             params=params,
+        )
+
+    def stream(
+        self,
+        thread_id: str | None = None,
+        *,
+        assistant_id: str,
+        headers: Mapping[str, str] | None = None,
+        run_start_timeout: float | None = None,
+        transport: Literal["sse", "websocket"] = "sse",
+    ) -> SyncThreadStream:
+        """Open a v3 thread-centric streaming session.
+
+        Args:
+            thread_id: optional explicit thread identifier. Defaults to a
+                fresh UUIDv4.
+            assistant_id: assistant the run will use. Required.
+            headers: optional headers forwarded on every command and SSE
+                request for this stream session.
+            transport: event transport to use, `"sse"` (default) or
+                `"websocket"`.
+
+        Returns:
+            A `SyncThreadStream` to use as a context manager.
+        """
+        if transport not in ("sse", "websocket"):
+            raise ValueError("transport must be 'sse' or 'websocket'.")
+        return SyncThreadStream(
+            http=self.http,
+            thread_id=thread_id if thread_id is not None else str(uuid.uuid4()),
+            assistant_id=assistant_id,
+            headers=headers,
+            run_start_timeout=run_start_timeout,
+            explicit_thread_id=thread_id is not None,
+            transport_kind=transport,
         )
 
     def join_stream(

@@ -13,8 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Mapping
 from typing import Any, cast
 
 import httpx
@@ -22,39 +21,12 @@ import orjson
 from langchain_protocol import Event
 
 from langgraph_sdk.sse import BytesLineDecoder, SSEDecoder
+from langgraph_sdk.stream.transport.base import (
+    EventStreamHandle,
+    build_event_stream_body,
+)
 
-
-def _build_event_stream_body(params: dict[str, Any]) -> dict[str, Any]:
-    body: dict[str, Any] = {"channels": params["channels"]}
-    if params.get("namespaces") is not None:
-        body["namespaces"] = params["namespaces"]
-    if params.get("depth") is not None:
-        body["depth"] = params["depth"]
-    since = params.get("since")
-    if isinstance(since, int):
-        body["since"] = since
-    return body
-
-
-@dataclass
-class EventStreamHandle:
-    """Handle for one filtered SSE stream.
-
-    Attributes:
-        events: async iterator of typed `Event`s. Exhausts when the
-            stream closes (server hangup or `close()`).
-        ready: resolves once HTTP response headers arrive; rejects on
-            connection failure before headers.
-        done: resolves with `None` on clean end or cancellation, or with
-            the exception on a mid-stream transport error.
-        close: invoke to cancel the underlying task and free the
-            connection.
-    """
-
-    events: AsyncIterator[Event]
-    ready: asyncio.Future[None]
-    done: asyncio.Future[BaseException | None]
-    close: Callable[[], Awaitable[None]]
+_build_event_stream_body = build_event_stream_body
 
 
 class ProtocolSseTransport:
@@ -67,19 +39,22 @@ class ProtocolSseTransport:
 
     def __init__(
         self,
+        *,
         client: httpx.AsyncClient,
         thread_id: str,
         commands_path: str | None = None,
         stream_path: str | None = None,
-        *,
+        headers: Mapping[str, str] | None = None,
         max_queue_size: int = 1024,
     ) -> None:
         self._client = client
         self.thread_id = thread_id
         self._commands_url = commands_path or f"/threads/{thread_id}/commands"
         self._stream_url = stream_path or f"/threads/{thread_id}/stream/events"
+        self._default_headers: dict[str, str] = dict(headers or {})
         self._max_queue_size = max_queue_size
         self._closed = False
+        self._event_streams: set[asyncio.Task[None]] = set()
 
     async def send_command(self, command: dict[str, Any]) -> dict[str, Any] | None:
         """POST a command. Returns the response JSON, or `None` for 202/204.
@@ -91,10 +66,12 @@ class ProtocolSseTransport:
         """
         if self._closed:
             raise RuntimeError("Protocol transport is closed.")
+        # Merge default headers first so content-type always wins.
+        merged_headers = {**self._default_headers, "content-type": "application/json"}
         response = await self._client.post(
             self._commands_url,
             content=orjson.dumps(command),
-            headers={"content-type": "application/json"},
+            headers=merged_headers,
         )
         response.raise_for_status()
         if response.status_code in (202, 204):
@@ -107,7 +84,7 @@ class ProtocolSseTransport:
             raise RuntimeError(
                 "Protocol command did not return a valid response."
             ) from err
-        if not isinstance(payload, dict) or "command_id" not in payload:
+        if not isinstance(payload, dict) or "id" not in payload:
             raise RuntimeError("Protocol command did not return a valid response.")
         return payload
 
@@ -116,8 +93,8 @@ class ProtocolSseTransport:
 
         Posts `params` as a SubscribeParams body to `/threads/{thread_id}/stream/events`.
         Returns an `EventStreamHandle` whose `events` async iterator yields typed
-        `Event` dicts as the server emits them. `handle.ready` resolves when
-        response headers arrive (or rejects on early failure).
+        `Event` dicts as the server emits them. `handle.ready` resolves on a 2xx
+        response (rejects on HTTP error or transport failure before headers).
 
         Reconnect: pass `params["since"]` to filter outbound seqs server-side. The
         cursor goes in the request body, not as a `Last-Event-ID` header.
@@ -133,15 +110,18 @@ class ProtocolSseTransport:
 
         async def pump() -> None:
             try:
+                # Merge default headers first so fixed SSE headers always win.
+                sse_headers = {
+                    **self._default_headers,
+                    "content-type": "application/json",
+                    "accept": "text/event-stream",
+                    "cache-control": "no-store",
+                }
                 async with self._client.stream(
                     "POST",
                     self._stream_url,
-                    content=orjson.dumps(_build_event_stream_body(params)),
-                    headers={
-                        "content-type": "application/json",
-                        "accept": "text/event-stream",
-                        "cache-control": "no-store",
-                    },
+                    content=orjson.dumps(build_event_stream_body(params)),
+                    headers=sse_headers,
                 ) as response:
                     response.raise_for_status()
                     if not ready.done():
@@ -166,22 +146,23 @@ class ProtocolSseTransport:
                         part = sse_decoder.decode(b"")
                         if part is not None and isinstance(part.data, dict):
                             await queue.put(cast("Event", part.data))
-            except asyncio.CancelledError:
+            except asyncio.CancelledError as err:
                 if not done.done():
-                    done.set_result(None)
+                    done.set_result(err)
                 raise
             except BaseException as err:
                 if not ready.done():
                     ready.set_exception(err)
                 if not done.done():
                     done.set_result(err)
-                # Do not re-raise; the error is surfaced via `done`.
             finally:
                 if not done.done():
                     done.set_result(None)
                 await queue.put(None)  # sentinel: end of stream
 
         task = asyncio.create_task(pump())
+        self._event_streams.add(task)
+        task.add_done_callback(self._event_streams.discard)
 
         async def aiter() -> AsyncIterator[Event]:
             while True:
@@ -192,12 +173,22 @@ class ProtocolSseTransport:
 
         async def close() -> None:
             cancel_event.set()
+            # Why: pump may be mid-`finally`; ensure consumer unblocks.
+            queue.put_nowait(None)
             task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, BaseException):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
 
         return EventStreamHandle(events=aiter(), ready=ready, done=done, close=close)
 
     async def close(self) -> None:
-        """Mark the transport closed. Idempotent."""
+        """Cancel any open event streams and mark the transport closed. Idempotent."""
+        if self._closed:
+            return
         self._closed = True
+        tasks = list(self._event_streams)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await asyncio.gather(*tasks, return_exceptions=True)
