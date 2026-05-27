@@ -325,3 +325,95 @@ async def test_interleave_cancels_drainers_on_early_break():
         async for _name, _item in stream.interleave("messages", "values"):
             break
     # Reaching here without hanging or leaking tasks is the success condition.
+
+
+from dataclasses import asdict
+
+from langgraph.pregel.remote import (
+    RemoteGraph,
+    _translate_command_input,
+    _V3_SUPPORTED_KWARGS,
+)
+from langgraph.types import Command
+
+
+def _make_remote_graph() -> RemoteGraph:
+    sync_client = MagicMock()
+    async_client = MagicMock()
+    rg = RemoteGraph(
+        "agent",
+        client=async_client,
+        sync_client=sync_client,
+    )
+    return rg
+
+
+def test_reject_v3_unsupported_passes_when_all_clear():
+    rg = _make_remote_graph()
+    rg._reject_v3_unsupported(
+        control=None,
+        transformers=None,
+        interrupt_before=None,
+        interrupt_after=None,
+        extra_kwargs={},
+    )
+
+
+@pytest.mark.parametrize(
+    "kwarg_name,kwarg_value",
+    [
+        ("control", object()),
+        ("transformers", [object()]),
+        ("interrupt_before", ["node_a"]),
+        ("interrupt_after", ["node_b"]),
+    ],
+)
+def test_reject_v3_unsupported_raises_per_kwarg(kwarg_name, kwarg_value):
+    rg = _make_remote_graph()
+    kwargs = dict(
+        control=None,
+        transformers=None,
+        interrupt_before=None,
+        interrupt_after=None,
+        extra_kwargs={},
+    )
+    kwargs[kwarg_name] = kwarg_value
+    with pytest.raises(NotImplementedError, match=f"`{kwarg_name}=`"):
+        rg._reject_v3_unsupported(**kwargs)
+
+
+def test_reject_v3_unsupported_raises_on_unknown_extra_kwarg():
+    rg = _make_remote_graph()
+    with pytest.raises(NotImplementedError, match="context"):
+        rg._reject_v3_unsupported(
+            control=None,
+            transformers=None,
+            interrupt_before=None,
+            interrupt_after=None,
+            extra_kwargs={"context": {}},
+        )
+
+
+def test_reject_v3_unsupported_allows_metadata_and_headers():
+    rg = _make_remote_graph()
+    rg._reject_v3_unsupported(
+        control=None,
+        transformers=None,
+        interrupt_before=None,
+        interrupt_after=None,
+        extra_kwargs={"metadata": {"a": 1}, "headers": {"X": "y"}},
+    )
+
+
+def test_translate_command_input_converts_command_to_dict():
+    cmd = Command(update={"a": 1})
+    assert _translate_command_input(cmd) == asdict(cmd)
+
+
+def test_translate_command_input_passes_through_non_command():
+    assert _translate_command_input({"a": 1}) == {"a": 1}
+    assert _translate_command_input(None) is None
+
+
+def test_v3_supported_kwargs_known_set():
+    assert _V3_SUPPORTED_KWARGS == frozenset({"metadata", "headers"})

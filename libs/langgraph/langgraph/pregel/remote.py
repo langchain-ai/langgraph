@@ -80,6 +80,8 @@ _CONF_DROPLIST = frozenset(
     ),
 )
 
+_V3_SUPPORTED_KWARGS = frozenset({"metadata", "headers"})
+
 
 def _sanitize_config_value(v: Any) -> Any:
     """Recursively sanitize a config value to ensure it contains only primitives."""
@@ -101,6 +103,13 @@ def _sanitize_config_value(v: Any) -> Any:
                 sanitized_list.append(sanitized_item)
         return sanitized_list
     return None
+
+
+def _translate_command_input(input: Any) -> Any:
+    """Translate a local Command into the SDK Command dict shape, else passthrough."""
+    if isinstance(input, Command):
+        return asdict(input)
+    return input
 
 
 class RemoteException(Exception):
@@ -185,6 +194,34 @@ class RemoteGraph(PregelProtocol):
                 "Sync client is not initialized: please provide `url` or `sync_client` when initializing `RemoteGraph`."
             )
         return self.sync_client
+
+    def _reject_v3_unsupported(
+        self,
+        *,
+        control: Any,
+        transformers: Any,
+        interrupt_before: Any,
+        interrupt_after: Any,
+        extra_kwargs: dict[str, Any],
+    ) -> None:
+        """Raise NotImplementedError for kwargs unsupported by the v3 streaming path."""
+        for name, value in (
+            ("control", control),
+            ("transformers", transformers),
+            ("interrupt_before", interrupt_before),
+            ("interrupt_after", interrupt_after),
+        ):
+            if value:
+                raise NotImplementedError(
+                    f"RemoteGraph.stream_events(version='v3') does not support `{name}=`."
+                )
+        unknown = set(extra_kwargs) - _V3_SUPPORTED_KWARGS
+        if unknown:
+            raise NotImplementedError(
+                f"RemoteGraph.stream_events(version='v3') does not support "
+                f"the following kwargs: {sorted(unknown)!r}. "
+                f"Supported: {sorted(_V3_SUPPORTED_KWARGS)!r}."
+            )
 
     def copy(self, update: dict[str, Any]) -> Self:
         attrs = {**self.__dict__, **update}
