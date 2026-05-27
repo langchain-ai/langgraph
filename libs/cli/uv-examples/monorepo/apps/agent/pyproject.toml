@@ -7,6 +7,7 @@ dependencies = [
     "langgraph>=0.6.0,<2",
     "langchain-core>=0.2.14",
     "shared",
+    "langgraph-checkpoint-postgres>=3.0.0"
 ]
 
 [build-system]
