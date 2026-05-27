@@ -16,7 +16,7 @@ from streaming._fake_server import FakeServer
 async def test_thread_stream_stores_thread_id_and_assistant_id():
     async with httpx.AsyncClient(base_url="http://test") as client:
         stream = AsyncThreadStream(
-            client=client,
+            http=HttpClient(client),
             thread_id="t-1",
             assistant_id="agent",
         )
@@ -26,14 +26,18 @@ async def test_thread_stream_stores_thread_id_and_assistant_id():
 
 async def test_aenter_returns_self():
     async with httpx.AsyncClient(base_url="http://test") as client:
-        stream = AsyncThreadStream(client=client, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(client), thread_id="t-1", assistant_id="agent"
+        )
         async with stream as entered:
             assert entered is stream
 
 
 async def test_aexit_marks_closed():
     async with httpx.AsyncClient(base_url="http://test") as client:
-        stream = AsyncThreadStream(client=client, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(client), thread_id="t-1", assistant_id="agent"
+        )
         async with stream:
             assert stream._closed is False
         assert stream._closed is True
@@ -41,7 +45,9 @@ async def test_aexit_marks_closed():
 
 async def test_close_is_idempotent():
     async with httpx.AsyncClient(base_url="http://test") as client:
-        stream = AsyncThreadStream(client=client, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(client), thread_id="t-1", assistant_id="agent"
+        )
         await stream.close()
         await stream.close()  # must not raise
         assert stream._closed is True
@@ -75,19 +81,73 @@ async def test_threads_stream_requires_assistant_id():
             threads.stream(thread_id="t-1")  # ty: ignore[missing-argument]
 
 
-async def test_threads_stream_accepts_headers_kwarg():
-    """`headers` is accepted as a kwarg even though it isn't forwarded yet."""
-    from langgraph_sdk._async.http import HttpClient
-    from langgraph_sdk._async.threads import ThreadsClient
-
-    async with httpx.AsyncClient(base_url="http://test") as raw:
+async def test_threads_stream_headers_forwarded_to_commands():
+    """Headers passed to `threads.stream()` are forwarded to /commands requests."""
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
         threads = ThreadsClient(HttpClient(raw))
-        stream = threads.stream(
+        async with threads.stream(
             thread_id="t-1",
             assistant_id="agent",
-            headers={"X-Foo": "bar"},
-        )
-        assert stream.thread_id == "t-1"
+            headers={"X-Custom-Header": "my-value"},
+        ) as thread:
+            await thread.run.start(input={})
+    assert fake.command_request_headers, "no command requests captured"
+    assert fake.command_request_headers[0].get("x-custom-header") == "my-value"
+
+
+async def test_threads_stream_headers_forwarded_to_stream_events():
+    """Headers passed to `threads.stream()` are forwarded to /stream/events requests."""
+    fake = FakeServer()
+    fake.script([lifecycle_event(seq=0)])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+            headers={"X-Custom-Header": "my-value"},
+        ) as thread:
+            await thread.run.start(input={})
+            _ = [e async for e in thread.subscribe(["lifecycle"])]
+    assert fake.stream_request_headers_list, "no stream/events requests captured"
+    assert fake.stream_request_headers_list[0].get("x-custom-header") == "my-value"
+
+
+async def test_no_headers_by_default():
+    """When `headers` is omitted, `_headers` is an empty dict and no custom
+    headers appear in command or stream requests.
+    """
+    fake = FakeServer()
+    fake.script([lifecycle_event(seq=0)])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            assert thread._headers == {}
+            await thread.run.start(input={})
+            _ = [e async for e in thread.subscribe(["lifecycle"])]
+    # No custom header keys beyond the protocol-required / transport-required ones.
+    protocol_keys = {
+        "content-type",
+        "accept",
+        "cache-control",
+        "host",
+        "user-agent",
+        "accept-encoding",
+        "connection",
+        "transfer-encoding",
+        "content-length",
+    }
+    extra_command = {
+        k for k in fake.command_request_headers[0] if k.lower() not in protocol_keys
+    }
+    extra_stream = {
+        k for k in fake.stream_request_headers_list[0] if k.lower() not in protocol_keys
+    }
+    assert extra_command == set(), f"unexpected command headers: {extra_command}"
+    assert extra_stream == set(), f"unexpected stream headers: {extra_stream}"
 
 
 async def test_aenter_constructs_transport_with_thread_id():
@@ -174,7 +234,9 @@ async def test_run_start_raises_outside_context_manager():
     import pytest
 
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(raw), thread_id="t-1", assistant_id="agent"
+        )
         with pytest.raises(RuntimeError, match="async with"):
             await stream.run.start(input={"x": 1})
 
@@ -281,7 +343,9 @@ async def test_events_terminates_on_aexit():
 
 async def test_events_raises_outside_context_manager():
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(raw), thread_id="t-1", assistant_id="agent"
+        )
         with pytest.raises(RuntimeError, match="async with"):
             _ = stream.events
 
@@ -291,7 +355,9 @@ async def test_aexit_preserves_original_exception_if_close_raises():
     body's exception must propagate. close()'s error is suppressed (chained
     as context on close_err, but does not replace the original)."""
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        thread = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        thread = AsyncThreadStream(
+            http=HttpClient(raw), thread_id="t-1", assistant_id="agent"
+        )
 
         async def failing_close():
             raise RuntimeError("close failed")
@@ -358,7 +424,9 @@ async def test_fresh_thread_happy_path_end_to_end():
 
 async def test_aenter_raises_after_close():
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(raw), thread_id="t-1", assistant_id="agent"
+        )
         async with stream:
             pass
         # After exit, the stream is closed; re-entering must raise rather than
@@ -370,7 +438,9 @@ async def test_aenter_raises_after_close():
 
 async def test_register_subscription_assigns_monotonic_ids():
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(raw), thread_id="t-1", assistant_id="agent"
+        )
         async with stream:
             sub_a = stream._register_subscription({"channels": ["values"]})
             sub_b = stream._register_subscription({"channels": ["messages"]})
@@ -382,8 +452,262 @@ async def test_register_subscription_assigns_monotonic_ids():
 
 async def test_unregister_subscription_removes_from_registry():
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        stream = AsyncThreadStream(
+            http=HttpClient(raw), thread_id="t-1", assistant_id="agent"
+        )
         async with stream:
             sub = stream._register_subscription({"channels": ["values"]})
             stream._unregister_subscription(sub.id)
             assert sub.id not in stream._subscriptions
+
+
+async def test_await_run_start_gate_honors_timeout():
+    """Gate must raise asyncio.TimeoutError if run.start never completes
+    within the configured timeout."""
+    import asyncio
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            # Install a never-resolving gate to simulate an in-flight
+            # run.start that will not complete within the timeout window.
+            loop = asyncio.get_running_loop()
+            thread._run_start_ready = loop.create_future()
+            with pytest.raises(asyncio.TimeoutError):
+                await thread._await_run_start_gate(timeout=0.1)
+            # Gate must still be pending after the timeout (no side effects).
+            assert thread._run_start_ready is not None
+            assert not thread._run_start_ready.done()
+
+
+async def test_await_run_start_gate_returns_when_gate_resolves_in_time():
+    """With a generous timeout and a gate that resolves promptly, the
+    gate returns without raising."""
+    import asyncio
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            loop = asyncio.get_running_loop()
+            gate: asyncio.Future[None] = loop.create_future()
+            thread._run_start_ready = gate
+            loop.call_later(0.01, lambda: gate.set_result(None))
+            await thread._await_run_start_gate(timeout=1.0)
+
+
+async def test_run_start_timeout_constructor_kwarg_forwarded_to_gate():
+    """`run_start_timeout` constructor kwarg is stored and consulted by
+    `_reconcile_stream` via `_await_run_start_gate`."""
+    import asyncio
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        stream = AsyncThreadStream(
+            http=HttpClient(raw),
+            thread_id="t-1",
+            assistant_id="agent",
+            run_start_timeout=0.1,
+        )
+        async with stream as thread:
+            loop = asyncio.get_running_loop()
+            # Install a never-resolving gate.
+            thread._run_start_ready = loop.create_future()
+            with pytest.raises(asyncio.TimeoutError):
+                # Reconcile must surface the timeout from the gate.
+                await thread._reconcile_stream({"channels": ["lifecycle"]})
+
+
+async def test_subscribe_waits_for_run_start_to_commit():
+    """Subscribing before run.start commits must not race the server.
+
+    With the gate: subscribers wait for run.start to return before opening
+    their SSE. Without it, a fast subscribe would 404 against a thread the
+    server hasn't created yet.
+    """
+    import asyncio
+
+    fake = FakeServer()
+    fake.script([])
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            # Kick run.start without awaiting — concurrently subscribe.
+            run_task = asyncio.create_task(thread.run.start(input={}))
+            sub_iter = thread.subscribe(["lifecycle"])
+            # Drain one event or hit EOF. The iterator's first __anext__
+            # awaits _reconcile_stream which awaits the gate.
+            async for _ in sub_iter:
+                break
+            # If the gate works, run.start completed before the subscription
+            # opened its SSE (and thus before iteration finished).
+            assert run_task.done()
+
+
+async def test_run_respond_dispatches_input_respond_command():
+    fake = FakeServer()
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            # Simulate one outstanding interrupt.
+            thread.interrupts.append(
+                {"interrupt_id": "i-1", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            await thread.run.respond("yes")
+    command = fake.received_commands[-1]
+    assert command["method"] == "input.respond"
+    assert command["params"]["interrupt_id"] == "i-1"
+    assert command["params"]["response"] == "yes"
+    assert command["params"]["namespace"] == []
+
+
+async def test_run_respond_with_explicit_interrupt_id():
+    fake = FakeServer()
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            thread.interrupts.extend(
+                [
+                    {"interrupt_id": "a", "value": None, "namespace": []},
+                    {"interrupt_id": "b", "value": None, "namespace": []},
+                ]
+            )
+            thread.interrupted = True
+            await thread.run.respond("pick", interrupt_id="b")
+    assert fake.received_commands[-1]["params"]["interrupt_id"] == "b"
+    assert fake.received_commands[-1]["params"]["namespace"] == []
+
+
+async def test_run_respond_raises_when_no_outstanding_interrupts():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            with pytest.raises(RuntimeError, match="no outstanding interrupt"):
+                await thread.run.respond("yes")
+
+
+async def test_run_respond_raises_when_ambiguous_interrupt_id():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.interrupts.extend(
+                [
+                    {"interrupt_id": "a", "value": None, "namespace": []},
+                    {"interrupt_id": "b", "value": None, "namespace": []},
+                ]
+            )
+            thread.interrupted = True
+            with pytest.raises(RuntimeError, match=r"ambiguous|interrupt_id"):
+                await thread.run.respond("yes")
+
+
+async def test_run_respond_snapshots_interrupts_under_lock():
+    """`respond()` must take a snapshot of `interrupts` under the
+    `_interrupts_lock`, so a concurrent terminal-event clear cannot
+    invalidate the in-flight dispatch.
+
+    Verifies: if `_interrupts_lock` is held when `respond()` is called,
+    `respond()` blocks until the lock is released — proving it serializes
+    with the terminal-clear path that takes the same lock.
+    """
+    import asyncio
+
+    fake = FakeServer()
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            thread.interrupts.append(
+                {"interrupt_id": "i-1", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            # Take the interrupts lock externally to block `respond()`.
+            assert hasattr(thread, "_interrupts_lock"), (
+                "AsyncThreadStream must expose _interrupts_lock"
+            )
+            await thread._interrupts_lock.acquire()
+            try:
+                # `respond()` must NOT complete while we hold the lock.
+                task = asyncio.create_task(thread.run.respond("yes"))
+                # Give the task a chance to start and reach the lock.
+                await asyncio.sleep(0.05)
+                assert not task.done(), (
+                    "respond() should be blocked waiting for _interrupts_lock"
+                )
+            finally:
+                thread._interrupts_lock.release()
+            # Now `respond()` should complete.
+            await asyncio.wait_for(task, timeout=1.0)
+    command = fake.received_commands[-1]
+    assert command["method"] == "input.respond"
+    assert command["params"]["interrupt_id"] == "i-1"
+
+
+async def test_terminal_lifecycle_clear_acquires_interrupts_lock():
+    """Terminal lifecycle event clears `interrupts` under the same lock
+    that `respond()` uses, preventing TOCTOU between snapshot and
+    dispatch."""
+    import asyncio
+
+    fake = FakeServer()
+    # No scripted events; we exercise `_apply_lifecycle_event` directly.
+    fake.script([])
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.interrupts.append(
+                {"interrupt_id": "i-1", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            # Hold the lock; a completion event must block on it before
+            # clearing interrupts.
+            await thread._interrupts_lock.acquire()
+            try:
+                from typing import cast
+
+                from langchain_protocol import Event
+
+                terminal_event = cast(
+                    Event,
+                    {
+                        "type": "event",
+                        "method": "lifecycle",
+                        "params": {
+                            "namespace": [],
+                            "data": {"phase": "completed"},
+                        },
+                        "seq": 99,
+                        "event_id": "evt-99",
+                    },
+                )
+                clear_task = asyncio.create_task(
+                    thread._apply_lifecycle_event(terminal_event)
+                )
+                await asyncio.sleep(0.05)
+                # Interrupts must still be present — clear is blocked.
+                assert thread.interrupted is True
+                assert len(thread.interrupts) == 1
+                assert not clear_task.done()
+            finally:
+                thread._interrupts_lock.release()
+            await asyncio.wait_for(clear_task, timeout=1.0)
+            assert thread.interrupted is False
+            assert thread.interrupts == []
+
+
+async def test_run_respond_raises_when_explicit_interrupt_id_not_outstanding():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.interrupts.append(
+                {"interrupt_id": "a", "value": None, "namespace": []}
+            )
+            thread.interrupted = True
+            with pytest.raises(RuntimeError, match="does not match"):
+                await thread.run.respond("yes", interrupt_id="nonexistent")

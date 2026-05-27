@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -72,12 +72,14 @@ class ProtocolSseTransport:
         thread_id: str,
         commands_path: str | None = None,
         stream_path: str | None = None,
+        headers: Mapping[str, str] | None = None,
         max_queue_size: int = 1024,
     ) -> None:
         self._client = client
         self.thread_id = thread_id
         self._commands_url = commands_path or f"/threads/{thread_id}/commands"
         self._stream_url = stream_path or f"/threads/{thread_id}/stream/events"
+        self._default_headers: dict[str, str] = dict(headers or {})
         self._max_queue_size = max_queue_size
         self._closed = False
         self._event_streams: set[asyncio.Task[None]] = set()
@@ -92,10 +94,12 @@ class ProtocolSseTransport:
         """
         if self._closed:
             raise RuntimeError("Protocol transport is closed.")
+        # Merge default headers first so content-type always wins.
+        merged_headers = {**self._default_headers, "content-type": "application/json"}
         response = await self._client.post(
             self._commands_url,
             content=orjson.dumps(command),
-            headers={"content-type": "application/json"},
+            headers=merged_headers,
         )
         response.raise_for_status()
         if response.status_code in (202, 204):
@@ -134,15 +138,18 @@ class ProtocolSseTransport:
 
         async def pump() -> None:
             try:
+                # Merge default headers first so fixed SSE headers always win.
+                sse_headers = {
+                    **self._default_headers,
+                    "content-type": "application/json",
+                    "accept": "text/event-stream",
+                    "cache-control": "no-store",
+                }
                 async with self._client.stream(
                     "POST",
                     self._stream_url,
                     content=orjson.dumps(_build_event_stream_body(params)),
-                    headers={
-                        "content-type": "application/json",
-                        "accept": "text/event-stream",
-                        "cache-control": "no-store",
-                    },
+                    headers=sse_headers,
                 ) as response:
                     response.raise_for_status()
                     if not ready.done():

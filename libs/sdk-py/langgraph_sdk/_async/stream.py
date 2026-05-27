@@ -1,8 +1,11 @@
 """Async thread-centric streaming surface for the v3 protocol.
 
 `AsyncThreadStream` is an async context manager that owns a
-`ProtocolSseTransport` for one thread, dispatches `run.start` commands,
-and exposes a raw `events` async iterable.
+`ProtocolSseTransport` for one thread, dispatches commands (`run.start`,
+`run.respond`), exposes typed subscriptions over a single shared SSE
+(`subscribe`, `events`), and surfaces lifecycle state (`interrupted`,
+`interrupts`) via an always-on lifecycle watcher SSE. Typed projections
+(`thread.values`, `thread.messages`, etc.) mirror the v3 protocol surface.
 
 Direct port of `libs/sdk/src/client/stream/index.ts`.
 """
@@ -10,13 +13,14 @@ Direct port of `libs/sdk/src/client/stream/index.ts`.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterator
+import contextlib
+from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from dataclasses import dataclass, field
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
-import httpx
 from langchain_protocol import Event, SubscribeParams
 
+from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
 
 
@@ -26,6 +30,14 @@ class InterruptPayload(TypedDict):
     interrupt_id: str
     value: Any
     namespace: list[str]
+
+
+@dataclass
+class _RunTerminal:
+    """Terminal state record resolved into `_run_done` on lifecycle completion."""
+
+    status: Literal["completed", "errored"]
+    error: BaseException | None = None
 
 
 @dataclass
@@ -77,8 +89,89 @@ class RunModule:
             params["config"] = config
         if metadata is not None:
             params["metadata"] = metadata
-        self._owner._ensure_lifecycle_watcher_running()
-        return await self._owner._send_command("run.start", params)
+        loop = asyncio.get_running_loop()
+        gate: asyncio.Future[None] = loop.create_future()
+        self._owner._run_start_ready = gate
+        try:
+            result = await self._owner._send_command("run.start", params)
+            if not gate.done():
+                gate.set_result(None)
+            self._owner._run_seen = True
+            return result
+        except BaseException as err:
+            # Why: gate MUST reject on any exit type, including CancelledError,
+            # so awaiters see the failure rather than hanging indefinitely.
+            if not gate.done():
+                gate.set_exception(err)
+            raise
+        finally:
+            # Why: concurrent run.start calls (multitask_strategy="enqueue")
+            # can replace _run_start_ready before our finally fires.
+            # Identity-check before clearing so the later call's gate isn't stomped.
+            if self._owner._run_start_ready is gate:
+                self._owner._run_start_ready = None
+            # Why: if the gate stored an exception that no awaiter consumed,
+            # retrieve it here to suppress asyncio's GC warning. The exception
+            # is already propagated to our caller via the `raise` above.
+            if gate.done() and not gate.cancelled():
+                gate.exception()
+
+    async def respond(
+        self,
+        response: Any,
+        *,
+        interrupt_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Reply to a server-side interrupt and resume the run.
+
+        Args:
+            response: the response value forwarded as `params.response` on the
+                wire (protocol field name).
+            interrupt_id: optional explicit id. When omitted, requires exactly
+                one outstanding interrupt and uses its id.
+
+        Raises:
+            RuntimeError: no outstanding interrupts; `interrupt_id` is None but
+                multiple interrupts are outstanding; or the explicit
+                `interrupt_id` doesn't match any outstanding interrupt.
+        """
+        # Why: take the `interrupts` snapshot AND dispatch the command under
+        # `_interrupts_lock`, so the lifecycle watcher's terminal-clear path
+        # cannot wipe `interrupts` between the snapshot and the wire send.
+        async with self._owner._interrupts_lock:
+            outstanding = list(self._owner.interrupts)
+            if interrupt_id is None:
+                if len(outstanding) == 0:
+                    raise RuntimeError(
+                        "thread.run.respond: no outstanding interrupt. Provide "
+                        "an explicit `interrupt_id` or wait for "
+                        "`thread.interrupted`."
+                    )
+                if len(outstanding) > 1:
+                    ids = [p["interrupt_id"] for p in outstanding]
+                    raise RuntimeError(
+                        f"thread.run.respond: ambiguous — {len(outstanding)} "
+                        f"outstanding interrupts ({ids!r}). Provide an explicit "
+                        "`interrupt_id`."
+                    )
+                match = outstanding[0]
+            else:
+                match = next(
+                    (p for p in outstanding if p["interrupt_id"] == interrupt_id),
+                    None,
+                )
+                if match is None:
+                    raise RuntimeError(
+                        f"thread.run.respond: interrupt_id {interrupt_id!r} does "
+                        "not match any outstanding interrupt in "
+                        "`thread.interrupts`."
+                    )
+            params = {
+                "interrupt_id": match["interrupt_id"],
+                "namespace": match["namespace"],
+                "response": response,
+            }
+            return await self._owner._send_command("input.respond", params)
 
 
 async def _close_after(handle: EventStreamHandle, *, delay: float = 0.0) -> None:
@@ -101,15 +194,19 @@ class AsyncThreadStream:
     def __init__(
         self,
         *,
-        client: httpx.AsyncClient,
+        http: HttpClient,
         thread_id: str,
         assistant_id: str,
+        headers: Mapping[str, str] | None = None,
         max_queue_size: int = 1024,
+        run_start_timeout: float | None = None,
     ) -> None:
-        self._http_client = client
+        self._http = http
+        self._headers = dict(headers or {})
         self.thread_id = thread_id
         self.assistant_id = assistant_id
         self._max_queue_size = max_queue_size
+        self._run_start_timeout = run_start_timeout
         self._closed = False
         self._transport: ProtocolSseTransport | None = None
         self._open_handles: list[EventStreamHandle] = []
@@ -122,18 +219,32 @@ class AsyncThreadStream:
         self._fanout_task: asyncio.Task[None] | None = None
         self.interrupted: bool = False
         self.interrupts: list[InterruptPayload] = []
+        # Why: serialize the `interrupts` snapshot in `run.respond` with the
+        # terminal-clear path in `_apply_lifecycle_event`, so a respond() in
+        # flight cannot send a stale `interrupt_id` after the lifecycle watcher
+        # observes a `completed`/`errored` event.
+        self._interrupts_lock = asyncio.Lock()
         self._lifecycle_watcher_task: asyncio.Task[None] | None = None
         self._lifecycle_watcher_handle: EventStreamHandle | None = None
+        self._run_start_ready: asyncio.Future[None] | None = None
+        self._run_seen: bool = False
+        self._run_done: asyncio.Future[_RunTerminal] | None = None
         self.run = RunModule(self)
 
     async def __aenter__(self) -> AsyncThreadStream:
         if self._closed:
             raise RuntimeError("AsyncThreadStream is closed and cannot be re-entered.")
         self._transport = ProtocolSseTransport(
-            client=self._http_client,
+            client=self._http.client,
             thread_id=self.thread_id,
+            headers=self._headers,
             max_queue_size=self._max_queue_size,
         )
+        # Create the run-done future here (async context guarantees a running loop).
+        self._run_done = asyncio.get_running_loop().create_future()
+        # Start the lifecycle watcher immediately so reattach and thread.output
+        # work without a preceding run.start call.
+        self._ensure_lifecycle_watcher_running()
         return self
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -167,6 +278,22 @@ class AsyncThreadStream:
         self._closed = True
         for handle in self._open_handles:
             await handle.close()
+        # Cancel _run_done so thread.output doesn't wait forever on close.
+        run_done = self._run_done
+        if run_done is not None and not run_done.done():
+            run_done.cancel()
+        if self._lifecycle_watcher_task is not None:
+            self._lifecycle_watcher_task.cancel()
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await self._lifecycle_watcher_task
+        if self._lifecycle_watcher_handle is not None:
+            await self._lifecycle_watcher_handle.close()
+        if self._fanout_task is not None:
+            self._fanout_task.cancel()
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await self._fanout_task
+        if self._shared_stream is not None:
+            await self._shared_stream.close()
         if self._transport is not None:
             await self._transport.close()
 
@@ -274,6 +401,7 @@ class AsyncThreadStream:
         that both old and new streams are simultaneously connected during
         rotation (enabling correct peak-count tracking and dedup correctness).
         """
+        await self._await_run_start_gate(timeout=self._run_start_timeout)
         from langgraph_sdk.stream.subscription import filter_covers
 
         if self._transport is None:
@@ -346,6 +474,21 @@ class AsyncThreadStream:
             raise RuntimeError(f"Protocol error [{code}]: {message}")
         return response.get("result", {})
 
+    async def _await_run_start_gate(self, *, timeout: float | None = None) -> None:
+        """Wait for the current run.start to commit the thread server-side.
+
+        No-op when no run.start is in flight. Re-raises if run.start failed.
+        Raises `asyncio.TimeoutError` if `timeout` is set and the gate does
+        not resolve in time; the gate itself is left intact for later callers.
+        """
+        gate = self._run_start_ready
+        if gate is None or gate.done():
+            return
+        if timeout is None:
+            await gate
+        else:
+            await asyncio.wait_for(asyncio.shield(gate), timeout=timeout)
+
     def _ensure_lifecycle_watcher_running(self) -> None:
         # Why: this watcher is intentionally one-shot. If it crashes, it stays
         # dead until the AsyncThreadStream is closed.
@@ -359,10 +502,9 @@ class AsyncThreadStream:
         """Always-on SSE consuming lifecycle + input channels.
 
         Independent of the union-filter shared stream so that interrupts
-        surface even when no other subscription is active.
-
-        The watcher waits for the run-start gate before opening so it does not
-        race server-side thread creation.
+        surface even when no other subscription is active. Starts immediately
+        on session entry (before any run.start) so reattach and thread.output
+        work for existing runs.
         """
         if self._transport is None:
             return
@@ -375,15 +517,50 @@ class AsyncThreadStream:
             async for event in handle.events:
                 if self._closed:
                     return
-                self._apply_lifecycle_event(event)
-        except (Exception, asyncio.CancelledError):
+                await self._apply_lifecycle_event(event)
+            # Why: iterator exhausted without `_run_done` being resolved by a
+            # terminal lifecycle event. Surface any transport error captured
+            # on `handle.done`, otherwise treat the clean EOF as errored so
+            # awaiters of `_run_done` (e.g. `thread.output`) don't hang.
+            err = await handle.done
+            run_done = self._run_done
+            if run_done is not None and not run_done.done():
+                if err is not None:
+                    run_done.set_result(
+                        _RunTerminal(
+                            status="errored",
+                            error=RuntimeError(f"Lifecycle transport failed: {err}"),
+                        )
+                    )
+                else:
+                    run_done.set_result(
+                        _RunTerminal(
+                            status="errored",
+                            error=RuntimeError(
+                                "lifecycle stream ended before terminal event"
+                            ),
+                        )
+                    )
+            return
+        except (Exception, asyncio.CancelledError) as exc:
             # Why: advisory-only watcher. Any error (HTTP failure, malformed
             # event in `_apply_lifecycle_event`, cancellation on close) must
             # not crash the caller; the watcher is one-shot best-effort.
+            # Resolve _run_done with an error so thread.output doesn't wait
+            # forever when the lifecycle transport fails.
+            run_done = self._run_done
+            if run_done is not None and not run_done.done():
+                if not isinstance(exc, asyncio.CancelledError):
+                    run_done.set_result(
+                        _RunTerminal(
+                            status="errored",
+                            error=RuntimeError(f"Lifecycle transport failed: {exc}"),
+                        )
+                    )
             return
 
-    def _apply_lifecycle_event(self, event: Event) -> None:
-        """Update `interrupted` / `interrupts` state from a lifecycle or input event."""
+    async def _apply_lifecycle_event(self, event: Event) -> None:
+        """Update `interrupted` / `interrupts` / `_run_done` from a lifecycle or input event."""
         method = event.get("method")
         if method == "input.requested":
             params = event.get("params") or {}
@@ -397,11 +574,41 @@ class AsyncThreadStream:
                     if isinstance(params, dict)
                     else [],
                 }
-                self.interrupts.append(payload)
-                self.interrupted = True
+                async with self._interrupts_lock:
+                    self.interrupts.append(payload)
+                    self.interrupted = True
         elif method == "lifecycle":
             params = event.get("params") or {}
             data = params.get("data") if isinstance(params, dict) else None
             phase = data.get("phase") if isinstance(data, dict) else None
-            if phase in ("completed", "errored"):
-                self.interrupted = False
+            if phase in ("started", "running"):
+                # Mark that we have observed an active run so thread.output
+                # knows a run exists (handles reattach without run.start).
+                self._run_seen = True
+            elif phase in ("completed", "errored"):
+                # Why: interrupts describe current-run state. Clear on terminal
+                # lifecycle so a subsequent run.respond() can't fire against a
+                # stale prior-run interrupt_id. Acquire `_interrupts_lock` so
+                # any in-flight `run.respond` either completes against the
+                # pre-clear snapshot or sees the cleared state — never both.
+                async with self._interrupts_lock:
+                    self.interrupted = False
+                    self.interrupts = []
+                run_done = self._run_done
+                if run_done is not None and not run_done.done():
+                    if phase == "errored":
+                        error_msg = (
+                            data.get("error") if isinstance(data, dict) else None
+                        )
+                        run_done.set_result(
+                            _RunTerminal(
+                                status="errored",
+                                error=RuntimeError(
+                                    f"Run errored: {error_msg}"
+                                    if error_msg
+                                    else "Run errored"
+                                ),
+                            )
+                        )
+                    else:
+                        run_done.set_result(_RunTerminal(status="completed"))
