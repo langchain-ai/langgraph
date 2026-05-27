@@ -4,9 +4,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from collections.abc import AsyncIterator, Iterator
-from typing import Any
+from collections.abc import AsyncIterable, AsyncIterator, Iterator
+from types import TracebackType
+from typing import Any, cast
 
+from langchain_core.runnables import RunnableConfig
 from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._sync.stream import SyncThreadStream
 from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
@@ -25,7 +27,7 @@ class _RemoteGraphRunStream:
         sync_client: SyncLangGraphClient,
         sdk_thread: SyncThreadStream,
         input: Any,
-        config: dict[str, Any] | None,
+        config: RunnableConfig | None,
         metadata: dict[str, Any] | None,
     ) -> None:
         self._client = sync_client
@@ -51,7 +53,12 @@ class _RemoteGraphRunStream:
         self._run_id = result["run_id"]
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         if self._closed:
             return
         self._closed = True
@@ -75,9 +82,7 @@ class _RemoteGraphRunStream:
         self._closed = True
         if self._run_id is not None:
             try:
-                self._client.runs.cancel(
-                    self._sdk.thread_id, self._run_id, wait=False
-                )
+                self._client.runs.cancel(self._sdk.thread_id, self._run_id, wait=False)
             except Exception:
                 logger.debug("abort: runs.cancel failed", exc_info=True)
         try:
@@ -106,7 +111,7 @@ class _AsyncRemoteGraphRunStream:
         client: LangGraphClient,
         sdk_thread: AsyncThreadStream,
         input: Any,
-        config: dict[str, Any] | None,
+        config: RunnableConfig | None,
         metadata: dict[str, Any] | None,
     ) -> None:
         self._client = client
@@ -132,7 +137,12 @@ class _AsyncRemoteGraphRunStream:
         self._run_id = result["run_id"]
         return self
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         if self._closed:
             return
         self._closed = True
@@ -178,12 +188,13 @@ class _AsyncRemoteGraphRunStream:
             "values": self._sdk.values,
             "subgraphs": self._sdk.subgraphs,
         }
-        source = builtin[name] if name in builtin else self._sdk.extensions[name]
+        source = cast(
+            AsyncIterable[Any],
+            builtin[name] if name in builtin else self._sdk.extensions[name],
+        )
         return source.__aiter__()
 
-    async def interleave(
-        self, *names: str
-    ) -> AsyncIterator[tuple[str, Any]]:
+    async def interleave(self, *names: str) -> AsyncIterator[tuple[str, Any]]:
         if not names:
             return
         sources = {n: self._resolve_projection(n) for n in names}
@@ -196,9 +207,7 @@ class _AsyncRemoteGraphRunStream:
             finally:
                 await queue.put(_SENTINEL)
 
-        drainers = [
-            asyncio.create_task(_drain(n, src)) for n, src in sources.items()
-        ]
+        drainers = [asyncio.create_task(_drain(n, src)) for n, src in sources.items()]
         pending = len(drainers)
         try:
             while pending > 0:

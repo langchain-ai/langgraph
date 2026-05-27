@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import asdict
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -9,6 +10,12 @@ from langgraph.pregel._remote_run_stream import (
     _AsyncRemoteGraphRunStream,
     _RemoteGraphRunStream,
 )
+from langgraph.pregel.remote import (
+    _V3_SUPPORTED_KWARGS,
+    RemoteGraph,
+    _translate_command_input,
+)
+from langgraph.types import Command
 
 
 def _make_sync_adapter(*, run_start_returns=None, run_start_raises=None):
@@ -236,9 +243,7 @@ async def test_async_abort_cancels_run_and_closes_sdk():
     adapter, client, sdk_thread = _make_async_adapter()
     async with adapter as stream:
         await stream.abort()
-        client.runs.cancel.assert_awaited_once_with(
-            "thread-abc", "run-xyz", wait=False
-        )
+        client.runs.cancel.assert_awaited_once_with("thread-abc", "run-xyz", wait=False)
         sdk_thread.close.assert_awaited_once()
 
 
@@ -294,10 +299,7 @@ async def test_interleave_routes_unknown_through_extensions():
     adapter, _, sdk_thread = _make_async_adapter()
     sdk_thread.extensions = {"custom": _FakeAsyncIter(["c1", "c2"])}
     async with adapter as stream:
-        got = [
-            (name, item)
-            async for name, item in stream.interleave("custom")
-        ]
+        got = [(name, item) async for name, item in stream.interleave("custom")]
     assert got == [("custom", "c1"), ("custom", "c2")]
 
 
@@ -305,10 +307,7 @@ async def test_interleave_routes_unknown_through_extensions():
 async def test_interleave_no_names_yields_nothing():
     adapter, _, _ = _make_async_adapter()
     async with adapter as stream:
-        got = [
-            (name, item)
-            async for name, item in stream.interleave()
-        ]
+        got = [(name, item) async for name, item in stream.interleave()]
     assert got == []
 
 
@@ -318,23 +317,11 @@ async def test_interleave_cancels_drainers_on_early_break():
     sdk_thread.messages = _FakeAsyncIter(
         ["m1", "m2", "m3", "m4"], sleeps=[0.0, 0.05, 0.05, 0.05]
     )
-    sdk_thread.values = _FakeAsyncIter(
-        [{"v": 1}, {"v": 2}], sleeps=[0.0, 0.05]
-    )
+    sdk_thread.values = _FakeAsyncIter([{"v": 1}, {"v": 2}], sleeps=[0.0, 0.05])
     async with adapter as stream:
         async for _name, _item in stream.interleave("messages", "values"):
             break
     # Reaching here without hanging or leaking tasks is the success condition.
-
-
-from dataclasses import asdict
-
-from langgraph.pregel.remote import (
-    RemoteGraph,
-    _translate_command_input,
-    _V3_SUPPORTED_KWARGS,
-)
-from langgraph.types import Command
 
 
 def _make_remote_graph() -> RemoteGraph:
