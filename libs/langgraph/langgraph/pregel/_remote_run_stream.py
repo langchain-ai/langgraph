@@ -70,10 +70,18 @@ class _RemoteGraphRunStream:
 
     @property
     def interrupted(self) -> bool:
+        """Whether the remote run is currently paused at an interrupt.
+
+        Reads the SDK's current value without blocking. This differs from
+        local `GraphRunStream.interrupted`, which drives the run to terminal
+        before returning the flag. Sync callers needing a wait-for-interrupt
+        pattern should switch to the async API and drain a projection.
+        """
         return self._sdk.interrupted
 
     @property
     def interrupts(self) -> list[Any]:
+        """Current outstanding interrupt payloads (non-blocking snapshot)."""
         return list(self._sdk.interrupts)
 
     def abort(self) -> None:
@@ -154,10 +162,24 @@ class _AsyncRemoteGraphRunStream:
 
     @property
     async def interrupted(self) -> bool:
+        """Whether the remote run is currently paused at an interrupt.
+
+        Reads the SDK's current value without blocking. This differs from
+        local `AsyncGraphRunStream.interrupted`, which drives the run to
+        terminal before returning the flag. Callers that need a
+        wait-for-interrupt pattern should drain a projection (e.g.,
+        `interleave('values')`) until the paused sentinel fires, then check
+        this property.
+        """
         return self._sdk.interrupted
 
     @property
     async def interrupts(self) -> list[Any]:
+        """Current outstanding interrupt payloads.
+
+        Non-blocking; reads the SDK's current snapshot. See `interrupted`
+        for the divergence from local v3 semantics.
+        """
         return list(self._sdk.interrupts)
 
     async def abort(self) -> None:
