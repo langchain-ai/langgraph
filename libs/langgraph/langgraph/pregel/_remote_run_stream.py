@@ -57,6 +57,45 @@ class _RemoteGraphRunStream:
         self._closed = True
         self._sdk.__exit__(exc_type, exc, tb)
 
+    @property
+    def output(self) -> Any:
+        return self._sdk.output
+
+    @property
+    def interrupted(self) -> bool:
+        return self._sdk.interrupted
+
+    @property
+    def interrupts(self) -> list[Any]:
+        return list(self._sdk.interrupts)
+
+    def abort(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        if self._run_id is not None:
+            try:
+                self._client.runs.cancel(
+                    self._sdk.thread_id, self._run_id, wait=False
+                )
+            except Exception:
+                logger.debug("abort: runs.cancel failed", exc_info=True)
+        try:
+            self._sdk.close()
+        except Exception:
+            logger.debug("abort: sdk.close failed", exc_info=True)
+
+    def __iter__(self) -> Iterator[Any]:
+        if self._events_iter is None:
+            self._events_iter = iter(self._sdk.events)
+        return self._events_iter
+
+    def interleave(self, *names: str) -> Iterator[tuple[str, Any]]:
+        raise NotImplementedError(
+            "sync interleave() is not supported on RemoteGraph; "
+            "use astream_events(version='v3') for cross-channel iteration."
+        )
+
 
 class _AsyncRemoteGraphRunStream:
     """Async adapter: AsyncThreadStream -> AsyncGraphRunStream surface."""

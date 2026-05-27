@@ -61,3 +61,68 @@ def test_enter_unwinds_sdk_cm_when_run_start_raises():
     assert exc_info[0] is RuntimeError
     assert isinstance(exc_info[1], RuntimeError)
     assert adapter._run_id is None
+
+
+def test_output_interrupted_interrupts_passthrough():
+    adapter, _, sdk_thread = _make_sync_adapter()
+    sdk_thread.output = {"foo": 1}
+    sdk_thread.interrupted = True
+    sdk_thread.interrupts = [{"interrupt_id": "i1", "namespace": [], "value": "v"}]
+    with adapter as stream:
+        assert stream.output == {"foo": 1}
+        assert stream.interrupted is True
+        assert stream.interrupts == [
+            {"interrupt_id": "i1", "namespace": [], "value": "v"}
+        ]
+
+
+def test_iter_caches_first_subscription():
+    adapter, _, sdk_thread = _make_sync_adapter()
+    fake_events = [object(), object(), object()]
+    sdk_thread.events = iter(fake_events)
+    with adapter as stream:
+        first = iter(stream)
+        second = iter(stream)
+        assert first is second
+        assert list(first) == fake_events
+
+
+def test_abort_cancels_run_and_closes_sdk():
+    adapter, sync_client, sdk_thread = _make_sync_adapter()
+    with adapter as stream:
+        stream.abort()
+        sync_client.runs.cancel.assert_called_once_with(
+            "thread-abc", "run-xyz", wait=False
+        )
+        sdk_thread.close.assert_called_once()
+
+
+def test_abort_before_enter_skips_cancel_but_closes_sdk():
+    adapter, sync_client, sdk_thread = _make_sync_adapter()
+    adapter.abort()
+    sync_client.runs.cancel.assert_not_called()
+    sdk_thread.close.assert_called_once()
+
+
+def test_abort_is_idempotent():
+    adapter, sync_client, sdk_thread = _make_sync_adapter()
+    with adapter as stream:
+        stream.abort()
+        stream.abort()
+        assert sync_client.runs.cancel.call_count == 1
+        assert sdk_thread.close.call_count == 1
+
+
+def test_abort_swallows_cancel_failure_and_still_closes():
+    adapter, sync_client, sdk_thread = _make_sync_adapter()
+    sync_client.runs.cancel.side_effect = RuntimeError("cancel boom")
+    with adapter as stream:
+        stream.abort()
+        sdk_thread.close.assert_called_once()
+
+
+def test_sync_interleave_raises_not_implemented():
+    adapter, _, _ = _make_sync_adapter()
+    with adapter as stream:
+        with pytest.raises(NotImplementedError, match="sync interleave"):
+            list(stream.interleave("messages"))
