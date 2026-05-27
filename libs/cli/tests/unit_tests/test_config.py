@@ -1330,6 +1330,8 @@ def test_config_to_docker_pip_installer():
         PATH_TO_CONFIG, config_auto, base_image="langchain/langgraph-api:0.2.47"
     )
     assert "uv pip install --system " in docker_auto
+    assert "RUN uv pip check --system" in docker_auto
+    assert "python -m pip check" not in docker_auto
     assert "rm /usr/bin/uv /usr/bin/uvx" in docker_auto
 
     # Test explicit pip setting
@@ -1338,6 +1340,8 @@ def test_config_to_docker_pip_installer():
         PATH_TO_CONFIG, config_pip, base_image="langchain/langgraph-api:0.2.47"
     )
     assert "uv pip install --system " not in docker_pip
+    assert "RUN uv pip check --system" not in docker_pip
+    assert "RUN python -m pip check" in docker_pip
     assert "pip install" in docker_pip
     assert "rm /usr/bin/uv" not in docker_pip
 
@@ -1347,6 +1351,8 @@ def test_config_to_docker_pip_installer():
         PATH_TO_CONFIG, config_uv, base_image="langchain/langgraph-api:0.2.47"
     )
     assert "uv pip install --system " in docker_uv
+    assert "RUN uv pip check --system" in docker_uv
+    assert "python -m pip check" not in docker_uv
     assert "rm /usr/bin/uv /usr/bin/uvx" in docker_uv
 
     # Test auto behavior with older image (should use pip)
@@ -1357,6 +1363,8 @@ def test_config_to_docker_pip_installer():
         PATH_TO_CONFIG, config_auto_old, base_image="langchain/langgraph-api:0.2.46"
     )
     assert "uv pip install --system " not in docker_auto_old
+    assert "RUN uv pip check --system" not in docker_auto_old
+    assert "RUN python -m pip check" in docker_auto_old
     assert "pip install" in docker_auto_old
     assert "rm /usr/bin/uv" not in docker_auto_old
 
@@ -1366,6 +1374,26 @@ def test_config_to_docker_pip_installer():
         PATH_TO_CONFIG, config_default, base_image="langchain/langgraph-api:0.2.47"
     )
     assert "uv pip install --system " in docker_default
+    assert "RUN uv pip check --system" in docker_default
+    assert "python -m pip check" not in docker_default
+
+
+def test_get_pip_cleanup_lines_selects_check_command_by_installer():
+    cleanup_uv = _get_pip_cleanup_lines(
+        install_cmd="uv pip install --system",
+        to_uninstall=None,
+        pip_installer="uv",
+    )
+    assert "RUN uv pip check --system" in cleanup_uv
+    assert "python -m pip check" not in cleanup_uv
+
+    cleanup_pip = _get_pip_cleanup_lines(
+        install_cmd="pip install",
+        to_uninstall=None,
+        pip_installer="pip",
+    )
+    assert "RUN python -m pip check" in cleanup_pip
+    assert "uv pip check --system" not in cleanup_pip
 
 
 def test_config_to_docker_uv_lock():
