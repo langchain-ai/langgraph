@@ -150,6 +150,21 @@ class TaskPayload(TypedDict):
     """Input data passed to the task."""
     triggers: list[str]
     """List of triggers that caused this task to be executed (e.g. channel writes)."""
+    metadata: NotRequired[dict[str, Any]]
+    """Framework-resolved metadata associated with the task.
+
+    Generic dict carrier following the messages-stream pattern. Populated by
+    `map_debug_tasks` from `task.config["metadata"]` when non-empty.
+
+    Specific keys consumers may project from this dict:
+
+    - `subagent_name`: declared subagent identity for tool-dispatched
+      subagents (stamped by `ToolNode`).
+    - `tool_call_id`: LLM-supplied tool_call_id for tool-dispatched
+      subagents.
+
+    Other keys may be present; consumers should ignore unrecognized keys.
+    """
 
 
 class TaskResultPayload(TypedDict):
