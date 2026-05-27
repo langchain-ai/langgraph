@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from langgraph.pregel._remote_run_stream import _RemoteGraphRunStream
+from langgraph.pregel._remote_run_stream import (
+    _AsyncRemoteGraphRunStream,
+    _RemoteGraphRunStream,
+)
 
 
 def _make_sync_adapter(*, run_start_returns=None, run_start_raises=None):
@@ -126,3 +129,61 @@ def test_sync_interleave_raises_not_implemented():
     with adapter as stream:
         with pytest.raises(NotImplementedError, match="sync interleave"):
             list(stream.interleave("messages"))
+
+
+def _make_async_adapter(*, run_start_returns=None, run_start_raises=None):
+    client = MagicMock()
+    client.runs.cancel = AsyncMock()
+    sdk_thread = MagicMock()
+    sdk_thread.thread_id = "thread-abc"
+    sdk_thread.__aenter__ = AsyncMock(return_value=sdk_thread)
+    sdk_thread.__aexit__ = AsyncMock(return_value=None)
+    sdk_thread.close = AsyncMock()
+    sdk_thread.run = MagicMock()
+    if run_start_raises is not None:
+        sdk_thread.run.start = AsyncMock(side_effect=run_start_raises)
+    else:
+        sdk_thread.run.start = AsyncMock(
+            return_value=run_start_returns or {"run_id": "run-xyz"}
+        )
+    adapter = _AsyncRemoteGraphRunStream(
+        client=client,
+        sdk_thread=sdk_thread,
+        input={"x": 1},
+        config={"configurable": {}},
+        metadata=None,
+    )
+    return adapter, client, sdk_thread
+
+
+@pytest.mark.anyio
+async def test_aenter_calls_sdk_aenter_then_run_start_and_captures_run_id():
+    adapter, _, sdk_thread = _make_async_adapter()
+    async with adapter as stream:
+        assert stream is adapter
+        sdk_thread.__aenter__.assert_awaited_once()
+        sdk_thread.run.start.assert_awaited_once_with(
+            input={"x": 1}, config={"configurable": {}}, metadata=None
+        )
+        assert adapter._run_id == "run-xyz"
+
+
+@pytest.mark.anyio
+async def test_aexit_delegates_to_sdk_aexit():
+    adapter, _, sdk_thread = _make_async_adapter()
+    async with adapter:
+        pass
+    sdk_thread.__aexit__.assert_awaited_once_with(None, None, None)
+
+
+@pytest.mark.anyio
+async def test_aenter_unwinds_sdk_cm_when_run_start_raises():
+    adapter, _, sdk_thread = _make_async_adapter(
+        run_start_raises=RuntimeError("start boom")
+    )
+    with pytest.raises(RuntimeError, match="start boom"):
+        async with adapter:
+            pytest.fail("body should not run")
+    sdk_thread.__aenter__.assert_awaited_once()
+    sdk_thread.__aexit__.assert_awaited_once()
+    assert adapter._run_id is None

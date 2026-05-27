@@ -119,3 +119,21 @@ class _AsyncRemoteGraphRunStream:
         self._run_id: str | None = None
         self._closed = False
         self._events_aiter: AsyncIterator[Any] | None = None
+
+    async def __aenter__(self) -> _AsyncRemoteGraphRunStream:
+        if self._closed:
+            raise RuntimeError("_AsyncRemoteGraphRunStream already closed")
+        await self._sdk.__aenter__()
+        try:
+            result = await self._sdk.run.start(**self._start_kwargs)
+        except BaseException:
+            await self._sdk.__aexit__(*sys.exc_info())
+            raise
+        self._run_id = result["run_id"]
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        await self._sdk.__aexit__(exc_type, exc, tb)
