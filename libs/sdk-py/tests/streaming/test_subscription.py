@@ -1,7 +1,25 @@
 from __future__ import annotations
 
 import pytest
+from langchain_protocol import (
+    Channel as ProtocolChannel,
+)
+from langchain_protocol import (
+    Event as ProtocolEvent,
+)
+from langchain_protocol import (
+    Namespace as ProtocolNamespace,
+)
+from langchain_protocol import (
+    SubscribeParams as ProtocolSubscribeParams,
+)
 
+from langgraph_sdk.stream import (
+    Channel,
+    Event,
+    Namespace,
+    SubscribeParams,
+)
 from langgraph_sdk.stream.subscription import (
     compute_union_filter,
     filter_covers,
@@ -236,3 +254,11 @@ def test_filter_covers_bounded_coverer_does_not_cover_unbounded_target():
     coverer = {"channels": ["values"], "depth": 2}
     target = {"channels": ["values"]}  # unbounded
     assert filter_covers(coverer, target) is False
+
+
+def test_protocol_types_are_importable_from_stream_module():
+    """Test that v3 protocol types are re-exported from langgraph_sdk.stream."""
+    assert Channel is ProtocolChannel
+    assert Event is ProtocolEvent
+    assert Namespace is ProtocolNamespace
+    assert SubscribeParams is ProtocolSubscribeParams
