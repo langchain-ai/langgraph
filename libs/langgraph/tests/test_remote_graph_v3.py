@@ -417,3 +417,128 @@ def test_translate_command_input_passes_through_non_command():
 
 def test_v3_supported_kwargs_known_set():
     assert _V3_SUPPORTED_KWARGS == frozenset({"metadata", "headers"})
+
+
+def test_stream_events_v3_constructs_sdk_thread_with_sanitized_args():
+    sync_client = MagicMock()
+    sdk_thread = MagicMock()
+    sync_client.threads.stream.return_value = sdk_thread
+    rg = RemoteGraph(
+        "agent",
+        client=MagicMock(),
+        sync_client=sync_client,
+    )
+    result = rg.stream_events(
+        {"input_key": 1},
+        config={"configurable": {"thread_id": "t1", "user": "u"}},
+        version="v3",
+    )
+    assert isinstance(result, _RemoteGraphRunStream)
+    sync_client.threads.stream.assert_called_once()
+    call = sync_client.threads.stream.call_args
+    assert call.kwargs["thread_id"] == "t1"
+    assert call.kwargs["assistant_id"] == "agent"
+    assert call.kwargs["headers"] is None
+
+
+def test_stream_events_v3_passes_none_thread_id_when_absent():
+    sync_client = MagicMock()
+    sync_client.threads.stream.return_value = MagicMock()
+    rg = RemoteGraph("agent", client=MagicMock(), sync_client=sync_client)
+    rg.stream_events({"x": 1}, version="v3")
+    call = sync_client.threads.stream.call_args
+    assert call.kwargs["thread_id"] is None
+
+
+def test_stream_events_v3_rejects_unsupported_kwargs_before_sdk_call():
+    sync_client = MagicMock()
+    rg = RemoteGraph("agent", client=MagicMock(), sync_client=sync_client)
+    with pytest.raises(NotImplementedError, match="control"):
+        rg.stream_events({"x": 1}, version="v3", control=object())
+    sync_client.threads.stream.assert_not_called()
+
+
+def test_stream_events_v3_translates_command_input():
+    sync_client = MagicMock()
+    sync_client.threads.stream.return_value = MagicMock()
+    rg = RemoteGraph("agent", client=MagicMock(), sync_client=sync_client)
+    adapter = rg.stream_events(Command(update={"a": 1}), version="v3")
+    assert adapter._start_kwargs["input"] == {
+        "update": {"a": 1},
+        "resume": None,
+        "goto": (),
+        "graph": None,
+    }
+
+
+def test_stream_events_v3_strips_checkpoint_keys_from_configurable():
+    sync_client = MagicMock()
+    sync_client.threads.stream.return_value = MagicMock()
+    rg = RemoteGraph("agent", client=MagicMock(), sync_client=sync_client)
+    adapter = rg.stream_events(
+        {"x": 1},
+        config={
+            "configurable": {
+                "thread_id": "t1",
+                "checkpoint_id": "c1",
+                "checkpoint_ns": "ns",
+                "user": "u",
+            }
+        },
+        version="v3",
+    )
+    sent_config = adapter._start_kwargs["config"]
+    assert "checkpoint_id" not in sent_config["configurable"]
+    assert "checkpoint_ns" not in sent_config["configurable"]
+    assert sent_config["configurable"]["user"] == "u"
+
+
+def test_stream_events_v3_merges_tracing_headers_when_distributed_tracing(
+    monkeypatch,
+):
+    from langgraph.pregel import remote as remote_mod
+
+    sync_client = MagicMock()
+    sync_client.threads.stream.return_value = MagicMock()
+    rg = RemoteGraph(
+        "agent",
+        client=MagicMock(),
+        sync_client=sync_client,
+        distributed_tracing=True,
+    )
+    captured = {}
+
+    def fake_merge(headers):
+        captured["arg"] = headers
+        return {"x-ls-trace": "1", **(headers or {})}
+
+    monkeypatch.setattr(remote_mod, "_merge_tracing_headers", fake_merge)
+    rg.stream_events({"x": 1}, version="v3", headers={"X-Custom": "y"})
+    assert captured["arg"] == {"X-Custom": "y"}
+    sent_headers = sync_client.threads.stream.call_args.kwargs["headers"]
+    assert sent_headers["x-ls-trace"] == "1"
+    assert sent_headers["X-Custom"] == "y"
+
+
+def test_stream_events_v3_passes_headers_unchanged_without_tracing():
+    sync_client = MagicMock()
+    sync_client.threads.stream.return_value = MagicMock()
+    rg = RemoteGraph(
+        "agent",
+        client=MagicMock(),
+        sync_client=sync_client,
+        distributed_tracing=False,
+    )
+    rg.stream_events({"x": 1}, version="v3", headers={"X-Custom": "y"})
+    sent_headers = sync_client.threads.stream.call_args.kwargs["headers"]
+    assert sent_headers == {"X-Custom": "y"}
+
+
+def test_stream_events_non_v3_delegates_to_super():
+    rg = RemoteGraph("agent", client=MagicMock(), sync_client=MagicMock())
+    sync_client_attr = rg.sync_client
+    try:
+        rg.stream_events({"x": 1}, version="v2")
+    except Exception:
+        pass
+    sync_client_attr.threads.stream.assert_not_called()

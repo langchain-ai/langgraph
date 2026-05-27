@@ -56,6 +56,10 @@ from langgraph._internal._constants import (
 )
 from langgraph.errors import GraphInterrupt, ParentCommand
 from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
+from langgraph.pregel._remote_run_stream import (
+    _AsyncRemoteGraphRunStream,
+    _RemoteGraphRunStream,
+)
 from langgraph.types import (
     All,
     Command,
@@ -1032,6 +1036,53 @@ class RemoteGraph(PregelProtocol):
                 yield chunk.data
             else:
                 yield chunk
+
+    def stream_events(
+        self,
+        input: Any,
+        config: RunnableConfig | None = None,
+        *,
+        version: Literal["v1", "v2", "v3"] = "v2",
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        control: Any = None,
+        transformers: Sequence[Any] | None = None,
+        headers: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Stream events from this remote graph.
+
+        For `version="v3"`, returns a `_RemoteGraphRunStream` whose surface
+        matches the local `GraphRunStream`. For other versions, delegates to
+        `Runnable.stream_events`.
+        """
+        if version != "v3":
+            return super().stream_events(input, config, version=version, **kwargs)
+        self._reject_v3_unsupported(
+            control=control,
+            transformers=transformers,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+            extra_kwargs=kwargs,
+        )
+        sync_client = self._validate_sync_client()
+        sanitized = self._sanitize_config(merge_configs(self.config, config))
+        thread_id = sanitized.get("configurable", {}).pop("thread_id", None)
+        merged_headers = (
+            _merge_tracing_headers(headers) if self.distributed_tracing else headers
+        )
+        sdk_thread = sync_client.threads.stream(
+            thread_id=thread_id,
+            assistant_id=self.assistant_id,
+            headers=merged_headers,
+        )
+        return _RemoteGraphRunStream(
+            sync_client=sync_client,
+            sdk_thread=sdk_thread,
+            input=_translate_command_input(input),
+            config=sanitized,
+            metadata=kwargs.get("metadata"),
+        )
 
     async def astream_events(
         self,
