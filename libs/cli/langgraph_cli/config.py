@@ -67,13 +67,27 @@ def _get_pip_cleanup_lines(
     pip_installer: Literal["uv", "pip"],
 ) -> str:
     commands = [
-        f"""# -- Ensure user deps didn't inadvertently overwrite langgraph-api
-RUN mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license && \
-touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py
-RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api
-# -- End of ensuring user deps didn't inadvertently overwrite langgraph-api --
-# -- Removing build deps from the final image ~<:===~~~ --"""
+        (
+            "# -- Ensure user deps didn't inadvertently overwrite langgraph-api\n"
+            "RUN mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license && \\\n"
+            "touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py\n"
+            f"RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api\n"
+            "# -- End of ensuring user deps didn't inadvertently overwrite langgraph-api --\n"
+            "# -- Validate installed dependencies are internally consistent --"
+        )
     ]
+    if pip_installer == "uv":
+        commands.append(
+            """RUN uv pip check --system || ( \
+echo "Dependency resolution check failed. One or more installed packages are incompatible."; \
+echo "Pin compatible versions in your dependencies and try again."; \
+exit 1 \
+)"""
+        )
+    commands.append(
+        """# -- End dependency validation --
+# -- Removing build deps from the final image ~<:===~~~ --"""
+    )
     if to_uninstall:
         for pack in to_uninstall:
             if pack not in _BUILD_TOOLS:
