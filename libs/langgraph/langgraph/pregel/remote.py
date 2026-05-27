@@ -55,11 +55,11 @@ from langgraph._internal._constants import (
     NS_SEP,
 )
 from langgraph.errors import GraphInterrupt, ParentCommand
-from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
 from langgraph.pregel._remote_run_stream import (
     _AsyncRemoteGraphRunStream,
     _RemoteGraphRunStream,
 )
+from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
 from langgraph.types import (
     All,
     Command,
