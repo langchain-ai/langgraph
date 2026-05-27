@@ -8,6 +8,7 @@ from typing import Any, Literal, cast, overload
 import httpx
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk.schema import (
     Assistant,
     AssistantSelectField,
@@ -84,7 +85,9 @@ class AssistantsClient:
             ```
         """
         return await self.http.get(
-            f"/assistants/{assistant_id}", headers=headers, params=params
+            f"/assistants/{_quote_path_param(assistant_id)}",
+            headers=headers,
+            params=params,
         )
 
     async def get_graph(
@@ -142,7 +145,9 @@ class AssistantsClient:
             query_params.update(params)
 
         return await self.http.get(
-            f"/assistants/{assistant_id}/graph", params=query_params, headers=headers
+            f"/assistants/{_quote_path_param(assistant_id)}/graph",
+            params=query_params,
+            headers=headers,
         )
 
     async def get_schemas(
@@ -263,7 +268,9 @@ class AssistantsClient:
 
         """
         return await self.http.get(
-            f"/assistants/{assistant_id}/schemas", headers=headers, params=params
+            f"/assistants/{_quote_path_param(assistant_id)}/schemas",
+            headers=headers,
+            params=params,
         )
 
     async def get_subgraphs(
@@ -293,13 +300,13 @@ class AssistantsClient:
             get_params = {**get_params, **dict(params)}
         if namespace is not None:
             return await self.http.get(
-                f"/assistants/{assistant_id}/subgraphs/{namespace}",
+                f"/assistants/{_quote_path_param(assistant_id)}/subgraphs/{_quote_path_param(namespace)}",
                 params=get_params,
                 headers=headers,
             )
         else:
             return await self.http.get(
-                f"/assistants/{assistant_id}/subgraphs",
+                f"/assistants/{_quote_path_param(assistant_id)}/subgraphs",
                 params=get_params,
                 headers=headers,
             )
@@ -436,7 +443,7 @@ class AssistantsClient:
         if description:
             payload["description"] = description
         return await self.http.patch(
-            f"/assistants/{assistant_id}",
+            f"/assistants/{_quote_path_param(assistant_id)}",
             json=payload,
             headers=headers,
             params=params,
@@ -479,7 +486,7 @@ class AssistantsClient:
         if params:
             query_params.update(params)
         await self.http.delete(
-            f"/assistants/{assistant_id}",
+            f"/assistants/{_quote_path_param(assistant_id)}",
             headers=headers,
             params=query_params or None,
         )
@@ -686,7 +693,7 @@ class AssistantsClient:
         if metadata:
             payload["metadata"] = metadata
         return await self.http.post(
-            f"/assistants/{assistant_id}/versions",
+            f"/assistants/{_quote_path_param(assistant_id)}/versions",
             json=payload,
             headers=headers,
             params=params,
@@ -726,7 +733,7 @@ class AssistantsClient:
         payload: dict[str, Any] = {"version": version}
 
         return await self.http.post(
-            f"/assistants/{assistant_id}/latest",
+            f"/assistants/{_quote_path_param(assistant_id)}/latest",
             json=payload,
             headers=headers,
             params=params,
