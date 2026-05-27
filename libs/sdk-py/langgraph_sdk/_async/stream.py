@@ -25,6 +25,7 @@ from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk.schema import QueryParamTypes
+from langgraph_sdk.stream.controller import _SeenEventIds
 from langgraph_sdk.stream.transport import (
     AsyncProtocolTransport,
     EventStreamHandle,
@@ -1331,7 +1332,7 @@ class AsyncThreadStream:
         self._next_command_id = 1
         self._next_subscription_id = 1
         self._subscriptions: dict[int, _Subscription] = {}
-        self._seen_event_ids: set[str] = set()
+        self._seen_event_ids = _SeenEventIds()
         self._shared_stream: EventStreamHandle | None = None
         self._shared_stream_filter: dict[str, Any] | None = None
         self._fanout_task: asyncio.Task[None] | None = None
