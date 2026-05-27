@@ -743,6 +743,7 @@ class ThreadsClient:
         assistant_id: str,
         headers: Mapping[str, str] | None = None,
         run_start_timeout: float | None = None,
+        transport: Literal["sse", "websocket"] = "sse",
     ) -> AsyncThreadStream:
         """Open a v3 thread-centric streaming session.
 
@@ -758,15 +759,19 @@ class ThreadsClient:
             thread_id: optional explicit thread identifier. Defaults to a
                 fresh UUIDv4.
             assistant_id: assistant the run will use. Required.
-            headers: optional headers forwarded on every command and SSE
+            headers: optional headers forwarded on every command and event
                 request for this stream session.
             run_start_timeout: optional seconds to wait for an in-flight
                 `run.start` before subscribing operations raise
                 `asyncio.TimeoutError`. Defaults to `None` (wait forever).
+            transport: event transport to use — `"sse"` (default) or
+                `"websocket"`.
 
         Returns:
             An `AsyncThreadStream` to use as an async context manager.
         """
+        if transport not in ("sse", "websocket"):
+            raise ValueError("transport must be 'sse' or 'websocket'.")
         return AsyncThreadStream(
             http=self.http,
             thread_id=thread_id if thread_id is not None else str(uuid.uuid4()),
@@ -774,6 +779,7 @@ class ThreadsClient:
             headers=headers,
             run_start_timeout=run_start_timeout,
             explicit_thread_id=thread_id is not None,
+            transport_kind=transport,
         )
 
     async def join_stream(

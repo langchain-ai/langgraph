@@ -11,6 +11,10 @@ import pytest
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._async.threads import ThreadsClient
+from langgraph_sdk.stream.transport import (
+    ProtocolSseTransport,
+    ProtocolWebSocketTransport,
+)
 from streaming._events import (
     lifecycle_completed_event,
     lifecycle_event,
@@ -171,6 +175,19 @@ async def test_aenter_constructs_transport_with_thread_id():
             assert stream._transport.thread_id == "t-1"
 
 
+async def test_aenter_selects_websocket_transport():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        from langgraph_sdk._async.http import HttpClient
+        from langgraph_sdk._async.threads import ThreadsClient
+
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(
+            thread_id="t-1", assistant_id="agent", transport="websocket"
+        )
+        async with stream:
+            assert isinstance(stream._transport, ProtocolWebSocketTransport)
+
+
 async def test_aexit_closes_transport():
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
@@ -183,6 +200,7 @@ async def test_aexit_closes_transport():
         async with stream:
             inner_transport = stream._transport
         assert inner_transport is not None
+        assert isinstance(inner_transport, ProtocolSseTransport)
         assert inner_transport._closed is True
 
 
@@ -806,3 +824,25 @@ async def test_output_with_timeout_returns_new_awaitable_not_self():
             assert bounded is not thread.output
             assert bounded._timeout == 0.5
             assert thread.output._timeout is None
+
+
+async def test_threads_stream_accepts_websocket_transport_option():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        stream = threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+            transport="websocket",
+        )
+    assert stream._transport_kind == "websocket"
+
+
+async def test_threads_stream_rejects_unknown_transport_option():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        with pytest.raises(ValueError, match="transport"):
+            threads.stream(
+                thread_id="t-1",
+                assistant_id="agent",
+                transport="bogus",  # ty: ignore[invalid-argument-type]
+            )
