@@ -33,6 +33,16 @@ from langgraph.types import (
 
 TASK_NAMESPACE = UUID("6ba7b831-9dad-11d1-80b4-00c04fd430c8")
 
+# Specific metadata keys forwarded from task.config["metadata"] into
+# TaskPayload.metadata. We curate this set rather than forwarding the
+# entire metadata dict to avoid leaking langgraph-internal routing
+# keys (thread_id, langgraph_step, langgraph_node, etc.) onto the
+# public task stream payload.
+#
+# Add new keys here as wire-visible features are introduced. Each
+# addition is a public API extension and should be deliberate.
+_TASK_PAYLOAD_METADATA_KEYS = frozenset({"subagent_name", "tool_call_id"})
+
 
 def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPayload]:
     """Produce "task" events for stream_mode=debug."""
@@ -40,12 +50,22 @@ def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPaylo
         if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
             continue
 
-        yield {
+        payload: TaskPayload = {
             "id": task.id,
             "name": task.name,
             "input": task.input,
             "triggers": task.triggers,
         }
+        # Forward a curated subset of framework-resolved metadata keys so
+        # consumers (LifecycleTransformer, custom transformers) can project
+        # them onto typed wire fields. Other metadata keys (langgraph-internal
+        # routing data) are NOT exposed via TaskPayload.metadata.
+        if task.config is not None:
+            md = task.config.get("metadata") or {}
+            filtered = {k: v for k, v in md.items() if k in _TASK_PAYLOAD_METADATA_KEYS}
+            if filtered:
+                payload["metadata"] = filtered
+        yield payload
 
 
 def is_multiple_channel_write(value: Any) -> bool:
