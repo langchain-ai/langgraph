@@ -70,6 +70,18 @@ NEEDS_CONTEXTVARS = pytest.mark.skipif(
     reason="Python 3.11+ is required for async contextvars support",
 )
 
+# `asyncio.Task.cancelling()` is Python 3.11+. The LSD-1507 fix in
+# `langgraph/pregel/_retry.py` falls back to a no-op on 3.10 (preserves the
+# existing CancelledError-as-silent-tear-down behaviour) because there is no
+# reliable way to distinguish user-raised from framework-initiated
+# cancellation without that API. Tests for the converted behaviour gate on
+# the same Python version boundary.
+NEEDS_TASK_CANCELLING = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="LSD-1507 user-cancellation conversion requires Python 3.11+ "
+    "(asyncio.Task.cancelling)",
+)
+
 
 def test_should_retry_on_single_exception():
     """Test retry with a single exception type."""
@@ -2810,6 +2822,8 @@ def test_error_handler_resumes_after_crash_multiple_nodes():
     assert "recovered_a:a" in result["results"]
     assert "recovered_b:b" in result["results"]
 
+
+@NEEDS_TASK_CANCELLING
 @pytest.mark.anyio
 async def test_arun_with_retry_user_raised_cancelled_becomes_node_cancelled():
     class UserCancelsProc:
@@ -2825,6 +2839,7 @@ async def test_arun_with_retry_user_raised_cancelled_becomes_node_cancelled():
     assert isinstance(excinfo.value.__cause__, asyncio.CancelledError)
 
 
+@NEEDS_TASK_CANCELLING
 @pytest.mark.anyio
 async def test_arun_with_retry_user_raised_cancelled_with_timeout_policy():
     """The timeout path runs the node in a child task; the conversion must
@@ -2856,15 +2871,13 @@ def test_run_with_retry_sync_node_raising_cancelled_becomes_node_cancelled():
     assert isinstance(excinfo.value.__cause__, asyncio.CancelledError)
 
 
+@NEEDS_TASK_CANCELLING
 @pytest.mark.anyio
 async def test_arun_with_retry_external_cancel_propagates_as_cancelled():
     """When the asyncio task running ``arun_with_retry`` is cancelled from the
     outside, the cancellation must still propagate as
     ``asyncio.CancelledError``. Converting it to ``NodeCancelledError`` would
     break the runner's ability to cancel sibling tasks during cleanup."""
-
-    if sys.version_info < (3, 11):
-        pytest.skip("Task.cancelling() requires Python 3.11+")
 
     started = asyncio.Event()
     observed: list[BaseException] = []
@@ -2898,6 +2911,7 @@ async def test_arun_with_retry_external_cancel_propagates_as_cancelled():
     assert not isinstance(observed[0], NodeCancelledError)
 
 
+@NEEDS_TASK_CANCELLING
 @pytest.mark.anyio
 async def test_pregel_user_raised_cancellederror_fails_run():
     """End-to-end: a two-branch graph where one branch raises
