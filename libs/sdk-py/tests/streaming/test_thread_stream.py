@@ -354,3 +354,36 @@ async def test_fresh_thread_happy_path_end_to_end():
     minted_id_paths = [p for p in posted_paths if thread.thread_id in p]
     assert any(p.endswith("/commands") for p in minted_id_paths)
     assert any(p.endswith("/stream/events") for p in minted_id_paths)
+
+
+async def test_aenter_raises_after_close():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        async with stream:
+            pass
+        # After exit, the stream is closed; re-entering must raise rather than
+        # silently constructing a new transport that would leak on the next exit.
+        with pytest.raises(RuntimeError, match="closed and cannot be re-entered"):
+            async with stream:
+                pass
+
+
+async def test_register_subscription_assigns_monotonic_ids():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        async with stream:
+            sub_a = stream._register_subscription({"channels": ["values"]})
+            sub_b = stream._register_subscription({"channels": ["messages"]})
+            assert sub_a.id == 1
+            assert sub_b.id == 2
+            assert stream._subscriptions[sub_a.id] is sub_a
+            assert stream._subscriptions[sub_b.id] is sub_b
+
+
+async def test_unregister_subscription_removes_from_registry():
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        stream = AsyncThreadStream(client=raw, thread_id="t-1", assistant_id="agent")
+        async with stream:
+            sub = stream._register_subscription({"channels": ["values"]})
+            stream._unregister_subscription(sub.id)
+            assert sub.id not in stream._subscriptions
