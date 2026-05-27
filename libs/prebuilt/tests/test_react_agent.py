@@ -368,6 +368,22 @@ def test_model_with_tools(tool_style: str, version: str, include_builtin: bool):
         create_react_agent(model.bind_tools([tool1]), [tool2])
 
 
+def test_fake_tool_calling_model_bind_tools_rejects_unsupported_types() -> None:
+    model = FakeToolCallingModel()
+
+    class DummySchema(BaseModel):
+        pass
+
+    with pytest.raises(TypeError):
+        model.bind_tools([DummySchema])
+
+    def dummy_func() -> None:
+        pass
+
+    with pytest.raises(TypeError):
+        model.bind_tools([dummy_func])
+
+
 def test__validate_messages():
     # empty input
     _validate_chat_history([])

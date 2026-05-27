@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import (
     Any,
     Literal,
@@ -59,7 +59,7 @@ class FakeToolCallingModel(BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[dict[str, Any] | type[BaseModel] | Callable | BaseTool],
+        tools: Sequence[dict[str, Any] | BaseTool],
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         if len(tools) == 0:
