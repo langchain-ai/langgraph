@@ -104,8 +104,11 @@ def _is_direct_child(namespace: list[str], scope: tuple[str, ...]) -> bool:
 
 
 def _subgraph_subscription_params(scope: tuple[str, ...]) -> SubscribeParams:
+    # Includes ``lifecycle`` so child-namespace ``started`` events (the
+    # ``create_deep_agent`` subagent discovery signal, matching JS)
+    # reach ``_subgraphs_iter`` alongside ``tasks``-based discovery.
     return {
-        "channels": ["messages", "tasks", "tools"],
+        "channels": ["messages", "tasks", "tools", "lifecycle"],
         "namespaces": [list(scope)],
     }
 
@@ -1123,6 +1126,25 @@ class _SyncSubgraphsProjection:
                             )
                             active[path] = handle
                             yield handle
+                elif (
+                    method == "lifecycle"
+                    and data.get("event") == "started"
+                    and _is_direct_child(namespace, self._scope)
+                ):
+                    # ``create_deep_agent`` subagent discovery: child-
+                    # namespace ``lifecycle: started`` rather than ``tasks``.
+                    path = tuple(namespace)
+                    if path not in seen:
+                        seen.add(path)
+                        graph_name, trigger_call_id = _parse_namespace_segment(path[-1])
+                        handle = SyncScopedStreamHandle(
+                            thread=self._thread,
+                            path=path,
+                            graph_name=graph_name or None,
+                            trigger_call_id=trigger_call_id,
+                        )
+                        active[path] = handle
+                        yield handle
         finally:
             # Determine terminal status from the run's lifecycle result.
             # If _run_done resolved as errored, force-complete remaining children
@@ -1404,6 +1426,19 @@ class SyncThreadStream:
             handle._fail(err)
         self._active_tool_calls.clear()
 
+    def _signal_paused(self) -> None:
+        """Wake every active projection iterator on interrupt / run end.
+
+        Delegates to the shared controller (subscription queues). The
+        root messages inbox is intentionally NOT signaled here: the
+        subgraphs projection that populates it is responsible for
+        pushing the terminal ``None`` in its own ``finally`` block, so
+        any message events it redirected to the inbox land before the
+        sentinel. Signaling root_inbox here would race the redirection.
+        """
+        if self._controller is not None:
+            self._controller.signal_paused()
+
     def subscribe(
         self,
         channels: list[str],
@@ -1569,20 +1604,30 @@ class SyncThreadStream:
                     if isinstance(params, dict)
                     else [],
                 }
+                was_interrupted = self.interrupted
                 self.interrupts.append(payload)
                 self.interrupted = True
+                # On the rising edge of `interrupted`, push the terminal
+                # sentinel into every active projection subscription so their
+                # iterators exit cleanly. The run is paused — not done — so
+                # the shared SSE and fanout keep running; a subsequent
+                # `for snap in thread.values:` (or any other projection)
+                # registers a fresh subscription and resumes iteration once
+                # the consumer calls `run.respond(...)`.
+                if not was_interrupted:
+                    self._signal_paused()
         elif method == "lifecycle":
             params = event.get("params") or {}
             data = params.get("data") if isinstance(params, dict) else None
-            phase = data.get("phase") if isinstance(data, dict) else None
+            phase = data.get("event") if isinstance(data, dict) else None
             if phase in ("started", "running"):
                 self._run_seen = True
-            elif phase in ("completed", "errored"):
+            elif phase in ("completed", "failed"):
                 self.interrupted = False
                 self.interrupts = []
                 run_done = self._run_done
                 if run_done is not None and not run_done.done():
-                    if phase == "errored":
+                    if phase == "failed":
                         error_msg = (
                             data.get("error") if isinstance(data, dict) else None
                         )

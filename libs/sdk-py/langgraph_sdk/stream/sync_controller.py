@@ -22,6 +22,31 @@ from langgraph_sdk.stream.transport import (
 _logger = logging.getLogger(__name__)
 
 
+_ROOT_TERMINAL_LIFECYCLE_EVENTS = frozenset({"completed", "failed"})
+
+
+def _is_root_terminal_lifecycle(event: Any) -> bool:
+    """Return True for a root-namespace lifecycle event marking run end.
+
+    Matches the wire shape ``{method: "lifecycle", params: {namespace: [],
+    data: {event: "completed" | "failed"}}}``. Subgraph lifecycle events
+    (non-empty namespace) do not terminate the parent run.
+    """
+    if not isinstance(event, dict):
+        return False
+    if event.get("method") != "lifecycle":
+        return False
+    params = event.get("params") or {}
+    if not isinstance(params, dict):
+        return False
+    if params.get("namespace") or []:
+        return False
+    data = params.get("data") or {}
+    if not isinstance(data, dict):
+        return False
+    return data.get("event") in _ROOT_TERMINAL_LIFECYCLE_EVENTS
+
+
 @dataclass
 class _SyncSubscription:
     id: int
@@ -77,6 +102,19 @@ class SyncStreamController:
     def unregister_subscription(self, subscription_id: int) -> None:
         with self._lock:
             self._subscriptions.pop(subscription_id, None)
+
+    def signal_paused(self) -> None:
+        """Wake every active subscription iterator on interrupt (run pause).
+
+        Pushes the terminal sentinel (`None`) into every subscription queue.
+        Iterators see `None` and return; the shared SSE keeps running so
+        re-iteration after `run.respond(...)` registers a fresh subscription
+        and resumes.
+        """
+        with self._lock:
+            subs = list(self._subscriptions.values())
+        for sub in subs:
+            sub.queue.put(None)
 
     def reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
         if self._run_start_gate is not None and not self._run_start_gate.wait(
@@ -136,6 +174,14 @@ class SyncStreamController:
                     for sub in subscriptions:
                         if matches_subscription(event, sub.params):
                             sub.queue.put(event)
+                    # Root-terminal lifecycle: push `None` into all sub
+                    # queues so projection iterators exit when the run
+                    # ends naturally. Terminal is processed in seq order
+                    # on the shared SSE, so in-flight values/tools/
+                    # messages events for this run are already queued
+                    # before None.
+                    if _is_root_terminal_lifecycle(event):
+                        self.signal_paused()
             except Exception:
                 pass  # transport drop — attempt reconnect below
 
@@ -178,6 +224,10 @@ class SyncStreamController:
         filters = [dict(sub.params) for sub in self._subscriptions.values()]
         if extra is not None:
             filters.append(dict(extra))
+        # Always include lifecycle in the shared SSE filter so `_fanout`
+        # sees root-terminal events in seq order with the projection
+        # events. See `_is_root_terminal_lifecycle`.
+        filters.append({"channels": ["lifecycle"]})
         return compute_union_filter(filters)
 
     def observe_applied_through_seq(self, seq: Any) -> None:
