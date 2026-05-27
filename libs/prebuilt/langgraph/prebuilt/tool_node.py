@@ -121,6 +121,31 @@ TOOL_INVOCATION_ERROR_TEMPLATE = (
 )
 
 
+def _resolve_subagent_name(tool: BaseTool, call: ToolCall) -> str | None:
+    """Resolve a tool's declared subagent_name for a specific tool_call.
+
+    Returns the declared name as a string, or None if no name is declared
+    or the callable returns falsy. Static strings pass through; callables
+    are invoked with the parsed ToolCall.
+
+    The callable form is best-effort: any exception from the user-supplied
+    callable returns None rather than failing dispatch (a buggy resolver
+    must not break tool execution).
+    """
+    name = getattr(tool, "subagent_name", None)
+    if name is None:
+        return None
+    if isinstance(name, str):
+        return name
+    if callable(name):
+        try:
+            resolved = name(call)
+        except Exception:
+            return None
+        return resolved if isinstance(resolved, str) and resolved else None
+    return None
+
+
 class _ToolCallRequestOverrides(TypedDict, total=False):
     """Possible overrides for ToolCallRequest.override() method."""
 
@@ -1031,6 +1056,17 @@ class ToolNode(RunnableCallable):
         # to short-circuit requests for unregistered tools
         tool = self.tools_by_name.get(call["name"])
 
+        # Resolve subagent_name and stamp into runtime config metadata before
+        # dispatch. The metadata flows through TaskPayload.metadata to downstream
+        # transformers, which project it onto LifecyclePayload fields for
+        # nested-run identity and dispatch origin.
+        if tool is not None:
+            resolved = _resolve_subagent_name(tool, call)
+            if resolved is not None:
+                md = tool_runtime.config.setdefault("metadata", {})
+                md["subagent_name"] = resolved
+                md["tool_call_id"] = call["id"]
+
         # Create the tool request with state and runtime
         tool_request = ToolCallRequest(
             tool_call=call,
@@ -1177,6 +1213,17 @@ class ToolNode(RunnableCallable):
         # Validation is deferred to _execute_tool_async to allow interceptors
         # to short-circuit requests for unregistered tools
         tool = self.tools_by_name.get(call["name"])
+
+        # Resolve subagent_name and stamp into runtime config metadata before
+        # dispatch. The metadata flows through TaskPayload.metadata to downstream
+        # transformers, which project it onto LifecyclePayload fields for
+        # nested-run identity and dispatch origin.
+        if tool is not None:
+            resolved = _resolve_subagent_name(tool, call)
+            if resolved is not None:
+                md = tool_runtime.config.setdefault("metadata", {})
+                md["subagent_name"] = resolved
+                md["tool_call_id"] = call["id"]
 
         # Create the tool request with state and runtime
         tool_request = ToolCallRequest(
