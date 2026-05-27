@@ -81,7 +81,7 @@ class ProtocolWebSocketTransport:
             try:
                 url = build_websocket_url(self._client.base_url, self._stream_path)
                 handshake_headers = list(websocket_headers(self._default_headers))
-                cookie_header = _cookie_header(self._client)
+                cookie_header = _cookie_header(self._client, self._stream_path)
                 if cookie_header:
                     handshake_headers.append(("Cookie", cookie_header))
                 async with self._connect(
@@ -201,9 +201,18 @@ def _decode_frame(
     return payload
 
 
-def _cookie_header(client: httpx.AsyncClient) -> str | None:
-    """Build a `Cookie` header value from the httpx client's cookie jar."""
-    cookies = dict(client.cookies)
-    if not cookies:
+def _cookie_header(client: httpx.AsyncClient, path: str) -> str | None:
+    """Build a `Cookie` header for the WebSocket handshake.
+
+    Why pass `path`: `dict(client.cookies)` flattens the entire jar without
+    domain/path filtering, so cookies set by responses from other origins would
+    leak to the WS server. We delegate to `httpx.Cookies.set_cookie_header`,
+    which applies the same `CookieJar` rules httpx uses for regular HTTP
+    requests, scoping the result to `client.base_url` + `path`.
+    """
+    if not list(client.cookies.jar):
         return None
-    return "; ".join(f"{k}={v}" for k, v in cookies.items())
+    target = client.base_url.copy_with(path=path)
+    request = httpx.Request("GET", target)
+    client.cookies.set_cookie_header(request)
+    return request.headers.get("Cookie")
