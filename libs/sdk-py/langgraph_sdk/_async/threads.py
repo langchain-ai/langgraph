@@ -773,6 +773,7 @@ class ThreadsClient:
             assistant_id=assistant_id,
             headers=headers,
             run_start_timeout=run_start_timeout,
+            explicit_thread_id=thread_id is not None,
         )
 
     async def join_stream(
