@@ -8,7 +8,7 @@ from datetime import datetime, tzinfo
 from typing import Any
 
 from langgraph_sdk._async.http import HttpClient
-from langgraph_sdk._shared.utilities import _resolve_timezone
+from langgraph_sdk._shared.utilities import _quote_path_param, _resolve_timezone
 from langgraph_sdk.schema import (
     All,
     Config,
@@ -166,7 +166,7 @@ class CronClient:
             payload["multitask_strategy"] = multitask_strategy
         payload = {k: v for k, v in payload.items() if v is not None}
         return await self.http.post(
-            f"/threads/{thread_id}/runs/crons",
+            f"/threads/{_quote_path_param(thread_id)}/runs/crons",
             json=payload,
             headers=headers,
             params=params,
@@ -315,7 +315,9 @@ class CronClient:
             ```
 
         """
-        await self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
+        await self.http.delete(
+            f"/runs/crons/{_quote_path_param(cron_id)}", headers=headers, params=params
+        )
 
     async def update(
         self,
@@ -402,7 +404,7 @@ class CronClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return await self.http.patch(
-            f"/runs/crons/{cron_id}",
+            f"/runs/crons/{_quote_path_param(cron_id)}",
             json=payload,
             headers=headers,
             params=params,
