@@ -42,13 +42,13 @@ async def test_send_command_posts_json_and_returns_response():
         sse = ProtocolSseTransport(client=client, thread_id="t-1")
         result = await sse.send_command(
             {
-                "command_id": 7,
+                "id": 7,
                 "method": "run.start",
                 "params": {"input": {"x": 1}},
             }
         )
-    assert result == {"command_id": 7, "result": {"run_id": "run-1"}}
-    assert fake.received_commands[0]["command_id"] == 7
+    assert result == {"type": "success", "id": 7, "result": {"run_id": "run-1"}}
+    assert fake.received_commands[0]["id"] == 7
 
 
 async def test_send_command_returns_none_on_202():
@@ -68,9 +68,7 @@ async def test_send_command_returns_none_on_202():
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         sse = ProtocolSseTransport(client=client, thread_id="t-1")
-        result = await sse.send_command(
-            {"command_id": 1, "method": "noop", "params": {}}
-        )
+        result = await sse.send_command({"id": 1, "method": "noop", "params": {}})
     assert result is None
     assert len(received) == 1
 
@@ -84,7 +82,7 @@ async def test_send_command_raises_when_closed():
         sse = ProtocolSseTransport(client=client, thread_id="t-1")
         await sse.close()
         with pytest.raises(RuntimeError, match="closed"):
-            await sse.send_command({"command_id": 1, "method": "noop", "params": {}})
+            await sse.send_command({"id": 1, "method": "noop", "params": {}})
 
 
 async def test_send_command_raises_http_error_on_4xx():
@@ -102,7 +100,7 @@ async def test_send_command_raises_http_error_on_4xx():
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         sse = ProtocolSseTransport(client=client, thread_id="t-1")
         with pytest.raises(httpx.HTTPStatusError):
-            await sse.send_command({"command_id": 1, "method": "noop", "params": {}})
+            await sse.send_command({"id": 1, "method": "noop", "params": {}})
 
 
 async def test_open_event_stream_yields_scripted_events():
@@ -339,3 +337,100 @@ async def test_cancel_event_prevents_post_cancel_flush():
         async for _ in handle.events:
             pytest.fail("event yielded after close()")
     assert len(received) == 1
+
+
+@pytest.mark.anyio
+async def test_open_event_stream_ready_rejects_on_5xx():
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    async def stream_events(_request):
+        return JSONResponse({"error": "boom"}, status_code=500)
+
+    app = Starlette(
+        routes=[
+            Route(
+                "/threads/{thread_id}/stream/events",
+                stream_events,
+                methods=["POST"],
+            )
+        ]
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        handle = sse.open_event_stream({"channels": ["lifecycle"]})
+        with pytest.raises(httpx.HTTPStatusError):
+            await asyncio.wait_for(handle.ready, timeout=1.0)
+        # Iterator should terminate cleanly (no hang).
+        with pytest.raises(StopAsyncIteration):
+            await asyncio.wait_for(handle.events.__anext__(), timeout=1.0)
+        await handle.close()
+
+
+def test_build_event_stream_body_minimal_channels_only():
+    from langgraph_sdk.stream.transport.http import _build_event_stream_body
+
+    body = _build_event_stream_body({"channels": ["values"]})
+    assert body == {"channels": ["values"]}
+
+
+def test_build_event_stream_body_includes_all_optional_fields():
+    from langgraph_sdk.stream.transport.http import _build_event_stream_body
+
+    body = _build_event_stream_body(
+        {
+            "channels": ["values", "messages"],
+            "namespaces": [["fetcher"]],
+            "depth": 2,
+            "since": 7,
+        }
+    )
+    assert body == {
+        "channels": ["values", "messages"],
+        "namespaces": [["fetcher"]],
+        "depth": 2,
+        "since": 7,
+    }
+
+
+def test_build_event_stream_body_omits_since_when_not_int():
+    from langgraph_sdk.stream.transport.http import _build_event_stream_body
+
+    body = _build_event_stream_body({"channels": ["values"], "since": None})
+    assert "since" not in body
+
+
+async def test_open_event_stream_raises_when_closed():
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        await sse.close()
+        with pytest.raises(RuntimeError, match="closed"):
+            sse.open_event_stream({"channels": ["lifecycle"]})
+
+
+async def test_transport_close_cancels_open_event_streams():
+    from streaming._events import lifecycle_event
+    from streaming._fake_server import FakeServer
+
+    fake = FakeServer()
+    fake.script([lifecycle_event(seq=i) for i in range(5)], delay=0.05)
+    transport = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sse = ProtocolSseTransport(client=client, thread_id="t-1")
+        handle = sse.open_event_stream({"channels": ["lifecycle"]})
+        await asyncio.wait_for(handle.ready, timeout=1.0)
+        # Closing the transport must terminate the open stream within a bounded time.
+        await asyncio.wait_for(sse.close(), timeout=1.0)
+
+        # Drain any already-queued events; the stream must end (not hang).
+        async def drain() -> None:
+            async for _ in handle.events:
+                pass
+
+        await asyncio.wait_for(drain(), timeout=1.0)

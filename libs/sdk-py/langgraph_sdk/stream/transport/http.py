@@ -67,11 +67,11 @@ class ProtocolSseTransport:
 
     def __init__(
         self,
+        *,
         client: httpx.AsyncClient,
         thread_id: str,
         commands_path: str | None = None,
         stream_path: str | None = None,
-        *,
         max_queue_size: int = 1024,
     ) -> None:
         self._client = client
@@ -80,6 +80,7 @@ class ProtocolSseTransport:
         self._stream_url = stream_path or f"/threads/{thread_id}/stream/events"
         self._max_queue_size = max_queue_size
         self._closed = False
+        self._event_streams: set[asyncio.Task[None]] = set()
 
     async def send_command(self, command: dict[str, Any]) -> dict[str, Any] | None:
         """POST a command. Returns the response JSON, or `None` for 202/204.
@@ -107,7 +108,7 @@ class ProtocolSseTransport:
             raise RuntimeError(
                 "Protocol command did not return a valid response."
             ) from err
-        if not isinstance(payload, dict) or "command_id" not in payload:
+        if not isinstance(payload, dict) or "id" not in payload:
             raise RuntimeError("Protocol command did not return a valid response.")
         return payload
 
@@ -116,8 +117,8 @@ class ProtocolSseTransport:
 
         Posts `params` as a SubscribeParams body to `/threads/{thread_id}/stream/events`.
         Returns an `EventStreamHandle` whose `events` async iterator yields typed
-        `Event` dicts as the server emits them. `handle.ready` resolves when
-        response headers arrive (or rejects on early failure).
+        `Event` dicts as the server emits them. `handle.ready` resolves on a 2xx
+        response (rejects on HTTP error or transport failure before headers).
 
         Reconnect: pass `params["since"]` to filter outbound seqs server-side. The
         cursor goes in the request body, not as a `Last-Event-ID` header.
@@ -182,6 +183,8 @@ class ProtocolSseTransport:
                 await queue.put(None)  # sentinel: end of stream
 
         task = asyncio.create_task(pump())
+        self._event_streams.add(task)
+        task.add_done_callback(self._event_streams.discard)
 
         async def aiter() -> AsyncIterator[Event]:
             while True:
@@ -192,12 +195,22 @@ class ProtocolSseTransport:
 
         async def close() -> None:
             cancel_event.set()
+            # Why: pump may be mid-`finally`; ensure consumer unblocks.
+            queue.put_nowait(None)
             task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, BaseException):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
 
         return EventStreamHandle(events=aiter(), ready=ready, done=done, close=close)
 
     async def close(self) -> None:
-        """Mark the transport closed. Idempotent."""
+        """Cancel any open event streams and mark the transport closed. Idempotent."""
+        if self._closed:
+            return
         self._closed = True
+        tasks = list(self._event_streams)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await asyncio.gather(*tasks, return_exceptions=True)
