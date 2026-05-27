@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import operator
 import sys
 import threading
@@ -35,7 +36,13 @@ from langgraph._internal._runnable import RunnableCallable
 from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
-from langgraph.errors import GraphInterrupt, NodeError, NodeTimeoutError, ParentCommand
+from langgraph.errors import (
+    GraphInterrupt,
+    NodeCancelledError,
+    NodeError,
+    NodeTimeoutError,
+    ParentCommand,
+)
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph, add_messages
 from langgraph.pregel import NodeBuilder, Pregel
@@ -2802,3 +2809,121 @@ def test_error_handler_resumes_after_crash_multiple_nodes():
     assert call_count["handler_b"] == 2  # ran again on resume
     assert "recovered_a:a" in result["results"]
     assert "recovered_b:b" in result["results"]
+
+@pytest.mark.anyio
+async def test_arun_with_retry_user_raised_cancelled_becomes_node_cancelled():
+    class UserCancelsProc:
+        async def ainvoke(self, input, config):
+            raise asyncio.CancelledError("nope")
+
+    task = _make_task(UserCancelsProc(), name="user-cancel")
+
+    with pytest.raises(NodeCancelledError) as excinfo:
+        await arun_with_retry(task, retry_policy=None)
+    assert excinfo.value.node == "user-cancel"
+    # original CancelledError chained for debugging
+    assert isinstance(excinfo.value.__cause__, asyncio.CancelledError)
+
+
+@pytest.mark.anyio
+async def test_arun_with_retry_user_raised_cancelled_with_timeout_policy():
+    """The timeout path runs the node in a child task; the conversion must
+    still trigger for user-raised ``CancelledError``."""
+
+    class UserCancelsProc:
+        async def ainvoke(self, input, config):
+            raise asyncio.CancelledError
+
+    task = _make_task(
+        UserCancelsProc(), timeout=_idle_timeout(1.0), name="user-cancel-timed"
+    )
+
+    with pytest.raises(NodeCancelledError) as excinfo:
+        await arun_with_retry(task, retry_policy=None)
+    assert excinfo.value.node == "user-cancel-timed"
+
+
+def test_run_with_retry_sync_node_raising_cancelled_becomes_node_cancelled():
+    class SyncUserCancelsProc:
+        def invoke(self, input, config):
+            raise asyncio.CancelledError("sync nope")
+
+    task = _make_task(SyncUserCancelsProc(), timeout=None, name="sync-user-cancel")
+
+    with pytest.raises(NodeCancelledError) as excinfo:
+        run_with_retry(task, retry_policy=None)
+    assert excinfo.value.node == "sync-user-cancel"
+    assert isinstance(excinfo.value.__cause__, asyncio.CancelledError)
+
+
+@pytest.mark.anyio
+async def test_arun_with_retry_external_cancel_propagates_as_cancelled():
+    """When the asyncio task running ``arun_with_retry`` is cancelled from the
+    outside, the cancellation must still propagate as
+    ``asyncio.CancelledError``. Converting it to ``NodeCancelledError`` would
+    break the runner's ability to cancel sibling tasks during cleanup."""
+
+    if sys.version_info < (3, 11):
+        pytest.skip("Task.cancelling() requires Python 3.11+")
+
+    started = asyncio.Event()
+    observed: list[BaseException] = []
+
+    class SlowProc:
+        async def ainvoke(self, input, config):
+            started.set()
+            await asyncio.sleep(10.0)
+            return "never"
+
+    task = _make_task(SlowProc(), timeout=None, name="external-cancel")
+
+    async def runner():
+        try:
+            await arun_with_retry(task, retry_policy=None)
+        except BaseException as exc:
+            observed.append(exc)
+            raise
+
+    bg = asyncio.create_task(runner())
+    await started.wait()
+    bg.cancel()
+    # We expect the cancellation to surface to us as well; swallow it here so
+    # the test runner's own task isn't poisoned by the cancel.
+    with contextlib.suppress(asyncio.CancelledError):
+        await bg
+    assert observed, "runner did not observe any exception"
+    # Framework cancellation must remain a CancelledError, not be rewritten as
+    # NodeCancelledError.
+    assert isinstance(observed[0], asyncio.CancelledError)
+    assert not isinstance(observed[0], NodeCancelledError)
+
+
+@pytest.mark.anyio
+async def test_pregel_user_raised_cancellederror_fails_run():
+    """End-to-end: a two-branch graph where one branch raises
+    ``asyncio.CancelledError`` must fail the run instead of returning
+    a partial-success state. This is the LSD-1507 customer scenario."""
+
+    class _S(TypedDict, total=False):
+        vals: Annotated[list[str], operator.add]
+
+    async def ok(state: _S) -> _S:
+        return {"vals": ["ok"]}
+
+    async def boom(state: _S) -> _S:
+        raise asyncio.CancelledError("user-raised in node body")
+
+    graph = (
+        StateGraph(_S)
+        .add_node("ok", ok)
+        .add_node("boom", boom)
+        .add_edge(START, "ok")
+        .add_edge(START, "boom")
+        .add_edge("ok", END)
+        .add_edge("boom", END)
+        .compile()
+    )
+
+    with pytest.raises(NodeCancelledError) as excinfo:
+        await graph.ainvoke({"vals": []})
+    assert excinfo.value.node == "boom"
