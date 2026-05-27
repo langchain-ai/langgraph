@@ -9,7 +9,6 @@ Run with: pytest tests/integration/test_remote_graph_v3.py -m integration
 from __future__ import annotations
 
 import pytest
-
 from langgraph.pregel.remote import RemoteGraph
 
 pytestmark = pytest.mark.integration
@@ -81,7 +80,9 @@ def test_sync_happy_path_yields_output(remote_tools_agent: RemoteGraph) -> None:
         assert stream.interrupted is False
 
 
-async def test_abort_mid_run_cancels_server_side(remote_tools_agent: RemoteGraph) -> None:
+async def test_abort_mid_run_cancels_server_side(
+    remote_tools_agent: RemoteGraph,
+) -> None:
     """Abort immediately after run.start; reaching the end without exception
     confirms abort + __aexit__ cleanup worked."""
     async with remote_tools_agent.astream_events(
