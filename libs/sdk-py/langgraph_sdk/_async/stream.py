@@ -28,6 +28,7 @@ from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.controller import _SeenEventIds
 from langgraph_sdk.stream.decoders import (
     MessagesDecoder,
+    SubgraphsDecoder,
     ToolCallsDecoder,
     ValuesDecoder,
 )
@@ -911,10 +912,17 @@ class _SubgraphsProjection:
             raise RuntimeError("AsyncThreadStream not entered - use `async with`.")
         params = _subgraph_subscription_params(self._scope)
         sub = self._thread._register_subscription(params)
-        seen: set[tuple[str, ...]] = set()
-        active: dict[tuple[str, ...], ScopedStreamHandle] = {}
-        # Activate root inbox so scope-level messages events consumed here are
-        # forwarded to `thread.messages` even after the shared SSE ends.
+        decoder = SubgraphsDecoder(
+            scope=self._scope,
+            handle_factory=lambda *, path, graph_name, trigger_call_id: (
+                ScopedStreamHandle(
+                    thread=self._thread,
+                    path=path,
+                    graph_name=graph_name,
+                    trigger_call_id=trigger_call_id,
+                )
+            ),
+        )
         root_inbox: asyncio.Queue[Event | None] | None = (
             self._thread._activate_root_messages_inbox() if not self._scope else None
         )
@@ -926,80 +934,14 @@ class _SubgraphsProjection:
                 if item is None:
                     return
                 params_field = item.get("params") or {}
-                namespace = _event_namespace(params_field)
-                data = (
-                    params_field.get("data") if isinstance(params_field, dict) else None
-                )
-                if not isinstance(data, dict):
-                    continue
-                method = item.get("method")
-
-                # Route events at a child namespace (or deeper) to that child
-                # handle's channel inbox so sequential child-projection
-                # consumption works without opening a second SSE.
-                ns_tuple = tuple(namespace)
-                routed_to_child = False
-                for child_path, child_handle in active.items():
-                    child_len = len(child_path)
-                    if (
-                        len(ns_tuple) >= child_len
-                        and ns_tuple[:child_len] == child_path
-                    ):
-                        child_handle._push_event(item)
-                        routed_to_child = True
-                        break
-
-                # Scope-level messages events are not routed to any child; forward
-                # them to the root inbox so `thread.messages` can drain them after
-                # this projection finishes (dedup prevents the SSE from replaying).
                 if (
-                    not routed_to_child
-                    and root_inbox is not None
-                    and method == "messages"
-                    and tuple(namespace) == self._scope
+                    root_inbox is not None
+                    and item.get("method") == "messages"
+                    and tuple(_event_namespace(params_field)) == self._scope
                 ):
                     root_inbox.put_nowait(item)
-
-                if method == "tasks":
-                    if "result" in data:
-                        self._apply_tasks_result(namespace, data, active)
-                    elif _is_direct_child(namespace, self._scope):
-                        path = tuple(namespace)
-                        if path not in seen:
-                            seen.add(path)
-                            graph_name, trigger_call_id = _parse_namespace_segment(
-                                path[-1]
-                            )
-                            handle = ScopedStreamHandle(
-                                thread=self._thread,
-                                path=path,
-                                graph_name=graph_name or None,
-                                trigger_call_id=trigger_call_id,
-                            )
-                            active[path] = handle
-                            yield handle
-                elif (
-                    method == "lifecycle"
-                    and data.get("event") == "started"
-                    and _is_direct_child(namespace, self._scope)
-                ):
-                    # ``create_deep_agent`` and similar surfaces signal
-                    # subagent invocation via a child-namespace
-                    # ``lifecycle: started`` event rather than a ``tasks``
-                    # event. JS does the same (see ``langgraphjs``
-                    # ``stream/handles/subgraphs.ts``).
-                    path = tuple(namespace)
-                    if path not in seen:
-                        seen.add(path)
-                        graph_name, trigger_call_id = _parse_namespace_segment(path[-1])
-                        handle = ScopedStreamHandle(
-                            thread=self._thread,
-                            path=path,
-                            graph_name=graph_name or None,
-                            trigger_call_id=trigger_call_id,
-                        )
-                        active[path] = handle
-                        yield handle
+                for handle in decoder.feed(item):
+                    yield handle
         finally:
             # Determine terminal status from the parent run's lifecycle result.
             # If _run_done resolved as errored, force-complete remaining children
@@ -1010,31 +952,12 @@ class _SubgraphsProjection:
                 result = run_done.result()
                 if isinstance(result, _RunTerminal) and result.status == "errored":
                     terminal_status = "failed"
-            for handle in active.values():
+            for handle in decoder._active.values():
                 if handle.status == "started":
                     handle._finish(terminal_status)
             self._thread._unregister_subscription(sub.id)
             if root_inbox is not None:
                 root_inbox.put_nowait(None)
-
-    def _apply_tasks_result(
-        self,
-        namespace: list[str],
-        data: dict[str, Any],
-        active: dict[tuple[str, ...], ScopedStreamHandle],
-    ) -> None:
-        result_id = data.get("id")
-        if not result_id:
-            return
-        parent_path = tuple(namespace)
-        for child_path, handle in list(active.items()):
-            if child_path[:-1] != parent_path:
-                continue
-            if handle.trigger_call_id != result_id:
-                continue
-            status, error = _terminal_from_tasks_result(data)
-            handle._finish(status, error)
-            del active[child_path]
 
 
 class ToolCallHandle:
