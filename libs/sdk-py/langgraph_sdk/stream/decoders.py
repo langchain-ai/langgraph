@@ -118,3 +118,61 @@ class MessagesDecoder:
                 for route_key, candidate in list(self._active.items()):
                     if candidate is stream:
                         del self._active[route_key]
+
+
+class ToolCallsDecoder:
+    """Yields one tool-call handle per `tool-started` event.
+
+    Mirrors the per-event body of `_ToolCallsProjection._tool_calls_iter`
+    (`_async/stream.py:1168-1217`). The thread register/unregister and the
+    terminal-error-on-close finally stay at the projection / wrapper layer.
+
+    Args:
+        namespace: Events whose namespace differs are ignored.
+        handle_factory: Keyword-only `(tool_call_id, name, input, namespace) -> handle`.
+    """
+
+    def __init__(self, namespace: list[str], handle_factory: Callable[..., Any]):
+        self._namespace = list(namespace)
+        self._handle_factory = handle_factory
+        self._active: dict[str, Any] = {}
+
+    def feed(self, event: dict[str, Any]) -> Iterable[Any]:
+        if event.get("method") != "tools":
+            return
+        params = event.get("params") or {}
+        if _event_namespace(params) != self._namespace:
+            return
+        data = params.get("data")
+        if not isinstance(data, dict):
+            return
+        tool_call_id = data.get("tool_call_id")
+        if not isinstance(tool_call_id, str):
+            return
+        event_type = data.get("event")
+        if event_type == "tool-started":
+            name = data.get("tool_name")
+            handle = self._handle_factory(
+                tool_call_id=tool_call_id,
+                name=name if isinstance(name, str) else "",
+                input=data.get("input"),
+                namespace=list(self._namespace),
+            )
+            self._active[tool_call_id] = handle
+            yield handle
+        elif event_type == "tool-output-delta":
+            handle = self._active.get(tool_call_id)
+            delta = data.get("delta")
+            if handle is not None and isinstance(delta, str):
+                handle._push_delta(delta)
+        elif event_type == "tool-finished":
+            handle = self._active.pop(tool_call_id, None)
+            if handle is not None:
+                handle._finish(data.get("output"))
+        elif event_type == "tool-error":
+            handle = self._active.pop(tool_call_id, None)
+            if handle is not None:
+                message = data.get("message")
+                handle._fail(
+                    RuntimeError(str(message) if message else "Tool call errored")
+                )
