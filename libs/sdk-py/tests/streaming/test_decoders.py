@@ -9,12 +9,14 @@ from __future__ import annotations
 from typing import Any
 
 from langgraph_sdk.stream.decoders import (
+    ExtensionsDecoder,
     MessagesDecoder,
     SubgraphsDecoder,
     ToolCallsDecoder,
     ValuesDecoder,
 )
 from streaming._events import (
+    custom_event,
     lifecycle_completed_event,
     lifecycle_started_event,
     message_error_event,
@@ -395,3 +397,35 @@ def test_subgraphs_decoder_ignores_unrelated_and_scope_itself():
     assert list(decoder.feed(lifecycle_started_event(seq=1, namespace=["other"]))) == []
     # the scope's own namespace is not a discovery
     assert list(decoder.feed(lifecycle_started_event(seq=2, namespace=["root"]))) == []
+
+
+def test_extensions_decoder_yields_full_data_for_matching_name():
+    decoder = ExtensionsDecoder(name="foo")
+    # custom_event(name="foo", x=1) -> params.data = {"name": "foo", "x": 1}
+    assert list(decoder.feed(custom_event(seq=1, name="foo", x=1))) == [
+        {"name": "foo", "x": 1}
+    ]
+
+
+def test_extensions_decoder_ignores_other_extension_names():
+    decoder = ExtensionsDecoder(name="foo")
+    assert list(decoder.feed(custom_event(seq=1, name="bar", x=1))) == []
+
+
+def test_extensions_decoder_ignores_non_custom_methods():
+    decoder = ExtensionsDecoder(name="foo")
+    assert list(decoder.feed(lifecycle_completed_event(seq=1))) == []
+
+
+def test_extensions_decoder_ignores_non_dict_data():
+    decoder = ExtensionsDecoder(name="foo")
+    evt = custom_event(seq=1, name="foo", x=1)
+    evt["params"]["data"] = "not-a-dict"
+    assert list(decoder.feed(evt)) == []
+
+
+def test_extensions_decoder_rejects_empty_name():
+    import pytest
+
+    with pytest.raises(ValueError):
+        ExtensionsDecoder(name="")

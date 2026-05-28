@@ -276,3 +276,31 @@ class SubgraphsDecoder:
             status, error = _terminal_from_tasks_result(data)
             handle._finish(status, error)
             del self._active[child_path]
+
+
+class ExtensionsDecoder:
+    """Yields `params.data` from one named custom channel.
+
+    Mirrors `_ExtensionProjection._iter` (`_async/stream.py:1278-1299`), with
+    an added name filter so it can share one subscription in interleave.
+
+    Args:
+        name: The extension name. Only `custom` events whose `data["name"]`
+            matches are consumed.
+    """
+
+    def __init__(self, name: str):
+        if not name:
+            raise ValueError("extension name must be non-empty.")
+        self._name = name
+
+    def feed(self, event: dict[str, Any]) -> Iterable[Any]:
+        if event.get("method") != "custom":
+            return
+        params = event.get("params") or {}
+        data = params.get("data")
+        if not isinstance(data, dict):
+            return
+        if data.get("name") != self._name:
+            return
+        yield data
