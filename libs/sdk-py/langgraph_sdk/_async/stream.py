@@ -27,6 +27,7 @@ from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.controller import _SeenEventIds
 from langgraph_sdk.stream.decoders import (
+    ExtensionsDecoder,
     MessagesDecoder,
     SubgraphsDecoder,
     ToolCallsDecoder,
@@ -1134,6 +1135,7 @@ class _ExtensionProjection:
         if self._namespace:
             params["namespaces"] = [self._namespace]
         sub = self._thread._register_subscription(params)
+        decoder = ExtensionsDecoder(name=self._name)
         try:
             if self._thread._closed:
                 return
@@ -1143,12 +1145,8 @@ class _ExtensionProjection:
                 item = await sub.queue.get()
                 if item is None:
                     return
-                event_params = item.get("params") or {}
-                data = (
-                    event_params.get("data") if isinstance(event_params, dict) else None
-                )
-                if isinstance(data, dict):
-                    yield data
+                for out in decoder.feed(item):
+                    yield out
         finally:
             self._thread._unregister_subscription(sub.id)
 

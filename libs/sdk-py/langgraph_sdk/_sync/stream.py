@@ -25,6 +25,7 @@ from langchain_protocol import Event, SubscribeParams
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.decoders import (
+    ExtensionsDecoder,
     MessagesDecoder,
     SubgraphsDecoder,
     ToolCallsDecoder,
@@ -1051,6 +1052,7 @@ class _SyncExtensionProjection:
         if self._namespace:
             params["namespaces"] = [self._namespace]
         sub = self._thread._register_subscription(params)
+        decoder = ExtensionsDecoder(name=self._name)
         try:
             if self._thread._closed:
                 return
@@ -1060,12 +1062,7 @@ class _SyncExtensionProjection:
                 item = sub.queue.get()
                 if item is None:
                     return
-                event_params = item.get("params") or {}
-                data = (
-                    event_params.get("data") if isinstance(event_params, dict) else None
-                )
-                if isinstance(data, dict):
-                    yield data
+                yield from decoder.feed(cast(dict[str, Any], item))
         finally:
             self._thread._unregister_subscription(sub.id)
 
