@@ -72,7 +72,7 @@ from langgraph.types import (
     interrupt,
 )
 from tests.agents import AgentAction, AgentFinish
-from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
+from tests.any_str import AnyObject, AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.messages import (
     _AnyIdAIMessage,
     _AnyIdAIMessageChunk,
@@ -2154,6 +2154,7 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "name": "rewrite_query",
                 "input": {"query": "what is weather in sf", "docs": []},
                 "triggers": ("branch:to:rewrite_query",),
+                "metadata": AnyObject(),
             },
         },
         {
@@ -2179,6 +2180,7 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "name": "retriever_one",
                 "input": {"query": "query: what is weather in sf", "docs": []},
                 "triggers": ("branch:to:retriever_one",),
+                "metadata": AnyObject(),
             },
         },
         {
@@ -2190,6 +2192,7 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "name": "retriever_two",
                 "input": {"query": "query: what is weather in sf", "docs": []},
                 "triggers": ("branch:to:retriever_two",),
+                "metadata": AnyObject(),
             },
         },
         {
@@ -2232,6 +2235,7 @@ def test_in_one_fan_out_state_graph_defer_node(
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                 },
                 "triggers": ("branch:to:analyzer_one",),
+                "metadata": AnyObject(),
             },
         },
         {
@@ -2262,6 +2266,7 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "triggers": ("branch:to:qa", "join:retriever_one+retriever_two:qa")
                 if use_waiting_edge
                 else ("branch:to:qa",),
+                "metadata": AnyObject(),
             },
         },
         {
@@ -5557,6 +5562,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 },
                 "name": "graph",
                 "triggers": ("__start__",),
+                "metadata": AnyObject(),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -5571,6 +5577,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 ),
                 "name": "falsy_task",
                 "triggers": ("__pregel_push",),
+                "metadata": AnyObject(),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -5662,6 +5669,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 },
                 "name": "graph",
                 "triggers": ("__start__",),
+                "metadata": AnyObject(),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -5676,6 +5684,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 ),
                 "name": "falsy_task",
                 "triggers": ("__pregel_push",),
+                "metadata": AnyObject(),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -9115,6 +9124,7 @@ def test_multiple_writes_same_channel_from_same_node(
                 "name": "one",
                 "input": {"foo": "input"},
                 "triggers": ("branch:to:one",),
+                "metadata": AnyObject(),
             },
         ),
         ("updates", {"one": [{"foo": "one.0"}, {"foo": "one.1"}]}),
@@ -9135,6 +9145,7 @@ def test_multiple_writes_same_channel_from_same_node(
                 "name": "two",
                 "input": {"foo": "input, one.0, one.1"},
                 "triggers": ("branch:to:two",),
+                "metadata": AnyObject(),
             },
         ),
         ("updates", {"two": {"foo": "two"}}),
