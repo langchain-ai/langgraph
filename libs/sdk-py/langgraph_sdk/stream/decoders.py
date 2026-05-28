@@ -9,7 +9,7 @@ which drives multiple decoders from one shared subscription.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 
 def _event_namespace(params_field: Any) -> list[str]:
@@ -37,6 +37,29 @@ def _message_route_key(data: dict[str, Any], fallback: str | None = None) -> str
     if fallback is not None:
         return f"message:{fallback}"
     return "__single__"
+
+
+SubgraphStatus = Literal["started", "completed", "failed", "interrupted"]
+
+
+def _parse_namespace_segment(segment: str) -> tuple[str, str | None]:
+    name, sep, task_id = segment.partition(":")
+    return name, task_id if sep else None
+
+
+def _terminal_from_tasks_result(
+    data: dict[str, Any],
+) -> tuple[SubgraphStatus, str | None]:
+    if data.get("interrupts"):
+        return "interrupted", None
+    error = data.get("error")
+    if error:
+        return "failed", str(error)
+    return "completed", None
+
+
+def _is_direct_child(namespace: list[str], scope: tuple[str, ...]) -> bool:
+    return len(namespace) == len(scope) + 1 and tuple(namespace[: len(scope)]) == scope
 
 
 class Decoder(Protocol):
@@ -176,3 +199,80 @@ class ToolCallsDecoder:
                 handle._fail(
                     RuntimeError(str(message) if message else "Tool call errored")
                 )
+
+
+class SubgraphsDecoder:
+    """Discovers child subgraph handles and fans out events to active ones.
+
+    Mirrors the per-event body of `_SubgraphsProjection._subgraphs_iter`
+    (`_async/stream.py:963-1041`) plus `_apply_tasks_result`. Root-inbox
+    forwarding and terminal-status-on-close stay at the projection / wrapper
+    layer.
+
+    Args:
+        scope: Tuple-form namespace of this decoder's parent. `()` for root.
+        handle_factory: Keyword-only `(path, graph_name, trigger_call_id) -> handle`.
+    """
+
+    def __init__(self, scope: tuple[str, ...], handle_factory: Callable[..., Any]):
+        self._scope = scope
+        self._handle_factory = handle_factory
+        self._active: dict[tuple[str, ...], Any] = {}
+        self._seen: set[tuple[str, ...]] = set()
+
+    def feed(self, event: dict[str, Any]) -> Iterable[Any]:
+        params = event.get("params") or {}
+        namespace = _event_namespace(params)
+        data = params.get("data")
+        if not isinstance(data, dict):
+            return
+        method = event.get("method")
+
+        # 1. Fanout: first active child whose path prefixes this namespace.
+        ns_tuple = tuple(namespace)
+        for child_path, child_handle in self._active.items():
+            child_len = len(child_path)
+            if len(ns_tuple) >= child_len and ns_tuple[:child_len] == child_path:
+                child_handle._push_event(event)
+                break
+
+        # 2 + 3. Discovery / status from tasks; discovery from lifecycle.
+        if method == "tasks":
+            if "result" in data:
+                self._apply_tasks_result(namespace, data)
+            elif _is_direct_child(namespace, self._scope):
+                yield from self._discover(namespace)
+        elif (
+            method == "lifecycle"
+            and data.get("event") == "started"
+            and _is_direct_child(namespace, self._scope)
+        ):
+            yield from self._discover(namespace)
+
+    def _discover(self, namespace: list[str]) -> Iterable[Any]:
+        path = tuple(namespace)
+        if path in self._seen:
+            return
+        self._seen.add(path)
+        graph_name, trigger_call_id = _parse_namespace_segment(path[-1])
+        handle = self._handle_factory(
+            path=path,
+            graph_name=graph_name or None,
+            trigger_call_id=trigger_call_id,
+        )
+        self._active[path] = handle
+        yield handle
+
+    def _apply_tasks_result(self, namespace: list[str], data: dict[str, Any]) -> None:
+        result_id = data.get("id")
+        if not result_id:
+            return
+        parent_path = tuple(namespace)
+        for child_path, handle in list(self._active.items()):
+            if child_path[:-1] != parent_path:
+                continue
+            if handle.trigger_call_id != result_id:
+                continue
+            status, error = _terminal_from_tasks_result(data)
+            handle._finish(status, error)
+            del self._active[child_path]

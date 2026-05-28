@@ -10,15 +10,19 @@ from typing import Any
 
 from langgraph_sdk.stream.decoders import (
     MessagesDecoder,
+    SubgraphsDecoder,
     ToolCallsDecoder,
     ValuesDecoder,
 )
 from streaming._events import (
     lifecycle_completed_event,
+    lifecycle_started_event,
     message_error_event,
     message_finish_event,
     message_start_event,
     message_text_delta_event,
+    tasks_result_event,
+    tasks_start_event,
     tool_error_event,
     tool_finished_event,
     tool_output_delta_event,
@@ -278,3 +282,116 @@ def test_tool_calls_decoder_error_message_defaults_when_blank():
     evt["params"]["data"]["message"] = ""  # blank -> default message
     list(decoder.feed(evt))
     assert str(h.error) == "Tool call errored"
+
+
+class _FakeScopedHandle:
+    def __init__(self, *, path, graph_name, trigger_call_id):
+        self.path = path
+        self.graph_name = graph_name
+        self.trigger_call_id = trigger_call_id
+        self.status = "started"
+        self.error = None
+        self.events: list[dict] = []
+
+    def _push_event(self, event):
+        self.events.append(event)
+
+    def _finish(self, status, error=None):
+        if self.status != "started":
+            return
+        self.status = status
+        self.error = error
+
+
+def _scoped_factory(*, path, graph_name, trigger_call_id):
+    return _FakeScopedHandle(
+        path=path, graph_name=graph_name, trigger_call_id=trigger_call_id
+    )
+
+
+def test_subgraphs_decoder_discovers_on_lifecycle_started_once():
+    decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
+    [h] = list(decoder.feed(lifecycle_started_event(seq=1, namespace=["child"])))
+    assert h.path == ("child",)
+    assert list(decoder.feed(lifecycle_started_event(seq=2, namespace=["child"]))) == []
+
+
+def test_subgraphs_decoder_discovers_on_tasks_start_without_result():
+    decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
+    [h] = list(decoder.feed(tasks_start_event(seq=1, namespace=["child"])))
+    assert h.path == ("child",)
+
+
+def test_subgraphs_decoder_parses_graph_name_and_trigger_from_segment():
+    decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
+    [h] = list(decoder.feed(tasks_start_event(seq=1, namespace=["agent:call-1"])))
+    assert h.graph_name == "agent"
+    assert h.trigger_call_id == "call-1"
+
+
+def test_subgraphs_decoder_fans_out_events_to_active_child():
+    decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
+    [h] = list(decoder.feed(lifecycle_started_event(seq=1, namespace=["child"])))
+    inner = message_start_event(seq=2, namespace=["child"], message_id="m")
+    assert list(decoder.feed(inner)) == []
+    assert inner in h.events  # whole event pushed, not just data
+
+
+def test_subgraphs_decoder_fans_out_grandchild_to_direct_child():
+    decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
+    [h] = list(decoder.feed(lifecycle_started_event(seq=1, namespace=["child"])))
+    grand = message_start_event(seq=2, namespace=["child", "grand"], message_id="m")
+    list(decoder.feed(grand))
+    assert grand in h.events
+
+
+def test_subgraphs_decoder_tasks_result_at_parent_finalizes_child():
+    decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
+    # child discovered with a colon segment -> trigger_call_id == "call-1"
+    [h] = list(decoder.feed(tasks_start_event(seq=1, namespace=["agent:call-1"])))
+    assert h.trigger_call_id == "call-1"
+    # the finalizing tasks-result is emitted at the PARENT (root) namespace,
+    # with id (task_id) matching the child's trigger_call_id
+    list(
+        decoder.feed(
+            tasks_result_event(seq=2, namespace=[], task_id="call-1", result={"ok": 1})
+        )
+    )
+    assert h.status == "completed"
+    # finalized + removed from active: later child-namespace events no longer fan out
+    later = message_start_event(seq=3, namespace=["agent:call-1"], message_id="m")
+    list(decoder.feed(later))
+    assert later not in h.events
+
+
+def test_subgraphs_decoder_tasks_result_failed_status():
+    decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
+    [h] = list(decoder.feed(tasks_start_event(seq=1, namespace=["agent:call-1"])))
+    list(
+        decoder.feed(
+            tasks_result_event(seq=2, namespace=[], task_id="call-1", error="boom")
+        )
+    )
+    assert h.status == "failed"
+    assert h.error == "boom"
+
+
+def test_subgraphs_decoder_tasks_result_interrupted_status():
+    decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
+    [h] = list(decoder.feed(tasks_start_event(seq=1, namespace=["agent:call-1"])))
+    list(
+        decoder.feed(
+            tasks_result_event(
+                seq=2, namespace=[], task_id="call-1", interrupts=[{"id": "i-1"}]
+            )
+        )
+    )
+    assert h.status == "interrupted"
+
+
+def test_subgraphs_decoder_ignores_unrelated_and_scope_itself():
+    decoder = SubgraphsDecoder(scope=("root",), handle_factory=_scoped_factory)
+    # not a direct child of ("root",): wrong depth / wrong prefix
+    assert list(decoder.feed(lifecycle_started_event(seq=1, namespace=["other"]))) == []
+    # the scope's own namespace is not a discovery
+    assert list(decoder.feed(lifecycle_started_event(seq=2, namespace=["root"]))) == []
