@@ -35,20 +35,24 @@ def _tasks_start(
     *,
     task_id: str,
     name: str,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a `tasks` ProtocolEvent carrying a TaskPayload (start)."""
+    data: dict[str, Any] = {
+        "id": task_id,
+        "name": name,
+        "input": None,
+        "triggers": [],
+    }
+    if metadata is not None:
+        data["metadata"] = metadata
     return {
         "type": "event",
         "method": "tasks",
         "params": {
             "namespace": namespace,
             "timestamp": TS,
-            "data": {
-                "id": task_id,
-                "name": name,
-                "input": None,
-                "triggers": [],
-            },
+            "data": data,
         },
     }
 
@@ -404,3 +408,143 @@ def test_stream_events_v3_with_nested_parent_ns_scopes_lifecycle() -> None:
         assert ns[:1] == ("outer:abc",), (
             f"namespace {ns} not within scoped prefix ('outer:abc',)"
         )
+
+
+# ---------------------------------------------------------------------------
+# Metadata projection: subagent_name -> graph_name, tool_call_id -> cause
+# ---------------------------------------------------------------------------
+
+
+def test_subagent_name_metadata_overrides_graph_name() -> None:
+    """metadata.subagent_name overrides the parser-derived segment name."""
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            ["tools:abc123"],
+            task_id="t1",
+            name="call_weather",
+            metadata={"subagent_name": "weather_agent"},
+        )
+    )
+
+    [payload] = _drain_lifecycle(mux)
+    assert payload["event"] == "started"
+    assert payload["graph_name"] == "weather_agent", (
+        "subagent_name from metadata should override the parsed segment name 'tools'"
+    )
+    assert payload["trigger_call_id"] == "abc123"
+
+
+def test_tool_call_id_metadata_sets_cause() -> None:
+    """metadata.tool_call_id projects onto cause as a LifecycleCauseToolCall variant."""
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            ["tools:abc123"],
+            task_id="t1",
+            name="call_weather",
+            metadata={
+                "subagent_name": "weather_agent",
+                "tool_call_id": "call_xyz789",
+            },
+        )
+    )
+
+    [payload] = _drain_lifecycle(mux)
+    assert "cause" in payload, (
+        "cause should be present when tool_call_id metadata is set"
+    )
+    cause = payload["cause"]
+    assert cause["type"] == "toolCall"
+    assert cause["toolCallId"] == "call_xyz789", (
+        "toolCallId must be camelCase to match the langchain-protocol CDDL spec"
+    )
+
+
+def test_subagent_name_without_tool_call_id_has_no_cause() -> None:
+    """metadata.subagent_name alone does not produce a cause field."""
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            ["tools:abc123"],
+            task_id="t1",
+            name="call_weather",
+            metadata={"subagent_name": "weather_agent"},
+        )
+    )
+
+    [payload] = _drain_lifecycle(mux)
+    assert "cause" not in payload, (
+        "cause should be absent when tool_call_id is not in metadata"
+    )
+
+
+def test_lifecycle_does_not_populate_cause_without_subagent_name() -> None:
+    """tool_call_id alone is not enough to populate cause.
+
+    subagent_name is the discriminator for "this is a subagent dispatch."
+    Populating cause without it would mislead frontends, which couldn't
+    distinguish subagent runs from arbitrary nested-graph dispatches that
+    happen to carry a tool_call_id.
+    """
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            ["tools:abc123"],
+            task_id="t1",
+            name="call_weather",
+            metadata={"tool_call_id": "call_xyz789"},
+        )
+    )
+
+    [payload] = _drain_lifecycle(mux)
+    assert "cause" not in payload, (
+        "cause must not be populated without subagent_name as discriminator"
+    )
+    # graph_name falls through to the parser-derived segment name.
+    assert payload["graph_name"] == "tools"
+
+
+def test_no_metadata_falls_through_to_existing_behavior() -> None:
+    """Tasks events without metadata produce the same output as before T4."""
+    mux = _build_lifecycle_mux()
+    mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool"))
+
+    [payload] = _drain_lifecycle(mux)
+    assert payload["graph_name"] == "agent"
+    assert payload["trigger_call_id"] == "abc"
+    assert "cause" not in payload
+
+
+def test_empty_metadata_dict_falls_through() -> None:
+    """An explicit empty metadata dict is treated the same as no metadata."""
+    mux = _build_lifecycle_mux()
+    mux.push(_tasks_start(["agent:abc"], task_id="t1", name="tool", metadata={}))
+
+    [payload] = _drain_lifecycle(mux)
+    assert payload["graph_name"] == "agent"
+    assert "cause" not in payload
+
+
+def test_subagent_name_projection_survives_terminal_roundtrip() -> None:
+    """After started is emitted with projected graph_name, the terminal event
+    (completed) is also emitted correctly for the same namespace."""
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            ["tools:abc"],
+            task_id="t1",
+            name="call_weather",
+            metadata={"subagent_name": "weather_agent", "tool_call_id": "call_001"},
+        )
+    )
+    mux.push(_tasks_result([], task_id="abc", name="tools"))
+
+    payloads = _drain_lifecycle(mux)
+    assert len(payloads) == 2
+    started, completed = payloads
+    assert started["event"] == "started"
+    assert started["graph_name"] == "weather_agent"
+    assert started["cause"] == {"type": "toolCall", "toolCallId": "call_001"}
+    assert completed["event"] == "completed"
+    assert completed["namespace"] == ["tools:abc"]

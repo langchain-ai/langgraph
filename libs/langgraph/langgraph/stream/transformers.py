@@ -353,6 +353,21 @@ def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
     return name, task_id if sep else None
 
 
+class LifecycleCauseToolCall(TypedDict):
+    """Causation edge: a tool call on the parent namespace spawned this subgraph.
+
+    Matches `LifecycleCauseToolCall` in the langchain-protocol CDDL spec.
+    camelCase field name (`toolCallId`) is intentional — matches the wire format.
+    """
+
+    type: Literal["toolCall"]
+    toolCallId: str
+
+
+# Union alias — extensible for future cause types (Send, Edge, etc.)
+LifecycleCause = LifecycleCauseToolCall
+
+
 class LifecyclePayload(TypedDict, total=False):
     """Payload of a lifecycle event surfaced on the `lifecycle` channel.
 
@@ -366,6 +381,7 @@ class LifecyclePayload(TypedDict, total=False):
     namespace: list[str]
     graph_name: NotRequired[str]
     trigger_call_id: NotRequired[str]
+    cause: NotRequired[LifecycleCause]
     error: NotRequired[str]
 
 
@@ -418,6 +434,8 @@ class _TasksLifecycleBase(StreamTransformer):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
+        *,
+        cause: LifecycleCause | None = None,
     ) -> None:
         """Fired once per discovered namespace (first observed task event)."""
         raise NotImplementedError
@@ -443,18 +461,30 @@ class _TasksLifecycleBase(StreamTransformer):
         if "result" in data:
             self._handle_task_result(ns, data)
         else:
-            self._handle_task_start(ns)
+            self._handle_task_start(ns, data)
         # Tasks events are folded into the synthesized projections;
         # suppress from the main event log so iterators don't double-see
         # the same information in two shapes.
         return False
 
-    def _handle_task_start(self, ns: tuple[str, ...]) -> None:
+    def _handle_task_start(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
         if not self._should_track(ns) or ns in self._seen:
             return
         self._seen.add(ns)
-        graph_name, trigger_call_id = _parse_ns_segment(ns[-1])
-        self._on_started(ns, graph_name or None, trigger_call_id)
+        parsed_name, trigger_call_id = _parse_ns_segment(ns[-1])
+        metadata = data.get("metadata") or {}
+        # subagent_name is the discriminator for "this is a subagent dispatch."
+        # Without it, we don't populate cause even if tool_call_id is present —
+        # the frontend can't distinguish a subagent run from any other nested
+        # graph dispatch, and a stray cause would be misleading.
+        subagent_name = metadata.get("subagent_name")
+        graph_name = subagent_name or parsed_name or None
+        cause: LifecycleCause | None = None
+        if subagent_name:
+            tool_call_id = metadata.get("tool_call_id")
+            if tool_call_id:
+                cause = {"type": "toolCall", "toolCallId": str(tool_call_id)}
+        self._on_started(ns, graph_name, trigger_call_id, cause=cause)
         if trigger_call_id is not None:
             self._open[ns] = trigger_call_id
 
@@ -553,6 +583,8 @@ class LifecycleTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
+        *,
+        cause: LifecycleCause | None = None,
     ) -> None:
         if trigger_call_id is None:
             # Without a task id we can't correlate a parent-result
@@ -563,6 +595,8 @@ class LifecycleTransformer(_TasksLifecycleBase):
         if graph_name:
             payload["graph_name"] = graph_name
         payload["trigger_call_id"] = trigger_call_id
+        if cause is not None:
+            payload["cause"] = cause
         self._channel.push(payload)
 
     def _on_terminal(
@@ -625,6 +659,8 @@ class SubgraphTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
+        *,
+        cause: LifecycleCause | None = None,
     ) -> None:
         if self._mux is None:
             return
@@ -737,7 +773,7 @@ class SubgraphTransformer(_TasksLifecycleBase):
                 for child_ns, status, error in self._pop_terminal_transitions(ns, data):
                     await self._aon_terminal(child_ns, status, error)
             else:
-                self._handle_task_start(ns)
+                self._handle_task_start(ns, data)
             keep = False
         else:
             keep = True
