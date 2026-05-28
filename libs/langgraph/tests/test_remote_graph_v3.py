@@ -131,29 +131,16 @@ def test_abort_swallows_cancel_failure_and_still_closes():
         sdk_thread.close.assert_called_once()
 
 
-def test_sync_interleave_yields_tagged_tuples():
-    adapter, _, sdk_thread = _make_sync_adapter()
-    sdk_thread.messages = ["m1", "m2"]
-    sdk_thread.values = [{"v": 1}]
-    with adapter as stream:
-        got = list(stream.interleave("messages", "values"))
-    names = [n for n, _ in got]
-    assert sorted(names) == ["messages", "messages", "values"]
-
-
-def test_sync_interleave_routes_unknown_through_extensions():
-    adapter, _, sdk_thread = _make_sync_adapter()
-    sdk_thread.extensions = {"custom": ["c1", "c2"]}
-    with adapter as stream:
-        got = list(stream.interleave("custom"))
-    assert got == [("custom", "c1"), ("custom", "c2")]
-
-
-def test_sync_interleave_no_names_yields_nothing():
+def test_sync_interleave_raises_not_implemented():
+    """Sync interleave is a known TODO pending an sdk-py refactor that
+    extracts per-channel decoders so they can be driven from one shared
+    subscription. Until then, raise NotImplementedError to make the gap
+    explicit to callers.
+    """
     adapter, _, _ = _make_sync_adapter()
     with adapter as stream:
-        got = list(stream.interleave())
-    assert got == []
+        with pytest.raises(NotImplementedError, match="sdk-py refactor"):
+            list(stream.interleave("messages"))
 
 
 def test_async_adapter_has_no_interleave():

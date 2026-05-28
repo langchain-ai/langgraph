@@ -2,12 +2,10 @@
 from __future__ import annotations
 
 import logging
-import queue
 import sys
-import threading
-from collections.abc import AsyncIterator, Iterable, Iterator
+from collections.abc import AsyncIterator, Iterator
 from types import TracebackType
-from typing import Any, cast
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph_sdk._async.stream import AsyncThreadStream
@@ -15,8 +13,6 @@ from langgraph_sdk._sync.stream import SyncThreadStream
 from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
 
 logger = logging.getLogger(__name__)
-
-_SENTINEL: Any = object()
 
 
 class _RemoteGraphRunStream:
@@ -104,56 +100,22 @@ class _RemoteGraphRunStream:
             self._events_iter = iter(self._sdk.events)
         return self._events_iter
 
-    def _resolve_projection(self, name: str) -> Iterator[Any]:
-        builtin = {
-            "messages": self._sdk.messages,
-            "tool_calls": self._sdk.tool_calls,
-            "values": self._sdk.values,
-            "subgraphs": self._sdk.subgraphs,
-        }
-        source = cast(
-            Iterable[Any],
-            builtin[name] if name in builtin else self._sdk.extensions[name],
-        )
-        return iter(source)
-
     def interleave(self, *names: str) -> Iterator[tuple[str, Any]]:
-        """Iterate multiple projections in arrival order.
+        """Not yet implemented on RemoteGraph.
 
-        Mirrors local `GraphRunStream.interleave` shape: yields
-        `(name, item)` tuples in best-effort arrival order across the
-        named projections. Cross-channel ordering is by client receive
-        order, not the local mux's monotonic push-stamp ordering.
+        Local `GraphRunStream.interleave` yields typed wrapper objects
+        (chat-model streams, tool-call handles, snapshot dicts) pushed by
+        in-process transformers. The remote analog requires an SDK-side
+        refactor so projection decoders can run off a single shared
+        subscription instead of each one owning its own queue. Tracked as
+        a follow-up sdk-py PR; once shipped, this method becomes a
+        one-line passthrough to the new SDK primitive.
         """
-        if not names:
-            return
-        sources = {n: self._resolve_projection(n) for n in names}
-        q: queue.Queue[Any] = queue.Queue()
-
-        def _drain(channel: str, src: Iterator[Any]) -> None:
-            try:
-                for item in src:
-                    q.put((channel, item))
-            finally:
-                q.put(_SENTINEL)
-
-        drainers = [
-            threading.Thread(target=_drain, args=(n, s), daemon=True)
-            for n, s in sources.items()
-        ]
-        for t in drainers:
-            t.start()
-        pending = len(drainers)
-        try:
-            while pending > 0:
-                item = q.get()
-                if item is _SENTINEL:
-                    pending -= 1
-                    continue
-                yield item
-        finally:
-            for t in drainers:
-                t.join(timeout=0.5)
+        raise NotImplementedError(
+            "RemoteGraph.stream_events(version='v3').interleave() is not "
+            "yet implemented; requires an upcoming sdk-py refactor that "
+            "extracts per-channel decoders from the projection iterators."
+        )
 
 
 class _AsyncRemoteGraphRunStream:
