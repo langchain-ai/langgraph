@@ -602,3 +602,133 @@ def test_v3_streaming_sync_surface_smoke():
     assert tools_result[0].name == "search"  # ty: ignore[unresolved-attribute]
     assert results["progress"] == [{"name": "progress", "step": 1}]
     assert final == {"final": True}
+
+
+# ---------------------------------------------------------------------------
+# interleave_projections tests
+# ---------------------------------------------------------------------------
+
+
+def test_interleave_projections_single_channel_values():
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        values_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({"counter": 0})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            values_event(seq=1, counter=1),
+            values_event(seq=2, counter=2),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            items = []
+            for ch, item in thread.interleave_projections(["values"]):
+                items.append((ch, item))
+    assert ("values", {"counter": 1}) in items
+    assert ("values", {"counter": 2}) in items
+    assert all(ch == "values" for ch, _ in items)
+
+
+def test_interleave_projections_values_and_messages_arrival_order():
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        message_finish_event,
+        message_start_event,
+        values_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({"counter": 0})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            values_event(seq=1, counter=1),
+            message_start_event(seq=2, message_id="m-1"),
+            values_event(seq=3, counter=2),
+            message_finish_event(seq=4, message_id="m-1"),
+            lifecycle_completed_event(seq=5),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            order = []
+            for ch, _ in thread.interleave_projections(["values", "messages"]):
+                order.append(ch)
+                if len(order) >= 3:
+                    break
+    assert order[:3] == ["values", "messages", "values"]
+
+
+def test_interleave_projections_mixes_builtin_and_extension():
+    from streaming._events import (
+        custom_event,
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        values_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({"counter": 0})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            values_event(seq=1, counter=1),
+            custom_event(seq=2, name="foo", hello="world"),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            items = []
+            for ch, item in thread.interleave_projections(["values", "foo"]):
+                items.append((ch, item))
+    assert ("values", {"counter": 1}) in items
+    assert ("foo", {"name": "foo", "hello": "world"}) in items
+
+
+def test_interleave_projections_tool_calls_uses_public_name():
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        tool_finished_event,
+        tool_started_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tool_started_event(seq=1, tool_call_id="call-1", tool_name="search"),
+            tool_finished_event(seq=2, tool_call_id="call-1", output={"ok": True}),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            names = []
+            handle = None
+            for ch, item in thread.interleave_projections(["tool_calls"]):
+                names.append(ch)
+                if handle is None:
+                    handle = item
+                break
+    assert names == ["tool_calls"]
+    assert handle is not None
+    assert handle.tool_call_id == "call-1"

@@ -31,6 +31,7 @@ from langgraph_sdk.stream.decoders import (
     ToolCallsDecoder,
     ValuesDecoder,
 )
+from langgraph_sdk.stream.subscription import compute_union_filter, infer_channel
 from langgraph_sdk.stream.sync_controller import SyncStreamController, _SyncSubscription
 from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
@@ -1278,6 +1279,103 @@ class SyncThreadStream:
         if depth is not None:
             params["depth"] = depth
         return self._subscription_iter(params)
+
+    def interleave_projections(self, channels: list[str]) -> Iterator[tuple[str, Any]]:
+        """Yield `(channel_name, item)` tuples across multiple projections.
+
+        One shared subscription drives all per-channel decoders; items arrive
+        in server-emit order (the SDK analog of `GraphRunStream.interleave`).
+
+        Args:
+            channels: Flat list of `"values"`, `"messages"`, `"tool_calls"`,
+                `"subgraphs"`, and/or extension names. Built-ins yield their
+                typed item (snapshot dict / `ChatModelStream` /
+                `SyncToolCallHandle` / `SyncScopedStreamHandle`); an extension
+                yields its payload dict, keyed by the bare extension name.
+
+        Note:
+            Handles and streams are yielded eagerly (before their sub-stream
+            completes), so items arrive interleaved in real time. To receive a
+            fully-resolved handle (output already populated), use the dedicated
+            `thread.tool_calls` / `thread.messages` projections instead.
+        """
+        if self._transport is None:
+            raise RuntimeError("SyncThreadStream not entered — use `with`.")
+        decoders: dict[str, Any] = {}
+        sub_params: list[dict[str, Any]] = []
+        for ch in channels:
+            if ch == "values":
+                decoders[ch] = ValuesDecoder()
+                sub_params.append({"channels": ["values"]})
+            elif ch == "messages":
+                decoders[ch] = MessagesDecoder(
+                    namespace=[],
+                    stream_factory=lambda *, namespace, node, message_id: (
+                        ChatModelStream(
+                            namespace=namespace, node=node, message_id=message_id
+                        )
+                    ),
+                )
+                sub_params.append(dict(_exact_namespace_params(["messages"], [])))
+            elif ch == "tool_calls":
+                decoders[ch] = ToolCallsDecoder(
+                    namespace=[],
+                    handle_factory=lambda *, tool_call_id, name, input, namespace: (
+                        SyncToolCallHandle(
+                            tool_call_id=tool_call_id,
+                            name=name,
+                            input=input,
+                            namespace=namespace,
+                        )
+                    ),
+                )
+                sub_params.append(dict(_exact_namespace_params(["tools"], [])))
+            elif ch == "subgraphs":
+                decoders[ch] = SubgraphsDecoder(
+                    scope=(),
+                    handle_factory=lambda *, path, graph_name, trigger_call_id: (
+                        SyncScopedStreamHandle(
+                            thread=self,
+                            path=path,
+                            graph_name=graph_name,
+                            trigger_call_id=trigger_call_id,
+                        )
+                    ),
+                )
+                sub_params.append(dict(_subgraph_subscription_params(())))
+            else:
+                decoders[ch] = ExtensionsDecoder(name=ch)
+                sub_params.append({"channels": [f"custom:{ch}"]})
+        if not sub_params:
+            return
+        merged = cast(
+            SubscribeParams,
+            compute_union_filter(cast("list[dict[str, Any]]", sub_params)),
+        )
+        subgraphs = decoders.get("subgraphs")
+        for event in self._subscription_iter(merged):
+            if subgraphs is not None:
+                for item in subgraphs.feed(cast("dict[str, Any]", event)):
+                    yield ("subgraphs", item)
+            wire = infer_channel(event)
+            public = self._interleave_public_name(wire)
+            # subgraphs is driven separately above (it consumes all events); never dispatch it here.
+            if public is not None and public != "subgraphs":
+                decoder = decoders.get(public)
+                if decoder is not None:
+                    for item in decoder.feed(cast("dict[str, Any]", event)):
+                        yield (public, item)
+
+    @staticmethod
+    def _interleave_public_name(wire: str | None) -> str | None:
+        """Map a wire channel name to the public channel name used in interleave tuples."""
+        if wire is None:
+            return None
+        if wire == "tools":
+            return "tool_calls"
+        if wire.startswith("custom:"):
+            return wire[len("custom:") :]
+        return wire  # values, messages (tasks/lifecycle pass through with no decoder match)
 
     def _subscription_iter(self, params: SubscribeParams) -> Iterator[Event]:
         sub = self._register_subscription(params)
