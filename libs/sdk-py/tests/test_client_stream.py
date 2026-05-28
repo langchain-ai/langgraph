@@ -89,6 +89,47 @@ def _assert_v2_shape(part: Any) -> None:
 # --- SSE parsing ---
 
 
+def test_decoder_joins_repeated_data_fields_with_newline(monkeypatch):
+    """Per the SSE spec, repeated ``data:`` lines in a single event are joined
+    with ``\\n`` before being handed to the JSON loader. Regression test for
+    #7915 where the decoder concatenated the values directly, so a multi-line
+    payload was reassembled as if it had no separators at all."""
+
+    captured: list[bytes] = []
+
+    def fake_loads(payload: Any) -> Any:
+        captured.append(bytes(payload))
+        return None
+
+    monkeypatch.setattr("langgraph_sdk.sse.orjson.loads", fake_loads)
+
+    decoder = SSEDecoder()
+    for line in (b"event: custom", b"data: hi", b"data: world"):
+        assert decoder.decode(line) is None
+    decoder.decode(b"")
+
+    assert captured == [b"hi\nworld"]
+
+
+def test_decoder_single_data_field_unchanged(monkeypatch):
+    """A single ``data:`` line should still reach the JSON loader without any
+    extra separators tacked on."""
+
+    captured: list[bytes] = []
+
+    def fake_loads(payload: Any) -> Any:
+        captured.append(bytes(payload))
+        return None
+
+    monkeypatch.setattr("langgraph_sdk.sse.orjson.loads", fake_loads)
+
+    decoder = SSEDecoder()
+    assert decoder.decode(b'data: {"x": 1}') is None
+    decoder.decode(b"")
+
+    assert captured == [b'{"x": 1}']
+
+
 def test_stream_sse():
     for groups in (
         [RESPONSE_PAYLOAD],

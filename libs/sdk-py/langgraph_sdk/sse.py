@@ -124,6 +124,12 @@ class SSEDecoder:
         if fieldname == b"event":
             self._event = value.decode()
         elif fieldname == b"data":
+            # Per the SSE spec, repeated `data:` fields in the same event are
+            # joined with a newline. Inserting `\n` between values keeps the
+            # original payload bytes intact when the server splits a multi-line
+            # JSON string across several `data:` lines.
+            if self._data:
+                self._data.extend(b"\n")
             self._data.extend(value)
         elif fieldname == b"id":
             if b"\0" in value:
