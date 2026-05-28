@@ -27,6 +27,7 @@ from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.controller import _SeenEventIds
 from langgraph_sdk.stream.decoders import (
+    Decoder,
     ExtensionsDecoder,
     MessagesDecoder,
     SubgraphsDecoder,
@@ -1428,7 +1429,7 @@ class AsyncThreadStream:
         """
         if self._transport is None:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
-        decoders: dict[str, Any] = {}
+        decoders: dict[str, Decoder] = {}
         sub_params: list[SubscribeParams] = []
         for ch in channels:
             if ch == "values":

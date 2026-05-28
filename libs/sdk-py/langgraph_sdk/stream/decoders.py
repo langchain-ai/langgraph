@@ -8,7 +8,7 @@ which drives multiple decoders from one shared subscription.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal, Protocol
 
 
@@ -63,7 +63,7 @@ def _is_direct_child(namespace: list[str], scope: tuple[str, ...]) -> bool:
 
 
 class Decoder(Protocol):
-    def feed(self, event: dict[str, Any]) -> Iterable[Any]: ...
+    def feed(self, event: Mapping[str, Any]) -> Iterable[Any]: ...
 
 
 class ValuesDecoder:
@@ -75,7 +75,7 @@ class ValuesDecoder:
     event state machine).
     """
 
-    def feed(self, event: dict[str, Any]) -> Iterable[Any]:
+    def feed(self, event: Mapping[str, Any]) -> Iterable[Any]:
         if event.get("method") == "values":
             params = event.get("params") or {}
             data = params.get("data")
@@ -106,7 +106,7 @@ class MessagesDecoder:
         self._stream_factory = stream_factory
         self._active: dict[str, Any] = {}  # route_key -> stream
 
-    def feed(self, event: dict[str, Any]) -> Iterable[Any]:
+    def feed(self, event: Mapping[str, Any]) -> Iterable[Any]:
         if event.get("method") != "messages":
             return
         params = event.get("params") or {}
@@ -160,7 +160,7 @@ class ToolCallsDecoder:
         self._handle_factory = handle_factory
         self._active: dict[str, Any] = {}
 
-    def feed(self, event: dict[str, Any]) -> Iterable[Any]:
+    def feed(self, event: Mapping[str, Any]) -> Iterable[Any]:
         if event.get("method") != "tools":
             return
         params = event.get("params") or {}
@@ -220,7 +220,7 @@ class SubgraphsDecoder:
         self._active: dict[tuple[str, ...], Any] = {}
         self._seen: set[tuple[str, ...]] = set()
 
-    def feed(self, event: dict[str, Any]) -> Iterable[Any]:
+    def feed(self, event: Mapping[str, Any]) -> Iterable[Any]:
         params = event.get("params") or {}
         namespace = _event_namespace(params)
         data = params.get("data")
@@ -294,7 +294,7 @@ class ExtensionsDecoder:
             raise ValueError("extension name must be non-empty.")
         self._name = name
 
-    def feed(self, event: dict[str, Any]) -> Iterable[Any]:
+    def feed(self, event: Mapping[str, Any]) -> Iterable[Any]:
         if event.get("method") != "custom":
             return
         params = event.get("params") or {}

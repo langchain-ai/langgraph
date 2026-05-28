@@ -608,3 +608,33 @@ def test_sync_tool_calls_subscription_resolves_output_before_yield():
             for call in thread.tool_calls:
                 outputs.append(call.output)  # resolved (blocking) on yield
     assert outputs == [{"ok": True}]
+
+
+# ---------------------------------------------------------------------------
+# Regression: interleaved-concurrent tool calls must BOTH surface
+# ---------------------------------------------------------------------------
+
+
+def test_sync_tool_calls_interleaved_concurrent_calls_both_surface():
+    """Two tool calls whose events interleave must BOTH be yielded (regression:
+    the pre-decoder read-ahead silently dropped the second concurrent call)."""
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tool_started_event(seq=1, tool_call_id="call-a", tool_name="search"),
+            tool_started_event(seq=2, tool_call_id="call-b", tool_name="lookup"),
+            tool_finished_event(seq=3, tool_call_id="call-a", output={"a": 1}),
+            tool_finished_event(seq=4, tool_call_id="call-b", output={"b": 2}),
+            lifecycle_completed_event(seq=5),
+        ]
+    )
+    fake.set_state({})
+    seen = []
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            for call in thread.tool_calls:
+                seen.append(call.tool_call_id)
+    assert sorted(seen) == ["call-a", "call-b"]

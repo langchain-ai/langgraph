@@ -25,6 +25,7 @@ from langchain_protocol import Event, SubscribeParams
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.decoders import (
+    Decoder,
     ExtensionsDecoder,
     MessagesDecoder,
     SubgraphsDecoder,
@@ -1301,7 +1302,7 @@ class SyncThreadStream:
         """
         if self._transport is None:
             raise RuntimeError("SyncThreadStream not entered — use `with`.")
-        decoders: dict[str, Any] = {}
+        decoders: dict[str, Decoder] = {}
         sub_params: list[dict[str, Any]] = []
         for ch in channels:
             if ch == "values":
@@ -1355,7 +1356,7 @@ class SyncThreadStream:
         subgraphs = decoders.get("subgraphs")
         for event in self._subscription_iter(merged):
             if subgraphs is not None:
-                for item in subgraphs.feed(cast("dict[str, Any]", event)):
+                for item in subgraphs.feed(event):
                     yield ("subgraphs", item)
             wire = infer_channel(event)
             public = self._interleave_public_name(wire)
@@ -1363,7 +1364,7 @@ class SyncThreadStream:
             if public is not None and public != "subgraphs":
                 decoder = decoders.get(public)
                 if decoder is not None:
-                    for item in decoder.feed(cast("dict[str, Any]", event)):
+                    for item in decoder.feed(event):
                         yield (public, item)
 
     @staticmethod
