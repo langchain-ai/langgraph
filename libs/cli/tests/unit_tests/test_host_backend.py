@@ -1,5 +1,6 @@
 import httpx
 import pytest
+import json
 
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 
@@ -174,6 +175,71 @@ def test_update_deployment(client):
 def test_update_deployment_no_secrets(client):
     result = client.update_deployment("dep-123", "image:latest")
     assert result == {"ok": True}
+
+
+def _capturing_client(captured: dict) -> HostBackendClient:
+    def handler(req: httpx.Request) -> httpx.Response:
+        captured["body"] = req.read()
+        return httpx.Response(200, json={"ok": True})
+
+    c = HostBackendClient("https://api.example.com", "key")
+    c._client = httpx.Client(
+        base_url="https://api.example.com",
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "key", "Accept": "application/json"},
+        timeout=30,
+    )
+    return c
+
+
+def test_update_deployment_forwards_tracked_packages():
+    captured: dict = {}
+    c = _capturing_client(captured)
+    c.update_deployment(
+        "dep-123",
+        "image:latest",
+        tracked_packages=["google-adk:1.0.0"],
+    )
+    body = json.loads(captured["body"])
+    assert body["source_revision_config"]["tracked_packages"] == [
+        "google-adk:1.0.0"
+    ]
+
+
+def test_update_deployment_omits_tracked_packages_when_absent():
+    captured: dict = {}
+    c = _capturing_client(captured)
+    c.update_deployment("dep-123", "image:latest")
+    body = json.loads(captured["body"])
+    assert "tracked_packages" not in body["source_revision_config"]
+
+
+def test_update_deployment_internal_source_forwards_tracked_packages():
+    captured: dict = {}
+    c = _capturing_client(captured)
+    c.update_deployment_internal_source(
+        "dep-123",
+        source_tarball_path="path/to/tarball",
+        config_path="langgraph.json",
+        tracked_packages=["google-adk:>=0.5"],
+    )
+    body = json.loads(captured["body"])
+    assert body["source_revision_config"]["tracked_packages"] == [
+        "google-adk:>=0.5"
+    ]
+    assert body["source_revision_config"]["source_tarball_path"] == "path/to/tarball"
+
+
+def test_update_deployment_internal_source_omits_tracked_packages_when_absent():
+    captured: dict = {}
+    c = _capturing_client(captured)
+    c.update_deployment_internal_source(
+        "dep-123",
+        source_tarball_path="path/to/tarball",
+        config_path="langgraph.json",
+    )
+    body = json.loads(captured["body"])
+    assert "tracked_packages" not in body["source_revision_config"]
 
 
 def test_list_revisions(client):
