@@ -26,6 +26,7 @@ from langchain_protocol import Event, SubscribeParams
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.controller import _SeenEventIds
+from langgraph_sdk.stream.decoders import ValuesDecoder
 from langgraph_sdk.stream.transport import (
     AsyncProtocolTransport,
     EventStreamHandle,
@@ -348,6 +349,7 @@ class _ValuesProjection:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
         params: SubscribeParams = {"channels": ["values"]}
         sub = self._thread._register_subscription(params)
+        decoder = ValuesDecoder()
         try:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
@@ -357,12 +359,8 @@ class _ValuesProjection:
                 item = await sub.queue.get()
                 if item is None:
                     return
-                params_field = item.get("params") or {}
-                data = (
-                    params_field.get("data") if isinstance(params_field, dict) else None
-                )
-                if data is not None:
-                    yield data
+                for out in decoder.feed(item):
+                    yield out
         finally:
             self._thread._unregister_subscription(sub.id)
 

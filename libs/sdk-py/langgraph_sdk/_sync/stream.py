@@ -17,13 +17,14 @@ import queue
 import threading
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
 
 from langchain_core.language_models.chat_model_stream import ChatModelStream
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import QueryParamTypes
+from langgraph_sdk.stream.decoders import ValuesDecoder
 from langgraph_sdk.stream.sync_controller import SyncStreamController, _SyncSubscription
 from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
@@ -295,6 +296,7 @@ class _SyncValuesProjection:
             raise RuntimeError("SyncThreadStream not entered — use `with`.")
         params: SubscribeParams = {"channels": ["values"]}
         sub = self._thread._register_subscription(params)
+        decoder = ValuesDecoder()
         try:
             self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
@@ -304,12 +306,7 @@ class _SyncValuesProjection:
                 item = sub.queue.get()
                 if item is None:
                     return
-                params_field = item.get("params") or {}
-                data = (
-                    params_field.get("data") if isinstance(params_field, dict) else None
-                )
-                if data is not None:
-                    yield data
+                yield from decoder.feed(cast(dict[str, Any], item))
         finally:
             self._thread._unregister_subscription(sub.id)
 
