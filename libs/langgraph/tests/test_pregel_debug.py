@@ -85,54 +85,35 @@ def test_map_debug_tasks_handles_none_config() -> None:
     assert "metadata" not in payloads[0]
 
 
-def test_map_debug_tasks_filters_non_whitelisted_metadata_keys() -> None:
-    """Internal langgraph metadata keys (thread_id, langgraph_*) must NOT
-    appear in TaskPayload.metadata. Only the curated whitelist should pass.
+def test_map_debug_tasks_forwards_all_metadata_keys() -> None:
+    """All metadata keys flow through to TaskPayload.metadata, including
+    framework keys. Mirrors stream_mode="messages" semantics, where the
+    callback metadata dict is also forwarded whole. Consumers that don't
+    want framework keys can filter them client-side.
     """
-    task = _FakeTask(
-        id="t1",
-        name="tools",
-        input=[],
-        triggers=["x"],
-        config={
-            "metadata": {
-                "subagent_name": "weather_agent",
-                "tool_call_id": "call_xyz",
-                # Internals that should NOT flow through:
-                "thread_id": "thread-1",
-                "langgraph_step": 1,
-                "langgraph_node": "tools",
-                "langgraph_path": ("__pregel_pull", "tools"),
-            },
-        },
-    )
-    payloads = list(map_debug_tasks([task]))
-    assert len(payloads) == 1
-    payload = payloads[0]
-    assert payload["metadata"] == {
+    md = {
         "subagent_name": "weather_agent",
         "tool_call_id": "call_xyz",
+        "thread_id": "thread-1",
+        "langgraph_step": 1,
+        "langgraph_node": "tools",
+        "langgraph_path": ("__pregel_pull", "tools"),
     }
-    assert "thread_id" not in payload["metadata"]
-    assert "langgraph_step" not in payload["metadata"]
-    assert "langgraph_node" not in payload["metadata"]
-
-
-def test_map_debug_tasks_omits_metadata_when_only_internal_keys_present() -> None:
-    """If config metadata contains only langgraph-internal keys (none of the
-    whitelisted ones), TaskPayload.metadata should be omitted entirely.
-    """
     task = _FakeTask(
-        id="t1",
-        name="tools",
-        input=[],
-        triggers=["x"],
-        config={
-            "metadata": {
-                "thread_id": "thread-1",
-                "langgraph_step": 1,
-            },
-        },
+        id="t1", name="tools", input=[], triggers=["x"], config={"metadata": md}
     )
     payloads = list(map_debug_tasks([task]))
-    assert "metadata" not in payloads[0]
+    assert payloads[0]["metadata"] == md
+
+
+def test_map_debug_tasks_metadata_is_copied_not_referenced() -> None:
+    """Mutating the source config after emission must not affect the
+    payload — TaskPayload.metadata is a defensive copy.
+    """
+    md = {"subagent_name": "a", "tool_call_id": "c1"}
+    task = _FakeTask(
+        id="t1", name="tools", input=[], triggers=["x"], config={"metadata": md}
+    )
+    payload = next(iter(map_debug_tasks([task])))
+    md["subagent_name"] = "MUTATED"
+    assert payload["metadata"]["subagent_name"] == "a"
