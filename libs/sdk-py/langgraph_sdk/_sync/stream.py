@@ -24,7 +24,7 @@ from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import QueryParamTypes
-from langgraph_sdk.stream.decoders import ValuesDecoder
+from langgraph_sdk.stream.decoders import MessagesDecoder, ValuesDecoder
 from langgraph_sdk.stream.sync_controller import SyncStreamController, _SyncSubscription
 from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
@@ -337,87 +337,35 @@ class _SyncMessagesProjection:
             return
         params = _exact_namespace_params(["messages"], self._namespace)
         sub = self._thread._register_subscription(params)
-        active: dict[str, ChatModelStream] = {}
+        decoder = MessagesDecoder(
+            namespace=self._namespace,
+            stream_factory=lambda *, namespace, node, message_id: ChatModelStream(
+                namespace=namespace, node=node, message_id=message_id
+            ),
+        )
+        registered: list[ChatModelStream] = []
+        pending: list[ChatModelStream] = []
         try:
             self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
             while True:
                 item = sub.queue.get()
                 if item is None:
+                    # EOF: surface remaining streams (possibly incomplete) in start order.
+                    while pending:
+                        yield pending.pop(0)
                     return
-                params_field = item.get("params") or {}
-                if _event_namespace(params_field) != self._namespace:
-                    continue
-                data = (
-                    params_field.get("data") if isinstance(params_field, dict) else None
-                )
-                if not isinstance(data, dict):
-                    continue
-                event_type = data.get("event")
-                if event_type == "message-start":
-                    message_id = _message_event_id(data)
-                    key = _message_route_key(data, fallback=message_id)
-                    metadata = (
-                        data.get("metadata")
-                        if isinstance(data.get("metadata"), dict)
-                        else {}
-                    )
-                    stream = ChatModelStream(
-                        namespace=list(self._namespace),
-                        node=metadata.get("langgraph_node") if metadata else None,
-                        message_id=message_id,
-                    )
-                    active[key] = stream
+                for stream in decoder.feed(cast(dict[str, Any], item)):
                     self._thread._register_active_message_stream(stream)
-                    stream.dispatch(data)
-                    # Pre-dispatch all remaining events for this message so the
-                    # caller can access str(message.text) inside a for loop.
-                    while not stream._done:
-                        next_item = sub.queue.get()
-                        if next_item is None:
-                            sub.queue.put(None)
-                            break
-                        next_params = next_item.get("params") or {}
-                        next_data = (
-                            next_params.get("data")
-                            if isinstance(next_params, dict)
-                            else None
-                        )
-                        if not isinstance(next_data, dict):
-                            continue
-                        next_event_type = next_data.get("event")
-                        next_key = _message_route_key(next_data)
-                        target = active.get(next_key)
-                        if (
-                            target is None
-                            and next_key == "__single__"
-                            and len(active) == 1
-                        ):
-                            target = next(iter(active.values()))
-                        if target is not None:
-                            target.dispatch(next_data)
-                            if next_event_type in ("message-finish", "error"):
-                                self._thread._unregister_active_message_stream(target)
-                                for rk, cand in list(active.items()):
-                                    if cand is target:
-                                        del active[rk]
-                    yield stream
-                else:
-                    key = _message_route_key(data)
-                    stream = active.get(key)
-                    if stream is None and key == "__single__" and len(active) == 1:
-                        stream = next(iter(active.values()))
-                    if stream is None:
-                        continue
-                    stream.dispatch(data)
-                    if event_type in ("message-finish", "error"):
-                        self._thread._unregister_active_message_stream(stream)
-                        for route_key, candidate in list(active.items()):
-                            if candidate is stream:
-                                del active[route_key]
+                    registered.append(stream)
+                    pending.append(stream)
+                # Surface in start order once each (and all earlier) streams are done,
+                # so `str(stream.text)` is ready on yield (sync pre-dispatch contract).
+                while pending and pending[0]._done:
+                    yield pending.pop(0)
         finally:
-            for s in active.values():
-                self._thread._unregister_active_message_stream(s)
+            for stream in registered:
+                self._thread._unregister_active_message_stream(stream)
             self._thread._unregister_subscription(sub.id)
 
 

@@ -26,7 +26,7 @@ from langchain_protocol import Event, SubscribeParams
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.controller import _SeenEventIds
-from langgraph_sdk.stream.decoders import ValuesDecoder
+from langgraph_sdk.stream.decoders import MessagesDecoder, ValuesDecoder
 from langgraph_sdk.stream.transport import (
     AsyncProtocolTransport,
     EventStreamHandle,
@@ -395,7 +395,13 @@ class _MessagesProjection:
             return
         params = _exact_namespace_params(["messages"], self._namespace)
         sub = self._thread._register_subscription(params)
-        active: dict[str, AsyncChatModelStream] = {}
+        decoder = MessagesDecoder(
+            namespace=self._namespace,
+            stream_factory=lambda *, namespace, node, message_id: AsyncChatModelStream(
+                namespace=namespace, node=node, message_id=message_id
+            ),
+        )
+        registered: list[AsyncChatModelStream] = []
         try:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
@@ -403,59 +409,12 @@ class _MessagesProjection:
                 item = await sub.queue.get()
                 if item is None:
                     return
-                params_field = item.get("params") or {}
-                if _event_namespace(params_field) != self._namespace:
-                    continue
-                data = (
-                    params_field.get("data") if isinstance(params_field, dict) else None
-                )
-                if not isinstance(data, dict):
-                    continue
-                event_type = data.get("event")
-                if event_type == "message-start":
-                    message_id = _message_event_id(data)
-                    key = _message_route_key(data, fallback=message_id)
-                    metadata = (
-                        data.get("metadata")
-                        if isinstance(data.get("metadata"), dict)
-                        else {}
-                    )
-                    stream = AsyncChatModelStream(
-                        namespace=list(self._namespace),
-                        node=metadata.get("langgraph_node") if metadata else None,
-                        message_id=message_id,
-                    )
-                    active[key] = stream
+                for stream in decoder.feed(item):
                     self._thread._register_active_message_stream(stream)
-                    stream.dispatch(data)
+                    registered.append(stream)
                     yield stream
-                else:
-                    key = _message_route_key(data)
-                    stream = active.get(key)
-                    if stream is None and key == "__single__" and len(active) == 1:
-                        # Content-block events (content-block-start /
-                        # content-block-delta / content-block-finish /
-                        # message-finish) don't carry the message ``id``
-                        # on the wire, so ``_message_route_key`` returns
-                        # ``__single__`` while the active stream was
-                        # registered under ``message:<id>``. When exactly
-                        # one stream is active, that mismatch is
-                        # unambiguous -- the events belong to it.
-                        # Events that DO carry an explicit id which
-                        # doesn't match any active stream are still
-                        # dropped (orphan-delta safety, see
-                        # ``test_messages_orphan_delta_without_matching_key_is_dropped``).
-                        stream = next(iter(active.values()))
-                    if stream is None:
-                        continue
-                    stream.dispatch(data)
-                    if event_type in ("message-finish", "error"):
-                        self._thread._unregister_active_message_stream(stream)
-                        for route_key, candidate in list(active.items()):
-                            if candidate is stream:
-                                del active[route_key]
         finally:
-            for stream in active.values():
+            for stream in registered:
                 self._thread._unregister_active_message_stream(stream)
             self._thread._unregister_subscription(sub.id)
 
