@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import asdict
 from unittest.mock import AsyncMock, MagicMock
 
@@ -132,11 +131,37 @@ def test_abort_swallows_cancel_failure_and_still_closes():
         sdk_thread.close.assert_called_once()
 
 
-def test_sync_interleave_raises_not_implemented():
+def test_sync_interleave_yields_tagged_tuples():
+    adapter, _, sdk_thread = _make_sync_adapter()
+    sdk_thread.messages = ["m1", "m2"]
+    sdk_thread.values = [{"v": 1}]
+    with adapter as stream:
+        got = list(stream.interleave("messages", "values"))
+    names = [n for n, _ in got]
+    assert sorted(names) == ["messages", "messages", "values"]
+
+
+def test_sync_interleave_routes_unknown_through_extensions():
+    adapter, _, sdk_thread = _make_sync_adapter()
+    sdk_thread.extensions = {"custom": ["c1", "c2"]}
+    with adapter as stream:
+        got = list(stream.interleave("custom"))
+    assert got == [("custom", "c1"), ("custom", "c2")]
+
+
+def test_sync_interleave_no_names_yields_nothing():
     adapter, _, _ = _make_sync_adapter()
     with adapter as stream:
-        with pytest.raises(NotImplementedError, match="sync interleave"):
-            list(stream.interleave("messages"))
+        got = list(stream.interleave())
+    assert got == []
+
+
+def test_async_adapter_has_no_interleave():
+    """Async adapter intentionally lacks `interleave` (mirrors local
+    `AsyncGraphRunStream`, which doesn't have one either). Async callers
+    compose with `asyncio.gather` / `asyncio.as_completed`.
+    """
+    assert not hasattr(_AsyncRemoteGraphRunStream, "interleave")
 
 
 def _make_async_adapter(*, run_start_returns=None, run_start_raises=None):
@@ -262,66 +287,6 @@ async def test_async_abort_swallows_cancel_failure():
     async with adapter as stream:
         await stream.abort()
         sdk_thread.close.assert_awaited_once()
-
-
-class _FakeAsyncIter:
-    def __init__(self, items, *, sleeps=None):
-        self._items = list(items)
-        self._sleeps = list(sleeps) if sleeps else [0.0] * len(items)
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        if not self._items:
-            raise StopAsyncIteration
-        delay = self._sleeps.pop(0)
-        if delay:
-            await asyncio.sleep(delay)
-        return self._items.pop(0)
-
-
-@pytest.mark.anyio
-async def test_interleave_yields_tagged_tuples():
-    adapter, _, sdk_thread = _make_async_adapter()
-    sdk_thread.messages = _FakeAsyncIter(["m1", "m2"])
-    sdk_thread.values = _FakeAsyncIter([{"v": 1}])
-    async with adapter as stream:
-        got = []
-        async for name, item in stream.interleave("messages", "values"):
-            got.append((name, item))
-    names = [n for n, _ in got]
-    assert sorted(names) == ["messages", "messages", "values"]
-
-
-@pytest.mark.anyio
-async def test_interleave_routes_unknown_through_extensions():
-    adapter, _, sdk_thread = _make_async_adapter()
-    sdk_thread.extensions = {"custom": _FakeAsyncIter(["c1", "c2"])}
-    async with adapter as stream:
-        got = [(name, item) async for name, item in stream.interleave("custom")]
-    assert got == [("custom", "c1"), ("custom", "c2")]
-
-
-@pytest.mark.anyio
-async def test_interleave_no_names_yields_nothing():
-    adapter, _, _ = _make_async_adapter()
-    async with adapter as stream:
-        got = [(name, item) async for name, item in stream.interleave()]
-    assert got == []
-
-
-@pytest.mark.anyio
-async def test_interleave_cancels_drainers_on_early_break():
-    adapter, _, sdk_thread = _make_async_adapter()
-    sdk_thread.messages = _FakeAsyncIter(
-        ["m1", "m2", "m3", "m4"], sleeps=[0.0, 0.05, 0.05, 0.05]
-    )
-    sdk_thread.values = _FakeAsyncIter([{"v": 1}, {"v": 2}], sleeps=[0.0, 0.05])
-    async with adapter as stream:
-        async for _name, _item in stream.interleave("messages", "values"):
-            break
-    # Reaching here without hanging or leaking tasks is the success condition.
 
 
 def _make_remote_graph() -> RemoteGraph:

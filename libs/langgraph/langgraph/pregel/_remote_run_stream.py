@@ -1,10 +1,11 @@
 # libs/langgraph/langgraph/pregel/_remote_run_stream.py
 from __future__ import annotations
 
-import asyncio
 import logging
+import queue
 import sys
-from collections.abc import AsyncIterable, AsyncIterator, Iterator
+import threading
+from collections.abc import AsyncIterator, Iterable, Iterator
 from types import TracebackType
 from typing import Any, cast
 
@@ -103,11 +104,56 @@ class _RemoteGraphRunStream:
             self._events_iter = iter(self._sdk.events)
         return self._events_iter
 
-    def interleave(self, *names: str) -> Iterator[tuple[str, Any]]:
-        raise NotImplementedError(
-            "sync interleave() is not supported on RemoteGraph; "
-            "use astream_events(version='v3') for cross-channel iteration."
+    def _resolve_projection(self, name: str) -> Iterator[Any]:
+        builtin = {
+            "messages": self._sdk.messages,
+            "tool_calls": self._sdk.tool_calls,
+            "values": self._sdk.values,
+            "subgraphs": self._sdk.subgraphs,
+        }
+        source = cast(
+            Iterable[Any],
+            builtin[name] if name in builtin else self._sdk.extensions[name],
         )
+        return iter(source)
+
+    def interleave(self, *names: str) -> Iterator[tuple[str, Any]]:
+        """Iterate multiple projections in arrival order.
+
+        Mirrors local `GraphRunStream.interleave` shape: yields
+        `(name, item)` tuples in best-effort arrival order across the
+        named projections. Cross-channel ordering is by client receive
+        order, not the local mux's monotonic push-stamp ordering.
+        """
+        if not names:
+            return
+        sources = {n: self._resolve_projection(n) for n in names}
+        q: queue.Queue[Any] = queue.Queue()
+
+        def _drain(channel: str, src: Iterator[Any]) -> None:
+            try:
+                for item in src:
+                    q.put((channel, item))
+            finally:
+                q.put(_SENTINEL)
+
+        drainers = [
+            threading.Thread(target=_drain, args=(n, s), daemon=True)
+            for n, s in sources.items()
+        ]
+        for t in drainers:
+            t.start()
+        pending = len(drainers)
+        try:
+            while pending > 0:
+                item = q.get()
+                if item is _SENTINEL:
+                    pending -= 1
+                    continue
+                yield item
+        finally:
+            for t in drainers:
+                t.join(timeout=0.5)
 
 
 class _AsyncRemoteGraphRunStream:
@@ -168,8 +214,8 @@ class _AsyncRemoteGraphRunStream:
         local `AsyncGraphRunStream.interrupted`, which drives the run to
         terminal before returning the flag. Callers that need a
         wait-for-interrupt pattern should drain a projection (e.g.,
-        `interleave('values')`) until the paused sentinel fires, then check
-        this property.
+        `async for snap in stream._sdk.values`) until the SDK's paused
+        sentinel fires, then check this property.
         """
         return self._sdk.interrupted
 
@@ -203,43 +249,8 @@ class _AsyncRemoteGraphRunStream:
             self._events_aiter = self._sdk.events.__aiter__()
         return self._events_aiter
 
-    def _resolve_projection(self, name: str) -> AsyncIterator[Any]:
-        builtin = {
-            "messages": self._sdk.messages,
-            "tool_calls": self._sdk.tool_calls,
-            "values": self._sdk.values,
-            "subgraphs": self._sdk.subgraphs,
-        }
-        source = cast(
-            AsyncIterable[Any],
-            builtin[name] if name in builtin else self._sdk.extensions[name],
-        )
-        return source.__aiter__()
-
-    async def interleave(self, *names: str) -> AsyncIterator[tuple[str, Any]]:
-        if not names:
-            return
-        sources = {n: self._resolve_projection(n) for n in names}
-        queue: asyncio.Queue[Any] = asyncio.Queue()
-
-        async def _drain(channel: str, src: AsyncIterator[Any]) -> None:
-            try:
-                async for item in src:
-                    await queue.put((channel, item))
-            finally:
-                await queue.put(_SENTINEL)
-
-        drainers = [asyncio.create_task(_drain(n, src)) for n, src in sources.items()]
-        pending = len(drainers)
-        try:
-            while pending > 0:
-                item = await queue.get()
-                if item is _SENTINEL:
-                    pending -= 1
-                    continue
-                yield item
-        finally:
-            for t in drainers:
-                if not t.done():
-                    t.cancel()
-            await asyncio.gather(*drainers, return_exceptions=True)
+    # Note: deliberately no `interleave()` on the async adapter. Local
+    # `AsyncGraphRunStream` doesn't have one either (async callers compose
+    # with `asyncio.gather` / `asyncio.as_completed`). The sync adapter
+    # provides `interleave()` because sync callers have no comparable
+    # primitive for iterating multiple iterators concurrently.
