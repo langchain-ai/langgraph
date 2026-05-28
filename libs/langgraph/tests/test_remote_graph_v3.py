@@ -132,14 +132,9 @@ def test_abort_swallows_cancel_failure_and_still_closes():
 
 
 def test_sync_interleave_raises_not_implemented():
-    """Sync interleave is a known TODO pending an sdk-py refactor that
-    extracts per-channel decoders so they can be driven from one shared
-    subscription. Until then, raise NotImplementedError to make the gap
-    explicit to callers.
-    """
     adapter, _, _ = _make_sync_adapter()
     with adapter as stream:
-        with pytest.raises(NotImplementedError, match="sdk-py refactor"):
+        with pytest.raises(NotImplementedError):
             list(stream.interleave("messages"))
 
 

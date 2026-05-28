@@ -101,21 +101,7 @@ class _RemoteGraphRunStream:
         return self._events_iter
 
     def interleave(self, *names: str) -> Iterator[tuple[str, Any]]:
-        """Not yet implemented on RemoteGraph.
-
-        Local `GraphRunStream.interleave` yields typed wrapper objects
-        (chat-model streams, tool-call handles, snapshot dicts) pushed by
-        in-process transformers. The remote analog requires an SDK-side
-        refactor so projection decoders can run off a single shared
-        subscription instead of each one owning its own queue. Tracked as
-        a follow-up sdk-py PR; once shipped, this method becomes a
-        one-line passthrough to the new SDK primitive.
-        """
-        raise NotImplementedError(
-            "RemoteGraph.stream_events(version='v3').interleave() is not "
-            "yet implemented; requires an upcoming sdk-py refactor that "
-            "extracts per-channel decoders from the projection iterators."
-        )
+        raise NotImplementedError
 
 
 class _AsyncRemoteGraphRunStream:
