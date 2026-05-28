@@ -84,9 +84,7 @@ def test_no_match_returns_empty(tmp_path: pathlib.Path) -> None:
 def test_traversal_dep_path_is_skipped(tmp_path: pathlib.Path) -> None:
     outside = tmp_path.parent / "outside-project"
     outside.mkdir(exist_ok=True)
-    (outside / "uv.lock").write_text(
-        'name = "google-adk"\nversion = "9.9.9"\n'
-    )
+    (outside / "uv.lock").write_text('name = "google-adk"\nversion = "9.9.9"\n')
     project_root = tmp_path / "project"
     project_root.mkdir()
     config = project_root / "langgraph.json"
@@ -128,9 +126,7 @@ def test_oversized_file_is_truncated_not_raised(tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.parametrize("pkg", TRACKED_PACKAGES)
-def test_every_tracked_package_is_detectable(
-    tmp_path: pathlib.Path, pkg: str
-) -> None:
+def test_every_tracked_package_is_detectable(tmp_path: pathlib.Path, pkg: str) -> None:
     config, config_json = _write_project(
         tmp_path,
         uv_lock=f'name = "{pkg}"\nversion = "1.0.0"\n',

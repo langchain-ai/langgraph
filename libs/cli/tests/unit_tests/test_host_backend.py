@@ -1,6 +1,7 @@
+import json
+
 import httpx
 import pytest
-import json
 
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 
@@ -201,9 +202,7 @@ def test_update_deployment_forwards_tracked_packages():
         tracked_packages=["google-adk:1.0.0"],
     )
     body = json.loads(captured["body"])
-    assert body["source_revision_config"]["tracked_packages"] == [
-        "google-adk:1.0.0"
-    ]
+    assert body["source_revision_config"]["tracked_packages"] == ["google-adk:1.0.0"]
 
 
 def test_update_deployment_omits_tracked_packages_when_absent():
@@ -224,9 +223,7 @@ def test_update_deployment_internal_source_forwards_tracked_packages():
         tracked_packages=["google-adk:>=0.5"],
     )
     body = json.loads(captured["body"])
-    assert body["source_revision_config"]["tracked_packages"] == [
-        "google-adk:>=0.5"
-    ]
+    assert body["source_revision_config"]["tracked_packages"] == ["google-adk:>=0.5"]
     assert body["source_revision_config"]["source_tarball_path"] == "path/to/tarball"
 
 
