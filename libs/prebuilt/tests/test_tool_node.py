@@ -2430,90 +2430,116 @@ def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     assert regular_tool_id in tool_call_ids
 
 
-# --- subagent_name resolution + metadata stamping tests ---
+# --- subagent_name resolution + pregel_dynamic_metadata tests ---
 
 
-def test_tool_node_stamps_subagent_name_into_metadata() -> None:
-    """When a tool declares subagent_name, ToolNode stamps the resolved value
-    plus the tool_call_id into the runtime config's metadata before the body runs."""
-    captured_metadata: dict = {}
-
-    @dec_tool("call_weather", subagent_name="weather_agent")
-    def call_weather(city: str, runtime: ToolRuntime) -> str:
-        """Return weather for a city."""
-        captured_metadata.update(runtime.config.get("metadata") or {})
-        return f"Sunny in {city}"
-
-    node = ToolNode([call_weather])
-    state = {
+def _state_with_tool_call(name: str, args: dict, id: str) -> dict:
+    return {
         "messages": [
             AIMessage(
-                "query",
+                "q",
                 tool_calls=[
-                    {
-                        "name": "call_weather",
-                        "args": {"city": "Boston"},
-                        "id": "call_1",
-                        "type": "tool_call",
-                    }
+                    {"name": name, "args": args, "id": id, "type": "tool_call"}
                 ],
             )
         ]
     }
-    node.invoke(state, config=_create_config_with_runtime())
-
-    assert captured_metadata.get("subagent_name") == "weather_agent"
-    assert captured_metadata.get("tool_call_id") == "call_1"
 
 
-def test_tool_node_stamps_subagent_name_from_callable() -> None:
-    """When subagent_name is a callable, ToolNode invokes it with the
-    ToolCall to resolve the name."""
-    captured_metadata: dict = {}
+def test_pregel_dynamic_metadata_static_subagent_name() -> None:
+    """A tool declaring `subagent_name=<str>` produces task metadata with that
+    name and the tool_call_id from the dispatched call."""
+
+    @dec_tool("call_weather", subagent_name="weather_agent")
+    def call_weather(city: str) -> str:
+        """Return weather for a city."""
+        return f"Sunny in {city}"
+
+    node = ToolNode([call_weather])
+    md = node.pregel_dynamic_metadata(
+        _state_with_tool_call("call_weather", {"city": "Boston"}, "call_1")
+    )
+
+    assert md == {"subagent_name": "weather_agent", "tool_call_id": "call_1"}
+
+
+def test_pregel_dynamic_metadata_callable_resolver() -> None:
+    """A callable `subagent_name` is invoked with the ToolCall and its return
+    value is used as the resolved name."""
 
     def resolver(call: ToolCall) -> str:
         return str(call["args"]["subagent_type"])
 
     @dec_tool("task", subagent_name=resolver)
-    def task(description: str, subagent_type: str, runtime: ToolRuntime) -> str:
+    def task(description: str, subagent_type: str) -> str:
         """Execute a task."""
-        captured_metadata.update(runtime.config.get("metadata") or {})
         return "ok"
 
     node = ToolNode([task])
-    state = {
-        "messages": [
-            AIMessage(
-                "query",
-                tool_calls=[
-                    {
-                        "name": "task",
-                        "args": {"description": "x", "subagent_type": "researcher"},
-                        "id": "call_2",
-                        "type": "tool_call",
-                    }
-                ],
-            )
-        ]
-    }
-    node.invoke(state, config=_create_config_with_runtime())
+    md = node.pregel_dynamic_metadata(
+        _state_with_tool_call(
+            "task", {"description": "x", "subagent_type": "researcher"}, "call_2"
+        )
+    )
 
-    assert captured_metadata.get("subagent_name") == "researcher"
-    assert captured_metadata.get("tool_call_id") == "call_2"
+    assert md == {"subagent_name": "researcher", "tool_call_id": "call_2"}
 
 
-def test_tool_node_no_stamp_when_subagent_name_unset() -> None:
-    """Tools without subagent_name should not have subagent-related keys
-    stamped into metadata."""
-    captured_metadata: dict = {}
+def test_pregel_dynamic_metadata_returns_none_when_no_subagent_name() -> None:
+    """Tools without `subagent_name` produce no dynamic metadata."""
 
     @dec_tool("regular")
-    def regular(x: int, runtime: ToolRuntime) -> str:
+    def regular(x: int) -> str:
         """A regular tool."""
-        captured_metadata.update(runtime.config.get("metadata") or {})
         return str(x)
 
     node = ToolNode([regular])
+    md = node.pregel_dynamic_metadata(
+        _state_with_tool_call("regular", {"x": 1}, "call_3")
+    )
+
+    assert md is None
+
+
+def test_pregel_dynamic_metadata_callable_exception_returns_none() -> None:
+    """A callable `subagent_name` that raises is treated as no declaration,
+    so dispatch is not blocked by a buggy resolver."""
+
+    def buggy_resolver(call: ToolCall) -> str:
+        raise RuntimeError("oops")
+
+    @dec_tool("brittle", subagent_name=buggy_resolver)
+    def brittle(x: int) -> str:
+        """A brittle tool."""
+        return str(x)
+
+    node = ToolNode([brittle])
+    md = node.pregel_dynamic_metadata(
+        _state_with_tool_call("brittle", {"x": 1}, "call_4")
+    )
+
+    assert md is None
+
+
+def test_pregel_dynamic_metadata_first_match_wins_in_mixed_batch() -> None:
+    """When a batch mixes a subagent-aware tool with a regular tool, the
+    first call whose tool declares `subagent_name` resolves and wins.
+
+    Mixed batches with multiple subagent dispatches share one task lifecycle
+    payload, so only one cause/graph_name can surface.
+    """
+
+    @dec_tool("regular")
+    def regular(x: int) -> str:
+        """A regular tool."""
+        return str(x)
+
+    @dec_tool("sub", subagent_name="researcher")
+    def sub(y: int) -> str:
+        """A subagent dispatcher."""
+        return str(y)
+
+    node = ToolNode([regular, sub])
     state = {
         "messages": [
             AIMessage(
@@ -2522,51 +2548,19 @@ def test_tool_node_no_stamp_when_subagent_name_unset() -> None:
                     {
                         "name": "regular",
                         "args": {"x": 1},
-                        "id": "call_3",
+                        "id": "call_a",
                         "type": "tool_call",
-                    }
-                ],
-            )
-        ]
-    }
-    node.invoke(state, config=_create_config_with_runtime())
-
-    assert "subagent_name" not in captured_metadata
-    assert "tool_call_id" not in captured_metadata
-
-
-def test_tool_node_callable_resolver_exception_does_not_break_dispatch() -> None:
-    """If the callable subagent_name raises, dispatch still succeeds and
-    no subagent metadata is stamped."""
-    captured_metadata: dict = {}
-
-    def buggy_resolver(call: ToolCall) -> str:
-        raise RuntimeError("oops")
-
-    @dec_tool("brittle", subagent_name=buggy_resolver)
-    def brittle(x: int, runtime: ToolRuntime) -> str:
-        """A brittle tool."""
-        captured_metadata.update(runtime.config.get("metadata") or {})
-        return str(x)
-
-    node = ToolNode([brittle])
-    state = {
-        "messages": [
-            AIMessage(
-                "q",
-                tool_calls=[
+                    },
                     {
-                        "name": "brittle",
-                        "args": {"x": 1},
-                        "id": "call_4",
+                        "name": "sub",
+                        "args": {"y": 2},
+                        "id": "call_b",
                         "type": "tool_call",
-                    }
+                    },
                 ],
             )
         ]
     }
-    # Should not raise.
-    node.invoke(state, config=_create_config_with_runtime())
+    md = node.pregel_dynamic_metadata(state)
 
-    assert "subagent_name" not in captured_metadata
-    assert "tool_call_id" not in captured_metadata
+    assert md == {"subagent_name": "researcher", "tool_call_id": "call_b"}

@@ -42,7 +42,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from copy import copy, deepcopy
 from dataclasses import dataclass, field, replace
 from types import UnionType
@@ -1056,17 +1056,6 @@ class ToolNode(RunnableCallable):
         # to short-circuit requests for unregistered tools
         tool = self.tools_by_name.get(call["name"])
 
-        # Resolve subagent_name and stamp into runtime config metadata before
-        # dispatch. The metadata flows through TaskPayload.metadata to downstream
-        # transformers, which project it onto LifecyclePayload fields for
-        # nested-run identity and dispatch origin.
-        if tool is not None:
-            resolved = _resolve_subagent_name(tool, call)
-            if resolved is not None:
-                md = tool_runtime.config.setdefault("metadata", {})
-                md["subagent_name"] = resolved
-                md["tool_call_id"] = call["id"]
-
         # Create the tool request with state and runtime
         tool_request = ToolCallRequest(
             tool_call=call,
@@ -1214,17 +1203,6 @@ class ToolNode(RunnableCallable):
         # to short-circuit requests for unregistered tools
         tool = self.tools_by_name.get(call["name"])
 
-        # Resolve subagent_name and stamp into runtime config metadata before
-        # dispatch. The metadata flows through TaskPayload.metadata to downstream
-        # transformers, which project it onto LifecyclePayload fields for
-        # nested-run identity and dispatch origin.
-        if tool is not None:
-            resolved = _resolve_subagent_name(tool, call)
-            if resolved is not None:
-                md = tool_runtime.config.setdefault("metadata", {})
-                md["subagent_name"] = resolved
-                md["tool_call_id"] = call["id"]
-
         # Create the tool request with state and runtime
         tool_request = ToolCallRequest(
             tool_call=call,
@@ -1311,6 +1289,37 @@ class ToolNode(RunnableCallable):
 
         tool_calls = list(latest_ai_message.tool_calls)
         return tool_calls, input_type
+
+    def pregel_dynamic_metadata(
+        self,
+        input: list[AnyMessage] | dict[str, Any] | BaseModel,
+    ) -> Mapping[str, Any] | None:
+        """Derive task metadata from the tool calls about to be dispatched.
+
+        Called by Pregel at task scheduling time so the resolved `subagent_name`
+        and `tool_call_id` land on `task.config["metadata"]` BEFORE the `tasks`
+        lifecycle event fires (the in-body runtime is too late). Returns a dict
+        to merge into the task config's metadata, or None if no tool call has
+        a `subagent_name` declared.
+
+        If multiple tool calls in the batch declare `subagent_name`, the first
+        resolved match wins. Mixed batches with multiple subagent dispatches
+        share a single lifecycle payload, so only one cause/graph_name can
+        surface; downstream projections that need per-call labeling should
+        rely on inner tool-call events rather than the batch's lifecycle.
+        """
+        try:
+            tool_calls, _ = self._parse_input(input)
+        except Exception:
+            return None
+        for call in tool_calls:
+            tool = self.tools_by_name.get(call["name"])
+            if tool is None:
+                continue
+            resolved = _resolve_subagent_name(tool, call)
+            if resolved is not None:
+                return {"subagent_name": resolved, "tool_call_id": call["id"]}
+        return None
 
     def _validate_tool_call(self, call: ToolCall) -> ToolMessage | None:
         requested_tool = call["name"]
