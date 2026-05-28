@@ -28,6 +28,7 @@ jobs:
     outputs:
       python: ${{ steps.filter.outputs.python || 'true' }}
       deps: ${{ steps.filter.outputs.deps || 'true' }}
+      sdk_py: ${{ steps.filter.outputs.sdk_py || 'true' }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
@@ -47,6 +48,8 @@ jobs:
             deps:
               - '**/pyproject.toml'
               - '**/uv.lock'
+            sdk_py:
+              - 'libs/sdk-py/**'
 
   lint:
     needs: changes
@@ -156,6 +159,13 @@ jobs:
     uses: ./.github/workflows/_integration_test.yml
     secrets: inherit
 
+  sdk-py-integration-test:
+    needs: changes
+    if: needs.changes.outputs.sdk_py == 'true'
+    name: "sdk-py integration test"
+    uses: ./.github/workflows/_sdk_integration_test.yml
+    secrets: inherit
+
   ci_success:
     name: "CI Success"
     needs:
@@ -166,6 +176,7 @@ jobs:
         check-sdk-methods,
         check-schema,
         integration-test,
+        sdk-py-integration-test,
       ]
     if: |
       always()

@@ -45,7 +45,9 @@ def _normalize_return_annotation(ann: object) -> str:
     s = re.sub(r"Generator\[([^,\]]+)(?:,[^\]]*)?\]", r"Iterator[\1]", s)
     s = re.sub(r"AsyncIterator\[(.+)\]", r"Iterator[\1]", s)
     s = re.sub(r"AsyncIterable\[(.+)\]", r"Iterable[\1]", s)
-    s = s.replace("AsyncThreadStream", "SyncThreadStream")
+    # Normalize Async/Sync class prefixes so AsyncFoo and SyncFoo both compare as Foo.
+    s = re.sub(r"\bAsync([A-Z])", r"\1", s)
+    s = re.sub(r"\bSync([A-Z])", r"\1", s)
     return s
 
 

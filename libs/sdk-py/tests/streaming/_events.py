@@ -21,24 +21,43 @@ def _base(seq: int, method: str, namespace: list[str], data: Any) -> dict[str, A
     }
 
 
+def _normalize_lifecycle_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Map test-fixture shorthand to the wire shape `langgraph-api` emits.
+
+    The server emits the lifecycle status as `data.event` with values
+    `running` / `completed` / `failed` / `interrupted` (see
+    `api/langgraph_api/event_streaming/event_normalizers.py::to_lifecycle_status`).
+    The fixture historically accepted `phase=` and the legacy `"errored"`
+    value; translate them so tests exercise the real wire format
+    without touching every call site.
+    """
+    normalized = dict(data)
+    if "phase" in normalized and "event" not in normalized:
+        normalized["event"] = normalized.pop("phase")
+    if normalized.get("event") == "errored":
+        normalized["event"] = "failed"
+    return normalized
+
+
 def lifecycle_event(
     seq: int = 0, namespace: list[str] | None = None, **data: Any
 ) -> dict[str, Any]:
-    return _base(seq, "lifecycle", namespace or [], data or {"phase": "started"})
+    payload = _normalize_lifecycle_data(data) if data else {"event": "started"}
+    return _base(seq, "lifecycle", namespace or [], payload)
 
 
 def lifecycle_started_event(
     seq: int = 0, namespace: list[str] | None = None
 ) -> dict[str, Any]:
-    """Lifecycle event with `phase="started"`."""
-    return _base(seq, "lifecycle", namespace or [], {"phase": "started"})
+    """Lifecycle event with `event="started"`."""
+    return _base(seq, "lifecycle", namespace or [], {"event": "started"})
 
 
 def lifecycle_completed_event(
     seq: int = 0, namespace: list[str] | None = None
 ) -> dict[str, Any]:
-    """Lifecycle event with `phase="completed"`."""
-    return _base(seq, "lifecycle", namespace or [], {"phase": "completed"})
+    """Lifecycle event with `event="completed"`."""
+    return _base(seq, "lifecycle", namespace or [], {"event": "completed"})
 
 
 def lifecycle_errored_event(
@@ -46,10 +65,8 @@ def lifecycle_errored_event(
     namespace: list[str] | None = None,
     error: str = "run errored",
 ) -> dict[str, Any]:
-    """Lifecycle event with `phase="errored"` and an error message."""
-    return _base(
-        seq, "lifecycle", namespace or [], {"phase": "errored", "error": error}
-    )
+    """Lifecycle event with `event="failed"` and an error message."""
+    return _base(seq, "lifecycle", namespace or [], {"event": "failed", "error": error})
 
 
 def values_event(

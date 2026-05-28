@@ -347,8 +347,12 @@ async def test_send_command_applied_through_seq_seeds_shared_stream_since():
             await thread.run.start(input={})
             _ = [event async for event in thread.subscribe(["values"])]
 
+    # The shared SSE filter is a union of subscription params plus
+    # ``lifecycle`` (added by ``_compute_current_union`` so the fanout
+    # consumer can detect root-terminal events for projection-iterator
+    # termination). Match any request whose channels include ``values``.
     values_requests = [
-        b for b in fake.stream_request_bodies if b.get("channels") == ["values"]
+        b for b in fake.stream_request_bodies if "values" in (b.get("channels") or [])
     ]
     assert len(values_requests) == 1
     assert values_requests[0]["since"] == 17
