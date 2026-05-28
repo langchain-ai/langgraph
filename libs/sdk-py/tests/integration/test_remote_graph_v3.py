@@ -52,15 +52,15 @@ async def test_async_interrupt_path_surfaces_interrupts(
 
     Note: interrupts pause the run but DON'T resolve `_run_done` (only
     `completed` / `failed` lifecycle phases do), so `await stream.output`
-    would hang. We drain a projection until the interrupt sentinel fires.
-    `interleave('values')` yields snapshots and terminates via the paused
-    sentinel pushed in `_signal_paused` on the rising edge of `interrupted`.
+    would hang. The adapter doesn't expose `interleave()` on the async
+    side (mirrors local `AsyncGraphRunStream`), so drain the SDK's values
+    projection directly until the SDK's paused sentinel fires.
     """
     async with remote_agent.astream_events(
         _AGENT_INPUT,
         version="v3",
     ) as stream:
-        async for _name, _item in stream.interleave("values"):
+        async for _ in stream._sdk.values:
             if stream._sdk.interrupted:
                 break
         assert (await stream.interrupted) is True
