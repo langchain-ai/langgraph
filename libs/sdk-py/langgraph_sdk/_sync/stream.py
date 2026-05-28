@@ -1354,18 +1354,37 @@ class SyncThreadStream:
             compute_union_filter(cast("list[dict[str, Any]]", sub_params)),
         )
         subgraphs = decoders.get("subgraphs")
-        for event in self._subscription_iter(merged):
-            if subgraphs is not None:
-                for item in subgraphs.feed(event):
-                    yield ("subgraphs", item)
-            wire = infer_channel(event)
-            public = self._interleave_public_name(wire)
-            # subgraphs is driven separately above (it consumes all events); never dispatch it here.
-            if public is not None and public != "subgraphs":
-                decoder = decoders.get(public)
-                if decoder is not None:
-                    for item in decoder.feed(event):
-                        yield (public, item)
+        # Track decoder-created handles so teardown can finalize anything still
+        # in flight; otherwise an awaiting `handle.output` / `handle.messages`
+        # would block after an early break or run termination.
+        registered_tool_calls: list[SyncToolCallHandle] = []
+        registered_message_streams: list[ChatModelStream] = []
+        try:
+            for event in self._subscription_iter(merged):
+                if subgraphs is not None:
+                    for item in subgraphs.feed(event):
+                        yield ("subgraphs", item)
+                wire = infer_channel(event)
+                public = self._interleave_public_name(wire)
+                # subgraphs is driven separately above (it consumes all events); never dispatch it here.
+                if public is not None and public != "subgraphs":
+                    decoder = decoders.get(public)
+                    if decoder is not None:
+                        for item in decoder.feed(event):
+                            if public == "tool_calls":
+                                self._register_active_tool_call(item)
+                                registered_tool_calls.append(item)
+                            elif public == "messages":
+                                self._register_active_message_stream(item)
+                                registered_message_streams.append(item)
+                            yield (public, item)
+        finally:
+            self._finalize_interleave_decoders(
+                decoders.get("tool_calls"),
+                subgraphs,
+                registered_tool_calls,
+                registered_message_streams,
+            )
 
     @staticmethod
     def _interleave_public_name(wire: str | None) -> str | None:
@@ -1377,6 +1396,49 @@ class SyncThreadStream:
         if wire.startswith("custom:"):
             return wire[len("custom:") :]
         return wire  # values, messages (tasks/lifecycle pass through with no decoder match)
+
+    def _finalize_interleave_decoders(
+        self,
+        tool_calls: Decoder | None,
+        subgraphs: Decoder | None,
+        registered_tool_calls: list[SyncToolCallHandle],
+        registered_message_streams: list[ChatModelStream],
+    ) -> None:
+        """Finalize in-flight handles when `interleave_projections` tears down.
+
+        Mirrors the terminal handling of the dedicated `_SyncToolCallsProjection`
+        / `_SyncSubgraphsProjection`: in-flight tool calls are failed (so a
+        blocking `handle.output` can't hang) and discovered subgraph children
+        are force-completed with the run's terminal status.
+        """
+        run_done = self._run_done
+        resolved: _RunTerminal | None = None
+        if run_done is not None and run_done.done():
+            try:
+                resolved = run_done.result(timeout=0)
+            except Exception:
+                resolved = None
+        if isinstance(tool_calls, ToolCallsDecoder):
+            err: BaseException = (
+                resolved.error
+                if resolved is not None and resolved.error is not None
+                else RuntimeError("Tool call stream closed before terminal tool event.")
+            )
+            for handle in list(tool_calls._active.values()):
+                handle._fail(err)
+        for handle in registered_tool_calls:
+            self._unregister_active_tool_call(handle)
+        for stream in registered_message_streams:
+            self._unregister_active_message_stream(stream)
+        if isinstance(subgraphs, SubgraphsDecoder):
+            terminal_status: SubgraphStatus = (
+                "failed"
+                if resolved is not None and resolved.status == "errored"
+                else "completed"
+            )
+            for child in subgraphs._active.values():
+                if child.status == "started":
+                    child._finish(terminal_status)
 
     def _subscription_iter(self, params: SubscribeParams) -> Iterator[Event]:
         sub = self._register_subscription(params)

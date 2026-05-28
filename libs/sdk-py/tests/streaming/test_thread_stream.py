@@ -1095,3 +1095,55 @@ async def test_interleave_projections_subgraphs_discovers_child():
             async for ch, handle in thread.interleave_projections(["subgraphs"]):
                 discovered.append((ch, handle.path))
     assert ("subgraphs", ("child",)) in discovered
+
+
+async def test_interleave_projections_inflight_tool_call_failed_on_break():
+    """A tool handle held past an early break is failed in teardown, never left hanging."""
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tool_started_event(seq=1, tool_call_id="call-1", tool_name="search"),
+            # no tool-finished: the call is still in flight when the consumer breaks
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    fake.set_state({})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            handle = None
+            async for _, item in thread.interleave_projections(["tool_calls"]):
+                handle = item
+                break
+            assert handle is not None
+            # Without teardown finalization this would hang forever; wait_for
+            # turns a regression into a TimeoutError rather than a RuntimeError.
+            with pytest.raises(RuntimeError):
+                await asyncio.wait_for(handle.output, timeout=2)
+
+
+async def test_interleave_projections_inflight_subgraph_finished_on_terminal():
+    """A discovered subgraph child with no terminal tasks-result is force-completed."""
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            lifecycle_started_event(seq=1, namespace=["child"]),
+            # no tasks-result for the child: it is still "started" at run end
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    fake.set_state({})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            child = None
+            async for _, handle in thread.interleave_projections(["subgraphs"]):
+                child = handle
+            assert child is not None
+            assert child.status == "completed"

@@ -732,3 +732,89 @@ def test_interleave_projections_tool_calls_uses_public_name():
     assert names == ["tool_calls"]
     assert handle is not None
     assert handle.tool_call_id == "call-1"
+
+
+def test_interleave_projections_subgraphs_discovers_child():
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            lifecycle_started_event(seq=1, namespace=["child"]),
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            discovered = []
+            for ch, handle in thread.interleave_projections(["subgraphs"]):
+                discovered.append((ch, handle.path))
+    assert ("subgraphs", ("child",)) in discovered
+
+
+def test_interleave_projections_inflight_tool_call_failed_on_break():
+    """A tool handle held past an early break is failed in teardown, never left hanging."""
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        tool_started_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tool_started_event(seq=1, tool_call_id="call-1", tool_name="search"),
+            # no tool-finished: the call is still in flight when the consumer breaks
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            handle = None
+            for _, item in thread.interleave_projections(["tool_calls"]):
+                handle = item
+                break
+            assert handle is not None
+            # Without teardown finalization this blocks forever; the bounded
+            # timeout turns a regression into a TimeoutError, not a RuntimeError.
+            with pytest.raises(RuntimeError):
+                handle._result.result(timeout=2)
+
+
+def test_interleave_projections_inflight_subgraph_finished_on_terminal():
+    """A discovered subgraph child with no terminal tasks-result is force-completed."""
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            lifecycle_started_event(seq=1, namespace=["child"]),
+            # no tasks-result for the child: it is still "started" at run end
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            child = None
+            for _, handle in thread.interleave_projections(["subgraphs"]):
+                child = handle
+            assert child is not None
+            assert child.status == "completed"
