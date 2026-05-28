@@ -24,7 +24,11 @@ from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import QueryParamTypes
-from langgraph_sdk.stream.decoders import MessagesDecoder, ValuesDecoder
+from langgraph_sdk.stream.decoders import (
+    MessagesDecoder,
+    ToolCallsDecoder,
+    ValuesDecoder,
+)
 from langgraph_sdk.stream.sync_controller import SyncStreamController, _SyncSubscription
 from langgraph_sdk.stream.transport import (
     SyncEventStreamHandle,
@@ -540,100 +544,37 @@ class _SyncToolCallsProjection:
             raise RuntimeError("SyncThreadStream not entered — use `with`.")
         params = _exact_namespace_params(["tools"], self._namespace)
         sub = self._thread._register_subscription(params)
-        active: dict[str, SyncToolCallHandle] = {}
+        decoder = ToolCallsDecoder(
+            namespace=self._namespace,
+            handle_factory=lambda *, tool_call_id, name, input, namespace: (
+                SyncToolCallHandle(
+                    tool_call_id=tool_call_id,
+                    name=name,
+                    input=input,
+                    namespace=namespace,
+                )
+            ),
+        )
+        registered: list[SyncToolCallHandle] = []
+        pending: list[SyncToolCallHandle] = []
         try:
             self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
             while True:
                 item = sub.queue.get()
                 if item is None:
+                    # EOF: surface remaining handles (possibly incomplete) in start order.
+                    while pending:
+                        yield pending.pop(0)
                     return
-                params_field = item.get("params") or {}
-                if _event_namespace(params_field) != self._namespace:
-                    continue
-                data = (
-                    params_field.get("data") if isinstance(params_field, dict) else None
-                )
-                if not isinstance(data, dict):
-                    continue
-                event_type = data.get("event")
-                tool_call_id = data.get("tool_call_id")
-                if not isinstance(tool_call_id, str):
-                    continue
-                if event_type == "tool-started":
-                    tool_name = data.get("tool_name")
-                    if not isinstance(tool_name, str):
-                        tool_name = ""
-                    handle = SyncToolCallHandle(
-                        tool_call_id=tool_call_id,
-                        name=tool_name,
-                        input=data.get("input"),
-                        namespace=list(self._namespace),
-                    )
-                    active[tool_call_id] = handle
+                for handle in decoder.feed(cast(dict[str, Any], item)):
                     self._thread._register_active_tool_call(handle)
-                    # Pre-dispatch events until this tool call completes so that
-                    # `call.output` is resolved when the caller receives the handle.
-                    while not handle.done:
-                        next_item = sub.queue.get()
-                        if next_item is None:
-                            sub.queue.put(None)
-                            break
-                        next_params = next_item.get("params") or {}
-                        if _event_namespace(next_params) != self._namespace:
-                            continue
-                        next_data = (
-                            next_params.get("data")
-                            if isinstance(next_params, dict)
-                            else None
-                        )
-                        if not isinstance(next_data, dict):
-                            continue
-                        next_event_type = next_data.get("event")
-                        next_tcid = next_data.get("tool_call_id")
-                        if not isinstance(next_tcid, str):
-                            continue
-                        if next_event_type == "tool-output-delta":
-                            h = active.get(next_tcid)
-                            delta = next_data.get("delta")
-                            if h is not None and isinstance(delta, str):
-                                h._push_delta(delta)
-                        elif next_event_type == "tool-finished":
-                            h = active.pop(next_tcid, None)
-                            if h is not None:
-                                self._thread._unregister_active_tool_call(h)
-                                h._finish(next_data.get("output"))
-                        elif next_event_type == "tool-error":
-                            h = active.pop(next_tcid, None)
-                            if h is not None:
-                                self._thread._unregister_active_tool_call(h)
-                                message = next_data.get("message")
-                                h._fail(
-                                    RuntimeError(
-                                        str(message) if message else "Tool call errored"
-                                    )
-                                )
-                    yield handle
-                elif event_type == "tool-output-delta":
-                    h = active.get(tool_call_id)
-                    delta = data.get("delta")
-                    if h is not None and isinstance(delta, str):
-                        h._push_delta(delta)
-                elif event_type == "tool-finished":
-                    h = active.pop(tool_call_id, None)
-                    if h is not None:
-                        self._thread._unregister_active_tool_call(h)
-                        h._finish(data.get("output"))
-                elif event_type == "tool-error":
-                    h = active.pop(tool_call_id, None)
-                    if h is not None:
-                        self._thread._unregister_active_tool_call(h)
-                        message = data.get("message")
-                        h._fail(
-                            RuntimeError(
-                                str(message) if message else "Tool call errored"
-                            )
-                        )
+                    registered.append(handle)
+                    pending.append(handle)
+                # Surface in start order once each (and all earlier) handles are done,
+                # so `call.output` is resolved when the caller receives the handle.
+                while pending and pending[0].done:
+                    yield pending.pop(0)
         finally:
             # Read terminal error from _run_done if it is already resolved.
             # We do NOT block here: callers who need a terminal observation
@@ -653,9 +594,10 @@ class _SyncToolCallsProjection:
                 if terminal_err is not None
                 else RuntimeError("Tool call stream closed before terminal tool event.")
             )
-            for h in active.values():
-                self._thread._unregister_active_tool_call(h)
-                h._fail(err)
+            for handle in list(decoder._active.values()):
+                handle._fail(err)
+            for handle in registered:
+                self._thread._unregister_active_tool_call(handle)
             self._thread._unregister_subscription(sub.id)
 
 

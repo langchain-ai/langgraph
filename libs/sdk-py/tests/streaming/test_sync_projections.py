@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -586,3 +586,25 @@ def test_sync_messages_subscription_pre_dispatches_before_yield():
             for stream in thread.messages:
                 collected.append(str(stream.text))
     assert collected == ["hello"]
+
+
+def test_sync_tool_calls_subscription_resolves_output_before_yield():
+    """Over a live subscription, call.output is resolved when the handle is yielded."""
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tool_started_event(seq=1, tool_call_id="call-1", tool_name="search"),
+            tool_finished_event(seq=2, tool_call_id="call-1", output={"ok": True}),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    fake.set_state({})
+    outputs: list[Any] = []
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            for call in thread.tool_calls:
+                outputs.append(call.output)  # resolved (blocking) on yield
+    assert outputs == [{"ok": True}]

@@ -26,7 +26,11 @@ from langchain_protocol import Event, SubscribeParams
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.controller import _SeenEventIds
-from langgraph_sdk.stream.decoders import MessagesDecoder, ValuesDecoder
+from langgraph_sdk.stream.decoders import (
+    MessagesDecoder,
+    ToolCallsDecoder,
+    ValuesDecoder,
+)
 from langgraph_sdk.stream.transport import (
     AsyncProtocolTransport,
     EventStreamHandle,
@@ -1118,7 +1122,18 @@ class _ToolCallsProjection:
             raise RuntimeError("AsyncThreadStream not entered - use `async with`.")
         params = _exact_namespace_params(["tools"], self._namespace)
         sub = self._thread._register_subscription(params)
-        active: dict[str, ToolCallHandle] = {}
+        decoder = ToolCallsDecoder(
+            namespace=self._namespace,
+            handle_factory=lambda *, tool_call_id, name, input, namespace: (
+                ToolCallHandle(
+                    tool_call_id=tool_call_id,
+                    name=name,
+                    input=input,
+                    namespace=namespace,
+                )
+            ),
+        )
+        registered: list[ToolCallHandle] = []
         try:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
@@ -1126,52 +1141,10 @@ class _ToolCallsProjection:
                 item = await sub.queue.get()
                 if item is None:
                     return
-                params_field = item.get("params") or {}
-                if _event_namespace(params_field) != self._namespace:
-                    continue
-                data = (
-                    params_field.get("data") if isinstance(params_field, dict) else None
-                )
-                if not isinstance(data, dict):
-                    continue
-                event_type = data.get("event")
-                tool_call_id = data.get("tool_call_id")
-                if not isinstance(tool_call_id, str):
-                    continue
-
-                if event_type == "tool-started":
-                    tool_name = data.get("tool_name")
-                    if not isinstance(tool_name, str):
-                        tool_name = ""
-                    handle = ToolCallHandle(
-                        tool_call_id=tool_call_id,
-                        name=tool_name,
-                        input=data.get("input"),
-                        namespace=list(self._namespace),
-                    )
-                    active[tool_call_id] = handle
+                for handle in decoder.feed(item):
                     self._thread._register_active_tool_call(handle)
+                    registered.append(handle)
                     yield handle
-                elif event_type == "tool-output-delta":
-                    handle = active.get(tool_call_id)
-                    delta = data.get("delta")
-                    if handle is not None and isinstance(delta, str):
-                        handle._push_delta(delta)
-                elif event_type == "tool-finished":
-                    handle = active.pop(tool_call_id, None)
-                    if handle is not None:
-                        self._thread._unregister_active_tool_call(handle)
-                        handle._finish(data.get("output"))
-                elif event_type == "tool-error":
-                    handle = active.pop(tool_call_id, None)
-                    if handle is not None:
-                        self._thread._unregister_active_tool_call(handle)
-                        message = data.get("message")
-                        handle._fail(
-                            RuntimeError(
-                                str(message) if message else "Tool call errored"
-                            )
-                        )
         finally:
             # Read terminal error from _run_done if it is already resolved.
             # We do NOT block here: callers who need a terminal observation
@@ -1183,14 +1156,15 @@ class _ToolCallsProjection:
             if run_done is not None and run_done.done() and not run_done.cancelled():
                 terminal = run_done.result()
                 terminal_err = terminal.error
-            err = (
+            err: BaseException = (
                 terminal_err
                 if terminal_err is not None
                 else RuntimeError("Tool call stream closed before terminal tool event.")
             )
-            for handle in active.values():
-                self._thread._unregister_active_tool_call(handle)
+            for handle in list(decoder._active.values()):
                 handle._fail(err)
+            for handle in registered:
+                self._thread._unregister_active_tool_call(handle)
             self._thread._unregister_subscription(sub.id)
 
 
