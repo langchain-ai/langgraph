@@ -25,12 +25,12 @@ from langchain_protocol import Event, SubscribeParams
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.decoders import (
+    DataDecoder,
     Decoder,
     ExtensionsDecoder,
     MessagesDecoder,
     SubgraphsDecoder,
     ToolCallsDecoder,
-    ValuesDecoder,
     validate_interleave_channels,
 )
 from langgraph_sdk.stream.subscription import compute_union_filter, infer_channel
@@ -305,7 +305,7 @@ class _SyncValuesProjection:
             raise RuntimeError("SyncThreadStream not entered — use `with`.")
         params: SubscribeParams = {"channels": ["values"]}
         sub = self._thread._register_subscription(params)
-        decoder = ValuesDecoder()
+        decoder = DataDecoder("values")
         try:
             self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
@@ -1308,8 +1308,15 @@ class SyncThreadStream:
         sub_params: list[dict[str, Any]] = []
         for ch in channels:
             if ch == "values":
-                decoders[ch] = ValuesDecoder()
+                decoders[ch] = DataDecoder("values")
                 sub_params.append({"channels": ["values"]})
+            elif ch in ("updates", "checkpoints", "tasks"):
+                # Plain payload channels (local Updates/Checkpoints/Tasks
+                # analog). Root-scope filter is load-bearing: a co-requested
+                # unscoped `values` widens the merged subscription to all
+                # namespaces, so the decoder itself keeps subgraph payloads out.
+                decoders[ch] = DataDecoder(ch, namespace=[])
+                sub_params.append(dict(_exact_namespace_params([ch], [])))
             elif ch == "messages":
                 decoders[ch] = MessagesDecoder(
                     namespace=[],

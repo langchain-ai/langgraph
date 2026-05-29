@@ -820,15 +820,14 @@ def test_interleave_projections_inflight_subgraph_finished_on_terminal():
             assert child.status == "completed"
 
 
-@pytest.mark.parametrize(
-    "channel", ["checkpoints", "updates", "tasks", "lifecycle", "tools", "input"]
-)
+@pytest.mark.parametrize("channel", ["lifecycle", "tools", "input"])
 def test_interleave_projections_rejects_reserved_channel(channel):
     """Reserved protocol channel names raise instead of silently no-op'ing.
 
     `infer_channel` treats these as first-class methods, but they have no
-    decoder here, so routing them to the extension/`custom:` fallback would
-    subscribe to a channel that never matches and yield nothing. Fail closed.
+    interleave decoder, so routing them to the extension/`custom:` fallback
+    would subscribe to a channel that never matches and yield nothing. Fail
+    closed. (`updates`/`checkpoints`/`tasks` are supported and tested below.)
     """
     from streaming._events import (
         lifecycle_completed_event,
@@ -846,3 +845,67 @@ def test_interleave_projections_rejects_reserved_channel(channel):
         ):
             for _ in thread.interleave_projections([channel]):
                 pass
+
+
+def test_interleave_projections_data_channels_yield_payloads():
+    """`updates`/`checkpoints`/`tasks` yield their raw `params.data` payloads."""
+    from streaming._events import (
+        checkpoints_event,
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        tasks_start_event,
+        updates_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            updates_event(seq=1, node={"v": 1}),
+            checkpoints_event(seq=2, ts="t-0", v=4),
+            tasks_start_event(seq=3, task_id="task-9"),
+            lifecycle_completed_event(seq=4),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            items = list(
+                thread.interleave_projections(["updates", "checkpoints", "tasks"])
+            )
+    assert ("updates", {"node": {"v": 1}}) in items
+    assert ("checkpoints", {"ts": "t-0", "v": 4}) in items
+    assert any(ch == "tasks" and item.get("id") == "task-9" for ch, item in items)
+
+
+def test_interleave_projections_data_channel_scoped_to_root_namespace():
+    """A child-namespace checkpoint must not leak into a root interleave."""
+    from streaming._events import (
+        checkpoints_event,
+        lifecycle_completed_event,
+        lifecycle_started_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({"counter": 0})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            checkpoints_event(seq=1, namespace=["child"], scope="child"),
+            checkpoints_event(seq=2, scope="root"),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            checkpoints = [
+                item
+                for ch, item in thread.interleave_projections(["values", "checkpoints"])
+                if ch == "checkpoints"
+            ]
+    assert {"scope": "root"} in checkpoints
+    assert {"scope": "child"} not in checkpoints

@@ -9,13 +9,14 @@ from __future__ import annotations
 from typing import Any
 
 from langgraph_sdk.stream.decoders import (
+    DataDecoder,
     ExtensionsDecoder,
     MessagesDecoder,
     SubgraphsDecoder,
     ToolCallsDecoder,
-    ValuesDecoder,
 )
 from streaming._events import (
+    checkpoints_event,
     custom_event,
     lifecycle_completed_event,
     lifecycle_started_event,
@@ -29,19 +30,47 @@ from streaming._events import (
     tool_finished_event,
     tool_output_delta_event,
     tool_started_event,
+    updates_event,
     values_event,
 )
 
 
-def test_values_decoder_yields_params_data():
-    decoder = ValuesDecoder()
+def test_data_decoder_yields_params_data():
+    decoder = DataDecoder("values")
     assert list(decoder.feed(values_event(seq=1, x=1))) == [{"x": 1}]
     assert list(decoder.feed(values_event(seq=2, x=2, y=3))) == [{"x": 2, "y": 3}]
 
 
-def test_values_decoder_ignores_non_values_events():
-    decoder = ValuesDecoder()
+def test_data_decoder_ignores_other_methods():
+    decoder = DataDecoder("values")
     assert list(decoder.feed(lifecycle_completed_event(seq=1))) == []
+    assert list(decoder.feed(updates_event(seq=2, foo=1))) == []
+
+
+def test_data_decoder_handles_updates_checkpoints_tasks_methods():
+    assert list(DataDecoder("updates").feed(updates_event(seq=1, node={"x": 1}))) == [
+        {"node": {"x": 1}}
+    ]
+    assert list(
+        DataDecoder("checkpoints").feed(checkpoints_event(seq=2, ts="t", v=4))
+    ) == [{"ts": "t", "v": 4}]
+    # tasks payloads pass through verbatim as data dicts
+    [item] = list(DataDecoder("tasks").feed(tasks_start_event(seq=3, task_id="a")))
+    assert item["id"] == "a"
+
+
+def test_data_decoder_namespace_none_yields_regardless_of_namespace():
+    decoder = DataDecoder("checkpoints", namespace=None)
+    assert list(decoder.feed(checkpoints_event(seq=1, namespace=["child"], v=1))) == [
+        {"v": 1}
+    ]
+
+
+def test_data_decoder_namespace_filter_drops_non_matching_namespace():
+    decoder = DataDecoder("checkpoints", namespace=[])
+    # root-namespace event is yielded; child-namespace event is filtered out
+    assert list(decoder.feed(checkpoints_event(seq=1, v=1))) == [{"v": 1}]
+    assert list(decoder.feed(checkpoints_event(seq=2, namespace=["child"], v=2))) == []
 
 
 class _FakeStream:

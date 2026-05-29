@@ -75,6 +75,18 @@ def values_event(
     return _base(seq, "values", namespace or [], data or {"values": {}})
 
 
+def updates_event(
+    seq: int = 0, namespace: list[str] | None = None, **data: Any
+) -> dict[str, Any]:
+    return _base(seq, "updates", namespace or [], data or {})
+
+
+def checkpoints_event(
+    seq: int = 0, namespace: list[str] | None = None, **data: Any
+) -> dict[str, Any]:
+    return _base(seq, "checkpoints", namespace or [], data or {})
+
+
 def custom_event(
     seq: int = 0, name: str = "ext", namespace: list[str] | None = None, **data: Any
 ) -> dict[str, Any]:

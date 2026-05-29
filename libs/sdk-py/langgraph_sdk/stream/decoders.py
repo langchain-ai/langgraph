@@ -12,16 +12,23 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal, Protocol
 
 #: Channel names the public ``interleave_projections`` API accepts as built-ins.
-SUPPORTED_INTERLEAVE_CHANNELS = ("values", "messages", "tool_calls", "subgraphs")
+SUPPORTED_INTERLEAVE_CHANNELS = (
+    "values",
+    "messages",
+    "tool_calls",
+    "subgraphs",
+    "updates",
+    "checkpoints",
+    "tasks",
+)
 
 #: Channel names that ``infer_channel`` recognizes as first-class protocol
 #: methods but that ``interleave_projections`` has no decoder for. Routing them
 #: to the extension/``custom:`` fallback would subscribe to a channel that never
 #: matches and silently yield nothing, so they are rejected up front (fail
-#: closed). ``tools`` is the wire alias for the public ``tool_calls`` channel.
-RESERVED_INTERLEAVE_CHANNELS = frozenset(
-    {"checkpoints", "updates", "tasks", "lifecycle", "tools", "input"}
-)
+#: closed). ``lifecycle`` is control-plane (drives run output/interrupt); ``tools``
+#: is the wire alias for the public ``tool_calls`` channel.
+RESERVED_INTERLEAVE_CHANNELS = frozenset({"lifecycle", "tools", "input"})
 
 
 def validate_interleave_channels(channels: list[str]) -> None:
@@ -96,21 +103,37 @@ class Decoder(Protocol):
     def feed(self, event: Mapping[str, Any]) -> Iterable[Any]: ...
 
 
-class ValuesDecoder:
-    """Yields snapshot dicts from `values` method events.
+class DataDecoder:
+    """Yields `params.data` from events of a single `method`.
 
-    Mirrors the per-event body of `_ValuesProjection._values_iter` in
-    `langgraph_sdk/_async/stream.py` (the REST-state seeding stays at the
-    projection layer; it is a one-shot pre-stream fetch, not part of the
-    event state machine).
+    Covers the channels whose projection is just "emit the payload": `values`,
+    `updates`, `checkpoints`, `tasks` — the SDK analog of local's
+    `Values`/`Updates`/`Checkpoints`/`TasksTransformer`, all of which push
+    `params["data"]` unchanged. The REST-state seeding for `values` stays at
+    the projection layer; it is a one-shot pre-stream fetch, not part of the
+    event state machine.
+
+    Args:
+        method: The protocol `method` this decoder consumes.
+        namespace: When not `None`, events whose namespace differs are ignored
+            (scope filter, mirroring the local transformers' `namespace != scope`
+            check). `None` consumes every namespace — the historical `values`
+            projection behavior, where subscription scoping is handled upstream.
     """
 
+    def __init__(self, method: str, namespace: list[str] | None = None):
+        self._method = method
+        self._namespace = list(namespace) if namespace is not None else None
+
     def feed(self, event: Mapping[str, Any]) -> Iterable[Any]:
-        if event.get("method") == "values":
-            params = event.get("params") or {}
-            data = params.get("data")
-            if data is not None:
-                yield data
+        if event.get("method") != self._method:
+            return
+        params = event.get("params") or {}
+        if self._namespace is not None and _event_namespace(params) != self._namespace:
+            return
+        data = params.get("data")
+        if data is not None:
+            yield data
 
 
 class MessagesDecoder:

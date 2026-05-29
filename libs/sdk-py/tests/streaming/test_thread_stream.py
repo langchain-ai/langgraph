@@ -17,14 +17,17 @@ from langgraph_sdk.stream.transport import (
     ProtocolWebSocketTransport,
 )
 from streaming._events import (
+    checkpoints_event,
     custom_event,
     lifecycle_completed_event,
     lifecycle_event,
     lifecycle_started_event,
     message_finish_event,
     message_start_event,
+    tasks_start_event,
     tool_finished_event,
     tool_started_event,
+    updates_event,
     values_event,
 )
 from streaming._fake_server import FakeServer
@@ -1149,15 +1152,14 @@ async def test_interleave_projections_inflight_subgraph_finished_on_terminal():
             assert child.status == "completed"
 
 
-@pytest.mark.parametrize(
-    "channel", ["checkpoints", "updates", "tasks", "lifecycle", "tools", "input"]
-)
+@pytest.mark.parametrize("channel", ["lifecycle", "tools", "input"])
 async def test_interleave_projections_rejects_reserved_channel(channel):
     """Reserved protocol channel names raise instead of silently no-op'ing.
 
     `infer_channel` treats these as first-class methods, but they have no
-    decoder here, so routing them to the extension/`custom:` fallback would
-    subscribe to a channel that never matches and yield nothing. Fail closed.
+    interleave decoder, so routing them to the extension/`custom:` fallback
+    would subscribe to a channel that never matches and yield nothing. Fail
+    closed. (`updates`/`checkpoints`/`tasks` are supported and tested below.)
     """
     fake = FakeServer()
     fake.script([lifecycle_started_event(seq=0), lifecycle_completed_event(seq=1)])
@@ -1169,3 +1171,63 @@ async def test_interleave_projections_rejects_reserved_channel(channel):
             with pytest.raises(ValueError, match=channel):
                 async for _ in thread.interleave_projections([channel]):
                     pass
+
+
+async def test_interleave_projections_data_channels_yield_payloads():
+    """`updates`/`checkpoints`/`tasks` yield their raw `params.data` payloads."""
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            updates_event(seq=1, node={"v": 1}),
+            checkpoints_event(seq=2, ts="t-0", v=4),
+            tasks_start_event(seq=3, task_id="task-9"),
+            lifecycle_completed_event(seq=4),
+        ]
+    )
+    fake.set_state({})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            items = []
+            async for ch, item in thread.interleave_projections(
+                ["updates", "checkpoints", "tasks"]
+            ):
+                items.append((ch, item))
+    assert ("updates", {"node": {"v": 1}}) in items
+    assert ("checkpoints", {"ts": "t-0", "v": 4}) in items
+    assert any(ch == "tasks" and item.get("id") == "task-9" for ch, item in items)
+
+
+async def test_interleave_projections_data_channel_scoped_to_root_namespace():
+    """A child-namespace checkpoint must not leak into a root interleave.
+
+    `values` subscribes unscoped, so `compute_union_filter` widens the merged
+    subscription to all namespaces; the `DataDecoder` root filter is what keeps
+    a subgraph checkpoint out of the root projection (mirrors local scope).
+    """
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            checkpoints_event(seq=1, namespace=["child"], scope="child"),
+            checkpoints_event(seq=2, scope="root"),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    fake.set_state({"counter": 0})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            checkpoints = []
+            async for ch, item in thread.interleave_projections(
+                ["values", "checkpoints"]
+            ):
+                if ch == "checkpoints":
+                    checkpoints.append(item)
+    assert {"scope": "root"} in checkpoints
+    assert {"scope": "child"} not in checkpoints
