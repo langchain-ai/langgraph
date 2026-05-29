@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from langgraph.pregel._remote_run_stream import (
     _AsyncRemoteGraphRunStream,
+    _ProjectionRegistry,
     _RemoteGraphRunStream,
+    _translate_command_input,
 )
 from langgraph.pregel.remote import (
     _V3_SUPPORTED_KWARGS,
     RemoteGraph,
-    _translate_command_input,
 )
 from langgraph.types import Command
 
@@ -84,6 +84,51 @@ def test_output_interrupted_interrupts_passthrough():
         assert stream.interrupts == [
             {"interrupt_id": "i1", "namespace": [], "value": "v"}
         ]
+
+
+def test_sync_projection_attrs_forward_to_sdk():
+    adapter, _, sdk_thread = _make_sync_adapter()
+    sdk_thread.values = object()
+    sdk_thread.messages = object()
+    sdk_thread.subgraphs = object()
+    with adapter as stream:
+        assert stream.values is sdk_thread.values
+        assert stream.messages is sdk_thread.messages
+        assert stream.subgraphs is sdk_thread.subgraphs
+        assert set(stream.extensions) == {"values", "messages", "subgraphs"}
+        assert stream.extensions["values"] is sdk_thread.values
+
+
+def test_projection_registry_native_and_delegated():
+    sdk = MagicMock()
+    sdk.values = object()
+    sdk.messages = object()
+    sdk.subgraphs = object()
+    custom = object()
+    sdk.extensions = {"custom": custom}
+    registry = _ProjectionRegistry(sdk)
+    # Native keys resolve to the SDK's typed projections.
+    assert registry["values"] is sdk.values
+    assert registry["messages"] is sdk.messages
+    assert registry["subgraphs"] is sdk.subgraphs
+    # Non-native names delegate to the SDK custom-extension projection.
+    assert registry["custom"] is custom
+    # Only native keys are enumerable.
+    assert list(registry) == ["values", "messages", "subgraphs"]
+    assert len(registry) == 3
+
+
+def test_sync_adapter_translates_command_input():
+    sync_client = MagicMock()
+    sdk_thread = MagicMock()
+    adapter = _RemoteGraphRunStream(
+        sync_client=sync_client,
+        sdk_thread=sdk_thread,
+        input=Command(resume="go"),
+        config=None,
+        metadata=None,
+    )
+    assert adapter._start_kwargs["input"] == "go"
 
 
 def test_iter_caches_first_subscription():
@@ -215,11 +260,25 @@ async def test_async_output_interrupted_interrupts_passthrough():
     sdk_thread.interrupted = True
     sdk_thread.interrupts = [{"interrupt_id": "i1", "namespace": [], "value": "v"}]
     async with adapter as stream:
-        assert await stream.output == {"foo": 1}
-        assert await stream.interrupted is True
-        assert await stream.interrupts == [
+        assert await stream.output() == {"foo": 1}
+        assert await stream.interrupted() is True
+        assert await stream.interrupts() == [
             {"interrupt_id": "i1", "namespace": [], "value": "v"}
         ]
+
+
+@pytest.mark.anyio
+async def test_async_projection_attrs_forward_to_sdk():
+    adapter, _, sdk_thread = _make_async_adapter()
+    sdk_thread.values = object()
+    sdk_thread.messages = object()
+    sdk_thread.subgraphs = object()
+    async with adapter as stream:
+        assert stream.values is sdk_thread.values
+        assert stream.messages is sdk_thread.messages
+        assert stream.subgraphs is sdk_thread.subgraphs
+        assert set(stream.extensions) == {"values", "messages", "subgraphs"}
+        assert stream.extensions["messages"] is sdk_thread.messages
 
 
 @pytest.mark.anyio
@@ -339,9 +398,18 @@ def test_reject_v3_unsupported_allows_metadata_and_headers():
     )
 
 
-def test_translate_command_input_converts_command_to_dict():
-    cmd = Command(update={"a": 1})
-    assert _translate_command_input(cmd) == asdict(cmd)
+def test_translate_command_input_surfaces_raw_resume_value():
+    # The v3 server wraps the resume `input` as {"resume": input} itself, so the
+    # wire `input` must be the raw resume value, not the serialized dataclass.
+    assert _translate_command_input(Command(resume="go")) == "go"
+    assert _translate_command_input(Command(resume={"id": "v"})) == {"id": "v"}
+
+
+def test_translate_command_input_rejects_goto_and_update():
+    with pytest.raises(NotImplementedError, match="goto"):
+        _translate_command_input(Command(goto="node_b"))
+    with pytest.raises(NotImplementedError, match="update"):
+        _translate_command_input(Command(update={"a": 1}))
 
 
 def test_translate_command_input_passes_through_non_command():
@@ -396,13 +464,16 @@ def test_stream_events_v3_translates_command_input():
     sync_client = MagicMock()
     sync_client.threads.stream.return_value = MagicMock()
     rg = RemoteGraph("agent", client=MagicMock(), sync_client=sync_client)
-    adapter = rg.stream_events(Command(update={"a": 1}), version="v3")
-    assert adapter._start_kwargs["input"] == {
-        "update": {"a": 1},
-        "resume": None,
-        "goto": (),
-        "graph": None,
-    }
+    # Resume Command surfaces its raw resume value as the wire `input`; the v3
+    # server wraps it as {"resume": input} once it detects the interrupt.
+    adapter = rg.stream_events(Command(resume="go"), version="v3")
+    assert adapter._start_kwargs["input"] == "go"
+
+
+def test_stream_events_v3_rejects_goto_update_command():
+    rg = RemoteGraph("agent", client=MagicMock(), sync_client=MagicMock())
+    with pytest.raises(NotImplementedError, match="goto"):
+        rg.stream_events(Command(goto="node_b"), version="v3")
 
 
 def test_stream_events_v3_strips_checkpoint_keys_from_configurable():
@@ -484,7 +555,7 @@ async def test_astream_events_v3_constructs_sdk_thread():
     sdk_thread = MagicMock()
     client.threads.stream.return_value = sdk_thread
     rg = RemoteGraph("agent", client=client, sync_client=MagicMock())
-    result = rg.astream_events(
+    result = await rg.astream_events(
         {"x": 1},
         config={"configurable": {"thread_id": "t1"}},
         version="v3",
@@ -500,7 +571,7 @@ async def test_astream_events_v3_rejects_unsupported_kwargs():
     client = MagicMock()
     rg = RemoteGraph("agent", client=client, sync_client=MagicMock())
     with pytest.raises(NotImplementedError, match="transformers"):
-        rg.astream_events({"x": 1}, version="v3", transformers=[object()])
+        await rg.astream_events({"x": 1}, version="v3", transformers=[object()])
     client.threads.stream.assert_not_called()
 
 
@@ -508,7 +579,4 @@ async def test_astream_events_v3_rejects_unsupported_kwargs():
 async def test_astream_events_non_v3_raises_not_implemented():
     rg = RemoteGraph("agent", client=MagicMock(), sync_client=MagicMock())
     with pytest.raises(NotImplementedError, match="not implemented"):
-        result = rg.astream_events({"x": 1}, version="v2")
-        if hasattr(result, "__aiter__"):
-            async for _ in result:
-                pass
+        await rg.astream_events({"x": 1}, version="v2")

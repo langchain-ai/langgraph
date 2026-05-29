@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, Mapping
 from types import TracebackType
 from typing import Any
 
@@ -12,7 +12,59 @@ from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._sync.stream import SyncThreadStream
 from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
 
+from langgraph.types import Command
+
 logger = logging.getLogger(__name__)
+
+
+def _translate_command_input(input: Any) -> Any:
+    """Translate a local `Command` into the v3 wire `input`, else passthrough.
+
+    The v3 server decides start-vs-resume from thread state (an interrupted
+    run or pending interrupts) and, on resume, wraps the whole `input` as
+    `{"resume": input}` itself. So a resume `Command` must surface its raw
+    `resume` value as the wire `input` (not the serialized dataclass, which
+    the server would double-wrap). The v3 `run.start` path has no `goto` /
+    `update` channel, so those are rejected.
+
+    `langgraph_sdk` is upstream of `langgraph`, so this `Command`-aware
+    marshalling lives here on the adapter (langgraph) side of the boundary.
+    """
+    if isinstance(input, Command):
+        if input.goto or input.update:
+            raise NotImplementedError(
+                "RemoteGraph v3 streaming supports `Command(resume=...)` only; "
+                "`goto` / `update` are not supported by the v3 `run.start` path."
+            )
+        return input.resume
+    return input
+
+
+class _ProjectionRegistry(Mapping[str, Any]):
+    """Read-only name -> projection registry mirroring local `GraphRunStream.extensions`.
+
+    Native keys (`values`/`messages`/`subgraphs`) resolve to the SDK's typed
+    projections; any other name delegates to the SDK's custom-extension
+    projection (`thread.extensions[name]`). Only the native keys are
+    enumerable; custom channels are looked up by name on demand, since the
+    remote side cannot statically know which custom channels the server emits.
+    """
+
+    _NATIVE = ("values", "messages", "subgraphs")
+
+    def __init__(self, sdk: AsyncThreadStream | SyncThreadStream) -> None:
+        self._sdk = sdk
+
+    def __getitem__(self, name: str) -> Any:
+        if name in self._NATIVE:
+            return getattr(self._sdk, name)
+        return self._sdk.extensions[name]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._NATIVE)
+
+    def __len__(self) -> int:
+        return len(self._NATIVE)
 
 
 class _RemoteGraphRunStream:
@@ -30,7 +82,7 @@ class _RemoteGraphRunStream:
         self._client = sync_client
         self._sdk = sdk_thread
         self._start_kwargs: dict[str, Any] = {
-            "input": input,
+            "input": _translate_command_input(input),
             "config": config,
             "metadata": metadata,
         }
@@ -81,6 +133,26 @@ class _RemoteGraphRunStream:
         """Current outstanding interrupt payloads (non-blocking snapshot)."""
         return list(self._sdk.interrupts)
 
+    @property
+    def values(self) -> Any:
+        """Live state-snapshot projection (mirrors local `run.values`)."""
+        return self._sdk.values
+
+    @property
+    def messages(self) -> Any:
+        """Live message-stream projection (mirrors local `run.messages`)."""
+        return self._sdk.messages
+
+    @property
+    def subgraphs(self) -> Any:
+        """Subgraph-handle projection (mirrors local `run.subgraphs`)."""
+        return self._sdk.subgraphs
+
+    @property
+    def extensions(self) -> Mapping[str, Any]:
+        """Name -> projection registry (mirrors local `run.extensions`)."""
+        return _ProjectionRegistry(self._sdk)
+
     def abort(self) -> None:
         if self._closed:
             return
@@ -119,7 +191,7 @@ class _AsyncRemoteGraphRunStream:
         self._client = client
         self._sdk = sdk_thread
         self._start_kwargs: dict[str, Any] = {
-            "input": input,
+            "input": _translate_command_input(input),
             "config": config,
             "metadata": metadata,
         }
@@ -150,24 +222,28 @@ class _AsyncRemoteGraphRunStream:
         self._closed = True
         await self._sdk.__aexit__(exc_type, exc, tb)
 
-    @property
-    def output(self) -> Any:
-        return self._sdk.output
+    async def output(self) -> Any:
+        """Drive the remote run to completion and return the final state.
 
-    @property
+        Awaits the SDK's terminal-state awaitable, matching local
+        `AsyncGraphRunStream.output()` (a method, not a property, so
+        `run.output` without `await` fails at type-check time rather than
+        silently yielding a coroutine).
+        """
+        return await self._sdk.output
+
     async def interrupted(self) -> bool:
         """Whether the remote run is currently paused at an interrupt.
 
         Reads the SDK's current value without blocking. This differs from
-        local `AsyncGraphRunStream.interrupted`, which drives the run to
+        local `AsyncGraphRunStream.interrupted()`, which drives the run to
         terminal before returning the flag. Callers that need a
         wait-for-interrupt pattern should drain a projection (e.g.,
         `async for snap in stream._sdk.values`) until the SDK's paused
-        sentinel fires, then check this property.
+        sentinel fires, then call this method.
         """
         return self._sdk.interrupted
 
-    @property
     async def interrupts(self) -> list[Any]:
         """Current outstanding interrupt payloads.
 
@@ -175,6 +251,26 @@ class _AsyncRemoteGraphRunStream:
         for the divergence from local v3 semantics.
         """
         return list(self._sdk.interrupts)
+
+    @property
+    def values(self) -> Any:
+        """Live state-snapshot projection (mirrors local `run.values`)."""
+        return self._sdk.values
+
+    @property
+    def messages(self) -> Any:
+        """Live message-stream projection (mirrors local `run.messages`)."""
+        return self._sdk.messages
+
+    @property
+    def subgraphs(self) -> Any:
+        """Subgraph-handle projection (mirrors local `run.subgraphs`)."""
+        return self._sdk.subgraphs
+
+    @property
+    def extensions(self) -> Mapping[str, Any]:
+        """Name -> projection registry (mirrors local `run.extensions`)."""
+        return _ProjectionRegistry(self._sdk)
 
     async def abort(self) -> None:
         if self._closed:

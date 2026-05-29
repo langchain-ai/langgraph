@@ -109,13 +109,6 @@ def _sanitize_config_value(v: Any) -> Any:
     return None
 
 
-def _translate_command_input(input: Any) -> Any:
-    """Translate a local Command into the SDK Command dict shape, else passthrough."""
-    if isinstance(input, Command):
-        return asdict(input)
-    return input
-
-
 class RemoteException(Exception):
     """Exception raised when an error occurs in the remote graph."""
 
@@ -1079,12 +1072,12 @@ class RemoteGraph(PregelProtocol):
         return _RemoteGraphRunStream(
             sync_client=sync_client,
             sdk_thread=sdk_thread,
-            input=_translate_command_input(input),
+            input=input,
             config=sanitized,
             metadata=kwargs.get("metadata"),
         )
 
-    def astream_events(
+    async def astream_events(
         self,
         input: Any,
         config: RunnableConfig | None = None,
@@ -1099,7 +1092,9 @@ class RemoteGraph(PregelProtocol):
     ) -> Any:
         """Async-stream events from this remote graph.
 
-        For `version="v3"`, returns an `_AsyncRemoteGraphRunStream`. For
+        For `version="v3"`, awaits to an `_AsyncRemoteGraphRunStream`, matching
+        the local `Pregel.astream_events(version="v3")` awaitable contract:
+        `async with await rg.astream_events(..., version="v3") as run`. For
         `version="v1"`/`"v2"`, raises NotImplementedError (use `astream`).
         """
         if version != "v3":
@@ -1129,7 +1124,7 @@ class RemoteGraph(PregelProtocol):
         return _AsyncRemoteGraphRunStream(
             client=client,
             sdk_thread=sdk_thread,
-            input=_translate_command_input(input),
+            input=input,
             config=sanitized,
             metadata=kwargs.get("metadata"),
         )

@@ -8,8 +8,11 @@ Run with: pytest tests/integration/test_remote_graph_v3.py -m integration
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from langgraph.pregel.remote import RemoteGraph
+from langgraph.types import Command
 
 pytestmark = pytest.mark.integration
 
@@ -36,13 +39,13 @@ async def test_async_happy_path_yields_output(remote_tools_agent: RemoteGraph) -
     """tools_agent completes without interrupt; ``await stream.output`` drives
     the run to terminal via the lifecycle watcher (no explicit event iteration
     needed — the SSE subscription stays open by design after run completion)."""
-    async with remote_tools_agent.astream_events(
+    async with await remote_tools_agent.astream_events(
         _TOOLS_AGENT_INPUT,
         version="v3",
     ) as stream:
-        output = await stream.output
+        output = await stream.output()
         assert output is not None
-        assert (await stream.interrupted) is False
+        assert (await stream.interrupted()) is False
 
 
 async def test_async_interrupt_path_surfaces_interrupts(
@@ -51,21 +54,57 @@ async def test_async_interrupt_path_surfaces_interrupts(
     """agent graph hits ask_human; interrupted must be True with >= 1 interrupt.
 
     Note: interrupts pause the run but DON'T resolve `_run_done` (only
-    `completed` / `failed` lifecycle phases do), so `await stream.output`
+    `completed` / `failed` lifecycle phases do), so `await stream.output()`
     would hang. The adapter doesn't expose `interleave()` on the async
-    side (mirrors local `AsyncGraphRunStream`), so drain the SDK's values
-    projection directly until the SDK's paused sentinel fires.
+    side (mirrors local `AsyncGraphRunStream`), so drain the `values`
+    projection directly until the run reports it is interrupted.
     """
-    async with remote_agent.astream_events(
+    async with await remote_agent.astream_events(
         _AGENT_INPUT,
         version="v3",
     ) as stream:
-        async for _ in stream._sdk.values:
-            if stream._sdk.interrupted:
+        async for _ in stream.values:
+            if await stream.interrupted():
                 break
-        assert (await stream.interrupted) is True
-        interrupts = await stream.interrupts
+        assert (await stream.interrupted()) is True
+        interrupts = await stream.interrupts()
         assert len(interrupts) >= 1
+
+
+async def test_async_resume_after_interrupt(remote_agent: RemoteGraph) -> None:
+    """Interrupt the agent at ask_human, then resume the SAME thread with
+    `Command(resume=...)`.
+
+    Validates the v3 resume path end-to-end. The client sends the raw resume
+    value as `input` (not a serialized Command); the server detects the
+    thread's pending interrupt from persisted state — which survives the first
+    session's close — and wraps it as `Command(resume=...)`, driving the run
+    past `ask_human` to completion (the graph interrupts only once).
+    """
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # First session: drive until the agent pauses at the ask_human interrupt.
+    async with await remote_agent.astream_events(
+        _AGENT_INPUT,
+        config=config,
+        version="v3",
+    ) as stream:
+        async for _ in stream.values:
+            if await stream.interrupted():
+                break
+        assert (await stream.interrupted()) is True
+
+    # Second session on the same thread: resume with the human's answer. The
+    # run continues past ask_human to completion with no further interrupt.
+    async with await remote_agent.astream_events(
+        Command(resume="yes"),
+        config=config,
+        version="v3",
+    ) as stream:
+        output = await stream.output()
+        assert output is not None
+        assert (await stream.interrupted()) is False
 
 
 def test_sync_happy_path_yields_output(remote_tools_agent: RemoteGraph) -> None:
@@ -85,7 +124,7 @@ async def test_abort_mid_run_cancels_server_side(
 ) -> None:
     """Abort immediately after run.start; reaching the end without exception
     confirms abort + __aexit__ cleanup worked."""
-    async with remote_tools_agent.astream_events(
+    async with await remote_tools_agent.astream_events(
         _TOOLS_AGENT_INPUT,
         version="v3",
     ) as stream:
