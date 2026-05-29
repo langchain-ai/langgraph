@@ -80,24 +80,50 @@ def test_map_debug_tasks_handles_none_config() -> None:
     assert "metadata" not in payloads[0]
 
 
-def test_map_debug_tasks_forwards_all_metadata_keys() -> None:
-    """All metadata keys flow through to TaskPayload.metadata, including
-    framework keys. Mirrors stream_mode="messages" semantics, where the
-    callback metadata dict is also forwarded whole. Consumers that don't
-    want framework keys can filter them client-side.
+def test_map_debug_tasks_filters_framework_metadata_keys() -> None:
+    """Internal framework keys are dropped from the forwarded metadata; only
+    user-meaningful keys (lc_agent_name, ls_integration, user metadata) ride
+    along. The framework keys (langgraph_*, thread_id, checkpoint_*) are
+    redundant with the task's own fields/namespace.
     """
     md = {
         "lc_agent_name": "weather_agent",
+        "ls_integration": "langchain_create_agent",
+        "my_user_key": "x",
         "thread_id": "thread-1",
         "langgraph_step": 1,
         "langgraph_node": "tools",
         "langgraph_path": ("__pregel_pull", "tools"),
+        "langgraph_checkpoint_ns": "tools:abc",
+        "checkpoint_ns": "",
     }
     task = _FakeTask(
         id="t1", name="tools", input=[], triggers=["x"], config={"metadata": md}
     )
-    payloads = list(map_debug_tasks([task]))
-    assert payloads[0]["metadata"] == md
+    payload = next(iter(map_debug_tasks([task])))
+    assert payload["metadata"] == {
+        "lc_agent_name": "weather_agent",
+        "ls_integration": "langchain_create_agent",
+        "my_user_key": "x",
+    }
+
+
+def test_map_debug_tasks_omits_metadata_when_only_framework_keys() -> None:
+    """A task whose metadata is entirely framework keys (e.g. a plain
+    StateGraph node) yields no `metadata` key after filtering.
+    """
+    md = {
+        "thread_id": "thread-1",
+        "langgraph_step": 1,
+        "langgraph_node": "worker",
+        "langgraph_checkpoint_ns": "worker:abc",
+        "checkpoint_ns": "",
+    }
+    task = _FakeTask(
+        id="t1", name="worker", input=[], triggers=["x"], config={"metadata": md}
+    )
+    payload = next(iter(map_debug_tasks([task])))
+    assert "metadata" not in payload
 
 
 def test_map_debug_tasks_metadata_is_copied_not_referenced() -> None:

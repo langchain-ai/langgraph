@@ -37,7 +37,7 @@ from langgraph.types import (
 )
 from tests.agents import AgentAction, AgentFinish
 from tests.any_int import AnyInt
-from tests.any_str import AnyDict, AnyObject, AnyStr, UnsortedSequence
+from tests.any_str import AnyDict, AnyStr, UnsortedSequence
 from tests.fake_chat import FakeChatModel
 from tests.fake_tracer import FakeTracer
 from tests.messages import (
@@ -4019,7 +4019,6 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "name": "rewrite_query",
                     "input": {"query": "what is weather in sf", "docs": []},
                     "triggers": ("branch:to:rewrite_query",),
-                    "metadata": AnyObject(),
                 },
             },
         ),
@@ -4053,7 +4052,6 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "name": "retriever_one",
                     "input": {"query": "query: what is weather in sf", "docs": []},
                     "triggers": ("branch:to:retriever_one",),
-                    "metadata": AnyObject(),
                 },
             },
         ),
@@ -4068,7 +4066,6 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "name": "retriever_two",
                     "input": {"query": "query: what is weather in sf", "docs": []},
                     "triggers": ("branch:to:retriever_two",),
-                    "metadata": AnyObject(),
                 },
             },
         ),
@@ -4135,7 +4132,6 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                         "docs": ["doc1", "doc2", "doc3", "doc4"],
                     },
                     "triggers": ("branch:to:qa",),
-                    "metadata": AnyObject(),
                 },
             },
         ),

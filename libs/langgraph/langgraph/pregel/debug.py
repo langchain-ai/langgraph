@@ -6,7 +6,11 @@ from typing import Any
 from uuid import UUID
 
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.base import CheckpointMetadata, PendingWrite
+from langgraph.checkpoint.base import (
+    EXCLUDED_METADATA_KEYS,
+    CheckpointMetadata,
+    PendingWrite,
+)
 
 from langgraph._internal._config import filter_to_user_tags, patch_checkpoint_map
 from langgraph._internal._constants import (
@@ -46,15 +50,19 @@ def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPaylo
             "input": task.input,
             "triggers": task.triggers,
         }
-        # Forward the task's metadata dict whole. Framework keys
-        # (langgraph_step, langgraph_node, lc_agent_name, ...) ride along —
-        # the same shape stream_mode="messages" consumers already receive —
-        # without needing to be enumerated here. Filtered config tags are
-        # folded in under `tags`, mirroring the messages stream handler.
+        # Forward user-meaningful metadata only — drop langgraph's internal
+        # framework keys (langgraph_node/step/triggers/path/checkpoint_ns,
+        # thread_id, ...), which are redundant with the task's own fields and
+        # namespace. Keys like `lc_agent_name`, `ls_integration`, and any
+        # user-supplied metadata ride along. Filtered config tags are folded in
+        # under `tags`, mirroring the messages stream handler. (The comprehension
+        # also yields a fresh dict, so mutating `md` doesn't touch task.config.)
         if task.config is not None:
-            # Copy so folding `tags` in below doesn't mutate the task's
-            # config metadata.
-            md = dict(task.config.get("metadata") or {})
+            md = {
+                k: v
+                for k, v in (task.config.get("metadata") or {}).items()
+                if k not in EXCLUDED_METADATA_KEYS
+            }
             filtered_tags = filter_to_user_tags(task.config.get("tags"))
             if filtered_tags is not None:
                 md["tags"] = filtered_tags
