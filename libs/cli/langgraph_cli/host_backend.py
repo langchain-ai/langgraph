@@ -124,13 +124,12 @@ class HostBackendClient:
         secrets: list[dict[str, str]] | None = None,
         tracked_packages: list[str] | None = None,
     ) -> dict[str, Any]:
-        source_revision_config: dict[str, Any] = {"image_uri": image_uri}
-        if tracked_packages:
-            source_revision_config["tracked_packages"] = tracked_packages
         payload: dict[str, Any] = {
             "revision_source": "internal_docker",
-            "source_revision_config": source_revision_config,
+            "source_revision_config": {"image_uri": image_uri},
         }
+        if tracked_packages:
+            payload["tracked_packages"] = tracked_packages
         if secrets is not None:
             payload["secrets"] = secrets
         return self._request(
@@ -150,16 +149,15 @@ class HostBackendClient:
         tracked_packages: list[str] | None = None,
     ) -> dict[str, Any]:
         """Trigger a remote build revision with the uploaded tarball."""
-        source_revision_config: dict[str, Any] = {
-            "source_tarball_path": source_tarball_path,
-            "langgraph_config_path": config_path,
-        }
-        if tracked_packages:
-            source_revision_config["tracked_packages"] = tracked_packages
         payload: dict[str, Any] = {
             "revision_source": "internal_source",
-            "source_revision_config": source_revision_config,
+            "source_revision_config": {
+                "source_tarball_path": source_tarball_path,
+                "langgraph_config_path": config_path,
+            },
         }
+        if tracked_packages:
+            payload["tracked_packages"] = tracked_packages
 
         source_config: dict[str, Any] = {}
         if install_command is not None:
