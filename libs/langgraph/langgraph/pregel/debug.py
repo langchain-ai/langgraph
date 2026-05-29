@@ -47,11 +47,9 @@ def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPaylo
             "triggers": task.triggers,
         }
         # Forward the task's metadata dict whole. Framework keys
-        # (langgraph_step, langgraph_node, ...) ride along — same shape as
-        # stream_mode="messages" consumers already receive — and any keys
-        # node authors stamp via static `proc.metadata` or the
-        # `pregel_dynamic_metadata` scheduling hook flow through without
-        # needing to be enumerated here.
+        # (langgraph_step, langgraph_node, lc_agent_name, ...) ride along —
+        # the same shape stream_mode="messages" consumers already receive —
+        # without needing to be enumerated here.
         if task.config is not None:
             md = task.config.get("metadata") or {}
             if md:
