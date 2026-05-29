@@ -8,7 +8,7 @@ from uuid import UUID
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import CheckpointMetadata, PendingWrite
 
-from langgraph._internal._config import patch_checkpoint_map
+from langgraph._internal._config import filter_user_tags, patch_checkpoint_map
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
@@ -49,11 +49,15 @@ def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPaylo
         # Forward the task's metadata dict whole. Framework keys
         # (langgraph_step, langgraph_node, lc_agent_name, ...) ride along —
         # the same shape stream_mode="messages" consumers already receive —
-        # without needing to be enumerated here.
+        # without needing to be enumerated here. Filtered config tags are
+        # folded in under `tags`, mirroring the messages stream handler.
         if task.config is not None:
-            md = task.config.get("metadata") or {}
+            md = dict(task.config.get("metadata") or {})
+            filtered_tags = filter_user_tags(task.config.get("tags"))
+            if filtered_tags is not None:
+                md["tags"] = filtered_tags
             if md:
-                payload["metadata"] = dict(md)
+                payload["metadata"] = md
         yield payload
 
 

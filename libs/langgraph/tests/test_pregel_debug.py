@@ -111,3 +111,49 @@ def test_map_debug_tasks_metadata_is_copied_not_referenced() -> None:
     payload = next(iter(map_debug_tasks([task])))
     md["lc_agent_name"] = "MUTATED"
     assert payload["metadata"]["lc_agent_name"] == "a"
+
+
+def test_map_debug_tasks_folds_filtered_tags_into_metadata() -> None:
+    """Config tags are folded into TaskPayload.metadata under `tags`, with
+    langchain's internal `seq:step:*` tags filtered out — mirroring the
+    messages stream handler so both channels surface the same tag set."""
+    task = _FakeTask(
+        id="t1",
+        name="tools",
+        input=[],
+        triggers=["x"],
+        config={
+            "metadata": {"lc_agent_name": "weather_agent"},
+            "tags": ["seq:step:1", "user-tag", "session-123"],
+        },
+    )
+    payload = next(iter(map_debug_tasks([task])))
+    assert payload["metadata"]["lc_agent_name"] == "weather_agent"
+    assert payload["metadata"]["tags"] == ["user-tag", "session-123"]
+
+
+def test_map_debug_tasks_omits_tags_when_only_seq_step() -> None:
+    """If the only tags are internal `seq:step:*` markers, no `tags` key is
+    added (matches the messages handler's `if filtered_tags:` guard)."""
+    task = _FakeTask(
+        id="t1",
+        name="tools",
+        input=[],
+        triggers=["x"],
+        config={"metadata": {"lc_agent_name": "a"}, "tags": ["seq:step:1"]},
+    )
+    payload = next(iter(map_debug_tasks([task])))
+    assert "tags" not in payload["metadata"]
+
+
+def test_map_debug_tasks_adds_tags_even_without_other_metadata() -> None:
+    """Filtered tags surface even when config has no metadata dict."""
+    task = _FakeTask(
+        id="t1",
+        name="tools",
+        input=[],
+        triggers=["x"],
+        config={"tags": ["user-tag"]},
+    )
+    payload = next(iter(map_debug_tasks([task])))
+    assert payload["metadata"] == {"tags": ["user-tag"]}
