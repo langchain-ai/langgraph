@@ -404,7 +404,7 @@ _PROPAGATE_TO_METADATA = frozenset(
 )
 
 
-def filter_user_tags(tags: Sequence[str] | None) -> list[str] | None:
+def filter_to_user_tags(tags: Sequence[str] | None) -> list[str] | None:
     """Drop langgraph's internal `seq:step:*` bookkeeping tags.
 
     `seq:step:N` tags are added internally to mark sequence steps; everything

@@ -8,7 +8,7 @@ from uuid import UUID
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import CheckpointMetadata, PendingWrite
 
-from langgraph._internal._config import filter_user_tags, patch_checkpoint_map
+from langgraph._internal._config import filter_to_user_tags, patch_checkpoint_map
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
@@ -55,7 +55,7 @@ def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPaylo
             # Copy so folding `tags` in below doesn't mutate the task's
             # config metadata.
             md = dict(task.config.get("metadata") or {})
-            filtered_tags = filter_user_tags(task.config.get("tags"))
+            filtered_tags = filter_to_user_tags(task.config.get("tags"))
             if filtered_tags is not None:
                 md["tags"] = filtered_tags
             if md:

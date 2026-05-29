@@ -15,7 +15,7 @@ from langchain_core.messages.utils import convert_to_messages
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from pydantic import BaseModel
 
-from langgraph._internal._config import filter_user_tags
+from langgraph._internal._config import filter_to_user_tags
 from langgraph._internal._constants import NS_SEP
 from langgraph.constants import TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
@@ -144,7 +144,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             ]
             if not self.subgraphs and len(ns) > 0 and ns != self.parent_ns:
                 return
-            if (filtered_tags := filter_user_tags(tags)) is not None:
+            if (filtered_tags := filter_to_user_tags(tags)) is not None:
                 metadata["tags"] = filtered_tags
             self.metadata[run_id] = (ns, metadata)
 
