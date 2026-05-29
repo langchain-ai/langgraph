@@ -31,7 +31,7 @@ def test_map_debug_tasks_forwards_metadata_when_present() -> None:
         input=[],
         triggers=["x"],
         config={
-            "metadata": {"subagent_name": "weather_agent", "tool_call_id": "call_xyz"}
+            "metadata": {"lc_agent_name": "weather_agent"}
         },
     )
     payloads = list(map_debug_tasks([task]))
@@ -39,10 +39,7 @@ def test_map_debug_tasks_forwards_metadata_when_present() -> None:
     payload = payloads[0]
     assert payload["id"] == "t1"
     assert payload["name"] == "tools"
-    assert payload["metadata"] == {
-        "subagent_name": "weather_agent",
-        "tool_call_id": "call_xyz",
-    }
+    assert payload["metadata"] == {"lc_agent_name": "weather_agent"}
 
 
 def test_map_debug_tasks_omits_metadata_when_empty() -> None:
@@ -92,8 +89,7 @@ def test_map_debug_tasks_forwards_all_metadata_keys() -> None:
     want framework keys can filter them client-side.
     """
     md = {
-        "subagent_name": "weather_agent",
-        "tool_call_id": "call_xyz",
+        "lc_agent_name": "weather_agent",
         "thread_id": "thread-1",
         "langgraph_step": 1,
         "langgraph_node": "tools",
@@ -110,10 +106,10 @@ def test_map_debug_tasks_metadata_is_copied_not_referenced() -> None:
     """Mutating the source config after emission must not affect the
     payload — TaskPayload.metadata is a defensive copy.
     """
-    md = {"subagent_name": "a", "tool_call_id": "c1"}
+    md = {"lc_agent_name": "a"}
     task = _FakeTask(
         id="t1", name="tools", input=[], triggers=["x"], config={"metadata": md}
     )
     payload = next(iter(map_debug_tasks([task])))
-    md["subagent_name"] = "MUTATED"
-    assert payload["metadata"]["subagent_name"] == "a"
+    md["lc_agent_name"] = "MUTATED"
+    assert payload["metadata"]["lc_agent_name"] == "a"
