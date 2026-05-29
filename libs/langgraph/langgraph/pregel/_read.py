@@ -138,23 +138,6 @@ class PregelNode:
     metadata: Mapping[str, Any] | None
     """Metadata to attach to the node for tracing."""
 
-    @property
-    def dynamic_metadata(
-        self,
-    ) -> Callable[[Any], Mapping[str, Any] | None] | None:
-        """Optional callable that derives extra task metadata from the task input.
-
-        Called by Pregel during task scheduling so values resolvable from the
-        task's input (e.g. tool-call-derived `subagent_name`) land on
-        `task.config["metadata"]` before the `tasks` lifecycle event fires.
-
-        A bound runnable opts in by exposing a `pregel_dynamic_metadata`
-        attribute: `Callable[[Input], Mapping[str, Any] | None]`. Exceptions
-        from the callable are swallowed (best-effort) so a buggy resolver
-        does not block dispatch.
-        """
-        return getattr(self.bound, "pregel_dynamic_metadata", None)
-
     is_error_handler: bool
     """Whether this node is registered as an error handler node."""
 

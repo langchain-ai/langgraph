@@ -664,13 +664,6 @@ def prepare_single_task(
                 if node := proc.node:
                     if proc.metadata:
                         metadata.update(proc.metadata)
-                    if (dyn := proc.dynamic_metadata) is not None:
-                        try:
-                            extra = dyn(val)
-                        except Exception:
-                            extra = None
-                        if extra:
-                            metadata.update(extra)
                     writes: deque[tuple[str, Any]] = deque()
                     cache_policy = proc.cache_policy or cache_policy
                     if cache_policy:
@@ -1022,13 +1015,6 @@ def prepare_push_task_send(
     if for_execution:
         if proc.metadata:
             metadata.update(proc.metadata)
-        if (dyn := proc.dynamic_metadata) is not None:
-            try:
-                extra = dyn(packet.arg)
-            except Exception:
-                extra = None
-            if extra:
-                metadata.update(extra)
         writes: deque[tuple[str, Any]] = deque()
         cache_policy = proc.cache_policy or cache_policy
         if cache_policy:
