@@ -202,7 +202,8 @@ def test_update_deployment_forwards_tracked_packages():
         tracked_packages=["google-adk:1.0.0"],
     )
     body = json.loads(captured["body"])
-    assert body["source_revision_config"]["tracked_packages"] == ["google-adk:1.0.0"]
+    assert body["tracked_packages"] == ["google-adk:1.0.0"]
+    assert "tracked_packages" not in body["source_revision_config"]
 
 
 def test_update_deployment_omits_tracked_packages_when_absent():
@@ -210,7 +211,7 @@ def test_update_deployment_omits_tracked_packages_when_absent():
     c = _capturing_client(captured)
     c.update_deployment("dep-123", "image:latest")
     body = json.loads(captured["body"])
-    assert "tracked_packages" not in body["source_revision_config"]
+    assert "tracked_packages" not in body
 
 
 def test_update_deployment_internal_source_forwards_tracked_packages():
@@ -223,8 +224,9 @@ def test_update_deployment_internal_source_forwards_tracked_packages():
         tracked_packages=["google-adk:>=0.5"],
     )
     body = json.loads(captured["body"])
-    assert body["source_revision_config"]["tracked_packages"] == ["google-adk:>=0.5"]
+    assert body["tracked_packages"] == ["google-adk:>=0.5"]
     assert body["source_revision_config"]["source_tarball_path"] == "path/to/tarball"
+    assert "tracked_packages" not in body["source_revision_config"]
 
 
 def test_update_deployment_internal_source_omits_tracked_packages_when_absent():
@@ -236,7 +238,7 @@ def test_update_deployment_internal_source_omits_tracked_packages_when_absent():
         config_path="langgraph.json",
     )
     body = json.loads(captured["body"])
-    assert "tracked_packages" not in body["source_revision_config"]
+    assert "tracked_packages" not in body
 
 
 def test_list_revisions(client):
