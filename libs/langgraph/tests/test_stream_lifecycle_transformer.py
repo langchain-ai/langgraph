@@ -545,12 +545,17 @@ def test_lifecycle_subagent_cause_from_legacy_list_input() -> None:
     assert subagent["cause"] == {"type": "toolCall", "tool_call_id": "call_w"}
 
 
-def test_lifecycle_excludes_inherited_lc_agent_name() -> None:
-    """A nested run that inherits the parent's lc_agent_name is NOT a subagent.
+def test_lifecycle_same_name_nested_run_is_surfaced() -> None:
+    """A nested run whose lc_agent_name matches the parent's is still surfaced.
 
-    A plain StateGraph invoked in a tool inherits the parent's lc_agent_name,
-    so child lc == parent lc. graph_name must fall back to the parsed segment
-    name, never the parent's agent name, and no cause is populated.
+    A subagent that invokes itself re-asserts its own lc_agent_name, so child
+    lc == parent lc. The discriminator surfaces any nested run carrying an
+    lc_agent_name, so the recursive call is reported (named after the agent,
+    with the triggering tool call as cause).
+
+    Trade-off: a non-agent subgraph that merely inherited the parent's
+    lc_agent_name would also surface here. That is accepted; a caller can null
+    lc_agent_name in the config it invokes such a graph with to exclude it.
     """
     mux = _build_lifecycle_mux()
     mux.push(
@@ -558,11 +563,11 @@ def test_lifecycle_excludes_inherited_lc_agent_name() -> None:
             [],
             task_id="tools_task_1",
             name="tools",
-            metadata={"lc_agent_name": "supervisor"},
+            metadata={"lc_agent_name": "weather_agent"},
             input={
                 "__type": "tool_call_with_context",
                 "tool_call": {
-                    "name": "lookup",
+                    "name": "recurse",
                     "args": {},
                     "id": "call_x",
                     "type": "tool_call",
@@ -571,28 +576,23 @@ def test_lifecycle_excludes_inherited_lc_agent_name() -> None:
             },
         )
     )
-    # Plain subgraph inherits the parent's lc_agent_name (== "supervisor").
+    # The agent invokes itself: the nested run re-asserts the SAME lc_agent_name.
     mux.push(
         _tasks_start(
-            ["plain:tools_task_1"],
+            ["tools:tools_task_1"],
             task_id="inner_node_1",
-            name="inner_node",
-            metadata={"lc_agent_name": "supervisor"},
+            name="model",
+            metadata={"lc_agent_name": "weather_agent"},
         )
     )
 
     payloads = _drain_lifecycle(mux)
     started = [p for p in payloads if p["event"] == "started"]
-    [nested] = [p for p in started if p["namespace"] == ["plain:tools_task_1"]]
-    assert nested.get("graph_name") != "supervisor", (
-        "an inherited lc_agent_name must not name the nested run after its parent"
+    [nested] = [p for p in started if p["namespace"] == ["tools:tools_task_1"]]
+    assert nested["graph_name"] == "weather_agent", (
+        "a same-named nested run (e.g. self-recursion) must still be surfaced"
     )
-    assert nested["graph_name"] == "plain", (
-        "graph_name must fall back to the parsed segment name for plain subgraphs"
-    )
-    assert "cause" not in nested, (
-        "no cause for a nested run that is not a subagent boundary"
-    )
+    assert nested["cause"] == {"type": "toolCall", "tool_call_id": "call_x"}
 
 
 def test_lifecycle_unnamed_nested_agent_is_not_subagent() -> None:

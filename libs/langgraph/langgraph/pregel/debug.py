@@ -52,6 +52,8 @@ def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPaylo
         # without needing to be enumerated here. Filtered config tags are
         # folded in under `tags`, mirroring the messages stream handler.
         if task.config is not None:
+            # Copy so folding `tags` in below doesn't mutate the task's
+            # config metadata.
             md = dict(task.config.get("metadata") or {})
             filtered_tags = filter_user_tags(task.config.get("tags"))
             if filtered_tags is not None:

@@ -405,12 +405,12 @@ _PROPAGATE_TO_METADATA = frozenset(
 
 
 def filter_user_tags(tags: Sequence[str] | None) -> list[str] | None:
-    """Drop langchain's internal `seq:step:*` sequence-step tags.
+    """Drop langgraph's internal `seq:step:*` bookkeeping tags.
 
-    Returns the remaining tags (user tags plus any non-sequence framework
-    tags), or `None` if none remain. Shared by the `messages` and `tasks`
-    stream handlers so both surface the same filtered tag set on their
-    metadata.
+    `seq:step:N` tags are added internally to mark sequence steps; everything
+    else (user-supplied tags and any other framework tags) is kept. Returns the
+    surviving tags, or `None` if none remain. Shared by the `messages` and
+    `tasks` stream handlers so both surface the same tag set on their metadata.
     """
     if not tags:
         return None

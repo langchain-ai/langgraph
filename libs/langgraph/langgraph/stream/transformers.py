@@ -408,8 +408,10 @@ class _TasksLifecycleBase(StreamTransformer):
         # `TaskResultPayload` will close it.
         self._open: dict[tuple[str, ...], str] = {}
         # lc_agent_name observed at each namespace (first task event wins).
-        # Used to detect a subagent boundary: a child whose lc_agent_name
-        # differs from its parent namespace's lc_agent_name.
+        # Not read by the base discriminator (which only checks whether the
+        # current task carries an lc_agent_name); maintained as extension state
+        # for subclasses that project named subagents — e.g. a `run.subagents`
+        # transformer reads this to filter to nested runs that have a name.
         self._lc_by_ns: dict[tuple[str, ...], str | None] = {}
         # Pregel task_id -> triggering LLM tool_call_id, harvested from a task
         # whose `input` is a `tool_call_with_context` dict (current shape) or a
@@ -514,12 +516,16 @@ class _TasksLifecycleBase(StreamTransformer):
         parsed_name, trigger_call_id = _parse_ns_segment(ns[-1])
         metadata = data.get("metadata") or {}
         child_lc = metadata.get("lc_agent_name")
-        parent_lc = self._lc_by_ns.get(ns[:-1])
-        # A subagent boundary is a nested run that self-identifies with a
-        # name distinct from its parent. Plain subgraphs inherit the
-        # parent's lc_agent_name (== parent -> excluded); unnamed agents
-        # have lc_agent_name None (excluded).
-        is_subagent = child_lc is not None and child_lc != parent_lc
+        # A subagent boundary is any nested run carrying an lc_agent_name (set
+        # by create_agent). Unnamed runs (lc_agent_name None) are excluded.
+        #
+        # A same-named nested agent — e.g. a subagent that invokes itself — is
+        # surfaced because it re-asserts its own lc_agent_name. The trade-off:
+        # a non-agent subgraph invoked inside a tool inherits the parent's
+        # lc_agent_name and will also surface (named after the parent). A caller
+        # that needs to exclude such a graph can null lc_agent_name in the
+        # config it invokes that graph with.
+        is_subagent = child_lc is not None
         graph_name = child_lc if is_subagent else (parsed_name or None)
         cause: LifecycleCause | None = None
         if is_subagent and trigger_call_id is not None:
