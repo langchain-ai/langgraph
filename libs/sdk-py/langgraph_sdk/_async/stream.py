@@ -33,6 +33,7 @@ from langgraph_sdk.stream.decoders import (
     SubgraphsDecoder,
     ToolCallsDecoder,
     ValuesDecoder,
+    validate_interleave_channels,
 )
 from langgraph_sdk.stream.subscription import compute_union_filter, infer_channel
 from langgraph_sdk.stream.transport import (
@@ -1433,6 +1434,7 @@ class AsyncThreadStream:
             fully-resolved handle (output already populated), use the dedicated
             `thread.tool_calls` / `thread.messages` projections instead.
         """
+        validate_interleave_channels(channels)
         if self._transport is None:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
         decoders: dict[str, Decoder] = {}

@@ -11,6 +11,36 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal, Protocol
 
+#: Channel names the public ``interleave_projections`` API accepts as built-ins.
+SUPPORTED_INTERLEAVE_CHANNELS = ("values", "messages", "tool_calls", "subgraphs")
+
+#: Channel names that ``infer_channel`` recognizes as first-class protocol
+#: methods but that ``interleave_projections`` has no decoder for. Routing them
+#: to the extension/``custom:`` fallback would subscribe to a channel that never
+#: matches and silently yield nothing, so they are rejected up front (fail
+#: closed). ``tools`` is the wire alias for the public ``tool_calls`` channel.
+RESERVED_INTERLEAVE_CHANNELS = frozenset(
+    {"checkpoints", "updates", "tasks", "lifecycle", "tools", "input"}
+)
+
+
+def validate_interleave_channels(channels: list[str]) -> None:
+    """Reject reserved protocol channel names before they hit the fallback.
+
+    Genuine extension names pass through untouched; only names that
+    ``infer_channel`` treats as built-in methods without an interleave decoder
+    are rejected, so a typo'd or unsupported protocol channel surfaces an error
+    instead of an empty stream.
+    """
+    for ch in channels:
+        if ch in RESERVED_INTERLEAVE_CHANNELS:
+            hint = ' (use "tool_calls")' if ch == "tools" else ""
+            raise ValueError(
+                f"{ch!r} is not a valid interleave_projections channel{hint}. "
+                f"Supported channels: {', '.join(SUPPORTED_INTERLEAVE_CHANNELS)}, "
+                "or an extension name."
+            )
+
 
 def _event_namespace(params_field: Any) -> list[str]:
     if not isinstance(params_field, dict):

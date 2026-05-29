@@ -1147,3 +1147,25 @@ async def test_interleave_projections_inflight_subgraph_finished_on_terminal():
                 child = handle
             assert child is not None
             assert child.status == "completed"
+
+
+@pytest.mark.parametrize(
+    "channel", ["checkpoints", "updates", "tasks", "lifecycle", "tools", "input"]
+)
+async def test_interleave_projections_rejects_reserved_channel(channel):
+    """Reserved protocol channel names raise instead of silently no-op'ing.
+
+    `infer_channel` treats these as first-class methods, but they have no
+    decoder here, so routing them to the extension/`custom:` fallback would
+    subscribe to a channel that never matches and yield nothing. Fail closed.
+    """
+    fake = FakeServer()
+    fake.script([lifecycle_started_event(seq=0), lifecycle_completed_event(seq=1)])
+    fake.set_state({})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            with pytest.raises(ValueError, match=channel):
+                async for _ in thread.interleave_projections([channel]):
+                    pass
