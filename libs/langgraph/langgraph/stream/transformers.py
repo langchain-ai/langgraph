@@ -422,6 +422,15 @@ class _TasksLifecycleBase(StreamTransformer):
         # Maps tracked namespace -> task_id of the parent task whose
         # `TaskResultPayload` will close it.
         self._open: dict[tuple[str, ...], str] = {}
+        # lc_agent_name observed at each namespace (first task event wins).
+        # Used to detect a subagent boundary: a child whose lc_agent_name
+        # differs from its parent namespace's lc_agent_name.
+        self._lc_by_ns: dict[tuple[str, ...], str | None] = {}
+        # Pregel task_id -> triggering LLM tool_call_id, harvested from any
+        # task whose `input` is a list of tool calls. The child subgraph's
+        # namespace segment `node:<task_id>` shares that `<task_id>`, so a
+        # subagent can recover the tool call that spawned it (cross-payload).
+        self._pending_tool_calls: dict[str, str] = {}
 
     # --- Template-method hooks (subclass overrides) ---
 
@@ -461,11 +470,46 @@ class _TasksLifecycleBase(StreamTransformer):
         if "result" in data:
             self._handle_task_result(ns, data)
         else:
+            self._record_identity(ns, data)
+            self._record_pending_tool_calls(data)
             self._handle_task_start(ns, data)
         # Tasks events are folded into the synthesized projections;
         # suppress from the main event log so iterators don't double-see
         # the same information in two shapes.
         return False
+
+    def _record_identity(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
+        """Record this namespace's `lc_agent_name` (first task event wins).
+
+        Runs for every task-start event, including `ns == self.scope` and
+        tracked children, so a child's parent identity is already known by
+        the time `_handle_task_start` evaluates the subagent boundary.
+        """
+        if ns in self._lc_by_ns:
+            return
+        metadata = data.get("metadata") or {}
+        self._lc_by_ns[ns] = metadata.get("lc_agent_name")
+
+    def _record_pending_tool_calls(self, data: dict[str, Any]) -> None:
+        """Harvest a task's triggering tool_call_id keyed by its task id.
+
+        A task whose `input` is a list of tool calls (the parent of a tool
+        dispatch) seeds `task_id -> tool_call_id`; the spawned subgraph's
+        namespace segment `node:<task_id>` shares that id, letting a subagent
+        recover the tool call that caused it across payloads.
+        """
+        task_id = data.get("id")
+        tool_calls = data.get("input")
+        if not isinstance(task_id, str) or not isinstance(tool_calls, list):
+            return
+        for tc in tool_calls:
+            if isinstance(tc, dict) and isinstance(tc.get("id"), str):
+                # First tool call wins. Under Pregel's push model each tool
+                # call is its own task, so this is exact; under a batched
+                # model multiple calls share a namespace and only the first
+                # can be labeled (accepted limitation).
+                self._pending_tool_calls[task_id] = tc["id"]
+                break
 
     def _handle_task_start(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
         if not self._should_track(ns) or ns in self._seen:
@@ -473,15 +517,17 @@ class _TasksLifecycleBase(StreamTransformer):
         self._seen.add(ns)
         parsed_name, trigger_call_id = _parse_ns_segment(ns[-1])
         metadata = data.get("metadata") or {}
-        # subagent_name is the discriminator for "this is a subagent dispatch."
-        # Without it, we don't populate cause even if tool_call_id is present —
-        # the frontend can't distinguish a subagent run from any other nested
-        # graph dispatch, and a stray cause would be misleading.
-        subagent_name = metadata.get("subagent_name")
-        graph_name = subagent_name or parsed_name or None
+        child_lc = metadata.get("lc_agent_name")
+        parent_lc = self._lc_by_ns.get(ns[:-1])
+        # A subagent boundary is a nested run that self-identifies with a
+        # name distinct from its parent. Plain subgraphs inherit the
+        # parent's lc_agent_name (== parent -> excluded); unnamed agents
+        # have lc_agent_name None (excluded).
+        is_subagent = child_lc is not None and child_lc != parent_lc
+        graph_name = child_lc if is_subagent else (parsed_name or None)
         cause: LifecycleCause | None = None
-        if subagent_name:
-            tool_call_id = metadata.get("tool_call_id")
+        if is_subagent and trigger_call_id is not None:
+            tool_call_id = self._pending_tool_calls.get(trigger_call_id)
             if tool_call_id:
                 cause = {"type": "toolCall", "toolCallId": str(tool_call_id)}
         self._on_started(ns, graph_name, trigger_call_id, cause=cause)
@@ -773,6 +819,11 @@ class SubgraphTransformer(_TasksLifecycleBase):
                 for child_ns, status, error in self._pop_terminal_transitions(ns, data):
                     await self._aon_terminal(child_ns, status, error)
             else:
+                # Mirror the sync `process` bookkeeping so the async lane
+                # observes parent identity / tool calls before discriminating
+                # a subagent boundary.
+                self._record_identity(ns, data)
+                self._record_pending_tool_calls(data)
                 self._handle_task_start(ns, data)
             keep = False
         else:

@@ -36,12 +36,13 @@ def _tasks_start(
     task_id: str,
     name: str,
     metadata: dict[str, Any] | None = None,
+    input: Any = None,
 ) -> dict[str, Any]:
     """Build a `tasks` ProtocolEvent carrying a TaskPayload (start)."""
     data: dict[str, Any] = {
         "id": task_id,
         "name": name,
-        "input": None,
+        "input": input,
         "triggers": [],
     }
     if metadata is not None:
@@ -411,98 +412,8 @@ def test_stream_events_v3_with_nested_parent_ns_scopes_lifecycle() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Metadata projection: subagent_name -> graph_name, tool_call_id -> cause
+# Parsed-segment fallback (no subagent boundary)
 # ---------------------------------------------------------------------------
-
-
-def test_subagent_name_metadata_overrides_graph_name() -> None:
-    """metadata.subagent_name overrides the parser-derived segment name."""
-    mux = _build_lifecycle_mux()
-    mux.push(
-        _tasks_start(
-            ["tools:abc123"],
-            task_id="t1",
-            name="call_weather",
-            metadata={"subagent_name": "weather_agent"},
-        )
-    )
-
-    [payload] = _drain_lifecycle(mux)
-    assert payload["event"] == "started"
-    assert payload["graph_name"] == "weather_agent", (
-        "subagent_name from metadata should override the parsed segment name 'tools'"
-    )
-    assert payload["trigger_call_id"] == "abc123"
-
-
-def test_tool_call_id_metadata_sets_cause() -> None:
-    """metadata.tool_call_id projects onto cause as a LifecycleCauseToolCall variant."""
-    mux = _build_lifecycle_mux()
-    mux.push(
-        _tasks_start(
-            ["tools:abc123"],
-            task_id="t1",
-            name="call_weather",
-            metadata={
-                "subagent_name": "weather_agent",
-                "tool_call_id": "call_xyz789",
-            },
-        )
-    )
-
-    [payload] = _drain_lifecycle(mux)
-    assert "cause" in payload, (
-        "cause should be present when tool_call_id metadata is set"
-    )
-    cause = payload["cause"]
-    assert cause["type"] == "toolCall"
-    assert cause["toolCallId"] == "call_xyz789", (
-        "toolCallId must be camelCase to match the langchain-protocol CDDL spec"
-    )
-
-
-def test_subagent_name_without_tool_call_id_has_no_cause() -> None:
-    """metadata.subagent_name alone does not produce a cause field."""
-    mux = _build_lifecycle_mux()
-    mux.push(
-        _tasks_start(
-            ["tools:abc123"],
-            task_id="t1",
-            name="call_weather",
-            metadata={"subagent_name": "weather_agent"},
-        )
-    )
-
-    [payload] = _drain_lifecycle(mux)
-    assert "cause" not in payload, (
-        "cause should be absent when tool_call_id is not in metadata"
-    )
-
-
-def test_lifecycle_does_not_populate_cause_without_subagent_name() -> None:
-    """tool_call_id alone is not enough to populate cause.
-
-    subagent_name is the discriminator for "this is a subagent dispatch."
-    Populating cause without it would mislead frontends, which couldn't
-    distinguish subagent runs from arbitrary nested-graph dispatches that
-    happen to carry a tool_call_id.
-    """
-    mux = _build_lifecycle_mux()
-    mux.push(
-        _tasks_start(
-            ["tools:abc123"],
-            task_id="t1",
-            name="call_weather",
-            metadata={"tool_call_id": "call_xyz789"},
-        )
-    )
-
-    [payload] = _drain_lifecycle(mux)
-    assert "cause" not in payload, (
-        "cause must not be populated without subagent_name as discriminator"
-    )
-    # graph_name falls through to the parser-derived segment name.
-    assert payload["graph_name"] == "tools"
 
 
 def test_no_metadata_falls_through_to_existing_behavior() -> None:
@@ -526,25 +437,132 @@ def test_empty_metadata_dict_falls_through() -> None:
     assert "cause" not in payload
 
 
-def test_subagent_name_projection_survives_terminal_roundtrip() -> None:
-    """After started is emitted with projected graph_name, the terminal event
-    (completed) is also emitted correctly for the same namespace."""
+# ---------------------------------------------------------------------------
+# Subagent discrimination via lc_agent_name transition
+# ---------------------------------------------------------------------------
+#
+# A nested task is a subagent iff its metadata["lc_agent_name"] is present and
+# differs from its PARENT namespace's lc_agent_name. These tests replicate the
+# empirically-verified `create_agent` stream shape synthetically:
+#
+#   - A supervisor created via `create_agent(name="supervisor")` emits its own
+#     node tasks (model, tools) at ns=(), each with
+#     metadata["lc_agent_name"] == "supervisor".
+#   - The parent `tools` task at ns=() carries the list of tool calls as its
+#     `input` (each a dict with an "id" = the LLM tool_call_id) and a task `id`.
+#   - When a tool body invokes an inner `create_agent(name="weather_agent")`,
+#     the inner agent's node tasks stream at ns=("tools:<taskid>",) with
+#     metadata["lc_agent_name"] == "weather_agent", sharing the SAME <taskid>
+#     as the parent `tools` task.
+#   - A plain StateGraph (no name) inherits the parent's lc_agent_name, so its
+#     child lc == parent lc -> NOT a subagent.
+
+
+def test_lifecycle_uses_lc_agent_name_for_subagent() -> None:
+    """A nested run whose lc_agent_name differs from its parent's is a subagent.
+
+    graph_name becomes the child's lc_agent_name; cause is recovered by joining
+    the child segment's task-id to the parent task's tool-call list.
+    """
+    mux = _build_lifecycle_mux()
+    # Supervisor's `tools` task at scope ns: carries its own lc_agent_name and
+    # the list of tool calls as `input`. Its task id seeds the child segment.
+    mux.push(
+        _tasks_start(
+            [],
+            task_id="tools_task_1",
+            name="tools",
+            metadata={"lc_agent_name": "supervisor"},
+            input=[{"name": "get_weather", "args": {"city": "SF"}, "id": "call_w"}],
+        )
+    )
+    # Inner weather_agent's first node task streams under the parent `tools`
+    # task's namespace segment (shared task id) with its own lc_agent_name.
+    mux.push(
+        _tasks_start(
+            ["tools:tools_task_1"],
+            task_id="inner_model_1",
+            name="model",
+            metadata={"lc_agent_name": "weather_agent"},
+        )
+    )
+
+    payloads = _drain_lifecycle(mux)
+    started = [p for p in payloads if p["event"] == "started"]
+    [subagent] = [p for p in started if p["namespace"] == ["tools:tools_task_1"]]
+    assert subagent["graph_name"] == "weather_agent", (
+        "graph_name should be the child's lc_agent_name, not the parsed segment"
+    )
+    assert subagent["cause"] == {"type": "toolCall", "toolCallId": "call_w"}, (
+        "cause should recover the triggering tool_call_id from the parent's "
+        "tool-call list via the shared task id"
+    )
+
+
+def test_lifecycle_excludes_inherited_lc_agent_name() -> None:
+    """A nested run that inherits the parent's lc_agent_name is NOT a subagent.
+
+    A plain StateGraph invoked in a tool inherits the parent's lc_agent_name,
+    so child lc == parent lc. graph_name must fall back to the parsed segment
+    name, never the parent's agent name, and no cause is populated.
+    """
     mux = _build_lifecycle_mux()
     mux.push(
         _tasks_start(
-            ["tools:abc"],
-            task_id="t1",
-            name="call_weather",
-            metadata={"subagent_name": "weather_agent", "tool_call_id": "call_001"},
+            [],
+            task_id="tools_task_1",
+            name="tools",
+            metadata={"lc_agent_name": "supervisor"},
+            input=[{"name": "lookup", "args": {}, "id": "call_x"}],
         )
     )
-    mux.push(_tasks_result([], task_id="abc", name="tools"))
+    # Plain subgraph inherits the parent's lc_agent_name (== "supervisor").
+    mux.push(
+        _tasks_start(
+            ["plain:tools_task_1"],
+            task_id="inner_node_1",
+            name="inner_node",
+            metadata={"lc_agent_name": "supervisor"},
+        )
+    )
 
     payloads = _drain_lifecycle(mux)
-    assert len(payloads) == 2
-    started, completed = payloads
-    assert started["event"] == "started"
-    assert started["graph_name"] == "weather_agent"
-    assert started["cause"] == {"type": "toolCall", "toolCallId": "call_001"}
-    assert completed["event"] == "completed"
-    assert completed["namespace"] == ["tools:abc"]
+    started = [p for p in payloads if p["event"] == "started"]
+    [nested] = [p for p in started if p["namespace"] == ["plain:tools_task_1"]]
+    assert nested.get("graph_name") != "supervisor", (
+        "an inherited lc_agent_name must not name the nested run after its parent"
+    )
+    assert nested["graph_name"] == "plain", (
+        "graph_name must fall back to the parsed segment name for plain subgraphs"
+    )
+    assert "cause" not in nested, (
+        "no cause for a nested run that is not a subagent boundary"
+    )
+
+
+def test_lifecycle_unnamed_nested_agent_is_not_subagent() -> None:
+    """A nested run with lc_agent_name None is excluded (not a subagent)."""
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            [],
+            task_id="tools_task_1",
+            name="tools",
+            metadata={"lc_agent_name": "supervisor"},
+            input=[{"name": "lookup", "args": {}, "id": "call_x"}],
+        )
+    )
+    mux.push(
+        _tasks_start(
+            ["plain:tools_task_1"],
+            task_id="inner_node_1",
+            name="inner_node",
+            metadata={"lc_agent_name": None},
+        )
+    )
+
+    payloads = _drain_lifecycle(mux)
+    started = [p for p in payloads if p["event"] == "started"]
+    [nested] = [p for p in started if p["namespace"] == ["plain:tools_task_1"]]
+    assert nested["graph_name"] == "plain"
+    assert "cause" not in nested
