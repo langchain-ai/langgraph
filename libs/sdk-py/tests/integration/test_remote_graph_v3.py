@@ -11,6 +11,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from langchain_core.runnables import RunnableConfig
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.types import Command
 
@@ -82,7 +83,7 @@ async def test_async_resume_after_interrupt(remote_agent: RemoteGraph) -> None:
     past `ask_human` to completion (the graph interrupts only once).
     """
     thread_id = str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     # First session: drive until the agent pauses at the ask_human interrupt.
     async with await remote_agent.astream_events(
