@@ -6,6 +6,7 @@ import pytest
 
 from langgraph.pregel._remote_run_stream import (
     _AsyncRemoteGraphRunStream,
+    _ChannelProjection,
     _ProjectionRegistry,
     _RemoteGraphRunStream,
     _translate_command_input,
@@ -90,32 +91,68 @@ def test_sync_projection_attrs_forward_to_sdk():
     adapter, _, sdk_thread = _make_sync_adapter()
     sdk_thread.values = object()
     sdk_thread.messages = object()
+    sdk_thread.tool_calls = object()
     sdk_thread.subgraphs = object()
     with adapter as stream:
         assert stream.values is sdk_thread.values
         assert stream.messages is sdk_thread.messages
+        assert stream.tool_calls is sdk_thread.tool_calls
         assert stream.subgraphs is sdk_thread.subgraphs
-        assert set(stream.extensions) == {"values", "messages", "subgraphs"}
+        assert set(stream.extensions) == set(_ProjectionRegistry._NATIVE)
         assert stream.extensions["values"] is sdk_thread.values
 
 
-def test_projection_registry_native_and_delegated():
+def test_projection_registry_typed_decoded_and_custom():
     sdk = MagicMock()
     sdk.values = object()
     sdk.messages = object()
+    sdk.tool_calls = object()
     sdk.subgraphs = object()
-    custom = object()
-    sdk.extensions = {"custom": custom}
+    custom_named = object()
+    sdk.extensions = {"my_custom": custom_named}
     registry = _ProjectionRegistry(sdk)
-    # Native keys resolve to the SDK's typed projections.
+
+    # Typed channels resolve to the SDK's decoded projections.
     assert registry["values"] is sdk.values
-    assert registry["messages"] is sdk.messages
+    assert registry["tool_calls"] is sdk.tool_calls
     assert registry["subgraphs"] is sdk.subgraphs
-    # Non-native names delegate to the SDK custom-extension projection.
-    assert registry["custom"] is custom
-    # Only native keys are enumerable.
-    assert list(registry) == ["values", "messages", "subgraphs"]
-    assert len(registry) == 3
+    # Channels without a typed projection resolve to a decoding _ChannelProjection.
+    ckpt = registry["checkpoints"]
+    assert isinstance(ckpt, _ChannelProjection)
+    assert ckpt._channel == "checkpoints"
+    assert isinstance(registry["updates"], _ChannelProjection)
+    # A non-protocol name is a specific custom-extension channel.
+    assert registry["my_custom"] is custom_named
+    # Enumerable set is the typed + decoded channels (no `lifecycle`, no `debug`).
+    assert list(registry) == [
+        "values",
+        "messages",
+        "tool_calls",
+        "subgraphs",
+        "updates",
+        "checkpoints",
+        "tasks",
+        "custom",
+    ]
+    assert len(registry) == 8
+
+
+def test_channel_projection_decodes_params_data():
+    sdk = MagicMock()
+    # Two events with data + one malformed/dataless event that must be skipped.
+    sdk.subscribe = MagicMock(
+        return_value=iter(
+            [
+                {"params": {"data": {"n": 1}}},
+                {"params": {}},  # no data -> skipped
+                {"params": {"data": {"n": 2}}},
+                {"unexpected": "shape"},  # not a params dict -> skipped
+            ]
+        )
+    )
+    proj = _ChannelProjection(sdk, "checkpoints")
+    assert list(proj) == [{"n": 1}, {"n": 2}]
+    sdk.subscribe.assert_called_once_with(["checkpoints"])
 
 
 def test_sync_adapter_translates_command_input():
@@ -272,12 +309,14 @@ async def test_async_projection_attrs_forward_to_sdk():
     adapter, _, sdk_thread = _make_async_adapter()
     sdk_thread.values = object()
     sdk_thread.messages = object()
+    sdk_thread.tool_calls = object()
     sdk_thread.subgraphs = object()
     async with adapter as stream:
         assert stream.values is sdk_thread.values
         assert stream.messages is sdk_thread.messages
+        assert stream.tool_calls is sdk_thread.tool_calls
         assert stream.subgraphs is sdk_thread.subgraphs
-        assert set(stream.extensions) == {"values", "messages", "subgraphs"}
+        assert set(stream.extensions) == set(_ProjectionRegistry._NATIVE)
         assert stream.extensions["messages"] is sdk_thread.messages
 
 

@@ -5,7 +5,7 @@ import logging
 import sys
 from collections.abc import AsyncIterator, Iterator, Mapping
 from types import TracebackType
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph_sdk._async.stream import AsyncThreadStream
@@ -40,24 +40,85 @@ def _translate_command_input(input: Any) -> Any:
     return input
 
 
+class _ChannelProjection:
+    """Decoded projection for a wire channel the SDK doesn't type natively.
+
+    Subscribes to `channel` and yields each event's `params["data"]` — the same
+    item shape the SDK's typed projections yield (`_ValuesProjection` etc.) and
+    that local's `UpdatesTransformer` / `CheckpointsTransformer` /
+    `TasksTransformer` / `CustomTransformer` push, so iterating this matches the
+    corresponding local projection. Iterate with `for` against a sync stream and
+    `async for` against an async stream (matching the underlying SDK). Opening
+    the subscription requires the stream to be entered (`with` / `async with`).
+    """
+
+    def __init__(self, sdk: AsyncThreadStream | SyncThreadStream, channel: str) -> None:
+        self._sdk = sdk
+        self._channel = channel
+
+    @staticmethod
+    def _data(event: Any) -> Any:
+        """Extract `params.data` from a protocol event, tolerating odd shapes."""
+        params = event.get("params") if isinstance(event, dict) else None
+        return params.get("data") if isinstance(params, dict) else None
+
+    def __iter__(self) -> Iterator[Any]:
+        # Sync lane: the sync adapter's SDK returns a sync iterator here.
+        events = cast(Iterator[Any], self._sdk.subscribe([self._channel]))
+        for event in events:
+            data = self._data(event)
+            if data is not None:
+                yield data
+
+    def __aiter__(self) -> AsyncIterator[Any]:
+        return self._aiter()
+
+    async def _aiter(self) -> AsyncIterator[Any]:
+        # Async lane: the async adapter's SDK returns an async iterator here.
+        events = cast(AsyncIterator[Any], self._sdk.subscribe([self._channel]))
+        async for event in events:
+            data = self._data(event)
+            if data is not None:
+                yield data
+
+
 class _ProjectionRegistry(Mapping[str, Any]):
     """Read-only name -> projection registry mirroring local `GraphRunStream.extensions`.
 
-    Native keys (`values`/`messages`/`subgraphs`) resolve to the SDK's typed
-    projections; any other name delegates to the SDK's custom-extension
-    projection (`thread.extensions[name]`). Only the native keys are
-    enumerable; custom channels are looked up by name on demand, since the
-    remote side cannot statically know which custom channels the server emits.
+    Resolution follows the langchain-protocol wire channels, and every entry
+    yields the same decoded item shape local does (`params.data`):
+
+    - `values` / `messages` / `tool_calls` / `subgraphs` resolve to the SDK's
+      decoded typed projections. `tool_calls` is the `tools` channel — tool
+      *execution* events, distinct from the tool-call *inputs* inside `messages`.
+    - `updates` / `checkpoints` / `tasks` / `custom` have no typed SDK
+      projection, so they resolve to a `_ChannelProjection` that subscribes to
+      the channel and yields `params.data` — matching the local transformer
+      output for those channels.
+    - any other name is a specific custom-extension channel
+      (`thread.extensions[name]`, i.e. `custom:<name>`).
+
+    `lifecycle` is intentionally absent: local derives a status payload from it
+    rather than yielding `params.data`, and the SDK consumes it as control-plane
+    (driving `output` / `interrupted`), so its shape can't be matched — it
+    remains reachable via the raw `events` iterator. `debug` is absent too: it
+    is not a v3 wire channel.
     """
 
-    _NATIVE = ("values", "messages", "subgraphs")
+    # Channels the SDK decodes into typed projections.
+    _TYPED = ("values", "messages", "tool_calls", "subgraphs")
+    # Wire channels with no typed SDK projection — decoded here to match local.
+    _DECODED = ("updates", "checkpoints", "tasks", "custom")
+    _NATIVE = _TYPED + _DECODED
 
     def __init__(self, sdk: AsyncThreadStream | SyncThreadStream) -> None:
         self._sdk = sdk
 
     def __getitem__(self, name: str) -> Any:
-        if name in self._NATIVE:
+        if name in self._TYPED:
             return getattr(self._sdk, name)
+        if name in self._DECODED:
+            return _ChannelProjection(self._sdk, name)
         return self._sdk.extensions[name]
 
     def __iter__(self) -> Iterator[str]:
@@ -147,6 +208,15 @@ class _RemoteGraphRunStream:
     def subgraphs(self) -> Any:
         """Subgraph-handle projection (mirrors local `run.subgraphs`)."""
         return self._sdk.subgraphs
+
+    @property
+    def tool_calls(self) -> Any:
+        """Tool-execution projection (the `tools` channel).
+
+        These are tool *execution* events (started / output / finished),
+        distinct from the tool-call *inputs* carried inside `messages`.
+        """
+        return self._sdk.tool_calls
 
     @property
     def extensions(self) -> Mapping[str, Any]:
@@ -266,6 +336,15 @@ class _AsyncRemoteGraphRunStream:
     def subgraphs(self) -> Any:
         """Subgraph-handle projection (mirrors local `run.subgraphs`)."""
         return self._sdk.subgraphs
+
+    @property
+    def tool_calls(self) -> Any:
+        """Tool-execution projection (the `tools` channel).
+
+        These are tool *execution* events (started / output / finished),
+        distinct from the tool-call *inputs* carried inside `messages`.
+        """
+        return self._sdk.tool_calls
 
     @property
     def extensions(self) -> Mapping[str, Any]:
