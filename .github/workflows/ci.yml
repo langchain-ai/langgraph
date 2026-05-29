@@ -50,6 +50,8 @@ jobs:
               - '**/uv.lock'
             sdk_py:
               - 'libs/sdk-py/**'
+              - 'libs/langgraph/langgraph/pregel/remote.py'
+              - 'libs/langgraph/langgraph/pregel/_remote_run_stream.py'
 
   lint:
     needs: changes
