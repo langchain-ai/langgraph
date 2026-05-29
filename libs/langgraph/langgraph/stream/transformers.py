@@ -9,7 +9,7 @@ from langchain_core.language_models.chat_model_stream import (
     ChatModelStream,
 )
 from langchain_core.messages import AIMessageChunk, BaseMessage, ToolMessage
-from langchain_protocol.protocol import MessagesData
+from langchain_protocol.protocol import LifecycleCause, MessagesData
 from typing_extensions import NotRequired, TypedDict
 
 from langgraph.errors import GraphDrained, GraphInterrupt
@@ -366,6 +366,7 @@ class LifecyclePayload(TypedDict, total=False):
     namespace: list[str]
     graph_name: NotRequired[str]
     trigger_call_id: NotRequired[str]
+    cause: NotRequired[LifecycleCause]
     error: NotRequired[str]
 
 
@@ -406,6 +407,18 @@ class _TasksLifecycleBase(StreamTransformer):
         # Maps tracked namespace -> task_id of the parent task whose
         # `TaskResultPayload` will close it.
         self._open: dict[tuple[str, ...], str] = {}
+        # lc_agent_name observed at each namespace (first task event wins).
+        # Not read by the base discriminator (which only checks whether the
+        # current task carries an lc_agent_name); maintained as extension state
+        # for subclasses that project named subagents — e.g. a `run.subagents`
+        # transformer reads this to filter to nested runs that have a name.
+        self._lc_by_ns: dict[tuple[str, ...], str | None] = {}
+        # Pregel task_id -> triggering LLM tool_call_id, harvested from a task
+        # whose `input` is a `tool_call_with_context` dict (current shape) or a
+        # list of tool-call dicts (legacy shape). The child subgraph's segment
+        # `node:<task_id>` shares this task_id, so a subagent recovers the tool
+        # call that spawned it (cross-payload).
+        self._pending_tool_calls: dict[str, str] = {}
 
     # --- Template-method hooks (subclass overrides) ---
 
@@ -418,6 +431,8 @@ class _TasksLifecycleBase(StreamTransformer):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
+        *,
+        cause: LifecycleCause | None = None,
     ) -> None:
         """Fired once per discovered namespace (first observed task event)."""
         raise NotImplementedError
@@ -443,18 +458,81 @@ class _TasksLifecycleBase(StreamTransformer):
         if "result" in data:
             self._handle_task_result(ns, data)
         else:
-            self._handle_task_start(ns)
+            self._record_identity(ns, data)
+            self._record_pending_tool_calls(data)
+            self._handle_task_start(ns, data)
         # Tasks events are folded into the synthesized projections;
         # suppress from the main event log so iterators don't double-see
         # the same information in two shapes.
         return False
 
-    def _handle_task_start(self, ns: tuple[str, ...]) -> None:
+    def _record_identity(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
+        """Record this namespace's `lc_agent_name` (first task event wins).
+
+        Runs for every task-start event, including `ns == self.scope` and
+        tracked children. Pregel emits parent-namespace tasks before
+        child-namespace tasks, so under that ordering the parent's identity is
+        recorded by the time a child event is evaluated in `_handle_task_start`.
+        """
+        if ns in self._lc_by_ns:
+            return
+        metadata = data.get("metadata") or {}
+        self._lc_by_ns[ns] = metadata.get("lc_agent_name")
+
+    def _record_pending_tool_calls(self, data: dict[str, Any]) -> None:
+        """Harvest a task's triggering tool_call_id keyed by its task id.
+
+        A tool-dispatch task seeds `task_id -> tool_call_id`; the spawned
+        subgraph's namespace segment `node:<task_id>` shares that id, letting
+        a subagent recover the tool call that caused it across payloads. Two
+        input shapes are handled: the current Pregel push model schedules each
+        tool call as its own task whose `input` is a `tool_call_with_context`
+        dict, while a legacy / batched model passes a list of tool-call dicts.
+        """
+        task_id = data.get("id")
+        if not isinstance(task_id, str):
+            return
+        payload = data.get("input")
+        tool_call_id: str | None = None
+        # Current langgraph schedules each tool call as its own push task
+        # whose input is a `tool_call_with_context` dict.
+        if isinstance(payload, dict) and isinstance(payload.get("tool_call"), dict):
+            candidate = payload["tool_call"].get("id")
+            if isinstance(candidate, str):
+                tool_call_id = candidate
+        # Legacy / batched shape: input is a list of tool-call dicts.
+        elif isinstance(payload, list):
+            for tc in payload:
+                if isinstance(tc, dict) and isinstance(tc.get("id"), str):
+                    tool_call_id = tc["id"]  # first wins
+                    break
+        if tool_call_id is not None:
+            self._pending_tool_calls[task_id] = tool_call_id
+
+    def _handle_task_start(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
         if not self._should_track(ns) or ns in self._seen:
             return
         self._seen.add(ns)
-        graph_name, trigger_call_id = _parse_ns_segment(ns[-1])
-        self._on_started(ns, graph_name or None, trigger_call_id)
+        parsed_name, trigger_call_id = _parse_ns_segment(ns[-1])
+        metadata = data.get("metadata") or {}
+        child_lc = metadata.get("lc_agent_name")
+        # A subagent boundary is any nested run carrying an lc_agent_name (set
+        # by create_agent). Unnamed runs (lc_agent_name None) are excluded.
+        #
+        # A same-named nested agent — e.g. a subagent that invokes itself — is
+        # surfaced because it re-asserts its own lc_agent_name. The trade-off:
+        # a non-agent subgraph invoked inside a tool inherits the parent's
+        # lc_agent_name and will also surface (named after the parent). A caller
+        # that needs to exclude such a graph can null lc_agent_name in the
+        # config it invokes that graph with.
+        is_subagent = child_lc is not None
+        graph_name = child_lc if is_subagent else (parsed_name or None)
+        cause: LifecycleCause | None = None
+        if is_subagent and trigger_call_id is not None:
+            tool_call_id = self._pending_tool_calls.get(trigger_call_id)
+            if tool_call_id:
+                cause = {"type": "toolCall", "tool_call_id": str(tool_call_id)}
+        self._on_started(ns, graph_name, trigger_call_id, cause=cause)
         if trigger_call_id is not None:
             self._open[ns] = trigger_call_id
 
@@ -553,6 +631,8 @@ class LifecycleTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
+        *,
+        cause: LifecycleCause | None = None,
     ) -> None:
         if trigger_call_id is None:
             # Without a task id we can't correlate a parent-result
@@ -563,6 +643,8 @@ class LifecycleTransformer(_TasksLifecycleBase):
         if graph_name:
             payload["graph_name"] = graph_name
         payload["trigger_call_id"] = trigger_call_id
+        if cause is not None:
+            payload["cause"] = cause
         self._channel.push(payload)
 
     def _on_terminal(
@@ -625,6 +707,8 @@ class SubgraphTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
+        *,
+        cause: LifecycleCause | None = None,
     ) -> None:
         if self._mux is None:
             return
@@ -633,6 +717,10 @@ class SubgraphTransformer(_TasksLifecycleBase):
         except RuntimeError:
             return
         handle_cls = AsyncSubgraphRunStream if child_mux.is_async else SubgraphRunStream
+        # `cause` is intentionally ignored here: it is a wire/lifecycle-channel
+        # concern (carried on `LifecyclePayload`), not something the in-process
+        # subgraph navigation handle exposes. The argument is accepted only to
+        # keep the `_on_started` template signature uniform across transformers.
         handle = handle_cls(
             mux=child_mux,
             path=ns,
@@ -737,7 +825,12 @@ class SubgraphTransformer(_TasksLifecycleBase):
                 for child_ns, status, error in self._pop_terminal_transitions(ns, data):
                     await self._aon_terminal(child_ns, status, error)
             else:
-                self._handle_task_start(ns)
+                # Mirror the sync `process` bookkeeping so the async lane
+                # observes parent identity / tool calls before discriminating
+                # a subagent boundary.
+                self._record_identity(ns, data)
+                self._record_pending_tool_calls(data)
+                self._handle_task_start(ns, data)
             keep = False
         else:
             keep = True

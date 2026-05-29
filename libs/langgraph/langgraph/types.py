@@ -150,6 +150,16 @@ class TaskPayload(TypedDict):
     """Input data passed to the task."""
     triggers: list[str]
     """List of triggers that caused this task to be executed (e.g. channel writes)."""
+    metadata: NotRequired[dict[str, Any]]
+    """Framework-resolved metadata associated with the task.
+
+    Generic dict carrier following the messages-stream pattern. Populated by
+    `map_debug_tasks` from `task.config["metadata"]` when non-empty, so the
+    same keys `stream_mode="messages"` consumers see (e.g. `lc_agent_name`,
+    `langgraph_node`, `langgraph_step`) are available to stream transformers.
+
+    Consumers should ignore unrecognized keys.
+    """
 
 
 class TaskResultPayload(TypedDict):

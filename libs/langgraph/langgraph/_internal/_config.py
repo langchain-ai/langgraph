@@ -402,3 +402,17 @@ _PROPAGATE_TO_METADATA = frozenset(
         "graph_id",
     )
 )
+
+
+def filter_to_user_tags(tags: Sequence[str] | None) -> list[str] | None:
+    """Drop langgraph's internal `seq:step:*` bookkeeping tags.
+
+    `seq:step:N` tags are added internally to mark sequence steps; everything
+    else (user-supplied tags and any other framework tags) is kept. Returns the
+    surviving tags, or `None` if none remain. Shared by the `messages` and
+    `tasks` stream handlers so both surface the same tag set on their metadata.
+    """
+    if not tags:
+        return None
+    filtered = [t for t in tags if not t.startswith("seq:step")]
+    return filtered or None
