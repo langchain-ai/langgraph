@@ -42,7 +42,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable
 from copy import copy, deepcopy
 from dataclasses import dataclass, field, replace
 from types import UnionType
@@ -119,31 +119,6 @@ TOOL_INVOCATION_ERROR_TEMPLATE = (
     " {error}\n"
     " Please fix the error and try again."
 )
-
-
-def _resolve_subagent_name(tool: BaseTool, call: ToolCall) -> str | None:
-    """Resolve a tool's declared subagent_name for a specific tool_call.
-
-    Returns the declared name as a string, or None if no name is declared
-    or the callable returns falsy. Static strings pass through; callables
-    are invoked with the parsed ToolCall.
-
-    The callable form is best-effort: any exception from the user-supplied
-    callable returns None rather than failing dispatch (a buggy resolver
-    must not break tool execution).
-    """
-    name = getattr(tool, "subagent_name", None)
-    if name is None:
-        return None
-    if isinstance(name, str):
-        return name
-    if callable(name):
-        try:
-            resolved = name(call)
-        except Exception:
-            return None
-        return resolved if isinstance(resolved, str) and resolved else None
-    return None
 
 
 class _ToolCallRequestOverrides(TypedDict, total=False):
@@ -1289,37 +1264,6 @@ class ToolNode(RunnableCallable):
 
         tool_calls = list(latest_ai_message.tool_calls)
         return tool_calls, input_type
-
-    def pregel_dynamic_metadata(
-        self,
-        input: list[AnyMessage] | dict[str, Any] | BaseModel,
-    ) -> Mapping[str, Any] | None:
-        """Derive task metadata from the tool calls about to be dispatched.
-
-        Called by Pregel at task scheduling time so the resolved `subagent_name`
-        and `tool_call_id` land on `task.config["metadata"]` BEFORE the `tasks`
-        lifecycle event fires (the in-body runtime is too late). Returns a dict
-        to merge into the task config's metadata, or None if no tool call has
-        a `subagent_name` declared.
-
-        If multiple tool calls in the batch declare `subagent_name`, the first
-        resolved match wins. Mixed batches with multiple subagent dispatches
-        share a single lifecycle payload, so only one cause/graph_name can
-        surface; downstream projections that need per-call labeling should
-        rely on inner tool-call events rather than the batch's lifecycle.
-        """
-        try:
-            tool_calls, _ = self._parse_input(input)
-        except Exception:
-            return None
-        for call in tool_calls:
-            tool = self.tools_by_name.get(call["name"])
-            if tool is None:
-                continue
-            resolved = _resolve_subagent_name(tool, call)
-            if resolved is not None:
-                return {"subagent_name": resolved, "tool_call_id": call["id"]}
-        return None
 
     def _validate_tool_call(self, call: ToolCall) -> ToolMessage | None:
         requested_tool = call["name"]
