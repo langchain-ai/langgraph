@@ -20,6 +20,7 @@ from dotenv import dotenv_values, set_key
 import langgraph_cli.config
 from langgraph_cli.analytics import log_command
 from langgraph_cli.constants import DEFAULT_CONFIG
+from langgraph_cli.dependency_tracking import find_tracked_packages
 from langgraph_cli.docker import build_docker_image, can_build_locally
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
@@ -902,6 +903,7 @@ def _run_local_build(
     build_command: str | None,
     docker_build_args: Sequence[str],
     secrets: list[dict[str, str]],
+    tracked_packages: list[str] | None,
 ) -> BuildResult:
     """Build locally with Docker, push to registry, update deployment."""
     # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
@@ -1060,7 +1062,10 @@ def _run_local_build(
         # -- Step: Update deployment --
         _log_deploy_step(step, f"Updating deployment {deployment_id}")
         updated = client.update_deployment(
-            deployment_id, resolved_image, secrets=secrets
+            deployment_id,
+            resolved_image,
+            secrets=secrets,
+            tracked_packages=tracked_packages,
         )
 
     return BuildResult(
@@ -1083,6 +1088,7 @@ def _run_remote_build(
     install_command: str | None,
     build_command: str | None,
     secrets: list[dict[str, str]],
+    tracked_packages: list[str] | None,
 ) -> BuildResult:
     """Upload source tarball and trigger a remote build."""
     from langgraph_cli.archive import create_archive
@@ -1113,6 +1119,7 @@ def _run_remote_build(
         secrets=secrets,
         install_command=install_command,
         build_command=build_command,
+        tracked_packages=tracked_packages,
     )
 
     log_offset: str | None = None
@@ -1597,6 +1604,15 @@ def _deploy_cmd(
     if not deployment_id:
         raise click.ClickException("Failed to determine deployment ID")
 
+    # Scan local sources for tracked packages so the new revision carries
+    # the same metadata GitHub-backed deploys produce. Failures must never
+    # block a deploy.
+    try:
+        tracked_packages = find_tracked_packages(config, config_json) or None
+    except Exception as exc:
+        em.warn(f"Skipped tracked-package scan: {exc}")
+        tracked_packages = None
+
     # -- 3. Build (divergent path) --
     if use_remote_build:
         build_result = _run_remote_build(
@@ -1609,6 +1625,7 @@ def _deploy_cmd(
             install_command=install_command,
             build_command=build_command,
             secrets=secrets,
+            tracked_packages=tracked_packages,
         )
     else:
         build_result = _run_local_build(
@@ -1628,6 +1645,7 @@ def _deploy_cmd(
             build_command=build_command,
             docker_build_args=docker_build_args,
             secrets=secrets,
+            tracked_packages=tracked_packages,
         )
 
     # -- 4. Shared wait + result --
