@@ -507,7 +507,7 @@ def test_lifecycle_uses_lc_agent_name_for_subagent() -> None:
     assert subagent["graph_name"] == "weather_agent", (
         "graph_name should be the child's lc_agent_name, not the parsed segment"
     )
-    assert subagent["cause"] == {"type": "toolCall", "toolCallId": "call_w"}, (
+    assert subagent["cause"] == {"type": "toolCall", "tool_call_id": "call_w"}, (
         "cause should recover the triggering tool_call_id from the parent push "
         "task's tool_call_with_context input via the shared task id"
     )
@@ -542,7 +542,7 @@ def test_lifecycle_subagent_cause_from_legacy_list_input() -> None:
     started = [p for p in payloads if p["event"] == "started"]
     [subagent] = [p for p in started if p["namespace"] == ["tools:tools_task_1"]]
     assert subagent["graph_name"] == "weather_agent"
-    assert subagent["cause"] == {"type": "toolCall", "toolCallId": "call_w"}
+    assert subagent["cause"] == {"type": "toolCall", "tool_call_id": "call_w"}
 
 
 def test_lifecycle_excludes_inherited_lc_agent_name() -> None:
@@ -677,4 +677,4 @@ def test_lifecycle_subagent_terminal_roundtrip() -> None:
     assert [p["event"] for p in subagent] == ["started", "completed"]
     started, _completed = subagent
     assert started["graph_name"] == "weather_agent"
-    assert started["cause"] == {"type": "toolCall", "toolCallId": "call_w"}
+    assert started["cause"] == {"type": "toolCall", "tool_call_id": "call_w"}

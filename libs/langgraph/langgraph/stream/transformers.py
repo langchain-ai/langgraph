@@ -9,7 +9,7 @@ from langchain_core.language_models.chat_model_stream import (
     ChatModelStream,
 )
 from langchain_core.messages import AIMessageChunk, BaseMessage, ToolMessage
-from langchain_protocol.protocol import MessagesData
+from langchain_protocol.protocol import LifecycleCause, MessagesData
 from typing_extensions import NotRequired, TypedDict
 
 from langgraph.errors import GraphDrained, GraphInterrupt
@@ -353,21 +353,6 @@ def _parse_ns_segment(segment: str) -> tuple[str, str | None]:
     return name, task_id if sep else None
 
 
-class LifecycleCauseToolCall(TypedDict):
-    """Causation edge: a tool call on the parent namespace spawned this subgraph.
-
-    Matches `LifecycleCauseToolCall` in the langchain-protocol CDDL spec.
-    camelCase field name (`toolCallId`) is intentional — matches the wire format.
-    """
-
-    type: Literal["toolCall"]
-    toolCallId: str
-
-
-# Union alias — extensible for future cause types (Send, Edge, etc.)
-LifecycleCause = LifecycleCauseToolCall
-
-
 class LifecyclePayload(TypedDict, total=False):
     """Payload of a lifecycle event surfaced on the `lifecycle` channel.
 
@@ -540,7 +525,7 @@ class _TasksLifecycleBase(StreamTransformer):
         if is_subagent and trigger_call_id is not None:
             tool_call_id = self._pending_tool_calls.get(trigger_call_id)
             if tool_call_id:
-                cause = {"type": "toolCall", "toolCallId": str(tool_call_id)}
+                cause = {"type": "toolCall", "tool_call_id": str(tool_call_id)}
         self._on_started(ns, graph_name, trigger_call_id, cause=cause)
         if trigger_call_id is not None:
             self._open[ns] = trigger_call_id
@@ -726,6 +711,10 @@ class SubgraphTransformer(_TasksLifecycleBase):
         except RuntimeError:
             return
         handle_cls = AsyncSubgraphRunStream if child_mux.is_async else SubgraphRunStream
+        # `cause` is intentionally ignored here: it is a wire/lifecycle-channel
+        # concern (carried on `LifecyclePayload`), not something the in-process
+        # subgraph navigation handle exposes. The argument is accepted only to
+        # keep the `_on_started` template signature uniform across transformers.
         handle = handle_cls(
             mux=child_mux,
             path=ns,
