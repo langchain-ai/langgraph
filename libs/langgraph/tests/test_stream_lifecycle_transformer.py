@@ -448,8 +448,10 @@ def test_empty_metadata_dict_falls_through() -> None:
 #   - A supervisor created via `create_agent(name="supervisor")` emits its own
 #     node tasks (model, tools) at ns=(), each with
 #     metadata["lc_agent_name"] == "supervisor".
-#   - The parent `tools` task at ns=() carries the list of tool calls as its
-#     `input` (each a dict with an "id" = the LLM tool_call_id) and a task `id`.
+#   - The parent `tools` task at ns=() carries a `tool_call_with_context`
+#     dict as its `input` (with the LLM tool_call_id at
+#     input["tool_call"]["id"]) and a task `id`. (A legacy / batched shape
+#     passes a list of tool-call dicts instead; both are exercised below.)
 #   - When a tool body invokes an inner `create_agent(name="weather_agent")`,
 #     the inner agent's node tasks stream at ns=("tools:<taskid>",) with
 #     metadata["lc_agent_name"] == "weather_agent", sharing the SAME <taskid>
@@ -462,18 +464,30 @@ def test_lifecycle_uses_lc_agent_name_for_subagent() -> None:
     """A nested run whose lc_agent_name differs from its parent's is a subagent.
 
     graph_name becomes the child's lc_agent_name; cause is recovered by joining
-    the child segment's task-id to the parent task's tool-call list.
+    the child segment's task-id to the parent push task's tool call. This uses
+    the production `tool_call_with_context` dict input shape current langgraph
+    emits (tool_call_id at input["tool_call"]["id"]).
     """
     mux = _build_lifecycle_mux()
-    # Supervisor's `tools` task at scope ns: carries its own lc_agent_name and
-    # the list of tool calls as `input`. Its task id seeds the child segment.
+    # Supervisor's `tools` push task at scope ns: carries its own lc_agent_name
+    # and a `tool_call_with_context` dict as `input`. Each tool call is its own
+    # push task, and the task id seeds the child segment.
     mux.push(
         _tasks_start(
             [],
             task_id="tools_task_1",
             name="tools",
             metadata={"lc_agent_name": "supervisor"},
-            input=[{"name": "get_weather", "args": {"city": "SF"}, "id": "call_w"}],
+            input={
+                "__type": "tool_call_with_context",
+                "tool_call": {
+                    "name": "call_weather",
+                    "args": {"city": "Boston"},
+                    "id": "call_w",
+                    "type": "tool_call",
+                },
+                "state": {},
+            },
         )
     )
     # Inner weather_agent's first node task streams under the parent `tools`
@@ -494,9 +508,41 @@ def test_lifecycle_uses_lc_agent_name_for_subagent() -> None:
         "graph_name should be the child's lc_agent_name, not the parsed segment"
     )
     assert subagent["cause"] == {"type": "toolCall", "toolCallId": "call_w"}, (
-        "cause should recover the triggering tool_call_id from the parent's "
-        "tool-call list via the shared task id"
+        "cause should recover the triggering tool_call_id from the parent push "
+        "task's tool_call_with_context input via the shared task id"
     )
+
+
+def test_lifecycle_subagent_cause_from_legacy_list_input() -> None:
+    """cause recovery also handles the legacy / batched list input shape.
+
+    A parent task whose `input` is a list of tool-call dicts (rather than a
+    `tool_call_with_context` dict) still seeds the tool_call_id join.
+    """
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            [],
+            task_id="tools_task_1",
+            name="tools",
+            metadata={"lc_agent_name": "supervisor"},
+            input=[{"name": "call_weather", "args": {"city": "SF"}, "id": "call_w"}],
+        )
+    )
+    mux.push(
+        _tasks_start(
+            ["tools:tools_task_1"],
+            task_id="inner_model_1",
+            name="model",
+            metadata={"lc_agent_name": "weather_agent"},
+        )
+    )
+
+    payloads = _drain_lifecycle(mux)
+    started = [p for p in payloads if p["event"] == "started"]
+    [subagent] = [p for p in started if p["namespace"] == ["tools:tools_task_1"]]
+    assert subagent["graph_name"] == "weather_agent"
+    assert subagent["cause"] == {"type": "toolCall", "toolCallId": "call_w"}
 
 
 def test_lifecycle_excludes_inherited_lc_agent_name() -> None:
@@ -513,7 +559,16 @@ def test_lifecycle_excludes_inherited_lc_agent_name() -> None:
             task_id="tools_task_1",
             name="tools",
             metadata={"lc_agent_name": "supervisor"},
-            input=[{"name": "lookup", "args": {}, "id": "call_x"}],
+            input={
+                "__type": "tool_call_with_context",
+                "tool_call": {
+                    "name": "lookup",
+                    "args": {},
+                    "id": "call_x",
+                    "type": "tool_call",
+                },
+                "state": {},
+            },
         )
     )
     # Plain subgraph inherits the parent's lc_agent_name (== "supervisor").
@@ -549,7 +604,16 @@ def test_lifecycle_unnamed_nested_agent_is_not_subagent() -> None:
             task_id="tools_task_1",
             name="tools",
             metadata={"lc_agent_name": "supervisor"},
-            input=[{"name": "lookup", "args": {}, "id": "call_x"}],
+            input={
+                "__type": "tool_call_with_context",
+                "tool_call": {
+                    "name": "lookup",
+                    "args": {},
+                    "id": "call_x",
+                    "type": "tool_call",
+                },
+                "state": {},
+            },
         )
     )
     mux.push(

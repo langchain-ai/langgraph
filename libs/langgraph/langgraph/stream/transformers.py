@@ -493,23 +493,32 @@ class _TasksLifecycleBase(StreamTransformer):
     def _record_pending_tool_calls(self, data: dict[str, Any]) -> None:
         """Harvest a task's triggering tool_call_id keyed by its task id.
 
-        A task whose `input` is a list of tool calls (the parent of a tool
-        dispatch) seeds `task_id -> tool_call_id`; the spawned subgraph's
-        namespace segment `node:<task_id>` shares that id, letting a subagent
-        recover the tool call that caused it across payloads.
+        A tool-dispatch task seeds `task_id -> tool_call_id`; the spawned
+        subgraph's namespace segment `node:<task_id>` shares that id, letting
+        a subagent recover the tool call that caused it across payloads. Two
+        input shapes are handled: the current Pregel push model schedules each
+        tool call as its own task whose `input` is a `tool_call_with_context`
+        dict, while a legacy / batched model passes a list of tool-call dicts.
         """
         task_id = data.get("id")
-        tool_calls = data.get("input")
-        if not isinstance(task_id, str) or not isinstance(tool_calls, list):
+        if not isinstance(task_id, str):
             return
-        for tc in tool_calls:
-            if isinstance(tc, dict) and isinstance(tc.get("id"), str):
-                # First tool call wins. Under Pregel's push model each tool
-                # call is its own task, so this is exact; under a batched
-                # model multiple calls share a namespace and only the first
-                # can be labeled (accepted limitation).
-                self._pending_tool_calls[task_id] = tc["id"]
-                break
+        payload = data.get("input")
+        tool_call_id: str | None = None
+        # Current langgraph schedules each tool call as its own push task
+        # whose input is a `tool_call_with_context` dict.
+        if isinstance(payload, dict) and isinstance(payload.get("tool_call"), dict):
+            candidate = payload["tool_call"].get("id")
+            if isinstance(candidate, str):
+                tool_call_id = candidate
+        # Legacy / batched shape: input is a list of tool-call dicts.
+        elif isinstance(payload, list):
+            for tc in payload:
+                if isinstance(tc, dict) and isinstance(tc.get("id"), str):
+                    tool_call_id = tc["id"]  # first wins
+                    break
+        if tool_call_id is not None:
+            self._pending_tool_calls[task_id] = tool_call_id
 
     def _handle_task_start(self, ns: tuple[str, ...], data: dict[str, Any]) -> None:
         if not self._should_track(ns) or ns in self._seen:
