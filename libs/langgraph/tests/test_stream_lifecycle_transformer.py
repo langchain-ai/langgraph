@@ -630,3 +630,51 @@ def test_lifecycle_unnamed_nested_agent_is_not_subagent() -> None:
     [nested] = [p for p in started if p["namespace"] == ["plain:tools_task_1"]]
     assert nested["graph_name"] == "plain"
     assert "cause" not in nested
+
+
+def test_lifecycle_subagent_terminal_roundtrip() -> None:
+    """A detected subagent closes with `completed` when its parent task results.
+
+    Pushes the subagent's `started` (via the `tool_call_with_context` parent
+    plus the child task event) and then the parent push task's terminal
+    result, asserting the namespace is closed and the `started` payload's
+    projected graph_name / cause survive the roundtrip.
+    """
+    mux = _build_lifecycle_mux()
+    mux.push(
+        _tasks_start(
+            [],
+            task_id="tools_task_1",
+            name="tools",
+            metadata={"lc_agent_name": "supervisor"},
+            input={
+                "__type": "tool_call_with_context",
+                "tool_call": {
+                    "name": "call_weather",
+                    "args": {"city": "Boston"},
+                    "id": "call_w",
+                    "type": "tool_call",
+                },
+                "state": {},
+            },
+        )
+    )
+    mux.push(
+        _tasks_start(
+            ["tools:tools_task_1"],
+            task_id="inner_model_1",
+            name="model",
+            metadata={"lc_agent_name": "weather_agent"},
+        )
+    )
+    # The parent push task (id=tools_task_1, at scope ns) finishes, closing
+    # the subagent subgraph that streamed under `tools:tools_task_1`.
+    mux.push(_tasks_result([], task_id="tools_task_1", name="tools"))
+
+    payloads = _drain_lifecycle(mux)
+    ns = ["tools:tools_task_1"]
+    subagent = [p for p in payloads if p["namespace"] == ns]
+    assert [p["event"] for p in subagent] == ["started", "completed"]
+    started, _completed = subagent
+    assert started["graph_name"] == "weather_agent"
+    assert started["cause"] == {"type": "toolCall", "toolCallId": "call_w"}

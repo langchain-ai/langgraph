@@ -426,10 +426,11 @@ class _TasksLifecycleBase(StreamTransformer):
         # Used to detect a subagent boundary: a child whose lc_agent_name
         # differs from its parent namespace's lc_agent_name.
         self._lc_by_ns: dict[tuple[str, ...], str | None] = {}
-        # Pregel task_id -> triggering LLM tool_call_id, harvested from any
-        # task whose `input` is a list of tool calls. The child subgraph's
-        # namespace segment `node:<task_id>` shares that `<task_id>`, so a
-        # subagent can recover the tool call that spawned it (cross-payload).
+        # Pregel task_id -> triggering LLM tool_call_id, harvested from a task
+        # whose `input` is a `tool_call_with_context` dict (current shape) or a
+        # list of tool-call dicts (legacy shape). The child subgraph's segment
+        # `node:<task_id>` shares this task_id, so a subagent recovers the tool
+        # call that spawned it (cross-payload).
         self._pending_tool_calls: dict[str, str] = {}
 
     # --- Template-method hooks (subclass overrides) ---
@@ -482,8 +483,9 @@ class _TasksLifecycleBase(StreamTransformer):
         """Record this namespace's `lc_agent_name` (first task event wins).
 
         Runs for every task-start event, including `ns == self.scope` and
-        tracked children, so a child's parent identity is already known by
-        the time `_handle_task_start` evaluates the subagent boundary.
+        tracked children. Pregel emits parent-namespace tasks before
+        child-namespace tasks, so under that ordering the parent's identity is
+        recorded by the time a child event is evaluated in `_handle_task_start`.
         """
         if ns in self._lc_by_ns:
             return
