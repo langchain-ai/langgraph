@@ -15,12 +15,14 @@ from unittest.mock import MagicMock, patch
 
 import langsmith
 import pytest
+from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tracers import LangChainTracer
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph._internal._config import (
     _is_not_empty,
+    _merge_callbacks,
     ensure_config,
     get_callback_manager_for_config,
 )
@@ -427,3 +429,128 @@ def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
         "thread_id": "th-123",
         "user_id": "uid-1",
     }
+
+
+class _TrackingCB(BaseCallbackHandler):
+    """Minimal callback handler used only as a sentinel for merge tests."""
+
+    def __init__(self, tag: str) -> None:
+        self.tag = tag
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _TrackingCB) and self.tag == other.tag
+
+    def __hash__(self) -> int:
+        return hash(self.tag)
+
+
+def test_merge_callbacks_none_base_list_new() -> None:
+    cb = _TrackingCB("a")
+    merged = _merge_callbacks(None, [cb])
+    assert merged == [cb]
+
+
+def test_merge_callbacks_list_base_list_new() -> None:
+    a, b = _TrackingCB("a"), _TrackingCB("b")
+    merged = _merge_callbacks([a], [b])
+    assert merged == [a, b]
+
+
+def test_merge_callbacks_list_base_manager_new() -> None:
+    a = _TrackingCB("a")
+    mgr = CallbackManager(handlers=[_TrackingCB("b")])
+    merged = _merge_callbacks([a], mgr)
+    assert isinstance(merged, CallbackManager)
+    assert _TrackingCB("a") in merged.handlers
+    assert _TrackingCB("b") in merged.handlers
+
+
+def test_merge_callbacks_manager_base_list_new() -> None:
+    mgr = CallbackManager(handlers=[_TrackingCB("a")])
+    b = _TrackingCB("b")
+    merged = _merge_callbacks(mgr, [b])
+    assert isinstance(merged, CallbackManager)
+    assert _TrackingCB("a") in merged.handlers
+    assert _TrackingCB("b") in merged.handlers
+
+
+def test_merge_callbacks_manager_base_manager_new() -> None:
+    mgr_a = CallbackManager(handlers=[_TrackingCB("a")])
+    mgr_b = CallbackManager(handlers=[_TrackingCB("b")])
+    merged = _merge_callbacks(mgr_a, mgr_b)
+    assert isinstance(merged, CallbackManager)
+    assert _TrackingCB("a") in merged.handlers
+    assert _TrackingCB("b") in merged.handlers
+
+
+def test_merge_callbacks_none_base_none_new() -> None:
+    merged = _merge_callbacks(None, None)
+    assert merged is None
+
+
+def test_ensure_config_merges_configurable_across_configs() -> None:
+    a = {"configurable": {"ls_agent_type": "root"}}
+    b = {"configurable": {"thread_id": "T1"}}
+    merged = ensure_config(a, b)
+    assert merged["configurable"]["ls_agent_type"] == "root"
+    assert merged["configurable"]["thread_id"] == "T1"
+
+
+def test_ensure_config_configurable_later_wins_per_key() -> None:
+    a = {"configurable": {"shared": "from_a", "only_a": "A"}}
+    b = {"configurable": {"shared": "from_b", "only_b": "B"}}
+    merged = ensure_config(a, b)
+    assert merged["configurable"]["shared"] == "from_b"  # later wins per key
+    assert merged["configurable"]["only_a"] == "A"
+    assert merged["configurable"]["only_b"] == "B"
+
+
+def test_ensure_config_merges_metadata_across_configs() -> None:
+    a = {"metadata": {"user_id": "U1"}}
+    b = {"metadata": {"correlation_id": "C1"}}
+    merged = ensure_config(a, b)
+    assert merged["metadata"]["user_id"] == "U1"
+    assert merged["metadata"]["correlation_id"] == "C1"
+
+
+def test_ensure_config_metadata_later_wins_per_key() -> None:
+    a = {"metadata": {"shared": "from_a"}}
+    b = {"metadata": {"shared": "from_b"}}
+    merged = ensure_config(a, b)
+    assert merged["metadata"]["shared"] == "from_b"
+
+
+def test_ensure_config_merges_tags_across_configs() -> None:
+    a = {"tags": ["alpha"]}
+    b = {"tags": ["beta"]}
+    merged = ensure_config(a, b)
+    assert merged["tags"] == ["alpha", "beta"]
+
+
+def test_ensure_config_tags_concat_preserves_order_and_duplicates() -> None:
+    # Plain concat (matches merge_configs in this file — no dedup, no sort).
+    a = {"tags": ["shared", "alpha"]}
+    b = {"tags": ["shared", "beta"]}
+    merged = ensure_config(a, b)
+    assert merged["tags"] == ["shared", "alpha", "shared", "beta"]
+
+
+def test_ensure_config_merges_callbacks_across_configs() -> None:
+    a_cb = _TrackingCB("a")
+    b_cb = _TrackingCB("b")
+    merged = ensure_config({"callbacks": [a_cb]}, {"callbacks": [b_cb]})
+    assert merged["callbacks"] == [a_cb, b_cb]
+
+
+def test_ensure_config_none_inputs_ignored() -> None:
+    # mixed with None should not raise
+    merged = ensure_config(None, {"tags": ["t"]}, None)
+    assert merged["tags"] == ["t"]
+
+
+def test_ensure_config_empty_inputs() -> None:
+    # everything empty -> defaults
+    merged = ensure_config()
+    assert merged["tags"] == []
+    assert merged["configurable"] == {}
+    assert merged["callbacks"] is None
