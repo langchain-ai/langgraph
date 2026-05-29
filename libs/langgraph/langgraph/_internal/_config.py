@@ -79,6 +79,34 @@ def patch_checkpoint_map(
         return config
 
 
+def _merge_callbacks(base: Callbacks, new: Callbacks) -> Callbacks:
+    """Merge two callbacks values (None / list / BaseCallbackManager).
+
+    Six cases total (3 base types x 2 non-None new types).
+    """
+    if new is None:
+        return base
+    if base is None:
+        return new.copy() if isinstance(new, (list, BaseCallbackManager)) else new
+    if isinstance(new, list):
+        if isinstance(base, list):
+            return base + new
+        if isinstance(base, BaseCallbackManager):
+            mngr = base.copy()
+            for cb in new:
+                mngr.add_handler(cb, inherit=True)
+            return mngr
+    elif isinstance(new, BaseCallbackManager):
+        if isinstance(base, list):
+            mngr = new.copy()
+            for cb in base:
+                mngr.add_handler(cb, inherit=True)
+            return mngr
+        if isinstance(base, BaseCallbackManager):
+            return base.merge(new)
+    raise NotImplementedError(f"Unsupported callback types: {type(base)}, {type(new)}")
+
+
 def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
     """Merge multiple configs into one.
 
@@ -113,34 +141,9 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
                 else:
                     base[key] = value
             elif key == "callbacks":
-                base_callbacks = base.get("callbacks")
-                # callbacks can be either None, list[handler] or manager
-                # so merging two callbacks values has 6 cases
-                if isinstance(value, list):
-                    if base_callbacks is None:
-                        base["callbacks"] = value.copy()
-                    elif isinstance(base_callbacks, list):
-                        base["callbacks"] = base_callbacks + value
-                    else:
-                        # base_callbacks is a manager
-                        mngr = base_callbacks.copy()
-                        for callback in value:
-                            mngr.add_handler(callback, inherit=True)
-                        base["callbacks"] = mngr
-                elif isinstance(value, BaseCallbackManager):
-                    # value is a manager
-                    if base_callbacks is None:
-                        base["callbacks"] = value.copy()
-                    elif isinstance(base_callbacks, list):
-                        mngr = value.copy()
-                        for callback in base_callbacks:
-                            mngr.add_handler(callback, inherit=True)
-                        base["callbacks"] = mngr
-                    else:
-                        # base_callbacks is also a manager
-                        base["callbacks"] = base_callbacks.merge(value)
-                else:
-                    raise NotImplementedError
+                base["callbacks"] = _merge_callbacks(
+                    base.get("callbacks"), cast(Callbacks, value)
+                )
             elif key == "recursion_limit":
                 if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
                     base["recursion_limit"] = config["recursion_limit"]
@@ -309,7 +312,40 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         for k, v in config.items():
             if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
-                    empty[k] = cast(dict, v).copy()
+                    # Shallow-merge configurable dicts across configs so values
+                    # bound via with_config(...) (e.g. ls_agent_type) are
+                    # preserved when later configs (e.g. invoke-time) only
+                    # specify a subset of keys like thread_id.
+                    existing = empty.get(k)
+                    empty[k] = (
+                        {**cast(dict, existing), **cast(dict, v)}
+                        if existing
+                        else cast(dict, v).copy()
+                    )
+                elif k == "callbacks":
+                    empty["callbacks"] = _merge_callbacks(
+                        empty.get("callbacks"), cast(Callbacks, v)
+                    )
+                elif k == "metadata":
+                    # Shallow-merge metadata dicts across configs so values
+                    # bound via with_config(...) (e.g. user_id) are preserved
+                    # when later configs supply other metadata keys.
+                    existing = empty.get("metadata")
+                    empty["metadata"] = (
+                        {**cast(dict, existing), **cast(dict, v)}
+                        if existing
+                        else cast(dict, v).copy()
+                    )
+                elif k == "tags":
+                    # Concatenate tags across configs so values bound via
+                    # with_config(...) are preserved when later configs
+                    # supply additional tags. Matches merge_configs.
+                    existing_tags: list[str] | None = empty.get("tags")
+                    empty["tags"] = (
+                        [*existing_tags, *cast(list, v)]
+                        if existing_tags
+                        else list(cast(list, v))
+                    )
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():

@@ -37,13 +37,23 @@ from langgraph._internal._constants import (
 )
 from langgraph._internal._runnable import create_task_in_config_context
 from langgraph._internal._timeout import sync_timeout_unsupported
-from langgraph.errors import GraphBubbleUp, NodeTimeoutError, ParentCommand
+from langgraph.errors import (
+    GraphBubbleUp,
+    NodeCancelledError,
+    NodeTimeoutError,
+    ParentCommand,
+)
 from langgraph.pregel.protocol import StreamProtocol
 from langgraph.runtime import ExecutionInfo, Runtime
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy, TimeoutPolicy
 
 logger = logging.getLogger(__name__)
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
+# `asyncio.Task.cancelling()` was added in Python 3.11. It reports the number of
+# pending cancel requests on the task: ``0`` means no external code asked us to
+# cancel — so a ``CancelledError`` observed here was raised by the task body
+# itself (the user's node) rather than by pregel cancelling sibling tasks.
+SUPPORTS_TASK_CANCELLING = sys.version_info >= (3, 11)
 
 
 def _timeout_secs(value: float | timedelta) -> float:
@@ -300,6 +310,28 @@ class _IdleProgressCallbackHandler(BaseCallbackHandler):
     on_text = _touch
     on_retry = _touch
     on_custom_event = _touch
+
+
+def _is_user_raised_cancelled() -> bool:
+    """Return True if the in-flight ``CancelledError`` came from the task body.
+
+    Pregel cancels sibling tasks via ``task.cancel()`` when a peer fails, which
+    increments ``asyncio.Task.cancelling()`` on the target before the cancel
+    actually fires. A user node that calls ``raise asyncio.CancelledError()``
+    from inside its own body raises while ``cancelling() == 0``, which is the
+    signal we use to convert the exception into a regular
+    :class:`NodeCancelledError`.
+
+    Returns ``False`` when we can't tell (``cancelling()`` unavailable, or no
+    current task — neither should happen in practice from ``arun_with_retry``)
+    so framework-initiated cancellation continues to propagate unchanged.
+    """
+    if not SUPPORTS_TASK_CANCELLING:
+        return False
+    current = asyncio.current_task()
+    if current is None:
+        return False
+    return current.cancelling() == 0
 
 
 def _drain_cancelled(task: asyncio.Task[Any]) -> None:
@@ -600,6 +632,12 @@ def run_with_retry(
         except GraphBubbleUp:
             # if interrupted, end
             raise
+        except asyncio.CancelledError as exc:
+            # A sync node has no asyncio context, so any ``CancelledError`` that
+            # reaches here was raised by the node body itself. Surface it as a
+            # regular exception so the pregel runner panics the run instead of
+            # treating the task as a silent tear-down (LSD-1507).
+            raise NodeCancelledError(task.name) from exc
         except Exception as exc:
             if SUPPORTS_EXC_NOTES:
                 exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
@@ -735,6 +773,24 @@ async def arun_with_retry(
         except GraphBubbleUp:
             # if interrupted, end
             _finish_timed_attempt(config, attempt_ctx)
+            raise
+        except asyncio.CancelledError as exc:
+            # ``CancelledError`` reaches us in two very different shapes:
+            #   1. Pregel cancelled this task because a sibling failed
+            #      (``asyncio.Task.cancelling() >= 1``). The framework already
+            #      knows the run is failing and we must let cancellation
+            #      propagate so the watchdog/cleanup code in the runner sees a
+            #      cancelled future.
+            #   2. The node body itself raised ``asyncio.CancelledError`` (
+            #      ``cancelling() == 0``). The runner would otherwise treat
+            #      this as silent tear-down and the run would report
+            #      ``success`` even though the node failed (LSD-1507). Convert
+            #      it into :class:`NodeCancelledError` so it follows the same
+            #      path as any other node failure.
+            if _is_user_raised_cancelled():
+                _finish_timed_attempt(config, attempt_ctx, exc)
+                raise NodeCancelledError(task.name) from exc
+            _finish_timed_attempt(config, attempt_ctx, exc)
             raise
         except Exception as exc:
             _finish_timed_attempt(config, attempt_ctx, exc)
