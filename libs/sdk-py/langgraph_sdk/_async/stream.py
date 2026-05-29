@@ -18,7 +18,7 @@ import contextlib
 import random
 from collections.abc import AsyncGenerator, AsyncIterator, Generator, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
 
 from langchain_core.language_models.chat_model_stream import AsyncChatModelStream
 from langchain_protocol import Event, SubscribeParams
@@ -26,6 +26,16 @@ from langchain_protocol import Event, SubscribeParams
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk.schema import QueryParamTypes
 from langgraph_sdk.stream.controller import _SeenEventIds
+from langgraph_sdk.stream.decoders import (
+    DataDecoder,
+    Decoder,
+    ExtensionsDecoder,
+    MessagesDecoder,
+    SubgraphsDecoder,
+    ToolCallsDecoder,
+    validate_interleave_channels,
+)
+from langgraph_sdk.stream.subscription import compute_union_filter, infer_channel
 from langgraph_sdk.stream.transport import (
     AsyncProtocolTransport,
     EventStreamHandle,
@@ -348,6 +358,7 @@ class _ValuesProjection:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
         params: SubscribeParams = {"channels": ["values"]}
         sub = self._thread._register_subscription(params)
+        decoder = DataDecoder("values")
         try:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
@@ -357,12 +368,8 @@ class _ValuesProjection:
                 item = await sub.queue.get()
                 if item is None:
                     return
-                params_field = item.get("params") or {}
-                data = (
-                    params_field.get("data") if isinstance(params_field, dict) else None
-                )
-                if data is not None:
-                    yield data
+                for out in decoder.feed(item):
+                    yield out
         finally:
             self._thread._unregister_subscription(sub.id)
 
@@ -397,7 +404,13 @@ class _MessagesProjection:
             return
         params = _exact_namespace_params(["messages"], self._namespace)
         sub = self._thread._register_subscription(params)
-        active: dict[str, AsyncChatModelStream] = {}
+        decoder = MessagesDecoder(
+            namespace=self._namespace,
+            stream_factory=lambda *, namespace, node, message_id: AsyncChatModelStream(
+                namespace=namespace, node=node, message_id=message_id
+            ),
+        )
+        registered: list[AsyncChatModelStream] = []
         try:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
@@ -405,59 +418,12 @@ class _MessagesProjection:
                 item = await sub.queue.get()
                 if item is None:
                     return
-                params_field = item.get("params") or {}
-                if _event_namespace(params_field) != self._namespace:
-                    continue
-                data = (
-                    params_field.get("data") if isinstance(params_field, dict) else None
-                )
-                if not isinstance(data, dict):
-                    continue
-                event_type = data.get("event")
-                if event_type == "message-start":
-                    message_id = _message_event_id(data)
-                    key = _message_route_key(data, fallback=message_id)
-                    metadata = (
-                        data.get("metadata")
-                        if isinstance(data.get("metadata"), dict)
-                        else {}
-                    )
-                    stream = AsyncChatModelStream(
-                        namespace=list(self._namespace),
-                        node=metadata.get("langgraph_node") if metadata else None,
-                        message_id=message_id,
-                    )
-                    active[key] = stream
+                for stream in decoder.feed(item):
                     self._thread._register_active_message_stream(stream)
-                    stream.dispatch(data)
+                    registered.append(stream)
                     yield stream
-                else:
-                    key = _message_route_key(data)
-                    stream = active.get(key)
-                    if stream is None and key == "__single__" and len(active) == 1:
-                        # Content-block events (content-block-start /
-                        # content-block-delta / content-block-finish /
-                        # message-finish) don't carry the message ``id``
-                        # on the wire, so ``_message_route_key`` returns
-                        # ``__single__`` while the active stream was
-                        # registered under ``message:<id>``. When exactly
-                        # one stream is active, that mismatch is
-                        # unambiguous -- the events belong to it.
-                        # Events that DO carry an explicit id which
-                        # doesn't match any active stream are still
-                        # dropped (orphan-delta safety, see
-                        # ``test_messages_orphan_delta_without_matching_key_is_dropped``).
-                        stream = next(iter(active.values()))
-                    if stream is None:
-                        continue
-                    stream.dispatch(data)
-                    if event_type in ("message-finish", "error"):
-                        self._thread._unregister_active_message_stream(stream)
-                        for route_key, candidate in list(active.items()):
-                            if candidate is stream:
-                                del active[route_key]
         finally:
-            for stream in active.values():
+            for stream in registered:
                 self._thread._unregister_active_message_stream(stream)
             self._thread._unregister_subscription(sub.id)
 
@@ -950,10 +916,17 @@ class _SubgraphsProjection:
             raise RuntimeError("AsyncThreadStream not entered - use `async with`.")
         params = _subgraph_subscription_params(self._scope)
         sub = self._thread._register_subscription(params)
-        seen: set[tuple[str, ...]] = set()
-        active: dict[tuple[str, ...], ScopedStreamHandle] = {}
-        # Activate root inbox so scope-level messages events consumed here are
-        # forwarded to `thread.messages` even after the shared SSE ends.
+        decoder = SubgraphsDecoder(
+            scope=self._scope,
+            handle_factory=lambda *, path, graph_name, trigger_call_id: (
+                ScopedStreamHandle(
+                    thread=self._thread,
+                    path=path,
+                    graph_name=graph_name,
+                    trigger_call_id=trigger_call_id,
+                )
+            ),
+        )
         root_inbox: asyncio.Queue[Event | None] | None = (
             self._thread._activate_root_messages_inbox() if not self._scope else None
         )
@@ -965,80 +938,14 @@ class _SubgraphsProjection:
                 if item is None:
                     return
                 params_field = item.get("params") or {}
-                namespace = _event_namespace(params_field)
-                data = (
-                    params_field.get("data") if isinstance(params_field, dict) else None
-                )
-                if not isinstance(data, dict):
-                    continue
-                method = item.get("method")
-
-                # Route events at a child namespace (or deeper) to that child
-                # handle's channel inbox so sequential child-projection
-                # consumption works without opening a second SSE.
-                ns_tuple = tuple(namespace)
-                routed_to_child = False
-                for child_path, child_handle in active.items():
-                    child_len = len(child_path)
-                    if (
-                        len(ns_tuple) >= child_len
-                        and ns_tuple[:child_len] == child_path
-                    ):
-                        child_handle._push_event(item)
-                        routed_to_child = True
-                        break
-
-                # Scope-level messages events are not routed to any child; forward
-                # them to the root inbox so `thread.messages` can drain them after
-                # this projection finishes (dedup prevents the SSE from replaying).
                 if (
-                    not routed_to_child
-                    and root_inbox is not None
-                    and method == "messages"
-                    and tuple(namespace) == self._scope
+                    root_inbox is not None
+                    and item.get("method") == "messages"
+                    and tuple(_event_namespace(params_field)) == self._scope
                 ):
                     root_inbox.put_nowait(item)
-
-                if method == "tasks":
-                    if "result" in data:
-                        self._apply_tasks_result(namespace, data, active)
-                    elif _is_direct_child(namespace, self._scope):
-                        path = tuple(namespace)
-                        if path not in seen:
-                            seen.add(path)
-                            graph_name, trigger_call_id = _parse_namespace_segment(
-                                path[-1]
-                            )
-                            handle = ScopedStreamHandle(
-                                thread=self._thread,
-                                path=path,
-                                graph_name=graph_name or None,
-                                trigger_call_id=trigger_call_id,
-                            )
-                            active[path] = handle
-                            yield handle
-                elif (
-                    method == "lifecycle"
-                    and data.get("event") == "started"
-                    and _is_direct_child(namespace, self._scope)
-                ):
-                    # ``create_deep_agent`` and similar surfaces signal
-                    # subagent invocation via a child-namespace
-                    # ``lifecycle: started`` event rather than a ``tasks``
-                    # event. JS does the same (see ``langgraphjs``
-                    # ``stream/handles/subgraphs.ts``).
-                    path = tuple(namespace)
-                    if path not in seen:
-                        seen.add(path)
-                        graph_name, trigger_call_id = _parse_namespace_segment(path[-1])
-                        handle = ScopedStreamHandle(
-                            thread=self._thread,
-                            path=path,
-                            graph_name=graph_name or None,
-                            trigger_call_id=trigger_call_id,
-                        )
-                        active[path] = handle
-                        yield handle
+                for handle in decoder.feed(item):
+                    yield handle
         finally:
             # Determine terminal status from the parent run's lifecycle result.
             # If _run_done resolved as errored, force-complete remaining children
@@ -1049,31 +956,12 @@ class _SubgraphsProjection:
                 result = run_done.result()
                 if isinstance(result, _RunTerminal) and result.status == "errored":
                     terminal_status = "failed"
-            for handle in active.values():
+            for handle in decoder._active.values():
                 if handle.status == "started":
                     handle._finish(terminal_status)
             self._thread._unregister_subscription(sub.id)
             if root_inbox is not None:
                 root_inbox.put_nowait(None)
-
-    def _apply_tasks_result(
-        self,
-        namespace: list[str],
-        data: dict[str, Any],
-        active: dict[tuple[str, ...], ScopedStreamHandle],
-    ) -> None:
-        result_id = data.get("id")
-        if not result_id:
-            return
-        parent_path = tuple(namespace)
-        for child_path, handle in list(active.items()):
-            if child_path[:-1] != parent_path:
-                continue
-            if handle.trigger_call_id != result_id:
-                continue
-            status, error = _terminal_from_tasks_result(data)
-            handle._finish(status, error)
-            del active[child_path]
 
 
 class ToolCallHandle:
@@ -1161,7 +1049,18 @@ class _ToolCallsProjection:
             raise RuntimeError("AsyncThreadStream not entered - use `async with`.")
         params = _exact_namespace_params(["tools"], self._namespace)
         sub = self._thread._register_subscription(params)
-        active: dict[str, ToolCallHandle] = {}
+        decoder = ToolCallsDecoder(
+            namespace=self._namespace,
+            handle_factory=lambda *, tool_call_id, name, input, namespace: (
+                ToolCallHandle(
+                    tool_call_id=tool_call_id,
+                    name=name,
+                    input=input,
+                    namespace=namespace,
+                )
+            ),
+        )
+        registered: list[ToolCallHandle] = []
         try:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
@@ -1169,52 +1068,10 @@ class _ToolCallsProjection:
                 item = await sub.queue.get()
                 if item is None:
                     return
-                params_field = item.get("params") or {}
-                if _event_namespace(params_field) != self._namespace:
-                    continue
-                data = (
-                    params_field.get("data") if isinstance(params_field, dict) else None
-                )
-                if not isinstance(data, dict):
-                    continue
-                event_type = data.get("event")
-                tool_call_id = data.get("tool_call_id")
-                if not isinstance(tool_call_id, str):
-                    continue
-
-                if event_type == "tool-started":
-                    tool_name = data.get("tool_name")
-                    if not isinstance(tool_name, str):
-                        tool_name = ""
-                    handle = ToolCallHandle(
-                        tool_call_id=tool_call_id,
-                        name=tool_name,
-                        input=data.get("input"),
-                        namespace=list(self._namespace),
-                    )
-                    active[tool_call_id] = handle
+                for handle in decoder.feed(item):
                     self._thread._register_active_tool_call(handle)
+                    registered.append(handle)
                     yield handle
-                elif event_type == "tool-output-delta":
-                    handle = active.get(tool_call_id)
-                    delta = data.get("delta")
-                    if handle is not None and isinstance(delta, str):
-                        handle._push_delta(delta)
-                elif event_type == "tool-finished":
-                    handle = active.pop(tool_call_id, None)
-                    if handle is not None:
-                        self._thread._unregister_active_tool_call(handle)
-                        handle._finish(data.get("output"))
-                elif event_type == "tool-error":
-                    handle = active.pop(tool_call_id, None)
-                    if handle is not None:
-                        self._thread._unregister_active_tool_call(handle)
-                        message = data.get("message")
-                        handle._fail(
-                            RuntimeError(
-                                str(message) if message else "Tool call errored"
-                            )
-                        )
         finally:
             # Read terminal error from _run_done if it is already resolved.
             # We do NOT block here: callers who need a terminal observation
@@ -1226,14 +1083,15 @@ class _ToolCallsProjection:
             if run_done is not None and run_done.done() and not run_done.cancelled():
                 terminal = run_done.result()
                 terminal_err = terminal.error
-            err = (
+            err: BaseException = (
                 terminal_err
                 if terminal_err is not None
                 else RuntimeError("Tool call stream closed before terminal tool event.")
             )
-            for handle in active.values():
-                self._thread._unregister_active_tool_call(handle)
+            for handle in list(decoder._active.values()):
                 handle._fail(err)
+            for handle in registered:
+                self._thread._unregister_active_tool_call(handle)
             self._thread._unregister_subscription(sub.id)
 
 
@@ -1280,6 +1138,7 @@ class _ExtensionProjection:
         if self._namespace:
             params["namespaces"] = [self._namespace]
         sub = self._thread._register_subscription(params)
+        decoder = ExtensionsDecoder(name=self._name)
         try:
             if self._thread._closed:
                 return
@@ -1289,12 +1148,8 @@ class _ExtensionProjection:
                 item = await sub.queue.get()
                 if item is None:
                     return
-                event_params = item.get("params") or {}
-                data = (
-                    event_params.get("data") if isinstance(event_params, dict) else None
-                )
-                if isinstance(data, dict):
-                    yield data
+                for out in decoder.feed(item):
+                    yield out
         finally:
             self._thread._unregister_subscription(sub.id)
 
@@ -1557,6 +1412,174 @@ class AsyncThreadStream:
         if depth is not None:
             params["depth"] = depth
         return self._subscription_iter(params)
+
+    async def interleave_projections(
+        self, channels: list[str]
+    ) -> AsyncIterator[tuple[str, Any]]:
+        """Yield `(channel_name, item)` tuples across multiple projections.
+
+        One shared subscription drives all per-channel decoders; items arrive
+        in server-emit order (the SDK analog of `GraphRunStream.interleave`).
+
+        Args:
+            channels: Flat list of `"values"`, `"messages"`, `"tool_calls"`,
+                `"subgraphs"`, and/or extension names. Built-ins yield their
+                typed item (snapshot dict / `AsyncChatModelStream` /
+                `ToolCallHandle` / `ScopedStreamHandle`); an extension yields
+                its payload dict, keyed by the bare extension name.
+
+        Note:
+            Handles and streams are yielded eagerly (before their sub-stream
+            completes), so items arrive interleaved in real time. To receive a
+            fully-resolved handle (output already populated), use the dedicated
+            `thread.tool_calls` / `thread.messages` projections instead.
+        """
+        validate_interleave_channels(channels)
+        if self._transport is None:
+            raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
+        decoders: dict[str, Decoder] = {}
+        sub_params: list[SubscribeParams] = []
+        for ch in channels:
+            if ch == "values":
+                decoders[ch] = DataDecoder("values")
+                sub_params.append({"channels": ["values"]})
+            elif ch in ("updates", "checkpoints", "tasks"):
+                # Plain payload channels (local Updates/Checkpoints/Tasks
+                # analog). Root-scope filter is load-bearing: a co-requested
+                # unscoped `values` widens the merged subscription to all
+                # namespaces, so the decoder itself keeps subgraph payloads out.
+                decoders[ch] = DataDecoder(ch, namespace=[])
+                sub_params.append(_exact_namespace_params([ch], []))
+            elif ch == "messages":
+                decoders[ch] = MessagesDecoder(
+                    namespace=[],
+                    stream_factory=lambda *, namespace, node, message_id: (
+                        AsyncChatModelStream(
+                            namespace=namespace, node=node, message_id=message_id
+                        )
+                    ),
+                )
+                sub_params.append(_exact_namespace_params(["messages"], []))
+            elif ch == "tool_calls":
+                decoders[ch] = ToolCallsDecoder(
+                    namespace=[],
+                    handle_factory=lambda *, tool_call_id, name, input, namespace: (
+                        ToolCallHandle(
+                            tool_call_id=tool_call_id,
+                            name=name,
+                            input=input,
+                            namespace=namespace,
+                        )
+                    ),
+                )
+                sub_params.append(_exact_namespace_params(["tools"], []))
+            elif ch == "subgraphs":
+                decoders[ch] = SubgraphsDecoder(
+                    scope=(),
+                    handle_factory=lambda *, path, graph_name, trigger_call_id: (
+                        ScopedStreamHandle(
+                            thread=self,
+                            path=path,
+                            graph_name=graph_name,
+                            trigger_call_id=trigger_call_id,
+                        )
+                    ),
+                )
+                sub_params.append(_subgraph_subscription_params(()))
+            else:
+                decoders[ch] = ExtensionsDecoder(name=ch)
+                sub_params.append({"channels": [f"custom:{ch}"]})
+        if not sub_params:
+            return
+        merged = cast(
+            SubscribeParams,
+            compute_union_filter(cast(list[dict[str, Any]], sub_params)),
+        )
+        subgraphs = decoders.get("subgraphs")
+        # Track decoder-created handles so teardown can finalize anything still
+        # in flight; otherwise an awaiting `handle.output` / `handle.messages`
+        # would hang after an early break or run termination.
+        registered_tool_calls: list[ToolCallHandle] = []
+        registered_message_streams: list[AsyncChatModelStream] = []
+        try:
+            async for event in self._subscription_iter(merged):
+                if subgraphs is not None:
+                    for item in subgraphs.feed(event):
+                        yield ("subgraphs", item)
+                wire = infer_channel(event)
+                public = self._interleave_public_name(wire)
+                # subgraphs is driven separately above (it consumes all events); never dispatch it here.
+                if public is not None and public != "subgraphs":
+                    decoder = decoders.get(public)
+                    if decoder is not None:
+                        for item in decoder.feed(event):
+                            if public == "tool_calls":
+                                self._register_active_tool_call(item)
+                                registered_tool_calls.append(item)
+                            elif public == "messages":
+                                self._register_active_message_stream(item)
+                                registered_message_streams.append(item)
+                            yield (public, item)
+        finally:
+            self._finalize_interleave_decoders(
+                decoders.get("tool_calls"),
+                subgraphs,
+                registered_tool_calls,
+                registered_message_streams,
+            )
+
+    @staticmethod
+    def _interleave_public_name(wire: str | None) -> str | None:
+        """Map a wire channel name to the public channel name used in interleave tuples."""
+        if wire is None:
+            return None
+        if wire == "tools":
+            return "tool_calls"
+        if wire.startswith("custom:"):
+            return wire[len("custom:") :]
+        return wire  # values, messages (tasks/lifecycle pass through with no decoder match)
+
+    def _finalize_interleave_decoders(
+        self,
+        tool_calls: Decoder | None,
+        subgraphs: Decoder | None,
+        registered_tool_calls: list[ToolCallHandle],
+        registered_message_streams: list[AsyncChatModelStream],
+    ) -> None:
+        """Finalize in-flight handles when `interleave_projections` tears down.
+
+        Mirrors the terminal handling of the dedicated `_ToolCallsProjection` /
+        `_SubgraphsProjection`: in-flight tool calls are failed (so awaiting
+        `handle.output` can't hang) and discovered subgraph children are
+        force-completed with the run's terminal status.
+        """
+        run_done = self._run_done
+        resolved = (
+            run_done.result()
+            if run_done is not None and run_done.done() and not run_done.cancelled()
+            else None
+        )
+        if isinstance(tool_calls, ToolCallsDecoder):
+            err: BaseException = (
+                resolved.error
+                if resolved is not None and resolved.error is not None
+                else RuntimeError("Tool call stream closed before terminal tool event.")
+            )
+            for handle in list(tool_calls._active.values()):
+                handle._fail(err)
+        for handle in registered_tool_calls:
+            self._unregister_active_tool_call(handle)
+        for stream in registered_message_streams:
+            self._unregister_active_message_stream(stream)
+        if isinstance(subgraphs, SubgraphsDecoder):
+            terminal_status: SubgraphStatus = (
+                "failed"
+                if isinstance(resolved, _RunTerminal) and resolved.status == "errored"
+                else "completed"
+            )
+            for child in subgraphs._active.values():
+                if child.status == "started":
+                    child._finish(terminal_status)
 
     async def _subscription_iter(
         self, params: SubscribeParams

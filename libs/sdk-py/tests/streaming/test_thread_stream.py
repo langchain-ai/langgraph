@@ -17,9 +17,17 @@ from langgraph_sdk.stream.transport import (
     ProtocolWebSocketTransport,
 )
 from streaming._events import (
+    checkpoints_event,
+    custom_event,
     lifecycle_completed_event,
     lifecycle_event,
     lifecycle_started_event,
+    message_finish_event,
+    message_start_event,
+    tasks_start_event,
+    tool_finished_event,
+    tool_started_event,
+    updates_event,
     values_event,
 )
 from streaming._fake_server import FakeServer
@@ -971,3 +979,255 @@ async def test_v3_streaming_async_surface_smoke():
     assert tool_calls[0].name == "search"
     assert progress == [{"name": "progress", "step": 1}]
     assert final == {"final": True}
+
+
+async def test_interleave_projections_single_channel_values():
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            values_event(seq=1, counter=1),
+            values_event(seq=2, counter=2),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    fake.set_state({"counter": 0})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            items = []
+            async for ch, item in thread.interleave_projections(["values"]):
+                items.append((ch, item))
+    assert ("values", {"counter": 1}) in items
+    assert ("values", {"counter": 2}) in items
+    assert all(ch == "values" for ch, _ in items)
+
+
+async def test_interleave_projections_values_and_messages_arrival_order():
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            values_event(seq=1, counter=1),
+            message_start_event(seq=2, message_id="m-1"),
+            values_event(seq=3, counter=2),
+            message_finish_event(seq=4, message_id="m-1"),
+            lifecycle_completed_event(seq=5),
+        ]
+    )
+    fake.set_state({"counter": 0})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            order = []
+            async for ch, _ in thread.interleave_projections(["values", "messages"]):
+                order.append(ch)
+                if len(order) >= 3:
+                    break
+    assert order[:3] == ["values", "messages", "values"]
+
+
+async def test_interleave_projections_mixes_builtin_and_extension():
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            values_event(seq=1, counter=1),
+            custom_event(seq=2, name="foo", hello="world"),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    fake.set_state({"counter": 0})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            items = []
+            async for ch, item in thread.interleave_projections(["values", "foo"]):
+                items.append((ch, item))
+    assert ("values", {"counter": 1}) in items
+    # extension payload is the whole params.data including "name"; tuple uses bare name "foo"
+    assert ("foo", {"name": "foo", "hello": "world"}) in items
+
+
+async def test_interleave_projections_tool_calls_uses_public_name():
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tool_started_event(seq=1, tool_call_id="call-1", tool_name="search"),
+            tool_finished_event(seq=2, tool_call_id="call-1", output={"ok": True}),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    fake.set_state({})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            names = []
+            async for ch, item in thread.interleave_projections(["tool_calls"]):
+                names.append(ch)
+                assert item.tool_call_id == "call-1"  # real ToolCallHandle
+    # tuple uses the PUBLIC name "tool_calls", never the wire name "tools"
+    assert names == ["tool_calls"]
+
+
+async def test_interleave_projections_subgraphs_discovers_child():
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            lifecycle_started_event(seq=1, namespace=["child"]),
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    fake.set_state({})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            discovered = []
+            async for ch, handle in thread.interleave_projections(["subgraphs"]):
+                discovered.append((ch, handle.path))
+    assert ("subgraphs", ("child",)) in discovered
+
+
+async def test_interleave_projections_inflight_tool_call_failed_on_break():
+    """A tool handle held past an early break is failed in teardown, never left hanging."""
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tool_started_event(seq=1, tool_call_id="call-1", tool_name="search"),
+            # no tool-finished: the call is still in flight when the consumer breaks
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    fake.set_state({})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            handle = None
+            async for _, item in thread.interleave_projections(["tool_calls"]):
+                handle = item
+                break
+            assert handle is not None
+            # Without teardown finalization this would hang forever; wait_for
+            # turns a regression into a TimeoutError rather than a RuntimeError.
+            with pytest.raises(RuntimeError):
+                await asyncio.wait_for(handle.output, timeout=2)
+
+
+async def test_interleave_projections_inflight_subgraph_finished_on_terminal():
+    """A discovered subgraph child with no terminal tasks-result is force-completed."""
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            lifecycle_started_event(seq=1, namespace=["child"]),
+            # no tasks-result for the child: it is still "started" at run end
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    fake.set_state({})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            child = None
+            async for _, handle in thread.interleave_projections(["subgraphs"]):
+                child = handle
+            assert child is not None
+            assert child.status == "completed"
+
+
+@pytest.mark.parametrize("channel", ["lifecycle", "tools", "input"])
+async def test_interleave_projections_rejects_reserved_channel(channel):
+    """Reserved protocol channel names raise instead of silently no-op'ing.
+
+    `infer_channel` treats these as first-class methods, but they have no
+    interleave decoder, so routing them to the extension/`custom:` fallback
+    would subscribe to a channel that never matches and yield nothing. Fail
+    closed. (`updates`/`checkpoints`/`tasks` are supported and tested below.)
+    """
+    fake = FakeServer()
+    fake.script([lifecycle_started_event(seq=0), lifecycle_completed_event(seq=1)])
+    fake.set_state({})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            with pytest.raises(ValueError, match=channel):
+                async for _ in thread.interleave_projections([channel]):
+                    pass
+
+
+async def test_interleave_projections_data_channels_yield_payloads():
+    """`updates`/`checkpoints`/`tasks` yield their raw `params.data` payloads."""
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            updates_event(seq=1, node={"v": 1}),
+            checkpoints_event(seq=2, ts="t-0", v=4),
+            tasks_start_event(seq=3, task_id="task-9"),
+            lifecycle_completed_event(seq=4),
+        ]
+    )
+    fake.set_state({})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            items = []
+            async for ch, item in thread.interleave_projections(
+                ["updates", "checkpoints", "tasks"]
+            ):
+                items.append((ch, item))
+    assert ("updates", {"node": {"v": 1}}) in items
+    assert ("checkpoints", {"ts": "t-0", "v": 4}) in items
+    assert any(ch == "tasks" and item.get("id") == "task-9" for ch, item in items)
+
+
+async def test_interleave_projections_data_channel_scoped_to_root_namespace():
+    """A child-namespace checkpoint must not leak into a root interleave.
+
+    `values` subscribes unscoped, so `compute_union_filter` widens the merged
+    subscription to all namespaces; the `DataDecoder` root filter is what keeps
+    a subgraph checkpoint out of the root projection (mirrors local scope).
+    """
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            checkpoints_event(seq=1, namespace=["child"], scope="child"),
+            checkpoints_event(seq=2, scope="root"),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    fake.set_state({"counter": 0})
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            checkpoints = []
+            async for ch, item in thread.interleave_projections(
+                ["values", "checkpoints"]
+            ):
+                if ch == "checkpoints":
+                    checkpoints.append(item)
+    assert {"scope": "root"} in checkpoints
+    assert {"scope": "child"} not in checkpoints

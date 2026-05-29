@@ -602,3 +602,310 @@ def test_v3_streaming_sync_surface_smoke():
     assert tools_result[0].name == "search"  # ty: ignore[unresolved-attribute]
     assert results["progress"] == [{"name": "progress", "step": 1}]
     assert final == {"final": True}
+
+
+# ---------------------------------------------------------------------------
+# interleave_projections tests
+# ---------------------------------------------------------------------------
+
+
+def test_interleave_projections_single_channel_values():
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        values_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({"counter": 0})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            values_event(seq=1, counter=1),
+            values_event(seq=2, counter=2),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            items = []
+            for ch, item in thread.interleave_projections(["values"]):
+                items.append((ch, item))
+    assert ("values", {"counter": 1}) in items
+    assert ("values", {"counter": 2}) in items
+    assert all(ch == "values" for ch, _ in items)
+
+
+def test_interleave_projections_values_and_messages_arrival_order():
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        message_finish_event,
+        message_start_event,
+        values_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({"counter": 0})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            values_event(seq=1, counter=1),
+            message_start_event(seq=2, message_id="m-1"),
+            values_event(seq=3, counter=2),
+            message_finish_event(seq=4, message_id="m-1"),
+            lifecycle_completed_event(seq=5),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            order = []
+            for ch, _ in thread.interleave_projections(["values", "messages"]):
+                order.append(ch)
+                if len(order) >= 3:
+                    break
+    assert order[:3] == ["values", "messages", "values"]
+
+
+def test_interleave_projections_mixes_builtin_and_extension():
+    from streaming._events import (
+        custom_event,
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        values_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({"counter": 0})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            values_event(seq=1, counter=1),
+            custom_event(seq=2, name="foo", hello="world"),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            items = []
+            for ch, item in thread.interleave_projections(["values", "foo"]):
+                items.append((ch, item))
+    assert ("values", {"counter": 1}) in items
+    assert ("foo", {"name": "foo", "hello": "world"}) in items
+
+
+def test_interleave_projections_tool_calls_uses_public_name():
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        tool_finished_event,
+        tool_started_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tool_started_event(seq=1, tool_call_id="call-1", tool_name="search"),
+            tool_finished_event(seq=2, tool_call_id="call-1", output={"ok": True}),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            names = []
+            handle = None
+            for ch, item in thread.interleave_projections(["tool_calls"]):
+                names.append(ch)
+                if handle is None:
+                    handle = item
+                break
+    assert names == ["tool_calls"]
+    assert handle is not None
+    assert handle.tool_call_id == "call-1"
+
+
+def test_interleave_projections_subgraphs_discovers_child():
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            lifecycle_started_event(seq=1, namespace=["child"]),
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            discovered = []
+            for ch, handle in thread.interleave_projections(["subgraphs"]):
+                discovered.append((ch, handle.path))
+    assert ("subgraphs", ("child",)) in discovered
+
+
+def test_interleave_projections_inflight_tool_call_failed_on_break():
+    """A tool handle held past an early break is failed in teardown, never left hanging."""
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        tool_started_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            tool_started_event(seq=1, tool_call_id="call-1", tool_name="search"),
+            # no tool-finished: the call is still in flight when the consumer breaks
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            handle = None
+            for _, item in thread.interleave_projections(["tool_calls"]):
+                handle = item
+                break
+            assert handle is not None
+            # Without teardown finalization this blocks forever; the bounded
+            # timeout turns a regression into a TimeoutError, not a RuntimeError.
+            with pytest.raises(RuntimeError):
+                handle._result.result(timeout=2)
+
+
+def test_interleave_projections_inflight_subgraph_finished_on_terminal():
+    """A discovered subgraph child with no terminal tasks-result is force-completed."""
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            lifecycle_started_event(seq=1, namespace=["child"]),
+            # no tasks-result for the child: it is still "started" at run end
+            lifecycle_completed_event(seq=2),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            child = None
+            for _, handle in thread.interleave_projections(["subgraphs"]):
+                child = handle
+            assert child is not None
+            assert child.status == "completed"
+
+
+@pytest.mark.parametrize("channel", ["lifecycle", "tools", "input"])
+def test_interleave_projections_rejects_reserved_channel(channel):
+    """Reserved protocol channel names raise instead of silently no-op'ing.
+
+    `infer_channel` treats these as first-class methods, but they have no
+    interleave decoder, so routing them to the extension/`custom:` fallback
+    would subscribe to a channel that never matches and yield nothing. Fail
+    closed. (`updates`/`checkpoints`/`tasks` are supported and tested below.)
+    """
+    from streaming._events import (
+        lifecycle_completed_event,
+        lifecycle_started_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({})
+    fake.script([lifecycle_started_event(seq=0), lifecycle_completed_event(seq=1)])
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with (
+            threads.stream(thread_id="t-1", assistant_id="agent") as thread,
+            pytest.raises(ValueError, match=channel),
+        ):
+            for _ in thread.interleave_projections([channel]):
+                pass
+
+
+def test_interleave_projections_data_channels_yield_payloads():
+    """`updates`/`checkpoints`/`tasks` yield their raw `params.data` payloads."""
+    from streaming._events import (
+        checkpoints_event,
+        lifecycle_completed_event,
+        lifecycle_started_event,
+        tasks_start_event,
+        updates_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            updates_event(seq=1, node={"v": 1}),
+            checkpoints_event(seq=2, ts="t-0", v=4),
+            tasks_start_event(seq=3, task_id="task-9"),
+            lifecycle_completed_event(seq=4),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            items = list(
+                thread.interleave_projections(["updates", "checkpoints", "tasks"])
+            )
+    assert ("updates", {"node": {"v": 1}}) in items
+    assert ("checkpoints", {"ts": "t-0", "v": 4}) in items
+    assert any(ch == "tasks" and item.get("id") == "task-9" for ch, item in items)
+
+
+def test_interleave_projections_data_channel_scoped_to_root_namespace():
+    """A child-namespace checkpoint must not leak into a root interleave."""
+    from streaming._events import (
+        checkpoints_event,
+        lifecycle_completed_event,
+        lifecycle_started_event,
+    )
+
+    fake = SyncFakeServer()
+    fake.set_state({"counter": 0})
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            checkpoints_event(seq=1, namespace=["child"], scope="child"),
+            checkpoints_event(seq=2, scope="root"),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        threads = SyncThreadsClient(SyncHttpClient(raw))
+        with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            thread.run.start(input={})
+            checkpoints = [
+                item
+                for ch, item in thread.interleave_projections(["values", "checkpoints"])
+                if ch == "checkpoints"
+            ]
+    assert {"scope": "root"} in checkpoints
+    assert {"scope": "child"} not in checkpoints
