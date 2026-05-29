@@ -87,7 +87,6 @@ langgraph-checkpoint-sqlite = { path = "../checkpoint-sqlite", editable = true }
 langgraph-checkpoint-postgres = { path = "../checkpoint-postgres", editable = true }
 langgraph-sdk = { path = "../sdk-py", editable = true }
 langgraph-cli = { path = "../cli", editable = true }
-langchain-core = { git = "https://github.com/langchain-ai/langchain", branch = "nh/basetool-subagent-name", subdirectory = "libs/core" }
 
 [tool.ruff]
 lint.select = [ "E", "F", "I", "TID251", "UP" ]

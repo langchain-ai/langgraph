@@ -267,7 +267,7 @@ wheels = [
 [[package]]
 name = "langchain-core"
 version = "1.4.0"
-source = { git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&branch=nh%2Fbasetool-subagent-name#41d1c352709d3a22e192a185bf8632efab788d09" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
     { name = "langchain-protocol" },
@@ -278,6 +278,10 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
     { name = "uuid-utils" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/59/de/679a53472c25860837e32c0442c962fa86e95317a36460e2c9d5c91b17c2/langchain_core-1.4.0.tar.gz", hash = "sha256:1dc341eed802ed9c117c0df3923c991e5e9e226571e5725c194eeb5bd93d1a7f", size = 920260, upload-time = "2026-05-11T18:42:35.919Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/1a/86c38c27b81913a1c6c12448cab55defb5a1097c7dc9a4cea83f55477a2d/langchain_core-1.4.0-py3-none-any.whl", hash = "sha256:23cbbdb46e38ddd1dd5247e6167e96013eae74bea4c5949c550809970a9e565c", size = 548120, upload-time = "2026-05-11T18:42:33.992Z" },
 ]
 
 [[package]]
@@ -307,7 +311,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&branch=nh%2Fbasetool-subagent-name" },
+    { name = "langchain-core", specifier = ">=1.4.0,<2" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-prebuilt", editable = "../prebuilt" },
     { name = "langgraph-sdk", editable = "." },
@@ -319,7 +323,7 @@ requires-dist = [
 dev = [
     { name = "httpx" },
     { name = "jupyter" },
-    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&branch=nh%2Fbasetool-subagent-name" },
+    { name = "langchain-core", specifier = ">=1.0.0" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
@@ -352,7 +356,7 @@ lint = [
 ]
 test = [
     { name = "httpx" },
-    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain?subdirectory=libs%2Fcore&branch=nh%2Fbasetool-subagent-name" },
+    { name = "langchain-core", specifier = ">=1.0.0" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
