@@ -30,9 +30,7 @@ def test_map_debug_tasks_forwards_metadata_when_present() -> None:
         name="tools",
         input=[],
         triggers=["x"],
-        config={
-            "metadata": {"lc_agent_name": "weather_agent"}
-        },
+        config={"metadata": {"lc_agent_name": "weather_agent"}},
     )
     payloads = list(map_debug_tasks([task]))
     assert len(payloads) == 1

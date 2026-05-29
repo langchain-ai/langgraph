@@ -2428,4 +2428,3 @@ def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     tool_call_ids = {m.tool_call_id for m in all_msgs}
     assert list_tool_id in tool_call_ids
     assert regular_tool_id in tool_call_ids
-
