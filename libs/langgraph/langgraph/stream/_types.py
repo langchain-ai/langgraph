@@ -35,7 +35,7 @@ class ProtocolEvent(TypedDict):
     """
 
     type: Literal["event"]
-    eventId: NotRequired[str]
+    event_id: NotRequired[str]  # snake_case to match the langchain-protocol wire field
     seq: NotRequired[int]
     method: str  # StreamMode value: "values", "messages", "custom", etc.
     params: _ProtocolEventParams
