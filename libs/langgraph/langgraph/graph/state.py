@@ -42,6 +42,7 @@ from langgraph._internal._constants import (
 from langgraph._internal._fields import (
     get_cached_annotated_keys,
     get_field_default,
+    get_field_default_factory,
     get_update_as_tuples,
 )
 from langgraph._internal._pydantic import create_model
@@ -1493,11 +1494,50 @@ class CompiledStateGraph(
 
         # add node and output channel
         if key == START:
+            # Issue #5225: seed declared defaults for reducer
+            # (BinaryOperatorAggregate) fields so node updates reduce on top of
+            # the default rather than on a zero-value (`typ()`). An explicitly
+            # provided input value for a field still overrides its default.
+            reducer_defaults: dict[str, Callable[[], Any]] = {}
+            start_schema = self.builder.input_schema
+            if isclass(start_schema) and (
+                issubclass(start_schema, BaseModel) or is_dataclass(start_schema)
+            ):
+                for k in output_keys:
+                    if isinstance(self.channels.get(k), BinaryOperatorAggregate) and (
+                        factory := get_field_default_factory(k, start_schema)
+                    ):
+                        reducer_defaults[k] = factory
+
+            if reducer_defaults:
+
+                def _get_input_updates(
+                    input: None | dict | Any,
+                ) -> Sequence[tuple[str, Any]] | None:
+                    updates = _get_updates(input)
+                    if updates is None:
+                        return None
+                    updates = list(updates)
+                    provided = {k for k, _ in updates}
+                    for field_name, factory in reducer_defaults.items():
+                        if field_name not in provided:
+                            updates.append((field_name, factory()))
+                    return updates
+
+                start_entries: tuple[
+                    ChannelWriteEntry | ChannelWriteTupleEntry, ...
+                ] = (
+                    ChannelWriteTupleEntry(mapper=_get_input_updates),
+                    *write_entries[1:],
+                )
+            else:
+                start_entries = write_entries
+
             self.nodes[key] = PregelNode(
                 tags=[TAG_HIDDEN],
                 triggers=[START],
                 channels=START,
-                writers=[ChannelWrite(write_entries)],
+                writers=[ChannelWrite(start_entries)],
             )
         elif node is not None:
             input_schema = node.input_schema if node else self.builder.state_schema

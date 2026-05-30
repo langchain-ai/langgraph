@@ -1,6 +1,7 @@
 import datetime
 import decimal
 import ipaddress
+import operator
 import pathlib
 import re
 import sys
@@ -360,3 +361,89 @@ def test_interrupt_functional_pydantic(sync_checkpointer: BaseCheckpointSaver) -
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar", "b": "bar"}
     assert called_count == 1
+
+
+def _extend(left: list, right: list) -> list:
+    left.extend(right)
+    return left
+
+
+def test_reducer_field_seeds_scalar_default_when_omitted() -> None:
+    """Issue #5225: a reducer field's declared default should seed the channel,
+    so node updates reduce on top of the default instead of on ``typ()``."""
+
+    class State(BaseModel):
+        counter: Annotated[int, operator.add] = Field(default=10)
+
+    builder = StateGraph(State)
+    builder.add_node("n", lambda s: {"counter": 5})
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    assert graph.invoke({}) == {"counter": 15}
+
+
+def test_reducer_field_seeds_default_factory_when_omitted() -> None:
+    class State(BaseModel):
+        items: Annotated[list[str], _extend] = Field(
+            default_factory=lambda: ["default"]
+        )
+
+    builder = StateGraph(State)
+    builder.add_node("n", lambda s: {"items": ["from_node"]})
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    assert graph.invoke({}) == {"items": ["default", "from_node"]}
+
+
+def test_reducer_field_explicit_input_overrides_default() -> None:
+    """105 semantics: an explicitly-provided input value replaces the default
+    (like a function-parameter default), then node updates reduce on top."""
+
+    class State(BaseModel):
+        counter: Annotated[int, operator.add] = Field(default=10)
+
+    builder = StateGraph(State)
+    builder.add_node("n", lambda s: {"counter": 5})
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    assert graph.invoke({"counter": 100}) == {"counter": 105}
+
+
+def test_reducer_field_default_not_shared_across_runs() -> None:
+    """A mutable default must not leak between separate invocations."""
+
+    class State(BaseModel):
+        items: Annotated[list[str], _extend] = Field(
+            default_factory=lambda: ["default"]
+        )
+
+    builder = StateGraph(State)
+    builder.add_node("n", lambda s: {"items": ["from_node"]})
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    assert graph.invoke({}) == {"items": ["default", "from_node"]}
+    assert graph.invoke({}) == {"items": ["default", "from_node"]}
+
+
+def test_reducer_field_without_default_unchanged() -> None:
+    """Non-regression: a reducer field with no declared default keeps its
+    existing ``typ()``-seeded behavior."""
+
+    class State(BaseModel):
+        counter: Annotated[int, operator.add]
+
+    builder = StateGraph(State)
+    builder.add_node("n", lambda s: {"counter": 5})
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    assert graph.invoke({}) == {"counter": 5}

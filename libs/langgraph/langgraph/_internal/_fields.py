@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import copy
 import dataclasses
 import types
 import weakref
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
+from inspect import signature
 from typing import Annotated, Any, Optional, Union, get_origin, get_type_hints
 
 from pydantic import BaseModel
@@ -120,6 +122,45 @@ def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
     if _is_optional_type(type_):
         return None
     return ...
+
+
+def get_field_default_factory(name: str, schema: type[Any]) -> Callable[[], Any] | None:
+    """Return a zero-arg factory producing a fresh declared default for ``name``.
+
+    Supports Pydantic ``BaseModel`` and dataclass schemas. Returns ``None`` when
+    the field has no explicit default (so callers fall back to existing
+    behavior). Mutable scalar defaults are deep-copied on each call so values
+    are never shared across invocations.
+    """
+    model_fields = getattr(schema, "model_fields", None)
+    if model_fields is not None and name in model_fields:
+        field = model_fields[name]
+        if field.is_required():
+            return None
+        if field.default_factory is not None:
+            factory = field.default_factory
+            try:
+                nparams = len(signature(factory).parameters)
+            except (TypeError, ValueError):
+                nparams = 0
+            # Pydantic >=2.10 allows a data-dependent factory; we can only seed
+            # from the zero-arg form, since validated data isn't available here.
+            return factory if nparams == 0 else None
+        default = field.default
+        return lambda: copy.deepcopy(default)
+    if dataclasses.is_dataclass(schema):
+        for dc_field in dataclasses.fields(schema):
+            if dc_field.name == name:
+                if dc_field.default_factory is not dataclasses.MISSING:
+                    return dc_field.default_factory
+                if (
+                    dc_field.default is not dataclasses.MISSING
+                    and dc_field.default is not ...
+                ):
+                    default = dc_field.default
+                    return lambda: copy.deepcopy(default)
+                return None
+    return None
 
 
 def get_enhanced_type_hints(
