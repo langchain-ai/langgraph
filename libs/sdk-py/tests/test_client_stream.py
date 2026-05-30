@@ -8,6 +8,7 @@ import httpx
 import pytest
 from typing_extensions import assert_type
 
+import langgraph_sdk.sse as sse_module
 from langgraph_sdk._shared.utilities import _sse_to_v2_dict
 from langgraph_sdk.client import HttpClient, SyncHttpClient
 from langgraph_sdk.schema import (
@@ -106,6 +107,21 @@ def test_stream_sse():
 
         assert decoder.decode(b"") is None
         assert len(parts) == 79
+
+
+def test_sse_decoder_joins_multiline_data_with_newlines(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(sse_module.orjson, "loads", lambda data: {"raw": data})
+    decoder = SSEDecoder()
+
+    assert decoder.decode(b"event: custom") is None
+    assert decoder.decode(b'data: "hello') is None
+    assert decoder.decode(b'data: world"') is None
+
+    assert decoder.decode(b"") == StreamPart(
+        event="custom", data={"raw": b'"hello\nworld"'}
+    )
 
 
 # --- HTTP client streaming ---

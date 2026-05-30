@@ -92,9 +92,10 @@ class SSEDecoder:
         # See: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
 
         if not line:
+            data = self._data[:-1] if self._data.endswith(b"\n") else self._data
             if (
                 not self._event
-                and not self._data
+                and not data
                 and not self._last_event_id
                 and self._retry is None
             ):
@@ -102,7 +103,7 @@ class SSEDecoder:
 
             sse = StreamPart(
                 event=self._event,
-                data=orjson.loads(self._data) if self._data else None,  # ty: ignore[invalid-argument-type]
+                data=orjson.loads(data) if data else None,  # ty: ignore[invalid-argument-type]
                 id=self.last_event_id,
             )
 
@@ -125,6 +126,7 @@ class SSEDecoder:
             self._event = value.decode()
         elif fieldname == b"data":
             self._data.extend(value)
+            self._data.extend(b"\n")
         elif fieldname == b"id":
             if b"\0" in value:
                 pass
