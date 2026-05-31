@@ -31,6 +31,7 @@ from typing import (
 from uuid import UUID, uuid5
 
 from langchain_core._api import beta
+from langchain_core.callbacks import BaseCallbackManager
 from langchain_core.globals import get_debug
 from langchain_core.runnables import (
     RunnableSequence,
@@ -40,6 +41,7 @@ from langchain_core.runnables.config import (
     RunnableConfig,
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
+    var_child_runnable_config,
 )
 from langchain_core.runnables.graph import Graph
 from langchain_core.runnables.schema import StreamEvent
@@ -410,6 +412,74 @@ def _collect_stream_modes(mux: Any) -> list[StreamMode]:
             )
         )
     return list(modes)
+
+
+def _strip_stream_messages_v2_callback(callbacks: Any) -> Any:
+    """Remove inherited v3 messages handlers from a callback collection."""
+    if callbacks is None:
+        return None
+    if isinstance(callbacks, list):
+        return [
+            callback
+            for callback in callbacks
+            if not isinstance(callback, StreamMessagesHandlerV2)
+        ]
+    if isinstance(callbacks, BaseCallbackManager):
+        copied = callbacks.copy()
+        copied.handlers = [
+            handler
+            for handler in copied.handlers
+            if not isinstance(handler, StreamMessagesHandlerV2)
+        ]
+        copied.inheritable_handlers = [
+            handler
+            for handler in copied.inheritable_handlers
+            if not isinstance(handler, StreamMessagesHandlerV2)
+        ]
+        return copied
+    return callbacks
+
+
+@contextlib.contextmanager
+def _without_inherited_stream_messages_v2() -> Iterator[None]:
+    """Prevent an outer v3 messages handler from observing a nested v3 run."""
+    inherited = var_child_runnable_config.get()
+    if not inherited or "callbacks" not in inherited:
+        yield
+        return
+
+    callbacks = inherited.get("callbacks")
+    stripped_callbacks = _strip_stream_messages_v2_callback(callbacks)
+    if stripped_callbacks is callbacks:
+        yield
+        return
+
+    patched = inherited.copy()
+    if stripped_callbacks:
+        patched["callbacks"] = stripped_callbacks
+    else:
+        patched.pop("callbacks", None)
+
+    token = var_child_runnable_config.set(patched)
+    try:
+        yield
+    finally:
+        var_child_runnable_config.reset(token)
+
+
+def _isolate_v3_graph_iter(
+    iterator: Iterator[StreamPart[StateT, OutputT]],
+) -> Iterator[StreamPart[StateT, OutputT]]:
+    with _without_inherited_stream_messages_v2():
+        yield from iterator
+
+
+async def _isolate_v3_graph_aiter(
+    iterator: AsyncIterator[StreamPart[StateT, OutputT]],
+) -> AsyncIterator[StreamPart[StateT, OutputT]]:
+    with _without_inherited_stream_messages_v2():
+        async for item in iterator:
+            yield item
 
 
 def _normalize_stream_transformer_factories(
@@ -3509,17 +3579,19 @@ class Pregel(
             scope=parent_ns,
             is_async=False,
         )
-        graph_iter = iter(
-            self.stream(
-                input,
-                patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
-                stream_mode=_collect_stream_modes(mux),
-                subgraphs=True,
-                version="v2",
-                interrupt_before=interrupt_before,
-                interrupt_after=interrupt_after,
-                control=control,
-                **kwargs,
+        graph_iter = _isolate_v3_graph_iter(
+            iter(
+                self.stream(
+                    input,
+                    patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
+                    stream_mode=_collect_stream_modes(mux),
+                    subgraphs=True,
+                    version="v2",
+                    interrupt_before=interrupt_before,
+                    interrupt_after=interrupt_after,
+                    control=control,
+                    **kwargs,
+                )
             )
         )
         return GraphRunStream(graph_iter, mux)
@@ -3565,17 +3637,19 @@ class Pregel(
             scope=parent_ns,
             is_async=True,
         )
-        graph_aiter = self.astream(
-            input,
-            patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
-            stream_mode=_collect_stream_modes(mux),
-            subgraphs=True,
-            version="v2",
-            interrupt_before=interrupt_before,
-            interrupt_after=interrupt_after,
-            control=control,
-            **kwargs,
-        ).__aiter__()
+        graph_aiter = _isolate_v3_graph_aiter(
+            self.astream(
+                input,
+                patch_configurable(config, {CONFIG_KEY_STREAM_MESSAGES_V2: True}),
+                stream_mode=_collect_stream_modes(mux),
+                subgraphs=True,
+                version="v2",
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                control=control,
+                **kwargs,
+            )
+        )
         return AsyncGraphRunStream(graph_aiter, mux)
 
     @overload

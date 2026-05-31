@@ -634,6 +634,69 @@ class TestEndToEnd:
 
         assert "".join(await asyncio.wait_for(consume(), timeout=2.0)) == "hello world"
 
+    @pytest.mark.anyio
+    async def test_nested_astream_events_v3_isolates_messages_handler(self) -> None:
+        """An outer v3 stream must not inherit its messages handler into a nested v3 run."""
+        import asyncio
+
+        model = GenericFakeChatModel(messages=iter(["inner answer"]))
+
+        async def call_model(state: MessagesState) -> dict[str, Any]:
+            return {"messages": await model.ainvoke(state["messages"])}
+
+        inner = (
+            StateGraph(MessagesState)
+            .add_node("call_model", call_model)
+            .add_edge(START, "call_model")
+            .add_edge("call_model", END)
+            .compile()
+        )
+
+        class OuterState(TypedDict, total=False):
+            inner_text: str
+            inner_output_text: str
+
+        async def call_inner(state: OuterState) -> dict[str, Any]:
+            run = await inner.astream_events({"messages": "hi"}, version="v3")
+            chunks: list[str] = []
+            async for stream in run.messages:
+                async for delta in stream.text:
+                    chunks.append(delta)
+            output = await run.output()
+            assert output is not None
+            return {
+                "inner_text": "".join(chunks),
+                "inner_output_text": output["messages"][-1].text,
+            }
+
+        outer = (
+            StateGraph(OuterState)
+            .add_node("call_inner", call_inner)
+            .add_edge(START, "call_inner")
+            .add_edge("call_inner", END)
+            .compile()
+        )
+
+        run = await outer.astream_events({}, version="v3")
+
+        async def collect_outer_messages() -> list[str]:
+            texts: list[str] = []
+            async for stream in run.messages:
+                parts: list[str] = []
+                async for delta in stream.text:
+                    parts.append(delta)
+                texts.append("".join(parts))
+            return texts
+
+        outer_messages_task = asyncio.create_task(collect_outer_messages())
+        output = await run.output()
+        outer_messages = await asyncio.wait_for(outer_messages_task, timeout=2.0)
+
+        assert output is not None
+        assert output["inner_text"] == "inner answer"
+        assert output["inner_output_text"] == "inner answer"
+        assert outer_messages == []
+
 
 # ---------------------------------------------------------------------------
 # End-to-end: graph → stream_events(version="v3") → run.messages (node calls invoke)
