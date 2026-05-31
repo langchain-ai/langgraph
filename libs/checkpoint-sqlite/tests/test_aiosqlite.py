@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 import pytest
@@ -55,6 +56,22 @@ class TestAsyncSqliteSaver:
             "score": None,
         }
         self.metadata_3: CheckpointMetadata = {}
+
+    async def test_sync_put_raises_in_loop_thread(self) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            with pytest.raises(
+                asyncio.InvalidStateError,
+                match="Synchronous calls to AsyncSqliteSaver",
+            ):
+                saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
+
+    async def test_sync_put_writes_raises_in_loop_thread(self) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            with pytest.raises(
+                asyncio.InvalidStateError,
+                match="Synchronous calls to AsyncSqliteSaver",
+            ):
+                saver.put_writes(self.config_1, [("channel", "value")], "task-1")
 
     async def test_combined_metadata(self) -> None:
         async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
