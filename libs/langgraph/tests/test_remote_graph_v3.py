@@ -213,11 +213,14 @@ def test_abort_swallows_cancel_failure_and_still_closes():
         sdk_thread.close.assert_called_once()
 
 
-def test_sync_interleave_raises_not_implemented():
-    adapter, _, _ = _make_sync_adapter()
+def test_sync_interleave_delegates_to_interleave_projections():
+    adapter, _, sdk_thread = _make_sync_adapter()
+    pairs = [("values", {"x": 1}), ("messages", object())]
+    sdk_thread.interleave_projections.return_value = pairs
     with adapter as stream:
-        with pytest.raises(NotImplementedError):
-            list(stream.interleave("messages"))
+        result = list(stream.interleave("values", "messages"))
+    assert result == pairs
+    sdk_thread.interleave_projections.assert_called_once_with(["values", "messages"])
 
 
 def test_async_adapter_has_no_interleave():

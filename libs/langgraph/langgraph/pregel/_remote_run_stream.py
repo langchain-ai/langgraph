@@ -243,7 +243,7 @@ class _RemoteGraphRunStream:
         return self._events_iter
 
     def interleave(self, *names: str) -> Iterator[tuple[str, Any]]:
-        raise NotImplementedError
+        yield from self._sdk.interleave_projections(list(names))
 
 
 class _AsyncRemoteGraphRunStream:
