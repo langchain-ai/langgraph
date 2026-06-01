@@ -156,6 +156,39 @@ def test_channel_projection_decodes_params_data():
     sdk.subscribe.assert_called_once_with(["checkpoints"])
 
 
+@pytest.mark.anyio
+async def test_channel_projection_decodes_params_data_async():
+    """Async lane mirrors the sync lane: `async for` over the SDK's async
+    subscription, decoded through the same `DataDecoder`."""
+
+    class _FakeAsyncEvents:
+        def __init__(self, items):
+            self._items = list(items)
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if not self._items:
+                raise StopAsyncIteration
+            return self._items.pop(0)
+
+    sdk = MagicMock()
+    sdk.subscribe = MagicMock(
+        return_value=_FakeAsyncEvents(
+            [
+                {"method": "checkpoints", "params": {"data": {"n": 1}}},
+                {"method": "checkpoints", "params": {}},  # no data -> skipped
+                {"method": "checkpoints", "params": {"data": {"n": 2}}},
+                {"method": "lifecycle", "params": {"data": {"n": 3}}},  # other channel
+            ]
+        )
+    )
+    proj = _ChannelProjection(sdk, "checkpoints")
+    assert [item async for item in proj] == [{"n": 1}, {"n": 2}]
+    sdk.subscribe.assert_called_once_with(["checkpoints"])
+
+
 def test_sync_adapter_translates_command_input():
     sync_client = MagicMock()
     sdk_thread = MagicMock()
