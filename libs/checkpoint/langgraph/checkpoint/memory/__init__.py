@@ -148,16 +148,16 @@ class InMemorySaver(
         whose stored blob is non-empty. Other channels keep walking until
         they find their own terminator or hit the root.
 
-        Pre-delta plain-value blobs subsume their ancestor's pending
-        writes (the value already includes them); `_DeltaSnapshot` blobs
-        do not (snapshot is the value AT that ancestor, prior to its own
-        pending writes that produce the child).
+        The seed value (whether a `_DeltaSnapshot` or a plain pre-delta
+        migration blob) is the value AT that ancestor, prior to its own
+        pending writes that produce the child. Those on-path writes —
+        including the ones stored on the terminating ancestor — are always
+        collected and replayed on top of the seed, so a thread migrated from
+        a pre-delta channel does not drop the writes saved under the
+        migration boundary checkpoint.
         """
         if not channels:
             return {}
-        # Imported lazily to avoid a hard checkpoint→serde-types coupling at
-        # module import; only this override needs the runtime check.
-        from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -205,11 +205,12 @@ class InMemorySaver(
             ):
                 if ch not in remaining:
                     continue
-                blob_value = blob_value_by_ch.get(ch)
-                if blob_value is not None and not isinstance(
-                    blob_value, _DeltaSnapshot
-                ):
-                    continue
+                # Collect on-path writes regardless of seed type. A plain
+                # (pre-delta migration) blob is the settled value AT that
+                # ancestor; its own pending writes produce the child and must
+                # still be replayed, just like a `_DeltaSnapshot` seed.
+                # Skipping them would drop post-migration writes saved under
+                # the migration boundary checkpoint.
                 collected_by_ch[ch].append(
                     (tid, ch, self.serde.loads_typed(serialized))
                 )
