@@ -139,19 +139,53 @@ def test_projection_registry_typed_decoded_and_custom():
 
 def test_channel_projection_decodes_params_data():
     sdk = MagicMock()
-    # Two events with data + one malformed/dataless event that must be skipped.
+    # Real wire events carry `method`; the SDK `DataDecoder` yields matching
+    # events' `params.data` and skips dataless and off-channel ones.
     sdk.subscribe = MagicMock(
         return_value=iter(
             [
-                {"params": {"data": {"n": 1}}},
-                {"params": {}},  # no data -> skipped
-                {"params": {"data": {"n": 2}}},
-                {"unexpected": "shape"},  # not a params dict -> skipped
+                {"method": "checkpoints", "params": {"data": {"n": 1}}},
+                {"method": "checkpoints", "params": {}},  # no data -> skipped
+                {"method": "checkpoints", "params": {"data": {"n": 2}}},
+                {"method": "lifecycle", "params": {"data": {"n": 3}}},  # other channel
             ]
         )
     )
     proj = _ChannelProjection(sdk, "checkpoints")
     assert list(proj) == [{"n": 1}, {"n": 2}]
+    sdk.subscribe.assert_called_once_with(["checkpoints"])
+
+
+@pytest.mark.anyio
+async def test_channel_projection_decodes_params_data_async():
+    """Async lane mirrors the sync lane: `async for` over the SDK's async
+    subscription, decoded through the same `DataDecoder`."""
+
+    class _FakeAsyncEvents:
+        def __init__(self, items):
+            self._items = list(items)
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if not self._items:
+                raise StopAsyncIteration
+            return self._items.pop(0)
+
+    sdk = MagicMock()
+    sdk.subscribe = MagicMock(
+        return_value=_FakeAsyncEvents(
+            [
+                {"method": "checkpoints", "params": {"data": {"n": 1}}},
+                {"method": "checkpoints", "params": {}},  # no data -> skipped
+                {"method": "checkpoints", "params": {"data": {"n": 2}}},
+                {"method": "lifecycle", "params": {"data": {"n": 3}}},  # other channel
+            ]
+        )
+    )
+    proj = _ChannelProjection(sdk, "checkpoints")
+    assert [item async for item in proj] == [{"n": 1}, {"n": 2}]
     sdk.subscribe.assert_called_once_with(["checkpoints"])
 
 
@@ -213,11 +247,14 @@ def test_abort_swallows_cancel_failure_and_still_closes():
         sdk_thread.close.assert_called_once()
 
 
-def test_sync_interleave_raises_not_implemented():
-    adapter, _, _ = _make_sync_adapter()
+def test_sync_interleave_delegates_to_interleave_projections():
+    adapter, _, sdk_thread = _make_sync_adapter()
+    pairs = [("values", {"x": 1}), ("messages", object())]
+    sdk_thread.interleave_projections.return_value = pairs
     with adapter as stream:
-        with pytest.raises(NotImplementedError):
-            list(stream.interleave("messages"))
+        result = list(stream.interleave("values", "messages"))
+    assert result == pairs
+    sdk_thread.interleave_projections.assert_called_once_with(["values", "messages"])
 
 
 def test_async_adapter_has_no_interleave():

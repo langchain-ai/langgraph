@@ -11,6 +11,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._sync.stream import SyncThreadStream
 from langgraph_sdk.client import LangGraphClient, SyncLangGraphClient
+from langgraph_sdk.stream.decoders import DataDecoder
 
 from langgraph.types import Command
 
@@ -43,9 +44,10 @@ def _translate_command_input(input: Any) -> Any:
 class _ChannelProjection:
     """Decoded projection for a wire channel the SDK doesn't type natively.
 
-    Subscribes to `channel` and yields each event's `params["data"]` — the same
-    item shape the SDK's typed projections yield (`_ValuesProjection` etc.) and
-    that local's `UpdatesTransformer` / `CheckpointsTransformer` /
+    Subscribes to `channel` and decodes each event's `params["data"]` through the
+    SDK's `DataDecoder` — the same decoder the SDK's own plain-payload projections
+    (`values` / `updates` / `checkpoints` / `tasks`) use, which yields the item
+    shape that local's `UpdatesTransformer` / `CheckpointsTransformer` /
     `TasksTransformer` / `CustomTransformer` push, so iterating this matches the
     corresponding local projection. Iterate with `for` against a sync stream and
     `async for` against an async stream (matching the underlying SDK). Opening
@@ -56,30 +58,23 @@ class _ChannelProjection:
         self._sdk = sdk
         self._channel = channel
 
-    @staticmethod
-    def _data(event: Any) -> Any:
-        """Extract `params.data` from a protocol event, tolerating odd shapes."""
-        params = event.get("params") if isinstance(event, dict) else None
-        return params.get("data") if isinstance(params, dict) else None
-
     def __iter__(self) -> Iterator[Any]:
         # Sync lane: the sync adapter's SDK returns a sync iterator here.
+        decoder = DataDecoder(self._channel)
         events = cast(Iterator[Any], self._sdk.subscribe([self._channel]))
         for event in events:
-            data = self._data(event)
-            if data is not None:
-                yield data
+            yield from decoder.feed(event)
 
     def __aiter__(self) -> AsyncIterator[Any]:
         return self._aiter()
 
     async def _aiter(self) -> AsyncIterator[Any]:
         # Async lane: the async adapter's SDK returns an async iterator here.
+        decoder = DataDecoder(self._channel)
         events = cast(AsyncIterator[Any], self._sdk.subscribe([self._channel]))
         async for event in events:
-            data = self._data(event)
-            if data is not None:
-                yield data
+            for item in decoder.feed(event):
+                yield item
 
 
 class _ProjectionRegistry(Mapping[str, Any]):
@@ -243,7 +238,7 @@ class _RemoteGraphRunStream:
         return self._events_iter
 
     def interleave(self, *names: str) -> Iterator[tuple[str, Any]]:
-        raise NotImplementedError
+        yield from self._sdk.interleave_projections(list(names))
 
 
 class _AsyncRemoteGraphRunStream:
