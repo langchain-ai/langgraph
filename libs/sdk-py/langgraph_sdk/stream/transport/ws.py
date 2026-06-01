@@ -13,6 +13,7 @@ from langchain_protocol import Event
 from websockets.asyncio.client import connect as websocket_connect
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
+from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk.stream.transport.base import (
     EventStreamHandle,
     build_event_stream_body,
@@ -39,8 +40,12 @@ class ProtocolWebSocketTransport:
     ) -> None:
         self._client = client
         self.thread_id = thread_id
-        self._commands_url = commands_path or f"/threads/{thread_id}/commands"
-        self._stream_path = stream_path or f"/threads/{thread_id}/stream/events"
+        self._commands_url = (
+            commands_path or f"/threads/{_quote_path_param(thread_id)}/commands"
+        )
+        self._stream_path = (
+            stream_path or f"/threads/{_quote_path_param(thread_id)}/stream/events"
+        )
         self._default_headers: dict[str, str] = dict(headers or {})
         self._connect = connect
         self._max_queue_size = max_queue_size
