@@ -177,7 +177,12 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
                 if overwrite_value is not None
                 else self.typ()
             )
-            remaining = [v for i, v in enumerate(values) if i != overwrite_idx]
+            # Treat Overwrite as a hard reset: drop everything up to and
+            # including the overwrite, keeping only writes that follow it. This
+            # mirrors replay_writes so reconstruction from a checkpoint
+            # reproduces the live state even when a plain write precedes the
+            # Overwrite in the same super-step.
+            remaining = list(values[overwrite_idx + 1 :])
             self.value = self.reducer(base, remaining) if remaining else base
             return True
         base = self.typ() if self.value is MISSING else self.value
