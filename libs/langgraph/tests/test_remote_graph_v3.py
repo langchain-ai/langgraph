@@ -139,14 +139,15 @@ def test_projection_registry_typed_decoded_and_custom():
 
 def test_channel_projection_decodes_params_data():
     sdk = MagicMock()
-    # Two events with data + one malformed/dataless event that must be skipped.
+    # Real wire events carry `method`; the SDK `DataDecoder` yields matching
+    # events' `params.data` and skips dataless and off-channel ones.
     sdk.subscribe = MagicMock(
         return_value=iter(
             [
-                {"params": {"data": {"n": 1}}},
-                {"params": {}},  # no data -> skipped
-                {"params": {"data": {"n": 2}}},
-                {"unexpected": "shape"},  # not a params dict -> skipped
+                {"method": "checkpoints", "params": {"data": {"n": 1}}},
+                {"method": "checkpoints", "params": {}},  # no data -> skipped
+                {"method": "checkpoints", "params": {"data": {"n": 2}}},
+                {"method": "lifecycle", "params": {"data": {"n": 3}}},  # other channel
             ]
         )
     )
