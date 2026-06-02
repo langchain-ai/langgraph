@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 import pytest
@@ -129,6 +130,21 @@ class TestAsyncSqliteSaver:
             ]
             assert len(search_results_7) == 1
             assert search_results_7[0].config["configurable"]["thread_id"] == "thread-1"
+
+    async def test_put_and_put_writes_raise_in_event_loop(self) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            await saver.setup()
+            cfg: RunnableConfig = {
+                "configurable": {"thread_id": "t1", "checkpoint_ns": ""}
+            }
+            checkpoint = empty_checkpoint()
+            metadata: CheckpointMetadata = {"source": "input", "step": 0, "writes": {}}
+
+            with pytest.raises(asyncio.InvalidStateError):
+                saver.put(cfg, checkpoint, metadata, {})
+
+            with pytest.raises(asyncio.InvalidStateError):
+                saver.put_writes(cfg, [("channel", "value")], "task-1")
 
     async def test_limit_parameter_sql_injection_prevention(self) -> None:
         """Test that the limit parameter properly uses parameterized queries to prevent SQL injection."""
