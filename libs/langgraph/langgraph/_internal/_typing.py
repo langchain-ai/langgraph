@@ -42,7 +42,17 @@ It can either be a `TypedDict`, `dataclass`, or Pydantic `BaseModel`.
 Note: we cannot use either `TypedDict` or `dataclass` directly due to limitations in type checking.
 """
 
-MISSING = object()
+
+class UnsetSentinel:
+    """Singleton sentinel for unset optional parameters."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "MISSING"
+
+
+MISSING: UnsetSentinel = UnsetSentinel()
 """Unset sentinel value."""
 
 
