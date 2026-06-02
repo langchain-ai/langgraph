@@ -8,7 +8,11 @@ from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk._sync.threads import SyncThreadsClient
 from langgraph_sdk.stream.sync_controller import SyncStreamController
 from langgraph_sdk.stream.transport.sync_http import SyncProtocolSseTransport
-from streaming._events import values_event
+from streaming._events import (
+    lifecycle_completed_event,
+    lifecycle_started_event,
+    values_event,
+)
 from streaming._sync_fake_server import SyncFakeServer, SyncStreamScript
 
 
@@ -85,3 +89,40 @@ def test_sync_shared_stream_reconnects_with_since_after_transport_drop():
     assert second["seq"] == 2
     assert end is None
     assert fake.stream_request_bodies[1]["since"] == 1
+
+
+def test_sync_controller_delivers_child_events_after_root_terminal():
+    """A direct-child event arriving after the root ``completed`` lifecycle is
+    still delivered to subscribers.
+
+    Regression: the controller used to push the terminal ``None`` sentinel the
+    instant it saw the root-terminal lifecycle event, orphaning any trailing
+    child-namespace events behind it (the events that feed ``thread.subgraphs``).
+    Iterators now terminate on stream-end, mirroring the async controller.
+    """
+    fake = SyncFakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=1),
+            lifecycle_completed_event(seq=2),  # root-terminal
+            lifecycle_started_event(
+                seq=3, namespace=["sub:0"]
+            ),  # child, after terminal
+        ]
+    )
+    with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
+        transport = SyncProtocolSseTransport(client=raw, thread_id="t-1")
+        controller = SyncStreamController(transport)
+        sub = controller.register_subscription({"channels": ["lifecycle"]})
+        controller.reconcile_stream({"channels": ["lifecycle"]})
+        controller.ensure_fanout_running()
+
+        received = []
+        while True:
+            item = sub.queue.get(timeout=1)
+            if item is None:
+                break
+            received.append(item)
+        controller.close()
+
+    assert lifecycle_started_event(seq=3, namespace=["sub:0"]) in received

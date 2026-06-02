@@ -22,31 +22,6 @@ from langgraph_sdk.stream.transport import (
 _logger = logging.getLogger(__name__)
 
 
-_ROOT_TERMINAL_LIFECYCLE_EVENTS = frozenset({"completed", "failed"})
-
-
-def _is_root_terminal_lifecycle(event: Any) -> bool:
-    """Return True for a root-namespace lifecycle event marking run end.
-
-    Matches the wire shape ``{method: "lifecycle", params: {namespace: [],
-    data: {event: "completed" | "failed"}}}``. Subgraph lifecycle events
-    (non-empty namespace) do not terminate the parent run.
-    """
-    if not isinstance(event, dict):
-        return False
-    if event.get("method") != "lifecycle":
-        return False
-    params = event.get("params") or {}
-    if not isinstance(params, dict):
-        return False
-    if params.get("namespace") or []:
-        return False
-    data = params.get("data") or {}
-    if not isinstance(data, dict):
-        return False
-    return data.get("event") in _ROOT_TERMINAL_LIFECYCLE_EVENTS
-
-
 @dataclass
 class _SyncSubscription:
     id: int
@@ -174,14 +149,14 @@ class SyncStreamController:
                     for sub in subscriptions:
                         if matches_subscription(event, sub.params):
                             sub.queue.put(event)
-                    # Root-terminal lifecycle: push `None` into all sub
-                    # queues so projection iterators exit when the run
-                    # ends naturally. Terminal is processed in seq order
-                    # on the shared SSE, so in-flight values/tools/
-                    # messages events for this run are already queued
-                    # before None.
-                    if _is_root_terminal_lifecycle(event):
-                        self.signal_paused()
+                    # Do NOT terminate iterators on the root-terminal
+                    # lifecycle event: the server may still emit trailing
+                    # events for this run after `completed`/`failed` (e.g.
+                    # direct-child subgraph `tasks`/`lifecycle` events that
+                    # feed `thread.subgraphs`). Pushing `None` here orphans
+                    # those behind the sentinel. Iterators are terminated
+                    # when the shared stream ends (below) or on interrupt
+                    # (`signal_paused`, driven by the thread-stream).
             except Exception:
                 pass  # transport drop — attempt reconnect below
 
@@ -224,9 +199,10 @@ class SyncStreamController:
         filters = [dict(sub.params) for sub in self._subscriptions.values()]
         if extra is not None:
             filters.append(dict(extra))
-        # Always include lifecycle in the shared SSE filter so `_fanout`
-        # sees root-terminal events in seq order with the projection
-        # events. See `_is_root_terminal_lifecycle`.
+        # Always include lifecycle in the shared SSE filter so the
+        # thread-stream observes run started/completed/failed and interrupt
+        # events (driving interrupt wake-up and run-done resolution) even when
+        # no projection subscribed to the lifecycle channel.
         filters.append({"channels": ["lifecycle"]})
         return compute_union_filter(filters)
 
