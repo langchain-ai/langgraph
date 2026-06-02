@@ -2835,7 +2835,9 @@ class Pregel(
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             # build server_info from metadata + parent runtime
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            parent_runtime = _coerce_parent_runtime(
+                config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            )
             server_info = _build_server_info(config, parent_runtime)
 
             runtime = Runtime(
@@ -3276,7 +3278,9 @@ class Pregel(
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             # build server_info from metadata + parent runtime
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            parent_runtime = _coerce_parent_runtime(
+                config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            )
             server_info = _build_server_info(config, parent_runtime)
 
             runtime = Runtime(
@@ -4251,6 +4255,23 @@ def _resolve_parent_ns(
     if not ns:
         return ()
     return tuple(ns.split(NS_SEP))
+
+
+def _coerce_parent_runtime(value: Any) -> Runtime[Any]:
+    """Normalize the value stored under `CONFIG_KEY_RUNTIME` into a `Runtime`.
+
+    During a graph run this is always a `Runtime` the framework created and
+    published for child tasks to inherit. Layers outside the run (for example a
+    server's graph-factory path) may instead seed an object that only carries
+    `context`/`store`. Adopt its `context` so context set at the graph level
+    plumbs through (`merge` lets the run's own `context` take precedence when
+    one is provided). `store` is resolved separately (passed to the graph
+    directly), so it is not read off here. `merge` then combines this with the
+    run's own runtime, including the framework's `control`.
+    """
+    if isinstance(value, Runtime):
+        return value
+    return Runtime(context=getattr(value, "context", None))
 
 
 def _build_server_info(
