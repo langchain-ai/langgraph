@@ -8921,6 +8921,38 @@ def test_get_graph_nonterminal_last_step_source(snapshot: SnapshotAssertion) -> 
     assert json.dumps(graph_json, indent=2, sort_keys=True) == snapshot
 
 
+def test_get_graph_command_with_conditional_edges_no_typeerror() -> None:
+    """get_graph() must not raise TypeError when a node uses both Command[Literal[...]]
+    and add_conditional_edges from the same source node (mixing None/str edge labels)."""
+
+    class State(TypedDict):
+        x: int
+
+    def router(state: State) -> Command[Literal["a", "b"]]:
+        return Command(goto="a")
+
+    def a(state: State) -> State:
+        return {"x": 1}
+
+    def b(state: State) -> State:
+        return {"x": 2}
+
+    def cond(_: State) -> str:
+        return "a"
+
+    workflow = StateGraph(State)
+    workflow.add_node("router", router)
+    workflow.add_node("a", a)
+    workflow.add_node("b", b)
+    workflow.add_edge(START, "router")
+    workflow.add_conditional_edges("router", cond, {"a": "a", "b": "b"})
+
+    app = workflow.compile()
+    # Previously raised: TypeError: '<' not supported between NoneType and str
+    graph = app.get_graph()
+    assert graph is not None
+
+
 def test_null_resume_disallowed_with_multiple_interrupts(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:

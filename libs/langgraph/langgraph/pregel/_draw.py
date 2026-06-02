@@ -200,7 +200,10 @@ def draw_graph(
         for task in tasks.values():
             added = False
             for trigger in task.triggers:
-                for src, cond, label in sorted(trigger_to_sources[trigger]):
+                for src, cond, label in sorted(
+                    trigger_to_sources[trigger],
+                    key=lambda t: (t[0], t[1], t[2] or ""),
+                ):
                     # record edge to be reviewed later
                     if task.name in deferred_nodes:
                         edges_to_deferred_nodes.add(Edge(src, task.name, cond, label))
@@ -235,7 +238,9 @@ def draw_graph(
         for task in start_tasks.values():
             add_edge(graph, START, task.name)
     # add discovered edges
-    for src, dest, is_conditional, label in sorted(edges):
+    for src, dest, is_conditional, label in sorted(
+        edges, key=lambda e: (e.source, e.target, e.conditional, e.data or "")
+    ):
         add_edge(
             graph,
             src,
