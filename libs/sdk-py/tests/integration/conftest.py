@@ -22,6 +22,7 @@ BASE_URL = os.environ.get("LANGGRAPH_INTEGRATION_URL", "http://localhost:2024")
 ASSISTANT_ID = "agent"
 TOOLS_ASSISTANT_ID = "tools_agent"
 DEEP_AGENT_ASSISTANT_ID = "deep_agent"
+FACTORY_ASSISTANT_ID = "factory_agent"
 
 EXPECTED_TERMINAL_ITEMS = ["streamed", "tool", "asked", "sub"]
 

@@ -36,11 +36,18 @@ services:
   api:
     # Thin layer on top of langchain/langgraph-api:latest-py3.12 —
     # see ./Dockerfile. The base image bundles langgraph-api +
-    # langgraph_runtime_postgres + langgraph_license + the Go core-server,
-    # so we only add graph deps (deepagents) and the graph files on top.
+    # langgraph_runtime_postgres + langgraph_license + the Go core-server;
+    # on top we add graph deps (deepagents), the graph files, and this
+    # monorepo's local langgraph *core* (so the server runs the code under
+    # test, not the released langgraph).
     build:
       context: .
       dockerfile: Dockerfile
+      additional_contexts:
+        # The monorepo's local langgraph core (libs/langgraph), installed over
+        # the base image so the server runs the langgraph under test. See the
+        # Dockerfile for why.
+        langgraph_src: ../../langgraph
     image: langgraph-v3-integration-api:local
     depends_on:
       postgres:
@@ -70,7 +77,7 @@ services:
       # Tell langgraph-api which graphs to register. The langgraph CLI sets
       # this from langgraph.json; we're bypassing the CLI (running uvicorn
       # directly) so we set it manually.
-      LANGSERVE_GRAPHS: '{"agent":"/app/graph/streaming_graph.py:graph","tools_agent":"/app/graph/tools_agent.py:graph","deep_agent":"/app/graph/deep_agent.py:graph"}'
+      LANGSERVE_GRAPHS: '{"agent":"/app/graph/streaming_graph.py:graph","tools_agent":"/app/graph/tools_agent.py:graph","deep_agent":"/app/graph/deep_agent.py:graph","factory_agent":"/app/graph/factory_graph.py:make_graph"}'
 
       # The published langgraph-api image is the `licensed` variant and
       # requires a real LANGSMITH_API_KEY (or LANGGRAPH_CLOUD_LICENSE_KEY)

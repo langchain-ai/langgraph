@@ -50,8 +50,10 @@ jobs:
               - '**/uv.lock'
             sdk_py:
               - 'libs/sdk-py/**'
-              - 'libs/langgraph/langgraph/pregel/remote.py'
-              - 'libs/langgraph/langgraph/pregel/_remote_run_stream.py'
+              # The integration suite runs the local langgraph core inside the
+              # server (see libs/sdk-py/integration/Dockerfile), so any core
+              # change is now exercised end-to-end and should trigger it.
+              - 'libs/langgraph/**'
 
   lint:
     needs: changes
