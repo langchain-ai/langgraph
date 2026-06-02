@@ -292,7 +292,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 their own via `add_node(..., retry_policy=...)`. Also applies
                 to error-handler nodes.
             cache_policy: Default cache policy for nodes that don't specify
-                their own via `add_node(..., cache_policy=...)`. Does **not**
+                their own via `add_node(..., cache_policy=...)`. Per-node
+                `cache_policy=None` opts out of this default. Does **not**
                 apply to error-handler nodes.
             error_handler: Default error handler invoked when any regular node
                 raises and does not have its own `error_handler` set via
@@ -668,7 +669,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         metadata: dict[str, Any] | None = None,
         input_schema: type[NodeInputT] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
+        cache_policy: CachePolicy | None = MISSING,
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
@@ -689,7 +690,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             retry_policy: The retry policy for the node.
 
                 If a sequence is provided, the first matching policy will be applied.
-            cache_policy: The cache policy for the node.
+            cache_policy: The cache policy for the node. Pass `None` explicitly to
+                disable caching for this node, including when graph defaults from
+                `set_node_defaults` would otherwise enable it. Omit the argument to
+                inherit graph defaults.
             error_handler: Optional node-level error handler callable for this node.
             destinations: Destinations that indicate where a node can route to.
 
@@ -764,6 +768,12 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             if input_schema is None:
                 input_schema = cast(type[NodeInputT] | None, input_)
         timeout = coerce_timeout_policy(timeout)
+
+        cache_policy_opt_out = False
+        if cache_policy is MISSING:
+            cache_policy = None
+        elif cache_policy is None:
+            cache_policy_opt_out = True
 
         if not isinstance(node, str):
             action = node
@@ -876,6 +886,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=input_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                cache_policy_opt_out=cache_policy_opt_out,
                 error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
@@ -888,6 +899,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=inferred_input_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                cache_policy_opt_out=cache_policy_opt_out,
                 error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
@@ -900,6 +912,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=self.state_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
+                cache_policy_opt_out=cache_policy_opt_out,
                 error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
@@ -1317,6 +1330,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 not spec.is_error_handler
                 and defaults.cache_policy is not None
                 and spec.cache_policy is None
+                and not spec.cache_policy_opt_out
             ):
                 spec.cache_policy = defaults.cache_policy
             # timeout: all nodes — a stuck handler should be cancelled the

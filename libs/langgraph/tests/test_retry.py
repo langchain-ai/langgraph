@@ -58,6 +58,7 @@ from langgraph.pregel._retry import (
 from langgraph.pregel.protocol import StreamProtocol
 from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
 from langgraph.types import (
+    CachePolicy,
     Command,
     PregelExecutableTask,
     RetryPolicy,
@@ -2568,6 +2569,92 @@ def test_set_node_defaults_retry_policy_per_node_wins():
 
     assert result["foo"] == "ok"
     assert attempts == 2
+
+
+def test_set_node_defaults_cache_policy_applies_to_nodes_without_own() -> None:
+    from langgraph.cache.memory import InMemoryCache
+
+    class State(TypedDict):
+        foo: str
+
+    calls = 0
+
+    def cached_node(state: State) -> State:
+        nonlocal calls
+        calls += 1
+        return {"foo": "ok"}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(cache_policy=CachePolicy(ttl=60))
+        .add_node("cached", cached_node)
+        .add_edge(START, "cached")
+        .compile(cache=InMemoryCache())
+    )
+
+    assert graph.nodes["cached"].cache_policy == CachePolicy(ttl=60)
+
+    graph.invoke({"foo": ""})
+    graph.invoke({"foo": ""})
+    assert calls == 1
+
+
+def test_set_node_defaults_cache_policy_per_node_wins() -> None:
+    from langgraph.cache.memory import InMemoryCache
+
+    class State(TypedDict):
+        foo: str
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(cache_policy=CachePolicy(ttl=60))
+        .add_node("a", lambda state: {"foo": "a"}, cache_policy=CachePolicy(ttl=5))
+        .add_node("b", lambda state: {"foo": "b"})
+        .add_edge(START, "a")
+        .add_edge("a", "b")
+        .compile(cache=InMemoryCache())
+    )
+
+    assert graph.nodes["a"].cache_policy == CachePolicy(ttl=5)
+    assert graph.nodes["b"].cache_policy == CachePolicy(ttl=60)
+
+
+def test_set_node_defaults_cache_policy_explicit_none_opts_out() -> None:
+    from langgraph.cache.memory import InMemoryCache
+
+    class State(TypedDict):
+        foo: str
+
+    cached_calls = 0
+    uncached_calls = 0
+
+    def cached_node(state: State) -> State:
+        nonlocal cached_calls
+        cached_calls += 1
+        return {"foo": "cached"}
+
+    def uncached_node(state: State) -> State:
+        nonlocal uncached_calls
+        uncached_calls += 1
+        return {"foo": "uncached"}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(cache_policy=CachePolicy())
+        .add_node("cached", cached_node)
+        .add_node("uncached", uncached_node, cache_policy=None)
+        .add_edge(START, "cached")
+        .add_edge("cached", "uncached")
+        .compile(cache=InMemoryCache())
+    )
+
+    assert graph.nodes["cached"].cache_policy == CachePolicy()
+    assert graph.nodes["uncached"].cache_policy is None
+
+    graph.invoke({"foo": ""})
+    graph.invoke({"foo": ""})
+    assert cached_calls == 1
+    assert uncached_calls == 2
 
 
 @pytest.mark.anyio
