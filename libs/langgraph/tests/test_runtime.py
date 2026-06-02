@@ -1164,3 +1164,50 @@ def test_execution_info_inherited_by_subgraph() -> None:
     # task_id appears in its own namespace segment
     assert main_info.task_id in main_info.checkpoint_ns
     assert sub_info.task_id in sub_info.checkpoint_ns
+
+
+def test_foreign_object_in_runtime_slot_is_coerced() -> None:
+    """A non-`Runtime` under `CONFIG_KEY_RUNTIME` is adopted, not crashed on.
+
+    Layers outside a run (e.g. a server's graph-factory path) may seed an
+    object that only carries `store`/`context` into the runtime slot. The run
+    must still execute: its `store`/`context` are adopted into a real
+    `Runtime`. Regression for `AttributeError: '...' object has no attribute
+    'control'`.
+    """
+    from langgraph.store.memory import InMemoryStore
+
+    from langgraph._internal._constants import CONFIG_KEY_RUNTIME
+
+    store = InMemoryStore()
+
+    class _ServerLikeRuntime:
+        """Carries store/context but is not a `Runtime` (no control/merge)."""
+
+        def __init__(self) -> None:
+            self.store = store
+            self.context = None
+
+    seen: dict[str, Any] = {}
+
+    class State(TypedDict, total=False):
+        text: str
+
+    def echo(state: State, runtime: Runtime) -> State:
+        seen["store"] = runtime.store
+        return {"text": (state.get("text") or "") + " echoed"}
+
+    builder = StateGraph(State)
+    builder.add_node("echo", echo)
+    builder.add_edge(START, "echo")
+    builder.add_edge("echo", END)
+    graph = builder.compile()
+
+    result = graph.invoke(
+        {"text": "hi"},
+        {"configurable": {CONFIG_KEY_RUNTIME: _ServerLikeRuntime()}},
+    )
+
+    assert result == {"text": "hi echoed"}
+    # the foreign object's store was adopted into the run's Runtime
+    assert seen["store"] is store
