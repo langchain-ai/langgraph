@@ -419,6 +419,11 @@ class _TasksLifecycleBase(StreamTransformer):
         # `node:<task_id>` shares this task_id, so a subagent recovers the tool
         # call that spawned it (cross-payload).
         self._pending_tool_calls: dict[str, str] = {}
+        # `cause` for the current `_on_started` dispatch, set immediately before
+        # the call and read by overrides that surface it. Keeping `cause` off the
+        # `_on_started` signature means overrides predating it (e.g. deepagents'
+        # `SubagentTransformer`) don't break.
+        self._pending_cause: LifecycleCause | None = None
 
     # --- Template-method hooks (subclass overrides) ---
 
@@ -431,10 +436,11 @@ class _TasksLifecycleBase(StreamTransformer):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
-        *,
-        cause: LifecycleCause | None = None,
     ) -> None:
-        """Fired once per discovered namespace (first observed task event)."""
+        """Fired once per discovered namespace (first observed task event).
+
+        The triggering `cause` (if any) is available as `self._pending_cause`.
+        """
         raise NotImplementedError
 
     def _on_terminal(
@@ -532,7 +538,10 @@ class _TasksLifecycleBase(StreamTransformer):
             tool_call_id = self._pending_tool_calls.get(trigger_call_id)
             if tool_call_id:
                 cause = {"type": "toolCall", "tool_call_id": str(tool_call_id)}
-        self._on_started(ns, graph_name, trigger_call_id, cause=cause)
+        # Deliver `cause` via instance state, not the call signature, so
+        # `_on_started` stays backward-compatible with overrides predating it.
+        self._pending_cause = cause
+        self._on_started(ns, graph_name, trigger_call_id)
         if trigger_call_id is not None:
             self._open[ns] = trigger_call_id
 
@@ -631,8 +640,6 @@ class LifecycleTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
-        *,
-        cause: LifecycleCause | None = None,
     ) -> None:
         if trigger_call_id is None:
             # Without a task id we can't correlate a parent-result
@@ -643,6 +650,7 @@ class LifecycleTransformer(_TasksLifecycleBase):
         if graph_name:
             payload["graph_name"] = graph_name
         payload["trigger_call_id"] = trigger_call_id
+        cause = self._pending_cause
         if cause is not None:
             payload["cause"] = cause
         self._channel.push(payload)
@@ -707,8 +715,6 @@ class SubgraphTransformer(_TasksLifecycleBase):
         ns: tuple[str, ...],
         graph_name: str | None,
         trigger_call_id: str | None,
-        *,
-        cause: LifecycleCause | None = None,
     ) -> None:
         if self._mux is None:
             return
@@ -717,10 +723,9 @@ class SubgraphTransformer(_TasksLifecycleBase):
         except RuntimeError:
             return
         handle_cls = AsyncSubgraphRunStream if child_mux.is_async else SubgraphRunStream
-        # `cause` is intentionally ignored here: it is a wire/lifecycle-channel
-        # concern (carried on `LifecyclePayload`), not something the in-process
-        # subgraph navigation handle exposes. The argument is accepted only to
-        # keep the `_on_started` template signature uniform across transformers.
+        # The triggering `cause` (on `self._pending_cause`) is a wire/lifecycle
+        # concern carried on `LifecyclePayload`; the in-process subgraph
+        # navigation handle does not expose it.
         handle = handle_cls(
             mux=child_mux,
             path=ns,
