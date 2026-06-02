@@ -781,6 +781,13 @@ class ToolNode(RunnableCallable):
                 tool_ = create_tool(cast("type[BaseTool]", tool))
             else:
                 tool_ = tool
+            if tool_.name in self._tools_by_name:
+                msg = (
+                    f"Duplicate tool name {tool_.name!r} is not allowed in ToolNode. "
+                    "Tool names must be unique so model tool calls bind to "
+                    "exactly one tool."
+                )
+                raise ValueError(msg)
             self._tools_by_name[tool_.name] = tool_
             # Build injected args mapping once during initialization in a single pass
             self._injected_args[tool_.name] = _get_all_injected_args(tool_)

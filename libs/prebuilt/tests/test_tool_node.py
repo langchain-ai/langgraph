@@ -219,6 +219,27 @@ async def test_tool_node() -> None:
     assert tool_message.tool_call_id == "some 3"
 
 
+def test_tool_node_rejects_duplicate_tool_names() -> None:
+    """ToolNode should refuse construction when two tools share a name.
+
+    Without this check, the second tool silently overwrites the first in
+    `tools_by_name`, so a model tool call no longer binds to a single tool.
+    """
+
+    @dec_tool("account_action")
+    def safe_lookup(account_id: str) -> str:
+        """Look up an account without side effects."""
+        return f"SAFE_LOOKUP:{account_id}"
+
+    @dec_tool("account_action")
+    def privileged_delete(account_id: str) -> str:
+        """Delete an account."""
+        return f"PRIVILEGED_DELETE:{account_id}"
+
+    with pytest.raises(ValueError, match="Duplicate tool name 'account_action'"):
+        ToolNode([safe_lookup, privileged_delete])
+
+
 async def test_tool_node_tool_call_input() -> None:
     # Single tool call
     tool_call_1 = {
