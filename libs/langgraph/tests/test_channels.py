@@ -12,6 +12,10 @@ from langgraph._internal._typing import MISSING
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
+from langgraph.channels.named_barrier_value import (
+    NamedBarrierValue,
+    NamedBarrierValueAfterFinish,
+)
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -87,6 +91,50 @@ def test_topic_accumulate() -> None:
     assert channel.get() == ["a", "b", "b", "c", "d", "d"]
     assert channel.update(["e"])
     assert channel.get() == ["a", "b", "b", "c", "d", "d", "e"]
+
+
+def test_topic_accumulate_from_checkpoint_does_not_alias() -> None:
+    # Restoring two channels from the same checkpoint, then updating one, must
+    # not mutate the checkpoint or the sibling channel (from_checkpoint must copy).
+    source = Topic(str, accumulate=True)
+    source.update(["a", "b"])
+    checkpoint = source.checkpoint()
+
+    one = Topic(str, accumulate=True).from_checkpoint(checkpoint)
+    two = Topic(str, accumulate=True).from_checkpoint(checkpoint)
+    one.update(["c"])
+
+    assert one.get() == ["a", "b", "c"]
+    assert two.get() == ["a", "b"]
+    assert checkpoint == ["a", "b"]
+
+
+def test_named_barrier_value_from_checkpoint_does_not_alias() -> None:
+    source = NamedBarrierValue(str, {"a", "b"})
+    source.update(["a"])
+    checkpoint = source.checkpoint()
+
+    one = NamedBarrierValue(str, {"a", "b"}).from_checkpoint(checkpoint)
+    two = NamedBarrierValue(str, {"a", "b"}).from_checkpoint(checkpoint)
+    one.update(["b"])
+
+    assert one.seen == {"a", "b"}
+    assert two.seen == {"a"}
+    assert checkpoint == {"a"}
+
+
+def test_named_barrier_value_after_finish_from_checkpoint_does_not_alias() -> None:
+    source = NamedBarrierValueAfterFinish(str, {"a", "b"})
+    source.update(["a"])
+    checkpoint = source.checkpoint()
+
+    one = NamedBarrierValueAfterFinish(str, {"a", "b"}).from_checkpoint(checkpoint)
+    two = NamedBarrierValueAfterFinish(str, {"a", "b"}).from_checkpoint(checkpoint)
+    one.update(["b"])
+
+    assert one.seen == {"a", "b"}
+    assert two.seen == {"a"}
+    assert checkpoint[0] == {"a"}
 
 
 def test_binop() -> None:

@@ -69,9 +69,9 @@ class Topic(
         if checkpoint is not MISSING:
             if isinstance(checkpoint, tuple):
                 # backwards compatibility
-                empty.values = checkpoint[1]
+                empty.values = checkpoint[1].copy()
             else:
-                empty.values = checkpoint
+                empty.values = checkpoint.copy()
         return empty
 
     def update(self, values: Sequence[Value | list[Value]]) -> bool:

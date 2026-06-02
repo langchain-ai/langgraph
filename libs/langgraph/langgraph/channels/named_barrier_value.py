@@ -50,7 +50,7 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
         empty = self.__class__(self.typ, self.names)
         empty.key = self.key
         if checkpoint is not MISSING:
-            empty.seen = checkpoint
+            empty.seen = checkpoint.copy()
         return empty
 
     def update(self, values: Sequence[Value]) -> bool:
@@ -128,7 +128,8 @@ class NamedBarrierValueAfterFinish(
         empty = self.__class__(self.typ, self.names)
         empty.key = self.key
         if checkpoint is not MISSING:
-            empty.seen, empty.finished = checkpoint
+            seen, empty.finished = checkpoint
+            empty.seen = seen.copy()
         return empty
 
     def update(self, values: Sequence[Value]) -> bool:
