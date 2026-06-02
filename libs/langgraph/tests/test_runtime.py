@@ -1167,26 +1167,29 @@ def test_execution_info_inherited_by_subgraph() -> None:
 
 
 def test_foreign_object_in_runtime_slot_is_coerced() -> None:
-    """A non-`Runtime` under `CONFIG_KEY_RUNTIME` is adopted, not crashed on.
+    """A non-`Runtime` under `CONFIG_KEY_RUNTIME` is adopted, not crashed on,
+    and the `context` it carries is plumbed through.
 
-    Layers outside a run (e.g. a server's graph-factory path) may seed an
-    object that only carries `store`/`context` into the runtime slot. The run
-    must still execute: its `store`/`context` are adopted into a real
-    `Runtime`. Regression for `AttributeError: '...' object has no attribute
-    'control'`.
+    Layers outside a run (e.g. a server's graph-factory path, like LangGraph
+    API) seed an object carrying `context`/`store` into the runtime slot. The
+    run must still execute (regression for `AttributeError: '...' object has no
+    attribute 'control'`), and `context` set at that level must reach nodes via
+    `merge` when no per-run `context` is provided. `store` is resolved
+    separately, so it is not read off the foreign object in the coercion.
     """
     from langgraph.store.memory import InMemoryStore
 
     from langgraph._internal._constants import CONFIG_KEY_RUNTIME
 
     store = InMemoryStore()
+    graph_level_context = {"source": "graph-level"}
 
     class _ServerLikeRuntime:
-        """Carries store/context but is not a `Runtime` (no control/merge)."""
+        """Carries context/store but is not a `Runtime` (no control/merge)."""
 
         def __init__(self) -> None:
+            self.context = graph_level_context
             self.store = store
-            self.context = None
 
     seen: dict[str, Any] = {}
 
@@ -1194,6 +1197,7 @@ def test_foreign_object_in_runtime_slot_is_coerced() -> None:
         text: str
 
     def echo(state: State, runtime: Runtime) -> State:
+        seen["context"] = runtime.context
         seen["store"] = runtime.store
         return {"text": (state.get("text") or "") + " echoed"}
 
@@ -1203,11 +1207,14 @@ def test_foreign_object_in_runtime_slot_is_coerced() -> None:
     builder.add_edge("echo", END)
     graph = builder.compile()
 
+    # No per-run `context=`: the graph-level context on the slot must plumb through.
     result = graph.invoke(
         {"text": "hi"},
         {"configurable": {CONFIG_KEY_RUNTIME: _ServerLikeRuntime()}},
     )
 
     assert result == {"text": "hi echoed"}
-    # the foreign object's store was adopted into the run's Runtime
+    # context set at the graph level is plumbed through to the node via merge
+    assert seen["context"] == graph_level_context
+    # store still reaches the node (resolved separately, not via the coercion)
     assert seen["store"] is store

@@ -4263,17 +4263,15 @@ def _coerce_parent_runtime(value: Any) -> Runtime[Any]:
     During a graph run this is always a `Runtime` the framework created and
     published for child tasks to inherit. Layers outside the run (for example a
     server's graph-factory path) may instead seed an object that only carries
-    `store`/`context`. Adopt those fields into a real `Runtime` so runtime
-    operations like `merge` and `control` work regardless of what populated the
-    slot. The run's own `context` is supplied separately and still takes
-    precedence via `merge`.
+    `context`/`store`. Adopt its `context` so context set at the graph level
+    plumbs through (`merge` lets the run's own `context` take precedence when
+    one is provided). `store` is resolved separately (passed to the graph
+    directly), so it is not read off here. `merge` then combines this with the
+    run's own runtime, including the framework's `control`.
     """
     if isinstance(value, Runtime):
         return value
-    return Runtime(
-        store=getattr(value, "store", None),
-        context=getattr(value, "context", None),
-    )
+    return Runtime(context=getattr(value, "context", None))
 
 
 def _build_server_info(
