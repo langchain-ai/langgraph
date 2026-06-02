@@ -802,3 +802,20 @@ async def test_graceful_failure_even_when_handle_errors_disabled_async() -> None
         result[0].content
         == "Error: missing is not a valid tool, try one of [registered_tool]."
     )
+
+
+def test_normalize_tool_response_accepts_raw_content_blocks() -> None:
+    """Raw LangChain content blocks should normalize into a ToolMessage."""
+
+    node = ToolNode([registered_tool])
+    result = node._normalize_tool_response(
+        [{"type": "text", "text": "Handled by interceptor"}],
+        {"name": "registered_tool", "args": {"x": 42}, "id": "1", "type": "tool_call"},
+        "tool_calls",
+    )
+
+    assert result == ToolMessage(
+        content=[{"type": "text", "text": "Handled by interceptor"}],
+        name="registered_tool",
+        tool_call_id="1",
+    )

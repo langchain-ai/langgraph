@@ -1444,6 +1444,16 @@ class ToolNode(RunnableCallable):
         if isinstance(response, list):
             if all(isinstance(r, (Command, ToolMessage)) for r in response):
                 return self._validate_tool_command_list(response, tool_call, input_type)
+            if all(
+                isinstance(item, dict)
+                and item.get("type") in TOOL_MESSAGE_BLOCK_TYPES
+                for item in response
+            ):
+                return ToolMessage(
+                    content=cast("str | list", msg_content_output(response)),
+                    name=tool_call["name"],
+                    tool_call_id=tool_call["id"],
+                )
             msg = (
                 f"Tool {tool_call['name']} returned a list with invalid element "
                 "types: expected all Command or ToolMessage"
