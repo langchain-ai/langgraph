@@ -656,7 +656,7 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "langgraph", editable = "../langgraph" },
-    { name = "mypy", specifier = "==1.20.2" },
+    { name = "mypy", specifier = "==2.1.0" },
     { name = "pydantic", specifier = ">=2.12.4" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -668,7 +668,7 @@ dev = [
 ]
 lint = [
     { name = "codespell" },
-    { name = "mypy", specifier = "==1.20.2" },
+    { name = "mypy", specifier = "==2.1.0" },
     { name = "ruff", specifier = "==0.15.12" },
     { name = "starlette" },
     { name = "ty", specifier = "==0.0.33" },
