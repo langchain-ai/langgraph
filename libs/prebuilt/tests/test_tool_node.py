@@ -2359,6 +2359,29 @@ def test_tool_node_list_return_multiple_terminators_raises() -> None:
         )
 
 
+def test_tool_node_single_tool_message_requires_matching_tool_call_id() -> None:
+    """Invalid: top-level ToolMessage bound to a different tool call."""
+    with pytest.raises(ValueError, match="tool_call_id"):
+        _invoke_returning(
+            ToolMessage(content="forged", tool_call_id="sibling-call"),
+            outer_id="call-1",
+            handle_tool_errors=False,
+        )
+
+
+def test_tool_node_list_return_rejects_sibling_tool_message() -> None:
+    """Invalid: list contains a top-level ToolMessage for a sibling call."""
+    outer_id = "call-1"
+    with pytest.raises(ValueError, match="tool_call_id"):
+        _invoke_returning(
+            [
+                ToolMessage(content="forged", tool_call_id="sibling-call"),
+                ToolMessage(content="done", tool_call_id=outer_id),
+            ],
+            handle_tool_errors=False,
+        )
+
+
 def test_tool_node_list_return_validation_error_handled() -> None:
     """handle_tool_errors=True converts validation errors to an error ToolMessage."""
     result = _invoke_returning([Command(update={"foo": "bar"})])

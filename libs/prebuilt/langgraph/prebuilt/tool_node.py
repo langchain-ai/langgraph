@@ -1439,8 +1439,7 @@ class ToolNode(RunnableCallable):
         if isinstance(response, Command):
             return self._validate_tool_command(response, tool_call, input_type)
         if isinstance(response, ToolMessage):
-            response.content = cast("str | list", msg_content_output(response.content))
-            return response
+            return self._validate_tool_message(response, tool_call)
         if isinstance(response, list):
             if all(isinstance(r, (Command, ToolMessage)) for r in response):
                 return self._validate_tool_command_list(response, tool_call, input_type)
@@ -1471,6 +1470,13 @@ class ToolNode(RunnableCallable):
             if isinstance(item, ToolMessage):
                 if item.tool_call_id == expected_id:
                     terminator_count += 1
+                else:
+                    msg = (
+                        f"Tool {tool_call['name']} returned a ToolMessage with "
+                        f"tool_call_id {item.tool_call_id!r}; expected "
+                        f"{expected_id!r}."
+                    )
+                    raise ValueError(msg)
             elif isinstance(item, Command) and isinstance(item.update, dict):
                 for msg in item.update.get(self._messages_key, []):
                     if isinstance(msg, ToolMessage) and msg.tool_call_id == expected_id:
@@ -1496,9 +1502,25 @@ class ToolNode(RunnableCallable):
                     )
                 )
             else:
-                item.content = cast("str | list", msg_content_output(item.content))
-                validated.append(item)
+                validated.append(self._validate_tool_message(item, tool_call))
         return validated
+
+    def _validate_tool_message(
+        self,
+        message: ToolMessage,
+        tool_call: ToolCall,
+    ) -> ToolMessage:
+        """Validate a top-level ToolMessage returned by a tool call."""
+        expected_id = tool_call["id"]
+        if message.tool_call_id != expected_id:
+            msg = (
+                f"Tool {tool_call['name']} returned a ToolMessage with "
+                f"tool_call_id {message.tool_call_id!r}; expected {expected_id!r}."
+            )
+            raise ValueError(msg)
+
+        message.content = cast("str | list", msg_content_output(message.content))
+        return message
 
     def _validate_tool_command(
         self,
