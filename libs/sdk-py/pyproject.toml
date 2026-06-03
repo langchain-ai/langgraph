@@ -91,9 +91,9 @@ ignore = [
 per-file-ignores = { "tests/**" = ["S101", "B017"], "integration/**" = ["S101", "T20", "B017", "ARG001", "ARG002"] }
 
 [tool.ty.src]
-# The `integration/` graphs run inside the docker image (with `deepagents`
-# and other graph-only deps installed there) and are not part of the SDK
-# package surface, so we don't typecheck them in the sdk-py venv.
+# The `integration/` graphs run inside the docker image (with graph-only deps
+# installed there) and are not part of the SDK package surface, so we don't
+# typecheck them in the sdk-py venv.
 exclude = ["integration"]
 
 [tool.ty.rules]

@@ -15,12 +15,11 @@
 
 FROM langchain/langgraph-api:latest-py3.12
 
-# Graph dependencies not in the base image. `deepagents` is required for
-# the deep_agent graph; the supervisor and researcher use a fake chat
-# model (no `langchain-anthropic`) so no LLM API key is needed.
+# Graph dependencies not in the base image. The tool-channel fixture uses
+# `langchain.agents.create_agent` with a fake chat model, so no LLM API key is
+# needed.
 RUN pip install --no-cache-dir \
-    "langchain>=1.3.0" \
-    "deepagents>=0.6.2"
+    "langchain>=1.3.0"
 
 # Swap the published langgraph *core* for this monorepo's local copy, so the
 # server executes the langgraph under test rather than the latest release.

@@ -1,8 +1,4 @@
-"""`thread.subgraphs` discovery against `agent` and `deep_agent`.
-
-`deep_agent` uses `FakeMessagesListChatModel` for both supervisor and
-researcher, so this suite is hermetic (no LLM API key required).
-"""
+"""`thread.subgraphs` discovery against integration graph fixtures."""
 
 from __future__ import annotations
 
@@ -20,7 +16,7 @@ async def test_subgraphs_agent_async(async_threads) -> None:
         await thread.run.start(input={"messages": [], "value": "init", "items": []})
         handles = [h async for h in thread.subgraphs]
         # Documented behavior: plain nested invokes do not show up as scoped
-        # child handles; the canonical signal is `create_deep_agent`.
+        # child handles; only compiled child graphs produce handles.
         assert handles == []
 
 
@@ -39,7 +35,7 @@ async def test_subgraphs_deep_agent_async(async_threads) -> None:
             input={"messages": [{"role": "user", "content": "research the v3 spec"}]},
         )
         handles = [h async for h in thread.subgraphs]
-        assert handles, "deep_agent should produce at least one direct-child handle"
+        assert handles, "compiled child graph should produce a direct-child handle"
 
 
 def test_subgraphs_deep_agent_sync(sync_threads) -> None:
@@ -49,4 +45,4 @@ def test_subgraphs_deep_agent_sync(sync_threads) -> None:
             input={"messages": [{"role": "user", "content": "research the v3 spec"}]},
         )
         handles = list(thread.subgraphs)
-        assert handles, "deep_agent should produce at least one direct-child handle"
+        assert handles, "compiled child graph should produce a direct-child handle"
