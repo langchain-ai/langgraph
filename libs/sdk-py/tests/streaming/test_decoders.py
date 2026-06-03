@@ -340,11 +340,64 @@ def _scoped_factory(*, path, graph_name, trigger_call_id):
     )
 
 
+def _forwarded_lifecycle_event(seq: int, **data: Any) -> dict[str, Any]:
+    return {
+        "type": "event",
+        "method": "lifecycle",
+        "params": {"namespace": [], "data": data},
+        "seq": seq,
+        "event_id": f"evt-{seq}",
+    }
+
+
 def test_subgraphs_decoder_discovers_on_lifecycle_started_once():
     decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
     [h] = list(decoder.feed(lifecycle_started_event(seq=1, namespace=["child"])))
     assert h.path == ("child",)
     assert list(decoder.feed(lifecycle_started_event(seq=2, namespace=["child"]))) == []
+
+
+def test_subgraphs_decoder_discovers_on_forwarded_lifecycle_payload_namespace():
+    decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
+    [h] = list(
+        decoder.feed(
+            _forwarded_lifecycle_event(
+                seq=1,
+                event="started",
+                namespace=["child:call-1"],
+                graph_name="child",
+                trigger_call_id="call-1",
+            )
+        )
+    )
+    assert h.path == ("child:call-1",)
+    assert h.graph_name == "child"
+    assert h.trigger_call_id == "call-1"
+
+
+def test_subgraphs_decoder_completes_on_forwarded_lifecycle_payload_namespace():
+    decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
+    [h] = list(
+        decoder.feed(
+            _forwarded_lifecycle_event(
+                seq=1,
+                event="started",
+                namespace=["child:call-1"],
+                graph_name="child",
+                trigger_call_id="call-1",
+            )
+        )
+    )
+    list(
+        decoder.feed(
+            _forwarded_lifecycle_event(
+                seq=2,
+                event="completed",
+                namespace=["child:call-1"],
+            )
+        )
+    )
+    assert h.status == "completed"
 
 
 def test_subgraphs_decoder_discovers_on_tasks_start_without_result():

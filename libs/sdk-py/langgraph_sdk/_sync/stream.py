@@ -217,6 +217,8 @@ class SyncRunModule:
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Send `run.start` to the server. Returns the result (`{"run_id": ...}`)."""
+        controller = self._owner._controller
+        replay_cursor = controller._cursor if controller is not None else None
         params: dict[str, Any] = {"assistant_id": self._owner.assistant_id}
         if input is not None:
             params["input"] = input
@@ -226,8 +228,8 @@ class SyncRunModule:
             params["metadata"] = metadata
         result = self._owner._send_command("run.start", params)
         self._owner._run_seen = True
-        controller = self._owner._controller
         if controller is not None and controller._run_start_gate is not None:
+            controller.mark_run_start_replay_cursor(replay_cursor)
             controller._run_start_gate.set()
         return result
 
@@ -974,7 +976,10 @@ class _SyncSubgraphsProjection:
             self._thread._activate_root_messages_inbox() if not self._scope else None
         )
         try:
-            self._thread._reconcile_stream(params)
+            self._thread._reconcile_stream(
+                params,
+                use_run_start_replay_cursor=self._scope == (),
+            )
             self._thread._ensure_fanout_running()
             while True:
                 item = sub.queue.get()
@@ -1215,10 +1220,21 @@ class SyncThreadStream:
         if self._controller is not None:
             self._controller.ensure_fanout_running()
 
-    def _reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
+    def _reconcile_stream(
+        self,
+        candidate_filter: SubscribeParams,
+        *,
+        use_run_start_replay_cursor: bool = False,
+    ) -> None:
         if self._controller is None:
             raise RuntimeError("SyncThreadStream not entered — use `with`.")
-        self._controller.reconcile_stream(candidate_filter)
+        if not use_run_start_replay_cursor:
+            self._controller.reconcile_stream(candidate_filter)
+            return
+        self._controller.reconcile_stream(
+            candidate_filter,
+            use_run_start_replay_cursor=use_run_start_replay_cursor,
+        )
 
     def _activate_root_messages_inbox(self) -> queue.Queue[Event | None]:
         if self._root_messages_inbox is None:
@@ -1608,6 +1624,9 @@ class SyncThreadStream:
             params = event.get("params") or {}
             data = params.get("data") if isinstance(params, dict) else None
             phase = data.get("event") if isinstance(data, dict) else None
+            payload_namespace = data.get("namespace") if isinstance(data, dict) else None
+            if isinstance(payload_namespace, list) and payload_namespace:
+                return
             if phase in ("started", "running"):
                 self._run_seen = True
             elif phase in ("completed", "failed"):

@@ -105,6 +105,8 @@ def _event_namespace(params_field: Any) -> list[str]:
 
 
 _ROOT_TERMINAL_LIFECYCLE_EVENTS = frozenset({"completed", "failed"})
+# `since` returns events after the given seq; -1 means replay from the first event.
+_INITIAL_REPLAY_CURSOR = -1
 
 
 def _is_root_terminal_lifecycle(event: Any) -> bool:
@@ -125,6 +127,9 @@ def _is_root_terminal_lifecycle(event: Any) -> bool:
         return False
     data = params.get("data") or {}
     if not isinstance(data, dict):
+        return False
+    payload_namespace = data.get("namespace")
+    if isinstance(payload_namespace, list) and payload_namespace:
         return False
     return data.get("event") in _ROOT_TERMINAL_LIFECYCLE_EVENTS
 
@@ -174,6 +179,7 @@ class RunModule:
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Send `run.start` to the server. Returns the result (`{"run_id": ...}`)."""
+        replay_cursor = self._owner._cursor
         params: dict[str, Any] = {"assistant_id": self._owner.assistant_id}
         if input is not None:
             params["input"] = input
@@ -186,6 +192,8 @@ class RunModule:
         self._owner._run_start_ready = gate
         try:
             result = await self._owner._send_command("run.start", params)
+            self._owner._run_start_replay_cursor = replay_cursor
+            self._owner._has_run_start_replay_cursor = True
             if not gate.done():
                 gate.set_result(None)
             self._owner._run_seen = True
@@ -931,7 +939,10 @@ class _SubgraphsProjection:
             self._thread._activate_root_messages_inbox() if not self._scope else None
         )
         try:
-            await self._thread._reconcile_stream(params)
+            await self._thread._reconcile_stream(
+                params,
+                use_run_start_replay_cursor=self._scope == (),
+            )
             self._thread._ensure_fanout_running()
             while True:
                 item = await sub.queue.get()
@@ -1215,6 +1226,8 @@ class AsyncThreadStream:
         self._run_seen: bool = False
         self._run_done: asyncio.Future[_RunTerminal] | None = None
         self._cursor: int | None = None
+        self._run_start_replay_cursor: int | None = None
+        self._has_run_start_replay_cursor = False
         self._active_message_streams: set[AsyncChatModelStream] = set()
         self._active_tool_calls: set[ToolCallHandle] = set()
         # Root-scope inbox: populated by `_SubgraphsProjection` when it consumes
@@ -1705,7 +1718,12 @@ class AsyncThreadStream:
             return True
         return False
 
-    async def _reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
+    async def _reconcile_stream(
+        self,
+        candidate_filter: SubscribeParams,
+        *,
+        use_run_start_replay_cursor: bool = False,
+    ) -> None:
         """Ensure the shared SSE covers `candidate_filter`. Rotate if not.
 
         Open-new-before-close-old: any events buffered server-side between
@@ -1721,8 +1739,17 @@ class AsyncThreadStream:
         if self._transport is None:
             raise RuntimeError("AsyncThreadStream not entered — use `async with`.")
 
+        replay_cursor = self._cursor
+        force_replay = False
+        if use_run_start_replay_cursor and self._has_run_start_replay_cursor:
+            replay_cursor = self._run_start_replay_cursor
+            if replay_cursor is None:
+                replay_cursor = _INITIAL_REPLAY_CURSOR
+            force_replay = replay_cursor != self._cursor
+
         if (
-            self._shared_stream is not None
+            not force_replay
+            and self._shared_stream is not None
             and self._shared_stream_filter is not None
             and filter_covers(self._shared_stream_filter, dict(candidate_filter))
         ):
@@ -1730,8 +1757,8 @@ class AsyncThreadStream:
 
         new_filter = self._compute_current_union(extra=candidate_filter)
         stream_params: dict[str, Any] = dict(new_filter)
-        if self._cursor is not None:
-            stream_params["since"] = self._cursor
+        if replay_cursor is not None:
+            stream_params["since"] = replay_cursor
         new_stream = self._transport.open_event_stream(stream_params)
         old_stream = self._shared_stream
         self._shared_stream = new_stream
@@ -1964,6 +1991,9 @@ class AsyncThreadStream:
             params = event.get("params") or {}
             data = params.get("data") if isinstance(params, dict) else None
             phase = data.get("event") if isinstance(data, dict) else None
+            payload_namespace = data.get("namespace") if isinstance(data, dict) else None
+            if isinstance(payload_namespace, list) and payload_namespace:
+                return
             if phase in ("started", "running"):
                 # Mark that we have observed an active run so thread.output
                 # knows a run exists (handles reattach without run.start).

@@ -22,6 +22,16 @@ from streaming._events import (
 from streaming._fake_server import FakeServer, _StreamScript
 
 
+def _forwarded_lifecycle_event(seq: int, **data):
+    return {
+        "type": "event",
+        "method": "lifecycle",
+        "params": {"namespace": [], "data": data},
+        "seq": seq,
+        "event_id": f"evt-{seq}",
+    }
+
+
 async def test_subgraphs_subscribes_to_tasks_channel():
     fake = FakeServer()
     fake.script([lifecycle_completed_event(seq=1)])
@@ -62,6 +72,75 @@ async def test_subgraphs_yields_handle_and_completes_status():
     assert handle.trigger_call_id == "abc"
     assert handle.status == "completed"
     assert handle.error is None
+
+
+async def test_subgraphs_yields_handle_from_forwarded_lifecycle_namespace():
+    fake = FakeServer()
+    fake.script(
+        [
+            lifecycle_started_event(seq=0),
+            _forwarded_lifecycle_event(
+                seq=1,
+                event="started",
+                namespace=["worker:abc"],
+                graph_name="worker",
+                trigger_call_id="abc",
+            ),
+            _forwarded_lifecycle_event(
+                seq=2,
+                event="completed",
+                namespace=["worker:abc"],
+            ),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            handles = [handle async for handle in thread.subgraphs]
+
+    assert len(handles) == 1
+    handle = handles[0]
+    assert handle.path == ("worker:abc",)
+    assert handle.graph_name == "worker"
+    assert handle.trigger_call_id == "abc"
+    assert handle.status == "completed"
+
+
+async def test_subgraphs_replays_from_before_run_start_cursor():
+    fake = FakeServer()
+    fake.script_command_response(
+        {
+            "type": "success",
+            "id": None,
+            "result": {"run_id": "run-1"},
+            "meta": {"applied_through_seq": 3},
+        }
+    )
+    fake.script(
+        [
+            lifecycle_started_event(seq=1),
+            tasks_start_event(seq=2, namespace=["worker:abc"], task_id="t-child"),
+            lifecycle_completed_event(seq=3),
+        ]
+    )
+    asgi = httpx.ASGITransport(app=fake.app)
+    async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
+            await thread.run.start(input={})
+            handles = [handle async for handle in thread.subgraphs]
+
+    assert [handle.path for handle in handles] == [("worker:abc",)]
+    subgraph_requests = [
+        body
+        for body in fake.stream_request_bodies
+        if "tasks" in (body.get("channels") or [])
+    ]
+    assert subgraph_requests
+    assert subgraph_requests[-1]["since"] == -1
 
 
 async def test_subgraphs_failed_and_interrupted_statuses():

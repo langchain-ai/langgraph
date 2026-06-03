@@ -20,9 +20,12 @@ from langgraph_sdk.stream.transport import (
 )
 
 _logger = logging.getLogger(__name__)
+_CURSOR_UNSET = object()
 
 
 _ROOT_TERMINAL_LIFECYCLE_EVENTS = frozenset({"completed", "failed"})
+# `since` returns events after the given seq; -1 means replay from the first event.
+_INITIAL_REPLAY_CURSOR = -1
 
 
 def _is_root_terminal_lifecycle(event: Any) -> bool:
@@ -43,6 +46,9 @@ def _is_root_terminal_lifecycle(event: Any) -> bool:
         return False
     data = params.get("data") or {}
     if not isinstance(data, dict):
+        return False
+    payload_namespace = data.get("namespace")
+    if isinstance(payload_namespace, list) and payload_namespace:
         return False
     return data.get("event") in _ROOT_TERMINAL_LIFECYCLE_EVENTS
 
@@ -91,6 +97,8 @@ class SyncStreamController:
         self._reconnect_backoff_base = reconnect_backoff_base
         self._reconnect_backoff_cap = reconnect_backoff_cap
         self._drain_threads: set[threading.Thread] = set()
+        self._run_start_replay_cursor: int | None = None
+        self._has_run_start_replay_cursor = False
 
     def register_subscription(self, params: SubscribeParams) -> _SyncSubscription:
         with self._lock:
@@ -116,14 +124,32 @@ class SyncStreamController:
         for sub in subs:
             sub.queue.put(None)
 
-    def reconcile_stream(self, candidate_filter: SubscribeParams) -> None:
+    def mark_run_start_replay_cursor(self, cursor: int | None) -> None:
+        with self._lock:
+            self._run_start_replay_cursor = cursor
+            self._has_run_start_replay_cursor = True
+
+    def reconcile_stream(
+        self,
+        candidate_filter: SubscribeParams,
+        *,
+        use_run_start_replay_cursor: bool = False,
+    ) -> None:
         if self._run_start_gate is not None and not self._run_start_gate.wait(
             timeout=self._run_start_timeout
         ):
             raise TimeoutError("Sync run.start gate timeout.")
         with self._lock:
+            replay_cursor = self._cursor
+            force_replay = False
+            if use_run_start_replay_cursor and self._has_run_start_replay_cursor:
+                replay_cursor = self._run_start_replay_cursor
+                if replay_cursor is None:
+                    replay_cursor = _INITIAL_REPLAY_CURSOR
+                force_replay = replay_cursor != self._cursor
             if (
-                self._shared_stream is not None
+                not force_replay
+                and self._shared_stream is not None
                 and self._shared_stream_filter is not None
                 and filter_covers(self._shared_stream_filter, dict(candidate_filter))
             ):
@@ -131,7 +157,7 @@ class SyncStreamController:
             new_filter = self._compute_current_union(extra=candidate_filter)
             old_stream = self._shared_stream
             self._shared_stream = self._transport.open_event_stream(
-                self._filter_with_since(new_filter)
+                self._filter_with_since(new_filter, replay_cursor)
             )
             self._shared_stream_filter = new_filter
             if old_stream is not None:
@@ -243,10 +269,14 @@ class SyncStreamController:
         if isinstance(seq, int) and (self._cursor is None or seq > self._cursor):
             self._cursor = seq
 
-    def _filter_with_since(self, params: dict[str, Any]) -> dict[str, Any]:
+    def _filter_with_since(
+        self, params: dict[str, Any], cursor: Any = _CURSOR_UNSET
+    ) -> dict[str, Any]:
         out = dict(params)
-        if self._cursor is not None:
-            out["since"] = self._cursor
+        if cursor is _CURSOR_UNSET:
+            cursor = self._cursor
+        if cursor is not None:
+            out["since"] = cursor
         return out
 
     def _dedup_iter(self, source: Any) -> Any:

@@ -56,6 +56,15 @@ def _event_namespace(params_field: Any) -> list[str]:
     return list(namespace) if isinstance(namespace, list) else []
 
 
+def _lifecycle_payload_namespace(
+    params_field: Mapping[str, Any], data: Mapping[str, Any]
+) -> list[str]:
+    namespace = data.get("namespace")
+    if isinstance(namespace, list):
+        return list(namespace)
+    return _event_namespace(params_field)
+
+
 def _message_event_id(data: dict[str, Any]) -> str | None:
     message_id = data.get("id") or data.get("message_id")
     return str(message_id) if message_id is not None else None
@@ -275,11 +284,15 @@ class SubgraphsDecoder:
 
     def feed(self, event: Mapping[str, Any]) -> Iterable[Any]:
         params = event.get("params") or {}
-        namespace = _event_namespace(params)
         data = params.get("data")
         if not isinstance(data, dict):
             return
         method = event.get("method")
+        namespace = (
+            _lifecycle_payload_namespace(params, data)
+            if method == "lifecycle"
+            else _event_namespace(params)
+        )
 
         # 1. Fanout: first active child whose path prefixes this namespace.
         ns_tuple = tuple(namespace)
@@ -295,12 +308,12 @@ class SubgraphsDecoder:
                 self._apply_tasks_result(namespace, data)
             elif _is_direct_child(namespace, self._scope):
                 yield from self._discover(namespace)
-        elif (
-            method == "lifecycle"
-            and data.get("event") == "started"
-            and _is_direct_child(namespace, self._scope)
-        ):
-            yield from self._discover(namespace)
+        elif method == "lifecycle":
+            event_type = data.get("event")
+            if event_type == "started" and _is_direct_child(namespace, self._scope):
+                yield from self._discover(namespace)
+            elif event_type in ("completed", "failed", "interrupted"):
+                self._apply_lifecycle_terminal(namespace, data)
 
     def _discover(self, namespace: list[str]) -> Iterable[Any]:
         path = tuple(namespace)
@@ -329,6 +342,21 @@ class SubgraphsDecoder:
             status, error = _terminal_from_tasks_result(data)
             handle._finish(status, error)
             del self._active[child_path]
+
+    def _apply_lifecycle_terminal(
+        self, namespace: list[str], data: dict[str, Any]
+    ) -> None:
+        path = tuple(namespace)
+        handle = self._active.pop(path, None)
+        if handle is None:
+            return
+        event_type = data.get("event")
+        if event_type == "failed":
+            handle._finish("failed", data.get("error"))
+        elif event_type == "interrupted":
+            handle._finish("interrupted", None)
+        else:
+            handle._finish("completed", None)
 
 
 class ExtensionsDecoder:
