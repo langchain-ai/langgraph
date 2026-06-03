@@ -7,6 +7,7 @@ import textwrap
 from contextlib import contextmanager
 from pathlib import Path
 
+import click
 from click.testing import CliRunner
 
 import langgraph_cli.deploy as deploy_module
@@ -576,7 +577,8 @@ def test_deploy_delete_command(monkeypatch) -> None:
         "deployment_id": "dep-123",
     }
     assert (
-        "Are you sure you want to delete deployment ID dep-123? (Y/n):" in result.output
+        "Are you sure you want to delete deployment ID dep-123? (Y/n):"
+        in click.unstyle(result.output)
     )
     assert result.output.strip().endswith("Deleted deployment dep-123.")
 
