@@ -47,12 +47,7 @@ from langgraph._internal._fields import (
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
 from langgraph._internal._timeout import coerce_timeout_policy
-from langgraph._internal._typing import (
-    EMPTY_SEQ,
-    MISSING,
-    DeprecatedKwargs,
-    UnsetSentinel,
-)
+from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.delta import DeltaChannel
@@ -101,6 +96,15 @@ logger = logging.getLogger(__name__)
 
 _CHANNEL_BRANCH_TO = "branch:to:{}"
 _DEFAULT_ERROR_HANDLER_NODE = "__default_error_handler__"
+
+
+class _CachePolicyUnset:
+    """Sentinel: `cache_policy` was omitted on `add_node` (inherit defaults)."""
+
+    __slots__ = ()
+
+
+_CACHE_POLICY_UNSET = _CachePolicyUnset()
 
 
 @dataclass(slots=True)
@@ -268,6 +272,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self.context_schema = context_schema
 
         self._node_defaults: _NodeDefaults = _NodeDefaults()
+        self._cache_policy_opt_out: set[str] = set()
 
         self._add_schema(self.state_schema)
         self._add_schema(self.input_schema, allow_managed=False)
@@ -674,7 +679,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         metadata: dict[str, Any] | None = None,
         input_schema: type[NodeInputT] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None | UnsetSentinel = MISSING,
+        cache_policy: CachePolicy | None | _CachePolicyUnset = _CACHE_POLICY_UNSET,
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
@@ -774,13 +779,13 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema = cast(type[NodeInputT] | None, input_)
         timeout = coerce_timeout_policy(timeout)
 
-        cache_policy_opt_out = False
-        if cache_policy is MISSING:
+        explicit_cache_opt_out = False
+        if isinstance(cache_policy, _CachePolicyUnset):
             resolved_cache_policy: CachePolicy | None = None
         elif isinstance(cache_policy, CachePolicy):
             resolved_cache_policy = cache_policy
         else:
-            cache_policy_opt_out = True
+            explicit_cache_opt_out = True
             resolved_cache_policy = None
 
         if not isinstance(node, str):
@@ -807,6 +812,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 )
         if action is None:
             raise RuntimeError
+        if explicit_cache_opt_out:
+            self._cache_policy_opt_out.add(node)
+        else:
+            self._cache_policy_opt_out.discard(node)
         if node in self.nodes:
             raise ValueError(f"Node `{node}` already present.")
         if node == END or node == START:
@@ -894,7 +903,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=input_schema,
                 retry_policy=retry_policy,
                 cache_policy=resolved_cache_policy,
-                cache_policy_opt_out=cache_policy_opt_out,
                 error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
@@ -907,7 +915,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=inferred_input_schema,
                 retry_policy=retry_policy,
                 cache_policy=resolved_cache_policy,
-                cache_policy_opt_out=cache_policy_opt_out,
                 error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
@@ -920,7 +927,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema=self.state_schema,
                 retry_policy=retry_policy,
                 cache_policy=resolved_cache_policy,
-                cache_policy_opt_out=cache_policy_opt_out,
                 error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
@@ -1318,7 +1324,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
 
         # Apply builder defaults to node specs. Per-node values always win.
-        for spec in self.nodes.values():
+        for node_name, spec in self.nodes.items():
             # error_handler: regular nodes only — handlers must never
             # catch themselves or other handlers.
             if (
@@ -1338,7 +1344,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 not spec.is_error_handler
                 and defaults.cache_policy is not None
                 and spec.cache_policy is None
-                and not spec.cache_policy_opt_out
+                and node_name not in self._cache_policy_opt_out
             ):
                 spec.cache_policy = defaults.cache_policy
             # timeout: all nodes — a stuck handler should be cancelled the
