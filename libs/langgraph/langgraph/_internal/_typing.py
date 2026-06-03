@@ -41,6 +41,7 @@ StateLike: TypeAlias = TypedDictLikeV1 | TypedDictLikeV2 | DataclassLike | BaseM
 It can either be a `TypedDict`, `dataclass`, or Pydantic `BaseModel`.
 Note: we cannot use either `TypedDict` or `dataclass` directly due to limitations in type checking.
 """
+
 MISSING = object()
 """Unset sentinel value."""
 
