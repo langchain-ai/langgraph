@@ -22,6 +22,19 @@ RUN pip install --no-cache-dir \
     "langchain>=1.3.0" \
     "deepagents>=0.6.2"
 
+# Swap the published langgraph *core* for this monorepo's local copy, so the
+# server executes the langgraph under test rather than the latest release.
+# We keep the rest of the base image (langgraph-api, runtime, Go core server)
+# on `latest` — that still surfaces upstream regressions — but the core the
+# server runs is now the PR's, which is what lets this suite catch core
+# regressions (e.g. ensure_config / runtime changes) before they're published.
+# `--no-deps` keeps the base image's already-compatible
+# checkpoint/prebuilt/sdk; we only replace core. The local source comes from
+# the `langgraph_src` additional build context (see docker-compose.yml).
+COPY --from=langgraph_src pyproject.toml README.md LICENSE /opt/langgraph-src/
+COPY --from=langgraph_src langgraph /opt/langgraph-src/langgraph/
+RUN pip install --no-cache-dir --force-reinstall --no-deps /opt/langgraph-src
+
 # Project graphs + registration config.
 COPY graph/ /app/graph/
 COPY langgraph.json /app/langgraph.json
