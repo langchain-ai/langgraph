@@ -25,6 +25,7 @@ from langgraph.stream._mux import StreamMux
 from langgraph.stream.transformers import (
     LifecyclePayload,
     LifecycleTransformer,
+    _TasksLifecycleBase,
 )
 
 TS = int(time.time() * 1000)
@@ -678,3 +679,34 @@ def test_lifecycle_subagent_terminal_roundtrip() -> None:
     started, _completed = subagent
     assert started["graph_name"] == "weather_agent"
     assert started["cause"] == {"type": "toolCall", "tool_call_id": "call_w"}
+
+
+def test_on_started_override_without_cause_is_backward_compatible() -> None:
+    """An `_on_started` override with the original 3-arg signature must work.
+
+    `cause` is delivered via `self._pending_cause`, not the call signature, so
+    older/third-party subclasses (e.g. deepagents' `SubagentTransformer`) that
+    override `_on_started(self, ns, graph_name, trigger_call_id)` keep working —
+    no `TypeError: _on_started() got an unexpected keyword argument 'cause'`.
+    """
+    seen: list[tuple] = []
+
+    class _LegacyTransformer(_TasksLifecycleBase):
+        def init(self) -> dict[str, Any]:
+            return {}
+
+        def _should_track(self, ns: tuple[str, ...]) -> bool:
+            return len(ns) == 1  # direct child of the root scope
+
+        # Deliberately omits `cause` — mirrors a pre-`cause` override.
+        def _on_started(self, ns, graph_name, trigger_call_id) -> None:  # type: ignore[override]
+            seen.append((ns, graph_name, trigger_call_id))
+
+        def _on_terminal(self, ns, status, error) -> None:
+            pass
+
+    transformer = _LegacyTransformer(scope=())
+    # Must not raise: the base calls `_on_started` without a `cause` kwarg.
+    transformer.process(_tasks_start(["agent:abc123"], task_id="abc123", name="agent"))
+
+    assert seen == [(("agent:abc123",), "agent", "abc123")]
