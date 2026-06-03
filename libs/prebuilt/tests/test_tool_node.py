@@ -2272,6 +2272,34 @@ def _invoke_returning(
     )
 
 
+def test_tool_node_raw_content_block_list_return() -> None:
+    """Raw tool responses may be LangChain content block lists."""
+    content = [{"type": "image_url", "image_url": {"url": "https://example.com/a.png"}}]
+
+    tool_message = ToolNode([])._normalize_tool_response(
+        content, _list_tool_call(), "dict"
+    )
+
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.content == content
+    assert tool_message.name == "list_tool"
+    assert tool_message.tool_call_id == "call-1"
+
+
+def test_tool_node_raw_invalid_list_return_raises() -> None:
+    """Non-content-block lists are still invalid raw tool responses."""
+    with pytest.raises(TypeError, match="expected all Command or ToolMessage"):
+        ToolNode([])._normalize_tool_response(
+            [{"key": "value"}], _list_tool_call(), "dict"
+        )
+
+
+def test_tool_node_raw_empty_list_return_raises() -> None:
+    """Empty lists are not treated as raw content block responses."""
+    with pytest.raises(ValueError, match="expected exactly one terminating ToolMessage"):
+        ToolNode([])._normalize_tool_response([], _list_tool_call(), "dict")
+
+
 def test_tool_node_list_return_command_and_tool_message() -> None:
     """Valid: tool returns [Command(update={...}), ToolMessage(...)]."""
     outer_id = "call-1"
