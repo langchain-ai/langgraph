@@ -9,7 +9,7 @@ which drives multiple decoders from one shared subscription.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 #: Channel names the public ``interleave_projections`` API accepts as built-ins.
 SUPPORTED_INTERLEAVE_CHANNELS = (
@@ -61,7 +61,7 @@ def _lifecycle_payload_namespace(
 ) -> list[str]:
     namespace = data.get("namespace")
     if isinstance(namespace, list):
-        return list(namespace)
+        return cast(list[str], list(namespace))
     return _event_namespace(params_field)
 
 
@@ -310,7 +310,9 @@ class SubgraphsDecoder:
                 yield from self._discover(namespace)
         elif method == "lifecycle":
             event_type = data.get("event")
-            if event_type == "started" and _is_direct_child(namespace, self._scope):
+            if event_type in ("started", "running") and _is_direct_child(
+                namespace, self._scope
+            ):
                 yield from self._discover(namespace)
             elif event_type in ("completed", "failed", "interrupted"):
                 self._apply_lifecycle_terminal(namespace, data)

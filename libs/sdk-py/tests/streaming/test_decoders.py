@@ -375,6 +375,24 @@ def test_subgraphs_decoder_discovers_on_forwarded_lifecycle_payload_namespace():
     assert h.trigger_call_id == "call-1"
 
 
+def test_subgraphs_decoder_discovers_on_forwarded_lifecycle_running_status():
+    decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
+    [h] = list(
+        decoder.feed(
+            _forwarded_lifecycle_event(
+                seq=1,
+                event="running",
+                namespace=["child:call-1"],
+                graph_name="child",
+                trigger_call_id="call-1",
+            )
+        )
+    )
+    assert h.path == ("child:call-1",)
+    assert h.graph_name == "child"
+    assert h.trigger_call_id == "call-1"
+
+
 def test_subgraphs_decoder_completes_on_forwarded_lifecycle_payload_namespace():
     decoder = SubgraphsDecoder(scope=(), handle_factory=_scoped_factory)
     [h] = list(

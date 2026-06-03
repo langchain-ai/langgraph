@@ -114,9 +114,9 @@ def _is_direct_child(namespace: list[str], scope: tuple[str, ...]) -> bool:
 
 
 def _subgraph_subscription_params(scope: tuple[str, ...]) -> SubscribeParams:
-    # Includes ``lifecycle`` so child-namespace ``started`` events (the
-    # ``create_deep_agent`` subagent discovery signal, matching JS)
-    # reach ``_subgraphs_iter`` alongside ``tasks``-based discovery.
+    # Includes `lifecycle` so child started/running events (the
+    # `create_deep_agent` subagent discovery signal, matching JS) reach
+    # `_subgraphs_iter` alongside `tasks`-based discovery.
     return {
         "channels": ["messages", "tasks", "tools", "lifecycle"],
         "namespaces": [list(scope)],
@@ -1624,7 +1624,9 @@ class SyncThreadStream:
             params = event.get("params") or {}
             data = params.get("data") if isinstance(params, dict) else None
             phase = data.get("event") if isinstance(data, dict) else None
-            payload_namespace = data.get("namespace") if isinstance(data, dict) else None
+            payload_namespace = (
+                data.get("namespace") if isinstance(data, dict) else None
+            )
             if isinstance(payload_namespace, list) and payload_namespace:
                 return
             if phase in ("started", "running"):

@@ -37,7 +37,7 @@ async def _drain_subgraphs(thread) -> list:
         # Just count handle paths; deep message iteration on scoped
         # handles has its own draining pattern and isn't the goal of
         # this test (which exercises subgraph discovery via
-        # child-namespace ``lifecycle: started``).
+        # child-namespace `lifecycle: started/running`).
         children.append({"path": child.path})
     return children
 

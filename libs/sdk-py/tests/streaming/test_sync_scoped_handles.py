@@ -140,7 +140,7 @@ def test_sync_subgraphs_yields_handle_from_forwarded_lifecycle_namespace():
             lifecycle_started_event(seq=0),
             _forwarded_lifecycle_event(
                 seq=1,
-                event="started",
+                event="running",
                 namespace=["worker:abc"],
                 graph_name="worker",
                 trigger_call_id="abc",

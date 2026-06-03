@@ -537,12 +537,11 @@ def _is_direct_child(namespace: list[str], scope: tuple[str, ...]) -> bool:
 def _subgraph_subscription_params(scope: tuple[str, ...]) -> SubscribeParams:
     # Subscribe to tasks + messages + tools + lifecycle without a depth limit
     # so all descendant-namespace events are captured in one SSE and buffered
-    # into each child handle's inbox. ``lifecycle`` is included so child-
-    # namespace ``started`` events (the canonical signal for
-    # ``create_deep_agent``-style subagent discovery, matching JS behavior)
-    # reach ``_subgraphs_iter``; servers that surface child invocations via
-    # ``tasks`` events instead are also handled via the existing ``method ==
-    # "tasks"`` branch.
+    # into each child handle's inbox. `lifecycle` is included so child
+    # started/running events (the canonical signal for `create_deep_agent`-
+    # style subagent discovery, matching JS behavior) reach `_subgraphs_iter`;
+    # servers that surface child invocations via `tasks` events instead are
+    # also handled via the existing `method == "tasks"` branch.
     return {
         "channels": ["messages", "tasks", "tools", "lifecycle"],
         "namespaces": [list(scope)],
@@ -1991,7 +1990,9 @@ class AsyncThreadStream:
             params = event.get("params") or {}
             data = params.get("data") if isinstance(params, dict) else None
             phase = data.get("event") if isinstance(data, dict) else None
-            payload_namespace = data.get("namespace") if isinstance(data, dict) else None
+            payload_namespace = (
+                data.get("namespace") if isinstance(data, dict) else None
+            )
             if isinstance(payload_namespace, list) and payload_namespace:
                 return
             if phase in ("started", "running"):
