@@ -38,7 +38,7 @@ test = [
 lint = [
     "ruff==0.15.12",
     "codespell",
-    "mypy==1.20.2",
+    "mypy==2.1.0",
     "ty==0.0.33",
     "starlette",
 ]

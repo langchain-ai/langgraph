@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 import pytest
 
 pytest.importorskip(
@@ -12,14 +14,14 @@ pytest.importorskip("aiosqlite", reason="aiosqlite not installed")
 
 
 @pytest.mark.asyncio
-async def test_delta_channel_conformance():
+async def test_delta_channel_conformance() -> None:
     from langgraph.checkpoint.conformance import validate
     from langgraph.checkpoint.conformance.initializer import checkpointer_test
 
     from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
     @checkpointer_test(name="AsyncSqliteSaver")
-    async def sqlite_saver():
+    async def sqlite_saver() -> AsyncIterator[AsyncSqliteSaver]:
         async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
             yield saver
 

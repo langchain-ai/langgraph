@@ -754,7 +754,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 category=LangGraphDeprecatedSinceV05,
             )
             if retry_policy is None:
-                retry_policy = retry  # type: ignore[assignment]
+                retry_policy = cast("RetryPolicy | Sequence[RetryPolicy] | None", retry)
 
         if (input_ := kwargs.get("input", MISSING)) is not MISSING:
             warnings.warn(

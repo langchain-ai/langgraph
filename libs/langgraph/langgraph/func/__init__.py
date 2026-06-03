@@ -81,11 +81,11 @@ class _TaskFunction(Generic[P, T]):
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.timeout = timeout
-        functools.update_wrapper(self, func)
+        functools.update_wrapper(self, func)  # type: ignore[arg-type]
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> SyncAsyncFuture[T]:
         return _call_with_options(
-            self.func,
+            self.func,  # type: ignore[arg-type]
             args,
             kwargs,
             retry_policy=self.retry_policy,
@@ -220,7 +220,7 @@ def task(
             stacklevel=2,
         )
         if retry_policy is None:
-            retry_policy = retry  # type: ignore[assignment]
+            retry_policy = cast("RetryPolicy | Sequence[RetryPolicy] | None", retry)
     timeout_policy = coerce_timeout_policy(timeout)
 
     retry_policies: Sequence[RetryPolicy] = (

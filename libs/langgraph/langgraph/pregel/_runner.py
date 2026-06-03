@@ -780,10 +780,10 @@ def _call(
             # so we should not re-raise at the end of the tick
             SKIP_RERAISE_SET.add(fut)
             futures()[fut] = next_task  # type: ignore[index]
-    fut = cast(asyncio.Future | concurrent.futures.Future, fut)
+    chained_fut = cast("asyncio.Future | concurrent.futures.Future", fut)
     # return a chained future to ensure commit() callback is called
     # before the returned future is resolved, to ensure stream order etc
-    return chain_future(fut, concurrent.futures.Future())
+    return chain_future(chained_fut, concurrent.futures.Future())
 
 
 def _acall(

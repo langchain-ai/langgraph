@@ -78,7 +78,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
                 f"snapshot_frequency must be a positive int, got {snapshot_frequency}"
             )
         if typ is None:
-            typ = list  # type: ignore[assignment]  # placeholder; overridden by _is_field_channel
+            typ = list  # placeholder; overridden by _is_field_channel
         super().__init__(typ)
         self.reducer = reducer
         self.snapshot_frequency = snapshot_frequency

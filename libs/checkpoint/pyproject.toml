@@ -79,3 +79,8 @@ warn_unused_ignores = "True"
 warn_redundant_casts = "True"
 allow_redefinition = "True"
 disable_error_code = "typeddict-item, return-value"
+
+# Optional conformance test dependency ships without a py.typed marker.
+[[tool.mypy.overrides]]
+module = "langgraph.checkpoint.conformance.*"
+ignore_missing_imports = true

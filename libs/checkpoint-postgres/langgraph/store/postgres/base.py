@@ -1274,7 +1274,7 @@ def _row_to_item(
     if not isinstance(val, dict):
         val = (loader or _json_loads)(val)
 
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "key": row["key"],
         "namespace": namespace,
         "value": val,

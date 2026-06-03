@@ -126,7 +126,7 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
                 seen_overwrite = True
                 continue
             if not seen_overwrite:
-                self.value = self.operator(self.value, value)
+                self.value = self.operator(self.value, value)  # type: ignore[arg-type]
         return True
 
     def get(self) -> Value:

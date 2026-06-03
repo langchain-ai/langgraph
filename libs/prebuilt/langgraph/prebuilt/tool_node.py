@@ -431,7 +431,7 @@ def _handle_tool_error(
     elif isinstance(flag, str):
         content = flag
     elif callable(flag):
-        content = flag(e)  # type: ignore [assignment, call-arg]
+        content = flag(e)  # type: ignore[call-arg]
     else:
         msg = (
             f"Got unexpected type of `handle_tool_error`. Expected bool, str "
@@ -1534,7 +1534,7 @@ class ToolNode(RunnableCallable):
                 raise ValueError(msg)
 
             updated_command = deepcopy(command)
-            messages_update = updated_command.update
+            messages_update = cast("list[Any]", updated_command.update)
         else:
             return command
 

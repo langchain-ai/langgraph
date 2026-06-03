@@ -493,7 +493,7 @@ class BaseSqliteStore:
                     LIMIT ?
                     OFFSET ?
                     """
-                params = [
+                params: list[Any] = [
                     _PLACEHOLDER,  # Vector placeholder
                     *ns_args,
                     *filter_params,
