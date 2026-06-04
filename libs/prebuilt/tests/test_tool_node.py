@@ -2428,3 +2428,146 @@ def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     tool_call_ids = {m.tool_call_id for m in all_msgs}
     assert list_tool_id in tool_call_ids
     assert regular_tool_id in tool_call_ids
+
+
+class DirectListReturningTool(BaseTool):
+    name: str = "direct_list_tool"
+    description: str = "returns a raw list of content block dicts"
+    args_schema: type[BaseModel] | None = None
+
+    def _run(self, *args: Any, **kwargs: Any) -> Any:
+        return [
+            {"type": "text", "text": "hello mcp"},
+        ]
+
+    def invoke(self, *args: Any, **kwargs: Any) -> Any:
+        return [
+            {"type": "text", "text": "hello mcp"},
+        ]
+
+
+def test_tool_node_dict_content_blocks_response() -> None:
+    """Test ToolNode with a tool returning a list of dict content blocks."""
+    tool = DirectListReturningTool()
+    node = ToolNode([tool])
+    result = node.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "direct_list_tool",
+                            "args": {},
+                            "id": "call-content-blocks",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    assert "messages" in result
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.type == "tool"
+    assert tool_message.tool_call_id == "call-content-blocks"
+    assert tool_message.content == [{"type": "text", "text": "hello mcp"}]
+
+
+async def test_tool_node_dict_content_blocks_response_async() -> None:
+    """Test ToolNode with an async tool returning a list of dict content blocks."""
+    class DirectListReturningAsyncTool(BaseTool):
+        name: str = "direct_list_tool_async"
+        description: str = "returns a raw list of content block dicts"
+        args_schema: type[BaseModel] | None = None
+
+        def _run(self, *args: Any, **kwargs: Any) -> Any:
+            raise NotImplementedError()
+
+        def invoke(self, *args: Any, **kwargs: Any) -> Any:
+            raise NotImplementedError()
+
+        async def ainvoke(self, *args: Any, **kwargs: Any) -> Any:
+            return [
+                {"type": "text", "text": "hello mcp async"},
+            ]
+
+    tool = DirectListReturningAsyncTool()
+    node = ToolNode([tool])
+    result = await node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "direct_list_tool_async",
+                            "args": {},
+                            "id": "call-content-blocks-async",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    assert "messages" in result
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.type == "tool"
+    assert tool_message.tool_call_id == "call-content-blocks-async"
+    assert tool_message.content == [{"type": "text", "text": "hello mcp async"}]
+
+
+def test_tool_node_dict_content_blocks_response_mocked() -> None:
+    """Test ToolNode with a mocked tool returning a list of dict content blocks."""
+    from unittest.mock import MagicMock
+    from langchain_core.tools import BaseTool
+
+    class SimpleMockTool(BaseTool):
+        name: str = "mocked_mcp_tool"
+        description: str = "mocked mcp tool"
+        args_schema: type[BaseModel] | None = None
+
+        def _run(self, *args: Any, **kwargs: Any) -> Any:
+            pass
+
+    mock_tool = SimpleMockTool()
+    object.__setattr__(
+        mock_tool,
+        "invoke",
+        MagicMock(return_value=[
+            {"type": "text", "text": "mocked mcp output"},
+        ]),
+    )
+
+    node = ToolNode([mock_tool])
+    result = node.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "mocked_mcp_tool",
+                            "args": {},
+                            "id": "call-mocked-mcp",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    assert "messages" in result
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.type == "tool"
+    assert tool_message.tool_call_id == "call-mocked-mcp"
+    assert tool_message.content == [{"type": "text", "text": "mocked mcp output"}]
+
+
