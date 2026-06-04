@@ -337,7 +337,7 @@ class StreamMux:
         for transformer in self._transformers:
             try:
                 transformer.fail(err)
-            except BaseException:
+            except Exception:
                 pass
         for ch in self._channels:
             if not ch._closed:
@@ -440,7 +440,7 @@ class StreamMux:
         for transformer in self._transformers:
             try:
                 await transformer.afail(err)
-            except BaseException:
+            except Exception:
                 pass
         for ch in self._channels:
             if not ch._closed:
