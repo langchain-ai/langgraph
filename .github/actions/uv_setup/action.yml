@@ -26,7 +26,6 @@ runs:
     - name: Install uv and set the python version
       uses: astral-sh/setup-uv@v7
       with:
-        version: "0.11.2"
         python-version: ${{ inputs.python-version }}
         enable-cache: ${{ inputs.enable-cache }}
         cache-dependency-glob: |

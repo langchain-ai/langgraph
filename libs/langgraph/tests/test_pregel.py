@@ -6290,7 +6290,8 @@ def test_sync_streaming_with_functional_api() -> None:
     rather than have all the results arrive at once after the graph has completed.
 
     The time of arrival between the two updates corresponding to the two `slow` tasks
-    should be greater than the time delay between the two tasks.
+    should be roughly the task delay. If results are buffered until graph completion,
+    the two updates arrive back-to-back instead.
     """
 
     time_delay = 0.05
