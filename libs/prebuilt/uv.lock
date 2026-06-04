@@ -609,7 +609,7 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=1.4.0,<2" },
     { name = "langchain-protocol", specifier = ">=0.0.15" },
     { name = "orjson", specifier = ">=3.11.5" },
-    { name = "websockets", specifier = ">=14,<16" },
+    { name = "websockets", specifier = ">=14,<17" },
 ]
 
 [package.metadata.requires-dev]
