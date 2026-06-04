@@ -72,6 +72,8 @@ jobs:
 
       - name: Run integration suite
         if: env.HAS_LANGSMITH_API_KEY == 'true'
+        env:
+          UV_FROZEN: "1"
         run: uv run pytest tests/integration/ -m integration
 
       - name: Dump api logs on failure

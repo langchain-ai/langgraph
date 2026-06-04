@@ -43,6 +43,8 @@ jobs:
 
       - name: Run tests
         shell: bash
+        env:
+          UV_FROZEN: "1"
         run: make test_parallel
 
       - name: Run strict msgpack pregel tests
@@ -50,6 +52,7 @@ jobs:
         shell: bash
         env:
           LANGGRAPH_STRICT_MSGPACK: "true"
+          UV_FROZEN: "1"
         run: make test TEST="tests/test_pregel.py tests/test_pregel_async.py"
 
       - name: Ensure the tests did not create any additional files
