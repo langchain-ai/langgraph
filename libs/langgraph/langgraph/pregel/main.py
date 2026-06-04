@@ -2705,6 +2705,11 @@ class Pregel(
                 )
             durability = "async" if checkpoint_during else "exit"
 
+        if version not in ("v1", "v2"):
+            raise ValueError(
+                f"Invalid version {version!r}. Expected \"v1\" or \"v2\"."
+            )
+
         if stream_mode is None:
             # if being called as a node in another graph, default to values mode
             # but don't overwrite stream_mode arg if provided
@@ -3112,6 +3117,11 @@ class Pregel(
                     "Cannot use both `checkpoint_during` and `durability` parameters. Please use `durability` instead."
                 )
             durability = "async" if checkpoint_during else "exit"
+
+        if version not in ("v1", "v2"):
+            raise ValueError(
+                f"Invalid version {version!r}. Expected \"v1\" or \"v2\"."
+            )
 
         if stream_mode is None:
             # if being called as a node in another graph, default to values mode
@@ -3851,6 +3861,11 @@ class Pregel(
             The output of the graph run. If `stream_mode` is `"values"`, it returns the latest output.
             If `stream_mode` is not `"values"`, it returns a list of output chunks.
         """
+        if version not in ("v1", "v2"):
+            raise ValueError(
+                f"Invalid version {version!r}. Expected \"v1\" or \"v2\"."
+            )
+
         output_keys = output_keys if output_keys is not None else self.output_channels
 
         latest: dict[str, Any] | Any = None
@@ -4028,6 +4043,11 @@ class Pregel(
             The output of the graph run. If `stream_mode` is `"values"`, it returns the latest output.
             If `stream_mode` is not `"values"`, it returns a list of output chunks.
         """
+        if version not in ("v1", "v2"):
+            raise ValueError(
+                f"Invalid version {version!r}. Expected \"v1\" or \"v2\"."
+            )
+
         output_keys = output_keys if output_keys is not None else self.output_channels
 
         latest: dict[str, Any] | Any = None
