@@ -51,16 +51,6 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         run: uv sync --frozen --group lint
 
-      - name: Get .mypy_cache to speed up mypy
-        if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
-        uses: actions/cache@v5
-        env:
-          SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
-        with:
-          path: |
-            ${{ inputs.working-directory }}/.mypy_cache
-          key: mypy-lint-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/uv.lock', inputs.working-directory)) }}
-
       - name: Analysing package code with our lint
         if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
         working-directory: ${{ inputs.working-directory }}
@@ -76,16 +66,6 @@ jobs:
         if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
         working-directory: ${{ inputs.working-directory }}
         run: uv sync --group lint
-
-      - name: Get .mypy_cache_test to speed up mypy
-        if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
-        uses: actions/cache@v5
-        env:
-          SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
-        with:
-          path: |
-            ${{ inputs.working-directory }}/.mypy_cache_test
-          key: mypy-test-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/uv.lock', inputs.working-directory)) }}
 
       - name: Analysing tests with our lint
         if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'

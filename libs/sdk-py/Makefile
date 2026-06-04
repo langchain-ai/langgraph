@@ -9,7 +9,6 @@ test:
 
 # Define a variable for Python and notebook files.
 PYTHON_FILES=.
-MYPY_CACHE=.mypy_cache
 lint format: PYTHON_FILES=.
 lint_diff format_diff: PYTHON_FILES=$(shell git diff --name-only --relative --diff-filter=d main . | grep -E '\.py$$|\.ipynb$$')
 

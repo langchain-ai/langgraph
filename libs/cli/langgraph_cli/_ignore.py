@@ -12,7 +12,6 @@ _ALWAYS_EXCLUDE = [
     "venv/",
     "node_modules/",
     ".tox/",
-    ".mypy_cache/",
 ]
 _ALWAYS_EXCLUDE_NAMES = frozenset(
     pattern.rstrip("/").split("/")[-1] for pattern in _ALWAYS_EXCLUDE

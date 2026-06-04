@@ -32,7 +32,7 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10, LangGraphDeprecatedS
 
 # Local TypeVars for generic stream TypedDicts.
 # We use separate TypeVars here (rather than importing from langgraph.typing)
-# because the typing module TypeVars have defaults that cause mypy issues
+# because the typing module TypeVars have defaults that cause type checker issues
 # when used in standalone type aliases.
 StateT = TypeVar("StateT")
 OutputT = TypeVar("OutputT")
