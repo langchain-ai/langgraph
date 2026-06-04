@@ -69,7 +69,7 @@ test = [
     "redis",
 ]
 lint = [
-    "mypy",
+    "mypy<2",
     "ruff",
     "types-requests",
 ]
