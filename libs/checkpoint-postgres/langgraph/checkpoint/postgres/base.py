@@ -40,6 +40,16 @@ except Exception:
 To add a new migration, add a new string to the MIGRATIONS list.
 The position of the migration in the list is the version number.
 """
+
+
+def _strip_concurrently(sql: str) -> str:
+    """Strip CONCURRENTLY from CREATE INDEX statements.
+
+    CREATE INDEX CONCURRENTLY cannot run inside a transaction. When the
+    connection is not in autocommit mode, we fall back to a regular
+    CREATE INDEX so that setup() works regardless of transaction state.
+    """
+    return sql.replace("CREATE INDEX CONCURRENTLY", "CREATE INDEX")
 MIGRATIONS = [
     """CREATE TABLE IF NOT EXISTS checkpoint_migrations (
     v INTEGER PRIMARY KEY

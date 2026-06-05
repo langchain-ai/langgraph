@@ -248,10 +248,14 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                 version = row["v"]
             return version
 
+        from langgraph.checkpoint.postgres.base import _strip_concurrently
+
+        in_transaction = not getattr(self.conn, "autocommit", True)
         async with self._cursor() as cur:
             version = await _get_version(cur, table="store_migrations")
             for v, sql in enumerate(self.MIGRATIONS[version + 1 :], start=version + 1):
-                await cur.execute(sql)
+                migration = _strip_concurrently(sql) if in_transaction else sql
+                await cur.execute(migration)
                 await cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
 
             if self.index_config:

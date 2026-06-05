@@ -236,6 +236,9 @@ class ShallowPostgresSaver(BasePostgresSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
+        from langgraph.checkpoint.postgres.base import _strip_concurrently
+
+        in_transaction = not getattr(self.conn, "autocommit", True)
         with self._cursor() as cur:
             cur.execute(self.MIGRATIONS[0])
             results = cur.execute(
@@ -251,7 +254,8 @@ class ShallowPostgresSaver(BasePostgresSaver):
                 self.MIGRATIONS[version + 1 :],
                 strict=False,
             ):
-                cur.execute(migration)
+                sql = _strip_concurrently(migration) if in_transaction else migration
+                cur.execute(sql)
                 cur.execute("INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,))
         if self.pipe:
             self.pipe.sync()
@@ -600,6 +604,9 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
+        from langgraph.checkpoint.postgres.base import _strip_concurrently
+
+        in_transaction = not getattr(self.conn, "autocommit", True)
         async with self._cursor() as cur:
             await cur.execute(self.MIGRATIONS[0])
             results = await cur.execute(
@@ -615,7 +622,8 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                 self.MIGRATIONS[version + 1 :],
                 strict=False,
             ):
-                await cur.execute(migration)
+                sql = _strip_concurrently(migration) if in_transaction else migration
+                await cur.execute(sql)
                 await cur.execute(
                     "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
                 )

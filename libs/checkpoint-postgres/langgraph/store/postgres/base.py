@@ -1109,11 +1109,15 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 version = row["v"]
             return version
 
+        from langgraph.checkpoint.postgres.base import _strip_concurrently
+
+        in_transaction = not getattr(self.conn, "autocommit", True)
         with self._cursor() as cur:
             version = _get_version(cur, table="store_migrations")
             for v, sql in enumerate(self.MIGRATIONS[version + 1 :], start=version + 1):
                 try:
-                    cur.execute(sql)
+                    migration = _strip_concurrently(sql) if in_transaction else sql
+                    cur.execute(migration)
                     cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
                 except Exception as e:
                     logger.error(
