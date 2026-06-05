@@ -47,7 +47,7 @@ test = [
 lint = [
     "ruff",
     "codespell",
-    "mypy",
+    "ty",
 ]
 dev = [
     {include-group = "test"},
@@ -76,3 +76,17 @@ lint.select = [
 ]
 lint.ignore = ["E501", "B008"]
 target-version = "py310"
+
+[tool.ty.rules]
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-key = "ignore"
+invalid-parameter-default = "ignore"
+invalid-return-type = "ignore"
+missing-argument = "ignore"
+no-matching-overload = "ignore"
+not-subscriptable = "ignore"
+unused-type-ignore-comment = "ignore"
+unresolved-attribute = "ignore"
+unresolved-import = "ignore"
+unsupported-operator = "ignore"

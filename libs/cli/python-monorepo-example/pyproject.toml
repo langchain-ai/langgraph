@@ -19,7 +19,7 @@ members = ["apps/*", "libs/shared"]
 shared = { workspace = true }
 
 [project.optional-dependencies]
-dev = ["mypy>=1.11.1", "ruff>=0.6.1"]
+dev = ["ruff>=0.6.1", "ty"]
 
 [build-system]
 requires = ["setuptools>=73.0.0", "wheel"]
