@@ -4,13 +4,10 @@
 `DeltaChannel`-backed channel (e.g. `DeepAgentState.messages`).
 
 Root cause lives in `Pregel.{bulk_update_state,abulk_update_state}`: channel
-writes are only persisted via `checkpointer.put_writes(...)` when a previous
-checkpoint exists (`if saved and channel_writes:`). On a brand-new thread
-`saved is None`, so the first write is applied to the live channel but never
-persisted as replayable writes. Because `DeltaChannel.checkpoint()` returns
-`MISSING` for non-snapshot steps, the resulting checkpoint bumps the channel
-version yet stores neither a readable value nor replayable writes, so reading
-the state back yields an empty list.
+writes are only persisted when a previous checkpoint exists. On a brand-new thread
+there is no previous checkpoint.
+
+Writes
 """
 
 from typing import Annotated, Any
