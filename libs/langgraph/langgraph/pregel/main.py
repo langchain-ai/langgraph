@@ -2017,7 +2017,7 @@ class Pregel(
                     {"source": "update", "step": -1, "parents": {}},
                     {},
                 )
-            
+
             for task_id, task in zip(run_task_ids, run_tasks):
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
