@@ -2391,6 +2391,22 @@ async def test_tool_node_list_return_async_smoke() -> None:
     assert len(commands) == 1 and commands[0].update == {"foo": "bar"}
 
 
+def test_tool_node_normalize_raw_content_block_list_response() -> None:
+    response = [{"type": "text", "text": "test content"}]
+    node = ToolNode([_ReturningTool()])
+
+    result = node._normalize_tool_response(
+        response=response,
+        tool_call=_list_tool_call(),
+        input_type="tool_calls",
+    )
+
+    assert isinstance(result, ToolMessage)
+    assert result.content == response
+    assert result.name == "list_tool"
+    assert result.tool_call_id == "call-1"
+
+
 def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     """List-returning tool and a regular tool dispatched from the same AIMessage."""
     list_tool_id = "call-list"
