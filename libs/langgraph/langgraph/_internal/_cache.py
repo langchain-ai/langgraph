@@ -15,10 +15,20 @@ def _freeze(obj: Any, depth: int = 10) -> Hashable:
         return tuple(_freeze(x, depth - 1) for x in obj)
     # numpy / pandas etc. can provide their own .tobytes()
     elif hasattr(obj, "tobytes"):
+        metadata = []
+        for attr in ("shape", "dtype", "mode", "size"):
+            if hasattr(obj, attr):
+                value = getattr(obj, attr)
+                metadata.append(
+                    (attr, str(value) if attr == "dtype" else _freeze(value, depth - 1))
+                )
+        getpalette = getattr(obj, "getpalette", None)
+        if callable(getpalette):
+            metadata.append(("palette", _freeze(getpalette(), depth - 1)))
         return (
             type(obj).__name__,
             obj.tobytes(),
-            obj.shape if hasattr(obj, "shape") else None,
+            tuple(metadata),
         )
     return obj  # strings, ints, dataclasses with frozen=True, etc.
 
