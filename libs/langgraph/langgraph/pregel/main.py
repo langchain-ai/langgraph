@@ -108,6 +108,7 @@ from langgraph.callbacks import (
     get_sync_graph_callback_manager_for_config,
 )
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
 from langgraph.constants import END
@@ -2009,7 +2010,24 @@ class Pregel(
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            # On a fresh thread with no prior checkpoint, snapshot all
+            # available DeltaChannels because there are no ancestor writes
+            # to replay from (put_writes requires a checkpoint_id from
+            # a parent checkpoint that does not exist yet).
+            if saved is None:
+                channels_to_snapshot = {
+                    k
+                    for k, ch in channels.items()
+                    if isinstance(ch, DeltaChannel) and ch.is_available()
+                } or None
+            else:
+                channels_to_snapshot = None
+            checkpoint = create_checkpoint(
+                checkpoint,
+                channels,
+                step + 1,
+                channels_to_snapshot=channels_to_snapshot,
+            )
             next_config = checkpointer.put(
                 checkpoint_config,
                 checkpoint,
@@ -2456,7 +2474,24 @@ class Pregel(
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            # On a fresh thread with no prior checkpoint, snapshot all
+            # available DeltaChannels because there are no ancestor writes
+            # to replay from (put_writes requires a checkpoint_id from
+            # a parent checkpoint that does not exist yet).
+            if saved is None:
+                channels_to_snapshot = {
+                    k
+                    for k, ch in channels.items()
+                    if isinstance(ch, DeltaChannel) and ch.is_available()
+                } or None
+            else:
+                channels_to_snapshot = None
+            checkpoint = create_checkpoint(
+                checkpoint,
+                channels,
+                step + 1,
+                channels_to_snapshot=channels_to_snapshot,
+            )
             # save checkpoint, after applying writes
             next_config = await checkpointer.aput(
                 checkpoint_config,
