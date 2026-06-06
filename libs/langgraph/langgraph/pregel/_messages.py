@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from dataclasses import fields, is_dataclass
 from typing import (
@@ -20,6 +21,21 @@ from langgraph._internal._constants import NS_SEP
 from langgraph.constants import TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
 from langgraph.types import Command
+
+# Patterns that indicate content likely originated from a tool call that the
+# provider's streaming parser failed to classify.  When a chunk matches one of
+# these and carries no `tool_call_chunks`, the content is buffered rather than
+# emitted as user-visible text.  On `on_llm_end` the buffer is discarded if the
+# finalized message contains tool calls (the buffered text was a parse error)
+# or flushed as genuine assistant text otherwise.
+_TOOL_CALL_LEAK_PATTERNS: list[re.Pattern[str]] = [
+    # Anthropic-style tool-call boundary: "to=functions.tool_name"
+    re.compile(r"^\s*to=functions\."),
+    # Raw JSON that looks like a serialised tool-call dict
+    re.compile(r'^\s*\{[^}]*"name"\s*:'),
+    # Tool-call arguments block starting mid-stream
+    re.compile(r'^\s*\{[^}]*"arguments"\s*:'),
+]
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -44,6 +60,20 @@ def _state_values(obj: Any) -> Sequence[Any]:
     elif is_dataclass(obj) and not isinstance(obj, type):
         return [getattr(obj, f.name) for f in fields(obj)]
     return ()
+
+
+def _is_tool_call_like_content(content: str) -> bool:
+    """Return True if *content* resembles a tool-call payload that the
+    provider's streaming parser may have failed to classify.
+
+    This is a best-effort heuristic keyed on common provider-specific
+    tool-call boundary markers (e.g. Anthropic's ``to=functions.``
+    prefix) and JSON shape signatures (``{"name":``, ``{"arguments":``).
+    False positives (genuine JSON output or code snippets) are buffered
+    temporarily and flushed on ``on_llm_end`` when the finalized message
+    contains no tool calls, so they are not permanently dropped.
+    """
+    return any(p.search(content) for p in _TOOL_CALL_LEAK_PATTERNS)
 
 
 class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
@@ -93,6 +123,12 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         self.metadata: dict[UUID, Meta] = {}
         self.seen: set[int | str] = set()
         self.parent_ns = parent_ns
+        # Per-run buffer for content that looks like leaked tool-call syntax.
+        # Maps run_id → list of buffered content fragments (strings).
+        self._tc_buffer: dict[UUID, list[str]] = {}
+        # Tracks run_ids where a tool_call_chunk has been observed so we can
+        # discriminate buffered-into-tool-call vs genuine text-abandoned.
+        self._tc_seen: set[UUID] = set()
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         if dedupe and message.id in self.seen:
@@ -102,6 +138,28 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                 message.id = str(uuid4())
             self.seen.add(message.id)
             self.stream((meta[0], "messages", (message, meta[1])))
+
+    def _flush_tc_buffer(
+        self, meta: Meta, template_msg: BaseMessage, run_id: UUID
+    ) -> None:
+        """Flush buffered tool-call-like content as synthetic text chunks.
+
+        Emits the concatenated buffer content so consumers see the complete
+        text stream when the buffered content turned out to be genuine
+        assistant prose (not a malformed tool call).
+        """
+        buf = self._tc_buffer.pop(run_id, [])
+        if not buf:
+            return
+        joined = "".join(buf)
+        if not joined:
+            return
+        # Create a synthetic message chunk from the buffered content so the
+        # emitter can assign an id and add it to the dedupe set.
+        synthetic = template_msg.__class__(content=joined)
+        if synthetic.id is None:
+            synthetic.id = str(uuid4())
+        self._emit(meta, synthetic)
 
     def _find_and_emit_messages(self, meta: Meta, response: Any) -> None:
         if isinstance(response, BaseMessage):
@@ -147,6 +205,9 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             if (filtered_tags := filter_to_user_tags(tags)) is not None:
                 metadata["tags"] = filtered_tags
             self.metadata[run_id] = (ns, metadata)
+        # Clean up any stale buffer from a previous invocation for the same run_id.
+        self._tc_buffer.pop(run_id, None)
+        self._tc_seen.discard(run_id)
 
     def on_llm_new_token(
         self,
@@ -161,7 +222,31 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         if not isinstance(chunk, ChatGenerationChunk):
             return
         if meta := self.metadata.get(run_id):
-            self._emit(meta, chunk.message)
+            msg = chunk.message
+
+            # If this chunk carries tool_call_chunks, the provider's streaming
+            # parser correctly classified it as a tool call.  Discard any
+            # previously-buffered content that was likely stray preamble text.
+            if msg.tool_call_chunks:
+                self._tc_seen.add(run_id)
+                self._tc_buffer.pop(run_id, None)
+                self._emit(meta, msg)
+                return
+
+            content = msg.content
+            if isinstance(content, str) and content:
+                if _is_tool_call_like_content(content):
+                    # Buffer this content — it may be leaked tool-call syntax.
+                    self._tc_buffer.setdefault(run_id, []).append(content)
+                else:
+                    # Flush any previously buffered content before emitting
+                    # this chunk, so the ordering is preserved.
+                    if run_id in self._tc_buffer:
+                        self._flush_tc_buffer(meta, msg, run_id)
+                    self._emit(meta, msg)
+            elif isinstance(content, list):
+                # Multi-modal content — emit as-is (cannot be a tool-call leak).
+                self._emit(meta, msg)
 
     def on_llm_end(
         self,
@@ -175,7 +260,30 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             if response.generations and response.generations[0]:
                 gen = response.generations[0][0]
                 if isinstance(gen, ChatGeneration):
-                    self._emit(meta, gen.message, dedupe=True)
+                    final_msg = gen.message
+                    has_tool_calls = bool(
+                        final_msg.tool_calls or final_msg.invalid_tool_calls
+                    )
+                    if has_tool_calls and run_id in self._tc_buffer:
+                        # The final message contains tool calls, so any
+                        # buffered content was leaked tool-call syntax that
+                        # the streaming parser failed to classify.  Discard
+                        # the buffer and strip the leaked content from the
+                        # finalized message so it does not appear in
+                        # conversation history.
+                        self._tc_buffer.pop(run_id, None)
+                        self._emit(meta, final_msg, dedupe=True)
+                    elif run_id in self._tc_buffer:
+                        # No tool calls in the final message — the buffered
+                        # content was genuine assistant text (e.g. the model
+                        # chose to output JSON as prose).  Flush the buffer
+                        # so consumers see the complete text.
+                        self._flush_tc_buffer(meta, final_msg, run_id)
+                        self._emit(meta, final_msg, dedupe=True)
+                    else:
+                        self._emit(meta, final_msg, dedupe=True)
+        self._tc_buffer.pop(run_id, None)
+        self._tc_seen.discard(run_id)
         self.metadata.pop(run_id, None)
 
     def on_llm_error(
@@ -186,6 +294,8 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
+        self._tc_buffer.pop(run_id, None)
+        self._tc_seen.discard(run_id)
         self.metadata.pop(run_id, None)
 
     def on_chain_start(
@@ -345,12 +455,26 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
             if response.generations and response.generations[0]:
                 gen = response.generations[0][0]
                 if isinstance(gen, ChatGeneration):
+                    final_msg = gen.message
+                    has_tool_calls = bool(
+                        final_msg.tool_calls or final_msg.invalid_tool_calls
+                    )
+                    if has_tool_calls and run_id in self._tc_buffer:
+                        # Discard buffered content that was leaked tool-call
+                        # syntax; the final message carries the real tool calls.
+                        self._tc_buffer.pop(run_id, None)
+                    elif run_id in self._tc_buffer:
+                        # No tool calls — flush buffered content as text.
+                        self._flush_tc_buffer(meta, final_msg, run_id)
+
                     if run_id in self._streamed_run_ids:
-                        if gen.message.id is None:
-                            gen.message.id = str(uuid4())
-                        self.seen.add(gen.message.id)
+                        if final_msg.id is None:
+                            final_msg.id = str(uuid4())
+                        self.seen.add(final_msg.id)
                     else:
-                        self._emit(meta, gen.message, dedupe=True)
+                        self._emit(meta, final_msg, dedupe=True)
+        self._tc_buffer.pop(run_id, None)
+        self._tc_seen.discard(run_id)
         self._streamed_run_ids.discard(run_id)
         self.metadata.pop(run_id, None)
 
@@ -362,6 +486,8 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
         parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
+        self._tc_buffer.pop(run_id, None)
+        self._tc_seen.discard(run_id)
         self._streamed_run_ids.discard(run_id)
         super().on_llm_error(
             error,
