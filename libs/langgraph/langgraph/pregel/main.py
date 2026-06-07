@@ -2847,7 +2847,8 @@ class Pregel(
 
             runtime = Runtime(
                 context=_coerce_context(
-                    self.context_schema, context if context is not None else self.context
+                    self.context_schema,
+                    context if context is not None else self.context,
                 ),
                 store=store,
                 stream_writer=stream_writer,
@@ -3292,7 +3293,8 @@ class Pregel(
 
             runtime = Runtime(
                 context=_coerce_context(
-                    self.context_schema, context if context is not None else self.context
+                    self.context_schema,
+                    context if context is not None else self.context,
                 ),
                 store=store,
                 stream_writer=stream_writer,
