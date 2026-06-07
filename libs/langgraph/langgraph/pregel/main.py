@@ -746,6 +746,9 @@ class Pregel(
     context_schema: type[ContextT] | None = None
     """Specifies the schema for the context object that will be passed to the workflow."""
 
+    context: ContextT | None = None
+    """Static context to use for all runs of this graph."""
+
     config: RunnableConfig | None = None
 
     name: str = "LangGraph"
@@ -774,6 +777,7 @@ class Pregel(
         retry_policy: RetryPolicy | Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
         context_schema: type[ContextT] | None = None,
+        context: ContextT | None = None,
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         node_error_handler_map: Mapping[str, str] | None = None,
@@ -822,6 +826,7 @@ class Pregel(
         )
         self.cache_policy = cache_policy
         self.context_schema = context_schema
+        self.context = context
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.node_error_handler_map = node_error_handler_map or {}
@@ -2841,7 +2846,9 @@ class Pregel(
             server_info = _build_server_info(config, parent_runtime)
 
             runtime = Runtime(
-                context=_coerce_context(self.context_schema, context),
+                context=_coerce_context(
+                    self.context_schema, context if context is not None else self.context
+                ),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
@@ -3284,7 +3291,9 @@ class Pregel(
             server_info = _build_server_info(config, parent_runtime)
 
             runtime = Runtime(
-                context=_coerce_context(self.context_schema, context),
+                context=_coerce_context(
+                    self.context_schema, context if context is not None else self.context
+                ),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,

@@ -440,6 +440,7 @@ class entrypoint(Generic[ContextT]):
         store: BaseStore | None = None,
         cache: BaseCache | None = None,
         context_schema: type[ContextT] | None = None,
+        context: ContextT | None = None,
         cache_policy: CachePolicy | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
@@ -471,6 +472,7 @@ class entrypoint(Generic[ContextT]):
         self.retry_policy = retry_policy
         self.timeout = coerce_timeout_policy(timeout)
         self.context_schema = context_schema
+        self.context = context
 
     @dataclass(**_DC_KWARGS)
     class final(Generic[R, S]):
@@ -606,6 +608,7 @@ class entrypoint(Generic[ContextT]):
             cache_policy=self.cache_policy,
             retry_policy=self.retry_policy or (),
             context_schema=self.context_schema,
+            context=self.context,
         )
         if _serde.STRICT_MSGPACK_ENABLED:
             serde_allowlist = _serde.build_serde_allowlist(
