@@ -79,7 +79,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
         """
         async with await AsyncConnection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            conn_string, autocommit=not pipeline, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
                 async with conn.pipeline() as pipe:
