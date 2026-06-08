@@ -2961,6 +2961,163 @@ def test_docker_tag_with_prerelease_api_version(version: str, in_config: bool):
     assert tag == f"langchain/langgraph-api:{version}-py3.11"
 
 
+def test_docker_tag_with_compatible_api_version_promotes_to_latest_patch():
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "image_distro": "wolfi",
+            "api_version": "~=0.11.0.dev5",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_docker_hub_tags",
+        return_value=[
+            "0.11.0.dev5-py3.12-wolfi",
+            "0.11.0.dev6-py3.12-wolfi",
+            "0.11.0rc1-py3.12-wolfi",
+            "0.11.0-py3.12-wolfi",
+            "0.11.1rc1-py3.12-wolfi",
+            "0.11.1-py3.12-wolfi",
+            "0.12.0rc1-py3.12-wolfi",
+        ],
+    ) as get_tags:
+        tag = docker_tag(config)
+
+    get_tags.assert_called_once_with("langchain/langgraph-api", "0.")
+    assert tag == "langchain/langgraph-api:0.11.1-py3.12-wolfi"
+
+
+def test_docker_tag_with_compatible_api_version_freezes_dev_until_rc():
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": "~=0.11.0.dev5",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_docker_hub_tags",
+        return_value=[
+            "0.11.0.dev5-py3.12",
+            "0.11.0.dev6-py3.12",
+            "0.11.0.dev7-py3.12",
+        ],
+    ):
+        tag = docker_tag(config)
+
+    assert tag == "langchain/langgraph-api:0.11.0.dev5-py3.12"
+
+
+def test_docker_tag_with_stable_floating_api_version_promotes_to_future_stable():
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "image_distro": "wolfi",
+            "api_version": ">~=0.11.0.dev5",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_docker_hub_tags",
+        return_value=[
+            "0.11.0.dev5-py3.12-wolfi",
+            "0.11.0.dev6-py3.12-wolfi",
+            "0.11.0rc1-py3.12-wolfi",
+            "0.11.0-py3.12-wolfi",
+            "0.11.1-py3.12-wolfi",
+            "0.12.0rc1-py3.12-wolfi",
+            "0.12.0-py3.12-wolfi",
+            "0.13.0.dev1-py3.12-wolfi",
+            "0.13.0-py3.12-wolfi",
+        ],
+    ) as get_tags:
+        tag = docker_tag(config)
+
+    get_tags.assert_called_once_with("langchain/langgraph-api", "0.")
+    assert tag == "langchain/langgraph-api:0.13.0-py3.12-wolfi"
+
+
+def test_docker_tag_with_stable_floating_api_version_ignores_future_prereleases():
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": ">~=0.11.0.dev5",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_docker_hub_tags",
+        return_value=[
+            "0.11.0.dev5-py3.12",
+            "0.11.0-py3.12",
+            "0.12.0rc1-py3.12",
+            "0.12.0.dev1-py3.12",
+        ],
+    ):
+        tag = docker_tag(config)
+
+    assert tag == "langchain/langgraph-api:0.11.0-py3.12"
+
+
+def test_validate_config_rejects_unrecognized_api_version_range_operator():
+    with pytest.raises(click.UsageError, match="Invalid version format"):
+        validate_config(
+            {
+                "python_version": "3.12",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "api_version": "~>=0.11.0.dev5",
+            }
+        )
+
+
+def test_docker_tag_with_compatible_api_version_supports_node_images():
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+            "image_distro": "wolfi",
+            "api_version": "~=1.2.4",
+        }
+    )
+
+    with patch(
+        "langgraph_cli.config._get_docker_hub_tags",
+        return_value=[
+            "1.2.4-node20-wolfi",
+            "1.2.5-node20-wolfi",
+            "1.3.0-node20-wolfi",
+        ],
+    ) as get_tags:
+        tag = docker_tag(config)
+
+    get_tags.assert_called_once_with("langchain/langgraphjs-api", "1.")
+    assert tag == "langchain/langgraphjs-api:1.2.5-node20-wolfi"
+
+
+def test_docker_tag_with_compatible_api_version_rejects_tagged_base_image():
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "api_version": "~=0.11.0.dev5",
+        }
+    )
+
+    with pytest.raises(click.UsageError, match="tagged base_image"):
+        docker_tag(config, base_image="langchain/langgraph-api:0.11.0")
+
+
 def test_config_to_docker_with_api_version():
     """Test config_to_docker function with api_version parameter."""
 

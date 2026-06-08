@@ -9,6 +9,7 @@ from collections import Counter
 from typing import Literal, NamedTuple
 
 import click
+import httpx
 
 from langgraph_cli.schemas import Config, Distros
 from langgraph_cli.uv_lock import python_config_to_docker_uv_lock
@@ -41,6 +42,33 @@ _API_VERSION_PATTERN = re.compile(
     r"(?:\.(?P<patch>\d+))?"
     r"(?:(?:\.|)(?:[A-Za-z][0-9A-Za-z]*))?$"
 )
+_API_VERSION_RANGE_PATTERN = re.compile(r"^(?P<operator>~=|>~=)\s*(?P<version>.+)$")
+_API_VERSION_PART_PATTERN = re.compile(
+    r"^(?P<major>\d+)"
+    r"(?:\.(?P<minor>\d+))?"
+    r"(?:\.(?P<patch>\d+))?"
+    r"(?:(?:\.|)(?P<pre>dev|a|b|rc)(?P<pre_n>\d+))?$"
+)
+
+
+class _ParsedApiVersion(NamedTuple):
+    release: tuple[int, ...]
+    prerelease: str | None
+    prerelease_number: int
+
+
+class _ApiVersionRange(NamedTuple):
+    floor: _ParsedApiVersion
+    allow_future_stable: bool
+
+
+_PRERELEASE_ORDER = {
+    "dev": 0,
+    "a": 1,
+    "b": 2,
+    "rc": 3,
+    None: 4,
+}
 
 
 def has_disallowed_build_command_content(command: str) -> bool:
@@ -141,6 +169,149 @@ def _parse_api_version_parts(version_str: str) -> tuple[int, ...]:
     return tuple(int(part) for part in match.groups() if part is not None)
 
 
+def _parse_api_version(version_str: str) -> _ParsedApiVersion:
+    match = _API_VERSION_PART_PATTERN.fullmatch(version_str)
+    if not match:
+        raise ValueError("Version must be major or major.minor or major.minor.patch.")
+    release = tuple(
+        int(part)
+        for part in (
+            match.group("major"),
+            match.group("minor"),
+            match.group("patch"),
+        )
+        if part is not None
+    )
+    prerelease = match.group("pre")
+    prerelease_number = int(match.group("pre_n") or 0)
+    return _ParsedApiVersion(release, prerelease, prerelease_number)
+
+
+def _api_version_sort_key(
+    version: _ParsedApiVersion,
+) -> tuple[tuple[int, ...], int, int]:
+    return (
+        version.release,
+        _PRERELEASE_ORDER[version.prerelease],
+        version.prerelease_number,
+    )
+
+
+def _api_version_upper_bound(version: _ParsedApiVersion) -> tuple[int, ...]:
+    release = version.release
+    if len(release) <= 2:
+        return (release[0] + 1,)
+    return (release[0], release[1] + 1)
+
+
+def _is_compatible_api_version_candidate(
+    candidate: _ParsedApiVersion,
+    version_range: _ApiVersionRange,
+    upper_bound: tuple[int, ...],
+) -> bool:
+    floor = version_range.floor
+    if _api_version_sort_key(candidate) < _api_version_sort_key(floor):
+        return False
+    outside_compatible_range = candidate.release[: len(upper_bound)] >= upper_bound
+    if outside_compatible_range and not version_range.allow_future_stable:
+        return False
+    if outside_compatible_range and candidate.prerelease is not None:
+        return False
+    if floor.prerelease == "dev" and candidate.prerelease == "dev":
+        return candidate == floor
+    return True
+
+
+def _docker_hub_repository(base_image: str) -> str:
+    if ":" in base_image:
+        raise click.UsageError(
+            "Compatible api_version ranges cannot be used with a tagged base_image."
+        )
+    parts = base_image.split("/")
+    if len(parts) == 1:
+        return f"library/{base_image}"
+    if len(parts) == 2:
+        return base_image
+    raise click.UsageError(
+        "Compatible api_version ranges are only supported for Docker Hub images."
+    )
+
+
+def _get_docker_hub_tags(repository: str, tag_prefix: str) -> list[str]:
+    tags: list[str] = []
+    url = f"https://hub.docker.com/v2/repositories/{repository}/tags"
+    params: dict[str, str | int] | None = {"page_size": 100, "name": tag_prefix}
+    while url:
+        try:
+            response = httpx.get(url, params=params, timeout=10)
+            params = None
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise click.UsageError(
+                f"Failed to fetch Docker image tags for {repository}: {exc}"
+            ) from None
+        payload = response.json()
+        tags.extend(
+            result["name"]
+            for result in payload.get("results", [])
+            if isinstance(result, dict) and isinstance(result.get("name"), str)
+        )
+        url = payload.get("next")
+    return tags
+
+
+def _resolve_compatible_api_version(
+    api_version: str,
+    base_image: str,
+    version_distro_tag: str,
+) -> str:
+    match = _API_VERSION_RANGE_PATTERN.fullmatch(api_version)
+    if not match:
+        return api_version
+
+    floor_str = match.group("version").strip()
+    try:
+        floor = _parse_api_version(floor_str)
+    except ValueError:
+        raise click.UsageError(
+            f"Invalid compatible api_version range: {api_version}.\n\n"
+            "Use a compatible version range, e.g.:\n"
+            '  "api_version": "~=0.11.0.dev5"\n'
+            "or a stable-floating range, e.g.:\n"
+            '  "api_version": ">~=0.11.0.dev5"'
+        ) from None
+
+    version_range = _ApiVersionRange(
+        floor=floor,
+        allow_future_stable=match.group("operator") == ">~=",
+    )
+    repository = _docker_hub_repository(base_image)
+    tag_suffix = f"-{version_distro_tag}"
+    tag_prefix = f"{floor.release[0]}."
+    tags = _get_docker_hub_tags(repository, tag_prefix)
+
+    candidates: list[tuple[_ParsedApiVersion, str]] = []
+    upper_bound = _api_version_upper_bound(floor)
+    for tag in tags:
+        if not tag.endswith(tag_suffix):
+            continue
+        candidate_str = tag[: -len(tag_suffix)]
+        try:
+            candidate = _parse_api_version(candidate_str)
+        except ValueError:
+            continue
+        if _is_compatible_api_version_candidate(candidate, version_range, upper_bound):
+            candidates.append((candidate, candidate_str))
+
+    if not candidates:
+        raise click.UsageError(
+            f"No Docker image tags match compatible api_version range {api_version!r} "
+            f"for {base_image} with suffix {tag_suffix!r}."
+        )
+
+    return max(candidates, key=lambda item: _api_version_sort_key(item[0]))[1]
+
+
 def _is_node_graph(spec: str | dict) -> bool:
     """Check if a graph is a Node.js graph based on the file extension."""
     if isinstance(spec, dict):
@@ -194,7 +365,12 @@ def validate_config(config: Config) -> Config:
             )
     if api_version:
         try:
-            parts = _parse_api_version_parts(api_version)
+            compatible_match = _API_VERSION_RANGE_PATTERN.fullmatch(api_version)
+            parts = _parse_api_version_parts(
+                compatible_match.group("version").strip()
+                if compatible_match
+                else api_version
+            )
             if len(parts) > 3:
                 raise ValueError(
                     "Version must be major or major.minor or major.minor.patch."
@@ -1430,6 +1606,9 @@ def docker_tag(
 
     # Prepend API version if provided
     if api_version:
+        api_version = _resolve_compatible_api_version(
+            api_version, base_image, f"{language}{version_distro_tag}"
+        )
         full_tag = f"{api_version}-{language}{version_distro_tag}"
     elif "/langgraph-server" in base_image and version_distro_tag not in base_image:
         return f"{base_image}-{language}{version_distro_tag}"

@@ -159,7 +159,12 @@ OPT_POSTGRES_URI = click.option(
 OPT_API_VERSION = click.option(
     "--api-version",
     type=str,
-    help="API server version to use for the base image. If unspecified, the latest version will be used.",
+    help=(
+        "API server version to use for the base image. If unspecified, the "
+        "latest version will be used. Compatible ranges like ~=0.11.0.dev5 "
+        "resolve to the newest matching image tag. Stable-floating ranges "
+        "like >~=0.11.0.dev5 can also pick up future stable releases."
+    ),
 )
 
 OPT_ENGINE_RUNTIME_MODE = click.option(
