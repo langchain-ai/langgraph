@@ -775,6 +775,11 @@ def dev(
             "Both --ssl-certfile and --ssl-keyfile must be provided to enable HTTPS."
         )
 
+    if ssl_certfile and ssl_keyfile and tunnel:
+        raise click.UsageError(
+            "Cannot use --tunnel with SSL options. Please choose either to serve over HTTPS or to expose via a tunnel, but not both."
+        )
+
     try:
         from langgraph_api.cli import run_server  # type: ignore
     except ImportError:
