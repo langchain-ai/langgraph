@@ -2002,7 +2002,7 @@ class Pregel(
                 for task in run_tasks
                 for c, _ in task.writes
             )
-            can_put_writes = saved is not None or has_delta_writes
+            should_put_writes = saved is not None or has_delta_writes
 
             if saved is None and has_delta_writes:
                 # If there is no previous checkpoint, we need to create a stub checkpoint
@@ -2021,7 +2021,7 @@ class Pregel(
             for task_id, task in zip(run_task_ids, run_tasks):
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
-                if can_put_writes and channel_writes:
+                if should_put_writes and channel_writes:
                     checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
 
             # apply to checkpoint and save
@@ -2469,7 +2469,7 @@ class Pregel(
                 for task in run_tasks
                 for c, _ in task.writes
             )
-            can_put_writes = saved is not None or has_delta_writes
+            should_put_writes = saved is not None or has_delta_writes
 
             if saved is None and has_delta_writes:
                 # If there is no previous checkpoint, we need to create a stub checkpoint
@@ -2488,7 +2488,7 @@ class Pregel(
             for task_id, task in zip(run_task_ids, run_tasks):
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
-                if can_put_writes and channel_writes:
+                if should_put_writes and channel_writes:
                     await checkpointer.aput_writes(
                         checkpoint_config, channel_writes, task_id
                     )
