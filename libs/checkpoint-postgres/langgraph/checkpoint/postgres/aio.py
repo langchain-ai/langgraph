@@ -87,6 +87,16 @@ class AsyncPostgresSaver(BasePostgresSaver):
             else:
                 yield cls(conn=conn, serde=serde)
 
+    async def __aenter__(self) -> AsyncPostgresSaver:
+        await self.setup()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        if isinstance(self.conn, AsyncConnectionPool):
+            await self.conn.close()
+        else:
+            await self.conn.close()
+
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
 
@@ -113,8 +123,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 await cur.execute(
                     "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
                 )
-        if self.pipe:
-            await self.pipe.sync()
+        if self.pipe:   await self.pipe.sync()
 
     async def alist(
         self,
