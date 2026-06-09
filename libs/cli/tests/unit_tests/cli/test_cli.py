@@ -2,10 +2,8 @@ import json
 import pathlib
 import re
 import shutil
-import sys
 import tempfile
 import textwrap
-import types
 from contextlib import contextmanager
 from pathlib import Path
 
