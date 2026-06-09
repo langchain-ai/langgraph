@@ -47,7 +47,7 @@ _API_VERSION_PART_PATTERN = re.compile(
     r"^(?P<major>\d+)"
     r"(?:\.(?P<minor>\d+))?"
     r"(?:\.(?P<patch>\d+))?"
-    r"(?:(?:\.|)(?P<pre>dev|a|b|rc)(?P<pre_n>\d+))?$"
+    r"(?:(?:\.|)(?P<pre>dev|rc)(?P<pre_n>\d+))?$"
 )
 
 
@@ -64,10 +64,8 @@ class _ApiVersionRange(NamedTuple):
 
 _PRERELEASE_ORDER = {
     "dev": 0,
-    "a": 1,
-    "b": 2,
-    "rc": 3,
-    None: 4,
+    "rc": 1,
+    None: 2,
 }
 
 
@@ -222,42 +220,31 @@ def _is_compatible_api_version_candidate(
     return True
 
 
-def _docker_hub_repository(base_image: str) -> str:
+def _ensure_compatible_api_version_base_image(base_image: str) -> None:
     if ":" in base_image:
         raise click.UsageError(
             "Compatible api_version ranges cannot be used with a tagged base_image."
         )
-    parts = base_image.split("/")
-    if len(parts) == 1:
-        return f"library/{base_image}"
-    if len(parts) == 2:
-        return base_image
-    raise click.UsageError(
-        "Compatible api_version ranges are only supported for Docker Hub images."
-    )
 
 
-def _get_docker_hub_tags(repository: str, tag_prefix: str) -> list[str]:
-    tags: list[str] = []
-    url = f"https://hub.docker.com/v2/repositories/{repository}/tags"
-    params: dict[str, str | int] | None = {"page_size": 100, "name": tag_prefix}
-    while url:
-        try:
-            response = httpx.get(url, params=params, timeout=10)
-            params = None
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise click.UsageError(
-                f"Failed to fetch Docker image tags for {repository}: {exc}"
-            ) from None
-        payload = response.json()
-        tags.extend(
-            result["name"]
-            for result in payload.get("results", [])
-            if isinstance(result, dict) and isinstance(result.get("name"), str)
+def _get_pypi_versions(package_name: str) -> list[str]:
+    try:
+        response = httpx.get(
+            f"https://pypi.org/pypi/{package_name}/json",
+            timeout=10,
         )
-        url = payload.get("next")
-    return tags
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.UsageError(
+            f"Failed to fetch PyPI versions for {package_name}: {exc}"
+        ) from None
+    payload = response.json()
+    releases = payload.get("releases", {})
+    if not isinstance(releases, dict):
+        raise click.UsageError(
+            f"Failed to fetch PyPI versions for {package_name}: invalid response."
+        )
+    return [version for version in releases if isinstance(version, str)]
 
 
 def _resolve_compatible_api_version(
@@ -285,17 +272,12 @@ def _resolve_compatible_api_version(
         floor=floor,
         allow_future_stable=match.group("operator") == ">~=",
     )
-    repository = _docker_hub_repository(base_image)
-    tag_suffix = f"-{version_distro_tag}"
-    tag_prefix = f"{floor.release[0]}."
-    tags = _get_docker_hub_tags(repository, tag_prefix)
+    _ensure_compatible_api_version_base_image(base_image)
+    pypi_versions = _get_pypi_versions("langgraph-api")
 
     candidates: list[tuple[_ParsedApiVersion, str]] = []
     upper_bound = _api_version_upper_bound(floor)
-    for tag in tags:
-        if not tag.endswith(tag_suffix):
-            continue
-        candidate_str = tag[: -len(tag_suffix)]
+    for candidate_str in pypi_versions:
         try:
             candidate = _parse_api_version(candidate_str)
         except ValueError:
@@ -305,8 +287,8 @@ def _resolve_compatible_api_version(
 
     if not candidates:
         raise click.UsageError(
-            f"No Docker image tags match compatible api_version range {api_version!r} "
-            f"for {base_image} with suffix {tag_suffix!r}."
+            f"No PyPI releases match compatible api_version range {api_version!r} "
+            f"for {base_image} with {version_distro_tag!r}."
         )
 
     return max(candidates, key=lambda item: _api_version_sort_key(item[0]))[1]
