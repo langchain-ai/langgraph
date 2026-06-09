@@ -830,6 +830,9 @@ class Pregel(
             stream_transformers or ()
         )
         self._serde_allowlist: set[tuple[str, ...]] | None = None
+        self._active_controls: weakref.WeakValueDictionary[str, RunControl] = (
+            weakref.WeakValueDictionary()
+        )
         if auto_validate:
             self.validate()
 
@@ -2840,6 +2843,10 @@ class Pregel(
             )
             server_info = _build_server_info(config, parent_runtime)
 
+            ctrl = control or parent_runtime.control or RunControl()
+            if thread_id := config[CONF].get(CONFIG_KEY_THREAD_ID):
+                self._active_controls[thread_id] = ctrl
+
             runtime = Runtime(
                 context=_coerce_context(self.context_schema, context),
                 store=store,
@@ -2847,7 +2854,7 @@ class Pregel(
                 previous=None,
                 execution_info=None,
                 server_info=server_info,
-                control=control or parent_runtime.control or RunControl(),
+                control=ctrl,
             )
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
@@ -3283,6 +3290,10 @@ class Pregel(
             )
             server_info = _build_server_info(config, parent_runtime)
 
+            ctrl = control or parent_runtime.control or RunControl()
+            if thread_id := config[CONF].get(CONFIG_KEY_THREAD_ID):
+                self._active_controls[thread_id] = ctrl
+
             runtime = Runtime(
                 context=_coerce_context(self.context_schema, context),
                 store=store,
@@ -3290,7 +3301,7 @@ class Pregel(
                 previous=None,
                 execution_info=None,
                 server_info=server_info,
-                control=control or parent_runtime.control or RunControl(),
+                control=ctrl,
             )
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
@@ -3926,6 +3937,70 @@ class Pregel(
             return latest
         else:
             return chunks
+
+    def pause(self, config: RunnableConfig | None = None) -> None:
+        """Pause the execution of the graph by requesting a cooperative drain.
+
+        If `config` is provided with a `thread_id`, only that specific thread
+        will be paused. If no `config` is provided, all active runs on this
+        graph instance will be paused.
+
+        Note: This is a cooperative pause; the graph will stop after the
+        current step finishes.
+
+        Args:
+            config: Optional configuration identifying the thread to pause.
+        """
+        if config is None:
+            # Pause all active runs
+            for control in list(self._active_controls.values()):
+                control.request_drain("pause")
+        else:
+            thread_id = config.get("configurable", {}).get("thread_id")
+            if thread_id and (control := self._active_controls.get(str(thread_id))):
+                control.request_drain("pause")
+
+    def resume(
+        self,
+        config: RunnableConfig,
+        *,
+        value: Any = None,
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any:
+        """Resume a paused or interrupted graph.
+
+        This is a convenience method that calls `invoke` with a `Command(resume=value)`.
+
+        Args:
+            config: The configuration identifying the thread to resume.
+            value: The value to provide to the interrupt.
+            **kwargs: Additional arguments passed to `invoke`.
+
+        Returns:
+            The result of the resumed execution.
+        """
+        return self.invoke(Command(resume=value), config=config, **kwargs)
+
+    async def aresume(
+        self,
+        config: RunnableConfig,
+        *,
+        value: Any = None,
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any:
+        """Resume a paused or interrupted graph asynchronously.
+
+        This is a convenience method that calls `ainvoke` with a `Command(resume=value)`.
+
+        Args:
+            config: The configuration identifying the thread to resume.
+            value: The value to provide to the interrupt.
+            **kwargs: Additional arguments passed to `ainvoke`.
+
+        Returns:
+            The result of the resumed execution.
+        """
+        return await self.ainvoke(Command(resume=value), config=config, **kwargs)
 
     @overload
     async def ainvoke(

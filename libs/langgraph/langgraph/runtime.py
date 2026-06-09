@@ -87,7 +87,7 @@ class RunControl:
     If more mutable state is added here, add synchronization.
     """
 
-    __slots__ = ("_drain_reason",)
+    __slots__ = ("_drain_reason", "__weakref__")
 
     def __init__(self) -> None:
         self._drain_reason: str | None = None
