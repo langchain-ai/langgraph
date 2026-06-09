@@ -27,7 +27,7 @@ from langchain_core.tools import InjectedToolCallId, ToolException
 from langchain_core.tools import tool as dec_tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.config import get_stream_writer
-from langgraph.graph import START, MessagesState, StateGraph, add_messages
+from langgraph.graph import END, START, MessagesState, StateGraph, add_messages
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
@@ -1082,6 +1082,191 @@ async def test_return_direct(version: str) -> None:
             id=result["messages"][3].id,
         ),
     ]
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+async def test_return_direct_with_command(version: str) -> None:
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+        remaining_steps: int
+        custom_counter: int
+
+    @dec_tool(return_direct=True)
+    def tool_with_command(
+        input: str,
+        tool_call_id: Annotated[str, InjectedToolCallId],
+    ) -> Command:
+        """A return_direct tool that also updates state."""
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content=f"Processed: {input}",
+                        tool_call_id=tool_call_id,
+                    )
+                ],
+                "custom_counter": 1,
+            },
+            goto=END,
+        )
+
+    tool_call = [
+        ToolCall(name="tool_with_command", args={"input": "hello"}, id="1"),
+    ]
+    model = FakeToolCallingModel(tool_calls=[tool_call, []])
+    agent = create_react_agent(
+        model,
+        [tool_with_command],
+        state_schema=State,
+        version=version,
+    )
+
+    result = agent.invoke(
+        {
+            "messages": [HumanMessage(content="test")],
+            "remaining_steps": 10,
+            "custom_counter": 0,
+        }
+    )
+    assert result["messages"] == [
+        _AnyIdHumanMessage(content="test"),
+        AIMessage(content="test", id="0", tool_calls=tool_call),
+        ToolMessage(
+            content="Processed: hello",
+            name="tool_with_command",
+            tool_call_id="1",
+            id=result["messages"][2].id,
+        ),
+    ]
+    assert result["custom_counter"] == 1
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+async def test_return_direct_with_command_injected_state(version: str) -> None:
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+        remaining_steps: int
+        items: list[str]
+
+    @dec_tool(return_direct=True)
+    def tool_with_state(
+        input: str,
+        tool_call_id: Annotated[str, InjectedToolCallId],
+        state: Annotated[dict, InjectedState],
+    ) -> Command:
+        """A return_direct tool that reads state via InjectedState."""
+        items = state.get("items", [])
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content=f"Got: {input}",
+                        tool_call_id=tool_call_id,
+                    )
+                ],
+                "items": items + [input],
+            },
+            goto=END,
+        )
+
+    tool_call = [
+        ToolCall(name="tool_with_state", args={"input": "hello"}, id="1"),
+    ]
+    model = FakeToolCallingModel(tool_calls=[tool_call, []])
+    agent = create_react_agent(
+        model,
+        [tool_with_state],
+        state_schema=State,
+        version=version,
+    )
+
+    result = agent.invoke(
+        {
+            "messages": [HumanMessage(content="test")],
+            "remaining_steps": 10,
+            "items": ["initial"],
+        }
+    )
+    assert result["messages"] == [
+        _AnyIdHumanMessage(content="test"),
+        AIMessage(content="test", id="0", tool_calls=tool_call),
+        ToolMessage(
+            content="Got: hello",
+            name="tool_with_state",
+            tool_call_id="1",
+            id=result["messages"][2].id,
+        ),
+    ]
+    assert result["items"] == ["initial", "hello"]
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+async def test_return_direct_with_command_mixed_tools(version: str) -> None:
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+        remaining_steps: int
+        direct_counter: int
+
+    @dec_tool(return_direct=True)
+    def direct_tool(
+        input: str,
+        tool_call_id: Annotated[str, InjectedToolCallId],
+    ) -> Command:
+        """A return_direct tool."""
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content=f"Direct: {input}",
+                        tool_call_id=tool_call_id,
+                    )
+                ],
+                "direct_counter": 99,
+            },
+            goto=END,
+        )
+
+    @dec_tool
+    def normal_tool(input: str) -> str:
+        """A normal tool."""
+        return f"Normal: {input}"
+
+    both_tool_calls = [
+        ToolCall(name="direct_tool", args={"input": "direct"}, id="1"),
+        ToolCall(name="normal_tool", args={"input": "normal"}, id="2"),
+    ]
+    model = FakeToolCallingModel(tool_calls=[both_tool_calls, []])
+    agent = create_react_agent(
+        model,
+        [direct_tool, normal_tool],
+        state_schema=State,
+        version=version,
+    )
+
+    result = agent.invoke(
+        {
+            "messages": [HumanMessage(content="test")],
+            "remaining_steps": 10,
+            "direct_counter": 0,
+        }
+    )
+    assert result["messages"] == [
+        _AnyIdHumanMessage(content="test"),
+        AIMessage(content="test", id="0", tool_calls=both_tool_calls),
+        ToolMessage(
+            content="Direct: direct",
+            name="direct_tool",
+            tool_call_id="1",
+            id=result["messages"][2].id,
+        ),
+        ToolMessage(
+            content="Normal: normal",
+            name="normal_tool",
+            tool_call_id="2",
+            id=result["messages"][3].id,
+        ),
+    ]
+    assert result["direct_counter"] == 99
 
 
 def test_inspect_react() -> None:
