@@ -108,6 +108,7 @@ from langgraph.callbacks import (
     get_sync_graph_callback_manager_for_config,
 )
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
 from langgraph.constants import END
@@ -1996,11 +1997,33 @@ class Pregel(
                     ),
                 )
             # save task writes
+            has_delta_writes = any(
+                isinstance(channels.get(c), DeltaChannel)
+                for task in run_tasks
+                for c, _ in task.writes
+            )
+            should_put_writes = saved is not None or has_delta_writes
+
+            if saved is None and has_delta_writes:
+                # If there is no previous checkpoint, we need to create a stub checkpoint
+                # so the first delta writes has a parent to anchor under.
+                # This is the model of DeltaChannel.
+                stub = empty_checkpoint()
+                checkpoint_config = checkpointer.put(
+                    patch_configurable(
+                        checkpoint_config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                    ),
+                    stub,
+                    {"source": "update", "step": -1, "parents": {}},
+                    {},
+                )
+
             for task_id, task in zip(run_task_ids, run_tasks):
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
-                if saved and channel_writes:
+                if should_put_writes and channel_writes:
                     checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
+
             # apply to checkpoint and save
             apply_writes(
                 checkpoint,
@@ -2441,10 +2464,31 @@ class Pregel(
                     ),
                 )
             # save task writes
+            has_delta_writes = any(
+                isinstance(channels.get(c), DeltaChannel)
+                for task in run_tasks
+                for c, _ in task.writes
+            )
+            should_put_writes = saved is not None or has_delta_writes
+
+            if saved is None and has_delta_writes:
+                # If there is no previous checkpoint, we need to create a stub checkpoint
+                # so the first delta writes has a parent to anchor under.
+                # This is the model of DeltaChannel.
+                stub = empty_checkpoint()
+                checkpoint_config = await checkpointer.aput(
+                    patch_configurable(
+                        checkpoint_config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                    ),
+                    stub,
+                    {"source": "update", "step": -1, "parents": {}},
+                    {},
+                )
+
             for task_id, task in zip(run_task_ids, run_tasks):
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
-                if saved and channel_writes:
+                if should_put_writes and channel_writes:
                     await checkpointer.aput_writes(
                         checkpoint_config, channel_writes, task_id
                     )
