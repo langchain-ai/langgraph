@@ -1,10 +1,11 @@
 """
 Standard state reducers for LangGraph.
 
-These functions are designed to be used with ``Annotated[...]`` in State
+These functions are designed to be used with `Annotated[...]` in State
 definitions to handle complex state-merging logic automatically, e.g. when
 multiple nodes write to the same channel within a single superstep.
 """
+
 from __future__ import annotations
 
 from typing import Any, TypeVar
@@ -26,7 +27,7 @@ def smart_merge_dict(
       4. scalar/type clash  -> upgrade to a list (preserve both values).
 
     Note: this is a *shallow* copy at each level. Touched branches are rebuilt
-    into fresh objects, but keys present only in ``current`` keep their original
+    into fresh objects, but keys present only in `current` keep their original
     references. Reducers must never mutate state in place (already a LangGraph
     requirement), so this is safe and avoids a full deepcopy on large states.
     """
@@ -63,9 +64,9 @@ def combine_distinct(current: list[T] | None, update: list[T] | None) -> list[T]
     """
     Merge two lists, dropping duplicates while preserving first-seen order.
 
-    Unlike a naive ``set``-based dedupe, this also works when elements are
+    Unlike a naive `set`-based dedupe, this also works when elements are
     unhashable (e.g. dicts in RAG document lists): hashable elements use a fast
-    ``dict.fromkeys`` path, and the presence of any unhashable element falls back
+    `dict.fromkeys` path, and the presence of any unhashable element falls back
     to an order-preserving equality scan.
     """
     if current is None:

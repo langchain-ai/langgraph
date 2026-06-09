@@ -14,16 +14,16 @@ from langgraph.graph.reducers import combine_distinct, first_wins, smart_merge_d
     [
         # Scenario 1: Basic non-conflicting merge
         ({"a": 1}, {"b": 2}, {"a": 1, "b": 2}),
-        
         # Scenario 2: Conflict upgrading to list
         ({"score": 10}, {"score": 20}, {"score": [10, 20]}),
-        
         # Scenario 3: Mixed types flattening
-        ({"tags": "python"}, {"tags": ["rust", "go"]}, {"tags": ["python", "rust", "go"]}),
-        
+        (
+            {"tags": "python"},
+            {"tags": ["rust", "go"]},
+            {"tags": ["python", "rust", "go"]},
+        ),
         # Scenario 4: List and list extension
         ({"logs": ["start"]}, {"logs": ["end"]}, {"logs": ["start", "end"]}),
-        
         # Scenario 5: Empty state handling
         ({}, {"a": 1}, {"a": 1}),
         ({"a": 1}, {}, {"a": 1}),
@@ -40,16 +40,12 @@ def test_smart_merge_dict_nested() -> None:
     """Test recursive deep merge for nested dictionaries."""
     left: dict[str, Any] = {"config": {"retries": 3, "timeout": 10}}
     right: dict[str, Any] = {"config": {"retries": 5, "verbose": True}}
-    
+
     # 'retries' conflicts -> becomes list [3, 5]
     # 'timeout' preserved -> 10
     # 'verbose' is new -> True added
     expected: dict[str, Any] = {
-        "config": {
-            "retries": [3, 5],
-            "timeout": 10,
-            "verbose": True
-        }
+        "config": {"retries": [3, 5], "timeout": 10, "verbose": True}
     }
     assert smart_merge_dict(left, right) == expected
 
@@ -65,7 +61,9 @@ def test_smart_merge_dict_nested() -> None:
         ([], ["a", "b"], ["a", "b"]),
     ],
 )
-def test_combine_distinct(current: list[str], update: list[str], expected: list[str]) -> None:
+def test_combine_distinct(
+    current: list[str], update: list[str], expected: list[str]
+) -> None:
     """Test list merging with deduplication and order preservation."""
     assert combine_distinct(current, update) == expected
 
@@ -82,7 +80,11 @@ def test_combine_distinct_hashable_order_preserved():
 
 
 def test_combine_distinct_mixed_hashable_unhashable():
-    assert combine_distinct(["a", {"k": 1}], [{"k": 1}, "a", "b"]) == ["a", {"k": 1}, "b"]
+    assert combine_distinct(["a", {"k": 1}], [{"k": 1}, "a", "b"]) == [
+        "a",
+        {"k": 1},
+        "b",
+    ]
 
 
 @pytest.mark.parametrize(
