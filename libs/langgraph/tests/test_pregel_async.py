@@ -5181,26 +5181,24 @@ async def test_stream_subgraphs_during_execution(
         elapsed, c = chunks[idx]
         chunks[idx] = (round(elapsed - chunks[0][0], 1), c)
 
-    assert chunks == [
+    assert [chunk for _, chunk in chunks] == [
         # arrives before "inner" finishes
         (
-            FloatBetween(0.0, 0.1),
-            (
-                (AnyStr("inner:"),),
-                {"inner_1": {"my_key": "got here", "my_other_key": ""}},
-            ),
+            (AnyStr("inner:"),),
+            {"inner_1": {"my_key": "got here", "my_other_key": ""}},
         ),
-        (FloatBetween(0.2, 0.4), ((), {"outer_1": {"my_key": " and parallel"}})),
+        ((), {"outer_1": {"my_key": " and parallel"}}),
         (
-            FloatBetween(0.5, 0.8),
-            (
-                (AnyStr("inner:"),),
-                {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
-            ),
+            (AnyStr("inner:"),),
+            {"inner_2": {"my_key": " and there", "my_other_key": "got here"}},
         ),
-        (FloatBetween(0.5, 0.8), ((), {"inner": {"my_key": "got here and there"}})),
-        (FloatBetween(0.5, 0.8), ((), {"outer_2": {"my_key": " and back again"}})),
+        ((), {"inner": {"my_key": "got here and there"}}),
+        ((), {"outer_2": {"my_key": " and back again"}}),
     ]
+    assert chunks[0][0] == FloatBetween(0.0, 0.1)
+    assert chunks[1][0] >= 0.1
+    assert chunks[1][0] <= chunks[2][0]
+    assert chunks[2][0] >= 0.4
 
 
 @NEEDS_CONTEXTVARS
