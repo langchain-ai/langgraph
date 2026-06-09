@@ -65,6 +65,7 @@ class _TaskFunction(Generic[P, T]):
         cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
         timeout: TimeoutPolicy | None = None,
         name: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         if name is not None:
             if hasattr(func, "__func__"):
@@ -81,6 +82,7 @@ class _TaskFunction(Generic[P, T]):
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.timeout = timeout
+        self.metadata = metadata
         functools.update_wrapper(self, func)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> SyncAsyncFuture[T]:
@@ -91,6 +93,7 @@ class _TaskFunction(Generic[P, T]):
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
             timeout=self.timeout,
+            metadata=self.metadata,
         )
 
     def clear_cache(self, cache: BaseCache) -> None:
@@ -114,6 +117,7 @@ def task(
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
     timeout: float | timedelta | TimeoutPolicy | None = None,
+    metadata: dict[str, Any] | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> Callable[
     [Callable[P, Awaitable[T]] | Callable[P, T]],
@@ -136,6 +140,7 @@ def task(
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
     timeout: float | timedelta | TimeoutPolicy | None = None,
+    metadata: dict[str, Any] | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> (
     Callable[[Callable[P, Awaitable[T]] | Callable[P, T]], _TaskFunction[P, T]]
@@ -167,6 +172,10 @@ def task(
             timeout fires, `NodeTimeoutError` is raised and the retry policy (if
             any) decides whether to retry. Supported only for async tasks; sync
             tasks cannot be safely cancelled in-process.
+        metadata: The metadata associated with the task. Merged into the task's
+            config metadata at run time, making it accessible inside the task
+            via `get_config()["metadata"]` and visible to tracing callbacks and
+            `debug` stream events.
 
     Returns:
         A callable function when used as a decorator.
@@ -243,6 +252,7 @@ def task(
             cache_policy=cache_policy,
             timeout=timeout_policy,
             name=name,
+            metadata=metadata,
         )
 
     if __func_or_none__ is not None:

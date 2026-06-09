@@ -261,6 +261,7 @@ def call(
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
     timeout: float | timedelta | TimeoutPolicy | None = None,
+    metadata: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
     return _call_with_options(
@@ -270,6 +271,7 @@ def call(
         retry_policy=retry_policy,
         cache_policy=cache_policy,
         timeout=coerce_timeout_policy(timeout),
+        metadata=metadata,
     )
 
 
@@ -281,6 +283,7 @@ def _call_with_options(
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
     timeout: TimeoutPolicy | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> SyncAsyncFuture[T]:
     if timeout is not None and not is_async_callable(func):
         name = getattr(func, "__name__", func.__class__.__name__)
@@ -294,5 +297,6 @@ def _call_with_options(
         cache_policy=cache_policy,
         callbacks=config["callbacks"],
         timeout=timeout,
+        metadata=metadata,
     )
     return fut

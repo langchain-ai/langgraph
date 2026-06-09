@@ -46,6 +46,7 @@ from langgraph._internal._queue import AsyncQueue
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.config import get_config
 from langgraph.errors import (
     GraphRecursionError,
     InvalidUpdateError,
@@ -7548,6 +7549,35 @@ async def test_named_tasks_functional() -> None:
         {"qux": "foo|bar|baz|custom_baz|qux"},
         {"workflow": "foo|bar|baz|custom_baz|qux"},
     ]
+
+
+@NEEDS_CONTEXTVARS
+async def test_task_metadata_functional() -> None:
+    task_metadata: dict = {}
+
+    @task(metadata={"courier": "fedex", "shared": "task"})
+    async def deliver(value: str) -> str:
+        task_metadata.update(get_config()["metadata"])
+        return value + "|delivered"
+
+    @entrypoint()
+    async def workflow(value: str) -> str:
+        return await deliver(value)
+
+    assert (
+        await workflow.ainvoke(
+            "package", {"metadata": {"shared": "run", "run_only": True}}
+        )
+        == "package|delivered"
+    )
+    # custom metadata is merged into the task's config metadata
+    assert task_metadata["courier"] == "fedex"
+    # task-level metadata wins over invoke-time metadata for colliding keys
+    assert task_metadata["shared"] == "task"
+    # invoke-time metadata is still present
+    assert task_metadata["run_only"] is True
+    # framework keys are preserved
+    assert task_metadata["langgraph_node"] == "deliver"
 
 
 @NEEDS_CONTEXTVARS

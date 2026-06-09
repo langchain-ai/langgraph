@@ -705,6 +705,7 @@ def _call(
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
     timeout: TimeoutPolicy | None = None,
+    metadata: dict[str, Any] | None = None,
     callbacks: Callbacks = None,
     futures: weakref.ref[FuturesDict],
     schedule_task: Callable[
@@ -729,6 +730,7 @@ def _call(
             cache_policy=cache_policy,
             callbacks=callbacks,
             timeout=timeout,
+            metadata=metadata,
         ),
     ):
         if fut := next(
@@ -794,6 +796,7 @@ def _acall(
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
     timeout: TimeoutPolicy | None = None,
+    metadata: dict[str, Any] | None = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict],
@@ -828,6 +831,7 @@ def _acall(
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             timeout=timeout,
+            metadata=metadata,
             callbacks=callbacks,
             futures=futures,
             schedule_task=schedule_task,
@@ -850,6 +854,7 @@ async def _acall_impl(
     retry_policy: Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy | None = None,
     timeout: TimeoutPolicy | None = None,
+    metadata: dict[str, Any] | None = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict[asyncio.Future, asyncio.Event]],
@@ -876,6 +881,7 @@ async def _acall_impl(
                 cache_policy=cache_policy,
                 callbacks=callbacks,
                 timeout=timeout,
+                metadata=metadata,
             ),
         ):
             if fut := next(

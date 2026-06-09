@@ -125,6 +125,7 @@ class Call:
         "cache_policy",
         "callbacks",
         "timeout",
+        "metadata",
     )
 
     func: Callable
@@ -133,6 +134,7 @@ class Call:
     cache_policy: CachePolicy | None
     callbacks: Callbacks
     timeout: TimeoutPolicy | None
+    metadata: dict[str, Any] | None
 
     def __init__(
         self,
@@ -143,6 +145,7 @@ class Call:
         cache_policy: CachePolicy | None,
         callbacks: Callbacks,
         timeout: TimeoutPolicy | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         self.func = func
         self.input = input
@@ -150,6 +153,7 @@ class Call:
         self.cache_policy = cache_policy
         self.callbacks = callbacks
         self.timeout = timeout
+        self.metadata = metadata
 
 
 def should_interrupt(
@@ -851,6 +855,8 @@ def prepare_push_task_functional(
         "langgraph_path": in_progress_task_path,
         "langgraph_checkpoint_ns": task_checkpoint_ns,
     }
+    if call.metadata:
+        metadata.update(call.metadata)
     if task_id_checksum is not None:
         assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
     if for_execution:
