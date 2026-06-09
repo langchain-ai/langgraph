@@ -70,11 +70,61 @@ def test_combine_distinct(current: list[str], update: list[str], expected: list[
     assert combine_distinct(current, update) == expected
 
 
-def test_first_wins() -> None:
-    """Test first_wins reducer logic."""
-    # Ignore update if current exists
-    assert first_wins(10, 20) == 10
-    assert first_wins("old", "new") == "old"
-    
-    # Accept update if current is None
-    assert first_wins(None, 20) == 20
+def test_combine_distinct_unhashable_dicts():
+    # Regression: dict.fromkeys() crashed on list[dict] (e.g. RAG doc lists).
+    d1 = [{"id": "a"}, {"id": "b"}]
+    d2 = [{"id": "b"}, {"id": "c"}]
+    assert combine_distinct(d1, d2) == [{"id": "a"}, {"id": "b"}, {"id": "c"}]
+
+
+def test_combine_distinct_hashable_order_preserved():
+    assert combine_distinct(["x", "y"], ["y", "z", "x"]) == ["x", "y", "z"]
+
+
+def test_combine_distinct_mixed_hashable_unhashable():
+    assert combine_distinct(["a", {"k": 1}], [{"k": 1}, "a", "b"]) == ["a", {"k": 1}, "b"]
+
+
+@pytest.mark.parametrize(
+    "a,b,expected",
+    [
+        (None, ["a"], ["a"]),
+        (["a"], None, ["a"]),
+        (None, None, []),
+    ],
+)
+def test_combine_distinct_none_inputs(a, b, expected):
+    assert combine_distinct(a, b) == expected
+
+
+def test_combine_distinct_returns_fresh_list():
+    # Must not return the input object by reference.
+    src = ["a"]
+    assert combine_distinct(src, None) is not src
+
+
+def test_smart_merge_dict_deep_merge_no_mutation():
+    a = {"ctx": {"k1": 1}}
+    assert smart_merge_dict(a, {"ctx": {"k2": 2}}) == {"ctx": {"k1": 1, "k2": 2}}
+    assert a == {"ctx": {"k1": 1}}  # original left untouched
+
+
+def test_smart_merge_dict_scalar_conflict_upgrades_to_list():
+    assert smart_merge_dict({"u": "alice"}, {"u": "bob"}) == {"u": ["alice", "bob"]}
+
+
+def test_smart_merge_dict_empty_and_none_not_treated_as_missing():
+    assert smart_merge_dict({}, {"a": 1}) == {"a": 1}
+    assert smart_merge_dict({"a": 1}, {}) == {"a": 1}
+    assert smart_merge_dict(None, {"a": 1}) == {"a": 1}
+    assert smart_merge_dict({"a": 1}, None) == {"a": 1}
+
+
+def test_smart_merge_dict_falsy_scalar_values():
+    assert smart_merge_dict({"n": 0}, {"n": 1}) == {"n": [0, 1]}
+
+
+def test_first_wins():
+    assert first_wins("first", "second") == "first"
+    assert first_wins(None, "second") == "second"
+    assert first_wins(0, 5) == 0
