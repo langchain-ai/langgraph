@@ -5,7 +5,7 @@ import logging
 import typing
 import warnings
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Hashable, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass, is_dataclass
 from datetime import timedelta
 from functools import partial
@@ -27,7 +27,7 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.cache.base import BaseCache
-from langgraph.checkpoint.base import Checkpoint
+from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
@@ -117,6 +117,35 @@ def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
         f"Invalid state_schema: {schema}. Expected a type or Annotated[type, reducer]. "
         "Please provide a valid schema to ensure correct updates.\n"
         " See: https://langchain-ai.github.io/langgraph/reference/graphs/#stategraph"
+    )
+
+
+def _warn_if_checkpointer_lacks_delta_support(
+    channels: Mapping[str, Any], checkpointer: Checkpointer
+) -> None:
+    """Warn when a `DeltaChannel` graph has a checkpointer that can't reconstruct it.
+
+    `DeltaChannel` stores only a sentinel in checkpoint blobs and rebuilds
+    state by replaying ancestor writes via `BaseCheckpointSaver`'s delta
+    history API (`get_delta_channel_history`, added in
+    `langgraph-checkpoint>=4.1.0`). A saver from an older `langgraph-checkpoint`
+    lacks that method, so reconstruction fails at runtime. Warn at compile
+    time so users know to upgrade.
+    """
+    if not isinstance(checkpointer, BaseCheckpointSaver):
+        return
+    if not any(isinstance(c, DeltaChannel) for c in channels.values()):
+        return
+    if hasattr(checkpointer, "get_delta_channel_history"):
+        return
+    warnings.warn(
+        f"The configured checkpointer ({type(checkpointer).__name__}) does not "
+        "support `DeltaChannel` state reconstruction, which requires the "
+        "`get_delta_channel_history` API added in `langgraph-checkpoint>=4.1.0`. "
+        "State reconstruction will fail at runtime. Upgrade `langgraph-checkpoint` "
+        "(e.g. `pip install -U langgraph-checkpoint`) to enable `DeltaChannel` support.",
+        UserWarning,
+        stacklevel=4,
     )
 
 
@@ -1216,6 +1245,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             CompiledStateGraph: The compiled `StateGraph`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
+        _warn_if_checkpointer_lacks_delta_support(self.channels, checkpointer)
 
         serde_allowlist: set[tuple[str, ...]] | None = None
         if _serde.STRICT_MSGPACK_ENABLED:
