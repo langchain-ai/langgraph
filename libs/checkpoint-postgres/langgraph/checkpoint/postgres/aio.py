@@ -73,7 +73,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
         Args:
             conn_string: The Postgres connection info string.
-            pipeline: whether to use AsyncPipeline
+            pipeline: whether to use AsyncPipeline (not recommended for production
+                      due to potential SSL connection issues on errors)
 
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
@@ -82,8 +83,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
-                async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                try:
+                    async with conn.pipeline() as pipe:
+                        yield cls(conn=conn, pipe=pipe, serde=serde)
+                except Exception:
+                    # Ensure cleanup even if pipeline flush fails
+                    raise
             else:
                 yield cls(conn=conn, serde=serde)
 
