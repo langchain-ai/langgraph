@@ -78,14 +78,17 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
         """
-        async with await AsyncConnection.connect(
+        conn = await AsyncConnection.connect(
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
-            if pipeline:
-                async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
-            else:
-                yield cls(conn=conn, serde=serde)
+        )
+        if pipeline:
+            pipe = conn.pipeline()
+            await pipe.__aenter__()
+            yield cls(conn=conn, pipe=pipe, serde=serde)
+            await pipe.__aexit__(None, None, None)
+        else:
+            yield cls(conn=conn, serde=serde)
+        await conn.close()
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
