@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass, is_dataclass
 from datetime import timedelta
 from functools import partial
+from importlib import metadata
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
 from types import NoneType as NoneType
@@ -27,8 +28,9 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.cache.base import BaseCache
-from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint
+from langgraph.checkpoint.base import Checkpoint
 from langgraph.store.base import BaseStore
+from packaging.version import Version
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
@@ -120,32 +122,31 @@ def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
     )
 
 
-def _warn_if_checkpointer_lacks_delta_support(
-    channels: Mapping[str, Any], checkpointer: Checkpointer
-) -> None:
-    """Warn when a `DeltaChannel` graph has a checkpointer that can't reconstruct it.
+_MIN_DELTA_CHANNEL_API_VERSION = Version("0.9.0")
 
-    `DeltaChannel` stores only a sentinel in checkpoint blobs and rebuilds
-    state by replaying ancestor writes via `BaseCheckpointSaver`'s delta
-    history API (`get_delta_channel_history`, added in
-    `langgraph-checkpoint>=4.1.0`). A saver from an older `langgraph-checkpoint`
-    lacks that method, so reconstruction fails at runtime. Warn at compile
-    time so users know to upgrade.
+
+def _check_delta_channel_api_support(channels: Mapping[str, Any]) -> None:
+    """Raise if a `DeltaChannel` graph runs under an API server too old to support it.
+
+    `DeltaChannel` reconstruction depends on server-side support added in
+    `langgraph-api>0.9.0`. When running under an older API server, delta
+    channels fail at runtime, so we raise at compile time with an upgrade
+    hint. The check is skipped when `langgraph-api` is not installed (e.g.
+    local execution), since there is no API server to be incompatible.
     """
-    if not isinstance(checkpointer, BaseCheckpointSaver):
-        return
     if not any(isinstance(c, DeltaChannel) for c in channels.values()):
         return
-    if hasattr(checkpointer, "get_delta_channel_history"):
+    try:
+        api_version = metadata.version("langgraph-api")
+    except metadata.PackageNotFoundError:
         return
-    warnings.warn(
-        f"The configured checkpointer ({type(checkpointer).__name__}) does not "
-        "support `DeltaChannel` state reconstruction, which requires the "
-        "`get_delta_channel_history` API added in `langgraph-checkpoint>=4.1.0`. "
-        "State reconstruction will fail at runtime. Upgrade `langgraph-checkpoint` "
-        "(e.g. `pip install -U langgraph-checkpoint`) to enable `DeltaChannel` support.",
-        UserWarning,
-        stacklevel=4,
+    if Version(api_version) > _MIN_DELTA_CHANNEL_API_VERSION:
+        return
+    raise RuntimeError(
+        f"`DeltaChannel` requires `langgraph-api>0.9.0`, but the installed "
+        f"version is {api_version}. Upgrade `langgraph-api` "
+        "(e.g. `pip install -U langgraph-api`) to use graphs that rely on "
+        "`DeltaChannel`."
     )
 
 
@@ -1245,7 +1246,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             CompiledStateGraph: The compiled `StateGraph`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
-        _warn_if_checkpointer_lacks_delta_support(self.channels, checkpointer)
+        _check_delta_channel_api_support(self.channels)
 
         serde_allowlist: set[tuple[str, ...]] | None = None
         if _serde.STRICT_MSGPACK_ENABLED:
