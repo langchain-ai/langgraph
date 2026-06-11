@@ -724,6 +724,30 @@ def dockerfile(
     default="WARNING",
     help="Set the log level for the API server.",
 )
+@click.option(
+    "--ssl-certfile",
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        path_type=pathlib.Path,
+    ),
+    default=None,
+    help="Path to an SSL certificate file for serving the development server over HTTPS.",
+)
+@click.option(
+    "--ssl-keyfile",
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        path_type=pathlib.Path,
+    ),
+    default=None,
+    help="Path to an SSL key file for serving the development server over HTTPS.",
+)
 @cli.command(
     "dev",
     help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
@@ -742,8 +766,20 @@ def dev(
     allow_blocking: bool,
     tunnel: bool,
     server_log_level: str,
+    ssl_certfile: pathlib.Path | None,
+    ssl_keyfile: pathlib.Path | None,
 ):
     """CLI entrypoint for running the LangGraph API server."""
+    if (ssl_certfile is None) != (ssl_keyfile is None):
+        raise click.UsageError(
+            "Both --ssl-certfile and --ssl-keyfile must be provided to enable HTTPS."
+        )
+
+    if ssl_certfile and ssl_keyfile and tunnel:
+        raise click.UsageError(
+            "Cannot use --tunnel with SSL options. Please choose either to serve over HTTPS or to expose via a tunnel, but not both."
+        )
+
     try:
         from langgraph_api.cli import run_server  # type: ignore
     except ImportError:
@@ -814,6 +850,8 @@ def dev(
         server_level=server_log_level,
         checkpointer=config_json.get("checkpointer"),
         disable_persistence=config_json.get("disable_persistence", False),
+        ssl_certfile=ssl_certfile,
+        ssl_keyfile=ssl_keyfile,
     )
 
 

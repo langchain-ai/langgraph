@@ -320,6 +320,31 @@ def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
     assert "[Beta] List LangSmith Deployments." in deploy_list_line
 
 
+def test_dev_command_requires_ssl_certfile_and_keyfile_together(tmp_path) -> None:
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text(
+        json.dumps({"dependencies": [], "graphs": {"agent": "./agent.py:graph"}}),
+        encoding="utf-8",
+    )
+    certfile = tmp_path / "cert.pem"
+    certfile.write_text("cert", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "dev",
+            "--config",
+            str(config_path),
+            "--ssl-certfile",
+            str(certfile),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Both --ssl-certfile and --ssl-keyfile must be provided" in result.output
+
+
 def test_deploy_list_command(monkeypatch) -> None:
     runner = CliRunner()
     captured: dict[str, str] = {}
