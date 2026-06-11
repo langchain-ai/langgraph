@@ -397,6 +397,52 @@ def test_delta_channel_inmemory_saver_assembles_writes() -> None:
     assert len(state.values["messages"]) == 4  # 2 human + 2 AI
 
 
+def test_update_state_persists_delta_channel_on_empty_thread() -> None:
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer, list)]
+
+    def writer(state: State) -> dict:
+        return state
+
+    saver = InMemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("writer", writer)
+        .add_edge(START, "writer")
+        .compile(checkpointer=saver)
+    )
+
+    config = {"configurable": {"thread_id": "t1"}}
+    updated_config = graph.update_state(
+        config, {"messages": [HumanMessage(content="hi", id="h1")]}, as_node="writer"
+    )
+    state = graph.get_state(updated_config)
+    assert state.values["messages"] == [HumanMessage(content="hi", id="h1")]
+
+
+async def test_aupdate_state_persists_delta_channel_on_empty_thread() -> None:
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer, list)]
+
+    def writer(state: State) -> dict:
+        return state
+
+    saver = InMemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("writer", writer)
+        .add_edge(START, "writer")
+        .compile(checkpointer=saver)
+    )
+
+    config = {"configurable": {"thread_id": "t1"}}
+    updated_config = await graph.aupdate_state(
+        config, {"messages": [HumanMessage(content="hi", id="h1")]}, as_node="writer"
+    )
+    state = await graph.aget_state(updated_config)
+    assert state.values["messages"] == [HumanMessage(content="hi", id="h1")]
+
+
 # ---------------------------------------------------------------------------
 # DeltaChannel — dict reducer
 # ---------------------------------------------------------------------------
