@@ -1444,6 +1444,16 @@ class ToolNode(RunnableCallable):
         if isinstance(response, list):
             if all(isinstance(r, (Command, ToolMessage)) for r in response):
                 return self._validate_tool_command_list(response, tool_call, input_type)
+            # Handle content block lists (e.g. from MCP tools or other frameworks
+            # that bypass _format_output). This mirrors the format recognized by
+            # msg_content_output() — a list of dicts each with a "type" in
+            # TOOL_MESSAGE_BLOCK_TYPES — and wraps them into a ToolMessage.
+            if all(
+                isinstance(r, dict) and r.get("type") in TOOL_MESSAGE_BLOCK_TYPES
+                for r in response
+            ):
+                content = cast("str | list", msg_content_output(response))
+                return ToolMessage(content=content, tool_call_id=tool_call["id"])
             msg = (
                 f"Tool {tool_call['name']} returned a list with invalid element "
                 "types: expected all Command or ToolMessage"
