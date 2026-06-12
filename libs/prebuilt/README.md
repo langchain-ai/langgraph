@@ -27,7 +27,7 @@ For full documentation, see the [API reference](https://reference.langchain.com/
 
 ## Agents
 
-`langgraph-prebuilt` provides an [implementation](https://reference.langchain.com/python/langgraph.prebuilt/chat_agent_executor/create_react_agent) of a tool-calling [ReAct-style](https://docs.langchain.com/oss/python/langgraph/agents/agents) agent - `create_react_agent`:
+`langgraph-prebuilt` provides an [implementation](https://reference.langchain.com/python/langgraph.prebuilt/chat_agent_executor/create_react_agent) of a tool-calling ReAct-style agent - `create_react_agent`:
 
 ```bash
 uv add langchain-anthropic
