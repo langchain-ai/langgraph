@@ -1,1 +1,3 @@
 .langgraph_api/
+# Go cross-compiled binaries (built at release time, bundled into wheels)
+langgraph_cli/bin/
