@@ -654,6 +654,117 @@ class TestStreamV2Async:
         assert len(runs) == runs_at_abort
         assert len(runs) < 10
 
+    async def test_abort_cancels_deeply_nested_subgraph(self) -> None:
+        class CountState(TypedDict):
+            count: int
+
+        runs: list[int] = []
+
+        async def deep_node(state: CountState) -> dict:
+            runs.append(state["count"] + 1)
+            await asyncio.sleep(0.05)
+            return {"count": state["count"] + 1}
+
+        # Deepest graph loops until count >= 10.
+        graph = (
+            StateGraph(CountState)
+            .add_node("deep_node", deep_node)
+            .set_entry_point("deep_node")
+            .add_conditional_edges(
+                "deep_node",
+                lambda s: END if s["count"] >= 10 else "deep_node",
+            )
+            .compile()
+        )
+
+        # Wrap it three times: graph -> subgraph -> subgraph -> subgraph.
+        for _ in range(3):
+
+            async def caller(state: CountState, _child: Any = graph) -> dict:
+                return await _child.ainvoke({"count": 0})
+
+            graph = (
+                StateGraph(CountState)
+                .add_node("caller", caller)
+                .set_entry_point("caller")
+                .compile()
+            )
+
+        run = await graph.astream_events({"count": 0}, version="v3")
+        async for e in run:
+            if (
+                e["method"] == "values"
+                and e["params"]["namespace"]
+                and e["params"]["data"]["count"] >= 2
+            ):
+                break
+        await run.abort()
+        runs_at_abort = len(runs)
+        # Give the (now-cancelled) nested subgraph a chance to keep looping.
+        await asyncio.sleep(0.3)
+        assert len(runs) == runs_at_abort
+        assert len(runs) < 10
+
+    async def test_abort_cancels_subgraph_during_inflight_pump(self) -> None:
+        class CountState(TypedDict):
+            count: int
+
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def sub_node(state: CountState) -> dict:
+            started.set()
+            try:
+                # Long-running node: still in flight when abort fires.
+                await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+            return {"count": state["count"] + 1}
+
+        sub_graph = (
+            StateGraph(CountState)
+            .add_node("sub_node", sub_node)
+            .set_entry_point("sub_node")
+            .compile()
+        )
+
+        async def main_node(state: CountState) -> None:
+            await sub_graph.ainvoke({"count": 0})
+
+        main_graph = (
+            StateGraph(CountState)
+            .add_node("main_node", main_node)
+            .set_entry_point("main_node")
+            .compile()
+        )
+
+        run = await main_graph.astream_events({"count": 0}, version="v3")
+
+        # A consumer task drives the pump. Once the subgraph node is
+        # running, no further event is produced, so the consumer parks
+        # inside _apump_next awaiting graph_aiter.__anext__() — the
+        # generator is "running" and a plain aclose() would raise.
+        async def consume() -> None:
+            async for _e in run:
+                pass
+
+        consumer = asyncio.create_task(consume())
+        try:
+            await asyncio.wait_for(started.wait(), timeout=2.0)
+            # Let the consumer drain and park in __anext__.
+            await asyncio.sleep(0.05)
+            # Abort from a different task while the consumer is in __anext__.
+            await run.abort()
+            # The in-flight subgraph node must observe cancellation.
+            await asyncio.wait_for(cancelled.wait(), timeout=2.0)
+        finally:
+            consumer.cancel()
+            try:
+                await consumer
+            except asyncio.CancelledError:
+                pass
+
     async def test_extensions_has_native_keys(self) -> None:
         run = await _build_simple_graph().astream_events(
             {"value": "x", "items": []}, version="v3"
