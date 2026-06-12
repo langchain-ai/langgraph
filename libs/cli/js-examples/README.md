@@ -10,7 +10,7 @@ This template demonstrates a simple chatbot implemented using [LangGraph.js](htt
 
 The core logic, defined in `src/agent/graph.ts`, showcases a straightforward chatbot that responds to user queries while maintaining context from previous messages.
 
-## What it does
+## 🤔 What is this?
 
 The simple chatbot:
 
@@ -19,6 +19,10 @@ The simple chatbot:
 3. Returns a placeholder response, updating the conversation history
 
 This template provides a foundation that can be easily customized and extended to create more complex conversational agents.
+
+## 📖 Documentation
+
+For JavaScript and TypeScript documentation, see the [LangGraph.js docs](https://docs.langchain.com/oss/javascript/langgraph/overview). LangGraph Studio also integrates with [LangSmith](https://smith.langchain.com/) for tracing and collaboration with teammates.
 
 ## Getting Started
 
