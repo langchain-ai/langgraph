@@ -204,6 +204,14 @@ class PregelLoop:
     # `__enter__`; stays `None` only when no checkpointer.
     _delta_write_futs: list[Any] | None = None
 
+    # Futures from ALL `checkpointer.put_writes` calls in the current
+    # superstep (including non-delta-channel writes).  `_checkpointer_put_
+    # after_previous` drains this list alongside `_delta_write_futs` so
+    # that a checkpoint is never persisted before the pending writes that
+    # produced it — preventing duplicate side effects on crash recovery
+    # under ``durability='sync'`` (see gh-8039).
+    _all_write_futs: list[Any] | None = None
+
     # Same pattern as `_delta_write_futs` but for error-handler writes.
     # When `put_writes` persists an ERROR_SOURCE_NODE marker, the future is
     # appended here.  `schedule_error_handler` / `aschedule_error_handler`
@@ -489,6 +497,12 @@ class PregelLoop:
                 isinstance(self.specs.get(c), DeltaChannel) for c, _ in writes_to_save
             ):
                 self._delta_write_futs.append(fut)
+            # Track ALL write futures so _checkpointer_put_after_previous
+            # can wait for them before persisting the checkpoint — without
+            # this, non-delta-channel writes may not be durable on crash
+            # recovery under durability="sync" (gh-8039).
+            if self._all_write_futs is not None:
+                self._all_write_futs.append(fut)
             # ERROR_SOURCE_NODE is only appended by commit() when the task
             # has an error handler (_should_route_to_error_handler), so this
             # check naturally limits future collection to those tasks.
@@ -1515,6 +1529,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         if self._delta_write_futs:
             futs, self._delta_write_futs = self._delta_write_futs, []
             concurrent.futures.wait(futs)
+        if self._all_write_futs:
+            futs, self._all_write_futs = self._all_write_futs, []
+            concurrent.futures.wait(futs)
         try:
             if prev is not None:
                 prev.result()
@@ -1660,6 +1677,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             else []
         )
         self._delta_write_futs = []
+        self._all_write_futs = []
         self._error_handler_write_futs = []
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
@@ -1768,6 +1786,12 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         # ancestor walks never see a checkpoint without its backing writes.
         if self._delta_write_futs:
             futs, self._delta_write_futs = self._delta_write_futs, []
+            await asyncio.gather(*futs)
+        # Drain ALL write futures (including non-delta-channel writes) so a
+        # checkpoint is never durable before its pending writes — prevents
+        # duplicate side effects on crash recovery (gh-8039).
+        if self._all_write_futs:
+            futs, self._all_write_futs = self._all_write_futs, []
             await asyncio.gather(*futs)
         try:
             if prev is not None:
@@ -1917,6 +1941,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             else []
         )
         self._delta_write_futs = []
+        self._all_write_futs = []
         self._error_handler_write_futs = []
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
