@@ -86,17 +86,21 @@ def _copy_mapping_value(value: Any) -> Any:
 def _merge_metadata(
     base: Mapping[str, Any] | None, new: Mapping[str, Any] | None
 ) -> dict[str, Any]:
-    """Merge metadata one level deep without mutating inputs.
+    """Merge metadata without mutating inputs.
 
-    Top-level keys merge with newer values winning. If the same key is a mapping
-    in both inputs, that mapping's entries are merged so values like
-    `metadata.versions` can coexist; deeper mappings are replaced wholesale by
-    newer values. Mapping values are copied one level, so deeper nested objects
+    Top-level keys merge with newer values winning. `lc_versions` is the only
+    mapping-valued key that merges one level deeper, so independent LangChain
+    packages can contribute package versions without changing generic metadata
+    semantics. Mapping values are copied one level, so deeper nested objects
     remain shared. `None` inputs are treated as empty metadata.
     """
     merged = {key: _copy_mapping_value(value) for key, value in (base or {}).items()}
     for key, value in (new or {}).items():
-        if isinstance(merged.get(key), Mapping) and isinstance(value, Mapping):
+        if (
+            key == "lc_versions"
+            and isinstance(merged.get(key), Mapping)
+            and isinstance(value, Mapping)
+        ):
             merged[key] = {
                 **cast(Mapping[str, Any], merged[key]),
                 **value,
@@ -355,7 +359,7 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                     )
                 elif k == "metadata":
                     # Matches merge_configs: top-level metadata keys merge, and
-                    # mapping-valued entries merge one level deeper.
+                    # only `lc_versions` merges one level deeper.
                     empty["metadata"] = _merge_metadata(
                         cast(Mapping[str, Any] | None, empty.get("metadata")),
                         cast(Mapping[str, Any], v),
