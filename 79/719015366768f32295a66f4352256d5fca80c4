@@ -1,0 +1,30 @@
+libs/langgraph/tests/test_subgraph_persistence.py
+  s_70066badf95926::t_3fc406a2893eaa 647-649
+libs/langgraph/tests/test_subgraph_persistence_async.py
+  s_70066badf95926::t_700947457c4c26 669-671
+libs/langgraph/tests/test_utils.py
+  s_70066badf95926::t_c1cc0305f12dd6 509-510
+  s_70066badf95926::t_a186839600b0a3 511
+  s_70066badf95926::t_f3457bf5f84d7d 542-543,562-577
+  s_70066badf95926::t_523ab7224c2a84 544
+libs/langgraph/langgraph/_internal/_config.py
+  s_70066badf95926::t_c257d01cc6e196 310,317-335,342-345,349
+  s_70066badf95926::t_77d5317d2ab9b3 27
+  s_70066badf95926::t_b20c97a149cae3 311-316
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "79719015366768f32295a66f4352256d5fca80c4",
+  "prompts": {},
+  "sessions": {
+    "s_70066badf95926": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aea03cf4-eb46-4b2a-865d-dc57ad81e057",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Nick Hollon <nick.hollon@langchain.dev>"
+    }
+  }
+}
