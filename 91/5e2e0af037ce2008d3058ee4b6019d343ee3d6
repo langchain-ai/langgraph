@@ -1,0 +1,26 @@
+libs/langgraph/tests/test_pregel_stream_events_v3.py
+  s_c1e23b3ae8fc44::t_defc906aacbff7 657-711,713-715,717,720-743,748-753,757-759,761-767
+  s_c1e23b3ae8fc44::t_f5ef5a2404442d 712,716,718-719,744-747,754-756,760
+libs/langgraph/langgraph/stream/run_stream.py
+  s_c1e23b3ae8fc44::t_e4e5f30fa2d6c5 427
+  s_c1e23b3ae8fc44::t_616e8ac56a54e6 472,475,477-486
+  s_c1e23b3ae8fc44::t_69c5402b895be4 461-466
+  s_c1e23b3ae8fc44::t_9c0e3f6fb86e22 422-426,428-440
+  s_c1e23b3ae8fc44::t_e1c56c6cc1a3fa 361-362
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "915e2e0af037ce2008d3058ee4b6019d343ee3d6",
+  "prompts": {},
+  "sessions": {
+    "s_c1e23b3ae8fc44": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ca8e6560-dcca-49a9-8dfb-46f124287288",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Nick Hollon <nick.hollon@langchain.dev>"
+    }
+  }
+}
