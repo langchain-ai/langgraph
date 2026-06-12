@@ -94,6 +94,10 @@ class AsyncPostgresSaver(BasePostgresSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
+        # Temporarily disable pipeline mode for setup to avoid SSL/network issues
+        # with pipelined execution of multiple statements.
+        if self.pipe and self.pipe._conn:
+            await self.pipe.sync()
         async with self._cursor() as cur:
             await cur.execute(self.MIGRATIONS[0])
             results = await cur.execute(
@@ -113,7 +117,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 await cur.execute(
                     "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
                 )
-        if self.pipe:
+        if self.pipe and self.pipe._conn:
+            await self.pipe.sync()
             await self.pipe.sync()
 
     async def alist(
