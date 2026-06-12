@@ -307,15 +307,16 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                 if _is_not_empty(v)
             },
         )
-    # An explicit config that supplies its own checkpoint coordinate (a new
+    # An explicit config that supplies its own checkpoint coordinate (a
     # thread_id, or any checkpoint_ns/checkpoint_id/checkpoint_map) is addressing
     # its own checkpoint lineage, so drop the inherited ambient configurable
     # rather than merging over it: a child graph invoked inside a parent node
     # would otherwise write its checkpoints under the parent's namespace and
-    # never find them again. Configs that only refine other keys keep the
-    # ambient and shallow-merge over it below.
-    if ambient_configurable := (empty.get(CONF) or {}):
-        ambient_thread_id = ambient_configurable.get(CONFIG_KEY_THREAD_ID)
+    # never find them again. An explicit thread_id resets even when it equals the
+    # ambient one, since a child reusing the parent's thread id still addresses
+    # its own root namespace, not the parent task's. Configs that only refine
+    # other keys keep the ambient and shallow-merge over it below.
+    if empty.get(CONF):
         for config in configs:
             if config is None:
                 continue
@@ -323,10 +324,7 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
             if not explicit_configurable:
                 continue
             if (
-                (
-                    _is_not_empty(explicit_configurable.get(CONFIG_KEY_THREAD_ID))
-                    and explicit_configurable[CONFIG_KEY_THREAD_ID] != ambient_thread_id
-                )
+                _is_not_empty(explicit_configurable.get(CONFIG_KEY_THREAD_ID))
                 or _is_not_empty(explicit_configurable.get(CONFIG_KEY_CHECKPOINT_NS))
                 or _is_not_empty(explicit_configurable.get(CONFIG_KEY_CHECKPOINT_ID))
                 or _is_not_empty(explicit_configurable.get(CONFIG_KEY_CHECKPOINT_MAP))

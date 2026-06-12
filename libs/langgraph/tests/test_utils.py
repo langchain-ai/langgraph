@@ -577,6 +577,23 @@ def test_ensure_config_non_coordinate_config_keeps_ambient_checkpoint_ns() -> No
     assert merged["configurable"]["thread_id"] == "parent"
 
 
+def test_ensure_config_same_thread_id_still_clears_ambient() -> None:
+    # A child that reuses the parent's thread_id is still addressing its own root
+    # namespace on that thread, so the parent task's checkpoint_ns must not leak
+    # in; otherwise the child writes state that get_state cannot read back.
+    from langchain_core.runnables.config import var_child_runnable_config
+
+    token = var_child_runnable_config.set(
+        {"configurable": {"thread_id": "shared", "checkpoint_ns": "p:parent-task"}}
+    )
+    try:
+        merged = ensure_config({"configurable": {"thread_id": "shared"}})
+    finally:
+        var_child_runnable_config.reset(token)
+    assert merged["configurable"]["thread_id"] == "shared"
+    assert "checkpoint_ns" not in merged["configurable"]
+
+
 def test_ensure_config_merges_metadata_across_configs() -> None:
     a = {"metadata": {"user_id": "U1"}}
     b = {"metadata": {"correlation_id": "C1"}}
