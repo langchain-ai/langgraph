@@ -11,6 +11,7 @@ from typing import (
 import pytest
 from langchain_core.messages import AnyMessage, ToolCall
 from langchain_core.runnables import RunnableConfig, RunnablePick
+from langchain_core.version import VERSION as LANGCHAIN_CORE_VERSION
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
@@ -1150,6 +1151,7 @@ async def test_prebuilt_tool_chat() -> None:
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
         (
@@ -1212,6 +1214,7 @@ async def test_prebuilt_tool_chat() -> None:
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
     ]
@@ -1264,6 +1267,7 @@ async def test_prebuilt_tool_chat() -> None:
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
     ]
@@ -3981,6 +3985,7 @@ async def test_weather_subgraph(
                     "ls_provider": "fakemessageslistchatmodel",
                     "ls_model_type": "chat",
                     "ls_integration": "langchain_chat_model",
+                    "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
                 },
             ),
         ),
@@ -4008,6 +4013,7 @@ async def test_weather_subgraph(
                     "ls_provider": "fakemessageslistchatmodel",
                     "ls_model_type": "chat",
                     "ls_integration": "langchain_chat_model",
+                    "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
                 },
             ),
         ),
@@ -4044,6 +4050,7 @@ async def test_weather_subgraph(
                 "ls_provider": "fakemessageslistchatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
     ]
