@@ -163,9 +163,9 @@ OPT_API_VERSION = click.option(
         "API server version to use for the base image. If unspecified, the "
         "latest stable version will be used. Compatible ranges like "
         "~=0.11.0.dev5 stay on 0.11.0.dev5 while only newer dev builds exist, "
-        "then resolve to the newest matching rc or stable release. "
-        "Stable-floating ranges like >~=0.11.0.dev5 can also pick up future "
-        "stable releases."
+        "then resolve to the newest matching rc or stable release, for example "
+        "0.11.0rc1 or 0.11.0. Stable-floating ranges like >~=0.11.0.dev5 "
+        "can also pick up future stable releases, for example 0.12.0."
     ),
 )
 
