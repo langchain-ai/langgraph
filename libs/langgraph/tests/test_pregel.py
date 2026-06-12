@@ -23,6 +23,7 @@ from langchain_core.runnables import (
     RunnablePassthrough,
 )
 from langchain_core.runnables.graph import Edge
+from langchain_core.version import VERSION as LANGCHAIN_CORE_VERSION
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -6923,6 +6924,7 @@ def test_tags_stream_mode_messages() -> None:
                 "ls_provider": "genericfakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
                 "tags": ["meow"],
             },
         )

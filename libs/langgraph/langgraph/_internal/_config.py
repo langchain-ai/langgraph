@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import ChainMap
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from os import getenv
 from typing import Any, cast
 
@@ -79,6 +79,42 @@ def patch_checkpoint_map(
         return config
 
 
+def _copy_mapping_value(value: Any) -> Any:
+    return dict(value) if isinstance(value, Mapping) else value
+
+
+def _merge_metadata(
+    base: Mapping[str, Any] | None, new: Mapping[str, Any] | None
+) -> dict[str, Any]:
+    """Merge metadata without mutating inputs.
+
+    Top-level keys merge with newer values winning. `lc_versions` is the only
+    mapping-valued key that merges one level deeper, so independent LangChain
+    packages can contribute package versions without changing generic metadata
+    semantics. Mapping values are copied one level, so deeper nested objects
+    remain shared. `None` inputs are treated as empty metadata.
+
+    Mirrors `langchain_core.runnables.config._merge_metadata_dicts` so configs
+    that pass through LangGraph's merge keep the same `lc_versions` semantics;
+    keep the two in sync. Unlike lc-core, this copies mapping values one level
+    (intentionally more defensive — do not "simplify" back to a shared ref).
+    """
+    merged = {key: _copy_mapping_value(value) for key, value in (base or {}).items()}
+    for key, value in (new or {}).items():
+        if (
+            key == "lc_versions"
+            and isinstance(merged.get(key), Mapping)
+            and isinstance(value, Mapping)
+        ):
+            merged[key] = {
+                **cast(Mapping[str, Any], merged[key]),
+                **value,
+            }
+        else:
+            merged[key] = _copy_mapping_value(value)
+    return merged
+
+
 def _merge_callbacks(base: Callbacks, new: Callbacks) -> Callbacks:
     """Merge two callbacks values (None / list / BaseCallbackManager).
 
@@ -126,10 +162,10 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
             if not value:
                 continue
             if key == "metadata":
-                if base_value := base.get(key):
-                    base[key] = {**base_value, **value}  # type: ignore
-                else:
-                    base[key] = value  # type: ignore[literal-required]
+                base[key] = _merge_metadata(
+                    cast(Mapping[str, Any] | None, base.get(key)),
+                    cast(Mapping[str, Any], value),
+                )
             elif key == "tags":
                 if base_value := base.get(key):
                     base[key] = [*base_value, *value]  # type: ignore
@@ -327,14 +363,11 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                         empty.get("callbacks"), cast(Callbacks, v)
                     )
                 elif k == "metadata":
-                    # Shallow-merge metadata dicts across configs so values
-                    # bound via with_config(...) (e.g. user_id) are preserved
-                    # when later configs supply other metadata keys.
-                    existing = empty.get("metadata")
-                    empty["metadata"] = (
-                        {**cast(dict, existing), **cast(dict, v)}
-                        if existing
-                        else cast(dict, v).copy()
+                    # Matches merge_configs: top-level metadata keys merge, and
+                    # only `lc_versions` merges one level deeper.
+                    empty["metadata"] = _merge_metadata(
+                        cast(Mapping[str, Any] | None, empty.get("metadata")),
+                        cast(Mapping[str, Any], v),
                     )
                 elif k == "tags":
                     # Concatenate tags across configs so values bound via

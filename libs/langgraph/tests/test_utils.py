@@ -25,6 +25,7 @@ from langgraph._internal._config import (
     _merge_callbacks,
     ensure_config,
     get_callback_manager_for_config,
+    merge_configs,
 )
 from langgraph._internal._fields import (
     _is_optional_type,
@@ -518,6 +519,159 @@ def test_ensure_config_metadata_later_wins_per_key() -> None:
     b = {"metadata": {"shared": "from_b"}}
     merged = ensure_config(a, b)
     assert merged["metadata"]["shared"] == "from_b"
+
+
+def test_merge_configs_merges_metadata_lc_versions() -> None:
+    a = {
+        "metadata": {
+            "lc_versions": {"langgraph": "1.2.4"},
+            "lc_agent_name": "agent",
+        }
+    }
+    b = {"metadata": {"lc_versions": {"langchain-core": "1.2.0"}}}
+    merged = merge_configs(a, b)
+    assert merged["metadata"]["lc_versions"] == {
+        "langgraph": "1.2.4",
+        "langchain-core": "1.2.0",
+    }
+    assert merged["metadata"]["lc_agent_name"] == "agent"
+
+
+def test_ensure_config_merges_metadata_lc_versions() -> None:
+    a = {
+        "metadata": {
+            "lc_versions": {"langgraph": "1.2.4"},
+            "lc_agent_name": "agent",
+        }
+    }
+    b = {"metadata": {"lc_versions": {"langchain-core": "1.2.0"}}}
+    merged = ensure_config(a, b)
+    assert merged["metadata"]["lc_versions"] == {
+        "langgraph": "1.2.4",
+        "langchain-core": "1.2.0",
+    }
+    assert merged["metadata"]["lc_agent_name"] == "agent"
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_lc_versions_later_values_win_without_recursive_merge(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {
+        "metadata": {
+            "lc_versions": {
+                "langgraph": "1.2.4",
+                "nested": {"only_a": "A", "shared": "from_a"},
+            }
+        }
+    }
+    b = {
+        "metadata": {
+            "lc_versions": {
+                "langchain-core": "1.2.0",
+                "nested": {"only_b": "B", "shared": "from_b"},
+            }
+        }
+    }
+    merged = merge(a, b)
+    assert merged["metadata"]["lc_versions"] == {
+        "langgraph": "1.2.4",
+        "langchain-core": "1.2.0",
+        "nested": {"only_b": "B", "shared": "from_b"},
+    }
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_nested_mappings_other_than_lc_versions_are_replaced(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {"metadata": {"versions": {"langgraph": "1.2.4"}, "mode": "bound"}}
+    b = {
+        "metadata": {
+            "versions": {"langchain-core": "1.2.0"},
+            "mode": {"source": "runtime"},
+        }
+    }
+    merged = merge(a, b)
+    assert merged["metadata"]["versions"] == {"langchain-core": "1.2.0"}
+    assert merged["metadata"]["mode"] == {"source": "runtime"}
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_non_mapping_values_later_wins(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {"metadata": {"lc_versions": {"langgraph": "1.2.4"}, "mode": "bound"}}
+    b = {"metadata": {"lc_versions": "runtime", "mode": {"source": "runtime"}}}
+    merged = merge(a, b)
+    assert merged["metadata"]["lc_versions"] == "runtime"
+    assert merged["metadata"]["mode"] == {"source": "runtime"}
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_lc_versions_merge_does_not_mutate_inputs(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a_versions = {"langgraph": "1.2.4"}
+    b_versions = {"langchain-core": "1.2.0"}
+    a = {"metadata": {"lc_versions": a_versions}}
+    b = {"metadata": {"lc_versions": b_versions}}
+    merged = merge(a, b)
+    assert a == {"metadata": {"lc_versions": {"langgraph": "1.2.4"}}}
+    assert b == {"metadata": {"lc_versions": {"langchain-core": "1.2.0"}}}
+    assert merged["metadata"]["lc_versions"] is not a_versions
+    assert merged["metadata"]["lc_versions"] is not b_versions
+
+    merged["metadata"]["lc_versions"]["langgraph"] = "changed"
+    assert a_versions == {"langgraph": "1.2.4"}
+    assert b_versions == {"langchain-core": "1.2.0"}
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_single_sided_mapping_values_are_copied(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    base_versions = {"langgraph": "1.2.4"}
+    new_versions = {"langchain-core": "1.2.0"}
+
+    merged_base_only = merge({"metadata": {"lc_versions": base_versions}})
+    merged_new_only = merge(
+        {"metadata": {}},
+        {"metadata": {"lc_versions": new_versions}},
+    )
+
+    assert merged_base_only["metadata"]["lc_versions"] is not base_versions
+    assert merged_new_only["metadata"]["lc_versions"] is not new_versions
+
+    merged_base_only["metadata"]["lc_versions"]["langgraph"] = "changed"
+    merged_new_only["metadata"]["lc_versions"]["langchain-core"] = "changed"
+    assert base_versions == {"langgraph": "1.2.4"}
+    assert new_versions == {"langchain-core": "1.2.0"}
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_empty_incoming_preserves_base_lc_versions(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {"metadata": {"lc_versions": {"langgraph": "1.2.4"}}}
+    b = {"metadata": {"lc_versions": {}}}
+    merged = merge(a, b)
+    assert merged["metadata"]["lc_versions"] == {"langgraph": "1.2.4"}
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_lc_versions_accumulate_across_more_than_two_configs(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {"metadata": {"lc_versions": {"langgraph": "1.2.4"}}}
+    b = {"metadata": {"lc_versions": {"langchain-core": "1.2.0"}}}
+    c = {"metadata": {"lc_versions": {"langchain": "1.1.0"}}}
+    merged = merge(a, b, c)
+    assert merged["metadata"]["lc_versions"] == {
+        "langgraph": "1.2.4",
+        "langchain-core": "1.2.0",
+        "langchain": "1.1.0",
+    }
 
 
 def test_ensure_config_merges_tags_across_configs() -> None:
