@@ -124,7 +124,7 @@ def _get_node_name(node: StateNode[Any, ContextT]) -> str:
     try:
         return getattr(node, "__name__", node.__class__.__name__)
     except AttributeError:
-        raise TypeError(f"Unsupported node type: {type(node)}")
+        raise TypeError(f"Unsupported node type: {type(node)}") from None
 
 
 class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):

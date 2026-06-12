@@ -272,6 +272,19 @@ def test__get_node_name() -> None:
     assert _get_node_name(MyClass().class_method) == "class_method"
 
 
+def test__get_node_name_suppresses_internal_attribute_error() -> None:
+    class BadNode:
+        def __getattribute__(self, name: str) -> Any:
+            if name == "__class__":
+                raise AttributeError("hidden class")
+            return super().__getattribute__(name)
+
+    with pytest.raises(TypeError, match="Unsupported node type") as exc_info:
+        _get_node_name(BadNode())
+
+    assert exc_info.value.__suppress_context__ is True
+
+
 def test_input_schema_conditional_edge():
     class OverallState(TypedDict):
         foo: Annotated[int, operator.add]
