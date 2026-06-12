@@ -26,6 +26,7 @@ from langchain_core.runnables.graph import Edge
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -3381,6 +3382,72 @@ def test_subgraph_checkpoint_true_interrupt(
     assert graph.invoke(Command(resume="baz"), config, durability=durability) == {
         "foo": "hi! foobaz"
     }
+
+
+def test_pending_writes_durable_before_superseding_checkpoint_put() -> None:
+    """A task's pending writes must be durable before the superseding
+    checkpoint is put, so post-crash recovery (replay the writes vs re-execute
+    the node) does not depend on a thread race in the background executor.
+
+    The delay in `put_writes` makes the superseding `put` reliably commit
+    first when the ordering is not enforced.
+    """
+    events: list[tuple[str, str | None]] = []
+    events_lock = threading.Lock()
+
+    class OrderTrackingSaver(InMemorySaver):
+        def put_writes(
+            self,
+            config: RunnableConfig,
+            writes: Sequence[tuple[str, Any]],
+            task_id: str,
+            task_path: str = "",
+        ) -> None:
+            time.sleep(0.05)
+            super().put_writes(config, writes, task_id, task_path)
+            with events_lock:
+                events.append(("writes_done", config["configurable"]["checkpoint_id"]))
+
+        def put(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: ChannelVersions,
+        ) -> RunnableConfig:
+            with events_lock:
+                events.append(
+                    ("put_start", config["configurable"].get("checkpoint_id"))
+                )
+            return super().put(config, checkpoint, metadata, new_versions)
+
+    class State(TypedDict):
+        count: int
+
+    def worker(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("worker", worker)
+    builder.add_edge(START, "worker")
+    builder.add_conditional_edges(
+        "worker", lambda state: "worker" if state["count"] < 3 else END
+    )
+    graph = builder.compile(checkpointer=OrderTrackingSaver())
+
+    result = graph.invoke(
+        {"count": 0}, {"configurable": {"thread_id": "1"}}, durability="sync"
+    )
+    assert result == {"count": 3}
+
+    # once a checkpoint has been superseded (a put with it as parent has
+    # started), all writes attached to it must already be durable
+    for i, (kind, checkpoint_id) in enumerate(events):
+        if kind == "put_start" and checkpoint_id is not None:
+            assert ("writes_done", checkpoint_id) not in events[i:], (
+                f"checkpoint {checkpoint_id} was superseded before the writes"
+                " that produced it were durable"
+            )
 
 
 def test_stream_subgraphs_during_execution(

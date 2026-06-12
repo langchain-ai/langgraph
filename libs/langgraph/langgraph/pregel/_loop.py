@@ -196,15 +196,17 @@ class PregelLoop:
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
-    # Futures from `checkpointer.put_writes` calls that produced delta-channel
-    # writes. `_checkpointer_put_after_previous` drains this list (swap to a
-    # local `futs` then reset to `[]` and wait/gather) before putting the
-    # next checkpoint, so a checkpoint never becomes durable before the
-    # writes that produced it. Initialised to `[]` in both sync and async
-    # `__enter__`; stays `None` only when no checkpointer.
-    _delta_write_futs: list[Any] | None = None
+    # Futures from `checkpointer.put_writes` calls. `_checkpointer_put_after_previous`
+    # drains this list (swap to a local `futs` then reset to `[]` and
+    # wait/gather) before putting the next checkpoint, so a checkpoint never
+    # becomes durable before the writes that produced it (otherwise crash
+    # recovery would be host-dependent: replay vs re-execute decided by which
+    # of the two concurrent saver calls committed first). Initialised to `[]`
+    # in both sync and async `__enter__`; stays `None` only when no
+    # checkpointer.
+    _pending_write_futs: list[Any] | None = None
 
-    # Same pattern as `_delta_write_futs` but for error-handler writes.
+    # Same pattern as `_pending_write_futs` but for error-handler writes.
     # When `put_writes` persists an ERROR_SOURCE_NODE marker, the future is
     # appended here.  `schedule_error_handler` / `aschedule_error_handler`
     # drain this list so the write is durable before the handler starts.
@@ -485,10 +487,8 @@ class PregelLoop:
                     writes_to_save,
                     task_id,
                 )
-            if self._delta_write_futs is not None and any(
-                isinstance(self.specs.get(c), DeltaChannel) for c, _ in writes_to_save
-            ):
-                self._delta_write_futs.append(fut)
+            if self._pending_write_futs is not None:
+                self._pending_write_futs.append(fut)
             # ERROR_SOURCE_NODE is only appended by commit() when the task
             # has an error handler (_should_route_to_error_handler), so this
             # check naturally limits future collection to those tasks.
@@ -1288,8 +1288,8 @@ class PregelLoop:
                     entries,
                     synth_tid,
                 )
-            if self._delta_write_futs is not None:
-                self._delta_write_futs.append(fut)
+            if self._pending_write_futs is not None:
+                self._pending_write_futs.append(fut)
 
     def _suppress_interrupt(
         self,
@@ -1512,8 +1512,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        if self._delta_write_futs:
-            futs, self._delta_write_futs = self._delta_write_futs, []
+        if self._pending_write_futs:
+            futs, self._pending_write_futs = self._pending_write_futs, []
             concurrent.futures.wait(futs)
         try:
             if prev is not None:
@@ -1659,7 +1659,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if saved.pending_writes is not None
             else []
         )
-        self._delta_write_futs = []
+        self._pending_write_futs = []
         self._error_handler_write_futs = []
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
@@ -1764,10 +1764,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        # Drain DeltaChannel write futures before committing the checkpoint so
+        # Drain pending-write futures before committing the checkpoint so
         # ancestor walks never see a checkpoint without its backing writes.
-        if self._delta_write_futs:
-            futs, self._delta_write_futs = self._delta_write_futs, []
+        if self._pending_write_futs:
+            futs, self._pending_write_futs = self._pending_write_futs, []
             await asyncio.gather(*futs)
         try:
             if prev is not None:
@@ -1916,7 +1916,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if saved.pending_writes is not None
             else []
         )
-        self._delta_write_futs = []
+        self._pending_write_futs = []
         self._error_handler_write_futs = []
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None

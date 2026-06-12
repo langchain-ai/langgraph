@@ -8,6 +8,7 @@ import random
 import sys
 import uuid
 from collections import Counter, deque
+from collections.abc import Sequence
 from dataclasses import replace
 from time import perf_counter
 from typing import (
@@ -5064,6 +5065,67 @@ async def test_subgraph_durability_inherited(
     else:
         checkpoints = list(async_checkpointer.list(config))
         assert len(checkpoints) == 1
+
+
+async def test_pending_writes_durable_before_superseding_checkpoint_put() -> None:
+    """A task's pending writes must be durable before the superseding
+    checkpoint is put, so post-crash recovery (replay the writes vs re-execute
+    the node) does not depend on a race between the saver calls.
+
+    The delay in `aput_writes` makes the superseding `aput` reliably commit
+    first when the ordering is not enforced.
+    """
+    events: list[tuple[str, str | None]] = []
+
+    class OrderTrackingSaver(InMemorySaver):
+        async def aput_writes(
+            self,
+            config: RunnableConfig,
+            writes: Sequence[tuple[str, Any]],
+            task_id: str,
+            task_path: str = "",
+        ) -> None:
+            await asyncio.sleep(0.05)
+            await super().aput_writes(config, writes, task_id, task_path)
+            events.append(("writes_done", config["configurable"]["checkpoint_id"]))
+
+        async def aput(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: ChannelVersions,
+        ) -> RunnableConfig:
+            events.append(("put_start", config["configurable"].get("checkpoint_id")))
+            return await super().aput(config, checkpoint, metadata, new_versions)
+
+    class State(TypedDict):
+        count: int
+
+    def worker(state: State) -> State:
+        return {"count": state["count"] + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("worker", worker)
+    builder.add_edge(START, "worker")
+    builder.add_conditional_edges(
+        "worker", lambda state: "worker" if state["count"] < 3 else END
+    )
+    graph = builder.compile(checkpointer=OrderTrackingSaver())
+
+    result = await graph.ainvoke(
+        {"count": 0}, {"configurable": {"thread_id": "1"}}, durability="sync"
+    )
+    assert result == {"count": 3}
+
+    # once a checkpoint has been superseded (a put with it as parent has
+    # started), all writes attached to it must already be durable
+    for i, (kind, checkpoint_id) in enumerate(events):
+        if kind == "put_start" and checkpoint_id is not None:
+            assert ("writes_done", checkpoint_id) not in events[i:], (
+                f"checkpoint {checkpoint_id} was superseded before the writes"
+                " that produced it were durable"
+            )
 
 
 @NEEDS_CONTEXTVARS
