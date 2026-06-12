@@ -639,3 +639,49 @@ def test_stateful_namespace_isolation(
         "broccoli round 2",
         "Veggie: broccoli round 2",
     ]
+
+
+def test_child_with_own_thread_id_keeps_namespace(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Regression test for #8038: a child graph invoked from inside a parent
+    node with its own thread_id must store/read its checkpoint under its own
+    namespace, not inherit the parent task's checkpoint_ns.
+    """
+
+    class ChildState(TypedDict):
+        count: int
+
+    def child_node(state: ChildState) -> dict:
+        return {"count": (state.get("count") or 0) + 1}
+
+    child = (
+        StateGraph(ChildState)
+        .add_node("n", child_node)
+        .add_edge(START, "n")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    child_thread = str(uuid4())
+    child_config = {"configurable": {"thread_id": child_thread}}
+
+    def parent_node(state: ParentState) -> dict:
+        child.invoke({}, config=child_config)
+        return {"result": "ok"}
+
+    parent = (
+        StateGraph(ParentState)
+        .add_node("p", parent_node)
+        .add_edge(START, "p")
+        .compile(checkpointer=sync_checkpointer)
+    )
+    parent_config = {"configurable": {"thread_id": str(uuid4())}}
+
+    parent.invoke({"result": ""}, config=parent_config)
+    state1 = child.get_state(child_config)
+    assert state1.values.get("count") == 1
+    assert state1.config["configurable"]["checkpoint_ns"] == ""
+
+    parent.invoke({"result": ""}, config=parent_config)
+    state2 = child.get_state(child_config)
+    assert state2.values.get("count") == 2

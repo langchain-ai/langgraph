@@ -306,22 +306,29 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                 if _is_not_empty(v)
             },
         )
+    # The configurable inherited from var_child_runnable_config is the ambient
+    # run context (e.g. a parent task's checkpoint_ns/checkpoint_id). The first
+    # explicitly passed configurable must replace it rather than merge over it,
+    # otherwise a child graph invoked inside a parent node inherits the parent's
+    # checkpoint_ns and writes its checkpoints to an unreadable namespace.
+    configurable_is_ambient = True
     for config in configs:
         if config is None:
             continue
         for k, v in config.items():
             if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
-                    # Shallow-merge configurable dicts across configs so values
-                    # bound via with_config(...) (e.g. ls_agent_type) are
-                    # preserved when later configs (e.g. invoke-time) only
-                    # specify a subset of keys like thread_id.
+                    # Shallow-merge configurable dicts across explicit configs so
+                    # values bound via with_config(...) (e.g. ls_agent_type) are
+                    # preserved when later configs (e.g. invoke-time) only specify
+                    # a subset of keys like thread_id.
                     existing = empty.get(k)
                     empty[k] = (
                         {**cast(dict, existing), **cast(dict, v)}
-                        if existing
+                        if existing and not configurable_is_ambient
                         else cast(dict, v).copy()
                     )
+                    configurable_is_ambient = False
                 elif k == "callbacks":
                     empty["callbacks"] = _merge_callbacks(
                         empty.get("callbacks"), cast(Callbacks, v)
