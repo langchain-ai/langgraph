@@ -649,6 +649,31 @@ def test_metadata_single_sided_mapping_values_are_copied(
     assert new_versions == {"langchain-core": "1.2.0"}
 
 
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_empty_incoming_preserves_base_lc_versions(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {"metadata": {"lc_versions": {"langgraph": "1.2.4"}}}
+    b = {"metadata": {"lc_versions": {}}}
+    merged = merge(a, b)
+    assert merged["metadata"]["lc_versions"] == {"langgraph": "1.2.4"}
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_lc_versions_accumulate_across_more_than_two_configs(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {"metadata": {"lc_versions": {"langgraph": "1.2.4"}}}
+    b = {"metadata": {"lc_versions": {"langchain-core": "1.2.0"}}}
+    c = {"metadata": {"lc_versions": {"langchain": "1.1.0"}}}
+    merged = merge(a, b, c)
+    assert merged["metadata"]["lc_versions"] == {
+        "langgraph": "1.2.4",
+        "langchain-core": "1.2.0",
+        "langchain": "1.1.0",
+    }
+
+
 def test_ensure_config_merges_tags_across_configs() -> None:
     a = {"tags": ["alpha"]}
     b = {"tags": ["beta"]}

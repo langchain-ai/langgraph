@@ -93,6 +93,11 @@ def _merge_metadata(
     packages can contribute package versions without changing generic metadata
     semantics. Mapping values are copied one level, so deeper nested objects
     remain shared. `None` inputs are treated as empty metadata.
+
+    Mirrors `langchain_core.runnables.config._merge_metadata_dicts` so configs
+    that pass through LangGraph's merge keep the same `lc_versions` semantics;
+    keep the two in sync. Unlike lc-core, this copies mapping values one level
+    (intentionally more defensive — do not "simplify" back to a shared ref).
     """
     merged = {key: _copy_mapping_value(value) for key, value in (base or {}).items()}
     for key, value in (new or {}).items():
