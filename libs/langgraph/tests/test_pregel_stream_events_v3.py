@@ -607,6 +607,53 @@ class TestStreamV2Async:
             _ = await anext(aiter(run.values))
         assert run._exhausted is True
 
+    async def test_abort_cancels_running_subgraph(self) -> None:
+        class CountState(TypedDict):
+            count: int
+
+        runs: list[int] = []
+
+        async def sub_node(state: CountState) -> dict:
+            runs.append(state["count"] + 1)
+            await asyncio.sleep(0.05)
+            return {"count": state["count"] + 1}
+
+        sub_graph = (
+            StateGraph(CountState)
+            .add_node("sub_node", sub_node)
+            .set_entry_point("sub_node")
+            .add_conditional_edges(
+                "sub_node",
+                lambda s: END if s["count"] >= 10 else "sub_node",
+            )
+            .compile()
+        )
+
+        async def main_node(state: CountState) -> None:
+            await sub_graph.ainvoke({"count": 0})
+
+        main_graph = (
+            StateGraph(CountState)
+            .add_node("main_node", main_node)
+            .set_entry_point("main_node")
+            .compile()
+        )
+
+        run = await main_graph.astream_events({"count": 0}, version="v3")
+        async for e in run:
+            if (
+                e["method"] == "values"
+                and e["params"]["namespace"]
+                and e["params"]["data"]["count"] >= 2
+            ):
+                break
+        await run.abort()
+        runs_at_abort = len(runs)
+        # Give the (now-cancelled) subgraph a chance to keep looping.
+        await asyncio.sleep(0.3)
+        assert len(runs) == runs_at_abort
+        assert len(runs) < 10
+
     async def test_extensions_has_native_keys(self) -> None:
         run = await _build_simple_graph().astream_events(
             {"value": "x", "items": []}, version="v3"

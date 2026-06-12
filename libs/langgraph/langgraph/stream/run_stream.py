@@ -132,13 +132,23 @@ class GraphRunStream:
     def abort(self) -> None:
         """Stop the run early.
 
-        Closes the mux and marks the stream exhausted. The graph
-        iterator is dropped; any in-flight nodes see the closure on
-        their next yield point. Idempotent.
+        Closes the underlying graph iterator (propagating `GeneratorExit`
+        so in-flight nodes and subgraphs are cancelled), closes the mux,
+        and marks the stream exhausted. Idempotent.
         """
         if self._exhausted:
             return
         self._exhausted = True
+        graph_iter = self._graph_iter
+        self._graph_iter = None
+        if (
+            graph_iter is not None
+            and (close := getattr(graph_iter, "close", None)) is not None
+        ):
+            try:
+                close()
+            except Exception:
+                pass
         try:
             self._mux.close()
         except Exception:
@@ -428,15 +438,27 @@ class AsyncGraphRunStream:
     async def abort(self) -> None:
         """Stop the run early.
 
-        Marks the stream exhausted, wakes any pump-waiters, and closes
-        the mux. Any `apush` blocked on backpressure wakes and returns
+        Marks the stream exhausted, wakes any pump-waiters, closes the
+        underlying graph iterator (propagating `GeneratorExit` so
+        in-flight nodes and subgraphs are cancelled), and closes the
+        mux. Any `apush` blocked on backpressure wakes and returns
         without appending. Idempotent.
         """
         async with self._pump_cond:
             if self._exhausted:
                 return
             self._exhausted = True
+            graph_aiter = self._graph_aiter
+            self._graph_aiter = None
             self._pump_cond.notify_all()
+        if (
+            graph_aiter is not None
+            and (aclose := getattr(graph_aiter, "aclose", None)) is not None
+        ):
+            try:
+                await aclose()
+            except Exception:
+                pass
         try:
             await self._mux.aclose()
         except Exception:
