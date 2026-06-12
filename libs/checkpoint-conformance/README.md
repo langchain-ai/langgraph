@@ -1,14 +1,26 @@
-# langgraph-checkpoint-conformance
+# LangGraph Checkpoint Conformance
 
-Conformance test suite for [LangGraph](https://github.com/langchain-ai/langgraph) checkpointer implementations.
+[![PyPI - Version](https://img.shields.io/pypi/v/langgraph-checkpoint-conformance?label=%20)](https://pypi.org/project/langgraph-checkpoint-conformance/#history)
+[![PyPI - License](https://img.shields.io/pypi/l/langgraph-checkpoint-conformance)](https://opensource.org/licenses/MIT)
+[![PyPI - Downloads](https://img.shields.io/pepy/dt/langgraph-checkpoint-conformance)](https://pypistats.org/packages/langgraph-checkpoint-conformance)
+[![Twitter](https://img.shields.io/twitter/url/https/twitter.com/langchain_oss.svg?style=social&label=Follow%20%40LangChain)](https://x.com/langchain_oss)
 
-Validates that a `BaseCheckpointSaver` subclass correctly implements the checkpoint storage contract — blob round-trips, metadata preservation, namespace isolation, incremental channel updates, and more.
+To help you ship LangGraph apps to production faster, check out [LangSmith](https://www.langchain.com/langsmith).
+[LangSmith](https://www.langchain.com/langsmith) is a unified developer platform for building, testing, and monitoring LLM applications.
 
-## Installation
+## Quick Install
 
 ```bash
-pip install langgraph-checkpoint-conformance
+uv add langgraph-checkpoint-conformance
 ```
+
+## 🤔 What is this?
+
+This library provides a conformance test suite for [LangGraph](https://github.com/langchain-ai/langgraph) checkpointer implementations. It validates that a `BaseCheckpointSaver` subclass correctly implements the checkpoint storage contract — blob round-trips, metadata preservation, namespace isolation, incremental channel updates, and more.
+
+## 📖 Documentation
+
+For full documentation, see the [API reference](https://reference.langchain.com/python/langgraph/). For conceptual guides on persistence and memory, see the [LangGraph Docs](https://docs.langchain.com/oss/python/langgraph/overview).
 
 ## Quick start
 
@@ -110,3 +122,13 @@ async def pg_checkpointer():
     async with PostgresSaver.from_conn_string(CONN_STRING) as saver:
         yield saver
 ```
+
+## 📕 Releases & Versioning
+
+See our [Releases](https://docs.langchain.com/oss/python/release-policy) and [Versioning](https://docs.langchain.com/oss/python/versioning) policies.
+
+## 💁 Contributing
+
+As an open-source project in a rapidly developing field, we are extremely open to contributions, whether it be in the form of a new feature, improved infrastructure, or better documentation.
+
+For detailed information on how to contribute, see the [Contributing Guide](https://docs.langchain.com/oss/python/contributing/overview).

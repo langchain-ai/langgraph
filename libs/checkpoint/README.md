@@ -1,6 +1,26 @@
 # LangGraph Checkpoint
 
-This library defines the base interface for LangGraph checkpointers. Checkpointers provide a persistence layer for LangGraph. They allow you to interact with and manage the graph's state. When you use a graph with a checkpointer, the checkpointer saves a _checkpoint_ of the graph state at every superstep, enabling several powerful capabilities like human-in-the-loop, "memory" between interactions and more.
+[![PyPI - Version](https://img.shields.io/pypi/v/langgraph-checkpoint?label=%20)](https://pypi.org/project/langgraph-checkpoint/#history)
+[![PyPI - License](https://img.shields.io/pypi/l/langgraph-checkpoint)](https://opensource.org/licenses/MIT)
+[![PyPI - Downloads](https://img.shields.io/pepy/dt/langgraph-checkpoint)](https://pypistats.org/packages/langgraph-checkpoint)
+[![Twitter](https://img.shields.io/twitter/url/https/twitter.com/langchain_oss.svg?style=social&label=Follow%20%40LangChain)](https://x.com/langchain_oss)
+
+To help you ship LangGraph apps to production faster, check out [LangSmith](https://www.langchain.com/langsmith).
+[LangSmith](https://www.langchain.com/langsmith) is a unified developer platform for building, testing, and monitoring LLM applications.
+
+## Quick Install
+
+```bash
+uv add langgraph-checkpoint
+```
+
+## 🤔 What is this?
+
+This library defines the base interface for LangGraph checkpointers. Checkpointers provide a persistence layer for LangGraph: they save graph state at every superstep, enabling human-in-the-loop, memory between interactions, durable execution, and more.
+
+## 📖 Documentation
+
+For full documentation, see the [API reference](https://reference.langchain.com/python/langgraph.checkpoint). For conceptual guides on persistence and memory, see the [LangGraph Docs](https://docs.langchain.com/oss/python/langgraph/overview).
 
 ## Key concepts
 
@@ -24,7 +44,7 @@ You must pass these when invoking the graph as part of the configurable part of 
 
 ### Serde
 
-`langgraph_checkpoint` also defines protocol for serialization/deserialization (serde) and provides an default implementation (`langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer`) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
+`langgraph-checkpoint` also defines protocol for serialization/deserialization (serde) and provides a default implementation (`langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer`) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
 
 > [!IMPORTANT]
 > **Checkpoint deserialization security:** By default the serializer allows any Python type found in checkpoint data. New applications should set the environment variable `LANGGRAPH_STRICT_MSGPACK=true` or pass an explicit `allowed_msgpack_modules` list to `JsonPlusSerializer` to restrict deserialization to known-safe types.
@@ -89,3 +109,13 @@ checkpointer.get(read_config)
 # list checkpoints
 list(checkpointer.list(read_config))
 ```
+
+## 📕 Releases & Versioning
+
+See our [Releases](https://docs.langchain.com/oss/python/release-policy) and [Versioning](https://docs.langchain.com/oss/python/versioning) policies.
+
+## 💁 Contributing
+
+As an open-source project in a rapidly developing field, we are extremely open to contributions, whether it be in the form of a new feature, improved infrastructure, or better documentation.
+
+For detailed information on how to contribute, see the [Contributing Guide](https://docs.langchain.com/oss/python/contributing/overview).
