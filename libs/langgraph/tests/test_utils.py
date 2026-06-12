@@ -506,9 +506,9 @@ def test_ensure_config_configurable_later_wins_per_key() -> None:
 
 
 def test_ensure_config_explicit_configurable_replaces_ambient() -> None:
-    # An explicitly passed configurable must replace the ambient run context
-    # (e.g. a parent task's checkpoint_ns) rather than merge over it, so a child
-    # graph does not inherit the parent's checkpoint namespace. See #8038.
+    # An explicit checkpoint coordinate (here a new thread_id) starts a fresh
+    # lineage and drops the ambient run context (e.g. a parent task's
+    # checkpoint_ns), so a child graph does not inherit it.
     from langchain_core.runnables.config import var_child_runnable_config
 
     token = var_child_runnable_config.set(
@@ -539,8 +539,9 @@ def test_ensure_config_ambient_inherited_when_no_explicit_configurable() -> None
 
 
 def test_ensure_config_explicit_configurables_still_merge_over_ambient() -> None:
-    # The first explicit configurable replaces the ambient one; subsequent
-    # explicit configurables still shallow-merge (preserves #7926 semantics).
+    # A new thread_id drops the ambient, but explicit configs still shallow-merge
+    # among themselves, so a with_config(...) value (ls_agent_type) survives
+    # alongside an invoke-time thread_id.
     from langchain_core.runnables.config import var_child_runnable_config
 
     token = var_child_runnable_config.set(
@@ -556,6 +557,24 @@ def test_ensure_config_explicit_configurables_still_merge_over_ambient() -> None
     assert merged["configurable"]["ls_agent_type"] == "root"
     assert merged["configurable"]["thread_id"] == "child"
     assert "checkpoint_ns" not in merged["configurable"]
+
+
+def test_ensure_config_non_coordinate_config_keeps_ambient_checkpoint_ns() -> None:
+    # A nested subagent is invoked with a non-coordinate configurable key
+    # (ls_agent_type) and no thread_id; it must keep the inherited checkpoint_ns
+    # so it stays a discoverable child of the parent run (deepagents `task` tool).
+    from langchain_core.runnables.config import var_child_runnable_config
+
+    token = var_child_runnable_config.set(
+        {"configurable": {"thread_id": "parent", "checkpoint_ns": "p:parent-task"}}
+    )
+    try:
+        merged = ensure_config({"configurable": {"ls_agent_type": "subagent"}})
+    finally:
+        var_child_runnable_config.reset(token)
+    assert merged["configurable"]["ls_agent_type"] == "subagent"
+    assert merged["configurable"]["checkpoint_ns"] == "p:parent-task"
+    assert merged["configurable"]["thread_id"] == "parent"
 
 
 def test_ensure_config_merges_metadata_across_configs() -> None:

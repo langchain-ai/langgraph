@@ -666,9 +666,9 @@ async def test_stateful_namespace_isolation_async(
 async def test_child_with_own_thread_id_keeps_namespace_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Regression test for #8038: a child graph invoked from inside a parent
-    node with its own thread_id must store/read its checkpoint under its own
-    namespace, not inherit the parent task's checkpoint_ns.
+    """A child graph invoked from inside a parent node with its own thread_id
+    must store and read its checkpoint under its own namespace, not inherit the
+    parent task's checkpoint_ns.
     """
 
     class ChildState(TypedDict):
