@@ -371,3 +371,18 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+def test_reducer_field_seeds_dataclass_default_when_omitted() -> None:
+    @dataclass
+    class DataclassState:
+        counter: Annotated[int, operator.add] = field(default=10)
+
+    builder = StateGraph(DataclassState)
+    builder.add_node("n", lambda _: {"counter": 5})
+    builder.add_edge("__start__", "n")
+    builder.add_edge("n", "__end__")
+    graph = builder.compile()
+
+    assert graph.invoke({}) == {"counter": 15}
+    assert graph.invoke({"counter": 100}) == {"counter": 105}

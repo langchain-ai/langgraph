@@ -1,6 +1,7 @@
 import datetime
 import decimal
 import ipaddress
+import operator
 import pathlib
 import re
 import sys
@@ -360,3 +361,82 @@ def test_interrupt_functional_pydantic(sync_checkpointer: BaseCheckpointSaver) -
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar", "b": "bar"}
     assert called_count == 1
+
+
+def _extend(left: list, right: list) -> list:
+    left.extend(right)
+    return left
+
+
+def test_reducer_field_seeds_scalar_default_when_omitted() -> None:
+    class State(BaseModel):
+        counter: Annotated[int, operator.add] = Field(default=10)
+
+    builder = StateGraph(State)
+    builder.add_node("n", lambda _: {"counter": 5})
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    assert graph.invoke({}) == {"counter": 15}
+
+
+def test_reducer_field_seeds_default_factory_when_omitted() -> None:
+    class State(BaseModel):
+        items: Annotated[list[str], _extend] = Field(
+            default_factory=lambda: ["default"]
+        )
+
+    def node(state: State) -> dict[str, list[str]]:
+        assert state.items == ["default"]
+        return {"items": ["from_node"]}
+
+    builder = StateGraph(State)
+    builder.add_node("n", node)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    assert graph.invoke({}) == {"items": ["default", "from_node"]}
+
+
+def test_reducer_field_explicit_input_overrides_default() -> None:
+    class State(BaseModel):
+        counter: Annotated[int, operator.add] = Field(default=10)
+
+    builder = StateGraph(State)
+    builder.add_node("n", lambda _: {"counter": 5})
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    assert graph.invoke({"counter": 100}) == {"counter": 105}
+
+
+def test_reducer_field_default_not_shared_across_runs() -> None:
+    class State(BaseModel):
+        items: Annotated[list[str], _extend] = Field(
+            default_factory=lambda: ["default"]
+        )
+
+    builder = StateGraph(State)
+    builder.add_node("n", lambda _: {"items": ["from_node"]})
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    assert graph.invoke({}) == {"items": ["default", "from_node"]}
+    assert graph.invoke({}) == {"items": ["default", "from_node"]}
+
+
+def test_reducer_field_without_default_unchanged() -> None:
+    class State(BaseModel):
+        counter: Annotated[int, operator.add]
+
+    builder = StateGraph(State)
+    builder.add_node("n", lambda _: {"counter": 5})
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    assert graph.invoke({}) == {"counter": 5}
