@@ -96,7 +96,9 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
     @classmethod
     @contextmanager
-    def from_conn_string(cls, conn_string: str) -> Iterator[SqliteSaver]:
+    def from_conn_string(
+        cls, conn_string: str, *, serde: SerializerProtocol | None = None
+    ) -> Iterator[SqliteSaver]:
         """Create a new SqliteSaver instance from a connection string.
 
         Args:
@@ -124,7 +126,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 check_same_thread=False,
             )
         ) as conn:
-            yield cls(conn)
+            yield cls(conn, serde=serde)
 
     def setup(self) -> None:
         """Set up the checkpoint database.

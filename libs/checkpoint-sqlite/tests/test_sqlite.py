@@ -1,3 +1,4 @@
+import json
 from typing import Any, cast
 
 import pytest
@@ -11,6 +12,14 @@ from langgraph.checkpoint.base import (
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.utils import _metadata_predicate, search_where
+
+
+class CustomJsonSerializer:
+    def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+        return "custom-json", json.dumps(obj).encode()
+
+    def loads_typed(self, data: tuple[str, bytes]) -> Any:
+        return json.loads(data[1].decode())
 
 
 class TestSqliteSaver:
@@ -74,6 +83,20 @@ class TestSqliteSaver:
                 **self.metadata_2,
                 "run_id": "my_run_id",
             }
+
+    def test_from_conn_string_accepts_custom_serializer(self) -> None:
+        with SqliteSaver.from_conn_string(
+            ":memory:", serde=CustomJsonSerializer()
+        ) as saver:
+            saved_config = saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
+
+            with saver.cursor(transaction=False) as cur:
+                (type_,) = cur.execute("SELECT type FROM checkpoints").fetchone()
+
+            checkpoint = saver.get_tuple(saved_config)
+            assert type_ == "custom-json"
+            assert checkpoint is not None
+            assert checkpoint.checkpoint == self.chkpnt_1
 
     def test_search(self) -> None:
         with SqliteSaver.from_conn_string(":memory:") as saver:

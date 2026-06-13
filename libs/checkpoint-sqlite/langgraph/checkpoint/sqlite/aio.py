@@ -131,7 +131,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
     @classmethod
     @asynccontextmanager
     async def from_conn_string(
-        cls, conn_string: str
+        cls, conn_string: str, *, serde: SerializerProtocol | None = None
     ) -> AsyncIterator[AsyncSqliteSaver]:
         """Create a new AsyncSqliteSaver instance from a connection string.
 
@@ -142,7 +142,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             AsyncSqliteSaver: A new AsyncSqliteSaver instance.
         """
         async with aiosqlite.connect(conn_string) as conn:
-            yield cls(conn)
+            yield cls(conn, serde=serde)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database.
