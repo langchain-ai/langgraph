@@ -15,10 +15,25 @@ def _freeze(obj: Any, depth: int = 10) -> Hashable:
         return tuple(_freeze(x, depth - 1) for x in obj)
     # numpy / pandas etc. can provide their own .tobytes()
     elif hasattr(obj, "tobytes"):
+        # Include metadata that distinguishes objects sharing the same raw
+        # bytes but differing semantically; otherwise distinct inputs collide
+        # to the same cache key (e.g. numpy arrays with the same bytes/shape
+        # but different dtype, or PIL images with the same pixels but a
+        # different mode/size/palette). See #8009.
+        palette = None
+        if hasattr(obj, "getpalette"):
+            try:
+                palette = tuple(obj.getpalette() or ())
+            except Exception:
+                palette = None
         return (
             type(obj).__name__,
             obj.tobytes(),
             obj.shape if hasattr(obj, "shape") else None,
+            str(obj.dtype) if hasattr(obj, "dtype") else None,
+            obj.mode if hasattr(obj, "mode") else None,
+            obj.size if hasattr(obj, "size") else None,
+            palette,
         )
     return obj  # strings, ints, dataclasses with frozen=True, etc.
 
