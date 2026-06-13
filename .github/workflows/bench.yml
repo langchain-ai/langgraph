@@ -15,7 +15,7 @@ jobs:
       run:
         working-directory: libs/langgraph
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - id: files
         name: Get changed files
         uses: Ana06/get-changed-files@25f79e676e7ea1868813e21465014798211fad8c # v2.3.0
@@ -30,7 +30,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --group test
       - name: Download baseline
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           key: ${{ runner.os }}-benchmark-baseline
           restore-keys: |
@@ -57,7 +57,7 @@ jobs:
             echo EOF
           } >> "$GITHUB_OUTPUT"
       - name: Annotation
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           CHANGED_FILES: ${{ steps.files.outputs.added_modified_renamed }}
           BENCHMARK_OUTPUT: ${{ steps.benchmark.outputs.OUTPUT }}
