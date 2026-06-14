@@ -108,6 +108,7 @@ from langgraph.callbacks import (
     get_sync_graph_callback_manager_for_config,
 )
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
 from langgraph.constants import END
@@ -1995,11 +1996,28 @@ class Pregel(
                         },
                     ),
                 )
+            created_root = False
+            if saved is None:
+                needs_root = any(
+                    isinstance(channels.get(chan), DeltaChannel)
+                    for task in run_tasks
+                    for chan, _ in task.writes
+                    if chan != PUSH and chan in channels
+                )
+                if needs_root:
+                    root_checkpoint = create_checkpoint(checkpoint, channels, step)
+                    checkpoint_config = checkpointer.put(
+                        checkpoint_config,
+                        root_checkpoint,
+                        {"source": "update", "step": step, "parents": {}},
+                        {},
+                    )
+                    created_root = True
             # save task writes
             for task_id, task in zip(run_task_ids, run_tasks):
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
-                if saved and channel_writes:
+                if (saved is not None or created_root) and channel_writes:
                     checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
             # apply to checkpoint and save
             apply_writes(
@@ -2440,11 +2458,28 @@ class Pregel(
                         },
                     ),
                 )
+            created_root = False
+            if saved is None:
+                needs_root = any(
+                    isinstance(channels.get(chan), DeltaChannel)
+                    for task in run_tasks
+                    for chan, _ in task.writes
+                    if chan != PUSH and chan in channels
+                )
+                if needs_root:
+                    root_checkpoint = create_checkpoint(checkpoint, channels, step)
+                    checkpoint_config = await checkpointer.aput(
+                        checkpoint_config,
+                        root_checkpoint,
+                        {"source": "update", "step": step, "parents": {}},
+                        {},
+                    )
+                    created_root = True
             # save task writes
             for task_id, task in zip(run_task_ids, run_tasks):
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
-                if saved and channel_writes:
+                if (saved is not None or created_root) and channel_writes:
                     await checkpointer.aput_writes(
                         checkpoint_config, channel_writes, task_id
                     )
@@ -4141,6 +4176,110 @@ class Pregel(
                 )
         # clear cache
         await self.cache.aclear(namespaces)
+
+    def resume(
+        self,
+        config: RunnableConfig,
+        value: Any,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode = "values",
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        version: Literal["v1", "v2"] = "v1",
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any:
+        """Resume a paused graph by providing a value to resume with.
+        
+        Args:
+            config: The configuration to use for the run.
+            value: The value to resume the graph with.
+            context: The static context to use for the run.
+            stream_mode: The mode to stream output, defaults to `self.stream_mode`.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes.
+            output_keys: The keys to stream, defaults to all non-context channels.
+            interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
+            interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
+            durability: The durability mode for the graph execution, defaults to `"async"`.
+            control: Optional run control used to request cooperative drain.
+            version: The version of the streaming API to use.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            The output of the resumed graph run.
+        """
+        from langgraph.types import Command
+
+        return self.invoke(
+            Command(resume=value),
+            config,
+            context=context,
+            stream_mode=stream_mode,
+            print_mode=print_mode,
+            output_keys=output_keys,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+            durability=durability,
+            control=control,
+            version=version,
+            **kwargs,
+        )
+
+    async def aresume(
+        self,
+        config: RunnableConfig,
+        value: Any,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode = "values",
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        control: RunControl | None = None,
+        version: Literal["v1", "v2"] = "v1",
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any:
+        """Asynchronously resume a paused graph by providing a value to resume with.
+        
+        Args:
+            config: The configuration to use for the run.
+            value: The value to resume the graph with.
+            context: The static context to use for the run.
+            stream_mode: The mode to stream output, defaults to `self.stream_mode`.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes.
+            output_keys: The keys to stream, defaults to all non-context channels.
+            interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
+            interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
+            durability: The durability mode for the graph execution, defaults to `"async"`.
+            control: Optional run control used to request cooperative drain.
+            version: The version of the streaming API to use.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            The output of the resumed graph run.
+        """
+        from langgraph.types import Command
+
+        return await self.ainvoke(
+            Command(resume=value),
+            config,
+            context=context,
+            stream_mode=stream_mode,
+            print_mode=print_mode,
+            output_keys=output_keys,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+            durability=durability,
+            control=control,
+            version=version,
+            **kwargs,
+        )
 
 
 def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str]]:
