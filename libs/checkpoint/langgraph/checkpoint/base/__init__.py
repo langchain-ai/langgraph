@@ -858,3 +858,11 @@ def create_checkpoint(
         pending_sends=checkpoint.get("pending_sends", []),
         updated_channels=None,
     )
+
+
+from langgraph.checkpoint.base.guard import (  # noqa: E402, I001
+    AsyncCheckpointWriteGuard as AsyncCheckpointWriteGuard,
+    CheckpointWrite as CheckpointWrite,
+    CheckpointWriteGuard as CheckpointWriteGuard,
+    GuardedCheckpointSaver as GuardedCheckpointSaver,
+)

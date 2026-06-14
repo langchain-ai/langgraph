@@ -53,6 +53,24 @@ You must pass these when invoking the graph as part of the configurable part of 
 
 When a graph node fails mid-execution at a given superstep, LangGraph stores pending checkpoint writes from any other nodes that completed successfully at that superstep, so that whenever we resume graph execution from that superstep we don't re-run the successful nodes.
 
+### Guarded checkpoint writes
+
+`GuardedCheckpointSaver` wraps any checkpoint saver and runs a user-provided policy before checkpoint data or pending writes are persisted. The policy can inspect the structured `CheckpointWrite` payload and raise to reject suspicious data, or allow the write to continue to the wrapped saver.
+
+```python
+from langgraph.checkpoint.base import CheckpointWrite, GuardedCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+def block_suspicious_memory(write: CheckpointWrite) -> None:
+    payload = write.checkpoint if write.kind == "checkpoint" else write.writes
+    if "ignore previous instructions" in repr(payload).lower():
+        raise ValueError("blocked suspicious checkpoint write")
+
+
+checkpointer = GuardedCheckpointSaver(InMemorySaver(), block_suspicious_memory)
+```
+
 ## Interface
 
 Each checkpointer should conform to `langgraph.checkpoint.base.BaseCheckpointSaver` interface and must implement the following methods:
