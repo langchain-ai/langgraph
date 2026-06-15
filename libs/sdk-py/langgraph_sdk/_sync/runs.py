@@ -1076,6 +1076,7 @@ class SyncRunsClient:
             params=params,
         )
 
+    @overload
     def join_stream(
         self,
         thread_id: str,
@@ -1086,7 +1087,35 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         last_event_id: str | None = None,
-    ) -> Iterator[StreamPart]:
+        version: Literal["v1"] = "v1",
+    ) -> Iterator[StreamPart]: ...
+
+    @overload
+    def join_stream(
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        cancel_on_disconnect: bool = False,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        last_event_id: str | None = None,
+        version: Literal["v2"],
+    ) -> Iterator[StreamPartV2]: ...
+
+    def join_stream(
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        cancel_on_disconnect: bool = False,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        last_event_id: str | None = None,
+        version: StreamVersion = "v1",
+    ) -> Iterator[StreamPart | StreamPartV2]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
         not be received here.
@@ -1101,6 +1130,8 @@ class SyncRunsClient:
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
             last_event_id: The last event ID to use for the stream.
+            version: Stream format version. "v1" (default) returns raw SSE StreamPart
+                NamedTuples. "v2" returns typed dicts with `type`, `ns`, and `data` keys.
 
         Returns:
             `None`
@@ -1123,7 +1154,7 @@ class SyncRunsClient:
         }
         if params:
             query_params.update(params)
-        return self.http.stream(
+        raw = self.http.stream(
             f"/threads/{_quote_path_param(thread_id)}/runs/{_quote_path_param(run_id)}/stream",
             "GET",
             params=query_params,
@@ -1133,6 +1164,9 @@ class SyncRunsClient:
             }
             or None,
         )
+        if version == "v2":
+            return _wrap_stream_v2_sync(raw)
+        return raw
 
     def delete(
         self,

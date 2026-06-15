@@ -440,6 +440,104 @@ def test_sync_stream_v2_client_side_conversion() -> None:
     }
 
 
+# --- join_stream v2 wrapping ---
+
+
+@pytest.mark.asyncio
+async def test_async_join_stream_v2_wraps_raw_iterator() -> None:
+    from langgraph_sdk._async.runs import RunsClient
+
+    raw_parts = [
+        StreamPart(event="metadata", data={"run_id": "r1"}),
+        StreamPart(
+            event="values", data={"messages": [{"role": "user", "content": "hi"}]}
+        ),
+        StreamPart(event="updates|sub:abc", data={"node": {"out": 1}}),
+        StreamPart(event="end", data=None),  # ty: ignore[invalid-argument-type]
+    ]
+    captured: dict[str, Any] = {}
+
+    async def fake_stream(*args: Any, **kwargs: Any) -> Any:
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        for part in raw_parts:
+            yield part
+
+    class _FakeHttp:
+        stream = staticmethod(fake_stream)
+
+    client = RunsClient(_FakeHttp())  # ty: ignore[invalid-argument-type]
+    parts: list[StreamPartV2] = [
+        part async for part in client.join_stream("thread-1", "run-1", version="v2")
+    ]
+
+    assert captured["args"][0] == "/threads/thread-1/runs/run-1/stream"
+    assert captured["args"][1] == "GET"
+    assert len(parts) == 3
+    for part in parts:
+        _assert_v2_shape(part)
+    assert parts[0] == {
+        "type": "metadata",
+        "ns": [],
+        "data": {"run_id": "r1"},
+        "interrupts": [],
+    }
+    assert parts[1] == {
+        "type": "values",
+        "ns": [],
+        "data": {"messages": [{"role": "user", "content": "hi"}]},
+        "interrupts": [],
+    }
+    assert parts[2] == {
+        "type": "updates",
+        "ns": ["sub:abc"],
+        "data": {"node": {"out": 1}},
+        "interrupts": [],
+    }
+
+
+def test_sync_join_stream_v2_wraps_raw_iterator() -> None:
+    from langgraph_sdk._sync.runs import SyncRunsClient
+
+    raw_parts = [
+        StreamPart(event="metadata", data={"run_id": "r1"}),
+        StreamPart(event="values", data={"state": "full"}),
+        StreamPart(event="end", data=None),  # ty: ignore[invalid-argument-type]
+    ]
+    captured: dict[str, Any] = {}
+
+    def fake_stream(*args: Any, **kwargs: Any) -> Iterator[StreamPart]:
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        yield from raw_parts
+
+    class _FakeHttp:
+        stream = staticmethod(fake_stream)
+
+    client = SyncRunsClient(_FakeHttp())  # ty: ignore[invalid-argument-type]
+    parts: list[StreamPartV2] = list(
+        client.join_stream("thread-1", "run-1", version="v2")
+    )
+
+    assert captured["args"][0] == "/threads/thread-1/runs/run-1/stream"
+    assert captured["args"][1] == "GET"
+    assert len(parts) == 2
+    for part in parts:
+        _assert_v2_shape(part)
+    assert parts[0] == {
+        "type": "metadata",
+        "ns": [],
+        "data": {"run_id": "r1"},
+        "interrupts": [],
+    }
+    assert parts[1] == {
+        "type": "values",
+        "ns": [],
+        "data": {"state": "full"},
+        "interrupts": [],
+    }
+
+
 # --- type narrowing compile-time checks ---
 
 
