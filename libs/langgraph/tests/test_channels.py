@@ -1,3 +1,4 @@
+import functools
 import operator
 from collections.abc import Sequence
 from typing import Annotated
@@ -103,6 +104,62 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_binop_comparison() -> None:
+    # Test that BinaryOperatorAggregate instances with the same operator are equal, even if the operator is a lambda or partial
+
+    # Test functools.partial - same partial object should be equal
+    reducer = functools.partial(operator.add)
+    channel_partial = BinaryOperatorAggregate(int, reducer).from_checkpoint(MISSING)
+    channel_partial2 = BinaryOperatorAggregate(int, reducer).from_checkpoint(MISSING)
+    channel_add = BinaryOperatorAggregate(int, operator.add).from_checkpoint(MISSING)
+    assert channel_partial == channel_partial2
+    assert channel_partial != channel_add
+
+    # Test lambda functions - same lambda instance should be equal, different instances not equal
+    lambda1 = lambda x, y: x + y  # noqa: E731
+    lambda2 = lambda x, y: x + y  # noqa: E731
+    channel_lambda1 = BinaryOperatorAggregate(int, lambda1).from_checkpoint(MISSING)
+    channel_lambda1_copy = BinaryOperatorAggregate(int, lambda1).from_checkpoint(
+        MISSING
+    )
+    channel_lambda2 = BinaryOperatorAggregate(int, lambda2).from_checkpoint(MISSING)
+    assert channel_lambda1 == channel_lambda1_copy
+    assert channel_lambda1 == channel_lambda2
+
+    # Test regular functions - same function should be equal, different functions not equal
+    def add_func(x, y):
+        return x + y
+
+    def another_add_func(x, y):
+        return x + y
+
+    channel_func1 = BinaryOperatorAggregate(int, add_func).from_checkpoint(MISSING)
+    channel_func1_copy = BinaryOperatorAggregate(int, add_func).from_checkpoint(MISSING)
+    channel_func2 = BinaryOperatorAggregate(int, another_add_func).from_checkpoint(
+        MISSING
+    )
+    assert channel_func1 == channel_func1_copy
+    assert channel_func1 != channel_func2  # Different function objects
+
+    # Test built-in operators - same operator should be equal, different operators not equal
+    channel_add1 = BinaryOperatorAggregate(int, operator.add).from_checkpoint(MISSING)
+    channel_add2 = BinaryOperatorAggregate(int, operator.add).from_checkpoint(MISSING)
+    channel_mul = BinaryOperatorAggregate(int, operator.mul).from_checkpoint(MISSING)
+    assert channel_add1 == channel_add2
+    assert channel_add1 != channel_mul
+
+    # Test different partial applications with different arguments
+    partial_add = functools.partial(operator.add)
+    partial_mul = functools.partial(operator.mul)
+    channel_partial_add = BinaryOperatorAggregate(int, partial_add).from_checkpoint(
+        MISSING
+    )
+    channel_partial_mul = BinaryOperatorAggregate(int, partial_mul).from_checkpoint(
+        MISSING
+    )
+    assert channel_partial_add != channel_partial_mul  # Different underlying operators
 
 
 def test_untracked_value() -> None:
