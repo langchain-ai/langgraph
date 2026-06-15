@@ -108,7 +108,6 @@ from langgraph.callbacks import (
     get_sync_graph_callback_manager_for_config,
 )
 from langgraph.channels.base import BaseChannel
-from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
 from langgraph.constants import END
@@ -1996,28 +1995,11 @@ class Pregel(
                         },
                     ),
                 )
-            created_root = False
-            if saved is None:
-                needs_root = any(
-                    isinstance(channels.get(chan), DeltaChannel)
-                    for task in run_tasks
-                    for chan, _ in task.writes
-                    if chan != PUSH and chan in channels
-                )
-                if needs_root:
-                    root_checkpoint = create_checkpoint(checkpoint, channels, step)
-                    checkpoint_config = checkpointer.put(
-                        checkpoint_config,
-                        root_checkpoint,
-                        {"source": "update", "step": step, "parents": {}},
-                        {},
-                    )
-                    created_root = True
             # save task writes
             for task_id, task in zip(run_task_ids, run_tasks):
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
-                if (saved is not None or created_root) and channel_writes:
+                if saved and channel_writes:
                     checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
             # apply to checkpoint and save
             apply_writes(
@@ -2458,28 +2440,11 @@ class Pregel(
                         },
                     ),
                 )
-            created_root = False
-            if saved is None:
-                needs_root = any(
-                    isinstance(channels.get(chan), DeltaChannel)
-                    for task in run_tasks
-                    for chan, _ in task.writes
-                    if chan != PUSH and chan in channels
-                )
-                if needs_root:
-                    root_checkpoint = create_checkpoint(checkpoint, channels, step)
-                    checkpoint_config = await checkpointer.aput(
-                        checkpoint_config,
-                        root_checkpoint,
-                        {"source": "update", "step": step, "parents": {}},
-                        {},
-                    )
-                    created_root = True
             # save task writes
             for task_id, task in zip(run_task_ids, run_tasks):
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
-                if (saved is not None or created_root) and channel_writes:
+                if saved and channel_writes:
                     await checkpointer.aput_writes(
                         checkpoint_config, channel_writes, task_id
                     )
@@ -4194,7 +4159,7 @@ class Pregel(
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Resume a paused graph by providing a value to resume with.
-        
+
         Args:
             config: The configuration to use for the run.
             value: The value to resume the graph with.
@@ -4246,7 +4211,7 @@ class Pregel(
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Asynchronously resume a paused graph by providing a value to resume with.
-        
+
         Args:
             config: The configuration to use for the run.
             value: The value to resume the graph with.
