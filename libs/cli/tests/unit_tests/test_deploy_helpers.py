@@ -19,6 +19,7 @@ from langgraph_cli.deploy import (
     _resolve_env_path,
     _resolve_pushed_image_digest,
     _smith_dashboard_base_url,
+    _upload_to_gcs,
     normalize_image_tag,
     normalize_name,
 )
@@ -687,3 +688,27 @@ class TestResolvePushedImageDigest:
         frame_locals = captured["coro"].cr_frame.f_locals
         assert "--config" not in frame_locals["args"]
         captured["coro"].close()
+
+
+class TestUploadToGcs:
+    def test_url_error_raises_click_exception(self, tmp_path, mocker):
+        # Network failures (DNS, connection reset, timeout) should surface as
+        # a structured ClickException, matching the existing HTTPError path.
+        import urllib.error
+
+        file_path = tmp_path / "build.tar.gz"
+        file_path.write_bytes(b"abc")
+
+        mocker.patch("langgraph_cli.deploy._get_emitter", return_value=MagicMock())
+        mocker.patch(
+            "urllib.request.urlopen",
+            side_effect=urllib.error.URLError("simulated connection reset"),
+        )
+
+        with pytest.raises(click.ClickException, match="network error") as exc_info:
+            _upload_to_gcs(
+                "https://storage.example/upload",
+                str(file_path),
+                file_path.stat().st_size,
+            )
+        assert "simulated connection reset" in exc_info.value.message

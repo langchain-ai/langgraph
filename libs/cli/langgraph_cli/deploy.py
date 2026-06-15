@@ -841,6 +841,10 @@ def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
             raise click.ClickException(
                 f"Upload failed with status {err.code}: {detail}"
             ) from None
+        except urllib.error.URLError as err:
+            raise click.ClickException(
+                f"Upload failed due to a network error: {err.reason}"
+            ) from None
     if not em.json_mode:
         click.echo()
 
