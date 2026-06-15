@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from dataclasses import asdict
+from pprint import pformat
 from typing import (
     Any,
     Literal,
@@ -112,7 +113,70 @@ def _sanitize_config_value(v: Any) -> Any:
 class RemoteException(Exception):
     """Exception raised when an error occurs in the remote graph."""
 
-    pass
+    def __init__(
+        self,
+        data: Any,
+        *,
+        event: str | None = None,
+        namespace: Sequence[str] = (),
+        assistant_id: str | None = None,
+    ) -> None:
+        super().__init__(data)
+        self.data = data
+        self.event = event
+        self.namespace = tuple(namespace)
+        self.assistant_id = assistant_id
+
+    def __str__(self) -> str:
+        if not isinstance(self.data, Mapping):
+            return str(self.data)
+
+        lines = ["Remote graph raised an error"]
+        if self.assistant_id:
+            lines.append(f"assistant_id: {self.assistant_id}")
+        if self.event:
+            lines.append(f"stream_event: {self.event}")
+        if self.namespace:
+            lines.append(f"namespace: {self.namespace!r}")
+
+        handled = set()
+        for key, label in (
+            ("error", "error"),
+            ("type", "type"),
+            ("message", "message"),
+            ("detail", "detail"),
+        ):
+            if key in self.data:
+                lines.append(f"{label}: {self.data[key]}")
+                handled.add(key)
+
+        for key in (
+            "node",
+            "task",
+            "task_id",
+            "task_path",
+            "checkpoint_ns",
+            "checkpoint_id",
+            "run_id",
+        ):
+            if key in self.data:
+                lines.append(f"{key}: {self.data[key]}")
+                handled.add(key)
+
+        for key in ("traceback", "stacktrace", "stack", "details"):
+            if key in self.data:
+                lines.append(f"{key}:")
+                lines.append(pformat(self.data[key]))
+                handled.add(key)
+
+        remaining = {
+            key: value for key, value in self.data.items() if key not in handled
+        }
+        if remaining:
+            lines.append("payload:")
+            lines.append(pformat(remaining))
+
+        return "\n".join(lines)
 
 
 class RemoteGraph(PregelProtocol):
@@ -843,7 +907,12 @@ class RemoteGraph(PregelProtocol):
                             [Interrupt(**i) for i in chunk.data[INTERRUPT]]
                         )
             elif chunk.event.startswith("error"):
-                raise RemoteException(chunk.data)
+                raise RemoteException(
+                    chunk.data,
+                    event=chunk.event,
+                    namespace=ns,
+                    assistant_id=self.assistant_id,
+                )
             # filter for what was actually requested
             if mode not in requested:
                 continue
@@ -998,7 +1067,12 @@ class RemoteGraph(PregelProtocol):
                             [Interrupt(**i) for i in chunk.data[INTERRUPT]]
                         )
             elif chunk.event.startswith("error"):
-                raise RemoteException(chunk.data)
+                raise RemoteException(
+                    chunk.data,
+                    event=chunk.event,
+                    namespace=ns,
+                    assistant_id=self.assistant_id,
+                )
             # filter for what was actually requested
             if mode not in requested:
                 continue

@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from langgraph_sdk.schema import StreamPart
 
 from langgraph.pregel._remote_run_stream import (
     _AsyncRemoteGraphRunStream,
@@ -13,6 +14,7 @@ from langgraph.pregel._remote_run_stream import (
 )
 from langgraph.pregel.remote import (
     _V3_SUPPORTED_KWARGS,
+    RemoteException,
     RemoteGraph,
 )
 from langgraph.types import Command
@@ -415,6 +417,110 @@ def _make_remote_graph() -> RemoteGraph:
         sync_client=sync_client,
     )
     return rg
+
+
+def test_remote_exception_formats_structured_payload():
+    payload = {
+        "error": "InvalidUpdateError",
+        "message": "Expected node `extract` to update one of ['people']",
+        "node": "extract",
+        "task_id": "task-123",
+        "traceback": ["line 1", "line 2"],
+        "extra": {"checkpoint": "cp-1"},
+    }
+    exc = RemoteException(
+        payload,
+        event="error|extract",
+        namespace=("parent", "extract"),
+        assistant_id="people_extractor",
+    )
+
+    assert exc.args == (payload,)
+    assert exc.data is payload
+    assert exc.event == "error|extract"
+    assert exc.namespace == ("parent", "extract")
+    assert exc.assistant_id == "people_extractor"
+
+    message = str(exc)
+    assert "Remote graph raised an error" in message
+    assert "assistant_id: people_extractor" in message
+    assert "stream_event: error|extract" in message
+    assert "namespace: ('parent', 'extract')" in message
+    assert "error: InvalidUpdateError" in message
+    assert "message: Expected node `extract` to update one of ['people']" in message
+    assert "node: extract" in message
+    assert "task_id: task-123" in message
+    assert "traceback:" in message
+    assert "payload:" in message
+    assert "checkpoint" in message
+
+
+def test_stream_error_raises_remote_exception_with_context():
+    payload = {
+        "error": "InvalidUpdateError",
+        "message": "Expected node `extract` to update one of ['people']",
+    }
+    sync_client = MagicMock()
+    sync_client.runs.stream.return_value = [
+        StreamPart(event="error|extract", data=payload)
+    ]
+    rg = RemoteGraph("people_extractor", client=MagicMock(), sync_client=sync_client)
+
+    with pytest.raises(RemoteException) as exc_info:
+        list(
+            rg.stream(
+                {"url": "https://example.com"},
+                config={
+                    "configurable": {
+                        "thread_id": "thread-1",
+                        "checkpoint_ns": "caller",
+                    }
+                },
+                stream_mode="values",
+            )
+        )
+
+    exc = exc_info.value
+    assert exc.data is payload
+    assert exc.event == "error|extract"
+    assert exc.namespace == ("caller", "extract")
+    assert exc.assistant_id == "people_extractor"
+    assert "namespace: ('caller', 'extract')" in str(exc)
+
+
+@pytest.mark.anyio
+async def test_astream_error_raises_remote_exception_with_context():
+    payload = {
+        "error": "InvalidUpdateError",
+        "message": "Expected node `extract` to update one of ['people']",
+    }
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = [
+        StreamPart(event="error|extract", data=payload)
+    ]
+    client = MagicMock()
+    client.runs.stream.return_value = async_iter
+    rg = RemoteGraph("people_extractor", client=client, sync_client=MagicMock())
+
+    with pytest.raises(RemoteException) as exc_info:
+        async for _ in rg.astream(
+            {"url": "https://example.com"},
+            config={
+                "configurable": {
+                    "thread_id": "thread-1",
+                    "checkpoint_ns": "caller",
+                }
+            },
+            stream_mode="values",
+        ):
+            pass
+
+    exc = exc_info.value
+    assert exc.data is payload
+    assert exc.event == "error|extract"
+    assert exc.namespace == ("caller", "extract")
+    assert exc.assistant_id == "people_extractor"
+    assert "namespace: ('caller', 'extract')" in str(exc)
 
 
 def test_reject_v3_unsupported_passes_when_all_clear():
