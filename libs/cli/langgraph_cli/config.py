@@ -1495,6 +1495,7 @@ def config_to_compose(
     image: str | None = None,
     watch: bool = False,
     engine_runtime_mode: str = "combined_queue_worker",
+    postgres_uri: str | None = None,
 ) -> str:
     base_image = base_image or default_base_image(config)
 
@@ -1582,22 +1583,30 @@ def config_to_compose(
                 additional_contexts:
 {executor_additional_contexts_str}"""
 
-            postgres_uri = "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
+            if postgres_uri is None:
+                # No external Postgres: the base compose includes the local
+                # langgraph-postgres service, so depend on it as before.
+                postgres_uri = "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
+                postgres_depends_on = (
+                    "\n            langgraph-postgres:"
+                    "\n                condition: service_healthy"
+                )
+            else:
+                # An external Postgres URI was supplied, so the base compose omits
+                # the local langgraph-postgres service; route the distributed
+                # services to the same DB and drop the dangling dependency.
+                postgres_depends_on = ""
             result += f"""    langgraph-orchestrator:
         image: langchain/langgraph-orchestrator-licensed:latest
         depends_on:
             langgraph-api:
-                condition: service_healthy
-            langgraph-postgres:
-                condition: service_healthy
+                condition: service_healthy{postgres_depends_on}
         environment:
             DATABASE_URI: {postgres_uri}
             EXECUTOR_TARGET: langgraph-executor:8188
         {env_file_str}
     langgraph-executor:
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
+        depends_on:{postgres_depends_on}
             langgraph-api:
                 condition: service_healthy
         entrypoint: ["sh", "/storage/executor_entrypoint.sh"]

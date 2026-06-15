@@ -968,6 +968,7 @@ def prepare_args_and_stdin(
         api_version=api_version,
         image=image,
         engine_runtime_mode=engine_runtime_mode,
+        postgres_uri=postgres_uri,
     )
     return args, stdin
 

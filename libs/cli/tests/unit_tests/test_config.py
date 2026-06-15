@@ -3133,6 +3133,43 @@ def test_config_to_compose_distributed_mode():
     assert "REDIS_URI: redis://langgraph-redis:6379" in actual_compose_stdin
 
 
+def test_config_to_compose_distributed_mode_external_postgres():
+    """Distributed services must use an external postgres_uri and not reference the
+    local langgraph-postgres service the base compose omits (regression for #8080)."""
+    graphs = {"agent": "./agent.py:graph"}
+    external_uri = "postgresql://user:pass@db.example.com:5432/langgraph"
+    actual_compose_stdin = config_to_compose(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs}),
+        "langchain/langgraph-api",
+        engine_runtime_mode="distributed",
+        postgres_uri=external_uri,
+    )
+
+    # Both distributed services route to the external database.
+    assert actual_compose_stdin.count(f"DATABASE_URI: {external_uri}") == 2
+    # The local langgraph-postgres service is omitted by the base compose, so the
+    # distributed services must not depend on (or point at) it.
+    assert "langgraph-postgres" not in actual_compose_stdin
+
+
+def test_config_to_compose_distributed_mode_default_postgres_depends_on_local():
+    """Without an external postgres_uri, distributed services keep the local
+    langgraph-postgres dependency (unchanged behavior)."""
+    graphs = {"agent": "./agent.py:graph"}
+    actual_compose_stdin = config_to_compose(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs}),
+        "langchain/langgraph-api",
+        engine_runtime_mode="distributed",
+    )
+    assert "langgraph-postgres:\n                condition: service_healthy" in actual_compose_stdin
+    assert (
+        "DATABASE_URI: postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
+        in actual_compose_stdin
+    )
+
+
 def test_config_to_compose_distributed_mode_with_env_file():
     """Test config_to_compose distributed mode propagates env_file to all services."""
     graphs = {"agent": "./agent.py:graph"}
