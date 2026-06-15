@@ -122,17 +122,13 @@ def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
     )
 
 
-_MIN_DELTA_CHANNEL_API_VERSION = Version("0.9.0")
-
-
 def _check_delta_channel_api_support(channels: Mapping[str, Any]) -> None:
     """Raise if a `DeltaChannel` graph runs under an API server too old to support it.
 
-    `DeltaChannel` reconstruction depends on server-side support added in
-    `langgraph-api>0.9.0`. When running under an older API server, delta
-    channels fail at runtime, so we raise at compile time with an upgrade
-    hint. The check is skipped when `langgraph-api` is not installed (e.g.
-    local execution), since there is no API server to be incompatible.
+    `DeltaChannel` reconstruction needs server-side support added in
+    `langgraph-api>=0.9.0`, so we raise at compile time when an older API
+    server is installed. Skipped when `langgraph-api` is absent (local
+    execution) or the graph has no delta channel.
     """
     if not any(isinstance(c, DeltaChannel) for c in channels.values()):
         return
@@ -140,14 +136,11 @@ def _check_delta_channel_api_support(channels: Mapping[str, Any]) -> None:
         api_version = metadata.version("langgraph-api")
     except metadata.PackageNotFoundError:
         return
-    if Version(api_version) > _MIN_DELTA_CHANNEL_API_VERSION:
-        return
-    raise RuntimeError(
-        f"`DeltaChannel` requires `langgraph-api>0.9.0`, but the installed "
-        f"version is {api_version}. Upgrade `langgraph-api` "
-        "(e.g. `pip install -U langgraph-api`) to use graphs that rely on "
-        "`DeltaChannel`."
-    )
+    if Version(api_version) < Version("0.9.0"):
+        raise RuntimeError(
+            f"`DeltaChannel` requires `langgraph-api>=0.9.0`, but {api_version} "
+            "is installed. Upgrade with `pip install -U langgraph-api`."
+        )
 
 
 def _get_node_name(node: StateNode[Any, ContextT]) -> str:
