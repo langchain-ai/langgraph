@@ -58,7 +58,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         self.pipe = pipe
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
-        self.supports_pipeline = Capabilities().has_pipeline()
+        self.supports_pipeline = False
 
     @classmethod
     @asynccontextmanager
