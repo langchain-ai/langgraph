@@ -23,7 +23,7 @@ jobs:
         working-directory: libs/langgraph
     name: "test #${{ matrix.python-version }}"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Set up Python ${{ matrix.python-version }}
         uses: ./.github/actions/uv_setup
         with:
@@ -31,7 +31,7 @@ jobs:
           cache-suffix: "test-langgraph"
           working-directory: libs/langgraph
       - name: Login to Docker Hub
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
         if: ${{ !github.event.pull_request.head.repo.fork }}
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}

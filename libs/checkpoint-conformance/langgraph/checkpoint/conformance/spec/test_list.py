@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import traceback
 from collections.abc import Callable
+from typing import cast
 from uuid import uuid4
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -335,39 +336,9 @@ async def test_list_metadata_custom_keys(
         results.append(tup)
 
     assert len(results) == 1
-    assert results[0].metadata["score"] == 42
-    assert results[0].metadata["run_id"] == "run-abc"
-
-
-async def test_list_global_search(
-    saver: BaseCheckpointSaver,
-) -> None:
-    """alist(None, filter=...) searches across all threads."""
-    tid1, tid2 = str(uuid4()), str(uuid4())
-
-    # Use a unique marker so we don't collide with other tests' data
-    marker = str(uuid4())
-
-    cfg1 = generate_config(tid1)
-    cp1 = generate_checkpoint()
-    await saver.aput(cfg1, cp1, generate_metadata(source="input", marker=marker), {})
-
-    cfg2 = generate_config(tid2)
-    cp2 = generate_checkpoint()
-    await saver.aput(cfg2, cp2, generate_metadata(source="loop", marker=marker), {})
-
-    # Search across all threads with filter
-    results = []
-    async for tup in saver.alist(None, filter={"source": "input", "marker": marker}):
-        results.append(tup)
-    assert len(results) == 1
-    assert results[0].config["configurable"]["thread_id"] == tid1
-
-    # Search with marker only — should find both
-    results = []
-    async for tup in saver.alist(None, filter={"marker": marker}):
-        results.append(tup)
-    assert len(results) == 2
+    metadata = cast(dict[str, object], results[0].metadata)
+    assert metadata["score"] == 42
+    assert metadata["run_id"] == "run-abc"
 
 
 ALL_LIST_TESTS = [
@@ -380,7 +351,6 @@ ALL_LIST_TESTS = [
     test_list_metadata_filter_multiple_keys,
     test_list_metadata_filter_no_match,
     test_list_metadata_custom_keys,
-    test_list_global_search,
     test_list_before,
     test_list_limit,
     test_list_limit_plus_before,

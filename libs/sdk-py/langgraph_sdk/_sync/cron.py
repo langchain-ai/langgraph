@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, tzinfo
 from typing import Any
 
-from langgraph_sdk._shared.utilities import _resolve_timezone
+from langgraph_sdk._shared.utilities import _quote_path_param, _resolve_timezone
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import (
     All,
@@ -18,6 +18,7 @@ from langgraph_sdk.schema import (
     CronSortBy,
     Durability,
     Input,
+    Json,
     OnCompletionBehavior,
     QueryParamTypes,
     Run,
@@ -155,7 +156,7 @@ class SyncCronClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(
-            f"/threads/{thread_id}/runs/crons",
+            f"/threads/{_quote_path_param(thread_id)}/runs/crons",
             json=payload,
             headers=headers,
             params=params,
@@ -303,7 +304,9 @@ class SyncCronClient:
             ```
 
         """
-        self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
+        self.http.delete(
+            f"/runs/crons/{_quote_path_param(cron_id)}", headers=headers, params=params
+        )
 
     def update(
         self,
@@ -390,7 +393,7 @@ class SyncCronClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.patch(
-            f"/runs/crons/{cron_id}",
+            f"/runs/crons/{_quote_path_param(cron_id)}",
             json=payload,
             headers=headers,
             params=params,
@@ -402,6 +405,7 @@ class SyncCronClient:
         assistant_id: str | None = None,
         thread_id: str | None = None,
         enabled: bool | None = None,
+        metadata: Json = None,
         limit: int = 10,
         offset: int = 0,
         sort_by: CronSortBy | None = None,
@@ -416,6 +420,8 @@ class SyncCronClient:
             assistant_id: The assistant ID or graph name to search for.
             thread_id: the thread ID to search for.
             enabled: Whether the cron job is enabled.
+            metadata: Metadata to filter by. Exact match filter for each KV pair.
+                !!! version-added "Added in Agent Server version 0.9.0"
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             headers: Optional custom headers to include with the request.
@@ -468,6 +474,8 @@ class SyncCronClient:
             "limit": limit,
             "offset": offset,
         }
+        if metadata:
+            payload["metadata"] = metadata
         if sort_by:
             payload["sort_by"] = sort_by
         if sort_order:
@@ -484,6 +492,7 @@ class SyncCronClient:
         *,
         assistant_id: str | None = None,
         thread_id: str | None = None,
+        metadata: Json = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> int:
@@ -492,6 +501,8 @@ class SyncCronClient:
         Args:
             assistant_id: Assistant ID to filter by.
             thread_id: Thread ID to filter by.
+            metadata: Metadata to filter by. Exact match filter for each KV pair.
+                !!! version-added "Added in Agent Server version 0.9.0"
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -503,6 +514,8 @@ class SyncCronClient:
             payload["assistant_id"] = assistant_id
         if thread_id:
             payload["thread_id"] = thread_id
+        if metadata:
+            payload["metadata"] = metadata
         return self.http.post(
             "/runs/crons/count", json=payload, headers=headers, params=params
         )

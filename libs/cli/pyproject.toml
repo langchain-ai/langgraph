@@ -17,18 +17,19 @@ dependencies = [
     "langgraph-sdk>=0.1.0 ; python_version >= '3.11'",
     "pathspec>=0.11.0",
     "python-dotenv>=0.8.0",
+    "tomli>=2.0.1 ; python_version < '3.11'",
 ]
 [tool.hatch.version]
 path = "langgraph_cli/__init__.py"
 [project.optional-dependencies]
 inmem = [
-    "langgraph-api>=0.5.35,<0.8.0 ; python_version >= '3.11'",
+    "langgraph-api>=0.5.35,<0.12.0 ; python_version >= '3.11'",
     "langgraph-runtime-inmem>=0.7 ; python_version >= '3.11'",
 ]
 
 [project.urls]
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/cli"
-Twitter = "https://x.com/LangChain"
+Twitter = "https://x.com/langchain_oss"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
@@ -46,7 +47,7 @@ test = [
 lint = [
     "ruff",
     "codespell",
-    "mypy",
+    "ty",
 ]
 dev = [
     {include-group = "test"},
@@ -75,3 +76,17 @@ lint.select = [
 ]
 lint.ignore = ["E501", "B008"]
 target-version = "py310"
+
+[tool.ty.rules]
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-key = "ignore"
+invalid-parameter-default = "ignore"
+invalid-return-type = "ignore"
+missing-argument = "ignore"
+no-matching-overload = "ignore"
+not-subscriptable = "ignore"
+unused-type-ignore-comment = "ignore"
+unresolved-attribute = "ignore"
+unresolved-import = "ignore"
+unsupported-operator = "ignore"

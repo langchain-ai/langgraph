@@ -8,6 +8,7 @@ import re
 from collections.abc import Mapping
 from datetime import tzinfo
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -143,8 +144,9 @@ def _resolve_timezone(tz: str | tzinfo | ZoneInfo | None) -> str | None:
         return tz
     if isinstance(tz, tzinfo):
         # ZoneInfo objects have a .key attribute with the IANA name
-        if hasattr(tz, "key"):
-            return tz.key  # type: ignore[union-attr]
+        key = getattr(tz, "key", None)
+        if isinstance(key, str):
+            return key
         # Fall back to tzname for fixed-offset timezones like datetime.timezone.utc
         name = tz.tzname(None)
         if name is not None:
@@ -158,8 +160,75 @@ def _resolve_timezone(tz: str | tzinfo | ZoneInfo | None) -> str | None:
     )
 
 
+def _default_port(scheme: str) -> int:
+    return 443 if scheme == "https" else 80
+
+
+def _validate_reconnect_location(base_url: httpx.URL, location: str) -> str:
+    """Validate that a reconnect Location URL is same-origin as the base URL.
+
+    Raises ValueError if the Location header points to a different origin
+    (scheme + host + port), which would leak credentials to an external server.
+    """
+    parsed = urlparse(location)
+    # Relative URLs are safe — they resolve against the base
+    if not parsed.scheme and not parsed.netloc:
+        return location
+    # Compare origin components (normalize default ports to avoid mismatches)
+    base_scheme = str(base_url.scheme)
+    base_origin = (
+        base_scheme,
+        str(base_url.host),
+        base_url.port or _default_port(base_scheme),
+    )
+    loc_origin = (
+        parsed.scheme,
+        parsed.hostname or "",
+        parsed.port or _default_port(parsed.scheme),
+    )
+    if base_origin != loc_origin:
+        raise ValueError(
+            f"Refusing to follow cross-origin reconnect Location: {location!r} "
+            f"(origin {loc_origin}) does not match base URL origin {base_origin}"
+        )
+    return location
+
+
 def _provided_vals(d: Mapping[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
+
+
+def _quote_path_param(value: Any) -> str:
+    """Encode a value for safe interpolation into a request path segment.
+
+    Path segments are encoded with ``safe=""`` so that ``/`` and other reserved
+    characters are escaped. Standalone dot-segments (``.`` and ``..``) are also
+    encoded because some URL-handling stacks (including ``httpx``) collapse
+    them client-side as relative-path traversal before transmission. The value
+    is coerced to ``str`` so callers can pass ``uuid.UUID`` and similar types
+    directly without changing call sites.
+
+    A properly formed identifier (for example, a standard UUID, which contains
+    no dots or reserved characters) round-trips through this function
+    unchanged.
+
+    Raises:
+        TypeError: If `value` is `None` or a `bytes`/`bytearray` instance.
+            Coercing those would produce misleading paths (e.g. `/threads/None`),
+            so surface the caller bug instead.
+    """
+    if value is None:
+        raise TypeError("path parameter must not be None")
+    if isinstance(value, (bytes, bytearray)):
+        raise TypeError("path parameter must not be bytes; pass a str or uuid.UUID")
+    quoted = quote(str(value), safe="")
+    # Bare "." or ".." (or any all-dot string) acts as a relative-path segment
+    # that some HTTP stacks (including ``httpx``) collapse client-side before
+    # transmission. Encode the dots so the segment becomes opaque to that
+    # logic. Mixed values like "agent.v1" are unaffected.
+    if quoted and all(c == "." for c in quoted):
+        quoted = "%2E" * len(quoted)
+    return quoted
 
 
 _registered_transports: list[httpx.ASGITransport] = []
@@ -174,7 +243,7 @@ def configure_loopback_transports(app: Any) -> None:
 @functools.lru_cache(maxsize=1)
 def get_asgi_transport() -> type[httpx.ASGITransport]:
     try:
-        from langgraph_api import asgi_transport  # type: ignore[unresolved-import]
+        from langgraph_api import asgi_transport  # ty: ignore[unresolved-import]
 
         return asgi_transport.ASGITransport
     except ImportError:

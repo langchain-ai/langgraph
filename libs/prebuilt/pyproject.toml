@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-prebuilt"
-version = "1.0.9"
+version = "1.1.0"
 description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
 authors = []
 requires-python = ">=3.10"
@@ -25,12 +25,12 @@ classifiers = [
 ]
 dependencies = [
     "langgraph-checkpoint>=2.1.0,<5.0.0",
-    "langchain-core>=1.0.0",
+    "langchain-core>=1.3.1",
 ]
 
 [project.urls]
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/prebuilt"
-Twitter = "https://x.com/LangChain"
+Twitter = "https://x.com/langchain_oss"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
@@ -51,7 +51,7 @@ test = [
 lint = [
     "ruff",
     "codespell",
-    "mypy",
+    "ty",
 ]
 dev = [
     {include-group = "test"},
@@ -79,18 +79,21 @@ lint.select = [ "E", "F", "I", "TID251", "UP" ]
 lint.ignore = [ "E501" ]
 target-version = "py310"
 
+[tool.ty.rules]
+call-non-callable = "ignore"
+deprecated = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-await = "ignore"
+invalid-return-type = "ignore"
+no-matching-overload = "ignore"
+unused-type-ignore-comment = "ignore"
+unresolved-attribute = "ignore"
+unresolved-import = "ignore"
+unsupported-operator = "ignore"
+
 [tool.pytest-watcher]
 now = true
 delay = 0.1
 runner_args = ["--ff", "-v", "--tb", "short"]
 patterns = ["*.py"]
-
-[tool.mypy]
-# https://mypy.readthedocs.io/en/stable/config_file.html
-disallow_untyped_defs = "True"
-explicit_package_bases = "True"
-warn_no_return = "False"
-warn_unused_ignores = "True"
-warn_redundant_casts = "True"
-allow_redefinition = "True"
-disable_error_code = "typeddict-item, return-value"

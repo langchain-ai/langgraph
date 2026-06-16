@@ -1,5 +1,7 @@
 from typing import Any, Literal, TypedDict
 
+from typing_extensions import Required
+
 Distros = Literal["debian", "wolfi", "bookworm"]
 MiddlewareOrders = Literal["auth_first", "middleware_first"]
 
@@ -9,20 +11,20 @@ class TTLConfig(TypedDict, total=False):
 
     refresh_on_read: bool
     """Default behavior for refreshing TTLs on read operations (`GET` and `SEARCH`).
-    
+
     If `True`, TTLs will be refreshed on read operations (get/search) by default.
     This can be overridden per-operation by explicitly setting `refresh_ttl`.
     Defaults to `True` if not configured.
     """
     default_ttl: float | None
     """Optional. Default TTL (time-to-live) in minutes for new items.
-    
+
     If provided, all new items will have this TTL unless explicitly overridden.
     If omitted, items will have no TTL by default.
     """
     sweep_interval_minutes: int | None
     """Optional. Interval in minutes between TTL sweep iterations.
-    
+
     If provided, the store will periodically delete expired items based on the TTL.
     If omitted, no automatic sweeping will occur.
     """
@@ -36,10 +38,10 @@ class IndexConfig(TypedDict, total=False):
 
     dims: int
     """Required. Dimensionality of the embedding vectors you will store.
-    
+
     Must match the output dimension of your selected embedding model or custom embed function.
     If mismatched, you will likely encounter shape/size errors when inserting or querying vectors.
-    
+
     Common embedding model output dimensions:
         - openai:text-embedding-3-large: 3072
         - openai:text-embedding-3-small: 1536
@@ -52,7 +54,7 @@ class IndexConfig(TypedDict, total=False):
 
     embed: str
     """Required. Identifier or reference to the embedding model or a custom embedding function.
-    
+
     The format can vary:
       - "<provider>:<model_name>" for recognized providers (e.g., "openai:text-embedding-3-large")
       - "path/to/module.py:function_name" for your own local embedding function
@@ -62,17 +64,17 @@ class IndexConfig(TypedDict, total=False):
         - "openai:text-embedding-3-large"
         - "cohere:embed-multilingual-v3.0"
         - "src/app.py:embeddings"
-    
+
     Note: Must return embeddings of dimension `dims`.
     """
 
     fields: list[str] | None
     """Optional. List of JSON fields to extract before generating embeddings.
-    
+
     Defaults to ["$"], which means the entire JSON object is embedded as one piece of text.
     If you provide multiple fields (e.g. ["title", "content"]), each is extracted and embedded separately,
     often saving token usage if you only care about certain parts of the data.
-    
+
     Example:
         fields=["title", "abstract", "author.biography"]
     """
@@ -87,18 +89,18 @@ class StoreConfig(TypedDict, total=False):
 
     index: IndexConfig | None
     """Optional. Defines the vector-based semantic search configuration.
-    
+
     If provided, the store will:
       - Generate embeddings according to `index.embed`
       - Enforce the embedding dimension given by `index.dims`
       - Embed only specified JSON fields (if any) from `index.fields`
-    
+
     If omitted, no vector index is initialized.
     """
 
     ttl: TTLConfig | None
     """Optional. Defines the TTL (time-to-live) behavior configuration.
-    
+
     If provided, the store will apply TTL settings according to the configuration.
     If omitted, no TTL behavior is configured.
     """
@@ -129,11 +131,11 @@ class SerdeConfig(TypedDict, total=False):
 
     allowed_json_modules: list[list[str]] | bool | None
     """Optional. List of allowed python modules to de-serialize custom objects from JSON.
-    
+
     If provided, only the specified modules will be allowed to be deserialized.
     If omitted, no modules are allowed, and the object returned will simply be a json object OR
     a deserialized langchain object.
-    
+
     Example:
     {...
         "serde": {
@@ -178,11 +180,11 @@ class SerdeConfig(TypedDict, total=False):
             "allowed_msgpack_modules": null
         }
     }
-    
+
     """
     pickle_fallback: bool
     """Optional. Whether to allow pickling as a fallback for deserialization.
-    
+
     If True, pickling will be allowed as a fallback for deserialization.
     If False, pickling will not be allowed as a fallback for deserialization.
     Defaults to True if not configured."""
@@ -216,7 +218,7 @@ class CheckpointerConfig(TypedDict, total=False):
 
     ttl: ThreadTTLConfig | None
     """Optional. Defines the TTL (time-to-live) behavior configuration.
-    
+
     If provided, the checkpointer will apply TTL settings according to the configuration.
     If omitted, no TTL behavior is configured.
     """
@@ -239,7 +241,7 @@ class SecurityConfig(TypedDict, total=False):
 
     securitySchemes: dict[str, dict[str, Any]]
     """Describe each security scheme recognized by your OpenAPI spec.
-    
+
     Keys are scheme names (e.g. "OAuth2", "ApiKeyAuth") and values are their definitions.
     Example:
         {
@@ -256,7 +258,7 @@ class SecurityConfig(TypedDict, total=False):
     """
     security: list[dict[str, list[str]]]
     """Global security requirements across all endpoints.
-    
+
     Each element in the list maps a security scheme (e.g. "OAuth2") to a list of scopes (e.g. ["read", "write"]).
     Example:
         [
@@ -267,11 +269,11 @@ class SecurityConfig(TypedDict, total=False):
     # path => {method => security}
     paths: dict[str, dict[str, list[dict[str, list[str]]]]]
     """Path-specific security overrides.
-    
+
     Keys are path templates (e.g., "/items/{item_id}"), mapping to:
       - Keys that are HTTP methods (e.g., "GET", "POST"),
       - Values are lists of security definitions (just like `security`) for that method.
-    
+
     Example:
         {
             "/private_data": {
@@ -285,19 +287,19 @@ class SecurityConfig(TypedDict, total=False):
 class CacheConfig(TypedDict, total=False):
     cache_keys: list[str]
     """Optional. List of header keys to use for caching.
-    
+
     Example:
         ["user_id", "workspace_id"]
     """
     ttl_seconds: int
     """Optional. Time-to-live in seconds for cached items.
-    
+
     Example:
         3600
     """
     max_size: int
     """Optional. Maximum size of the cache.
-    
+
     Example:
         100
     """
@@ -308,19 +310,19 @@ class AuthConfig(TypedDict, total=False):
 
     path: str
     """Required. Path to an instance of the Auth() class that implements custom authentication.
-    
+
     Format: "path/to/file.py:my_auth"
     """
     disable_studio_auth: bool
-    """Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio. 
-    
+    """Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio.
+
     Defaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header
     value is a valid API key for the deployment's workspace. If `True`, all requests will go through your custom
     authentication logic, regardless of origin of the request.
     """
     openapi: SecurityConfig
     """The security configuration to include in your server's OpenAPI spec.
-    
+
     Example (OAuth2):
         {
             "securitySchemes": {
@@ -341,7 +343,7 @@ class AuthConfig(TypedDict, total=False):
     """
     cache: CacheConfig
     """Optional. Cache configuration for the server.
-    
+
     Example:
         {
             "cache_keys": ["user_id", "workspace_id"],
@@ -380,32 +382,32 @@ class CorsConfig(TypedDict, total=False):
 
     allow_origins: list[str]
     """Optional. List of allowed origins (e.g., "https://example.com").
-    
-    Default is often an empty list (no external origins). 
+
+    Default is often an empty list (no external origins).
     Use "*" only if you trust all origins, as that bypasses most restrictions.
     """
     allow_methods: list[str]
     """Optional. HTTP methods permitted for cross-origin requests (e.g. ["GET", "POST"]).
-    
+
     Default might be ["GET", "POST", "OPTIONS"] depending on your server framework.
     """
     allow_headers: list[str]
     """Optional. HTTP headers that can be used in cross-origin requests (e.g. ["Content-Type", "Authorization"])."""
     allow_credentials: bool
     """Optional. If `True`, cross-origin requests can include credentials (cookies, auth headers).
-    
+
     Default False to avoid accidentally exposing secured endpoints to untrusted sites.
     """
     allow_origin_regex: str
     """Optional. A regex pattern for matching allowed origins, used if you have dynamic subdomains.
-    
+
     Example: "^https://.*\\.mycompany\\.com$"
     """
     expose_headers: list[str]
     """Optional. List of headers that browsers are allowed to read from the response in cross-origin contexts."""
     max_age: int
     """Optional. How many seconds the browser may cache preflight responses.
-    
+
     Default might be 600 (10 minutes). Larger values reduce preflight requests but can cause stale configurations.
     """
 
@@ -442,61 +444,61 @@ class HttpConfig(TypedDict, total=False):
 
     app: str
     """Optional. Import path to a custom Starlette/FastAPI application to mount.
-    
+
     Format: "path/to/module.py:app_var"
     If provided, it can override or extend the default routes.
     """
     disable_assistants: bool
     """Optional. If `True`, /assistants routes are removed from the server.
-    
+
     Default is False (meaning /assistants is enabled).
     """
     disable_threads: bool
     """Optional. If `True`, /threads routes are removed.
-    
+
     Default is False.
     """
     disable_runs: bool
     """Optional. If `True`, /runs routes are removed.
-    
+
     Default is False.
     """
     disable_store: bool
     """Optional. If `True`, /store routes are removed, disabling direct store interactions via HTTP.
-    
+
     Default is False.
     """
     disable_mcp: bool
     """Optional. If `True`, /mcp routes are removed, disabling default support to expose the deployment as an MCP server.
-    
+
     Default is False.
     """
     disable_a2a: bool
     """Optional. If `True`, /a2a routes are removed, disabling default support to expose the deployment as an agent-to-agent (A2A) server.
-    
+
     Default is False.
     """
     disable_meta: bool
     """Optional. Remove meta endpoints.
-    
+
     Set to True to disable the following endpoints: /openapi.json, /info, /metrics, /docs.
     This will also make the /ok endpoint skip any DB or other checks, always returning {"ok": True}.
-    
+
     Default is False.
     """
     disable_ui: bool
     """Optional. If `True`, /ui routes are removed, disabling the UI server.
-    
+
     Default is False.
     """
     disable_webhooks: bool
     """Optional. If `True`, webhooks are disabled. Runs created with an associated webhook will
     still be executed, but the webhook event will not be sent.
-    
+
     Default is False.
     """
     cors: CorsConfig | None
-    """Optional. Defines CORS restrictions. If omitted, no special rules are set and 
+    """Optional. Defines CORS restrictions. If omitted, no special rules are set and
     cross-origin behavior depends on default server settings.
     """
     configurable_headers: ConfigurableHeaderConfig | None
@@ -527,7 +529,7 @@ class HttpConfig(TypedDict, total=False):
     """
     mount_prefix: str
     """Optional. URL prefix to prepend to all the routes.
-    
+
     Example:
         "/api"
     """
@@ -588,11 +590,33 @@ class WebhooksConfig(TypedDict, total=False):
     """
 
 
+class UvSource(TypedDict, total=False):
+    """Deployment source rooted at a uv project or workspace."""
+
+    kind: Required[Literal["uv"]]
+    """Discriminator for uv-backed deployment mode."""
+
+    root: str
+    """Relative path from langgraph.json to the authoritative uv project root.
+
+    The resolved directory must contain `pyproject.toml` and `uv.lock`. If the
+    root is a workspace, package discovery happens within this root.
+    """
+
+    package: str
+    """Optional. Workspace package name to deploy when the target is ambiguous.
+
+    If omitted, the CLI tries to infer the target package from the location of
+    `langgraph.json`, or falls back to the only package if the root contains
+    exactly one candidate.
+    """
+
+
 class Config(TypedDict, total=False):
     """Top-level config for langgraph-cli or similar deployment tooling."""
 
     python_version: str
-    """Optional. Python version in 'major.minor' format (e.g. '3.11'). 
+    """Optional. Python version in 'major.minor' format (e.g. '3.11').
     Must be at least 3.11 or greater for this deployment to function properly.
     """
 
@@ -603,7 +627,7 @@ class Config(TypedDict, total=False):
 
     api_version: str | None
     """Optional. Which semantic version of the LangGraph API server to use.
-    
+
     Defaults to latest. Check the
     [changelog](https://docs.langchain.com/langgraph-platform/langgraph-server-changelog)
     for more information."""
@@ -614,12 +638,12 @@ class Config(TypedDict, total=False):
 
     base_image: str | None
     """Optional. Base image to use for the LangGraph API server.
-    
+
     Defaults to langchain/langgraph-api or langchain/langgraphjs-api."""
 
     image_distro: Distros | None
     """Optional. Linux distribution for the base image.
-    
+
     Must be one of 'wolfi', 'debian', or 'bookworm'.
     If omitted, defaults to 'debian' ('latest').
     """
@@ -627,22 +651,30 @@ class Config(TypedDict, total=False):
     pip_config_file: str | None
     """Optional. Path to a pip config file (e.g., "/etc/pip.conf" or "pip.ini") for controlling
     package installation (custom indices, credentials, etc.).
-    
+
     Only relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.
     """
 
     pip_installer: str | None
-    """Optional. Python package installer to use ('auto', 'pip', 'uv').
-    
+    """Optional. Python package installer to use ('auto', 'pip', or 'uv').
+
     - 'auto' (default): Use uv for supported base images, otherwise pip
     - 'pip': Force use of pip regardless of base image support
     - 'uv': Force use of uv (will fail if base image doesn't support it)
     """
 
+    source: UvSource | None
+    """Optional. Explicit deployment source configuration.
+
+    Use `{ "kind": "uv", "root": "." }` to deploy from a uv project rooted at
+    `root/pyproject.toml` and `root/uv.lock`. If `root` is a workspace and the
+    target is ambiguous, set `package` to the desired workspace member.
+    """
+
     dockerfile_lines: list[str]
     """Optional. Additional Docker instructions that will be appended to your base Dockerfile.
-    
-    Useful for installing OS packages, setting environment variables, etc. 
+
+    Useful for installing OS packages, setting environment variables, etc.
     Example:
         dockerfile_lines=[
             "RUN apt-get update && apt-get install -y libmagic-dev",
@@ -652,12 +684,14 @@ class Config(TypedDict, total=False):
 
     dependencies: list[str]
     """List of Python dependencies to install, either from PyPI or local paths.
-    
+
     Examples:
       - "." or "./src" if you have a local Python package
       - str (aka "anthropic") for a PyPI package
       - "git+https://github.com/org/repo.git@main" for a Git-based package
     Defaults to an empty list, meaning no additional packages installed beyond your base environment.
+
+    This field is not supported when `source.kind` is `uv`.
     """
 
     graphs: dict[str, str | GraphDef]
@@ -682,10 +716,10 @@ class Config(TypedDict, total=False):
 
     env: dict[str, str] | str
     """Optional. Environment variables to set for your deployment.
-    
+
     - If given as a dict, keys are variable names and values are their values.
     - If given as a string, it must be a path to a file containing lines in KEY=VALUE format.
-    
+
     Example as a dict:
         env={"API_TOKEN": "abc123", "DEBUG": "true"}
     Example as a file path:
@@ -694,13 +728,13 @@ class Config(TypedDict, total=False):
 
     store: StoreConfig | None
     """Optional. Configuration for the built-in long-term memory store, including semantic search indexing.
-    
+
     If omitted, no vector index is set up (the object store will still be present, however).
     """
 
     checkpointer: CheckpointerConfig | None
     """Optional. Configuration for the built-in checkpointer, which handles checkpointing of state.
-    
+
     If omitted, no checkpointer is set up (the object store will still be present, however).
     """
 
@@ -733,7 +767,7 @@ class Config(TypedDict, total=False):
 
     keep_pkg_tools: bool | list[str] | None
     """Optional. Control whether to retain Python packaging tools in the final image.
-    
+
     Allowed tools are: "pip", "setuptools", "wheel".
     You can also set to true to include all packaging tools.
     """

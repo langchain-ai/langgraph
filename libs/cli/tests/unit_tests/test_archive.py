@@ -71,7 +71,6 @@ class TestBuildIgnoreSpec:
         assert spec.match_file("venv/")
         assert spec.match_file("node_modules/")
         assert spec.match_file(".tox/")
-        assert spec.match_file(".mypy_cache/")
 
     def test_regular_file_not_excluded(self, tmp_path):
         spec = _build_ignore_spec(tmp_path)
@@ -98,6 +97,13 @@ class TestBuildIgnoreSpec:
         spec = _build_ignore_spec(tmp_path)
         assert spec.match_file("app.log")
         assert spec.match_file("mod.pyc")
+
+    def test_can_skip_gitignore(self, tmp_path):
+        (tmp_path / ".dockerignore").write_text("*.log\n")
+        (tmp_path / ".gitignore").write_text("*.pyc\n")
+        spec = _build_ignore_spec(tmp_path, include_gitignore=False)
+        assert spec.match_file("app.log")
+        assert not spec.match_file("mod.pyc")
 
     def test_no_ignore_files_only_builtins(self, tmp_path):
         spec = _build_ignore_spec(tmp_path)

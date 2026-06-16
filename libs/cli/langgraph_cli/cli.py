@@ -159,7 +159,14 @@ OPT_POSTGRES_URI = click.option(
 OPT_API_VERSION = click.option(
     "--api-version",
     type=str,
-    help="API server version to use for the base image. If unspecified, the latest version will be used.",
+    help=(
+        "API server version to use for the base image. If unspecified, the "
+        "latest stable version will be used. Compatible ranges like "
+        "~=0.11.0.dev5 stay on 0.11.0.dev5 while only newer dev builds exist, "
+        "then resolve to the newest matching rc or stable release, for example "
+        "0.11.0rc1 or 0.11.0. Stable-floating ranges like >~=0.11.0.dev5 "
+        "can also pick up future stable releases, for example 0.12.0."
+    ),
 )
 
 OPT_ENGINE_RUNTIME_MODE = click.option(
@@ -724,6 +731,30 @@ def dockerfile(
     default="WARNING",
     help="Set the log level for the API server.",
 )
+@click.option(
+    "--ssl-certfile",
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        path_type=pathlib.Path,
+    ),
+    default=None,
+    help="Path to an SSL certificate file for serving the development server over HTTPS.",
+)
+@click.option(
+    "--ssl-keyfile",
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        path_type=pathlib.Path,
+    ),
+    default=None,
+    help="Path to an SSL key file for serving the development server over HTTPS.",
+)
 @cli.command(
     "dev",
     help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
@@ -742,8 +773,20 @@ def dev(
     allow_blocking: bool,
     tunnel: bool,
     server_log_level: str,
+    ssl_certfile: pathlib.Path | None,
+    ssl_keyfile: pathlib.Path | None,
 ):
     """CLI entrypoint for running the LangGraph API server."""
+    if (ssl_certfile is None) != (ssl_keyfile is None):
+        raise click.UsageError(
+            "Both --ssl-certfile and --ssl-keyfile must be provided to enable HTTPS."
+        )
+
+    if ssl_certfile and ssl_keyfile and tunnel:
+        raise click.UsageError(
+            "Cannot use --tunnel with SSL options. Please choose either to serve over HTTPS or to expose via a tunnel, but not both."
+        )
+
     try:
         from langgraph_api.cli import run_server  # type: ignore
     except ImportError:
@@ -814,7 +857,51 @@ def dev(
         server_level=server_log_level,
         checkpointer=config_json.get("checkpointer"),
         disable_persistence=config_json.get("disable_persistence", False),
+        ssl_certfile=ssl_certfile,
+        ssl_keyfile=ssl_keyfile,
     )
+
+
+# ---------------------------------------------------------------------------
+# validate command
+# ---------------------------------------------------------------------------
+
+
+@OPT_CONFIG
+@cli.command(help="✅ Validate the LangGraph configuration file.")
+@log_command
+def validate(config: pathlib.Path):
+    import json
+
+    try:
+        with open(config) as f:
+            raw_config = json.load(f)
+    except json.JSONDecodeError as e:
+        raise click.UsageError(f"Invalid JSON in {config}: {e.args[0]}") from None
+
+    # Check for unknown keys before validation so they show alongside any error.
+    unknown_warnings = langgraph_cli.config.get_unknown_keys(raw_config)
+
+    try:
+        config_json = langgraph_cli.config.validate_config_file(config)
+    except (click.UsageError, ValueError) as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        if unknown_warnings:
+            click.echo(err=True)
+            for warning in unknown_warnings:
+                click.secho(f"  warning: {warning}", fg="yellow", err=True)
+        raise SystemExit(1) from None
+
+    num_graphs = len(config_json.get("graphs", {}))
+    click.secho(
+        f"Configuration file {config} is valid. "
+        f"({num_graphs} graph{'s' if num_graphs != 1 else ''} found)",
+        fg="green",
+    )
+    if unknown_warnings:
+        click.echo()
+        for warning in unknown_warnings:
+            click.secho(f"  warning: {warning}", fg="yellow")
 
 
 # ---------------------------------------------------------------------------

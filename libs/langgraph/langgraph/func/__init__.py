@@ -5,6 +5,7 @@ import inspect
 import warnings
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import (
     Any,
     Generic,
@@ -22,6 +23,11 @@ from typing_extensions import Unpack
 
 from langgraph._internal import _serde
 from langgraph._internal._constants import CACHE_NS_WRITES, PREVIOUS
+from langgraph._internal._runnable import is_async_callable
+from langgraph._internal._timeout import (
+    coerce_timeout_policy,
+    sync_timeout_unsupported,
+)
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
@@ -31,13 +37,19 @@ from langgraph.pregel._call import (
     P,
     SyncAsyncFuture,
     T,
-    call,
+    _call_with_options,
     get_runnable_for_entrypoint,
     identifier,
 )
 from langgraph.pregel._read import PregelNode
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
-from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
+from langgraph.types import (
+    _DC_KWARGS,
+    CachePolicy,
+    RetryPolicy,
+    StreamMode,
+    TimeoutPolicy,
+)
 from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 
@@ -51,6 +63,7 @@ class _TaskFunction(Generic[P, T]):
         *,
         retry_policy: Sequence[RetryPolicy],
         cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
+        timeout: TimeoutPolicy | None = None,
         name: str | None = None,
     ) -> None:
         if name is not None:
@@ -67,15 +80,17 @@ class _TaskFunction(Generic[P, T]):
         self.func = func
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
+        self.timeout = timeout
         functools.update_wrapper(self, func)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> SyncAsyncFuture[T]:
-        return call(
+        return _call_with_options(
             self.func,
+            args,
+            kwargs,
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
-            *args,
-            **kwargs,
+            timeout=self.timeout,
         )
 
     def clear_cache(self, cache: BaseCache) -> None:
@@ -98,6 +113,7 @@ def task(
     name: str | None = None,
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
+    timeout: float | timedelta | TimeoutPolicy | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> Callable[
     [Callable[P, Awaitable[T]] | Callable[P, T]],
@@ -119,6 +135,7 @@ def task(
     name: str | None = None,
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
+    timeout: float | timedelta | TimeoutPolicy | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> (
     Callable[[Callable[P, Awaitable[T]] | Callable[P, T]], _TaskFunction[P, T]]
@@ -142,6 +159,14 @@ def task(
         name: An optional name for the task. If not provided, the function name will be used.
         retry_policy: An optional retry policy (or list of policies) to use for the task in case of a failure.
         cache_policy: An optional cache policy to use for the task. This allows caching of the task results.
+        timeout: Timeout for each task attempt. A number or `timedelta` is a hard
+            wall-clock cap and is not refreshed. Use `TimeoutPolicy` to configure
+            both a wall-clock `run_timeout` and an `idle_timeout` refreshed by
+            progress signals. For long-running work that doesn't naturally emit
+            progress, call `runtime.heartbeat()` from inside the task. When the
+            timeout fires, `NodeTimeoutError` is raised and the retry policy (if
+            any) decides whether to retry. Supported only for async tasks; sync
+            tasks cannot be safely cancelled in-process.
 
     Returns:
         A callable function when used as a decorator.
@@ -196,6 +221,7 @@ def task(
         )
         if retry_policy is None:
             retry_policy = retry  # type: ignore[assignment]
+    timeout_policy = coerce_timeout_policy(timeout)
 
     retry_policies: Sequence[RetryPolicy] = (
         ()
@@ -208,8 +234,15 @@ def task(
     def decorator(
         func: Callable[P, Awaitable[T]] | Callable[P, T],
     ) -> Callable[P, SyncAsyncFuture[T]]:
+        if timeout_policy is not None and not is_async_callable(func):
+            name_ = name or getattr(func, "__name__", func.__class__.__name__)
+            raise sync_timeout_unsupported(str(name_), kind="Task")
         return _TaskFunction(
-            func, retry_policy=retry_policies, cache_policy=cache_policy, name=name
+            func,
+            retry_policy=retry_policies,
+            cache_policy=cache_policy,
+            timeout=timeout_policy,
+            name=name,
         )
 
     if __func_or_none__ is not None:
@@ -268,6 +301,15 @@ class entrypoint(Generic[ContextT]):
             passed to the workflow.
         cache_policy: A cache policy to use for caching the results of the workflow.
         retry_policy: A retry policy (or list of policies) to use for the workflow in case of a failure.
+        timeout: Timeout for each workflow attempt. A number or `timedelta` is a
+            hard wall-clock cap and is not refreshed. Use `TimeoutPolicy` to
+            configure both a wall-clock `run_timeout` and an `idle_timeout`
+            refreshed by progress signals. For long-running work that doesn't
+            naturally emit progress, call `runtime.heartbeat()` from inside the
+            workflow. When the timeout fires, `NodeTimeoutError` is raised and
+            the retry policy (if any) decides whether to retry. Supported only
+            for async workflows; sync workflows cannot be safely cancelled
+            in-process.
 
     !!! warning "`config_schema` Deprecated"
         The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
@@ -400,6 +442,7 @@ class entrypoint(Generic[ContextT]):
         context_schema: type[ContextT] | None = None,
         cache_policy: CachePolicy | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        timeout: float | timedelta | TimeoutPolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         """Initialize the entrypoint decorator."""
@@ -426,6 +469,7 @@ class entrypoint(Generic[ContextT]):
         self.cache = cache
         self.cache_policy = cache_policy
         self.retry_policy = retry_policy
+        self.timeout = coerce_timeout_policy(timeout)
         self.context_schema = context_schema
 
     @dataclass(**_DC_KWARGS)
@@ -535,6 +579,7 @@ class entrypoint(Generic[ContextT]):
                     bound=bound,
                     triggers=[START],
                     channels=START,
+                    timeout=self.timeout,
                     writers=[
                         ChannelWrite(
                             [

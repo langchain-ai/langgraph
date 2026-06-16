@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "1.1.6"
+version = "1.2.5"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.10"
@@ -24,10 +24,10 @@ classifiers = [
     'Programming Language :: Python :: 3.13',
 ]
 dependencies = [
-    "langchain-core>=0.1",
-    "langgraph-checkpoint>=2.1.0,<5.0.0",
-    "langgraph-sdk>=0.3.0,<0.4.0",
-    "langgraph-prebuilt>=1.0.9,<1.1.0",
+    "langchain-core>=1.4.7,<2",
+    "langgraph-checkpoint>=4.1.0,<5.0.0",
+    "langgraph-sdk>=0.4.2,<0.5.0",
+    "langgraph-prebuilt>=1.1.0,<1.2.0",
     "xxhash>=3.5.0",
     "pydantic>=2.7.4",
 ]
@@ -38,7 +38,7 @@ Homepage = "https://docs.langchain.com/oss/python/langgraph/overview"
 Documentation = "https://reference.langchain.com/python/langgraph/"
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/langgraph"
 Changelog = "https://github.com/langchain-ai/langgraph/releases"
-Twitter = "https://x.com/LangChain"
+Twitter = "https://x.com/langchain_oss"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
@@ -69,8 +69,8 @@ test = [
     "redis",
 ]
 lint = [
-    "mypy",
     "ruff",
+    "ty",
     "types-requests",
 ]
 dev = [
@@ -99,15 +99,24 @@ target-version = "py310"
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "typing.TypedDict".msg = "Use typing_extensions.TypedDict instead."
 
-[tool.mypy]
-# https://mypy.readthedocs.io/en/stable/config_file.html
-disallow_untyped_defs = "True"
-explicit_package_bases = "True"
-warn_no_return = "False"
-warn_unused_ignores = "True"
-warn_redundant_casts = "True"
-allow_redefinition = "True"
-disable_error_code = "typeddict-item, return-value, override, has-type"
+[tool.ty.rules]
+call-non-callable = "ignore"
+deprecated = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-key = "ignore"
+invalid-method-override = "ignore"
+invalid-paramspec = "ignore"
+invalid-return-type = "ignore"
+invalid-type-form = "ignore"
+invalid-yield = "ignore"
+missing-typed-dict-key = "ignore"
+no-matching-overload = "ignore"
+not-iterable = "ignore"
+unused-type-ignore-comment = "ignore"
+unresolved-attribute = "ignore"
+unsupported-base = "ignore"
+unsupported-operator = "ignore"
 
 [tool.coverage.run]
 omit = ["tests/*"]

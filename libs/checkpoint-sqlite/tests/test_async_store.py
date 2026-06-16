@@ -1,4 +1,3 @@
-# mypy: disable-error-code="union-attr,arg-type,index,operator"
 import asyncio
 import os
 import tempfile

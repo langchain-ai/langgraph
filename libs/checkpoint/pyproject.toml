@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint"
-version = "4.0.1"
+version = "4.1.1"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
 requires-python = ">=3.10"
@@ -18,7 +18,7 @@ dependencies = [
 
 [project.urls]
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint"
-Twitter = "https://x.com/LangChain"
+Twitter = "https://x.com/langchain_oss"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
@@ -37,7 +37,7 @@ test = [
 lint = [
   "ruff",
   "codespell",
-  "mypy",
+  "ty",
 ]
 dev = [
   {include-group = "test"},
@@ -64,18 +64,22 @@ lint.select = [
 lint.ignore = ["E501", "B008"]
 target-version = "py310"
 
+[tool.ty.rules]
+deprecated = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-key = "ignore"
+invalid-method-override = "ignore"
+invalid-return-type = "ignore"
+invalid-type-form = "ignore"
+redundant-cast = "ignore"
+unused-type-ignore-comment = "ignore"
+unresolved-attribute = "ignore"
+unresolved-import = "ignore"
+unsupported-operator = "ignore"
+
 [tool.pytest-watcher]
 now = true
 delay = 0.1
 runner_args = ["--ff", "-v", "--tb", "short"]
 patterns = ["*.py"]
-
-[tool.mypy]
-# https://mypy.readthedocs.io/en/stable/config_file.html
-disallow_untyped_defs = "True"
-explicit_package_bases = "True"
-warn_no_return = "False"
-warn_unused_ignores = "True"
-warn_redundant_casts = "True"
-allow_redefinition = "True"
-disable_error_code = "typeddict-item, return-value"

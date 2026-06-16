@@ -29,6 +29,9 @@ from langgraph._internal._constants import (
 )
 
 DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10007"))
+DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT = int(
+    getenv("LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT", "5000")
+)
 
 
 def recast_checkpoint_ns(ns: str) -> str:
@@ -76,6 +79,70 @@ def patch_checkpoint_map(
         return config
 
 
+def _copy_mapping_value(value: Any) -> Any:
+    return dict(value) if isinstance(value, Mapping) else value
+
+
+def _merge_metadata(
+    base: Mapping[str, Any] | None, new: Mapping[str, Any] | None
+) -> dict[str, Any]:
+    """Merge metadata without mutating inputs.
+
+    Top-level keys merge with newer values winning. `lc_versions` is the only
+    mapping-valued key that merges one level deeper, so independent LangChain
+    packages can contribute package versions without changing generic metadata
+    semantics. Mapping values are copied one level, so deeper nested objects
+    remain shared. `None` inputs are treated as empty metadata.
+
+    Mirrors `langchain_core.runnables.config._merge_metadata_dicts` so configs
+    that pass through LangGraph's merge keep the same `lc_versions` semantics;
+    keep the two in sync. Unlike lc-core, this copies mapping values one level
+    (intentionally more defensive — do not "simplify" back to a shared ref).
+    """
+    merged = {key: _copy_mapping_value(value) for key, value in (base or {}).items()}
+    for key, value in (new or {}).items():
+        if (
+            key == "lc_versions"
+            and isinstance(merged.get(key), Mapping)
+            and isinstance(value, Mapping)
+        ):
+            merged[key] = {
+                **cast(Mapping[str, Any], merged[key]),
+                **value,
+            }
+        else:
+            merged[key] = _copy_mapping_value(value)
+    return merged
+
+
+def _merge_callbacks(base: Callbacks, new: Callbacks) -> Callbacks:
+    """Merge two callbacks values (None / list / BaseCallbackManager).
+
+    Six cases total (3 base types x 2 non-None new types).
+    """
+    if new is None:
+        return base
+    if base is None:
+        return new.copy() if isinstance(new, (list, BaseCallbackManager)) else new
+    if isinstance(new, list):
+        if isinstance(base, list):
+            return base + new
+        if isinstance(base, BaseCallbackManager):
+            mngr = base.copy()
+            for cb in new:
+                mngr.add_handler(cb, inherit=True)
+            return mngr
+    elif isinstance(new, BaseCallbackManager):
+        if isinstance(base, list):
+            mngr = new.copy()
+            for cb in base:
+                mngr.add_handler(cb, inherit=True)
+            return mngr
+        if isinstance(base, BaseCallbackManager):
+            return base.merge(new)
+    raise NotImplementedError(f"Unsupported callback types: {type(base)}, {type(new)}")
+
+
 def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
     """Merge multiple configs into one.
 
@@ -95,10 +162,10 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
             if not value:
                 continue
             if key == "metadata":
-                if base_value := base.get(key):
-                    base[key] = {**base_value, **value}  # type: ignore
-                else:
-                    base[key] = value  # type: ignore[literal-required]
+                base[key] = _merge_metadata(
+                    cast(Mapping[str, Any] | None, base.get(key)),
+                    cast(Mapping[str, Any], value),
+                )
             elif key == "tags":
                 if base_value := base.get(key):
                     base[key] = [*base_value, *value]  # type: ignore
@@ -110,34 +177,9 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
                 else:
                     base[key] = value
             elif key == "callbacks":
-                base_callbacks = base.get("callbacks")
-                # callbacks can be either None, list[handler] or manager
-                # so merging two callbacks values has 6 cases
-                if isinstance(value, list):
-                    if base_callbacks is None:
-                        base["callbacks"] = value.copy()
-                    elif isinstance(base_callbacks, list):
-                        base["callbacks"] = base_callbacks + value
-                    else:
-                        # base_callbacks is a manager
-                        mngr = base_callbacks.copy()
-                        for callback in value:
-                            mngr.add_handler(callback, inherit=True)
-                        base["callbacks"] = mngr
-                elif isinstance(value, BaseCallbackManager):
-                    # value is a manager
-                    if base_callbacks is None:
-                        base["callbacks"] = value.copy()
-                    elif isinstance(base_callbacks, list):
-                        mngr = value.copy()
-                        for callback in base_callbacks:
-                            mngr.add_handler(callback, inherit=True)
-                        base["callbacks"] = mngr
-                    else:
-                        # base_callbacks is also a manager
-                        base["callbacks"] = base_callbacks.merge(value)
-                else:
-                    raise NotImplementedError
+                base["callbacks"] = _merge_callbacks(
+                    base.get("callbacks"), cast(Callbacks, value)
+                )
             elif key == "recursion_limit":
                 if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
                     base["recursion_limit"] = config["recursion_limit"]
@@ -217,14 +259,16 @@ def get_callback_manager_for_config(
             callbacks.add_tags(all_tags)
         if metadata := config.get("metadata"):
             callbacks.add_metadata(metadata)
-        return callbacks
+        manager = callbacks
     else:
         # otherwise create a new manager
-        return CallbackManager.configure(
+        manager = CallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
+            langsmith_inheritable_metadata=_get_tracing_metadata_defaults(config),
         )
+    return manager
 
 
 def get_async_callback_manager_for_config(
@@ -255,14 +299,16 @@ def get_async_callback_manager_for_config(
             callbacks.add_tags(all_tags)
         if metadata := config.get("metadata"):
             callbacks.add_metadata(metadata)
-        return callbacks
+        manager = callbacks
     else:
         # otherwise create a new manager
-        return AsyncCallbackManager.configure(
+        manager = AsyncCallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
+            langsmith_inheritable_metadata=_get_tracing_metadata_defaults(config),
         )
+    return manager
 
 
 def _is_not_empty(value: Any) -> bool:
@@ -302,28 +348,104 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         for k, v in config.items():
             if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
-                    empty[k] = cast(dict, v).copy()
+                    # Shallow-merge configurable dicts across configs so values
+                    # bound via with_config(...) (e.g. ls_agent_type) are
+                    # preserved when later configs (e.g. invoke-time) only
+                    # specify a subset of keys like thread_id.
+                    existing = empty.get(k)
+                    empty[k] = (
+                        {**cast(dict, existing), **cast(dict, v)}
+                        if existing
+                        else cast(dict, v).copy()
+                    )
+                elif k == "callbacks":
+                    empty["callbacks"] = _merge_callbacks(
+                        empty.get("callbacks"), cast(Callbacks, v)
+                    )
+                elif k == "metadata":
+                    # Matches merge_configs: top-level metadata keys merge, and
+                    # only `lc_versions` merges one level deeper.
+                    empty["metadata"] = _merge_metadata(
+                        cast(Mapping[str, Any] | None, empty.get("metadata")),
+                        cast(Mapping[str, Any], v),
+                    )
+                elif k == "tags":
+                    # Concatenate tags across configs so values bound via
+                    # with_config(...) are preserved when later configs
+                    # supply additional tags. Matches merge_configs.
+                    existing_tags: list[str] | None = empty.get("tags")
+                    empty["tags"] = (
+                        [*existing_tags, *cast(list, v)]
+                        if existing_tags
+                        else list(cast(list, v))
+                    )
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
             if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
-    _empty_metadata = empty["metadata"]
-    for key, value in empty[CONF].items():
-        if _exclude_as_metadata(key, value, _empty_metadata):
-            continue
-        _empty_metadata[key] = value
+
+    configurable = empty.get("configurable")
+    metadata = empty.get("metadata")
+    if configurable and metadata is not None:
+        for key in _PROPAGATE_TO_METADATA:
+            if key in metadata:
+                continue
+            value = configurable.get(key)
+            if value:
+                metadata[key] = value
     return empty
 
 
 _OMIT = ("key", "token", "secret", "password", "auth")
 
 
-def _exclude_as_metadata(key: str, value: Any, metadata: Mapping[str, Any]) -> bool:
+def _exclude_as_metadata(key: str, value: Any) -> bool:
     key_lower = key.casefold()
     return (
         key.startswith("__")
         or not isinstance(value, (str, int, float, bool))
-        or key in metadata
         or any(substr in key_lower for substr in _OMIT)
     )
+
+
+def _get_tracing_metadata_defaults(
+    config: RunnableConfig,
+) -> dict[str, Any] | None:
+    """Get tracer-only metadata defaults from configurable values."""
+    configurable = config.get("configurable")
+    if not configurable:
+        return None
+    metadata: dict[str, Any] = {}
+    for key, value in configurable.items():
+        if _exclude_as_metadata(key, value):
+            continue
+        metadata[key] = value
+    return metadata or None
+
+
+_PROPAGATE_TO_METADATA = frozenset(
+    (
+        "thread_id",
+        "checkpoint_id",
+        "checkpoint_ns",
+        "task_id",
+        "run_id",
+        "assistant_id",
+        "graph_id",
+    )
+)
+
+
+def filter_to_user_tags(tags: Sequence[str] | None) -> list[str] | None:
+    """Drop langgraph's internal `seq:step:*` bookkeeping tags.
+
+    `seq:step:N` tags are added internally to mark sequence steps; everything
+    else (user-supplied tags and any other framework tags) is kept. Returns the
+    surviving tags, or `None` if none remain. Shared by the `messages` and
+    `tasks` stream handlers so both surface the same tag set on their metadata.
+    """
+    if not tags:
+        return None
+    filtered = [t for t in tags if not t.startswith("seq:step")]
+    return filtered or None

@@ -16,12 +16,15 @@ from typing import (
     Literal,
     Optional,
 )
+from unittest.mock import patch
 from uuid import UUID
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from langchain_core.utils.aiter import aclosing
+from langchain_core.version import VERSION as LANGCHAIN_CORE_VERSION
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -47,6 +50,7 @@ from langgraph.channels.topic import Topic
 from langgraph.errors import (
     GraphRecursionError,
     InvalidUpdateError,
+    NodeError,
     ParentCommand,
 )
 from langgraph.func import entrypoint, task
@@ -212,6 +216,30 @@ async def test_checkpoint_errors() -> None:
             "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
         ):
             pass
+
+
+@NEEDS_CONTEXTVARS
+async def test_request_drain_allows_inflight_acall_scheduling(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    from langgraph.runtime import RunControl
+
+    @task
+    async def child(x: int) -> int:
+        return x + 1
+
+    control = RunControl()
+
+    @entrypoint(checkpointer=async_checkpointer)
+    async def graph(x: int) -> int:
+        control.request_drain()
+        fut = child(x)
+        return await fut
+
+    config = {"configurable": {"thread_id": "drain-call-async"}}
+
+    assert await graph.ainvoke(1, config=config, control=control) == 2
+    assert control.drain_requested
 
 
 async def test_py_async_with_cancel_behavior() -> None:
@@ -2085,8 +2113,11 @@ async def test_run_from_checkpoint_id_retains_previous_writes(
         )
     ]
 
-    assert len(new_history) == len(history) + 1
-    for original, new in zip(history, new_history[1:]):
+    # +2: one fork checkpoint from time travel, one from the new execution
+    assert len(new_history) == len(history) + 2
+    # new_history[0] is the new execution result, new_history[1] is the fork
+    assert new_history[1].metadata["source"] == "fork"
+    for original, new in zip(history, new_history[2:]):
         assert original.values == new.values
         assert original.next == new.next
         assert original.metadata["step"] == new.metadata["step"]
@@ -2094,7 +2125,7 @@ async def test_run_from_checkpoint_id_retains_previous_writes(
     def _get_tasks(hist: list, start: int):
         return [h.tasks for h in hist[start:]]
 
-    assert _get_tasks(new_history, 1) == _get_tasks(history, 0)
+    assert _get_tasks(new_history, 2) == _get_tasks(history, 0)
 
 
 async def test_cond_edge_after_send() -> None:
@@ -6097,6 +6128,36 @@ async def test_parent_command(
     )
 
 
+async def test_delta_channel_durability_exit_stores_snapshot_async() -> None:
+    """DeltaChannel must reload from an async durability='exit' checkpoint."""
+    from langchain_core.messages import AIMessage
+
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph.message import _messages_delta_reducer
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    async def respond(state: State) -> dict:
+        return {"messages": [AIMessage(content="reply", id="ai1")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    graph = builder.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "delta-exit-async-test"}}
+
+    result = await graph.ainvoke(
+        {"messages": [HumanMessage(content="hello", id="h1")]},
+        config,
+        durability="exit",
+    )
+    assert [m.content for m in result["messages"]] == ["hello", "reply"]
+
+    state = await graph.aget_state(config)
+    assert [m.content for m in state.values["messages"]] == ["hello", "reply"]
+
+
 @NEEDS_CONTEXTVARS
 async def test_interrupt_subgraph(async_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):
@@ -7541,14 +7602,75 @@ async def test_tags_stream_mode_messages() -> None:
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),
-                "_type": "generic-fake-chat-model",
                 "ls_provider": "genericfakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
                 "tags": ["meow"],
             },
         )
     ]
+
+
+async def test_configurable_propagates_to_stream_metadata() -> None:
+    """Regression: thread_id, run_id, assistant_id, graph_id,
+    and langgraph_auth_user_id from configurable must appear
+    in stream_mode='messages' metadata."""
+
+    def my_node(state):
+        return {"messages": HumanMessage(content="hello")}
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("my_node", my_node)
+        .add_edge(START, "my_node")
+        .compile()
+    )
+
+    config = {
+        "configurable": {
+            "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
+            "langgraph_auth_user_id": "user-1",
+            # these should NOT be propagated into metadata
+            "some_api_key": "secret",
+            "custom_setting": {"nested": True},
+        },
+    }
+    results = [
+        chunk
+        async for chunk in graph.astream(
+            {"messages": []}, config, stream_mode="messages"
+        )
+    ]
+    assert len(results) == 1
+    _, metadata = results[0]
+    # propagated keys
+    assert metadata["thread_id"] == "th-123"
+    assert metadata["checkpoint_id"] == "ckpt-1"
+    assert metadata["checkpoint_ns"] == "ns-1"
+    assert metadata["task_id"] == "task-1"
+    assert metadata["run_id"] == "run-456"
+    assert metadata["assistant_id"] == "asst-789"
+    assert metadata["graph_id"] == "graph-0"
+
+    # These will only be traced as of langgraph 1.2 and not present by default in
+    # metadata
+    # assert metadata["model"] == "gpt-4o"
+    # assert metadata["user_id"] == "uid-1"
+    # assert metadata["cron_id"] == "cron-1"
+    # assert metadata["langgraph_auth_user_id"] == "user-1"
+    # non-allowlisted keys must not appear
+    assert "some_api_key" not in metadata
+    assert "custom_setting" not in metadata
 
 
 async def test_stream_mode_messages_command() -> None:
@@ -8641,279 +8763,116 @@ async def test_imp_exception(
         {"my_workflow": "done"},
     ]
 
-    assert [c async for c in my_workflow.astream_events(1, thread1)] == [
-        {
-            "event": "on_chain_start",
-            "data": {"input": 1},
-            "name": "LangGraph",
-            "tags": [],
-            "run_id": AnyStr(),
-            "metadata": {"thread_id": "1", "ls_integration": "langgraph"},
-            "parent_ids": [],
-        },
-        {
-            "event": "on_chain_start",
-            "data": {"input": 1},
-            "name": "my_workflow",
-            "tags": ["graph:step:4"],
-            "run_id": AnyStr(),
-            "metadata": {
-                "thread_id": "1",
-                "ls_integration": "langgraph",
-                "langgraph_step": 4,
-                "langgraph_node": "my_workflow",
-                "langgraph_triggers": ("__start__",),
-                "langgraph_path": ("__pregel_pull", "my_workflow"),
-                "langgraph_checkpoint_ns": AnyStr(),
-            },
-            "parent_ids": [AnyStr()],
-        },
-        {
-            "event": "on_chain_start",
-            "data": {"input": {"number": 1}},
-            "name": "my_task",
-            "tags": ["seq:step:1"],
-            "run_id": AnyStr(),
-            "metadata": {
-                "thread_id": "1",
-                "ls_integration": "langgraph",
-                "langgraph_step": 4,
-                "langgraph_node": "my_task",
-                "langgraph_triggers": ("__pregel_push",),
-                "langgraph_path": (
-                    "__pregel_push",
-                    ("__pregel_pull", "my_workflow"),
-                    2,
-                    True,
-                ),
-                "langgraph_checkpoint_ns": AnyStr(),
-            },
-            "parent_ids": [
-                AnyStr(),
-                AnyStr(),
-            ],
-        },
-        {
-            "event": "on_chain_stream",
-            "run_id": AnyStr(),
-            "name": "my_task",
-            "tags": ["seq:step:1"],
-            "metadata": {
-                "thread_id": "1",
-                "ls_integration": "langgraph",
-                "langgraph_step": 4,
-                "langgraph_node": "my_task",
-                "langgraph_triggers": ("__pregel_push",),
-                "langgraph_path": (
-                    "__pregel_push",
-                    ("__pregel_pull", "my_workflow"),
-                    2,
-                    True,
-                ),
-                "langgraph_checkpoint_ns": AnyStr(),
-            },
-            "data": {"chunk": 2},
-            "parent_ids": [
-                AnyStr(),
-                AnyStr(),
-            ],
-        },
-        {
-            "event": "on_chain_end",
-            "data": {"output": 2, "input": {"number": 1}},
-            "run_id": AnyStr(),
-            "name": "my_task",
-            "tags": ["seq:step:1"],
-            "metadata": {
-                "thread_id": "1",
-                "ls_integration": "langgraph",
-                "langgraph_step": 4,
-                "langgraph_node": "my_task",
-                "langgraph_triggers": ("__pregel_push",),
-                "langgraph_path": (
-                    "__pregel_push",
-                    ("__pregel_pull", "my_workflow"),
-                    2,
-                    True,
-                ),
-                "langgraph_checkpoint_ns": AnyStr(),
-            },
-            "parent_ids": [
-                AnyStr(),
-                AnyStr(),
-            ],
-        },
-        {
-            "event": "on_chain_stream",
-            "run_id": AnyStr(),
-            "name": "LangGraph",
-            "tags": [],
-            "metadata": {"thread_id": "1", "ls_integration": "langgraph"},
-            "data": {"chunk": {"my_task": 2}},
-            "parent_ids": [],
-        },
-        {
-            "event": "on_chain_start",
-            "data": {"input": {"number": 1}},
-            "name": "task_with_exception",
-            "tags": ["seq:step:1"],
-            "run_id": AnyStr(),
-            "metadata": {
-                "thread_id": "1",
-                "ls_integration": "langgraph",
-                "langgraph_step": 4,
-                "langgraph_node": "my_task",
-                "langgraph_triggers": ("__pregel_push",),
-                "langgraph_path": (
-                    "__pregel_push",
-                    ("__pregel_pull", "my_workflow"),
-                    2,
-                    True,
-                ),
-                "langgraph_checkpoint_ns": AnyStr(),
-            },
-            "parent_ids": [
-                AnyStr(),
-                AnyStr(),
-            ],
-        },
-        {
-            "event": "on_chain_start",
-            "data": {"input": {"number": 1}},
-            "name": "my_task",
-            "tags": ["seq:step:1"],
-            "run_id": AnyStr(),
-            "metadata": {
-                "thread_id": "1",
-                "ls_integration": "langgraph",
-                "langgraph_step": 4,
-                "langgraph_node": "my_task",
-                "langgraph_triggers": ("__pregel_push",),
-                "langgraph_path": (
-                    "__pregel_push",
-                    ("__pregel_pull", "my_workflow"),
-                    2,
-                    True,
-                ),
-                "langgraph_checkpoint_ns": AnyStr(),
-            },
-            "parent_ids": [
-                AnyStr(),
-                AnyStr(),
-            ],
-        },
-        {
-            "event": "on_chain_stream",
-            "run_id": AnyStr(),
-            "name": "my_task",
-            "tags": ["seq:step:1"],
-            "metadata": {
-                "thread_id": "1",
-                "ls_integration": "langgraph",
-                "langgraph_step": 4,
-                "langgraph_node": "my_task",
-                "langgraph_triggers": ("__pregel_push",),
-                "langgraph_path": (
-                    "__pregel_push",
-                    ("__pregel_pull", "my_workflow"),
-                    2,
-                    True,
-                ),
-                "langgraph_checkpoint_ns": AnyStr(),
-            },
-            "data": {"chunk": 2},
-            "parent_ids": [
-                AnyStr(),
-                AnyStr(),
-            ],
-        },
-        {
-            "event": "on_chain_end",
-            "data": {"output": 2, "input": {"number": 1}},
-            "run_id": AnyStr(),
-            "name": "my_task",
-            "tags": ["seq:step:1"],
-            "metadata": {
-                "thread_id": "1",
-                "ls_integration": "langgraph",
-                "langgraph_step": 4,
-                "langgraph_node": "my_task",
-                "langgraph_triggers": ("__pregel_push",),
-                "langgraph_path": (
-                    "__pregel_push",
-                    ("__pregel_pull", "my_workflow"),
-                    2,
-                    True,
-                ),
-                "langgraph_checkpoint_ns": AnyStr(),
-            },
-            "parent_ids": [
-                AnyStr(),
-                AnyStr(),
-            ],
-        },
-        {
-            "event": "on_chain_stream",
-            "run_id": AnyStr(),
-            "name": "my_workflow",
-            "tags": ["graph:step:4"],
-            "metadata": {
-                "thread_id": "1",
-                "ls_integration": "langgraph",
-                "langgraph_step": 4,
-                "langgraph_node": "my_workflow",
-                "langgraph_triggers": ("__start__",),
-                "langgraph_path": ("__pregel_pull", "my_workflow"),
-                "langgraph_checkpoint_ns": AnyStr(),
-            },
-            "data": {"chunk": "done"},
-            "parent_ids": [AnyStr()],
-        },
-        {
-            "event": "on_chain_stream",
-            "run_id": AnyStr(),
-            "name": "LangGraph",
-            "tags": [],
-            "metadata": {"thread_id": "1", "ls_integration": "langgraph"},
-            "data": {"chunk": {"my_task": 2}},
-            "parent_ids": [],
-        },
-        {
-            "event": "on_chain_end",
-            "data": {"output": "done", "input": 1},
-            "run_id": AnyStr(),
-            "name": "my_workflow",
-            "tags": ["graph:step:4"],
-            "metadata": {
-                "thread_id": "1",
-                "ls_integration": "langgraph",
-                "langgraph_step": 4,
-                "langgraph_node": "my_workflow",
-                "langgraph_triggers": ("__start__",),
-                "langgraph_path": ("__pregel_pull", "my_workflow"),
-                "langgraph_checkpoint_ns": AnyStr(),
-            },
-            "parent_ids": [AnyStr()],
-        },
-        {
-            "event": "on_chain_stream",
-            "run_id": AnyStr(),
-            "name": "LangGraph",
-            "tags": [],
-            "metadata": {"thread_id": "1", "ls_integration": "langgraph"},
-            "data": {"chunk": {"my_workflow": "done"}},
-            "parent_ids": [],
-        },
-        {
-            "event": "on_chain_end",
-            "data": {"output": "done"},
-            "run_id": AnyStr(),
-            "name": "LangGraph",
-            "tags": [],
-            "metadata": {"thread_id": "1", "ls_integration": "langgraph"},
-            "parent_ids": [],
-        },
+    events = [c async for c in my_workflow.astream_events(1, thread1)]
+    assert [(event["event"], event["name"]) for event in events] == [
+        ("on_chain_start", "LangGraph"),
+        ("on_chain_start", "my_workflow"),
+        ("on_chain_start", "my_task"),
+        ("on_chain_stream", "my_task"),
+        ("on_chain_end", "my_task"),
+        ("on_chain_stream", "LangGraph"),
+        ("on_chain_start", "task_with_exception"),
+        ("on_chain_start", "my_task"),
+        ("on_chain_stream", "my_task"),
+        ("on_chain_end", "my_task"),
+        ("on_chain_stream", "my_workflow"),
+        ("on_chain_stream", "LangGraph"),
+        ("on_chain_end", "my_workflow"),
+        ("on_chain_stream", "LangGraph"),
+        ("on_chain_end", "LangGraph"),
     ]
+
+    root_events = [event for event in events if event["name"] == "LangGraph"]
+    for event in root_events:
+        assert event["tags"] == []
+        assert event["metadata"]["thread_id"] == "1"
+        assert event["metadata"]["ls_integration"] == "langgraph"
+        assert event["parent_ids"] == []
+
+    workflow_events = [event for event in events if event["name"] == "my_workflow"]
+    for event in workflow_events:
+        assert event["tags"] == ["graph:step:4"]
+        metadata = event["metadata"]
+        assert metadata["thread_id"] == "1"
+        assert metadata["ls_integration"] == "langgraph"
+        assert metadata["langgraph_step"] == 4
+        assert metadata["langgraph_node"] == "my_workflow"
+        assert metadata["langgraph_triggers"] == ("__start__",)
+        assert metadata["langgraph_path"] == ("__pregel_pull", "my_workflow")
+        assert isinstance(metadata["langgraph_checkpoint_ns"], str)
+        assert len(event["parent_ids"]) == 1
+
+    task_events = [event for event in events if event["name"] == "my_task"]
+    assert len(task_events) == 6
+    for event in task_events:
+        assert event["tags"] == ["seq:step:1"]
+        metadata = event["metadata"]
+        assert metadata["thread_id"] == "1"
+        assert metadata["ls_integration"] == "langgraph"
+        assert metadata["langgraph_step"] == 4
+        assert metadata["langgraph_node"] == "my_task"
+        assert metadata["langgraph_triggers"] == ("__pregel_push",)
+        assert metadata["langgraph_path"][:2] == (
+            "__pregel_push",
+            ("__pregel_pull", "my_workflow"),
+        )
+        assert metadata["langgraph_path"][-1] is True
+        assert isinstance(metadata["langgraph_checkpoint_ns"], str)
+        assert len(event["parent_ids"]) == 2
+
+    task_with_exception_event = next(
+        event for event in events if event["name"] == "task_with_exception"
+    )
+    assert task_with_exception_event["event"] == "on_chain_start"
+    assert task_with_exception_event["data"] == {"input": {"number": 1}}
+    assert task_with_exception_event["tags"] == ["seq:step:1"]
+    metadata = task_with_exception_event["metadata"]
+    assert metadata["thread_id"] == "1"
+    assert metadata["ls_integration"] == "langgraph"
+    assert metadata["langgraph_step"] == 4
+    assert metadata["langgraph_node"] == "task_with_exception"
+    assert metadata["langgraph_triggers"] == ("__pregel_push",)
+    assert metadata["langgraph_path"][:2] == (
+        "__pregel_push",
+        ("__pregel_pull", "my_workflow"),
+    )
+    assert metadata["langgraph_path"][-1] is True
+    assert isinstance(metadata["langgraph_checkpoint_ns"], str)
+    assert len(task_with_exception_event["parent_ids"]) == 2
+
+    assert [
+        event["data"]
+        for event in events
+        if event["event"] == "on_chain_stream" and event["name"] == "LangGraph"
+    ] == [
+        {"chunk": {"my_task": 2}},
+        {"chunk": {"my_task": 2}},
+        {"chunk": {"my_workflow": "done"}},
+    ]
+    assert [
+        event["data"]
+        for event in events
+        if event["event"] == "on_chain_stream" and event["name"] == "my_task"
+    ] == [{"chunk": 2}, {"chunk": 2}]
+    assert [
+        event["data"]
+        for event in events
+        if event["event"] == "on_chain_end" and event["name"] == "my_task"
+    ] == [
+        {"output": 2, "input": {"number": 1}},
+        {"output": 2, "input": {"number": 1}},
+    ]
+    assert [
+        event["data"]
+        for event in events
+        if event["event"] == "on_chain_stream" and event["name"] == "my_workflow"
+    ] == [{"chunk": "done"}]
+    assert [
+        event["data"]
+        for event in events
+        if event["event"] == "on_chain_end" and event["name"] == "my_workflow"
+    ] == [{"output": "done", "input": 1}]
+    assert events[-1]["data"] == {"output": "done"}
 
 
 @pytest.mark.parametrize("with_timeout", [False, "inner", "outer", "both"])
@@ -9645,3 +9604,126 @@ async def test_fork_does_not_apply_pending_writes(
 
     # 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+async def test_graph_error_handler_async_runtime_info() -> None:
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+    captured: dict[str, object] = {}
+
+    async def always_failing_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("Always fails async")
+
+    async def err_handler_node(state: State, error: NodeError) -> State:
+        captured["from_node_name"] = error.node
+        captured["from_node_error"] = error.error
+        return {"foo": "handled_async"}
+
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "always_failing",
+            always_failing_node,
+            retry_policy=RetryPolicy(
+                max_attempts=2,
+                initial_interval=0.01,
+                jitter=False,
+                retry_on=ValueError,
+            ),
+            error_handler=err_handler_node,
+        )
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    with patch("asyncio.sleep"):
+        result = await graph.ainvoke({"foo": ""})
+
+    assert attempts == 2
+    assert result["foo"] == "handled_async"
+    assert captured["from_node_name"] == "always_failing"
+    assert isinstance(captured["from_node_error"], BaseException)
+
+
+@NEEDS_CONTEXTVARS
+async def test_graph_error_handler_does_not_swallow_interrupt_concurrent() -> None:
+    """When a graph error handler is configured and a node calls interrupt()
+    concurrently with other nodes, the interrupt must still be raised — not
+    silently swallowed."""
+
+    class State(TypedDict):
+        foo: str
+
+    async def node_a(state: State) -> State:
+        val = interrupt("need human input")
+        return {"foo": f"a_{val}"}
+
+    async def node_b(state: State) -> State:
+        return {}
+
+    async def err_handler(state: State) -> State:
+        return {"foo": "handled"}
+
+    checkpointer = InMemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a, error_handler=err_handler)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge(START, "node_b")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "test-interrupt-concurrent-async"}}
+
+    await graph.ainvoke({"foo": ""}, config)
+
+    state = await graph.aget_state(config)
+    assert len(state.tasks) > 0
+
+    interrupts = [t for t in state.tasks if hasattr(t, "interrupts") and t.interrupts]
+    assert len(interrupts) > 0, (
+        "GraphInterrupt was swallowed — interrupt() in node_a "
+        "should have paused execution"
+    )
+
+
+async def test_node_error_handler_handles_subgraph_internal_failure_async() -> None:
+    class SubState(TypedDict):
+        foo: str
+
+    class ParentState(TypedDict):
+        foo: str
+
+    captured: dict[str, object] = {}
+
+    async def sub_fail_node(state: SubState) -> SubState:
+        raise ValueError("async subgraph boom")
+
+    async def parent_handler(state: ParentState, error: NodeError) -> ParentState:
+        captured["from_node_name"] = error.node
+        captured["from_node_error"] = error.error
+        return {"foo": "handled_async_subgraph"}
+
+    subgraph = (
+        StateGraph(SubState)
+        .add_node("sub_fail_node", sub_fail_node)
+        .add_edge(START, "sub_fail_node")
+        .compile()
+    )
+
+    parent_graph = (
+        StateGraph(ParentState)
+        .add_node("subgraph_node", subgraph, error_handler=parent_handler)
+        .add_edge(START, "subgraph_node")
+        .compile()
+    )
+
+    result = await parent_graph.ainvoke({"foo": ""})
+    assert result["foo"] == "handled_async_subgraph"
+    assert captured["from_node_name"] == "subgraph_node"
+    assert isinstance(captured["from_node_error"], BaseException)

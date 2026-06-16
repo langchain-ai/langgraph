@@ -11,13 +11,22 @@ from typing import (
     TypeVar,
     Union,
 )
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import langsmith
 import pytest
+from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tracers import LangChainTracer
 from typing_extensions import NotRequired, Required, TypedDict
 
-from langgraph._internal._config import _is_not_empty, ensure_config
+from langgraph._internal._config import (
+    _is_not_empty,
+    _merge_callbacks,
+    ensure_config,
+    get_callback_manager_for_config,
+    merge_configs,
+)
 from langgraph._internal._fields import (
     _is_optional_type,
     get_enhanced_type_hints,
@@ -298,7 +307,7 @@ def test_is_not_empty() -> None:
     assert not _is_not_empty({})
 
 
-def test_configurable_metadata():
+def test_configurable_metadata() -> None:
     config = {
         "configurable": {
             "a-key": "foo",
@@ -309,11 +318,393 @@ def test_configurable_metadata():
             "andme": 42,
             "nested": {"foo": "bar"},
             "nooverride": -2,
+            "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
+            "langgraph_auth_user_id": "user-1",
         },
         "metadata": {"nooverride": 18},
     }
-    expected = {"includeme", "andme", "nooverride"}
     merged = ensure_config(config)
     metadata = merged["metadata"]
-    assert metadata.keys() == expected
+    assert set(metadata) == {
+        "nooverride",
+        "assistant_id",
+        "thread_id",
+        "checkpoint_id",
+        "run_id",
+        "graph_id",
+        "checkpoint_ns",
+        "task_id",
+    }
     assert metadata["nooverride"] == 18
+
+
+def test_callback_manager_copies_whitelisted_configurable_ids_to_metadata() -> None:
+    config = {
+        "configurable": {
+            "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
+            "langgraph_auth_user_id": "user-1",
+        },
+        "metadata": {
+            "thread_id": "from-metadata",
+            "nooverride": 18,
+        },
+    }
+    manager = ensure_config(config)
+    callback_manager = get_callback_manager_for_config(manager)
+    assert callback_manager.metadata == {
+        "thread_id": "from-metadata",
+        "nooverride": 18,
+        "checkpoint_id": "ckpt-1",
+        "checkpoint_ns": "ns-1",
+        "task_id": "task-1",
+        "run_id": "run-456",
+        "assistant_id": "asst-789",
+        "graph_id": "graph-0",
+    }
+
+
+def test_callback_manager_copies_configurable_ids_to_tracing_metadata() -> None:
+    tracer = LangChainTracer(client=MagicMock())
+    config: RunnableConfig = {
+        "configurable": {
+            "thread_id": "th-123",
+            "checkpoint_id": "ckpt-1",
+            "checkpoint_ns": "ns-1",
+            "task_id": "task-1",
+            "run_id": "run-456",
+            "assistant_id": "asst-789",
+            "graph_id": "graph-0",
+            "model": "gpt-4o",
+            "user_id": "uid-1",
+            "cron_id": "cron-1",
+            "langgraph_auth_user_id": "user-1",
+            "includeme": "hi",
+            "andme": 42,
+            "__dontinclude": "bar",
+            "some_api_key": "secret",
+            "custom_setting": {"nested": True},
+        },
+        "metadata": {
+            "thread_id": "from-metadata",
+            "user_id": "from-metadata-user",
+            "includeme": "from-metadata",
+        },
+        "callbacks": [tracer],
+    }
+
+    manager = ensure_config(config)
+    callback_manager = get_callback_manager_for_config(manager)
+    handlers = callback_manager.handlers
+    tracers = [handler for handler in handlers if isinstance(handler, LangChainTracer)]
+    assert len(tracers) == 1
+    tracer = tracers[0]
+    assert tracer.tracing_metadata == {
+        "checkpoint_id": "ckpt-1",
+        "checkpoint_ns": "ns-1",
+        "task_id": "task-1",
+        "run_id": "run-456",
+        "assistant_id": "asst-789",
+        "graph_id": "graph-0",
+        "model": "gpt-4o",
+        "cron_id": "cron-1",
+        "andme": 42,
+        "includeme": "hi",
+        "thread_id": "th-123",
+        "user_id": "uid-1",
+    }
+
+
+class _TrackingCB(BaseCallbackHandler):
+    """Minimal callback handler used only as a sentinel for merge tests."""
+
+    def __init__(self, tag: str) -> None:
+        self.tag = tag
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _TrackingCB) and self.tag == other.tag
+
+    def __hash__(self) -> int:
+        return hash(self.tag)
+
+
+def test_merge_callbacks_none_base_list_new() -> None:
+    cb = _TrackingCB("a")
+    merged = _merge_callbacks(None, [cb])
+    assert merged == [cb]
+
+
+def test_merge_callbacks_list_base_list_new() -> None:
+    a, b = _TrackingCB("a"), _TrackingCB("b")
+    merged = _merge_callbacks([a], [b])
+    assert merged == [a, b]
+
+
+def test_merge_callbacks_list_base_manager_new() -> None:
+    a = _TrackingCB("a")
+    mgr = CallbackManager(handlers=[_TrackingCB("b")])
+    merged = _merge_callbacks([a], mgr)
+    assert isinstance(merged, CallbackManager)
+    assert _TrackingCB("a") in merged.handlers
+    assert _TrackingCB("b") in merged.handlers
+
+
+def test_merge_callbacks_manager_base_list_new() -> None:
+    mgr = CallbackManager(handlers=[_TrackingCB("a")])
+    b = _TrackingCB("b")
+    merged = _merge_callbacks(mgr, [b])
+    assert isinstance(merged, CallbackManager)
+    assert _TrackingCB("a") in merged.handlers
+    assert _TrackingCB("b") in merged.handlers
+
+
+def test_merge_callbacks_manager_base_manager_new() -> None:
+    mgr_a = CallbackManager(handlers=[_TrackingCB("a")])
+    mgr_b = CallbackManager(handlers=[_TrackingCB("b")])
+    merged = _merge_callbacks(mgr_a, mgr_b)
+    assert isinstance(merged, CallbackManager)
+    assert _TrackingCB("a") in merged.handlers
+    assert _TrackingCB("b") in merged.handlers
+
+
+def test_merge_callbacks_none_base_none_new() -> None:
+    merged = _merge_callbacks(None, None)
+    assert merged is None
+
+
+def test_ensure_config_merges_configurable_across_configs() -> None:
+    a = {"configurable": {"ls_agent_type": "root"}}
+    b = {"configurable": {"thread_id": "T1"}}
+    merged = ensure_config(a, b)
+    assert merged["configurable"]["ls_agent_type"] == "root"
+    assert merged["configurable"]["thread_id"] == "T1"
+
+
+def test_ensure_config_configurable_later_wins_per_key() -> None:
+    a = {"configurable": {"shared": "from_a", "only_a": "A"}}
+    b = {"configurable": {"shared": "from_b", "only_b": "B"}}
+    merged = ensure_config(a, b)
+    assert merged["configurable"]["shared"] == "from_b"  # later wins per key
+    assert merged["configurable"]["only_a"] == "A"
+    assert merged["configurable"]["only_b"] == "B"
+
+
+def test_ensure_config_merges_metadata_across_configs() -> None:
+    a = {"metadata": {"user_id": "U1"}}
+    b = {"metadata": {"correlation_id": "C1"}}
+    merged = ensure_config(a, b)
+    assert merged["metadata"]["user_id"] == "U1"
+    assert merged["metadata"]["correlation_id"] == "C1"
+
+
+def test_ensure_config_metadata_later_wins_per_key() -> None:
+    a = {"metadata": {"shared": "from_a"}}
+    b = {"metadata": {"shared": "from_b"}}
+    merged = ensure_config(a, b)
+    assert merged["metadata"]["shared"] == "from_b"
+
+
+def test_merge_configs_merges_metadata_lc_versions() -> None:
+    a = {
+        "metadata": {
+            "lc_versions": {"langgraph": "1.2.4"},
+            "lc_agent_name": "agent",
+        }
+    }
+    b = {"metadata": {"lc_versions": {"langchain-core": "1.2.0"}}}
+    merged = merge_configs(a, b)
+    assert merged["metadata"]["lc_versions"] == {
+        "langgraph": "1.2.4",
+        "langchain-core": "1.2.0",
+    }
+    assert merged["metadata"]["lc_agent_name"] == "agent"
+
+
+def test_ensure_config_merges_metadata_lc_versions() -> None:
+    a = {
+        "metadata": {
+            "lc_versions": {"langgraph": "1.2.4"},
+            "lc_agent_name": "agent",
+        }
+    }
+    b = {"metadata": {"lc_versions": {"langchain-core": "1.2.0"}}}
+    merged = ensure_config(a, b)
+    assert merged["metadata"]["lc_versions"] == {
+        "langgraph": "1.2.4",
+        "langchain-core": "1.2.0",
+    }
+    assert merged["metadata"]["lc_agent_name"] == "agent"
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_lc_versions_later_values_win_without_recursive_merge(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {
+        "metadata": {
+            "lc_versions": {
+                "langgraph": "1.2.4",
+                "nested": {"only_a": "A", "shared": "from_a"},
+            }
+        }
+    }
+    b = {
+        "metadata": {
+            "lc_versions": {
+                "langchain-core": "1.2.0",
+                "nested": {"only_b": "B", "shared": "from_b"},
+            }
+        }
+    }
+    merged = merge(a, b)
+    assert merged["metadata"]["lc_versions"] == {
+        "langgraph": "1.2.4",
+        "langchain-core": "1.2.0",
+        "nested": {"only_b": "B", "shared": "from_b"},
+    }
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_nested_mappings_other_than_lc_versions_are_replaced(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {"metadata": {"versions": {"langgraph": "1.2.4"}, "mode": "bound"}}
+    b = {
+        "metadata": {
+            "versions": {"langchain-core": "1.2.0"},
+            "mode": {"source": "runtime"},
+        }
+    }
+    merged = merge(a, b)
+    assert merged["metadata"]["versions"] == {"langchain-core": "1.2.0"}
+    assert merged["metadata"]["mode"] == {"source": "runtime"}
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_non_mapping_values_later_wins(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {"metadata": {"lc_versions": {"langgraph": "1.2.4"}, "mode": "bound"}}
+    b = {"metadata": {"lc_versions": "runtime", "mode": {"source": "runtime"}}}
+    merged = merge(a, b)
+    assert merged["metadata"]["lc_versions"] == "runtime"
+    assert merged["metadata"]["mode"] == {"source": "runtime"}
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_lc_versions_merge_does_not_mutate_inputs(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a_versions = {"langgraph": "1.2.4"}
+    b_versions = {"langchain-core": "1.2.0"}
+    a = {"metadata": {"lc_versions": a_versions}}
+    b = {"metadata": {"lc_versions": b_versions}}
+    merged = merge(a, b)
+    assert a == {"metadata": {"lc_versions": {"langgraph": "1.2.4"}}}
+    assert b == {"metadata": {"lc_versions": {"langchain-core": "1.2.0"}}}
+    assert merged["metadata"]["lc_versions"] is not a_versions
+    assert merged["metadata"]["lc_versions"] is not b_versions
+
+    merged["metadata"]["lc_versions"]["langgraph"] = "changed"
+    assert a_versions == {"langgraph": "1.2.4"}
+    assert b_versions == {"langchain-core": "1.2.0"}
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_single_sided_mapping_values_are_copied(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    base_versions = {"langgraph": "1.2.4"}
+    new_versions = {"langchain-core": "1.2.0"}
+
+    merged_base_only = merge({"metadata": {"lc_versions": base_versions}})
+    merged_new_only = merge(
+        {"metadata": {}},
+        {"metadata": {"lc_versions": new_versions}},
+    )
+
+    assert merged_base_only["metadata"]["lc_versions"] is not base_versions
+    assert merged_new_only["metadata"]["lc_versions"] is not new_versions
+
+    merged_base_only["metadata"]["lc_versions"]["langgraph"] = "changed"
+    merged_new_only["metadata"]["lc_versions"]["langchain-core"] = "changed"
+    assert base_versions == {"langgraph": "1.2.4"}
+    assert new_versions == {"langchain-core": "1.2.0"}
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_empty_incoming_preserves_base_lc_versions(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {"metadata": {"lc_versions": {"langgraph": "1.2.4"}}}
+    b = {"metadata": {"lc_versions": {}}}
+    merged = merge(a, b)
+    assert merged["metadata"]["lc_versions"] == {"langgraph": "1.2.4"}
+
+
+@pytest.mark.parametrize("merge", [merge_configs, ensure_config])
+def test_metadata_lc_versions_accumulate_across_more_than_two_configs(
+    merge: Callable[..., RunnableConfig],
+) -> None:
+    a = {"metadata": {"lc_versions": {"langgraph": "1.2.4"}}}
+    b = {"metadata": {"lc_versions": {"langchain-core": "1.2.0"}}}
+    c = {"metadata": {"lc_versions": {"langchain": "1.1.0"}}}
+    merged = merge(a, b, c)
+    assert merged["metadata"]["lc_versions"] == {
+        "langgraph": "1.2.4",
+        "langchain-core": "1.2.0",
+        "langchain": "1.1.0",
+    }
+
+
+def test_ensure_config_merges_tags_across_configs() -> None:
+    a = {"tags": ["alpha"]}
+    b = {"tags": ["beta"]}
+    merged = ensure_config(a, b)
+    assert merged["tags"] == ["alpha", "beta"]
+
+
+def test_ensure_config_tags_concat_preserves_order_and_duplicates() -> None:
+    # Plain concat (matches merge_configs in this file — no dedup, no sort).
+    a = {"tags": ["shared", "alpha"]}
+    b = {"tags": ["shared", "beta"]}
+    merged = ensure_config(a, b)
+    assert merged["tags"] == ["shared", "alpha", "shared", "beta"]
+
+
+def test_ensure_config_merges_callbacks_across_configs() -> None:
+    a_cb = _TrackingCB("a")
+    b_cb = _TrackingCB("b")
+    merged = ensure_config({"callbacks": [a_cb]}, {"callbacks": [b_cb]})
+    assert merged["callbacks"] == [a_cb, b_cb]
+
+
+def test_ensure_config_none_inputs_ignored() -> None:
+    # mixed with None should not raise
+    merged = ensure_config(None, {"tags": ["t"]}, None)
+    assert merged["tags"] == ["t"]
+
+
+def test_ensure_config_empty_inputs() -> None:
+    # everything empty -> defaults
+    merged = ensure_config()
+    assert merged["tags"] == []
+    assert merged["configurable"] == {}
+    assert merged["callbacks"] is None

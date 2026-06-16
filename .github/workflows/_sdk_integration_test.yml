@@ -1,0 +1,85 @@
+name: sdk-py integration test
+
+on:
+  workflow_call:
+    secrets:
+      LANGSMITH_API_KEY:
+        required: false
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_RO_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: "sdk-py integration"
+    defaults:
+      run:
+        working-directory: libs/sdk-py
+    env:
+      HAS_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Python
+        uses: ./.github/actions/uv_setup
+        with:
+          python-version: "3.13"
+          cache-suffix: sdk-py-integration
+          working-directory: libs/sdk-py
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_RO_TOKEN }}
+
+      - name: Install dependencies
+        shell: bash
+        run: uv sync --frozen --group test --no-dev
+
+      - name: Skip if LANGSMITH_API_KEY is not available
+        if: env.HAS_LANGSMITH_API_KEY != 'true'
+        run: |
+          echo "LANGSMITH_API_KEY is not set (likely a fork PR). Skipping integration tests."
+          exit 0
+
+      - name: Bring up integration stack
+        if: env.HAS_LANGSMITH_API_KEY == 'true'
+        working-directory: libs/sdk-py/integration
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: docker compose up -d --build
+
+      - name: Wait for API healthcheck
+        if: env.HAS_LANGSMITH_API_KEY == 'true'
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:2024/ok >/dev/null; then
+              echo "API ready after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API failed to become healthy within 120s"
+          docker compose -f libs/sdk-py/integration/docker-compose.yml logs api | tail -100
+          exit 1
+
+      - name: Run integration suite
+        if: env.HAS_LANGSMITH_API_KEY == 'true'
+        run: uv run pytest tests/integration/ -m integration
+
+      - name: Dump api logs on failure
+        if: failure() && env.HAS_LANGSMITH_API_KEY == 'true'
+        working-directory: libs/sdk-py/integration
+        run: docker compose logs api | tail -200
+
+      - name: Tear down stack
+        if: always() && env.HAS_LANGSMITH_API_KEY == 'true'
+        working-directory: libs/sdk-py/integration
+        run: docker compose down -v

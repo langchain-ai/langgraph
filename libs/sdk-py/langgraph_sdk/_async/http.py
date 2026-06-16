@@ -12,7 +12,10 @@ from typing import Any, cast
 import httpx
 import orjson
 
-from langgraph_sdk._shared.utilities import _orjson_default
+from langgraph_sdk._shared.utilities import (
+    _orjson_default,
+    _validate_reconnect_location,
+)
 from langgraph_sdk.errors import _araise_for_status_typed
 from langgraph_sdk.schema import QueryParamTypes, StreamPart
 from langgraph_sdk.sse import SSEDecoder, aiter_lines_raw
@@ -164,6 +167,7 @@ class HttpClient:
             loc = r.headers.get("location")
             if reconnect_limit <= 0 or not loc:
                 return await _adecode_json(r)
+            _validate_reconnect_location(self.client.base_url, loc)
             try:
                 return await _adecode_json(r)
             except httpx.HTTPError:
@@ -242,6 +246,9 @@ class HttpClient:
 
                 reconnect_location = res.headers.get("location")
                 if reconnect_location:
+                    _validate_reconnect_location(
+                        self.client.base_url, reconnect_location
+                    )
                     reconnect_path = reconnect_location
 
                 # parse SSE
