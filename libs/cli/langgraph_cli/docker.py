@@ -12,9 +12,7 @@ import langgraph_cli.config
 from langgraph_cli.exec import subp_exec
 
 ROOT = pathlib.Path(__file__).parent.resolve()
-DEFAULT_POSTGRES_URI = (
-    "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
-)
+DEFAULT_POSTGRES_URI = langgraph_cli.config.DEFAULT_POSTGRES_URI
 
 
 class Version(NamedTuple):

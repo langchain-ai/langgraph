@@ -82,6 +82,9 @@ MIN_PYTHON_VERSION = "3.11"
 DEFAULT_PYTHON_VERSION = "3.11"
 
 DEFAULT_IMAGE_DISTRO = "debian"
+DEFAULT_POSTGRES_URI = (
+    "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
+)
 
 
 _BUILD_TOOLS = ("pip", "setuptools", "wheel")
@@ -1656,6 +1659,7 @@ def config_to_compose(
     image: str | None = None,
     watch: bool = False,
     engine_runtime_mode: str = "combined_queue_worker",
+    postgres_uri: str | None = None,
 ) -> str:
     base_image = base_image or default_base_image(config)
 
@@ -1743,27 +1747,45 @@ def config_to_compose(
                 additional_contexts:
 {executor_additional_contexts_str}"""
 
-            postgres_uri = "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
+            database_uri = (
+                DEFAULT_POSTGRES_URI if postgres_uri is None else postgres_uri
+            )
+            local_postgres_depends_on = (
+                [
+                    "            langgraph-postgres:",
+                    "                condition: service_healthy",
+                ]
+                if postgres_uri is None
+                else []
+            )
+            orchestrator_depends_on = "\n".join(
+                [
+                    "            langgraph-api:",
+                    "                condition: service_healthy",
+                    *local_postgres_depends_on,
+                ]
+            )
+            executor_depends_on = "\n".join(
+                [
+                    *local_postgres_depends_on,
+                    "            langgraph-api:",
+                    "                condition: service_healthy",
+                ]
+            )
             result += f"""    langgraph-orchestrator:
         image: langchain/langgraph-orchestrator-licensed:latest
         depends_on:
-            langgraph-api:
-                condition: service_healthy
-            langgraph-postgres:
-                condition: service_healthy
+{orchestrator_depends_on}
         environment:
-            DATABASE_URI: {postgres_uri}
+            DATABASE_URI: {database_uri}
             EXECUTOR_TARGET: langgraph-executor:8188
         {env_file_str}
     langgraph-executor:
         depends_on:
-            langgraph-postgres:
-                condition: service_healthy
-            langgraph-api:
-                condition: service_healthy
+{executor_depends_on}
         entrypoint: ["sh", "/storage/executor_entrypoint.sh"]
         environment:
-            DATABASE_URI: {postgres_uri}
+            DATABASE_URI: {database_uri}
             REDIS_URI: redis://langgraph-redis:6379
             EXECUTOR_GRPC_PORT: "8188"
             ENGINE_GRPC_ADDRESS: "langgraph-orchestrator:50054"

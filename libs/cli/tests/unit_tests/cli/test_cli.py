@@ -1354,3 +1354,27 @@ def test_prepare_args_and_stdin_distributed_mode() -> None:
     assert "langgraph-executor:" in actual_stdin
     assert "FROM langchain/langgraph-executor:" in actual_stdin
     assert "executor_entrypoint.sh" in actual_stdin
+
+
+def test_prepare_args_and_stdin_distributed_mode_with_postgres_uri() -> None:
+    """Test distributed mode uses custom Postgres URI for all services."""
+    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config = validate_config(
+        Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
+    )
+    postgres_uri = "postgresql://user:password@external-db:5432/app"
+
+    _, actual_stdin = prepare_args_and_stdin(
+        capabilities=DEFAULT_DOCKER_CAPABILITIES,
+        config_path=config_path,
+        config=config,
+        docker_compose=None,
+        port=8000,
+        watch=False,
+        postgres_uri=postgres_uri,
+        engine_runtime_mode="distributed",
+    )
+
+    assert f"POSTGRES_URI: {postgres_uri}" in actual_stdin
+    assert actual_stdin.count(f"DATABASE_URI: {postgres_uri}") == 2
+    assert "langgraph-postgres:" not in actual_stdin

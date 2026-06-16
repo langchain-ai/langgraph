@@ -3308,6 +3308,22 @@ def test_config_to_compose_distributed_mode_with_env_file():
     )
 
 
+def test_config_to_compose_distributed_mode_with_postgres_uri():
+    """Test distributed services use custom Postgres URI and no local DB dependency."""
+    graphs = {"agent": "./agent.py:graph"}
+    postgres_uri = "postgresql://user:password@external-db:5432/app"
+    actual_compose_stdin = config_to_compose(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs}),
+        "langchain/langgraph-api",
+        engine_runtime_mode="distributed",
+        postgres_uri=postgres_uri,
+    )
+
+    assert actual_compose_stdin.count(f"DATABASE_URI: {postgres_uri}") == 2
+    assert "langgraph-postgres:" not in actual_compose_stdin
+
+
 def test_config_to_compose_distributed_mode_generates_two_dockerfiles():
     """Test that distributed mode generates separate Dockerfiles for API and executor."""
     graphs = {"agent": "./agent.py:graph"}
