@@ -27,6 +27,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_THREAD_ID,
     NS_END,
     NS_SEP,
+    _CHECKPOINT_COORDINATE_KEYS,
 )
 
 DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10007"))
@@ -323,11 +324,9 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
             explicit_configurable = config.get(CONF)
             if not explicit_configurable:
                 continue
-            if (
-                _is_not_empty(explicit_configurable.get(CONFIG_KEY_THREAD_ID))
-                or _is_not_empty(explicit_configurable.get(CONFIG_KEY_CHECKPOINT_NS))
-                or _is_not_empty(explicit_configurable.get(CONFIG_KEY_CHECKPOINT_ID))
-                or _is_not_empty(explicit_configurable.get(CONFIG_KEY_CHECKPOINT_MAP))
+            if any(
+                _is_not_empty(explicit_configurable.get(k))
+                for k in _CHECKPOINT_COORDINATE_KEYS
             ):
                 empty[CONF] = {}
                 break
