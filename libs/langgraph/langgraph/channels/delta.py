@@ -154,7 +154,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
                 base = _copy.copy(ow_value) if ow_value is not None else self.typ()
                 start = i + 1
         remaining = values[start:]
-        self.value = self.reducer(base, remaining) if remaining else base
+        self.value = self.reducer(base, remaining)
 
     def update(self, values: Sequence[Any]) -> bool:
         if not values:
@@ -178,7 +178,7 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
                 else self.typ()
             )
             remaining = [v for i, v in enumerate(values) if i != overwrite_idx]
-            self.value = self.reducer(base, remaining) if remaining else base
+            self.value = self.reducer(base, remaining)
             return True
         base = self.typ() if self.value is MISSING else self.value
         self.value = self.reducer(base, list(values))
