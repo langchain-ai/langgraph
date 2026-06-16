@@ -198,6 +198,37 @@ def normalize_image_tag(value: str) -> str:
     return value
 
 
+def _validate_prebuilt_image(runner, image: str, *, verbose: bool) -> None:
+    """Ensure a prebuilt image exists locally for linux/amd64."""
+    try:
+        stdout, _ = runner.run(
+            subp_exec(
+                "docker",
+                "image",
+                "inspect",
+                "--format",
+                "{{.Os}}/{{.Architecture}}",
+                image,
+                verbose=verbose,
+                collect=True,
+            )
+        )
+    except click.exceptions.Exit:
+        raise click.ClickException(
+            f"Docker image '{image}' was not found locally. Build or pull the image "
+            "before deploying with --image."
+        ) from None
+
+    image_platform = (stdout or "").strip()
+    if image_platform != "linux/amd64":
+        detected = image_platform or "unknown"
+        raise click.ClickException(
+            f"Docker image '{image}' targets {detected}, but LangSmith Deployment "
+            "requires linux/amd64. Rebuild or pull the image for linux/amd64 before "
+            "deploying with --image."
+        )
+
+
 def _extract_deployment_url(deployment: dict[str, object]) -> str:
     source_config = deployment.get("source_config")
     if isinstance(source_config, dict):
@@ -687,7 +718,9 @@ def _run_local_build(
 
     with Runner() as runner:
         if prebuilt_image:
-            _log_deploy_step(step, f"Using image {prebuilt_image}")
+            _log_deploy_step(step, f"Validating image {prebuilt_image}")
+            _validate_prebuilt_image(runner, prebuilt_image, verbose=verbose)
+            click.secho("   Image is available for linux/amd64", fg="green")
         else:
             # -- Step: Build image --
             _log_deploy_step(step, "Building image")

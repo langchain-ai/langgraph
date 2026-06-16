@@ -1,17 +1,21 @@
+import asyncio
 import base64
 import json
 import os
 
 import click
+import click.exceptions
 import httpx
 import pytest
 
+import langgraph_cli.deploy as deploy_mod
 from langgraph_cli.deploy import (
     _call_host_backend_with_optional_tenant,
     _docker_config_for_token,
     _env_without_deployment_name,
     _parse_env_from_config,
     _resolve_env_path,
+    _validate_prebuilt_image,
     normalize_image_name,
     normalize_image_tag,
 )
@@ -83,6 +87,56 @@ class TestNormalizeImageTag:
     def test_spaces_raises(self):
         with pytest.raises(click.UsageError, match="Image tag may only contain"):
             normalize_image_tag("has space")
+
+
+class _FakeRunner:
+    def run(self, coro):
+        return asyncio.run(coro)
+
+
+class TestValidatePrebuiltImage:
+    def test_accepts_linux_amd64(self, monkeypatch):
+        calls = []
+
+        async def fake_subp_exec(*args, **kwargs):
+            calls.append((args, kwargs))
+            return "linux/amd64\n", None
+
+        monkeypatch.setattr(deploy_mod, "subp_exec", fake_subp_exec)
+
+        _validate_prebuilt_image(_FakeRunner(), "repo/app:tag", verbose=False)
+
+        assert calls == [
+            (
+                (
+                    "docker",
+                    "image",
+                    "inspect",
+                    "--format",
+                    "{{.Os}}/{{.Architecture}}",
+                    "repo/app:tag",
+                ),
+                {"verbose": False, "collect": True},
+            )
+        ]
+
+    def test_missing_image_raises_actionable_error(self, monkeypatch):
+        async def fake_subp_exec(*args, **kwargs):
+            raise click.exceptions.Exit(1)
+
+        monkeypatch.setattr(deploy_mod, "subp_exec", fake_subp_exec)
+
+        with pytest.raises(click.ClickException, match="not found locally"):
+            _validate_prebuilt_image(_FakeRunner(), "missing:tag", verbose=False)
+
+    def test_rejects_non_amd64_platform(self, monkeypatch):
+        async def fake_subp_exec(*args, **kwargs):
+            return "linux/arm64\n", None
+
+        monkeypatch.setattr(deploy_mod, "subp_exec", fake_subp_exec)
+
+        with pytest.raises(click.ClickException, match="requires linux/amd64"):
+            _validate_prebuilt_image(_FakeRunner(), "repo/app:arm", verbose=False)
 
 
 class TestParseEnvFromConfig:
