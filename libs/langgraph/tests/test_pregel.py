@@ -9310,6 +9310,32 @@ def test_overwrite_sequential(
     assert result == {"messages": ["b"]}
 
 
+def test_overwrite_survives_json_roundtrip(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        messages: Annotated[list, operator.add]
+
+    def node_a(state: State):
+        return {"messages": ["a"]}
+
+    def node_b(state: State):
+        overwrite = json.loads(json.dumps(Overwrite(["b"])))
+        assert overwrite == {"__overwrite__": ["b"]}
+        return {"messages": overwrite}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    result = graph.invoke({"messages": ["START"]}, {"configurable": {"thread_id": "1"}})
+
+    assert result == {"messages": ["b"]}
+
+
 @pytest.mark.parametrize("as_json", [False, True])
 def test_overwrite_parallel(
     sync_checkpointer: BaseCheckpointSaver, as_json: bool

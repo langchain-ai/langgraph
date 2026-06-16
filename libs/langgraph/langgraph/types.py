@@ -25,6 +25,7 @@ from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
 from langgraph._internal._constants import INTERRUPT as _INTERRUPT_KEY
+from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
@@ -934,8 +935,7 @@ def interrupt(value: Any) -> Any:
     )
 
 
-@dataclass(slots=True)
-class Overwrite:
+class Overwrite(dict[str, Any]):
     """Bypass a reducer and write the wrapped value directly to a `BinaryOperatorAggregate` channel.
 
     Receiving multiple `Overwrite` values for the same channel in a single super-step
@@ -974,5 +974,16 @@ class Overwrite:
         ```
     """
 
-    value: Any
-    """The value to write directly to the channel, bypassing any reducer."""
+    __slots__ = ()
+
+    def __init__(self, value: Any) -> None:
+        super().__init__({OVERWRITE: value})
+
+    @property
+    def value(self) -> Any:
+        """The value to write directly to the channel, bypassing any reducer."""
+        return self[OVERWRITE]
+
+    @value.setter
+    def value(self, value: Any) -> None:
+        self[OVERWRITE] = value
