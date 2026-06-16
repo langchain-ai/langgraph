@@ -20,14 +20,13 @@ from langchain_core.runnables.config import (
 from langgraph.checkpoint.base import CheckpointMetadata
 
 from langgraph._internal._constants import (
+    _CHECKPOINT_COORDINATE_KEYS,
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
-    CONFIG_KEY_THREAD_ID,
     NS_END,
     NS_SEP,
-    _CHECKPOINT_COORDINATE_KEYS,
 )
 
 DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "10007"))
