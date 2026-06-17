@@ -62,13 +62,15 @@ class PostgresSaver(BasePostgresSaver):
     @classmethod
     @contextmanager
     def from_conn_string(
-        cls, conn_string: str, *, pipeline: bool = False
+        cls, conn_string: str, *, pipeline: bool = False,
+        serde: SerializerProtocol | None = None,
     ) -> Iterator[PostgresSaver]:
         """Create a new PostgresSaver instance from a connection string.
 
         Args:
             conn_string: The Postgres connection info string.
             pipeline: whether to use Pipeline
+            serde (SerializerProtocol): Serializer for encoding/decoding checkpoints.
 
         Returns:
             PostgresSaver: A new PostgresSaver instance.
@@ -78,9 +80,9 @@ class PostgresSaver(BasePostgresSaver):
         ) as conn:
             if pipeline:
                 with conn.pipeline() as pipe:
-                    yield cls(conn, pipe)
+                    yield cls(conn, pipe, serde=serde)
             else:
-                yield cls(conn)
+                yield cls(conn, serde=serde)
 
     def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
