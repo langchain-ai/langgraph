@@ -829,7 +829,7 @@ def validate(config: pathlib.Path):
     import json
 
     try:
-        with open(config) as f:
+        with open(config, encoding="utf-8") as f:
             raw_config = json.load(f)
     except json.JSONDecodeError as e:
         raise click.UsageError(f"Invalid JSON in {config}: {e.args[0]}") from None

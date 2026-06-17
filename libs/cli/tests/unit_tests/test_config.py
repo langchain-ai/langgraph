@@ -11,6 +11,7 @@ import pytest
 
 from langgraph_cli.config import (
     _BUILD_TOOLS,
+    _get_node_pm_install_cmd,
     _get_pip_cleanup_lines,
     config_to_compose,
     config_to_docker,
@@ -29,6 +30,15 @@ FORMATTED_CLEANUP_LINES = _get_pip_cleanup_lines(
 )
 
 PATH_TO_CONFIG = pathlib.Path(__file__).parent / "test_config.json"
+
+
+def _open_with_gbk_default(original_open):
+    def wrapped(file, mode="r", *args, **kwargs):
+        if "b" not in mode and "encoding" not in kwargs and len(args) < 2:
+            kwargs["encoding"] = "gbk"
+        return original_open(file, mode, *args, **kwargs)
+
+    return wrapped
 
 
 def _write_uv_lock_workspace(
@@ -599,6 +609,40 @@ def test_validate_config_file():
                 else:
                     f.write(package_content)
             validate_config_file(config_path)
+
+
+def test_validate_config_file_reads_utf8_on_non_utf8_locale():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "node_version": "20",
+                    "graphs": {"agent": "./agent.js:graph"},
+                    "env": {"GREETING": "\U0001f680"},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        (tmpdir_path / "package.json").write_text(
+            json.dumps(
+                {
+                    "name": "test",
+                    "description": "\U0001f680",
+                    "engines": {"node": "20"},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        original_open = open
+        with patch("builtins.open", side_effect=_open_with_gbk_default(original_open)):
+            validated = validate_config_file(config_path)
+
+        assert validated["env"] == {"GREETING": "\U0001f680"}
 
 
 def test_validate_config_multiplatform():
@@ -1773,6 +1817,22 @@ def test_config_to_docker_uv_lock_detects_js_pm_from_target_package_root():
             'ENV LANGGRAPH_UI=\'{"agent": "/deps/workspace/apps/agent/ui.tsx"}\''
             in docker
         )
+
+
+def test_get_node_pm_install_cmd_reads_package_json_as_utf8():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        (tmpdir_path / "package.json").write_text(
+            json.dumps(
+                {"packageManager": "pnpm@9.0.0", "description": "\U0001f680"},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        original_open = open
+        with patch("builtins.open", side_effect=_open_with_gbk_default(original_open)):
+            assert _get_node_pm_install_cmd(tmpdir_path) == "pnpm i"
 
 
 def test_config_to_docker_uv_lock_uses_workdir_for_js_install_with_special_chars():
