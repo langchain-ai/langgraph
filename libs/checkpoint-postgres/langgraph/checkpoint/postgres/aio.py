@@ -113,7 +113,15 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 await cur.execute(
                     "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
                 )
+        # If using a pipeline, sync it to ensure all setup commands are flushed
         if self.pipe:
+            # Pipeline sync is already handled by psycopg's context manager;
+            # but if we are outside that context, we need to manually sync.
+            # To avoid the SSL closure, we should ensure the pipeline is properly
+            # flushed after setup. However, the real fix is to avoid using
+            # AsyncPipeline in the first place for setup operations, or to
+            # keep the pipeline context alive for the entire saver lifetime.
+            # For now, we simply sync the pipeline to commit any pending operations.
             await self.pipe.sync()
 
     async def alist(
