@@ -186,6 +186,50 @@ def test_delta_channel_overwrite() -> None:
     assert ch.get()[0].content == "new"
 
 
+def test_overwrite_dataclass_form_survives_json_roundtrip() -> None:
+    """`Overwrite` serialised with `orjson` collapses to a plain dict but
+    must still be recognised as an overwrite by the channel reducer.
+
+    Without the `type` discriminator the dataclass-erased shape (`{"value":
+    ...}`) is indistinguishable from a literal channel value, and downstream
+    reducers raise `MESSAGE_COERCION_FAILURE` (or similar) on read.
+    """
+    import orjson
+
+    from langgraph._internal._constants import OVERWRITE
+    from langgraph.channels.binop import _get_overwrite
+
+    ow = Overwrite(value=[HumanMessage(content="new", id="h2")])
+    erased = orjson.loads(orjson.dumps(ow, default=lambda o: o.model_dump()))
+
+    assert erased["type"] == OVERWRITE
+    is_overwrite, value = _get_overwrite(erased)
+    assert is_overwrite
+    assert isinstance(value, list)
+    assert value[0]["content"] == "new"
+
+
+def test_overwrite_sentinel_dict_still_recognised() -> None:
+    """The pre-existing `{"__overwrite__": value}` dict form continues to be
+    recognised. This is the canonical sentinel emitted by producers that do
+    not have an `Overwrite` dataclass available."""
+    from langgraph._internal._constants import OVERWRITE
+    from langgraph.channels.binop import _get_overwrite
+
+    is_overwrite, value = _get_overwrite({OVERWRITE: ["b"]})
+    assert is_overwrite
+    assert value == ["b"]
+
+
+def test_overwrite_non_matching_dict_not_recognised() -> None:
+    """Dicts that resemble the erased shape but do not carry the
+    `__overwrite__` discriminator must not be misclassified as overwrites."""
+    from langgraph.channels.binop import _get_overwrite
+
+    assert _get_overwrite({"value": ["b"]}) == (False, None)
+    assert _get_overwrite({"type": "human", "value": "hi"}) == (False, None)
+
+
 def test_delta_channel_remove_message_and_replay() -> None:
     """RemoveMessage must round-trip correctly when writes are replayed."""
     spec = DeltaChannel(_messages_delta_reducer, list)
