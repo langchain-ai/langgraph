@@ -14,7 +14,10 @@ from zipfile import ZipFile
 from click.testing import CliRunner
 
 from langgraph_cli.cli import cli
-from langgraph_cli.templates import TEMPLATE_ID_TO_CONFIG
+from langgraph_cli.templates import (
+    TEMPLATE_DOWNLOAD_TIMEOUT_SECONDS,
+    TEMPLATE_ID_TO_CONFIG,
+)
 
 
 @patch.object(request, "urlopen")
@@ -38,7 +41,11 @@ def test_create_new_with_mocked_download(mock_urlopen: MagicMock) -> None:
         template = next(
             iter(TEMPLATE_ID_TO_CONFIG)
         )  # Select the first template for the test
-        result = runner.invoke(cli, ["new", temp_dir, "--template", template])
+        result = runner.invoke(
+            cli,
+            ["new", temp_dir, "--template", template],
+            env={"LANGGRAPH_CLI_NO_ANALYTICS": "1"},
+        )
 
         # Verify CLI command execution and success
         assert result.exit_code == 0, result.output
@@ -54,13 +61,38 @@ def test_create_new_with_mocked_download(mock_urlopen: MagicMock) -> None:
         assert "test-file.txt" in extracted_files, (
             "Expected 'test-file.txt' in the extracted content."
         )
+        _, _, template_url = TEMPLATE_ID_TO_CONFIG[template]
+        mock_urlopen.assert_called_once_with(
+            template_url, timeout=TEMPLATE_DOWNLOAD_TIMEOUT_SECONDS
+        )
+
+
+@patch.object(request, "urlopen")
+def test_create_new_with_download_timeout(mock_urlopen: MagicMock) -> None:
+    """Test that stalled template downloads fail with an actionable CLI error."""
+    mock_urlopen.side_effect = TimeoutError("timed out")
+
+    with TemporaryDirectory() as temp_dir:
+        runner = CliRunner()
+        template = next(iter(TEMPLATE_ID_TO_CONFIG))
+        result = runner.invoke(
+            cli,
+            ["new", temp_dir, "--template", template],
+            env={"LANGGRAPH_CLI_NO_ANALYTICS": "1"},
+        )
+
+        assert result.exit_code != 0
+        assert "Failed to download repository" in result.output
+        assert "timed out" in result.output
 
 
 def test_invalid_template_id() -> None:
     """Test that an invalid template ID passed via CLI results in a graceful error."""
     runner = CliRunner()
     result = runner.invoke(
-        cli, ["new", "dummy_path", "--template", "invalid-template-id"]
+        cli,
+        ["new", "dummy_path", "--template", "invalid-template-id"],
+        env={"LANGGRAPH_CLI_NO_ANALYTICS": "1"},
     )
 
     # Verify the command failed and proper message is displayed

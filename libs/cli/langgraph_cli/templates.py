@@ -7,6 +7,8 @@ from zipfile import ZipFile
 
 import click
 
+TEMPLATE_DOWNLOAD_TIMEOUT_SECONDS = 30
+
 TEMPLATES: dict[str, dict[str, str]] = {
     "Deep Agent": {
         "description": "An opinionated deployment template for a Deep Agent.",
@@ -101,7 +103,9 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
     click.secho("📥 Attempting to download repository as a ZIP archive...", fg="yellow")
     click.secho(f"URL: {repo_url}", fg="yellow")
     try:
-        with request.urlopen(repo_url) as response:
+        with request.urlopen(
+            repo_url, timeout=TEMPLATE_DOWNLOAD_TIMEOUT_SECONDS
+        ) as response:
             if response.status == 200:
                 with ZipFile(BytesIO(response.read())) as zip_file:
                     zip_file.extractall(path)
@@ -115,14 +119,8 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
                 click.secho(
                     f"✅ Downloaded and extracted repository to {path}", fg="green"
                 )
-    except error.HTTPError as e:
-        click.secho(
-            f"❌ Error: Failed to download repository.\nDetails: {e}\n",
-            fg="red",
-            bold=True,
-            err=True,
-        )
-        sys.exit(1)
+    except (TimeoutError, error.URLError) as e:
+        raise click.ClickException(f"Failed to download repository: {e}") from e
 
 
 def create_new(path: str | None, template: str | None) -> None:
