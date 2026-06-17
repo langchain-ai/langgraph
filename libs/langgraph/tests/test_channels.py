@@ -1,5 +1,6 @@
 import operator
 from collections.abc import Sequence
+from functools import partial
 from typing import Annotated
 
 import pytest
@@ -103,6 +104,31 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_binop_eq_handles_reducers_without_name() -> None:
+    def add_with_offset(offset: int, left: int, right: int) -> int:
+        return left + right + offset
+
+    class Add:
+        def __call__(self, left: int, right: int) -> int:
+            return left + right
+
+    partial_reducer = partial(add_with_offset, 0)
+    callable_reducer = Add()
+
+    assert BinaryOperatorAggregate(int, partial_reducer) == BinaryOperatorAggregate(
+        int, partial_reducer
+    )
+    assert BinaryOperatorAggregate(int, partial_reducer) != BinaryOperatorAggregate(
+        int, partial(add_with_offset, 0)
+    )
+    assert BinaryOperatorAggregate(int, callable_reducer) == BinaryOperatorAggregate(
+        int, callable_reducer
+    )
+    assert BinaryOperatorAggregate(int, callable_reducer) != BinaryOperatorAggregate(
+        int, Add()
+    )
 
 
 def test_untracked_value() -> None:
