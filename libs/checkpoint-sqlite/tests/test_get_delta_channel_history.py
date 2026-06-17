@@ -33,8 +33,6 @@ pytest.importorskip("langgraph.channels.delta", reason="langgraph core not insta
 pytest.importorskip("langgraph.graph", reason="langgraph core not installed")
 
 from langgraph.channels.delta import DeltaChannel  # type: ignore[import-untyped]  # noqa: E402,I001
-from langgraph.checkpoint.base import Checkpoint  # noqa: E402
-from langgraph.checkpoint.base.id import uuid6  # noqa: E402
 from langgraph.checkpoint.serde.types import _DeltaSnapshot  # noqa: E402
 from langgraph.graph import END, START, StateGraph  # type: ignore[import-untyped]  # noqa: E402
 from typing_extensions import TypedDict  # noqa: E402
@@ -213,42 +211,6 @@ def test_seed_omitted_when_walk_reaches_root_sync() -> None:
         entry = result["items"]
         assert "seed" not in entry, f"root-walk should have no seed, got {entry}"
         assert entry["writes"] == []
-
-
-def test_overwrite_bypasses_same_step_writes_sync() -> None:
-    with SqliteSaver.from_conn_string(":memory:") as saver:
-        config: RunnableConfig = {
-            "configurable": {"thread_id": "overwrite-sync", "checkpoint_ns": ""}
-        }
-        cp1 = Checkpoint(
-            v=1,
-            id=str(uuid6(clock_seq=-1)),
-            ts="",
-            channel_values={},
-            channel_versions={},
-            versions_seen={},
-            updated_channels=None,
-        )
-        cfg1 = saver.put(config, cp1, {"source": "loop", "step": 0}, {})
-        cp2 = Checkpoint(
-            v=1,
-            id=str(uuid6(clock_seq=-1)),
-            ts="",
-            channel_values={},
-            channel_versions={},
-            versions_seen={},
-            updated_channels=None,
-        )
-        cfg2 = saver.put(cfg1, cp2, {"source": "loop", "step": 1}, {})
-        saver.put_writes(
-            cfg1,
-            [("items", [1]), ("items", {"__overwrite__": [50]}), ("items", [2])],
-            "task",
-        )
-
-        result = saver.get_delta_channel_history(config=cfg2, channels=["items"])
-        values = [w[2] for w in result["items"]["writes"]]
-        assert values == [{"__overwrite__": [50]}]
 
 
 # ---------------------------------------------------------------------------

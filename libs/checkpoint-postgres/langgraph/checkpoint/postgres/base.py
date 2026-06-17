@@ -13,7 +13,6 @@ from langgraph.checkpoint.base import (
     ChannelVersions,
     DeltaChannelHistory,
     PendingWrite,
-    _apply_delta_history_overwrite_semantics,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS
@@ -451,10 +450,10 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                     "tuple[str, bytes]", (r["type"], r["blob"])
                 )
 
-        # Sort writes per (channel, cid) oldest-first by (task_id, idx).
+        # Sort writes per (channel, cid) newest-first by (task_id, idx)
         for cid_map in writes_by_ch_by_cid.values():
             for ws in cid_map.values():
-                ws.sort(key=lambda w: (w[2], w[3]))
+                ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
 
         result: dict[str, DeltaChannelHistory] = {}
         for ch in channels:
@@ -463,13 +462,11 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
             collected: list[PendingWrite] = []
             cid_writes = writes_by_ch_by_cid.get(ch, {})
-            # Chain is newest-first; iterate oldest-first for the public order.
-            for cid in reversed(chain_cids):
-                step_writes: list[PendingWrite] = [
-                    (task_id, ch, self.serde.loads_typed((type_tag, write_blob)))
-                    for type_tag, write_blob, task_id, _idx in cid_writes.get(cid, [])
-                ]
-                collected.extend(_apply_delta_history_overwrite_semantics(step_writes))
+            for cid in chain_cids:
+                for type_tag, write_blob, task_id, _idx in cid_writes.get(cid, []):
+                    val = self.serde.loads_typed((type_tag, write_blob))
+                    collected.append((task_id, ch, val))
+            collected.reverse()
 
             entry: DeltaChannelHistory = {"writes": collected}
             if seed_version is not None:
