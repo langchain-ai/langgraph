@@ -60,6 +60,10 @@ class SimpleState(TypedDict):
     items: Annotated[list[str], operator.add]
 
 
+class LoopState(TypedDict):
+    count: int
+
+
 def _build_simple_graph():
     def node_a(state: SimpleState) -> dict:
         return {"value": state["value"] + "A", "items": ["a"]}
@@ -490,6 +494,26 @@ class TestStreamV2Sync:
         assert run._exhausted is True
         run.abort()  # idempotent
 
+    def test_abort_closes_underlying_iterator(self) -> None:
+        class ClosableIterator:
+            closed = False
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                raise StopIteration
+
+            def close(self) -> None:
+                self.closed = True
+
+        source = ClosableIterator()
+        run = GraphRunStream(source, StreamMux(factories=[ValuesTransformer]))
+
+        run.abort()
+
+        assert source.closed is True
+
     def test_context_manager_calls_abort_on_exit(self) -> None:
         with _build_simple_graph().stream_events(
             {"value": "x", "items": []}, version="v3"
@@ -598,6 +622,51 @@ class TestStreamV2Async:
             pass
         assert run._exhausted is True
         await run.abort()  # idempotent
+
+    async def test_abort_stops_running_subgraph(self) -> None:
+        runs = 0
+
+        async def sub_node(state: LoopState) -> dict[str, int]:
+            nonlocal runs
+            runs += 1
+            await asyncio.sleep(0.01)
+            return {"count": state["count"] + 1}
+
+        def route(state: LoopState) -> str:
+            return END if state["count"] >= 100 else "sub_node"
+
+        sub_graph = (
+            StateGraph(LoopState)
+            .add_node("sub_node", sub_node)
+            .set_entry_point("sub_node")
+            .add_conditional_edges("sub_node", route)
+            .compile()
+        )
+
+        async def main_node(state: LoopState) -> dict[str, int]:
+            return await sub_graph.ainvoke({"count": 0})
+
+        main_graph = (
+            StateGraph(LoopState)
+            .add_node("main_node", main_node)
+            .set_entry_point("main_node")
+            .compile()
+        )
+
+        run = await main_graph.astream_events({"count": 0}, version="v3")
+        async for event in run:
+            if (
+                event["method"] == "values"
+                and event["params"]["namespace"]
+                and event["params"]["data"]["count"] >= 2
+            ):
+                break
+
+        await run.abort()
+        runs_after_abort = runs
+        await asyncio.sleep(0.05)
+
+        assert runs == runs_after_abort
 
     async def test_context_manager_calls_abort_on_exit(self) -> None:
         run = await _build_simple_graph().astream_events(

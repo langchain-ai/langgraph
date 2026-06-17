@@ -132,13 +132,19 @@ class GraphRunStream:
     def abort(self) -> None:
         """Stop the run early.
 
-        Closes the mux and marks the stream exhausted. The graph
-        iterator is dropped; any in-flight nodes see the closure on
-        their next yield point. Idempotent.
+        Closes the graph iterator, closes the mux, and marks the stream
+        exhausted. Idempotent.
         """
         if self._exhausted:
             return
         self._exhausted = True
+        if self._graph_iter is not None and (
+            close := getattr(self._graph_iter, "close", None)
+        ):
+            try:
+                close()
+            except Exception:
+                pass
         try:
             self._mux.close()
         except Exception:
@@ -428,15 +434,22 @@ class AsyncGraphRunStream:
     async def abort(self) -> None:
         """Stop the run early.
 
-        Marks the stream exhausted, wakes any pump-waiters, and closes
-        the mux. Any `apush` blocked on backpressure wakes and returns
-        without appending. Idempotent.
+        Marks the stream exhausted, wakes any pump-waiters, closes the
+        graph async iterator, and closes the mux. Any `apush` blocked on
+        backpressure wakes and returns without appending. Idempotent.
         """
         async with self._pump_cond:
             if self._exhausted:
                 return
             self._exhausted = True
             self._pump_cond.notify_all()
+        if self._graph_aiter is not None and (
+            aclose := getattr(self._graph_aiter, "aclose", None)
+        ):
+            try:
+                await aclose()
+            except Exception:
+                pass
         try:
             await self._mux.aclose()
         except Exception:
