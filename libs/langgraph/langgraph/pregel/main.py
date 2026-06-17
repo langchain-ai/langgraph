@@ -2833,13 +2833,15 @@ class Pregel(
                     if use_stream_messages_v2
                     else StreamMessagesHandler
                 )
-                run_manager.inheritable_handlers.append(
-                    messages_handler_cls(
-                        stream.put,
-                        subgraphs,
-                        parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
-                    )
+                messages_handler = messages_handler_cls(
+                    stream.put,
+                    subgraphs,
+                    parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
                 )
+                if use_stream_messages_v2:
+                    run_manager.inheritable_handlers.insert(0, messages_handler)
+                else:
+                    run_manager.inheritable_handlers.append(messages_handler)
 
             # set up tools stream mode
             if "tools" in stream_modes:
@@ -3261,13 +3263,15 @@ class Pregel(
                     if use_stream_messages_v2
                     else StreamMessagesHandler
                 )
-                run_manager.inheritable_handlers.append(
-                    messages_handler_cls(
-                        stream_put,
-                        subgraphs,
-                        parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
-                    )
+                messages_handler = messages_handler_cls(
+                    stream_put,
+                    subgraphs,
+                    parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
                 )
+                if use_stream_messages_v2:
+                    run_manager.inheritable_handlers.insert(0, messages_handler)
+                else:
+                    run_manager.inheritable_handlers.append(messages_handler)
 
             # set up tools stream mode
             if "tools" in stream_modes:

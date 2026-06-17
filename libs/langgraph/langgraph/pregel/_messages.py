@@ -33,6 +33,7 @@ except ImportError:
 
 T = TypeVar("T")
 Meta = tuple[tuple[str, ...], dict[str, Any]]
+_USAGE_DETAIL_KEYS = ("input_token_details", "output_token_details")
 
 
 def _state_values(obj: Any) -> Sequence[Any]:
@@ -44,6 +45,33 @@ def _state_values(obj: Any) -> Sequence[Any]:
     elif is_dataclass(obj) and not isinstance(obj, type):
         return [getattr(obj, f.name) for f in fields(obj)]
     return ()
+
+
+def _usage_detail_fields(usage: Any) -> dict[str, dict[str, Any]]:
+    """Return usage detail dictionaries that are lost by older protocol bridges."""
+    if not isinstance(usage, dict):
+        return {}
+    return {
+        key: dict(value)
+        for key in _USAGE_DETAIL_KEYS
+        if isinstance((value := usage.get(key)), dict)
+    }
+
+
+def _merge_usage_details(
+    usage: Any, details: dict[str, dict[str, Any]]
+) -> dict[str, Any] | None:
+    if not details:
+        return cast(dict[str, Any] | None, usage if isinstance(usage, dict) else None)
+
+    merged: dict[str, Any] = dict(usage) if isinstance(usage, dict) else {}
+    for key, value in details.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict):
+            merged[key] = {**existing, **value}
+        else:
+            merged[key] = dict(value)
+    return merged
 
 
 class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
@@ -272,28 +300,6 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
     AIMessageChunk shape.
     """
 
-    def on_llm_new_token(
-        self,
-        token: str,
-        *,
-        chunk: ChatGenerationChunk | None = None,
-        run_id: UUID,
-        parent_run_id: UUID | None = None,
-        tags: list[str] | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        """Intentional no-op — v1 chunks are not used on v2-flagged runs.
-
-        The v2 marker already steers `invoke` to the event generator, so
-        `on_llm_new_token` should not fire under normal routing. This
-        override stays a pass-through (no call to `super()`) to make
-        the intent explicit and to guard against any caller (e.g. a
-        node that calls `model.stream()` directly, which still fires
-        the v1 callback) leaking AIMessageChunks onto a v2-flagged
-        messages stream.
-        """
-        # Intentionally empty: v2 handler does not forward v1 chunks.
-
     def __init__(
         self,
         stream: Callable[[StreamChunk], None],
@@ -303,6 +309,29 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
     ) -> None:
         super().__init__(stream, subgraphs, parent_ns=parent_ns)
         self._streamed_run_ids: set[UUID] = set()
+        self._usage_details_by_run: dict[UUID, dict[str, dict[str, Any]]] = {}
+
+    def _capture_usage_details(
+        self, run_id: UUID, usage: Any
+    ) -> dict[str, dict[str, Any]]:
+        details = _usage_detail_fields(usage)
+        if not details:
+            return {}
+        stored = self._usage_details_by_run.setdefault(run_id, {})
+        for key, value in details.items():
+            if key in stored:
+                stored[key].update(value)
+            else:
+                stored[key] = dict(value)
+        return stored
+
+    def _patch_usage_details(
+        self, run_id: UUID, usage: Any
+    ) -> dict[str, Any] | None:
+        details = self._usage_details_by_run.get(run_id)
+        if not details:
+            return cast(dict[str, Any] | None, usage if isinstance(usage, dict) else None)
+        return _merge_usage_details(usage, details)
 
     def _find_and_emit_messages(self, meta: Meta, response: Any) -> None:
         """Like the v1 handler, but skip ToolMessage from node outputs.
@@ -333,6 +362,26 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
                         ):
                             self._emit(meta, item, dedupe=True)
 
+    def on_llm_new_token(
+        self,
+        token: str,
+        *,
+        chunk: ChatGenerationChunk | None = None,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Capture v1 chunk usage details without emitting v1 chunks.
+
+        The langchain-core compat bridge converts chunks to v3 protocol events,
+        but older versions narrowed `usage_metadata` before the final
+        `message-finish` event. Keep the detail dictionaries so the finalized
+        message exposed through `on_llm_end` remains faithful to v2.
+        """
+        if isinstance(chunk, ChatGenerationChunk):
+            self._capture_usage_details(run_id, chunk.message.usage_metadata)
+
     def on_llm_end(
         self,
         response: LLMResult,
@@ -341,10 +390,15 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
         parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
-        if meta := self.metadata.get(run_id):
-            if response.generations and response.generations[0]:
-                gen = response.generations[0][0]
-                if isinstance(gen, ChatGeneration):
+        if response.generations and response.generations[0]:
+            gen = response.generations[0][0]
+            if isinstance(gen, ChatGeneration):
+                patched_usage = self._patch_usage_details(
+                    run_id, gen.message.usage_metadata
+                )
+                if patched_usage is not None:
+                    gen.message.usage_metadata = patched_usage
+                if meta := self.metadata.get(run_id):
                     if run_id in self._streamed_run_ids:
                         if gen.message.id is None:
                             gen.message.id = str(uuid4())
@@ -352,6 +406,7 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
                     else:
                         self._emit(meta, gen.message, dedupe=True)
         self._streamed_run_ids.discard(run_id)
+        self._usage_details_by_run.pop(run_id, None)
         self.metadata.pop(run_id, None)
 
     def on_llm_error(
@@ -363,6 +418,7 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
         **kwargs: Any,
     ) -> Any:
         self._streamed_run_ids.discard(run_id)
+        self._usage_details_by_run.pop(run_id, None)
         super().on_llm_error(
             error,
             run_id=run_id,
@@ -404,6 +460,10 @@ class StreamMessagesHandlerV2(StreamMessagesHandler, _V2StreamingCallbackHandler
                 msg_id = event.get("message_id")
                 if msg_id:
                     self.seen.add(msg_id)
+            elif event.get("event") == "message-finish":
+                patched_usage = self._patch_usage_details(run_id, event.get("usage"))
+                if patched_usage is not None:
+                    event["usage"] = patched_usage
             v2_meta = {**meta[1], "run_id": str(run_id)}
             self.stream((meta[0], "messages", (event, v2_meta)))
 

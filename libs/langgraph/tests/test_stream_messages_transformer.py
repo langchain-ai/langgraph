@@ -7,12 +7,14 @@ import time
 from typing import Any
 
 import pytest
+from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.language_models import GenericFakeChatModel
 from langchain_core.language_models.chat_model_stream import (
     AsyncChatModelStream,
     ChatModelStream,
 )
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+from langchain_core.outputs import LLMResult
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import TypedDict
 
@@ -22,6 +24,7 @@ from langgraph.stream._mux import StreamMux
 from langgraph.stream.run_stream import GraphRunStream
 from langgraph.stream.stream_channel import StreamChannel
 from langgraph.stream.transformers import MessagesTransformer, ValuesTransformer
+from tests.fake_chat import FakeChatModel
 
 TS = int(time.time() * 1000)
 
@@ -767,6 +770,53 @@ class TestEndToEndV2Invoke:
         assert len(streams) == 1
         assert isinstance(streams[0], AsyncChatModelStream)
         assert (await streams[0].output).text == "async invoke"
+
+    @pytest.mark.anyio
+    async def test_astream_events_v3_preserves_usage_metadata_details_in_callbacks(
+        self,
+    ) -> None:
+        usage_metadata = {
+            "input_tokens": 10,
+            "output_tokens": 2,
+            "total_tokens": 12,
+            "input_token_details": {"cache_creation": 1, "cache_read": 7},
+            "output_token_details": {"reasoning": 2},
+        }
+        model = FakeChatModel(
+            messages=[AIMessage(content="", usage_metadata=usage_metadata)]
+        )
+        captured: list[dict[str, Any]] = []
+
+        class CaptureUsage(AsyncCallbackHandler):
+            async def on_llm_end(
+                self, response: LLMResult, **kwargs: Any
+            ) -> None:
+                for generations in response.generations or []:
+                    for generation in generations:
+                        message = getattr(generation, "message", None)
+                        usage = getattr(message, "usage_metadata", None)
+                        if usage is not None:
+                            captured.append(dict(usage))
+
+        async def call_model(state: MessagesState) -> dict[str, Any]:
+            return {"messages": await model.ainvoke(state["messages"])}
+
+        graph = (
+            StateGraph(MessagesState)
+            .add_node("call_model", call_model)
+            .add_edge(START, "call_model")
+            .add_edge("call_model", END)
+            .compile()
+        )
+
+        run = await graph.astream_events(
+            {"messages": "hi"}, {"callbacks": [CaptureUsage()]}, version="v3"
+        )
+        streams = [stream async for stream in run.messages]
+
+        assert captured == [usage_metadata]
+        assert len(streams) == 1
+        assert (await streams[0].output).usage_metadata == usage_metadata
 
 
 # ---------------------------------------------------------------------------
