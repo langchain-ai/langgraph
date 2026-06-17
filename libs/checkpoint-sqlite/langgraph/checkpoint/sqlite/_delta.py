@@ -24,7 +24,11 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from langgraph.checkpoint.base import DeltaChannelHistory, PendingWrite
+from langgraph.checkpoint.base import (
+    DeltaChannelHistory,
+    PendingWrite,
+    _apply_delta_history_overwrite_semantics,
+)
 
 # Stage 1 streams ancestors of `target_cid` newest-first. The `<=`
 # predicate keeps target itself in the stream so we can read its
@@ -161,10 +165,11 @@ def build_delta_channels_writes_history(
         collected: list[PendingWrite] = []
         # Chain is newest-first; iterate oldest-first for the public order.
         for cid in reversed(chain_cids):
-            for type_tag, value_blob, task_id, _idx in cid_writes.get(cid, []):
-                collected.append(
-                    (task_id, ch, serde.loads_typed((type_tag, value_blob)))
-                )
+            step_writes: list[PendingWrite] = [
+                (task_id, ch, serde.loads_typed((type_tag, value_blob)))
+                for type_tag, value_blob, task_id, _idx in cid_writes.get(cid, [])
+            ]
+            collected.extend(_apply_delta_history_overwrite_semantics(step_writes))
         entry: DeltaChannelHistory = {"writes": collected}
         if ch in seeded:
             entry["seed"] = seed_val_by_ch[ch]

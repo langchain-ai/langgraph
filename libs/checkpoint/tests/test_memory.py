@@ -387,6 +387,52 @@ class TestInMemorySaverDeltaChannel:
         values = [v for _, _, v in result["writes"]]
         assert values == [{"content": "hi"}]
 
+    def test_get_channel_writes_overwrite_bypasses_same_step_writes(self) -> None:
+        saver = InMemorySaver()
+        serde = JsonPlusSerializer()
+
+        thread_id, ns, channel = "t1", "", "messages"
+
+        cp1 = empty_checkpoint()
+        cp1["id"] = "cp1"
+        cp2 = empty_checkpoint()
+        cp2["id"] = "cp2"
+        saver.storage[thread_id][ns] = {
+            "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), None),
+            "cp2": (serde.dumps_typed(cp2), serde.dumps_typed({}), "cp1"),
+        }
+        saver.writes[(thread_id, ns, "cp1")][("task1", 0)] = (
+            "task1",
+            channel,
+            serde.dumps_typed([1]),
+            "",
+        )
+        saver.writes[(thread_id, ns, "cp1")][("task2", 0)] = (
+            "task2",
+            channel,
+            serde.dumps_typed({"__overwrite__": [50]}),
+            "",
+        )
+        saver.writes[(thread_id, ns, "cp1")][("task3", 0)] = (
+            "task3",
+            channel,
+            serde.dumps_typed([2]),
+            "",
+        )
+
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": ns,
+                "checkpoint_id": "cp2",
+            }
+        }
+        result = saver.get_delta_channel_history(config=config, channels=[channel])[
+            channel
+        ]
+        values = [v for _, _, v in result["writes"]]
+        assert values == [{"__overwrite__": [50]}]
+
     def test_get_channel_writes_at_root_returns_empty(self) -> None:
         """Reconstructing the root checkpoint's state: no ancestors → []."""
         saver = InMemorySaver()

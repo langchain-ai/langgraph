@@ -186,6 +186,18 @@ def test_delta_channel_overwrite() -> None:
     assert ch.get()[0].content == "new"
 
 
+def test_delta_channel_overwrite_bypasses_same_step_reducer_writes() -> None:
+    def list_reducer(state: list, writes: list) -> list:
+        out = list(state)
+        for w in writes:
+            out.extend(w)
+        return out
+
+    ch = DeltaChannel(list_reducer, list).from_checkpoint(MISSING)
+    ch.update([[1], Overwrite([50]), [2]])
+    assert ch.get() == [50]
+
+
 def test_delta_channel_remove_message_and_replay() -> None:
     """RemoveMessage must round-trip correctly when writes are replayed."""
     spec = DeltaChannel(_messages_delta_reducer, list)

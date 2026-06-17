@@ -34,6 +34,24 @@ PendingWrite = tuple[str, str, Any]
 logger = logging.getLogger(__name__)
 
 
+_OVERWRITE_KEY = "__overwrite__"
+
+
+def _is_overwrite_value(value: Any) -> bool:
+    if isinstance(value, dict) and len(value) == 1 and _OVERWRITE_KEY in value:
+        return True
+    return value.__class__.__name__ == "Overwrite" and hasattr(value, "value")
+
+
+def _apply_delta_history_overwrite_semantics(
+    writes: Sequence[PendingWrite],
+) -> list[PendingWrite]:
+    for write in writes:
+        if _is_overwrite_value(write[2]):
+            return [write]
+    return list(writes)
+
+
 # Marked as total=False to allow for future expansion.
 class CheckpointMetadata(TypedDict, total=False):
     """Metadata associated with a checkpoint."""
@@ -631,10 +649,17 @@ class BaseCheckpointSaver(Generic[V]):
             if tup is None:
                 break
             if tup.pending_writes:
-                for write in reversed(tup.pending_writes):
+                step_writes_by_ch: dict[str, list[PendingWrite]] = {
+                    ch: [] for ch in remaining
+                }
+                for write in tup.pending_writes:
                     ch = write[1]
                     if ch in remaining:
-                        collected_by_ch[ch].append(write)
+                        step_writes_by_ch[ch].append(write)
+                for ch, step_writes in step_writes_by_ch.items():
+                    collected_by_ch[ch].extend(
+                        reversed(_apply_delta_history_overwrite_semantics(step_writes))
+                    )
             for ch in list(remaining):
                 if ch in tup.checkpoint["channel_values"]:
                     seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]
@@ -672,10 +697,17 @@ class BaseCheckpointSaver(Generic[V]):
             if tup is None:
                 break
             if tup.pending_writes:
-                for write in reversed(tup.pending_writes):
+                step_writes_by_ch: dict[str, list[PendingWrite]] = {
+                    ch: [] for ch in remaining
+                }
+                for write in tup.pending_writes:
                     ch = write[1]
                     if ch in remaining:
-                        collected_by_ch[ch].append(write)
+                        step_writes_by_ch[ch].append(write)
+                for ch, step_writes in step_writes_by_ch.items():
+                    collected_by_ch[ch].extend(
+                        reversed(_apply_delta_history_overwrite_semantics(step_writes))
+                    )
             for ch in list(remaining):
                 if ch in tup.checkpoint["channel_values"]:
                     seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]

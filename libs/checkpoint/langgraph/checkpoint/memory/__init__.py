@@ -23,6 +23,7 @@ from langgraph.checkpoint.base import (
     DeltaChannelHistory,
     PendingWrite,
     SerializerProtocol,
+    _apply_delta_history_overwrite_semantics,
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
@@ -200,8 +201,11 @@ class InMemorySaver(
                     terminated_here.add(ch)
 
             step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
+            step_writes_by_ch: dict[str, list[PendingWrite]] = {
+                ch: [] for ch in remaining
+            }
             for (_task_id, _idx), (tid, ch, serialized, _) in sorted(
-                step_writes.items(), reverse=True
+                step_writes.items()
             ):
                 if ch not in remaining:
                     continue
@@ -210,8 +214,12 @@ class InMemorySaver(
                     blob_value, _DeltaSnapshot
                 ):
                     continue
-                collected_by_ch[ch].append(
+                step_writes_by_ch[ch].append(
                     (tid, ch, self.serde.loads_typed(serialized))
+                )
+            for ch, writes in step_writes_by_ch.items():
+                collected_by_ch[ch].extend(
+                    reversed(_apply_delta_history_overwrite_semantics(writes))
                 )
 
             for ch in terminated_here:

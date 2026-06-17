@@ -74,6 +74,49 @@ async def test_history_excludes_target_pending_writes(
     assert "extra" not in values, f"Target's writes should be excluded, got {values}"
 
 
+async def test_history_overwrite_bypasses_same_step_writes(
+    saver: BaseCheckpointSaver,
+) -> None:
+    tid = str(uuid4())
+    channel = "ch"
+
+    from langgraph.checkpoint.base import Checkpoint
+    from langgraph.checkpoint.base.id import uuid6
+
+    from langgraph.checkpoint.conformance.test_utils import generate_metadata
+
+    parent_cfg = None
+    configs: list = []
+    for step in range(2):
+        config = {"configurable": {"thread_id": tid, "checkpoint_ns": ""}}
+        if parent_cfg:
+            config["configurable"]["checkpoint_id"] = parent_cfg["configurable"][
+                "checkpoint_id"
+            ]
+        cp = Checkpoint(
+            v=1,
+            id=str(uuid6(clock_seq=-1)),
+            ts="",
+            channel_values={},
+            channel_versions={},
+            versions_seen={},
+            updated_channels=None,
+        )
+        parent_cfg = await saver.aput(config, cp, generate_metadata(step=step), {})
+        configs.append(parent_cfg)
+
+    await saver.aput_writes(
+        configs[0],
+        [(channel, [1]), (channel, {"__overwrite__": [50]}), (channel, [2])],
+        str(uuid4()),
+    )
+    result = await saver.aget_delta_channel_history(
+        config=configs[1], channels=[channel]
+    )
+    values = [w[2] for w in result[channel]["writes"]]
+    assert values == [{"__overwrite__": [50]}], f"Expected overwrite only, got {values}"
+
+
 async def test_history_multi_channel(
     saver: BaseCheckpointSaver,
 ) -> None:
@@ -212,6 +255,7 @@ ALL_DELTA_CHANNEL_HISTORY_TESTS = [
     test_history_returns_writes_oldest_first,
     test_history_seed_is_nearest_snapshot,
     test_history_excludes_target_pending_writes,
+    test_history_overwrite_bypasses_same_step_writes,
     test_history_multi_channel,
     test_history_empty_channels_returns_empty,
     test_history_walk_to_root_no_seed,
