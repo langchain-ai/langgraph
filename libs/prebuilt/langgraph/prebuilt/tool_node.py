@@ -1306,10 +1306,11 @@ class ToolNode(RunnableCallable):
                 return {}
             # Pregel installs CONFIG_KEY_READ as
             # `functools.partial(local_read, scratchpad, channels, managed, task)`.
-            # Match the previous inlined-state contract by reading channels only;
-            # managed values have their own injection path (`ToolRuntime.context`).
-            channels = read.args[1]
-            return cast("dict[str, Any]", read(list(channels), True))
+            # Read ALL channels to ensure custom state fields are included,
+            # not just the messages field. Managed values have their own
+            # injection path (`ToolRuntime.context`).
+            # Pass None to select parameter to read all available channels
+            return cast("dict[str, Any]", read(None, True))
         return input
 
     def _inject_tool_args(
