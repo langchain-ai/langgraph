@@ -112,7 +112,13 @@ class LangSmithTracing(TypedDict, total=False):
     """Configuration for LangSmith tracing."""
 
     project_name: str
-    """The LangSmith project name to trace to."""
+    """A single extra LangSmith project name to trace to."""
+    project_names: list[str]
+    """Multiple extra LangSmith project names to trace to.
+
+    Combined with `project_name` (if both are provided) to form the full set of
+    extra projects. The server also traces to its primary tracing project.
+    """
     example_id: str
     """The LangSmith example/dataset ID to associate with the trace."""
 
