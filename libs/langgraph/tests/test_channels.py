@@ -397,6 +397,50 @@ def test_delta_channel_inmemory_saver_assembles_writes() -> None:
     assert len(state.values["messages"]) == 4  # 2 human + 2 AI
 
 
+def test_delta_channel_overwrite_superstep_snapshots() -> None:
+    def reducer(state: list[str], writes: Sequence[list[str]]) -> list[str]:
+        result = list(state)
+        for write in writes:
+            result.extend(write)
+        return result
+
+    class State(TypedDict):
+        items: Annotated[
+            list[str], DeltaChannel(reducer, list, snapshot_frequency=1000)
+        ]
+
+    def node_a(state: State) -> dict:
+        return {"items": ["a"]}
+
+    def node_b(state: State) -> dict:
+        return {"items": Overwrite(["b"])}
+
+    def node_c(state: State) -> dict:
+        return {"items": ["c"]}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_node("node_c", node_c)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_a", "node_c")
+
+    saver = InMemorySaver()
+    graph = builder.compile(checkpointer=saver)
+    config = {"configurable": {"thread_id": "overwrite-snapshot"}}
+
+    result = graph.invoke({"items": ["START"]}, config)
+    assert result == {"items": ["b"]}
+
+    saved = saver.get_tuple(config)
+    assert saved is not None
+    snapshot = saved.checkpoint["channel_values"].get("items")
+    assert isinstance(snapshot, _DeltaSnapshot)
+    assert snapshot.value == ["b"]
+    assert saved.metadata.get("counters_since_delta_snapshot", {}).get("items") is None
+
+
 # ---------------------------------------------------------------------------
 # DeltaChannel — dict reducer
 # ---------------------------------------------------------------------------
