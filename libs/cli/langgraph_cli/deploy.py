@@ -779,7 +779,7 @@ def _docker_config_for_token(registry_host: str, token: str):
     auth_b64 = base64.b64encode(f"oauth2accesstoken:{token}".encode()).decode()
     config_data = {"auths": {registry_host: {"auth": auth_b64}}}
     with tempfile.TemporaryDirectory() as tmpdir:
-        with open(os.path.join(tmpdir, "config.json"), "w") as f:
+        with open(os.path.join(tmpdir, "config.json"), "w", encoding="utf-8") as f:
             json_mod.dump(config_data, f)
         yield tmpdir
 

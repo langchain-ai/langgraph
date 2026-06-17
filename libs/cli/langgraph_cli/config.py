@@ -607,7 +607,7 @@ def get_unknown_keys(raw_config: dict) -> list[str]:
 
 def validate_config_file(config_path: pathlib.Path) -> Config:
     """Load and validate a configuration file."""
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config = json.load(f)
     validated = validate_config(config)
     # Enforce the package.json doesn't enforce an
@@ -616,7 +616,7 @@ def validate_config_file(config_path: pathlib.Path) -> Config:
         package_json_path = config_path.parent / "package.json"
         if package_json_path.is_file():
             try:
-                with open(package_json_path) as f:
+                with open(package_json_path,encoding="utf-8") as f:
                     package_json = json.load(f)
                     if "engines" in package_json:
                         engines = package_json["engines"]
@@ -1173,7 +1173,7 @@ def _get_node_pm_install_cmd(project_dir: pathlib.Path) -> str:
     # inspired by `package-manager-detector`
     def get_pkg_manager_name():
         try:
-            with open(project_dir / "package.json") as f:
+            with open(project_dir / "package.json",encoding="utf-8") as f:
                 pkg = json.load(f)
 
                 if (pkg_manager_name := pkg.get("packageManager")) and isinstance(
