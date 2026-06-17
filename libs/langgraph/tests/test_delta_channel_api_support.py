@@ -1,7 +1,7 @@
 """Compile-time check that `DeltaChannel` graphs run under a supported API server.
 
 `DeltaChannel` reconstruction relies on server-side support added in
-`langgraph-api>=0.9.0`. When running under an older API server, delta channels
+`langgraph-api>=0.10.0`. When running under an older API server, delta channels
 fail at runtime, so `StateGraph.compile` raises with an upgrade hint. The check
 is skipped when `langgraph-api` is not installed (local execution).
 """
@@ -57,13 +57,19 @@ def api_version(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_delta_graph_raises_for_old_api(api_version) -> None:
-    api_version("0.8.9")
-    with pytest.raises(RuntimeError, match="requires `langgraph-api>=0.9.0`"):
+    api_version("0.9.9")
+    with pytest.raises(RuntimeError, match="requires `langgraph-api>=0.10.0`"):
+        _delta_graph().compile()
+
+
+def test_delta_graph_raises_for_api_release_candidate(api_version) -> None:
+    api_version("0.10.0rc1")
+    with pytest.raises(RuntimeError, match="requires `langgraph-api>=0.10.0`"):
         _delta_graph().compile()
 
 
 def test_delta_graph_ok_for_min_api(api_version) -> None:
-    api_version("0.9.0")
+    api_version("0.10.0")
     _delta_graph().compile()
 
 

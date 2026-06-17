@@ -126,7 +126,7 @@ def _check_delta_channel_api_support(channels: Mapping[str, Any]) -> None:
     """Raise if a `DeltaChannel` graph runs under an API server too old to support it.
 
     `DeltaChannel` reconstruction needs server-side support added in
-    `langgraph-api>=0.9.0`, so we raise at compile time when an older API
+    `langgraph-api>=0.10.0`, so we raise at compile time when an older API
     server is installed. Skipped when `langgraph-api` is absent (local
     execution) or the graph has no delta channel.
     """
@@ -136,9 +136,9 @@ def _check_delta_channel_api_support(channels: Mapping[str, Any]) -> None:
         api_version = metadata.version("langgraph-api")
     except metadata.PackageNotFoundError:
         return
-    if Version(api_version) < Version("0.9.0"):
+    if Version(api_version) < Version("0.10.0"):
         raise RuntimeError(
-            f"`DeltaChannel` requires `langgraph-api>=0.9.0`, but {api_version} "
+            f"`DeltaChannel` requires `langgraph-api>=0.10.0`, but {api_version} "
             "is installed. Upgrade with `pip install -U langgraph-api`."
         )
 
