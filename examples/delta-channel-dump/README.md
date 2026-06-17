@@ -1,13 +1,19 @@
 # delta-channel-dump
 
 Recover messages (and other channels) from a Postgres-backed LangGraph thread
-written by **deepagents 0.6.x / langgraph >= 1.2** (DeltaChannel format) before
-rolling back to **deepagents 0.5.x / langgraph < 1.2**.
+written by **langgraph >= 1.2** (DeltaChannel format) — including **LangGraph
+Server / langgraph-api** deployments on the Postgres runtime, **deepagents
+0.6.x**, or any OSS app using `PostgresSaver` — before rolling back to an older
+runtime such as **deepagents 0.5.x / langgraph < 1.2**.
+
+langgraph-api uses the same `checkpoints` / `checkpoint_blobs` / `checkpoint_writes`
+schema as OSS `checkpoint-postgres`; this script reads those tables directly.
 
 On the older runtime, `add_messages` does not understand the `EXT_DELTA_SNAPSHOT`
 msgpack ext code and silently returns an empty list for affected channels. This
 tool reads the raw checkpoint blobs from Postgres and emits JSON you can inspect
-and re-apply via `update_state`.
+and re-apply via `update_state` (LangGraph Server SDK) or `graph.update_state`
+(OSS).
 
 ## Install
 
@@ -114,7 +120,8 @@ read-only and intentionally does not mutate the database.
 
 ## Scope / non-goals (v1)
 
-- **Postgres only** — not gRPC core, Mongo, or Redis checkpointer backends
+- **Postgres only** — OSS `PostgresSaver` or langgraph-api Postgres runtime; not
+  inmem, gRPC core, Mongo, or Redis checkpointer backends
 - **No AES decryption** (`LANGGRAPH_AES_KEY`) or custom encryption
 - **No reducer** — raw seed + writes only
 - **No automatic `update_state`** — operator applies manually

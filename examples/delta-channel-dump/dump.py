@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Recover delta-channel state from a Postgres-backed LangGraph thread.
 
-Use after rolling back from langgraph >= 1.2 / deepagents 0.6.x to an older
-runtime that does not understand ``EXT_DELTA_SNAPSHOT`` msgpack blobs. The script
-walks the checkpoint parent chain, decodes msgpack blobs, and emits a JSON dump
-of per-channel ``seed`` plus oldest-to-newest ``writes``. Apply the recovered
-values manually via ``client.threads.update_state(...)``.
+Works with OSS ``PostgresSaver`` and LangGraph Server / langgraph-api on the
+Postgres runtime (same checkpoint schema). Use after rolling back from
+langgraph >= 1.2 / deepagents 0.6.x to an older runtime that does not
+understand ``EXT_DELTA_SNAPSHOT`` msgpack blobs. The script walks the checkpoint
+parent chain, decodes msgpack blobs, and emits a JSON dump of per-channel
+``seed`` plus oldest-to-newest ``writes``. Apply the recovered values manually
+via ``client.threads.update_state(...)`` (Server) or ``graph.update_state``
+(OSS).
 
 Install::
 
