@@ -2,7 +2,7 @@
 
 Recover messages (and other channels) from a Postgres-backed LangGraph thread
 written by **deepagents 0.6.x / langgraph >= 1.2** (DeltaChannel format) before
-rolling back to **deepagents 0.5.x / langgraph 0.5.x**.
+rolling back to **deepagents 0.5.x / langgraph < 1.2**.
 
 On the older runtime, `add_messages` does not understand the `EXT_DELTA_SNAPSHOT`
 msgpack ext code and silently returns an empty list for affected channels. This

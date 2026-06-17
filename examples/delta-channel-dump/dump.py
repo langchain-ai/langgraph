@@ -247,13 +247,19 @@ def _load_writes_for_checkpoint(
     checkpoint_id: str,
     channel: str,
 ) -> list[dict[str, Any]]:
+    """Load writes for one checkpoint, newest-first by ``(task_id, idx)``.
+
+    ``walk_channel`` reverses the accumulated flat list before returning;
+    DESC here yields oldest-first within each checkpoint in the final output,
+    matching ``PostgresSaver._build_delta_channels_writes_history``.
+    """
     rows = conn.execute(
         """
         SELECT task_id::text, idx, type, blob
         FROM checkpoint_writes
         WHERE thread_id = %s AND checkpoint_ns = %s
           AND checkpoint_id = %s AND channel = %s
-        ORDER BY task_id, idx
+        ORDER BY task_id DESC, idx DESC
         """,
         (thread_id, checkpoint_ns, checkpoint_id, channel),
     ).fetchall()
