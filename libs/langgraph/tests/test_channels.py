@@ -8,6 +8,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import NotRequired, TypedDict
 
+from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.delta import DeltaChannel
@@ -395,6 +396,49 @@ def test_delta_channel_inmemory_saver_assembles_writes() -> None:
 
     state = graph.get_state(config)
     assert len(state.values["messages"]) == 4  # 2 human + 2 AI
+
+
+def test_delta_channel_api_json_overwrite_sentinel_snapshots_and_replays() -> None:
+    def reducer(state: list[str], writes: Sequence[list[str]]) -> list[str]:
+        result = list(state)
+        for write in writes:
+            result.extend(write)
+        return result
+
+    class State(TypedDict):
+        items: Annotated[
+            list[str], DeltaChannel(reducer, list, snapshot_frequency=1000)
+        ]
+
+    calls = 0
+
+    def node(state: State) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"items": {OVERWRITE: ["reset"]}}
+        return {"items": ["after"]}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+
+    saver = InMemorySaver()
+    graph = builder.compile(checkpointer=saver)
+    config = {"configurable": {"thread_id": "overwrite-json-sentinel"}}
+
+    updates = list(graph.stream({"items": ["before"]}, config, stream_mode=["updates"]))
+    assert updates == [("updates", {"node": {"items": {OVERWRITE: ["reset"]}}})]
+    assert graph.get_state(config).values == {"items": ["reset"]}
+
+    first_saved = saver.get_tuple(config)
+    assert first_saved is not None
+    snapshot = first_saved.checkpoint["channel_values"].get("items")
+    assert isinstance(snapshot, _DeltaSnapshot)
+    assert snapshot.value == ["reset"]
+
+    assert graph.invoke({"items": []}, config) == {"items": ["reset", "after"]}
+    assert graph.get_state(config).values == {"items": ["reset", "after"]}
 
 
 # ---------------------------------------------------------------------------
