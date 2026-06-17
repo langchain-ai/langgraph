@@ -8,7 +8,9 @@ is skipped when `langgraph-api` is not installed (local execution).
 
 from __future__ import annotations
 
+import sys
 import warnings
+from types import ModuleType
 from typing import Annotated
 
 import pytest
@@ -17,7 +19,6 @@ from typing_extensions import TypedDict
 from langgraph.channels.delta import DeltaChannel
 from langgraph.constants import START
 from langgraph.graph import StateGraph
-from langgraph.graph import state as state_module
 from langgraph.graph.message import _messages_delta_reducer
 
 
@@ -41,17 +42,15 @@ def _delta_graph() -> StateGraph:
 
 @pytest.fixture
 def api_version(monkeypatch: pytest.MonkeyPatch):
-    """Override the reported `langgraph-api` version (or simulate absence)."""
+    """Override the imported `langgraph_api.__version__` (or simulate absence)."""
 
     def _set(version: str | None) -> None:
-        def fake_version(name: str) -> str:
-            if name == "langgraph-api":
-                if version is None:
-                    raise state_module.metadata.PackageNotFoundError(name)
-                return version
-            return state_module.metadata.version(name)
-
-        monkeypatch.setattr(state_module.metadata, "version", fake_version)
+        if version is None:
+            monkeypatch.setitem(sys.modules, "langgraph_api", None)
+            return
+        module = ModuleType("langgraph_api")
+        setattr(module, "__version__", version)
+        monkeypatch.setitem(sys.modules, "langgraph_api", module)
 
     return _set
 

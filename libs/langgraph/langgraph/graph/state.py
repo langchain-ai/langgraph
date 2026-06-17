@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass, is_dataclass
 from datetime import timedelta
 from functools import partial
-from importlib import metadata
+from importlib import import_module
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
 from types import NoneType as NoneType
@@ -133,8 +133,8 @@ def _check_delta_channel_api_support(channels: Mapping[str, Any]) -> None:
     if not any(isinstance(c, DeltaChannel) for c in channels.values()):
         return
     try:
-        api_version = metadata.version("langgraph-api")
-    except metadata.PackageNotFoundError:
+        api_version = import_module("langgraph_api").__version__
+    except ImportError:
         return
     if Version(api_version) < Version("0.10.0"):
         raise RuntimeError(
