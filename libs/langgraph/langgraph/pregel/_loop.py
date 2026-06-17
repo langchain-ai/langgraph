@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import binascii
 import concurrent.futures
+import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import (
@@ -194,6 +195,7 @@ class PregelLoop:
         | None
     )
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
+    _pending_writes_lock: threading.Lock
     submit: Submit
     channels: Mapping[str, BaseChannel]
     # Futures from `checkpointer.put_writes` calls that produced delta-channel
@@ -313,6 +315,7 @@ class PregelLoop:
         self.durability = durability
         self._has_graph_lifecycle_callbacks = has_graph_lifecycle_callbacks
         self._graph_lifecycle_events = deque()
+        self._pending_writes_lock = threading.Lock()
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -409,96 +412,99 @@ class PregelLoop:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
-        # deduplicate writes to special channels, last write wins
-        if all(w[0] in WRITES_IDX_MAP for w in writes):
-            writes = list({w[0]: w for w in writes}.values())
-        if task_id == NULL_TASK_ID:
-            # writes for the null task are accumulated
-            self.checkpoint_pending_writes = [
-                w
-                for w in self.checkpoint_pending_writes
-                if w[0] != task_id or w[1] not in WRITES_IDX_MAP
-            ]
-            writes_to_save: WritesT = [
-                w[1:] for w in self.checkpoint_pending_writes if w[0] == task_id
-            ] + list(writes)
-        else:
-            # remove existing writes for this task
-            self.checkpoint_pending_writes = [
-                w for w in self.checkpoint_pending_writes if w[0] != task_id
-            ]
-            writes_to_save = writes
-
-        # check if any writes are to an UntrackedValue channel
-        if any(
-            isinstance(channel, UntrackedValue) for channel in self.channels.values()
-        ):
-            # we do not persist untracked values in checkpoints
-            writes_to_save = [
-                # sanitize UntrackedValues that are nested within Send packets
-                (
-                    (c, sanitize_untracked_values_in_send(v, self.channels))
-                    if c == TASKS and isinstance(v, Send)
-                    else (c, v)
-                )
-                for c, v in writes_to_save
-                # dont persist UntrackedValue channel writes
-                if not isinstance(self.specs.get(c), UntrackedValue)
-            ]
-
-        # save writes
-        self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
-        # Assign stable IDs to any id=None BaseMessages in DeltaChannel writes
-        # before the background thread serialises them. Without this, reducers
-        # that assign IDs inside apply_writes() race with serialisation and
-        # store id=None, causing get_state() replays to produce a different UUID
-        # on every call.
-        for c, v in writes_to_save:
-            if isinstance(self.specs.get(c), DeltaChannel):
-                ensure_message_ids(v)
-        if self.durability != "exit" and self.checkpointer_put_writes is not None:
-            config = patch_configurable(
-                self.checkpoint_config,
-                {
-                    CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
-                        CONFIG_KEY_CHECKPOINT_NS, ""
-                    ),
-                    CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
-                },
-            )
-            if self.checkpointer_put_writes_accepts_task_path:
-                if hasattr(self, "tasks"):
-                    task = self.tasks.get(task_id)
-                else:
-                    task = None
-                fut = self.submit(
-                    self.checkpointer_put_writes,
-                    config,
-                    writes_to_save,
-                    task_id,
-                    task_path_str(task.path) if task else "",
-                )
+        with self._pending_writes_lock:
+            # deduplicate writes to special channels, last write wins
+            if all(w[0] in WRITES_IDX_MAP for w in writes):
+                writes = list({w[0]: w for w in writes}.values())
+            if task_id == NULL_TASK_ID:
+                # writes for the null task are accumulated
+                self.checkpoint_pending_writes = [
+                    w
+                    for w in self.checkpoint_pending_writes
+                    if w[0] != task_id or w[1] not in WRITES_IDX_MAP
+                ]
+                writes_to_save: WritesT = [
+                    w[1:] for w in self.checkpoint_pending_writes if w[0] == task_id
+                ] + list(writes)
             else:
-                fut = self.submit(
-                    self.checkpointer_put_writes,
-                    config,
-                    writes_to_save,
-                    task_id,
+                # remove existing writes for this task
+                self.checkpoint_pending_writes = [
+                    w for w in self.checkpoint_pending_writes if w[0] != task_id
+                ]
+                writes_to_save = writes
+
+            # check if any writes are to an UntrackedValue channel
+            if any(
+                isinstance(channel, UntrackedValue)
+                for channel in self.channels.values()
+            ):
+                # we do not persist untracked values in checkpoints
+                writes_to_save = [
+                    # sanitize UntrackedValues that are nested within Send packets
+                    (
+                        (c, sanitize_untracked_values_in_send(v, self.channels))
+                        if c == TASKS and isinstance(v, Send)
+                        else (c, v)
+                    )
+                    for c, v in writes_to_save
+                    # dont persist UntrackedValue channel writes
+                    if not isinstance(self.specs.get(c), UntrackedValue)
+                ]
+
+            # save writes
+            self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
+            # Assign stable IDs to any id=None BaseMessages in DeltaChannel writes
+            # before the background thread serialises them. Without this, reducers
+            # that assign IDs inside apply_writes() race with serialisation and
+            # store id=None, causing get_state() replays to produce a different UUID
+            # on every call.
+            for c, v in writes_to_save:
+                if isinstance(self.specs.get(c), DeltaChannel):
+                    ensure_message_ids(v)
+            if self.durability != "exit" and self.checkpointer_put_writes is not None:
+                config = patch_configurable(
+                    self.checkpoint_config,
+                    {
+                        CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
+                            CONFIG_KEY_CHECKPOINT_NS, ""
+                        ),
+                        CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
+                    },
                 )
-            if self._delta_write_futs is not None and any(
-                isinstance(self.specs.get(c), DeltaChannel) for c, _ in writes_to_save
-            ):
-                self._delta_write_futs.append(fut)
-            # ERROR_SOURCE_NODE is only appended by commit() when the task
-            # has an error handler (_should_route_to_error_handler), so this
-            # check naturally limits future collection to those tasks.
-            if self._error_handler_write_futs is not None and any(
-                c == ERROR_SOURCE_NODE for c, _ in writes
-            ):
-                self._error_handler_write_futs.append(fut)
-        # output writes
-        if hasattr(self, "tasks"):
-            self.output_writes(task_id, writes)
+                if self.checkpointer_put_writes_accepts_task_path:
+                    if hasattr(self, "tasks"):
+                        task = self.tasks.get(task_id)
+                    else:
+                        task = None
+                    fut = self.submit(
+                        self.checkpointer_put_writes,
+                        config,
+                        writes_to_save,
+                        task_id,
+                        task_path_str(task.path) if task else "",
+                    )
+                else:
+                    fut = self.submit(
+                        self.checkpointer_put_writes,
+                        config,
+                        writes_to_save,
+                        task_id,
+                    )
+                if self._delta_write_futs is not None and any(
+                    isinstance(self.specs.get(c), DeltaChannel)
+                    for c, _ in writes_to_save
+                ):
+                    self._delta_write_futs.append(fut)
+                # ERROR_SOURCE_NODE is only appended by commit() when the task
+                # has an error handler (_should_route_to_error_handler), so this
+                # check naturally limits future collection to those tasks.
+                if self._error_handler_write_futs is not None and any(
+                    c == ERROR_SOURCE_NODE for c, _ in writes
+                ):
+                    self._error_handler_write_futs.append(fut)
+            # output writes
+            if hasattr(self, "tasks"):
+                self.output_writes(task_id, writes)
 
     def _put_pending_writes(self) -> None:
         if self.checkpointer_put_writes is None:
