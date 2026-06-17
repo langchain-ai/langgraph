@@ -3,6 +3,7 @@ import io
 import json
 import os
 import sys
+import urllib.error
 from unittest.mock import MagicMock
 
 import click
@@ -19,6 +20,7 @@ from langgraph_cli.deploy import (
     _resolve_env_path,
     _resolve_pushed_image_digest,
     _smith_dashboard_base_url,
+    _upload_to_gcs,
     normalize_image_tag,
     normalize_name,
 )
@@ -414,6 +416,20 @@ class TestEmitterJsonMode:
         assert events[0]["event"] == "upload_progress"
         assert events[0]["size_mb"] == 5.7
         assert events[0]["pct"] == 42
+
+
+class TestUploadToGcs:
+    def test_network_error_raises_click_exception(self, tmp_path, monkeypatch):
+        archive = tmp_path / "archive.tar.gz"
+        archive.write_bytes(b"payload")
+
+        def raise_url_error(*args, **kwargs):
+            raise urllib.error.URLError("connection reset")
+
+        monkeypatch.setattr("urllib.request.urlopen", raise_url_error)
+
+        with pytest.raises(click.ClickException, match="network error"):
+            _upload_to_gcs("https://example.test/upload", str(archive), 7)
 
 
 # ---------------------------------------------------------------------------

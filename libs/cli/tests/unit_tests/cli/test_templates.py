@@ -8,13 +8,16 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
-from urllib import request
+from urllib import error, request
 from zipfile import ZipFile
 
 from click.testing import CliRunner
 
 from langgraph_cli.cli import cli
-from langgraph_cli.templates import TEMPLATE_ID_TO_CONFIG
+from langgraph_cli.templates import (
+    _TEMPLATE_DOWNLOAD_TIMEOUT_SECONDS,
+    TEMPLATE_ID_TO_CONFIG,
+)
 
 
 @patch.object(request, "urlopen")
@@ -54,6 +57,27 @@ def test_create_new_with_mocked_download(mock_urlopen: MagicMock) -> None:
         assert "test-file.txt" in extracted_files, (
             "Expected 'test-file.txt' in the extracted content."
         )
+        _, _, template_url = TEMPLATE_ID_TO_CONFIG[template]
+        assert any(
+            call.args == (template_url,)
+            and call.kwargs["timeout"] == _TEMPLATE_DOWNLOAD_TIMEOUT_SECONDS
+            for call in mock_urlopen.call_args_list
+        )
+
+
+@patch.object(request, "urlopen")
+def test_create_new_download_network_error(mock_urlopen: MagicMock) -> None:
+    """Network failures should render as ClickException errors."""
+    mock_urlopen.side_effect = error.URLError("timed out")
+
+    with TemporaryDirectory() as temp_dir:
+        runner = CliRunner()
+        template = next(iter(TEMPLATE_ID_TO_CONFIG))
+        result = runner.invoke(cli, ["new", temp_dir, "--template", template])
+
+    assert result.exit_code != 0
+    assert "Failed to download repository due to a network error" in result.output
+    assert "timed out" in result.output
 
 
 def test_invalid_template_id() -> None:

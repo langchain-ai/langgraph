@@ -16,6 +16,8 @@ from langgraph_cli.constants import (
 )
 from langgraph_cli.version import __version__
 
+_ANALYTICS_TIMEOUT_SECONDS = 5
+
 
 class LogData(TypedDict):
     os: str
@@ -78,7 +80,7 @@ def log_data(data: LogData) -> None:
     )
 
     try:
-        urllib.request.urlopen(req)
+        urllib.request.urlopen(req, timeout=_ANALYTICS_TIMEOUT_SECONDS)
     except urllib.error.URLError:
         pass
 
