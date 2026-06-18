@@ -82,8 +82,15 @@ class AsyncPostgresSaver(BasePostgresSaver):
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
-                async with conn.pipeline() as pipe:
+                pipe = conn.pipeline()
+                try:
+                    await pipe.__aenter__()
                     yield cls(conn=conn, pipe=pipe, serde=serde)
+                finally:
+                    try:
+                        await pipe.__aexit__(None, None, None)
+                    except Exception:
+                        pass  # suppress errors during teardown
             else:
                 yield cls(conn=conn, serde=serde)
 
