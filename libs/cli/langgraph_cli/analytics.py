@@ -78,7 +78,7 @@ def log_data(data: LogData) -> None:
     )
 
     try:
-        urllib.request.urlopen(req)
+        urllib.request.urlopen(req, timeout=10)
     except urllib.error.URLError:
         pass
 
