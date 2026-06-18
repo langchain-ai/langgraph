@@ -534,22 +534,21 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         serialized_metadata = json.dumps(
             get_checkpoint_metadata(config, metadata), ensure_ascii=False
         ).encode("utf-8", "ignore")
-        async with (
-            self.lock,
-            self.conn.execute(
-                "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    str(config["configurable"]["thread_id"]),
-                    checkpoint_ns,
-                    checkpoint["id"],
-                    config["configurable"].get("checkpoint_id"),
-                    type_,
-                    serialized_checkpoint,
-                    serialized_metadata,
-                ),
-            ),
-        ):
-            await self.conn.commit()
+        async with self.lock:
+            async with self.conn.execute("BEGIN IMMEDIATE"):
+                await self.conn.execute(
+                    "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(config["configurable"]["thread_id"]),
+                        checkpoint_ns,
+                        checkpoint["id"],
+                        config["configurable"].get("checkpoint_id"),
+                        type_,
+                        serialized_checkpoint,
+                        serialized_metadata,
+                    ),
+                )
+                await self.conn.commit()
         return {
             "configurable": {
                 "thread_id": thread_id,
