@@ -375,6 +375,45 @@ def test_search(store) -> None:
         store.delete(namespace, key)
 
 
+def test_numeric_comparison_filters(store) -> None:
+    # Regression test for #7684: `value->>key` extracts JSON as text, so the
+    # comparison operators compared lexicographically ("9" >= "10" is true).
+    # They must compare numerically for int/float values.
+    namespace = ("test", "scores")
+    for key, score in [("a", 2), ("b", 9), ("c", 10), ("d", 11)]:
+        store.put(namespace, key, {"score": score})
+
+    def scores(filter: dict) -> list:
+        return sorted(
+            item.value["score"] for item in store.search(namespace, filter=filter)
+        )
+
+    assert scores({"score": {"$gte": 10}}) == [10, 11]  # not [9, 10, 11]
+    assert scores({"score": {"$gt": 9}}) == [10, 11]
+    assert scores({"score": {"$lt": 10}}) == [2, 9]
+    assert scores({"score": {"$lte": 9}}) == [2, 9]
+
+    # Floats compare numerically too.
+    store.put(namespace, "e", {"score": 9.5})
+    assert scores({"score": {"$gt": 9}}) == [9.5, 10, 11]
+
+    # String comparisons remain lexicographic (unchanged behavior).
+    str_namespace = ("test", "names")
+    for key, name in [("a", "apple"), ("b", "banana")]:
+        store.put(str_namespace, key, {"name": name})
+    names = sorted(
+        item.value["name"]
+        for item in store.search(str_namespace, filter={"name": {"$gt": "apple"}})
+    )
+    assert names == ["banana"]
+
+    # Cleanup
+    for key in ["a", "b", "c", "d", "e"]:
+        store.delete(namespace, key)
+    for key in ["a", "b"]:
+        store.delete(str_namespace, key)
+
+
 @contextmanager
 def _create_vector_store(
     vector_type: str,

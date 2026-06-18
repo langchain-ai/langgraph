@@ -623,14 +623,15 @@ class BasePostgresStore(Generic[C]):
         """Helper to generate filter conditions."""
         if op == "$eq":
             return "value->%s = %s::jsonb", [key, json.dumps(value)]
-        elif op == "$gt":
-            return "value->>%s > %s", [key, str(value)]
-        elif op == "$gte":
-            return "value->>%s >= %s", [key, str(value)]
-        elif op == "$lt":
-            return "value->>%s < %s", [key, str(value)]
-        elif op == "$lte":
-            return "value->>%s <= %s", [key, str(value)]
+        elif op in ("$gt", "$gte", "$lt", "$lte"):
+            sql_op = {"$gt": ">", "$gte": ">=", "$lt": "<", "$lte": "<="}[op]
+            # `->>` extracts JSON values as text, so comparisons are lexicographic by
+            # default (e.g. "9" > "10" is true). Cast to numeric for real numbers so
+            # that, for example, {"score": {"$gte": 10}} compares numerically (see #7684).
+            # Mirrors SqliteStore, which casts numeric comparisons with CAST(... AS REAL).
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return f"(value->>%s)::numeric {sql_op} %s", [key, value]
+            return f"value->>%s {sql_op} %s", [key, str(value)]
         elif op == "$ne":
             return "value->%s != %s::jsonb", [key, json.dumps(value)]
         else:
