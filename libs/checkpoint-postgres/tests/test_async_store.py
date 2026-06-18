@@ -573,6 +573,26 @@ async def test_vector_search_with_filters(vector_store: AsyncPostgresStore) -> N
     assert len(results) == 1
     assert results[0].key == "doc3"
 
+async def test_numeric_filter_regression(
+    vector_store: AsyncPostgresStore,
+) -> None:
+    docs = [
+        ("doc1", {"score": 9}),
+        ("doc2", {"score": 10}),
+        ("doc3", {"score": 11}),
+    ]
+
+    for key, value in docs:
+        await vector_store.aput(("test",), key, value)
+
+    results = await vector_store.asearch(
+        ("test",),
+        filter={"score": {"$gte": 10}},
+    )
+
+    keys = {r.key for r in results}
+
+    assert keys == {"doc2", "doc3"}
 
 async def test_vector_search_pagination(vector_store: AsyncPostgresStore) -> None:
     """Test pagination with vector search."""
