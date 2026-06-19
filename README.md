@@ -77,6 +77,19 @@ To improve your LLM application development, pair LangGraph with:
 
 ---
 
+## Contributor Fast Path (Docs & Quality)
+
+If you are contributing to LangGraph for the first time, docs and quality improvements are a strong place to start.
+
+Suggested first-contribution workflow:
+
+1. Identify one focused docs gap (unclear step, missing edge case, troubleshooting clarification).
+2. Keep PR scope narrow and user-impact oriented.
+3. Run relevant local checks before opening PR (format, lint, and docs checks used by the repo).
+4. Link the motivating issue and include a brief test/validation note in the PR description.
+
+This helps reviewers evaluate changes quickly and improves first-PR success rates.
+
 ## Acknowledgements
 
 LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/). LangGraph is built by LangChain Inc, the creators of LangChain, but can be used without LangChain.
