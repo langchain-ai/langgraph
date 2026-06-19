@@ -151,8 +151,6 @@ class TestMemorySaver:
             search_results_5[1].config["configurable"]["checkpoint_ns"],
         } == {"", "inner"}
 
-        # TODO: test before and limit params
-
     async def test_asearch(self) -> None:
         # set up test
         # save checkpoints
@@ -205,6 +203,87 @@ class TestMemorySaver:
             c async for c in self.memory_saver.alist(None, filter=query_4)
         ]
         assert len(search_results_4) == 0
+
+    async def test_list_before_param(self) -> None:
+        # put() stores checkpoints under checkpoint["id"] (a UUID) and returns a
+        # config carrying that id; the id in the input config becomes the parent pointer.
+        saved_config_1 = self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        saved_config_2 = self.memory_saver.put(
+            self.config_2,
+            self.chkpnt_2,
+            self.metadata_2,
+            self.chkpnt_2["channel_versions"],
+        )
+        saved_config_3 = self.memory_saver.put(
+            self.config_3,
+            self.chkpnt_3,
+            self.metadata_3,
+            self.chkpnt_3["channel_versions"],
+        )
+
+        # list() -- checkpoints with id >= before's id are excluded
+        results = list(self.memory_saver.list(None, before=saved_config_2))
+        assert len(results) == 1
+        assert (
+            results[0].config["configurable"]["checkpoint_id"]
+            == saved_config_1["configurable"]["checkpoint_id"]
+        )
+
+        # before scoped to a specific thread
+        thread_results = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-2"}},
+                before=saved_config_3,
+            )
+        )
+        assert len(thread_results) == 1
+        assert (
+            thread_results[0].config["configurable"]["checkpoint_id"]
+            == saved_config_2["configurable"]["checkpoint_id"]
+        )
+
+        # alist() -- same behaviour via the async interface
+        async_results = [
+            c async for c in self.memory_saver.alist(None, before=saved_config_2)
+        ]
+        assert len(async_results) == 1
+        assert (
+            async_results[0].config["configurable"]["checkpoint_id"]
+            == saved_config_1["configurable"]["checkpoint_id"]
+        )
+
+    async def test_list_limit_param(self) -> None:
+        self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        self.memory_saver.put(
+            self.config_2,
+            self.chkpnt_2,
+            self.metadata_2,
+            self.chkpnt_2["channel_versions"],
+        )
+        self.memory_saver.put(
+            self.config_3,
+            self.chkpnt_3,
+            self.metadata_3,
+            self.chkpnt_3["channel_versions"],
+        )
+
+        # list() -- limit caps the number of results returned
+        assert len(list(self.memory_saver.list(None, limit=2))) == 2
+        assert len(list(self.memory_saver.list(None, limit=1))) == 1
+
+        # alist() -- same behaviour via the async interface
+        assert len([c async for c in self.memory_saver.alist(None, limit=2)]) == 2
+        assert len([c async for c in self.memory_saver.alist(None, limit=1)]) == 1
 
 
 async def test_memory_saver() -> None:
