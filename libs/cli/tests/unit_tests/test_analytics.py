@@ -6,6 +6,7 @@ from langgraph_cli.constants import DEFAULT_TIMEOUT
 import urllib.request
 
 
+
 def test_log_command_default_daemon_and_timeout():
     """Test the default daemon and timeout parameters of the log_command decorator
     to ensure backward compatibility with existing code"""
