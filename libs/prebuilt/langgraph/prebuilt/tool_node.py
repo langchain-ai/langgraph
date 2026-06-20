@@ -1442,6 +1442,15 @@ class ToolNode(RunnableCallable):
             response.content = cast("str | list", msg_content_output(response.content))
             return response
         if isinstance(response, list):
+            if all(
+                isinstance(r, dict) and r.get("type") in TOOL_MESSAGE_BLOCK_TYPES
+                for r in response
+            ):
+                return ToolMessage(
+                    content=response,
+                    name=tool_call["name"],
+                    tool_call_id=tool_call["id"],
+                )
             if all(isinstance(r, (Command, ToolMessage)) for r in response):
                 return self._validate_tool_command_list(response, tool_call, input_type)
             msg = (
