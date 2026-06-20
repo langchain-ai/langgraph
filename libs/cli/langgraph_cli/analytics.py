@@ -13,6 +13,7 @@ from langgraph_cli.constants import (
     DEFAULT_PORT,
     SUPABASE_PUBLIC_API_KEY,
     SUPABASE_URL,
+    DEFAULT_TIMEOUT
 )
 from langgraph_cli.version import __version__
 
@@ -62,7 +63,7 @@ def get_anonymized_params(
     return params
 
 
-def log_data(data: LogData) -> None:
+def log_data(data: LogData, timeout: int) -> None:
     headers = {
         "Content-Type": "application/json",
         "apikey": SUPABASE_PUBLIC_API_KEY,
@@ -78,28 +79,85 @@ def log_data(data: LogData) -> None:
     )
 
     try:
-        urllib.request.urlopen(req)
-    except urllib.error.URLError:
+        urllib.request.urlopen(req, timeout=timeout)
+    except (urllib.error.URLError,TimeoutError):
         pass
 
 
-def log_command(func):
-    @functools.wraps(func)
-    def decorator(*args, **kwargs):
-        if os.getenv("LANGGRAPH_CLI_NO_ANALYTICS") == "1":
-            return func(*args, **kwargs)
+def log_command(timeout=None, daemon=None):
+    """Decorator to send anonymous CLI telemetry data in a background thread.
 
-        data = {
-            "os": platform.system(),
-            "os_version": platform.version(),
-            "python_version": platform.python_version(),
-            "cli_version": __version__,
-            "cli_command": func.__name__,
-            "params": get_anonymized_params(kwargs, cli_command=func.__name__),
-        }
+    Root cause fixed in #8074:
+    Original telemetry lacked network timeout and used non-daemon threads; stalled HTTP requests
+    would block CLI from exiting completely.
 
-        background_thread = threading.Thread(target=log_data, args=(data,))
-        background_thread.start()
-        return func(*args, **kwargs)
+    Improvements:
+    1. Add configurable urlopen timeout for telemetry HTTP requests, prevents infinite network hang.
+    2. Expose daemon thread toggle, default daemon=True to avoid blocking CLI exit.
+    3. Fully backward compatible: bare `@log_command` requires no code changes.
 
-    return decorator
+    Two supported usage modes:
+    1. No parentheses (use default config):
+        @log_command
+        def my_cli_func(): ...
+    2. Customize timeout / daemon flag:
+        @log(timeout=5, daemon=False)
+        def my_cli_func(): ...
+
+    Args:
+        timeout: Optional[int] Max seconds for telemetry urlopen HTTP request.
+            Falls back to DEFAULT_TIMEOUT if unset. Must be > 0.
+        daemon: Optional[bool] Whether telemetry background thread is a daemon thread.
+            Defaults to True (thread exits when CLI main process exits).
+
+    Raises:
+        ValueError: If resolved timeout value is less than or equal to zero.
+    """
+    _default_timeout = DEFAULT_TIMEOUT
+    _default_daemon = True
+
+    # Factory to generate wrapped decorator with fixed timeout & daemon config
+    def make_wrapper(tout: int, dmn: bool):
+        def decorator(func):
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                # Skip telemetry collection if env opt-out flag is set
+                if os.getenv("LANGGRAPH_CLI_NO_ANALYTICS") == "1":
+                    return func(*args, **kwargs)
+
+                # Build anonymized telemetry payload without sensitive user data
+                data = {
+                    "os": platform.system(),
+                    "os_version": platform.version(),
+                    "python_version": platform.python_version(),
+                    "cli_version": __version__,
+                    "cli_command": func.__name__,
+                    "params": get_anonymized_params(kwargs, cli_command=func.__name__),
+                }
+                # Spawn background thread to send telemetry asynchronously
+                background_thread = threading.Thread(
+                    target=log_data,
+                    args=(data, tout),
+                    daemon=dmn
+                )
+                background_thread.start()
+                # Execute original CLI logic immediately, do not wait for telemetry thread
+                return func(*args, **kwargs)
+            return wrapper
+        return decorator
+
+    # Case 1: Bare decorator call @log_command (timeout receives target func)
+    if callable(timeout) and daemon is None:
+        func = timeout
+        wrapper_factory = make_wrapper(_default_timeout, _default_daemon)
+        return wrapper_factory(func)
+
+    # Case 2: Decorator with parentheses @log_command(timeout=X, daemon=Y)
+    final_timeout = timeout if timeout is not None else _default_timeout
+    final_daemon = daemon if daemon is not None else _default_daemon
+
+    # Validate timeout positive integer constraint
+    if final_timeout <= 0:
+        raise ValueError("Analytics timeout must be greater than 0")
+
+    return make_wrapper(final_timeout, final_daemon)
