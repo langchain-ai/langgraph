@@ -13,8 +13,8 @@ from langgraph_cli.constants import (
     DEFAULT_PORT,
     DEFAULT_TIMEOUT,
     SUPABASE_PUBLIC_API_KEY,
-    SUPABASE_URL,
-    DEFAULT_TIMEOUT
+    SUPABASE_URL
+
 )
 from langgraph_cli.version import __version__
 
