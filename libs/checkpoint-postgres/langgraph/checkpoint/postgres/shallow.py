@@ -209,13 +209,18 @@ class ShallowPostgresSaver(BasePostgresSaver):
     @classmethod
     @contextmanager
     def from_conn_string(
-        cls, conn_string: str, *, pipeline: bool = False
+        cls,
+        conn_string: str,
+        *,
+        pipeline: bool = False,
+        serde: SerializerProtocol | None = None,
     ) -> Iterator["ShallowPostgresSaver"]:
         """Create a new ShallowPostgresSaver instance from a connection string.
 
         Args:
             conn_string: The Postgres connection info string.
             pipeline: whether to use Pipeline
+            serde: Serializer to use for checkpoint serialization.
 
         Returns:
             ShallowPostgresSaver: A new ShallowPostgresSaver instance.
@@ -225,9 +230,9 @@ class ShallowPostgresSaver(BasePostgresSaver):
         ) as conn:
             if pipeline:
                 with conn.pipeline() as pipe:
-                    yield cls(conn, pipe)
+                    yield cls(conn, pipe, serde=serde)
             else:
-                yield cls(conn)
+                yield cls(conn, serde=serde)
 
     def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
