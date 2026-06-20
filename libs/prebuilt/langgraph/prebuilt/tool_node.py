@@ -283,6 +283,36 @@ AsyncToolCallWrapper = Callable[
 """Async wrapper for tool call execution with multi-call support."""
 
 
+class BeforeToolCallDecision(TypedDict, total=False):
+    """Decision returned by before_tool_call hook."""
+
+    action: Literal["ALLOW", "BLOCK", "MODIFY"]
+    reason: str
+    tool_input: dict[str, Any]
+
+
+BeforeToolCallDecisionLike = str | BeforeToolCallDecision | None
+
+BeforeToolCallHook = Callable[
+    [str, dict[str, Any], Any],
+    BeforeToolCallDecisionLike | Awaitable[BeforeToolCallDecisionLike],
+]
+"""Pre-execution hook for lightweight policy decisions.
+
+Hook receives:
+    tool_name: Tool name selected by the model.
+    tool_input: Tool arguments from the tool call.
+    graph_state: Current graph state visible to the ToolNode.
+
+Hook returns:
+    - `"ALLOW"` / `None`: continue tool execution as normal.
+    - `"BLOCK"` or `{"action": "BLOCK", "reason": "..."}`: short-circuit with
+      an error ToolMessage.
+    - `{"action": "MODIFY", "tool_input": {...}}`: replace tool arguments
+      before execution.
+"""
+
+
 class ToolCallWithContext(TypedDict):
     """ToolCall with additional context for graph state.
 
@@ -752,6 +782,7 @@ class ToolNode(RunnableCallable):
         | type[Exception]
         | tuple[type[Exception], ...] = _default_handle_tool_errors,
         messages_key: str = "messages",
+        before_tool_call: BeforeToolCallHook | None = None,
         wrap_tool_call: ToolCallWrapper | None = None,
         awrap_tool_call: AsyncToolCallWrapper | None = None,
     ) -> None:
@@ -763,6 +794,9 @@ class ToolNode(RunnableCallable):
             tags: Optional metadata tags.
             handle_tool_errors: Error handling configuration.
             messages_key: State key containing messages.
+            before_tool_call: Lightweight pre-execution hook that receives
+                `(tool_name, tool_input, graph_state)` and returns ALLOW, BLOCK,
+                or MODIFY decisions.
             wrap_tool_call: Sync wrapper function to intercept tool execution. Receives
                 ToolCallRequest and execute callable, returns ToolMessage or Command.
                 Enables retries, caching, request modification, and control flow.
@@ -774,6 +808,7 @@ class ToolNode(RunnableCallable):
         self._injected_args: dict[str, _InjectedArgs] = {}
         self._handle_tool_errors = handle_tool_errors
         self._messages_key = messages_key
+        self._before_tool_call = before_tool_call
         self._wrap_tool_call = wrap_tool_call
         self._awrap_tool_call = awrap_tool_call
         for tool in tools:
@@ -1027,6 +1062,10 @@ class ToolNode(RunnableCallable):
         Returns:
             ToolMessage or Command.
         """
+        call, blocked_message = self._run_before_tool_call_sync(call, tool_runtime.state)
+        if blocked_message is not None:
+            return blocked_message
+
         # Validation is deferred to _execute_tool_sync to allow interceptors
         # to short-circuit requests for unregistered tools
         tool = self.tools_by_name.get(call["name"])
@@ -1174,6 +1213,12 @@ class ToolNode(RunnableCallable):
         Returns:
             ToolMessage or Command.
         """
+        call, blocked_message = await self._run_before_tool_call_async(
+            call, tool_runtime.state
+        )
+        if blocked_message is not None:
+            return blocked_message
+
         # Validation is deferred to _execute_tool_async to allow interceptors
         # to short-circuit requests for unregistered tools
         tool = self.tools_by_name.get(call["name"])
@@ -1220,6 +1265,100 @@ class ToolNode(RunnableCallable):
                 tool_call_id=tool_request.tool_call["id"],
                 status="error",
             )
+
+    def _apply_before_tool_call_decision(
+        self,
+        call: ToolCall,
+        decision: BeforeToolCallDecisionLike,
+    ) -> tuple[ToolCall, ToolMessage | None]:
+        if decision is None:
+            return call, None
+
+        action: str | None = None
+        reason: str | None = None
+        tool_input: dict[str, Any] | None = None
+
+        if isinstance(decision, str):
+            action = decision
+        elif isinstance(decision, dict):
+            action = cast("str | None", decision.get("action"))
+            reason = cast("str | None", decision.get("reason"))
+            tool_input = cast("dict[str, Any] | None", decision.get("tool_input"))
+        else:
+            action = cast("str | None", getattr(decision, "action", None))
+            reason = cast("str | None", getattr(decision, "reason", None))
+            tool_input = cast(
+                "dict[str, Any] | None", getattr(decision, "tool_input", None)
+            )
+
+        normalized_action = (action or "ALLOW").upper()
+        if normalized_action == "ALLOW":
+            return call, None
+
+        if normalized_action == "BLOCK":
+            blocked_reason = reason or "blocked by before_tool_call"
+            return (
+                call,
+                ToolMessage(
+                    content=f"Blocked: {blocked_reason}",
+                    name=call["name"],
+                    tool_call_id=call["id"],
+                    status="error",
+                ),
+            )
+
+        if normalized_action == "MODIFY":
+            if tool_input is None:
+                msg = "before_tool_call returned MODIFY without tool_input"
+                raise ValueError(msg)
+            if not isinstance(tool_input, dict):
+                msg = "before_tool_call.tool_input must be a dict for MODIFY"
+                raise TypeError(msg)
+            modified_call = {**call, "args": tool_input}
+            return modified_call, None
+
+        msg = "before_tool_call action must be one of ALLOW, BLOCK, MODIFY"
+        raise ValueError(msg)
+
+    def _run_before_tool_call_sync(
+        self,
+        call: ToolCall,
+        state: Any,
+    ) -> tuple[ToolCall, ToolMessage | None]:
+        if self._before_tool_call is None:
+            return call, None
+
+        decision = self._before_tool_call(
+            call["name"],
+            cast("dict[str, Any]", call.get("args", {})),
+            state,
+        )
+        if inspect.isawaitable(decision):
+            msg = (
+                "before_tool_call returned an awaitable during sync execution; "
+                "use ToolNode.ainvoke(...) for async hooks"
+            )
+            raise TypeError(msg)
+
+        return self._apply_before_tool_call_decision(call, decision)
+
+    async def _run_before_tool_call_async(
+        self,
+        call: ToolCall,
+        state: Any,
+    ) -> tuple[ToolCall, ToolMessage | None]:
+        if self._before_tool_call is None:
+            return call, None
+
+        decision = self._before_tool_call(
+            call["name"],
+            cast("dict[str, Any]", call.get("args", {})),
+            state,
+        )
+        if inspect.isawaitable(decision):
+            decision = await decision
+
+        return self._apply_before_tool_call_decision(call, decision)
 
     def _parse_input(
         self,
