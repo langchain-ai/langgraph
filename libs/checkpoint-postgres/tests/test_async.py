@@ -22,6 +22,7 @@ from langgraph.checkpoint.postgres.aio import (
     AsyncPostgresSaver,
     AsyncShallowPostgresSaver,
 )
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
@@ -415,3 +416,95 @@ async def test_delta_channel_chain_reconstruction(saver_name: str) -> None:
         assert msgs[1].content == "reply-1"
         assert msgs[2].content == "there"
         assert msgs[3].content == "reply-3"
+
+
+@pytest.mark.parametrize("pipeline_flag", [False, True])
+async def test_async_from_conn_string_serde_default(pipeline_flag: bool) -> None:
+    """Verify omitting serde on AsyncPostgresSaver keeps default."""
+    database = f"test_{uuid4().hex[:16]}"
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database,
+            pipeline=pipeline_flag,
+        ) as saver:
+            await saver.setup()
+            assert saver.serde is None
+    finally:
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.mark.parametrize("pipeline_flag", [False, True])
+async def test_async_from_conn_string_serde_custom(pipeline_flag: bool) -> None:
+    """Verify custom serde is propagated through AsyncPostgresSaver.from_conn_string."""
+    database = f"test_{uuid4().hex[:16]}"
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        custom_serde = JsonPlusSerializer()
+        async with AsyncPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database,
+            pipeline=pipeline_flag,
+            serde=custom_serde,
+        ) as saver:
+            await saver.setup()
+            assert saver.serde is custom_serde
+    finally:
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.mark.parametrize("pipeline_flag", [False, True])
+async def test_async_shallow_from_conn_string_serde_custom(pipeline_flag: bool) -> None:
+    """Verify custom serde on AsyncShallowPostgresSaver.from_conn_string."""
+    database = f"test_{uuid4().hex[:16]}"
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        custom_serde = JsonPlusSerializer()
+        async with AsyncShallowPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database,
+            pipeline=pipeline_flag,
+            serde=custom_serde,
+        ) as saver:
+            await saver.setup()
+            assert saver.serde is custom_serde
+    finally:
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.mark.parametrize("pipeline_flag", [False, True])
+async def test_async_shallow_from_conn_string_serde_default(pipeline_flag: bool) -> None:
+    """Verify omitting serde on AsyncShallowPostgresSaver keeps default."""
+    database = f"test_{uuid4().hex[:16]}"
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncShallowPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database,
+            pipeline=pipeline_flag,
+        ) as saver:
+            await saver.setup()
+            assert saver.serde is None
+    finally:
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")

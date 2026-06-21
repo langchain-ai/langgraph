@@ -20,6 +20,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
@@ -358,3 +359,79 @@ def test_get_checkpoint_no_channel_values(
 
         checkpoint = saver.get_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+@pytest.mark.parametrize("pipeline_flag", [False, True])
+def test_from_conn_string_serde_default(pipeline_flag: bool) -> None:
+    """Verify omitting serde keeps default (no regression)."""
+    database = f"test_{uuid4().hex[:16]}"
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        with PostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database,
+            pipeline=pipeline_flag,
+        ) as saver:
+            saver.setup()
+            assert saver.serde is None
+    finally:
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.mark.parametrize("pipeline_flag", [False, True])
+def test_from_conn_string_serde_custom(pipeline_flag: bool) -> None:
+    """Verify custom serde is passed through from_conn_string in both pipeline and non-pipeline paths."""
+    database = f"test_{uuid4().hex[:16]}"
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        custom_serde = JsonPlusSerializer()
+        with PostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database,
+            pipeline=pipeline_flag,
+            serde=custom_serde,
+        ) as saver:
+            saver.setup()
+            assert saver.serde is custom_serde
+    finally:
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.mark.parametrize("pipeline_flag", [False, True])
+def test_shallow_from_conn_string_serde_custom(pipeline_flag: bool) -> None:
+    """Verify custom serde is passed through ShallowPostgresSaver.from_conn_string."""
+    database = f"test_{uuid4().hex[:16]}"
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        custom_serde = JsonPlusSerializer()
+        with ShallowPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database,
+            pipeline=pipeline_flag,
+            serde=custom_serde,
+        ) as saver:
+            saver.setup()
+            assert saver.serde is custom_serde
+    finally:
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.mark.parametrize("pipeline_flag", [False, True])
+def test_shallow_from_conn_string_serde_default(pipeline_flag: bool) -> None:
+    """Verify omitting serde on ShallowPostgresSaver keeps default."""
+    database = f"test_{uuid4().hex[:16]}"
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        with ShallowPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database,
+            pipeline=pipeline_flag,
+        ) as saver:
+            saver.setup()
+            assert saver.serde is None
+    finally:
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
