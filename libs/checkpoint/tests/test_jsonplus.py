@@ -30,6 +30,7 @@ from langgraph.checkpoint.serde.event_hooks import (
     register_serde_event_listener,
 )
 from langgraph.checkpoint.serde.jsonplus import (
+    EXT_CONSTRUCTOR_SINGLE_ARG,
     EXT_METHOD_SINGLE_ARG,
     InvalidModuleError,
     JsonPlusSerializer,
@@ -331,6 +332,40 @@ def test_serde_jsonplus_bytes() -> None:
 
     assert dumped == ("bytes", some_bytes)
     assert serde.loads_typed(dumped) == some_bytes
+
+
+def test_serde_jsonplus_deque_maxlen() -> None:
+    serde = JsonPlusSerializer()
+
+    # bounded deque keeps its maxlen and eviction behavior across a round-trip
+    bounded = deque([1, 2, 3], maxlen=3)
+    restored = serde.loads_typed(serde.dumps_typed(bounded))
+    assert isinstance(restored, deque)
+    assert list(restored) == [1, 2, 3]
+    assert restored.maxlen == 3
+    restored.append(99)
+    restored.append(100)
+    assert list(restored) == [3, 99, 100]
+
+    # unbounded deque round-trips with maxlen still None
+    unbounded = deque([1, 2, 3])
+    restored = serde.loads_typed(serde.dumps_typed(unbounded))
+    assert isinstance(restored, deque)
+    assert list(restored) == [1, 2, 3]
+    assert restored.maxlen is None
+
+    # legacy single-arg payloads (written before maxlen support) still load
+    legacy = ormsgpack.packb(
+        ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc(("collections", "deque", (1, 2, 3))),
+        ),
+        option=ormsgpack.OPT_NON_STR_KEYS,
+    )
+    restored = serde.loads_typed(("msgpack", legacy))
+    assert isinstance(restored, deque)
+    assert list(restored) == [1, 2, 3]
+    assert restored.maxlen is None
 
 
 def test_lc2_json_safe_type_revives_without_allowlist() -> None:

@@ -378,11 +378,22 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
             ),
         )
-    elif isinstance(obj, (set, frozenset, deque)):
+    elif isinstance(obj, (set, frozenset)):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, tuple(obj)),
+            ),
+        )
+    elif isinstance(obj, deque):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_POS_ARGS,
+            _msgpack_enc(
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__name__,
+                    (tuple(obj), obj.maxlen),
+                ),
             ),
         )
     elif isinstance(obj, (IPv4Address, IPv4Interface, IPv4Network)):
@@ -660,8 +671,12 @@ def _create_msgpack_ext_hook(
                     return tup[2]
                 if tup[0] == "langgraph.types" and tup[1] == "Send":
                     return _send_from_args(tup[2])
+                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                if isclass(cls) and issubclass(cls, deque):
+                    # elements, maxlen
+                    return cls(tup[2][0], maxlen=tup[2][1])
                 # module, name, args
-                return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
+                return cls(*tup[2])
             except Exception:
                 return None
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
@@ -774,6 +789,9 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             if tup[0] == "langgraph.types" and tup[1] == "Send":
                 return _send_from_args(tup[2])
+            if tup[0] == "collections" and tup[1] == "deque":
+                # elements, maxlen
+                return tup[2][0]
             # module, name, args
             return tup[2]
         except Exception:
