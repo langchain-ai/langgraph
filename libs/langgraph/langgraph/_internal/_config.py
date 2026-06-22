@@ -20,6 +20,7 @@ from langchain_core.runnables.config import (
 from langgraph.checkpoint.base import CheckpointMetadata
 
 from langgraph._internal._constants import (
+    _CHECKPOINT_COORDINATE_KEYS,
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
@@ -342,6 +343,28 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
                 if _is_not_empty(v)
             },
         )
+    # An explicit config that supplies its own checkpoint coordinate (a
+    # thread_id, or any checkpoint_ns/checkpoint_id/checkpoint_map) is addressing
+    # its own checkpoint lineage, so drop the inherited ambient configurable
+    # rather than merging over it: a child graph invoked inside a parent node
+    # would otherwise write its checkpoints under the parent's namespace and
+    # never find them again. An explicit thread_id resets even when it equals the
+    # ambient one, since a child reusing the parent's thread id still addresses
+    # its own root namespace, not the parent task's. Configs that only refine
+    # other keys keep the ambient and shallow-merge over it below.
+    if empty.get(CONF):
+        for config in configs:
+            if config is None:
+                continue
+            explicit_configurable = config.get(CONF)
+            if not explicit_configurable:
+                continue
+            if any(
+                _is_not_empty(explicit_configurable.get(k))
+                for k in _CHECKPOINT_COORDINATE_KEYS
+            ):
+                empty[CONF] = {}
+                break
     for config in configs:
         if config is None:
             continue
