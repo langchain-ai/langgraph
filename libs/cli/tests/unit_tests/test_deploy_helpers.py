@@ -130,6 +130,15 @@ class TestValidatePrebuiltImage:
             )
         ]
 
+    def test_missing_docker_binary_raises_actionable_error(self, monkeypatch):
+        async def fake_subp_exec(*args, **kwargs):
+            raise FileNotFoundError("docker")
+
+        monkeypatch.setattr(deploy_mod, "subp_exec", fake_subp_exec)
+
+        with pytest.raises(click.ClickException, match="Docker is required"):
+            _validate_prebuilt_image(_FakeRunner(), "repo/app:tag", verbose=False)
+
     def test_missing_image_raises_actionable_error(self, monkeypatch):
         async def fake_subp_exec(*args, **kwargs):
             raise click.exceptions.Exit(1)

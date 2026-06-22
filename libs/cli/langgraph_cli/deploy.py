@@ -381,6 +381,11 @@ def _validate_prebuilt_image(runner, image: str, *, verbose: bool) -> None:
                 collect=True,
             )
         )
+    except FileNotFoundError:
+        raise click.ClickException(
+            "Docker is required but not installed.\n"
+            "Install Docker Desktop: https://docs.docker.com/get-docker/"
+        ) from None
     except click.exceptions.Exit:
         raise click.ClickException(
             f"Docker image '{image}' was not found locally. Build or pull the image "
