@@ -23,6 +23,7 @@ test = [
   "pytest-asyncio",
 ]
 lint = [
+  "codespell",
   "ruff",
   "ty",
 ]

@@ -64,6 +64,9 @@ default-groups = ['dev']
 [tool.uv.sources]
 langgraph = { path = "../langgraph", editable = true }
 
+[tool.codespell]
+ignore-words-list = "hel"
+
 [tool.ruff]
 exclude = ["venv", ".venv", "build", "dist"]
 [tool.ruff.lint]

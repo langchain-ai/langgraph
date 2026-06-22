@@ -51,6 +51,11 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         run: uv sync --frozen --group lint
 
+      - name: Check spelling
+        if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
+        working-directory: ${{ inputs.working-directory }}
+        run: uv run codespell --toml pyproject.toml
+
       - name: Analysing package code with our lint
         if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
         working-directory: ${{ inputs.working-directory }}

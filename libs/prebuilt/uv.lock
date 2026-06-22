@@ -308,6 +308,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "codespell" },
     { name = "httpx" },
     { name = "jupyter" },
     { name = "langchain-core", specifier = ">=1.0.0" },
@@ -337,6 +338,7 @@ dev = [
     { name = "uvloop", specifier = "==0.22.1" },
 ]
 lint = [
+    { name = "codespell" },
     { name = "ruff" },
     { name = "ty" },
     { name = "types-requests" },
