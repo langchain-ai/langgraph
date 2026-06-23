@@ -114,9 +114,40 @@ add_capability_node(graph, "review", "catalog:langgraph.review@1:package", catal
 add_capability_node(graph, "research", RESEARCH_CAPABILITY, ...)  # direct object
 ```
 
+## Harden (phase 4)
+
+### Parity (package vs service)
+
+```python
+from langgraph.capability import compare_capability_parity, assert_io_compatible
+
+report = compare_capability_parity(package_cap, service_cap)
+# report.level: identical_io | compatible_major | divergent | unknown
+# Always read report.disclaimer — full behavioral parity is not promised.
+```
+
+### Multi-version service windows
+
+```python
+from langgraph.capability import default_n_minus_one_policy, bind_service_to_policy
+
+policy = default_n_minus_one_policy("langgraph.research", "1.1.0", "1.0.0")
+svc = bind_service_to_policy(svc, policy, "1")  # pins endpoint.version_label
+```
+
+### Boundary progress events
+
+```python
+from langgraph.capability import progress_events_from_run_result, iter_progress_dicts
+
+result = svc.invoke_with_status(input)
+for ev in progress_events_from_run_result(result):
+    ...  # accepted → running → succeeded|failed (no internal nodes)
+```
+
 ## Phases
 
 1. **Contract + package** — specs, package delivery, local composition, docs/tests
 2. **Service mode** — remote black-box delivery via existing deploy/RemoteGraph patterns
-3. **Ergonomics** (current) — catalog, config refs, `add_capability_node`
-4. **Harden** — parity notes, multi-version windows, progress events
+3. **Ergonomics** — catalog, config refs, `add_capability_node`
+4. **Harden** (current) — parity notes, multi-version windows, progress events
