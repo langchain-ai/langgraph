@@ -56,9 +56,36 @@ attach_capability(
 - `langgraph.capability.examples.review` — `langgraph.review@1.0.0`
 - `langgraph.capability.examples.parent_app` — parent composing both via `attach_capability`
 
+## Service mode (phase 2)
+
+Same **capability id + semver + I/O schemas** as the package; delivery is a deployed graph.
+
+```python
+from langgraph.capability import ServiceEndpoint, service_capability_from_package
+from langgraph.capability.examples.research import RESEARCH_CAPABILITY
+from langgraph.capability.service import local_service_invoker  # tests/dev only
+
+# Production: url + assistant_id → RemoteGraph under the hood
+# Tests/dev: inject local_service_invoker(package_cap) to stay hermetic
+svc = service_capability_from_package(
+    RESEARCH_CAPABILITY,
+    ServiceEndpoint(url="http://localhost:2024", assistant_id="research", version_label="1.0.0"),
+)
+
+# Parent composition (black-box node)
+from langgraph.capability import attach_service_capability
+attach_service_capability(parent_graph, "research", svc, input_mapper=..., output_mapper=...)
+```
+
+Provider deploy surface (example): `langgraph.capability.examples.service_deploy.build_research_service_graph`
+wired in `langgraph.json` as graph id `research`. Callers never import internal nodes.
+
+**Observability:** service mode exposes boundary events (`iter_boundary_events`) — run id, status,
+version — not internal xray. Use package mode when you need subgraph traces.
+
 ## Phases
 
-1. **Contract + package** (current) — specs, package delivery, local composition, docs/tests
-2. **Service mode** — remote black-box delivery via existing deploy/RemoteGraph patterns
+1. **Contract + package** — specs, package delivery, local composition, docs/tests
+2. **Service mode** (current) — remote black-box delivery via existing deploy/RemoteGraph patterns
 3. **Ergonomics** — catalog, config refs, `add_capability_node`
 4. **Harden** — parity notes, multi-version windows, progress events

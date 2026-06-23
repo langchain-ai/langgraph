@@ -24,6 +24,17 @@ from langgraph.capability.package import (
     attach_capability,
     graph_capability,
 )
+from langgraph.capability.service import (
+    ServiceCapability,
+    ServiceEndpoint,
+    ServiceRunResult,
+    ServiceRunStatus,
+    attach_service_capability,
+    iter_boundary_events,
+    local_service_invoker,
+    service_capability,
+    service_capability_from_package,
+)
 
 __all__ = [
     "CapabilityContractError",
@@ -34,10 +45,19 @@ __all__ = [
     "CapabilityVersionError",
     "GraphCapability",
     "SemVer",
+    "ServiceCapability",
+    "ServiceEndpoint",
+    "ServiceRunResult",
+    "ServiceRunStatus",
     "SideEffect",
     "StateBoundary",
     "attach_capability",
+    "attach_service_capability",
     "graph_capability",
+    "iter_boundary_events",
+    "local_service_invoker",
     "select_capability_version",
+    "service_capability",
+    "service_capability_from_package",
     "validate_capability_spec",
 ]
