@@ -224,3 +224,6 @@ async def async_checkpointer(
             yield checkpointer
     else:
         raise NotImplementedError(f"Unknown checkpointer: {checkpointer_name}")
+
+
+# No-op: trigger sdk-py integration CI path filter (PR #8168 infra verification).
