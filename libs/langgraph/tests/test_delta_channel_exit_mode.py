@@ -6,6 +6,7 @@ channel), lazy stub creation when no parent exists, and proper read-path
 reconstruction via ancestor walks.
 """
 
+import uuid
 from typing import Annotated, Any
 
 import pytest
@@ -17,8 +18,26 @@ from typing_extensions import TypedDict
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
+from langgraph.pregel._checkpoint import exit_delta_task_id
 
 pytestmark = pytest.mark.anyio
+
+
+def test_exit_delta_task_id_is_valid_uuid_and_ordered() -> None:
+    """Exit-mode synthetic task ids must parse as UUID and sort by superstep."""
+    tid = "4f7226e4-0270-bf16-1ef8-fb321bef9f3d"
+    id1 = exit_delta_task_id(1, tid)
+    id7 = exit_delta_task_id(7, tid)
+
+    uuid.UUID(id1)
+    uuid.UUID(id7)
+    assert id1 < id7
+    assert id1.split("-")[0] == "00000001"
+    assert id7.split("-")[0] == "00000007"
+    assert id1.endswith("-0270-bf16-1ef8-fb321bef9f3d")
+
+    with pytest.raises(ValueError):
+        uuid.UUID(f"00000001-{tid}")
 
 
 def _build_graph(
