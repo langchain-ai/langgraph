@@ -83,9 +83,40 @@ wired in `langgraph.json` as graph id `research`. Callers never import internal 
 **Observability:** service mode exposes boundary events (`iter_boundary_events`) — run id, status,
 version — not internal xray. Use package mode when you need subgraph traces.
 
+## Ergonomics (phase 3)
+
+### Catalog
+
+```python
+from langgraph.capability import CapabilityCatalog, default_example_catalog
+
+cat = default_example_catalog()
+cat.get_package("langgraph.research", "1")
+cat.get_service("langgraph.research", "1.0.0")
+print(cat.to_summary())  # org-facing inventory
+```
+
+### Config refs (deploy / app wiring)
+
+| Scheme | Example |
+|--------|---------|
+| `python:module:attr` | `python:langgraph.capability.examples.research:RESEARCH_CAPABILITY` |
+| `service:id@version?url=&assistant_id=` | `service:langgraph.research@1?url=http://localhost:2024&assistant_id=research` |
+| `catalog:id@version:package\|service` | `catalog:langgraph.review@1:package` |
+
+### `add_capability_node`
+
+```python
+from langgraph.capability import add_capability_node, default_example_catalog
+
+add_capability_node(graph, "research", "langgraph.research", catalog=cat, mode="package", ...)
+add_capability_node(graph, "review", "catalog:langgraph.review@1:package", catalog=cat, ...)
+add_capability_node(graph, "research", RESEARCH_CAPABILITY, ...)  # direct object
+```
+
 ## Phases
 
 1. **Contract + package** — specs, package delivery, local composition, docs/tests
-2. **Service mode** (current) — remote black-box delivery via existing deploy/RemoteGraph patterns
-3. **Ergonomics** — catalog, config refs, `add_capability_node`
+2. **Service mode** — remote black-box delivery via existing deploy/RemoteGraph patterns
+3. **Ergonomics** (current) — catalog, config refs, `add_capability_node`
 4. **Harden** — parity notes, multi-version windows, progress events
