@@ -34,6 +34,8 @@ from langgraph._internal._constants import (
     ERROR_SOURCE_NODE,
     INTERRUPT,
     NO_WRITES,
+    NULL_TASK_ID,
+    PUSH,
     RESUME,
     RETURN,
 )
@@ -585,6 +587,12 @@ class PregelRunner:
             if isinstance(exception, GraphInterrupt):
                 # save interrupt to checkpointer
                 if exception.args[0]:
+                    if pending_writes := _writes_to_persist_on_interrupt(task.writes):
+                        # GraphInterrupt is a controlled suspension point, not a
+                        # task failure. Persist writes emitted before the
+                        # suspension without associating them with task
+                        # completion, so the interrupted task remains resumable.
+                        self.put_writes()(NULL_TASK_ID, pending_writes)  # type: ignore[misc]
                     writes = [(INTERRUPT, exception.args[0])]
                     if resumes := [w for w in task.writes if w[0] == RESUME]:
                         writes.extend(resumes)
@@ -939,3 +947,22 @@ async def _acall_impl(
             destination.set_exception(RuntimeError("Task not scheduled"))
     except Exception as exc:
         destination.set_exception(exc)
+
+
+def _writes_to_persist_on_interrupt(
+    writes: Iterable[tuple[str, Any]],
+) -> list[tuple[str, Any]]:
+    return [
+        write
+        for write in writes
+        if write[0]
+        not in (
+            ERROR,
+            ERROR_SOURCE_NODE,
+            INTERRUPT,
+            NO_WRITES,
+            PUSH,
+            RESUME,
+            RETURN,
+        )
+    ]
