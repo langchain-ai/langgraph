@@ -32,12 +32,14 @@ from langgraph._internal._constants import (
     CONFIG_KEY_SCRATCHPAD,
     ERROR,
     ERROR_SOURCE_NODE,
+    INPUT,
     INTERRUPT,
     NO_WRITES,
     NULL_TASK_ID,
     PUSH,
     RESUME,
     RETURN,
+    TASKS,
 )
 from langgraph._internal._future import chain_future, run_coroutine_threadsafe
 from langgraph._internal._scratchpad import PregelScratchpad
@@ -959,10 +961,12 @@ def _writes_to_persist_on_interrupt(
         not in (
             ERROR,
             ERROR_SOURCE_NODE,
+            INPUT,
             INTERRUPT,
             NO_WRITES,
             PUSH,
             RESUME,
             RETURN,
+            TASKS,
         )
     ]
