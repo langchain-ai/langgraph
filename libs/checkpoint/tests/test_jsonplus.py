@@ -323,6 +323,27 @@ def test_serde_jsonplus_json_mode() -> None:
     assert result == expected_result
 
 
+def test_deque_maxlen_serialization() -> None:
+    serde = JsonPlusSerializer()
+
+    # maxlen must survive the round-trip
+    original = deque([1, 2, 3], maxlen=3)
+    restored = serde.loads_typed(serde.dumps_typed(original))
+    assert isinstance(restored, deque)
+    assert restored.maxlen == 3
+    assert list(restored) == [1, 2, 3]
+
+    # eviction still works after deserialization
+    restored.append(4)
+    assert list(restored) == [2, 3, 4]
+
+    # unbounded deque still round-trips correctly
+    unbounded = deque([1, 2, 3])
+    restored_unbounded = serde.loads_typed(serde.dumps_typed(unbounded))
+    assert restored_unbounded.maxlen is None
+    assert list(restored_unbounded) == [1, 2, 3]
+
+
 def test_serde_jsonplus_bytes() -> None:
     serde = JsonPlusSerializer()
 
