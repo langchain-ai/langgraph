@@ -1,3 +1,4 @@
+import functools
 import operator
 from collections.abc import Sequence
 from typing import Annotated
@@ -103,6 +104,40 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_binop_eq_reducer_without_name() -> None:
+    """Equality must not crash for reducers that lack `__name__`.
+
+    `functools.partial` objects and callable class instances are valid 2-arg
+    reducers but have no `__name__`. `_operators_equal` read `.__name__`
+    directly (before the identity check), so building a graph whose reducer
+    field is shared across schemas raised AttributeError. Regression for #8082.
+    """
+    reducer = functools.partial(operator.add)
+
+    # Same partial reducer on two channels: equal, no AttributeError.
+    assert BinaryOperatorAggregate(int, reducer) == BinaryOperatorAggregate(
+        int, reducer
+    )
+
+    class Add:
+        def __call__(self, a: int, b: int) -> int:
+            return a + b
+
+    add = Add()
+    assert BinaryOperatorAggregate(int, add) == BinaryOperatorAggregate(int, add)
+
+    # End-to-end repro from the issue: a partial reducer shared across the
+    # state and input schemas must build instead of raising.
+    class InputState(TypedDict):
+        items: Annotated[list, reducer]
+
+    class OverallState(TypedDict):
+        items: Annotated[list, reducer]
+        extra: str
+
+    StateGraph(OverallState, input_schema=InputState)
 
 
 def test_untracked_value() -> None:
