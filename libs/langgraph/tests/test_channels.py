@@ -1,3 +1,4 @@
+import functools
 import operator
 from collections.abc import Sequence
 from typing import Annotated
@@ -103,6 +104,30 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_binop_eq_partial_reducer() -> None:
+    reducer = functools.partial(operator.add)
+    a = BinaryOperatorAggregate(list, reducer)
+    b = BinaryOperatorAggregate(list, reducer)
+    assert a == b
+
+
+def test_stategraph_shared_partial_reducer_across_schemas() -> None:
+    reducer = functools.partial(operator.add)
+
+    class InputState(TypedDict):
+        items: Annotated[list, reducer]
+
+    class OverallState(TypedDict):
+        items: Annotated[list, reducer]
+        extra: str
+
+    builder = StateGraph(OverallState, input_schema=InputState)
+    builder.add_node("n", lambda x: x)
+    builder.add_edge(START, "n")
+    graph = builder.compile()
+    assert isinstance(graph.channels["items"], BinaryOperatorAggregate)
 
 
 def test_untracked_value() -> None:

@@ -43,9 +43,12 @@ def _operators_equal(a: Callable, b: Callable) -> bool:
     Lambdas all share the name '<lambda>' so identity comparison is
     unreliable; treat any pairing that includes a lambda as equal.
     """
-    if a.__name__ == "<lambda>" or b.__name__ == "<lambda>":
+    if a is b:
         return True
-    return a is b
+    return (
+        getattr(a, "__name__", None) == "<lambda>"
+        or getattr(b, "__name__", None) == "<lambda>"
+    )
 
 
 class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
