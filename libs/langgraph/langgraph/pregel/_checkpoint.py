@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from typing import Any, cast
@@ -32,6 +33,17 @@ def empty_checkpoint() -> Checkpoint:
         channel_versions={},
         versions_seen={},
     )
+
+
+def exit_delta_task_id(step: int, task_id: str) -> str:
+    """Synthetic task id for exit-mode DeltaChannel writes.
+
+    Embeds the superstep in the first UUID group so `ORDER BY task_id, idx`
+    preserves chronological order while remaining a valid RFC UUID (required by
+    Postgres `checkpoint_writes.task_id uuid` columns).
+    """
+    parts = str(uuid.UUID(task_id)).split("-")
+    return f"{step:08d}-{parts[1]}-{parts[2]}-{parts[3]}-{parts[4]}"
 
 
 def delta_channels_to_snapshot(
