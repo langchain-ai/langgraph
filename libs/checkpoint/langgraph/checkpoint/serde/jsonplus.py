@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import dataclasses
 import decimal
+import fractions
 import importlib
 import json
 import logging
@@ -376,6 +377,28 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
+            ),
+        )
+    elif isinstance(obj, fractions.Fraction):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_POS_ARGS,
+            _msgpack_enc(
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__name__,
+                    (obj.numerator, obj.denominator),
+                ),
+            ),
+        )
+    elif isinstance(obj, complex):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_POS_ARGS,
+            _msgpack_enc(
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__name__,
+                    (obj.real, obj.imag),
+                ),
             ),
         )
     elif isinstance(obj, (set, frozenset, deque)):

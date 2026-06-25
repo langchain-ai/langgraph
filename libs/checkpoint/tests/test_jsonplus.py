@@ -8,6 +8,7 @@ import uuid
 from collections import deque
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
+from fractions import Fraction
 from enum import Enum
 from ipaddress import IPv4Address
 from zoneinfo import ZoneInfo
@@ -803,6 +804,8 @@ def test_msgpack_safe_types_no_warning(caplog: pytest.LogCaptureFixture) -> None
         timezone.utc,
         uuid.uuid4(),
         Decimal("123.45"),
+        Fraction(1, 3),
+        complex(1, 2),
         {1, 2, 3},
         frozenset([1, 2, 3]),
         deque([1, 2, 3]),
@@ -1190,6 +1193,8 @@ def test_msgpack_safe_types_value_equality(caplog: pytest.LogCaptureFixture) -> 
         time(14, 30, 0),
         uuid.UUID("12345678-1234-5678-1234-567812345678"),
         Decimal("123.456789"),
+        Fraction(22, 7),
+        complex(3.5, -2.0),
         {1, 2, 3, 4, 5},
         frozenset(["a", "b", "c"]),
         deque([1, 2, 3]),
@@ -1210,6 +1215,14 @@ def test_msgpack_safe_types_value_equality(caplog: pytest.LogCaptureFixture) -> 
             assert result.flags == obj.flags
         else:
             assert result == obj, f"Value mismatch for {type(obj)}: {result} != {obj}"
+
+
+def test_msgpack_fraction_and_complex_roundtrip() -> None:
+    """Fraction and complex should serialize like Decimal (issue #8185)."""
+    serde = JsonPlusSerializer()
+
+    for obj in [Decimal("1.5"), Fraction(1, 3), complex(1, 2)]:
+        assert serde.loads_typed(serde.dumps_typed(obj)) == obj
 
 
 def test_msgpack_nested_pydantic_serializes_as_dict(
