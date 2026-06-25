@@ -82,6 +82,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
+                # Warning: pipeline mode can cause SSL errors when the connection is
+                # idle during long operations (e.g., LLM calls). Use only for
+                # high-throughput batch operations without interleaved external I/O.
                 async with conn.pipeline() as pipe:
                     yield cls(conn=conn, pipe=pipe, serde=serde)
             else:
