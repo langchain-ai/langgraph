@@ -1448,8 +1448,6 @@ class CompiledStateGraph(
             elif isinstance(input, dict):
                 return [(k, v) for k, v in input.items() if k in output_keys]
             elif isinstance(input, Command):
-                if input.graph == Command.PARENT:
-                    return None
                 return [
                     (k, v) for k, v in input._update_as_tuples() if k in output_keys
                 ]
@@ -1461,8 +1459,6 @@ class CompiledStateGraph(
                 updates: list[tuple[str, Any]] = []
                 for i in input:
                     if isinstance(i, Command):
-                        if i.graph == Command.PARENT:
-                            continue
                         updates.extend(
                             (k, v) for k, v in i._update_as_tuples() if k in output_keys
                         )
@@ -1777,8 +1773,6 @@ def _control_static(
 
 def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
     if isinstance(input, Command):
-        if input.graph == Command.PARENT:
-            return ()
         return input._update_as_tuples()
     elif (
         isinstance(input, (list, tuple))
@@ -1788,8 +1782,6 @@ def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
         updates: list[tuple[str, Any]] = []
         for i in input:
             if isinstance(i, Command):
-                if i.graph == Command.PARENT:
-                    continue
                 updates.extend(i._update_as_tuples())
             else:
                 updates.append(("__root__", i))

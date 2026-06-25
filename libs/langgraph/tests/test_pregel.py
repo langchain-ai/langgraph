@@ -3461,6 +3461,68 @@ def test_stream_subgraphs_during_execution(
     ]
 
 
+def test_stream_subgraphs_command_parent_namespace() -> None:
+    """Command.PARENT exit should still emit final subgraph node under subgraph ns."""
+
+    def my_reducer(a: str, b: str | None) -> str:
+        if b is not None:
+            return b
+        return a
+
+    class State(TypedDict):
+        node_name: Annotated[str, my_reducer]
+        foo: str
+
+    def subgraph_node_1(state: State) -> Command[Literal["subgraph_node_2"]]:
+        return Command(
+            goto="subgraph_node_2",
+            update={
+                "node_name": "subgraph_node_1",
+                "foo": "Update at subgraph_node_1!",
+            },
+        )
+
+    def subgraph_node_2(state: State) -> Command:
+        return Command(
+            goto="node_3",
+            update={"node_name": "subgraph_node_2"},
+            graph=Command.PARENT,
+        )
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node(subgraph_node_1)
+    subgraph_builder.add_node(subgraph_node_2)
+    subgraph_builder.set_entry_point("subgraph_node_1")
+    subgraph = subgraph_builder.compile()
+
+    def node_1(state: State) -> Command[Literal["node_2"]]:
+        return Command(goto="node_2", update={"node_name": "node_1"})
+
+    def node_3(state: State) -> Command[Literal["__end__"]]:
+        return Command(goto=END, update={"node_name": "node_3"})
+
+    main_builder = StateGraph(State)
+    main_builder.add_node("node_1", node_1)
+    main_builder.add_node("node_2", subgraph)
+    main_builder.add_node("node_3", node_3)
+    main_builder.set_entry_point("node_1")
+    main_graph = main_builder.compile()
+
+    chunks = list(
+        main_graph.stream(
+            {"node_name": "__start__"}, stream_mode="values", subgraphs=True
+        )
+    )
+
+    subgraph_node_2_chunks = [
+        c for c in chunks if c[1].get("node_name") == "subgraph_node_2" and c[0]
+    ]
+    assert subgraph_node_2_chunks, (
+        "subgraph_node_2 should be emitted under subgraph namespace"
+    )
+    assert all(ns[0].startswith("node_2:") for ns, _ in subgraph_node_2_chunks)
+
+
 def test_stream_buffering_single_node(sync_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]

@@ -714,6 +714,32 @@ class PregelLoop:
         # unset resuming flag
         self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
 
+    def emit_values_for_task_writes(self, task: PregelExecutableTask) -> None:
+        """Apply a single task's writes and emit values before ParentCommand bubbles."""
+        if self.stream is None or "values" not in self.stream.modes:
+            return
+        if not task.writes or task.writes[0][0] in (ERROR, INTERRUPT):
+            return
+        updated = apply_writes(
+            self.checkpoint,
+            self.channels,
+            [task],
+            self.checkpointer_get_next_version,
+            self.trigger_to_nodes,
+        )
+        if not updated.isdisjoint(
+            (self.output_keys,)
+            if isinstance(self.output_keys, str)
+            else self.output_keys
+        ):
+            self._emit(
+                "values",
+                map_output_values,
+                self.output_keys,
+                list(task.writes),
+                self.channels,
+            )
+
     def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         raise NotImplementedError
 

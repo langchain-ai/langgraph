@@ -41,7 +41,7 @@ from langgraph._internal._future import chain_future, run_coroutine_threadsafe
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import MISSING
 from langgraph.constants import TAG_HIDDEN
-from langgraph.errors import GraphBubbleUp, GraphInterrupt
+from langgraph.errors import GraphBubbleUp, GraphInterrupt, ParentCommand
 from langgraph.pregel._algo import Call
 from langgraph.pregel._executor import Submit
 from langgraph.pregel._retry import arun_with_retry, run_with_retry
@@ -589,6 +589,13 @@ class PregelRunner:
                     if resumes := [w for w in task.writes if w[0] == RESUME]:
                         writes.extend(resumes)
                     self.put_writes()(task.id, writes)  # type: ignore[misc]
+            elif isinstance(exception, ParentCommand):
+                if task.writes:
+                    put_writes = self.put_writes()
+                    put_writes(task.id, task.writes)  # type: ignore[misc]
+                    loop = getattr(put_writes, "__self__", None)
+                    if loop is not None:
+                        loop.emit_values_for_task_writes(task)
             elif isinstance(exception, GraphBubbleUp):
                 # exception will be raised in _panic_or_proceed
                 pass

@@ -13,7 +13,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, TASKS
 from langgraph._internal._runnable import RunnableCallable
 from langgraph._internal._typing import MISSING
-from langgraph.errors import InvalidUpdateError
+from langgraph.errors import InvalidUpdateError, ParentCommand
 from langgraph.types import Send
 
 TYPE_SEND = Callable[[Sequence[tuple[str, Any]]], None]
@@ -120,10 +120,13 @@ class ChannelWrite(RunnableCallable):
             if isinstance(w, ChannelWriteTupleEntry):
                 if w.value is PASSTHROUGH and not allow_passthrough:
                     raise InvalidUpdateError("PASSTHROUGH value must be replaced")
-        # if we want to persist writes found before hitting a ParentCommand
-        # can move this to a finally block
         write: TYPE_SEND = config[CONF][CONFIG_KEY_SEND]
-        write(_assemble_writes(writes))
+        try:
+            tuples = _assemble_writes(writes, on_partial=write)
+        except ParentCommand:
+            raise
+        if tuples:
+            write(tuples)
 
     @staticmethod
     def is_writer(runnable: Runnable) -> bool:
@@ -171,22 +174,29 @@ class ChannelWrite(RunnableCallable):
 
 def _assemble_writes(
     writes: Sequence[ChannelWriteEntry | ChannelWriteTupleEntry | Send],
+    *,
+    on_partial: TYPE_SEND | None = None,
 ) -> list[tuple[str, Any]]:
     """Assembles the writes into a list of tuples."""
     tuples: list[tuple[str, Any]] = []
     for w in writes:
-        if isinstance(w, Send):
-            tuples.append((TASKS, w))
-        elif isinstance(w, ChannelWriteTupleEntry):
-            if ww := w.mapper(w.value):
-                tuples.extend(ww)
-        elif isinstance(w, ChannelWriteEntry):
-            value = w.mapper(w.value) if w.mapper is not None else w.value
-            if value is SKIP_WRITE:
-                continue
-            if w.skip_none and value is None:
-                continue
-            tuples.append((w.channel, value))
-        else:
-            raise ValueError(f"Invalid write entry: {w}")
+        try:
+            if isinstance(w, Send):
+                tuples.append((TASKS, w))
+            elif isinstance(w, ChannelWriteTupleEntry):
+                if ww := w.mapper(w.value):
+                    tuples.extend(ww)
+            elif isinstance(w, ChannelWriteEntry):
+                value = w.mapper(w.value) if w.mapper is not None else w.value
+                if value is SKIP_WRITE:
+                    continue
+                if w.skip_none and value is None:
+                    continue
+                tuples.append((w.channel, value))
+            else:
+                raise ValueError(f"Invalid write entry: {w}")
+        except ParentCommand:
+            if on_partial and tuples:
+                on_partial(tuples)
+            raise
     return tuples
