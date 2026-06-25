@@ -61,6 +61,7 @@ from langgraph._internal._config import (
     patch_config,
     patch_configurable,
     recast_checkpoint_ns,
+    split_state_snapshot_metadata,
 )
 from langgraph._internal._constants import (
     CACHE_NS_WRITES,
@@ -1253,11 +1254,15 @@ class Pregel(
             self.stream_channels_asis,
         )
         # assemble the state snapshot
+        snapshot_config, snapshot_metadata = split_state_snapshot_metadata(
+            patch_checkpoint_map(saved.config, saved.metadata),
+            saved.metadata,
+        )
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
             tuple(t.name for t in next_tasks.values() if not t.writes),
-            patch_checkpoint_map(saved.config, saved.metadata),
-            saved.metadata,
+            snapshot_config,
+            snapshot_metadata,
             saved.checkpoint["ts"],
             patch_checkpoint_map(saved.parent_config, saved.metadata),
             tasks_with_writes,
@@ -1377,11 +1382,15 @@ class Pregel(
             self.stream_channels_asis,
         )
         # assemble the state snapshot
+        snapshot_config, snapshot_metadata = split_state_snapshot_metadata(
+            patch_checkpoint_map(saved.config, saved.metadata),
+            saved.metadata,
+        )
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
             tuple(t.name for t in next_tasks.values() if not t.writes),
-            patch_checkpoint_map(saved.config, saved.metadata),
-            saved.metadata,
+            snapshot_config,
+            snapshot_metadata,
             saved.checkpoint["ts"],
             patch_checkpoint_map(saved.parent_config, saved.metadata),
             tasks_with_writes,

@@ -5346,6 +5346,40 @@ def test_multiple_interrupt_state_persistence(
     assert state.values["steps"] == ["step1", "step2"]
 
 
+@pytest.mark.anyio
+async def test_state_snapshot_invoke_metadata_in_config(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Invoke-time config metadata is exposed on StateSnapshot.config, not metadata."""
+
+    class State(TypedDict):
+        messages: Annotated[list[str], add_messages]
+
+    async def node1(state: State) -> State:
+        return {"messages": ["node1"]}
+
+    builder = StateGraph(State)
+    builder.add_node("node1", node1)
+    builder.add_edge(START, "node1")
+    builder.add_edge("node1", END)
+
+    app = builder.compile(checkpointer=async_checkpointer)
+    thread_id = "6460-metadata"
+    config = {
+        "metadata": {"foo": "bar"},
+        "configurable": {"thread_id": thread_id},
+    }
+    await app.ainvoke({"messages": []}, config=config)
+
+    history_config = {"configurable": {"thread_id": thread_id}}
+    async for snapshot in app.aget_state_history(config=history_config):
+        assert snapshot.config.get("metadata", {}).get("foo") == "bar"
+        assert "foo" not in (snapshot.metadata or {})
+        assert snapshot.metadata is not None
+        assert "source" in snapshot.metadata
+        assert "step" in snapshot.metadata
+
+
 def test_concurrent_execution_thread_safety():
     """Test thread safety during concurrent execution."""
 

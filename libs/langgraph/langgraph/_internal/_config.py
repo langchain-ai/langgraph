@@ -459,6 +459,44 @@ _PROPAGATE_TO_METADATA = frozenset(
     )
 )
 
+_CHECKPOINT_METADATA_KEYS = frozenset(
+    {
+        "source",
+        "step",
+        "parents",
+        "run_id",
+        "counters_since_delta_snapshot",
+        "writes",
+    }
+)
+
+
+def split_state_snapshot_metadata(
+    config: RunnableConfig,
+    metadata: Mapping[str, Any] | None,
+) -> tuple[RunnableConfig, dict[str, Any] | None]:
+    """Split merged checkpoint metadata back into config metadata and checkpoint fields.
+
+    Invoke-time ``config.metadata`` is persisted inside checkpoint metadata by
+    checkpointers. When building a ``StateSnapshot``, restore user keys to
+    ``config['metadata']`` and keep structural checkpoint fields in ``metadata``.
+    """
+    if not metadata:
+        return config, None
+    checkpoint_metadata = {
+        k: v for k, v in metadata.items() if k in _CHECKPOINT_METADATA_KEYS
+    }
+    user_metadata = {
+        k: v for k, v in metadata.items() if k not in _CHECKPOINT_METADATA_KEYS
+    }
+    snapshot_config = dict(config)
+    if user_metadata:
+        snapshot_config["metadata"] = {
+            **user_metadata,
+            **(snapshot_config.get("metadata") or {}),
+        }
+    return snapshot_config, checkpoint_metadata or None
+
 
 def filter_to_user_tags(tags: Sequence[str] | None) -> list[str] | None:
     """Drop langgraph's internal `seq:step:*` bookkeeping tags.
