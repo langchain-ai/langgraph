@@ -366,6 +366,42 @@ def normalize_image_tag(value: str) -> str:
     return value
 
 
+def _validate_prebuilt_image(runner, image: str, *, verbose: bool) -> None:
+    """Ensure a prebuilt image exists locally for linux/amd64."""
+    try:
+        stdout, _ = runner.run(
+            subp_exec(
+                "docker",
+                "image",
+                "inspect",
+                "--format",
+                "{{.Os}}/{{.Architecture}}",
+                image,
+                verbose=verbose,
+                collect=True,
+            )
+        )
+    except FileNotFoundError:
+        raise click.ClickException(
+            "Docker is required but not installed.\n"
+            "Install Docker Desktop: https://docs.docker.com/get-docker/"
+        ) from None
+    except click.exceptions.Exit:
+        raise click.ClickException(
+            f"Docker image '{image}' was not found locally. Build or pull the image "
+            "before deploying with --image."
+        ) from None
+
+    image_platform = (stdout or "").strip()
+    if image_platform != "linux/amd64":
+        detected = image_platform or "unknown"
+        raise click.ClickException(
+            f"Docker image '{image}' targets {detected}, but LangSmith Deployment "
+            "requires linux/amd64. Rebuild or pull the image for linux/amd64 before "
+            "deploying with --image."
+        )
+
+
 def _extract_deployment_url(deployment: dict[str, object]) -> str:
     source_config = deployment.get("source_config")
     if isinstance(source_config, dict):
@@ -525,12 +561,18 @@ def _secrets_from_env(
 
 def _resolve_build_mode(
     remote_build_flag: bool | None,
+    *,
+    force_local: bool = False,
 ) -> tuple[bool, str | None]:
     """Determine whether to use a remote build.
 
     Returns (use_remote_build, local_build_error).  Raises UsageError when
-    --no-remote is set but the machine cannot build locally.
+    --no-remote is set but the machine cannot build locally. When
+    `force_local` is set, the function short-circuits and always selects a
+    local build.
     """
+    if force_local:
+        return False, None
     local_build_supported, local_build_error = can_build_locally()
 
     if remote_build_flag is True:
@@ -897,6 +939,7 @@ def _run_local_build(
     api_version: str | None,
     base_image: str | None,
     image_name: str | None,
+    prebuilt_image: str | None,
     name: str | None,
     tag: str,
     install_command: str | None,
@@ -910,51 +953,57 @@ def _run_local_build(
     # (e.g. Apple Silicon). On amd64 hosts, plain docker build is sufficient.
     needs_buildx = platform.machine() != "x86_64"
     local_tag = f"langgraph-deploy-tmp:{int(time.time())}"
+    image_to_push = prebuilt_image or local_tag
 
     with Runner() as runner:
-        # -- Step: Build image --
-        _log_deploy_step(step, "Building image")
-        if needs_buildx:
-            build_flags: list[str] = [
-                "--platform",
-                "linux/amd64",
-                "--load",
-            ]
-            if not verbose:
-                build_flags.append("--progress=quiet")
-            with Progress(message="Building...", elapsed=not verbose):
-                build_docker_image(
-                    runner,
-                    lambda _msg: None,
-                    config,
-                    config_json,
-                    base_image,
-                    api_version,
-                    pull,
-                    local_tag,
-                    docker_build_args,
-                    install_command,
-                    build_command,
-                    docker_command=("docker", "buildx", "build"),
-                    extra_flags=build_flags,
-                    verbose=verbose,
-                )
+        if prebuilt_image:
+            _log_deploy_step(step, f"Validating image {prebuilt_image}")
+            _validate_prebuilt_image(runner, prebuilt_image, verbose=verbose)
+            click.secho("   Image is available for linux/amd64", fg="green")
         else:
-            with Progress(message="Building...", elapsed=not verbose):
-                build_docker_image(
-                    runner,
-                    lambda _msg: None,
-                    config,
-                    config_json,
-                    base_image,
-                    api_version,
-                    pull,
-                    local_tag,
-                    docker_build_args,
-                    install_command,
-                    build_command,
-                    verbose=verbose,
-                )
+            # -- Step: Build image --
+            _log_deploy_step(step, "Building image")
+            if needs_buildx:
+                build_flags: list[str] = [
+                    "--platform",
+                    "linux/amd64",
+                    "--load",
+                ]
+                if not verbose:
+                    build_flags.append("--progress=quiet")
+                with Progress(message="Building...", elapsed=not verbose):
+                    build_docker_image(
+                        runner,
+                        lambda _msg: None,
+                        config,
+                        config_json,
+                        base_image,
+                        api_version,
+                        pull,
+                        local_tag,
+                        docker_build_args,
+                        install_command,
+                        build_command,
+                        docker_command=("docker", "buildx", "build"),
+                        extra_flags=build_flags,
+                        verbose=verbose,
+                    )
+            else:
+                with Progress(message="Building...", elapsed=not verbose):
+                    build_docker_image(
+                        runner,
+                        lambda _msg: None,
+                        config,
+                        config_json,
+                        base_image,
+                        api_version,
+                        pull,
+                        local_tag,
+                        docker_build_args,
+                        install_command,
+                        build_command,
+                        verbose=verbose,
+                    )
         step += 1
 
         # -- Step: Get push token and authenticate --
@@ -1023,7 +1072,7 @@ def _run_local_build(
                 subp_exec(
                     "docker",
                     "tag",
-                    local_tag,
+                    image_to_push,
                     remote_image,
                     verbose=verbose,
                 )
@@ -1424,6 +1473,13 @@ def _deploy_base_options(
                 help="Tag to use for the pushed deployment image.",
             ),
             click.option(
+                "--image",
+                help=(
+                    "Use an existing local image reference (e.g. repo:tag) and "
+                    "skip building. The image must target linux/amd64."
+                ),
+            ),
+            click.option(
                 "--config",
                 "-c",
                 default=DEFAULT_CONFIG,
@@ -1523,6 +1579,7 @@ def _deploy_cmd(
     deployment_type: str,
     name: str | None,
     image_name: str | None,
+    image: str | None,
     tag: str,
     base_image: str | None,
     install_command: str | None,
@@ -1569,7 +1626,12 @@ def _deploy_cmd(
 
     secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 
-    use_remote_build, local_build_error = _resolve_build_mode(remote_build_flag)
+    if image and remote_build_flag is True:
+        raise click.UsageError("--image cannot be combined with --remote builds.")
+
+    use_remote_build, local_build_error = _resolve_build_mode(
+        remote_build_flag, force_local=image is not None
+    )
     if use_remote_build and remote_build_flag is None and local_build_error:
         em.note(f"{local_build_error}\nUsing remote build instead.")
         if not json_output:
@@ -1639,6 +1701,7 @@ def _deploy_cmd(
             api_version=api_version,
             base_image=base_image,
             image_name=image_name,
+            prebuilt_image=image,
             name=name,
             tag=tag,
             install_command=install_command,
