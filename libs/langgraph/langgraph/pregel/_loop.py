@@ -845,6 +845,9 @@ class PregelLoop:
         #   - None input: resume after interrupt (invoke(None, config))
         #   - Command input: any Command operates on existing state
         #   - Same run_id: re-entry into an ongoing run (e.g. stream reconnect)
+        # Capture before fork/input checkpoints are written below — subgraphs
+        # need the replay bound from the loaded checkpoint, not the new one.
+        loaded_checkpoint_id = self.checkpoint["id"]
         configurable = self.config.get(CONF, {})
         input_is_command = isinstance(self.input, Command)
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
@@ -1036,7 +1039,7 @@ class PregelLoop:
             # current parent step.
             replay_state: ReplayState | None = None
             if is_time_traveling:
-                replay_checkpoint_id = self.checkpoint["id"]
+                replay_checkpoint_id = loaded_checkpoint_id
                 if (
                     self.checkpoint_metadata.get("source")
                     in (

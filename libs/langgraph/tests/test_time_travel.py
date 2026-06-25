@@ -19,11 +19,12 @@ Key concepts:
 import operator
 from typing import Annotated
 
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from typing_extensions import TypedDict
 
-from langgraph.graph import START, StateGraph
+from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.types import Command, interrupt
 
 
@@ -2905,6 +2906,52 @@ def test_stateful_subgraph_retains_state_on_parent_fork(
     assert "__interrupt__" in fork_result
     # Fork sees 1st invocation's final state, NOT 2nd invocation's
     assert observed[0] == ("step_a", {"value": ["a:a1", "b:b1"]})
+
+
+def test_stateful_subgraph_invoke_fork_no_duplicate_messages(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Fork via invoke at a pre-input checkpoint with new input must not
+    merge stale subgraph message state from the original branch.
+
+    Regression for https://github.com/langchain-ai/langgraph/issues/7593
+    """
+    subgraph_inputs: list[list[str]] = []
+
+    def sub_node(state: MessagesState) -> MessagesState:
+        subgraph_inputs.append([m.content for m in state["messages"]])
+        return {"messages": [AIMessage(content="sub")]}
+
+    agent = (
+        StateGraph(MessagesState)
+        .add_node("n", sub_node)
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("agent", agent)
+        .add_edge(START, "agent")
+        .add_edge("agent", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "7593"}}
+    graph.invoke({"messages": [HumanMessage(content="hi")]}, config)
+
+    history = list(graph.get_state_history(config))
+    pre_human = history[-1]
+    assert pre_human.metadata.get("step") == -1
+
+    graph.invoke({"messages": [HumanMessage(content="hi2")]}, pre_human.config)
+
+    assert subgraph_inputs[-1] == ["hi2"]
+    messages = graph.get_state(config).values["messages"]
+    humans = [m.content for m in messages if isinstance(m, HumanMessage)]
+    assert humans == ["hi2"]
+    assert [m.content for m in messages if isinstance(m, AIMessage)] == ["sub"]
 
 
 def test_stateful_subgraph_loads_state_across_ticks(
