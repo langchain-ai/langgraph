@@ -126,8 +126,8 @@ jobs:
             exit 1
           fi
           LANGCHAIN_ANTHROPIC_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-anthropic'); print(v);")
-          if [ "$LANGCHAIN_ANTHROPIC_VERSION" != "1.0.0a5" ]; then
-            echo "LANGCHAIN_ANTHROPIC_VERSION != 1.0.0a5; $LANGCHAIN_ANTHROPIC_VERSION"
+          if [ "$LANGCHAIN_ANTHROPIC_VERSION" != "1.4.6" ]; then
+            echo "LANGCHAIN_ANTHROPIC_VERSION != 1.4.6; $LANGCHAIN_ANTHROPIC_VERSION"
             exit 1
           fi
 
