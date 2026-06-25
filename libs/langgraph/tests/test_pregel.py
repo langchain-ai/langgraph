@@ -5346,6 +5346,81 @@ def test_multiple_interrupt_state_persistence(
     assert state.values["steps"] == ["step1", "step2"]
 
 
+def test_interrupt_command_goto_with_pending_interrupt(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Command(goto=..., resume=...) must target the named node when another interrupt is pending."""
+
+    class State(MessagesState):
+        interrupt: int
+        chat: int
+
+    delivery_ran = False
+
+    def payment_interrupt_node(state: State):
+        payload = interrupt("Payment Link...")
+        data = payload.get("data") if isinstance(payload, dict) else None
+        message = payload.get("message") if isinstance(payload, dict) else None
+        if data:
+            return Command(
+                goto="delivery",
+                update={
+                    "interrupt": state.get("interrupt", 0) + 1,
+                    "messages": [{"role": "ai", "content": data}],
+                },
+            )
+        if message:
+            if message == "normal conversation":
+                return {
+                    "chat": state.get("chat", 0) + 1,
+                    "messages": [{"role": "ai", "content": "reply"}],
+                }
+            return Command(
+                goto="another_interrupt_node",
+                update={
+                    "chat": state.get("chat", 0) + 1,
+                    "messages": [{"role": "ai", "content": "some interrupt"}],
+                },
+            )
+        return {"messages": [{"role": "ai", "content": "Error"}]}
+
+    def delivery(_state: State):
+        nonlocal delivery_ran
+        delivery_ran = True
+        return {"messages": [{"role": "ai", "content": "Delivery message."}]}
+
+    def another_interrupt_node(_state: State):
+        payload = interrupt("Another interrupt")
+        return {"messages": [{"role": "human", "content": str(payload)}]}
+
+    builder = StateGraph(State)
+    builder.add_node("payment_interrupt_node", payment_interrupt_node)
+    builder.add_node("delivery", delivery)
+    builder.add_node("another_interrupt_node", another_interrupt_node)
+    builder.add_edge(START, "payment_interrupt_node")
+    builder.add_edge("another_interrupt_node", END)
+    builder.add_edge("delivery", END)
+
+    app = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "6534"}}
+
+    app.invoke({"messages": [{"role": "user", "content": "buy"}]}, config)
+    app.invoke(Command(resume={"message": "ask some information"}), config)
+    app.invoke(
+        Command(goto="payment_interrupt_node", resume={"data": "30$"}),
+        config,
+    )
+
+    assert delivery_ran
+    state = app.get_state(config)
+    assert state.next == ()
+    assert any(
+        getattr(m, "content", None) == "Delivery message."
+        or (isinstance(m, dict) and m.get("content") == "Delivery message.")
+        for m in state.values["messages"]
+    )
+
+
 def test_concurrent_execution_thread_safety():
     """Test thread safety during concurrent execution."""
 

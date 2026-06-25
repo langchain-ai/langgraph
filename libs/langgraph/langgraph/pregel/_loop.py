@@ -42,6 +42,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_COMMAND_GOTO,
     CONFIG_KEY_REPLAY_STATE,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RESUMING,
@@ -621,6 +622,12 @@ class PregelLoop:
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
         )
+        if goto_target := self.config[CONF].pop(CONFIG_KEY_COMMAND_GOTO, None):
+            self.tasks = {
+                tid: task
+                for tid, task in self.tasks.items()
+                if task.name == goto_target
+            }
 
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
@@ -834,6 +841,81 @@ class PregelLoop:
 
         return hanging_interrupts
 
+    def _route_command_resume_to_goto(
+        self,
+        cmd: Command,
+        updated_channels: set[str] | None,
+    ) -> None:
+        """When Command specifies both goto and resume, bind resume to that node."""
+        target = cmd.goto
+        assert isinstance(target, str)
+        self.checkpoint_pending_writes = [
+            w
+            for w in self.checkpoint_pending_writes
+            if not (w[0] == NULL_TASK_ID and w[1] == RESUME)
+        ]
+        interrupt_task_ids = {
+            tid
+            for tid, wtype, _ in self.checkpoint_pending_writes
+            if wtype == INTERRUPT
+        }
+        if interrupt_task_ids:
+            preview = prepare_next_tasks(
+                self.checkpoint,
+                self.checkpoint_pending_writes,
+                self.nodes,
+                self.channels,
+                self.managed,
+                self.config,
+                self.step,
+                self.stop,
+                for_execution=False,
+                store=self.store,
+                checkpointer=self.checkpointer,
+                manager=self.manager,
+                trigger_to_nodes=self.trigger_to_nodes,
+                updated_channels=updated_channels,
+                retry_policy=self.retry_policy,
+                cache_policy=self.cache_policy,
+            )
+            non_target_interrupt_ids = {
+                task.id
+                for task in preview.values()
+                if task.name != target and task.id in interrupt_task_ids
+            }
+            if non_target_interrupt_ids:
+                self.checkpoint_pending_writes = [
+                    w
+                    for w in self.checkpoint_pending_writes
+                    if not (w[1] == INTERRUPT and w[0] in non_target_interrupt_ids)
+                ]
+        next_tasks = prepare_next_tasks(
+            self.checkpoint,
+            self.checkpoint_pending_writes,
+            self.nodes,
+            self.channels,
+            self.managed,
+            self.config,
+            self.step,
+            self.stop,
+            for_execution=True,
+            store=self.store,
+            checkpointer=self.checkpointer,
+            manager=self.manager,
+            trigger_to_nodes=self.trigger_to_nodes,
+            updated_channels=updated_channels,
+            retry_policy=self.retry_policy,
+            cache_policy=self.cache_policy,
+        )
+        target_task_id: str | None = None
+        for task in next_tasks.values():
+            if task.name == target:
+                target_task_id = task.id
+        if target_task_id is None:
+            return
+        self.put_writes(target_task_id, [(RESUME, cmd.resume)])
+        self.config[CONF][CONFIG_KEY_COMMAND_GOTO] = target
+
     def _first(
         self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
     ) -> set[str] | None:
@@ -889,8 +971,10 @@ class PregelLoop:
             ]
 
         # map command to writes
+        resume_is_map = False
         if input_is_command:
-            if (resume := cast(Command, self.input).resume) is not None:
+            cmd = cast(Command, self.input)
+            if (resume := cmd.resume) is not None:
                 if not self.checkpointer:
                     raise RuntimeError(
                         "Cannot use Command(resume=...) without checkpointer"
@@ -901,16 +985,17 @@ class PregelLoop:
                     and all(is_xxh3_128_hexdigest(k) for k in resume)
                 ):
                     self.config[CONF][CONFIG_KEY_RESUME_MAP] = resume
-                else:
-                    if len(self._pending_interrupts()) > 1:
-                        raise RuntimeError(
-                            "When there are multiple pending interrupts, you must specify the interrupt id when resuming. "
-                            "Docs: https://docs.langchain.com/oss/python/langgraph/add-human-in-the-loop#resume-multiple-interrupts-with-one-invocation."
-                        )
+                elif len(self._pending_interrupts()) > 1 and not isinstance(
+                    cmd.goto, str
+                ):
+                    raise RuntimeError(
+                        "When there are multiple pending interrupts, you must specify the interrupt id when resuming. "
+                        "Docs: https://docs.langchain.com/oss/python/langgraph/add-human-in-the-loop#resume-multiple-interrupts-with-one-invocation."
+                    )
 
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
-            for tid, c, v in map_command(cmd=cast(Command, self.input)):
+            for tid, c, v in map_command(cmd=cmd):
                 if not (c == RESUME and resume_is_map):
                     writes[tid].append((c, v))
             if not writes and not resume_is_map:
@@ -931,6 +1016,14 @@ class PregelLoop:
             )
             if updated_channels is not None:
                 updated_channels.update(null_updated_channels)
+        if input_is_command:
+            cmd = cast(Command, self.input)
+            if (
+                cmd.resume is not None
+                and isinstance(cmd.goto, str)
+                and not resume_is_map
+            ):
+                self._route_command_resume_to_goto(cmd, updated_channels)
         # proceed past previous checkpoint
         if is_resuming:
             self.checkpoint["versions_seen"].setdefault(INTERRUPT, {})
