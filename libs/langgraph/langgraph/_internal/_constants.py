@@ -71,6 +71,8 @@ CONFIG_KEY_RUNTIME = sys.intern("__pregel_runtime")
 # holds a `Runtime` instance with context, store, stream writer, etc.
 CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 # holds a mapping of task ns -> resume value for resuming tasks
+CONFIG_KEY_COMMAND_GOTO = sys.intern("__pregel_command_goto")
+# when set to a node name, the next tick runs only that node (Command goto+resume)
 CONFIG_KEY_STREAM_MESSAGES_V2 = sys.intern("__pregel_stream_messages_v2")
 # when True, attach StreamMessagesHandlerV2 so content-block (v2) events
 # flow through stream_mode="messages"; set by StreamingHandler only.
