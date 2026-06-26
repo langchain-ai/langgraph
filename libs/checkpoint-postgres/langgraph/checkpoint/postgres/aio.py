@@ -82,8 +82,14 @@ class AsyncPostgresSaver(BasePostgresSaver):
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
+                # Enter pipeline mode; ensure we flush/sync before any exit
                 async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                    saver = cls(conn=conn, pipe=pipe, serde=serde)
+                    try:
+                        yield saver
+                    finally:
+                        # Flush any pending operations to avoid SSL errors on close
+                        await pipe.sync()
             else:
                 yield cls(conn=conn, serde=serde)
 
