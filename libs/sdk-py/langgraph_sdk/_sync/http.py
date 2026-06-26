@@ -15,7 +15,7 @@ from langgraph_sdk._shared.utilities import (
     _orjson_default,
     _validate_reconnect_location,
 )
-from langgraph_sdk.errors import _raise_for_status_typed
+from langgraph_sdk.errors import _map_transport_error, _raise_for_status_typed
 from langgraph_sdk.schema import QueryParamTypes, StreamPart
 from langgraph_sdk.sse import SSEDecoder, iter_lines_raw
 
@@ -45,7 +45,10 @@ class SyncHttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a `GET` request."""
-        r = self.client.get(path, params=params, headers=headers)
+        try:
+            r = self.client.get(path, params=params, headers=headers)
+        except httpx.TransportError as e:
+            raise _map_transport_error(e) from e
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -67,9 +70,12 @@ class SyncHttpClient:
             request_headers, content = {}, b""
         if headers:
             request_headers.update(headers)
-        r = self.client.post(
-            path, headers=request_headers, content=content, params=params
-        )
+        try:
+            r = self.client.post(
+                path, headers=request_headers, content=content, params=params
+            )
+        except httpx.TransportError as e:
+            raise _map_transport_error(e) from e
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -89,9 +95,12 @@ class SyncHttpClient:
         if headers:
             request_headers.update(headers)
 
-        r = self.client.put(
-            path, headers=request_headers, content=content, params=params
-        )
+        try:
+            r = self.client.put(
+                path, headers=request_headers, content=content, params=params
+            )
+        except httpx.TransportError as e:
+            raise _map_transport_error(e) from e
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -110,9 +119,12 @@ class SyncHttpClient:
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
-        r = self.client.patch(
-            path, headers=request_headers, content=content, params=params
-        )
+        try:
+            r = self.client.patch(
+                path, headers=request_headers, content=content, params=params
+            )
+        except httpx.TransportError as e:
+            raise _map_transport_error(e) from e
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -128,9 +140,12 @@ class SyncHttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a `DELETE` request."""
-        r = self.client.request(
-            "DELETE", path, json=json, params=params, headers=headers
-        )
+        try:
+            r = self.client.request(
+                "DELETE", path, json=json, params=params, headers=headers
+            )
+        except httpx.TransportError as e:
+            raise _map_transport_error(e) from e
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)

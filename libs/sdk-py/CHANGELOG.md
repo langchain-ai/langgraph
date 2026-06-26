@@ -39,6 +39,19 @@
 - `client.threads.stream()` now accepts `transport="sse"` (default) or
   `transport="websocket"` in place of the previous transport-agnostic default.
 
+### Fixed
+
+- `HttpClient` and `SyncHttpClient` now wrap httpx transport-level errors
+  (`ReadError`, `ConnectError`, timeouts, `RemoteProtocolError`, ...) as
+  `APIConnectionError` (or `APITimeoutError` for timeouts) instead of letting
+  the raw `httpx.TransportError` bubble up. All SDK errors remain catchable
+  via `except LangGraphError`; the original httpx exception is preserved on
+  `__cause__`.
+
+  **Breaking for callers that caught raw httpx exceptions** (e.g.
+  `except httpx.ReadError`): catch `APIConnectionError` instead and inspect
+  `__cause__` for the specific httpx error.
+
 ### Notes
 
 - The v3 streaming surface (`AsyncThreadStream`, `SyncThreadStream`, and all

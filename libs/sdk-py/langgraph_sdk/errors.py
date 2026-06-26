@@ -16,7 +16,7 @@ class LangGraphError(Exception):
 
 class APIError(httpx.HTTPStatusError, LangGraphError):
     message: str
-    request: httpx.Request
+    request: httpx.Request | None
 
     body: object | None
     code: str | None
@@ -26,7 +26,7 @@ class APIError(httpx.HTTPStatusError, LangGraphError):
     def __init__(
         self,
         message: str,
-        response_or_request: httpx.Response | httpx.Request,
+        response_or_request: httpx.Response | httpx.Request | None,
         *,
         body: object | None,
     ) -> None:
@@ -95,13 +95,13 @@ class APIStatusError(APIError):
 
 class APIConnectionError(APIError):
     def __init__(
-        self, *, message: str = "Connection error.", request: httpx.Request
+        self, *, message: str = "Connection error.", request: httpx.Request | None
     ) -> None:
         super().__init__(message, response_or_request=request, body=None)
 
 
 class APITimeoutError(APIConnectionError):
-    def __init__(self, request: httpx.Request) -> None:
+    def __init__(self, request: httpx.Request | None) -> None:
         super().__init__(message="Request timed out.", request=request)
 
 
@@ -208,6 +208,28 @@ def _map_status_error(response: httpx.Response, body: object | None) -> APIStatu
     if status >= 500:
         return InternalServerError(message, response=response, body=body)
     return APIStatusError(message, response=response, body=body)
+
+
+def _map_transport_error(exc: httpx.TransportError) -> APIConnectionError:
+    """Map a low-level httpx transport error to an SDK connection error.
+
+    Network-level failures (read/connect errors, timeouts, protocol errors)
+    occur before any HTTP response is received, so they cannot be represented
+    as an APIStatusError. Wrap them as an APIConnectionError (or its
+    APITimeoutError subclass) so all SDK errors remain catchable via
+    `except LangGraphError`. The caller preserves the original exception via
+    `raise ... from exc`.
+    """
+    try:
+        request = exc.request
+    except RuntimeError:
+        # httpx raises RuntimeError (not AttributeError) when the .request
+        # property has not been set on the exception. Guard so this mapper
+        # never leaks while handling a transport error.
+        request = None
+    if isinstance(exc, httpx.TimeoutException):
+        return APITimeoutError(request=request)
+    return APIConnectionError(message=f"{type(exc).__name__}: {exc}", request=request)
 
 
 async def _araise_for_status_typed(r: httpx.Response) -> None:
