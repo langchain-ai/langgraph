@@ -5349,18 +5349,22 @@ def test_multiple_interrupt_state_persistence(
 def test_interrupt_command_goto_with_pending_interrupt(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Command(goto=..., resume=...) must target the named node when another interrupt is pending."""
+    """Command(goto=..., resume=...) binds resume to the named node when another interrupt is pending."""
 
     class State(MessagesState):
         interrupt: int
         chat: int
 
+    payment_payloads: list[dict] = []
+    chat_payloads: list[object] = []
     delivery_ran = False
 
     def payment_interrupt_node(state: State):
         payload = interrupt("Payment Link...")
-        data = payload.get("data") if isinstance(payload, dict) else None
-        message = payload.get("message") if isinstance(payload, dict) else None
+        assert isinstance(payload, dict)
+        payment_payloads.append(payload)
+        data = payload.get("data")
+        message = payload.get("message")
         if data:
             return Command(
                 goto="delivery",
@@ -5391,6 +5395,7 @@ def test_interrupt_command_goto_with_pending_interrupt(
 
     def another_interrupt_node(_state: State):
         payload = interrupt("Another interrupt")
+        chat_payloads.append(payload)
         return {"messages": [{"role": "human", "content": str(payload)}]}
 
     builder = StateGraph(State)
@@ -5406,19 +5411,98 @@ def test_interrupt_command_goto_with_pending_interrupt(
 
     app.invoke({"messages": [{"role": "user", "content": "buy"}]}, config)
     app.invoke(Command(resume={"message": "ask some information"}), config)
-    app.invoke(
+
+    chat_pending = app.get_state(config)
+    assert chat_pending.next == ("another_interrupt_node",)
+    assert len(chat_pending.tasks) == 1
+    assert chat_pending.tasks[0].name == "another_interrupt_node"
+    assert chat_pending.tasks[0].interrupts[0].value == "Another interrupt"
+
+    checkpoint_events: list[dict] = []
+    for mode, chunk in app.stream(
         Command(goto="payment_interrupt_node", resume={"data": "30$"}),
         config,
-    )
+        stream_mode=["checkpoints", "updates"],
+    ):
+        if mode == "checkpoints":
+            checkpoint_events.append(chunk)
+        elif mode == "updates" and "__interrupt__" in chunk:
+            pytest.fail("payment resume should not surface as ambient interrupt update")
 
     assert delivery_ran
+    assert payment_payloads == [
+        {"message": "ask some information"},
+        {"data": "30$"},
+    ]
+    assert chat_payloads == []
+
     state = app.get_state(config)
     assert state.next == ()
+    assert state.values["interrupt"] == 1
+    assert state.values["chat"] == 1
     assert any(
         getattr(m, "content", None) == "Delivery message."
         or (isinstance(m, dict) and m.get("content") == "Delivery message.")
         for m in state.values["messages"]
     )
+
+    if checkpoint_events:
+        streamed = checkpoint_events[-1]
+        history = app.get_state(config)
+        assert streamed["next"] == list(history.next)
+        assert len(streamed["tasks"]) == len(history.tasks)
+        for stream_task, history_task in zip(streamed["tasks"], history.tasks):
+            assert stream_task["name"] == history_task.name
+            assert stream_task["interrupts"] == history_task.interrupts
+
+
+def test_interrupt_command_goto_mismatched_target_fails(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Stale goto targets fail closed instead of delivering resume to another interrupt."""
+
+    class State(MessagesState):
+        chat: int
+
+    chat_payloads: list[object] = []
+
+    def payment_interrupt_node(state: State):
+        payload = interrupt("Payment Link...")
+        message = payload.get("message") if isinstance(payload, dict) else None
+        if message:
+            return Command(
+                goto="another_interrupt_node",
+                update={"chat": state.get("chat", 0) + 1},
+            )
+        return {}
+
+    def another_interrupt_node(_state: State):
+        payload = interrupt("Another interrupt")
+        chat_payloads.append(payload)
+        return {"messages": [{"role": "human", "content": str(payload)}]}
+
+    builder = StateGraph(State)
+    builder.add_node("payment_interrupt_node", payment_interrupt_node)
+    builder.add_node("another_interrupt_node", another_interrupt_node)
+    builder.add_edge(START, "payment_interrupt_node")
+    builder.add_edge("another_interrupt_node", END)
+
+    app = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "6534-mismatch"}}
+
+    app.invoke({"messages": []}, config)
+    app.invoke(Command(resume={"message": "chat"}), config)
+
+    with pytest.raises(RuntimeError, match="goto target 'nonexistent_node'"):
+        app.invoke(
+            Command(goto="nonexistent_node", resume={"data": "30$"}),
+            config,
+        )
+
+    assert chat_payloads == []
+    pending = app.get_state(config)
+    assert pending.next == ("another_interrupt_node",)
+    assert pending.tasks[0].interrupts[0].value == "Another interrupt"
 
 
 def test_concurrent_execution_thread_safety():

@@ -912,7 +912,10 @@ class PregelLoop:
             if task.name == target:
                 target_task_id = task.id
         if target_task_id is None:
-            return
+            raise RuntimeError(
+                f"Command resume cannot be routed to goto target {target!r}: "
+                "no matching pending or scheduled task found."
+            )
         self.put_writes(target_task_id, [(RESUME, cmd.resume)])
         self.config[CONF][CONFIG_KEY_COMMAND_GOTO] = target
 
