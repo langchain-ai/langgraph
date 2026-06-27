@@ -1023,6 +1023,35 @@ async def test_return_direct(version: str) -> None:
             id=result["messages"][2].id,
         ),
     ]
+
+    model = FakeToolCallingModel(tool_calls=[first_tool_call, []])
+
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+        remaining_steps: int
+
+    agent = create_react_agent(
+        model,
+        [tool_return_direct, tool_normal],
+        state_schema=State,
+        version=version,
+    )
+    result = agent.invoke(
+        {
+            "messages": [HumanMessage(content="Test direct", id="hum0")],
+            "remaining_steps": 1,
+        },
+    )
+    assert result["messages"] == [
+        HumanMessage(content="Test direct", id="hum0"),
+        expected_ai,
+        _AnyIdToolMessage(
+            content="Direct result: Test direct",
+            name="tool_return_direct",
+            tool_call_id="1",
+        ),
+    ]
+
     second_tool_call = [
         ToolCall(
             name="tool_normal",
@@ -1047,6 +1076,24 @@ async def test_return_direct(version: str) -> None:
             id=result["messages"][2].id,
         ),
         AIMessage(content="Test normal-Test normal-Normal result: Test normal", id="1"),
+    ]
+
+    model = FakeToolCallingModel(tool_calls=[second_tool_call, []])
+    agent = create_react_agent(
+        model,
+        [tool_return_direct, tool_normal],
+        state_schema=State,
+        version=version,
+    )
+    result = agent.invoke(
+        {
+            "messages": [HumanMessage(content="Test normal", id="hum1")],
+            "remaining_steps": 1,
+        },
+    )
+    assert result["messages"] == [
+        HumanMessage(content="Test normal", id="hum1"),
+        AIMessage(content="Sorry, need more steps to process this request.", id="0"),
     ]
 
     both_tool_calls = [
