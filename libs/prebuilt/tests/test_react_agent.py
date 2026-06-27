@@ -1084,6 +1084,45 @@ async def test_return_direct(version: str) -> None:
     ]
 
 
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_return_direct_with_remaining_steps_one(version: str) -> None:
+    @dec_tool(return_direct=True)
+    def tool_return_direct(input: str) -> str:
+        """A tool that returns directly."""
+        return f"Direct result: {input}"
+
+    tool_call = [
+        ToolCall(
+            name="tool_return_direct",
+            args={"input": "Test direct"},
+            id="1",
+        ),
+    ]
+    model = FakeToolCallingModel(tool_calls=[tool_call, []])
+    agent = create_react_agent(
+        model,
+        [tool_return_direct],
+        version=version,
+    )
+
+    result = agent.invoke(
+        {
+            "messages": [HumanMessage(content="Test direct", id="hum0")],
+            "remaining_steps": 1,
+        }
+    )
+    assert result["messages"] == [
+        HumanMessage(content="Test direct", id="hum0"),
+        AIMessage(content="Test direct", id="0", tool_calls=tool_call),
+        ToolMessage(
+            content="Direct result: Test direct",
+            name="tool_return_direct",
+            tool_call_id="1",
+            id=result["messages"][2].id,
+        ),
+    ]
+
+
 def test_inspect_react() -> None:
     model = FakeToolCallingModel(tool_calls=[])
     agent = create_react_agent(model, [])

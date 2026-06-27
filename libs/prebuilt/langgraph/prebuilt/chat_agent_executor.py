@@ -434,9 +434,10 @@ def create_react_agent(
             !!! Note
                 `remaining_steps` is used to limit the number of steps the react agent can take.
                 Calculated roughly as `recursion_limit` - `total_steps_taken`.
-                If `remaining_steps` is less than 2 and tool calls are present in the response,
-                the react agent will return a final AI Message with
-                the content "Sorry, need more steps to process this request.".
+                If `remaining_steps` is less than 2 and tool calls are present in the
+                response (and not all requested tools are `return_direct`), the react
+                agent will return a final AI Message with the content
+                "Sorry, need more steps to process this request.".
                 No `GraphRecusionError` will be raised in this case.
 
         context_schema: An optional schema for runtime context.
@@ -628,7 +629,9 @@ def create_react_agent(
         if remaining_steps is not None:
             if remaining_steps < 1 and all_tools_return_direct:
                 return True
-            elif remaining_steps < 2 and has_tool_calls:
+            elif (
+                remaining_steps < 2 and has_tool_calls and not all_tools_return_direct
+            ):
                 return True
 
         return False
