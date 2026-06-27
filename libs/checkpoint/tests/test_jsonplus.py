@@ -1,4 +1,5 @@
 import dataclasses
+import fractions
 import json
 import logging
 import pathlib
@@ -114,6 +115,8 @@ def test_serde_jsonplus() -> None:
         "path": pathlib.Path("foo", "bar"),
         "re": re.compile(r"foo", re.DOTALL),
         "decimal": Decimal("1.10101"),
+        "fraction": fractions.Fraction(1, 3),
+        "complex": complex(1.5, -2.5),
         "set": {1, 2, frozenset({1, 2})},
         "frozen_set": frozenset({1, 2, 3}),
         "ip4": ip4,
@@ -1235,3 +1238,51 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_serde_fraction_roundtrip() -> None:
+    serde = JsonPlusSerializer()
+    values = [
+        fractions.Fraction(1, 3),
+        fractions.Fraction(22, 7),
+        fractions.Fraction(-1, 4),
+        fractions.Fraction(0),
+        fractions.Fraction(5),
+    ]
+    for frac in values:
+        dumped = serde.dumps_typed(frac)
+        result = serde.loads_typed(dumped)
+        assert result == frac, f"Fraction roundtrip failed: {frac!r} -> {result!r}"
+        assert type(result) is fractions.Fraction
+
+
+def test_serde_complex_roundtrip() -> None:
+    serde = JsonPlusSerializer()
+    values = [
+        complex(1.5, -2.5),
+        complex(0, 1),
+        complex(-3.14, 0),
+        complex(0, 0),
+        1 + 2j,
+    ]
+    for num in values:
+        dumped = serde.dumps_typed(num)
+        result = serde.loads_typed(dumped)
+        assert result == num, f"complex roundtrip failed: {num!r} -> {result!r}"
+        assert type(result) is complex
+
+
+def test_serde_fraction_strict_mode() -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    frac = fractions.Fraction(1, 3)
+    dumped = serde.dumps_typed(frac)
+    result = serde.loads_typed(dumped)
+    assert result == frac
+
+
+def test_serde_complex_strict_mode() -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    num = complex(1.5, -2.5)
+    dumped = serde.dumps_typed(num)
+    result = serde.loads_typed(dumped)
+    assert result == num
