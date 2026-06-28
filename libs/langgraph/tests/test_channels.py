@@ -186,6 +186,38 @@ def test_delta_channel_overwrite() -> None:
     assert ch.get()[0].content == "new"
 
 
+def test_delta_channel_overwrite_after_plain_write_in_one_step() -> None:
+    """Regression: a plain write ordered BEFORE an Overwrite in the same
+    super-step must reconstruct identically to the live state.
+
+    Overwrite is a hard reset: update() and replay_writes() both drop
+    everything up to and including the overwrite, keeping only writes that
+    follow it. Mirrors the JS end-state (channels/delta.ts).
+    """
+
+    def list_reducer(state: list, writes: list) -> list:
+        out = list(state)
+        for w in writes:
+            out.extend(w)
+        return out
+
+    # Live: a single super-step receives [1] then Overwrite([50]).
+    live = DeltaChannel(list_reducer, list).from_checkpoint(MISSING)
+    live.update([[1], Overwrite([50])])
+    assert live.get() == [50]
+
+    # Reload: the same two writes are replayed from the checkpoint.
+    replayed = DeltaChannel(list_reducer, list).from_checkpoint(MISSING)
+    replayed.replay_writes(
+        [
+            ("t1", "messages", [1]),
+            ("t2", "messages", Overwrite([50])),
+        ]
+    )
+    # Invariant: reconstructed state must equal live state.
+    assert replayed.get() == live.get()
+
+
 def test_delta_channel_remove_message_and_replay() -> None:
     """RemoveMessage must round-trip correctly when writes are replayed."""
     spec = DeltaChannel(_messages_delta_reducer, list)
