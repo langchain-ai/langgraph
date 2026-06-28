@@ -85,7 +85,7 @@ ENV/
 env.bak/
 venv.bak/
 
-# mypy
+# Python type checker caches
 .mypy_cache/
 .dmypy.json
 dmypy.json

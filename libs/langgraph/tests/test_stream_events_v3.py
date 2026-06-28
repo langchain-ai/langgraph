@@ -1150,7 +1150,7 @@ class TestV2ValidationErrors:
 
 
 # --- type narrowing compile-time checks ---
-# These assert_type calls verify that mypy narrows the union correctly.
+# These assert_type calls verify that the type checker narrows the union correctly.
 
 
 _OutputT = TypeVar("_OutputT")
