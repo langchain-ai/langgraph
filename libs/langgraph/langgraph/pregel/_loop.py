@@ -102,6 +102,7 @@ from langgraph.pregel._checkpoint import (
     create_checkpoint,
     delta_channels_to_snapshot,
     empty_checkpoint,
+    exit_delta_task_id,
 )
 from langgraph.pregel._executor import (
     AsyncBackgroundExecutor,
@@ -1272,7 +1273,7 @@ class PregelLoop:
             },
         )
         for (step, tid), entries in grouped.items():
-            synth_tid = f"{step:08d}-{tid}"
+            synth_tid = exit_delta_task_id(step, tid)
             if self.checkpointer_put_writes_accepts_task_path:
                 fut = self.submit(
                     self.checkpointer_put_writes,
