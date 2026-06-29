@@ -99,8 +99,9 @@ jobs:
     uses: ./.github/workflows/_test_langgraph.yml
     secrets: inherit
 
-  # Incremental Windows support: starts with libs/checkpoint (pure Python, minimal native deps).
-  # Future PRs can extend to other libs once this lands. See issue #5029.
+  # Windows CI for libs/checkpoint: smallest native-dep surface in the monorepo
+  # (no Postgres/Docker), so the lowest-risk lib to validate the windows-latest
+  # runner. Extend to other libs in follow-ups. See #5029.
   test-windows:
     needs: changes
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
@@ -122,7 +123,7 @@ jobs:
         uses: ./.github/actions/uv_setup
         with:
           python-version: ${{ matrix.python-version }}
-          cache-suffix: test-libs-checkpoint-windows
+          cache-suffix: test-libs-checkpoint-windows-${{ matrix.python-version }}
           working-directory: libs/checkpoint
       - name: Install dependencies
         run: uv sync --frozen --group test --no-dev
@@ -135,6 +136,8 @@ jobs:
           STATUS="$(git status)"
           echo "$STATUS"
 
+          # grep will exit non-zero if the target message isn't found,
+          # and `set -e` above will cause the step to fail.
           echo "$STATUS" | grep 'nothing to commit, working tree clean'
 
   check-sdk-methods:
