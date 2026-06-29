@@ -9,6 +9,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from langgraph._internal._constants import NS_SEP
 from langgraph.constants import TAG_NOSTREAM
+from langgraph.errors import GraphBubbleUp
 from langgraph.pregel.protocol import StreamChunk
 
 try:
@@ -188,6 +189,15 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             return
         ns, tool_call_id, token = info
         self._reset_writer(token)
+        # A `GraphBubbleUp` (e.g. the `GraphInterrupt` raised by `interrupt()`)
+        # is control flow, not a tool failure: the run pauses and the signal is
+        # surfaced via the `__interrupt__` channel / graph state. Reporting it as
+        # a `tool-error` would misclassify a pause as a failure and, since the
+        # event only carries `str(error)`, discard the structured payload (e.g.
+        # the `Interrupt` objects). Let it bubble untouched, mirroring how the
+        # runner, executor, and retry logic already special-case `GraphBubbleUp`.
+        if isinstance(error, GraphBubbleUp):
+            return
         self.stream(
             (
                 ns,
