@@ -316,6 +316,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             async with self.conn.executescript(
                 """
                 PRAGMA journal_mode=WAL;
+                PRAGMA busy_timeout=5000;
                 CREATE TABLE IF NOT EXISTS checkpoints (
                     thread_id TEXT NOT NULL,
                     checkpoint_ns TEXT NOT NULL DEFAULT '',

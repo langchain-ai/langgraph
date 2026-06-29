@@ -1,5 +1,8 @@
+import asyncio
+import sqlite3
 from typing import Any
 
+import aiosqlite
 import pytest
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -72,6 +75,30 @@ class TestAsyncSqliteSaver:
                 **self.metadata_2,
                 "run_id": "my_run_id",
             }
+
+    async def test_aput_waits_for_contended_writer(self, tmp_path) -> None:
+        db_path = tmp_path / "checkpoints.sqlite"
+        async with aiosqlite.connect(db_path, timeout=0) as conn:
+            saver = AsyncSqliteSaver(conn)
+            await saver.setup()
+
+            async with conn.execute("PRAGMA busy_timeout") as cur:
+                assert await cur.fetchone() == (5000,)
+
+            blocker = sqlite3.connect(db_path, timeout=0, isolation_level=None)
+            try:
+                blocker.execute("BEGIN IMMEDIATE")
+                put_task = asyncio.create_task(
+                    saver.aput(self.config_1, self.chkpnt_1, self.metadata_1, {})
+                )
+
+                await asyncio.sleep(0.1)
+                assert not put_task.done()
+
+                blocker.commit()
+                await put_task
+            finally:
+                blocker.close()
 
     async def test_asearch(self) -> None:
         async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
