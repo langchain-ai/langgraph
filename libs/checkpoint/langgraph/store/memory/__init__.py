@@ -211,11 +211,13 @@ class InMemoryStore(BaseStore):
             queryinmem_store = self._embed_search_queries(search_ops)
             self._batch_search(search_ops, queryinmem_store, results)
 
+        # Apply puts before (re)inserting vectors so stale vectors from an
+        # updated key are cleared before the new embeddings are written.
+        self._apply_put_ops(put_ops)
         to_embed = self._extract_texts(put_ops)
         if to_embed and self.index_config and self.embeddings:
             embeddings = self.embeddings.embed_documents(list(to_embed))
             self._insertinmem_store(to_embed, embeddings)
-        self._apply_put_ops(put_ops)
         return results
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
@@ -226,11 +228,13 @@ class InMemoryStore(BaseStore):
             queryinmem_store = await self._aembed_search_queries(search_ops)
             self._batch_search(search_ops, queryinmem_store, results)
 
+        # Apply puts before (re)inserting vectors so stale vectors from an
+        # updated key are cleared before the new embeddings are written.
+        self._apply_put_ops(put_ops)
         to_embed = self._extract_texts(put_ops)
         if to_embed and self.index_config and self.embeddings:
             embeddings = await self.embeddings.aembed_documents(list(to_embed))
             self._insertinmem_store(to_embed, embeddings)
-        self._apply_put_ops(put_ops)
         return results
 
     # Helpers
@@ -414,6 +418,11 @@ class InMemoryStore(BaseStore):
                     created_at=datetime.now(timezone.utc),
                     updated_at=datetime.now(timezone.utc),
                 )
+                # Clear any existing vectors for this key. Embeddings for the new
+                # value are recomputed and re-inserted afterwards (when indexed),
+                # so stale vectors from the previous value must not linger. This
+                # also handles `index=False` updates, where nothing is re-embedded.
+                self._vectors[namespace].pop(key, None)
 
     def _extract_texts(
         self, put_ops: dict[tuple[tuple[str, ...], str], PutOp]

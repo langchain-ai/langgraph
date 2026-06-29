@@ -716,6 +716,47 @@ async def test_async_vector_update_with_embedding(
     assert not any(r.key == "doc4" for r in results_new)
 
 
+def test_vector_update_index_false_clears_stale_vectors(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Updating an indexed key with index=False must drop its old embeddings."""
+    store = InMemoryStore(
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+    )
+    store.put(("test",), "doc1", {"text": "zany zebra Xerxes"})
+
+    results_initial = store.search(("test",), query="Zany Xerxes")
+    assert any(r.key == "doc1" and r.score is not None for r in results_initial)
+
+    # Re-put the same key without indexing; the stale vector must not survive.
+    store.put(("test",), "doc1", {"text": "new text about dogs"}, index=False)
+
+    results_after = store.search(("test",), query="Zany Xerxes")
+    doc1 = next((r for r in results_after if r.key == "doc1"), None)
+    # doc1 either drops out of the scored results or comes back scoreless,
+    # but it must never retain the old embedding's similarity score.
+    assert doc1 is None or doc1.score is None
+
+
+async def test_async_vector_update_index_false_clears_stale_vectors(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Async: updating an indexed key with index=False must drop its old embeddings."""
+    store = InMemoryStore(
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+    )
+    await store.aput(("test",), "doc1", {"text": "zany zebra Xerxes"})
+
+    results_initial = await store.asearch(("test",), query="Zany Xerxes")
+    assert any(r.key == "doc1" and r.score is not None for r in results_initial)
+
+    await store.aput(("test",), "doc1", {"text": "new text about dogs"}, index=False)
+
+    results_after = await store.asearch(("test",), query="Zany Xerxes")
+    doc1 = next((r for r in results_after if r.key == "doc1"), None)
+    assert doc1 is None or doc1.score is None
+
+
 def test_vector_search_with_filters(fake_embeddings: CharacterEmbeddings) -> None:
     """Test combining vector search with filters."""
     inmem_store = InMemoryStore(
