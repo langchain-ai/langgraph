@@ -96,6 +96,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """
         async with self._cursor() as cur:
             await cur.execute(self.MIGRATIONS[0])
+            if self.pipe:
+                await cur.connection.pipeline.sync()  # flush pipeline before query results
             results = await cur.execute(
                 "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
             )
@@ -113,6 +115,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 await cur.execute(
                     "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
                 )
+                if self.pipe:
+                    await cur.connection.pipeline.sync()  # ensure pipeline consistency
         if self.pipe:
             await self.pipe.sync()
 
