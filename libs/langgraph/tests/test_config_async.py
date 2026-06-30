@@ -1,3 +1,6 @@
+import asyncio
+import sys
+
 import pytest
 from langchain_core.callbacks import AsyncCallbackManager, BaseCallbackHandler
 
@@ -114,3 +117,31 @@ async def test_with_config_tags_preserved_on_invoke() -> None:
     await graph.ainvoke({}, {"tags": ["invoke"]})
     assert "bound" in captured, "bound tag was dropped by ensure_config overwrite"
     assert "invoke" in captured, "invoke-time tag not present"
+
+
+@pytest.mark.skipif(
+    sys.version_info >= (3, 11),
+    reason="the async-context guard in get_config() only applies on Python < 3.11",
+)
+def test_get_config_raises_in_async_context_on_py310() -> None:
+    """On Python < 3.11, get_config() must raise inside an async context.
+
+    Regression test for the guard being swallowed by its own
+    ``except RuntimeError: pass`` (see #8203).
+    """
+    from langchain_core.runnables.config import var_child_runnable_config
+
+    from langgraph.config import get_config
+
+    async def main() -> None:
+        # Seed a config so the fall-through path would otherwise succeed;
+        # this isolates the async guard from the "outside a runnable context"
+        # error.
+        token = var_child_runnable_config.set({"tags": [], "metadata": {}})
+        try:
+            with pytest.raises(RuntimeError, match="3.11 or later"):
+                get_config()
+        finally:
+            var_child_runnable_config.reset(token)
+
+    asyncio.run(main())
