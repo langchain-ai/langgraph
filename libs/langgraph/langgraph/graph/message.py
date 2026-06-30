@@ -383,7 +383,7 @@ def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
             "version or remove the 'format' flag. Returning un-formatted "
             "messages."
         )
-        warnings.warn(msg)
+        warnings.warn(msg, stacklevel=2)
         return list(messages)
     else:
         return convert_to_messages(convert_to_openai_messages(messages))
