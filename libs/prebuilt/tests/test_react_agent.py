@@ -167,6 +167,62 @@ def test_string_prompt():
     assert response == expected_response
 
 
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_regeneration_strips_trailing_ai_message(version: str):
+    """Test that the agent strips trailing AI messages without tool calls.
+
+    This simulates the regeneration scenario where the graph is re-invoked
+    with messages that include the previous AI response that should be regenerated.
+    The agent should strip this trailing AI message and generate a new response.
+    """
+    model = FakeToolCallingModel()
+    agent = create_react_agent(model, [], version=version)
+
+    # Simulate regeneration: input includes a previous AI message that should be regenerated
+    inputs = [HumanMessage("hi?"), AIMessage(content="old response", id="old")]
+    response = agent.invoke({"messages": inputs})
+
+    # The agent should have stripped the trailing AI message before invoking the LLM.
+    # The FakeToolCallingModel concatenates all input messages with "-", so if the
+    # trailing AI message was NOT stripped, the response content would be "hi?-old response".
+    # Since we strip it, the content should only be "hi?".
+    assert response["messages"][-1].content == "hi?"
+    assert response["messages"][-1].id == "0"
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_regeneration_only_strips_trailing_ai_messages(version: str):
+    """Test that only trailing AI messages are stripped, not earlier ones.
+
+    When there are multiple AI messages in the history, only the trailing
+    ones (at the end, without tool calls) should be stripped for regeneration.
+    Messages in the middle of the conversation should be preserved.
+    """
+    model = FakeToolCallingModel()
+    agent = create_react_agent(model, [], version=version)
+
+    # Input has an AI message in the middle, followed by another human message,
+    # then a trailing AI message that should be stripped
+    inputs = [
+        HumanMessage("first question"),
+        AIMessage(content="first response", id="1"),
+        HumanMessage("second question"),
+        AIMessage(
+            content="should be stripped", id="2"
+        ),  # This trailing AI should be stripped
+    ]
+    response = agent.invoke({"messages": inputs})
+
+    # The FakeToolCallingModel concatenates all input messages with "-".
+    # If the trailing AI message was stripped, we should NOT see "should be stripped" in the output.
+    # We should see: "first question-first response-second question"
+    assert (
+        response["messages"][-1].content
+        == "first question-first response-second question"
+    )
+    assert "should be stripped" not in response["messages"][-1].content
+
+
 def test_callable_prompt():
     def prompt(state):
         modified_message = f"Bar {state['messages'][-1].content}"
