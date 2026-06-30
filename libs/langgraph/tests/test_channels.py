@@ -12,6 +12,10 @@ from langgraph._internal._typing import MISSING
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
+from langgraph.channels.named_barrier_value import (
+    NamedBarrierValue,
+    NamedBarrierValueAfterFinish,
+)
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -801,3 +805,149 @@ def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_sentinel() -> 
     ch = spec.from_checkpoint(None)
     ch.replay_writes([("t0", "x", "after")])
     assert ch.get() == "after"
+
+
+# ---------------------------------------------------------------------------
+# NamedBarrierValue
+# ---------------------------------------------------------------------------
+
+
+def test_named_barrier_value_types() -> None:
+    channel = NamedBarrierValue(str, {"a", "b"}).from_checkpoint(MISSING)
+    assert channel.ValueType is str
+    assert channel.UpdateType is str
+
+
+def test_named_barrier_value_not_available_until_all_seen() -> None:
+    channel = NamedBarrierValue(str, {"a", "b", "c"}).from_checkpoint(MISSING)
+
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+    assert not channel.is_available()
+
+    assert channel.update(["a"])
+    assert not channel.is_available()
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+
+    assert channel.update(["b"])
+    assert not channel.is_available()
+
+    assert channel.update(["c"])
+    assert channel.is_available()
+    assert channel.get() is None  # barrier value is None when all seen
+
+
+def test_named_barrier_value_rejects_unknown_name() -> None:
+    channel = NamedBarrierValue(str, {"a", "b"}).from_checkpoint(MISSING)
+    with pytest.raises(InvalidUpdateError):
+        channel.update(["x"])
+
+
+def test_named_barrier_value_duplicate_update_is_noop() -> None:
+    channel = NamedBarrierValue(str, {"a", "b"}).from_checkpoint(MISSING)
+    assert channel.update(["a"])
+    assert not channel.update(["a"]), "second identical update should not mark as changed"
+    assert not channel.is_available()
+
+
+def test_named_barrier_value_consume_resets_state() -> None:
+    channel = NamedBarrierValue(str, {"a", "b"}).from_checkpoint(MISSING)
+    channel.update(["a"])
+    channel.update(["b"])
+    assert channel.is_available()
+
+    assert channel.consume()
+    assert not channel.is_available()
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+
+
+def test_named_barrier_value_consume_when_not_ready_returns_false() -> None:
+    channel = NamedBarrierValue(str, {"a", "b"}).from_checkpoint(MISSING)
+    channel.update(["a"])
+    assert not channel.consume()
+
+
+def test_named_barrier_value_checkpoint_roundtrip() -> None:
+    channel = NamedBarrierValue(str, {"a", "b"}).from_checkpoint(MISSING)
+    channel.update(["a"])
+    cp = channel.checkpoint()
+    assert cp == {"a"}
+
+    restored = NamedBarrierValue(str, {"a", "b"}).from_checkpoint(cp)
+    assert not restored.is_available()
+    restored.update(["b"])
+    assert restored.is_available()
+
+
+def test_named_barrier_value_copy_is_independent() -> None:
+    channel = NamedBarrierValue(str, {"a", "b"}).from_checkpoint(MISSING)
+    channel.update(["a"])
+    copy = channel.copy()
+    copy.update(["b"])
+    assert copy.is_available()
+    assert not channel.is_available(), "original must not be affected by copy mutation"
+
+
+# ---------------------------------------------------------------------------
+# NamedBarrierValueAfterFinish
+# ---------------------------------------------------------------------------
+
+
+def test_named_barrier_after_finish_not_available_without_finish() -> None:
+    channel = NamedBarrierValueAfterFinish(str, {"a", "b"}).from_checkpoint(MISSING)
+    channel.update(["a"])
+    channel.update(["b"])
+    assert not channel.is_available(), "all names seen but finish() not called yet"
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+
+
+def test_named_barrier_after_finish_available_after_finish() -> None:
+    channel = NamedBarrierValueAfterFinish(str, {"a", "b"}).from_checkpoint(MISSING)
+    channel.update(["a"])
+    channel.update(["b"])
+    assert channel.finish()
+    assert channel.is_available()
+    assert channel.get() is None
+
+
+def test_named_barrier_after_finish_finish_before_all_seen_is_noop() -> None:
+    channel = NamedBarrierValueAfterFinish(str, {"a", "b"}).from_checkpoint(MISSING)
+    channel.update(["a"])
+    assert not channel.finish(), "finish() must return False if not all names seen"
+    assert not channel.is_available()
+
+
+def test_named_barrier_after_finish_consume_resets() -> None:
+    channel = NamedBarrierValueAfterFinish(str, {"a", "b"}).from_checkpoint(MISSING)
+    channel.update(["a"])
+    channel.update(["b"])
+    channel.finish()
+    assert channel.consume()
+    assert not channel.is_available()
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+
+
+def test_named_barrier_after_finish_checkpoint_roundtrip() -> None:
+    channel = NamedBarrierValueAfterFinish(str, {"a", "b"}).from_checkpoint(MISSING)
+    channel.update(["a"])
+    channel.update(["b"])
+    channel.finish()
+    cp = channel.checkpoint()
+    assert cp == ({"a", "b"}, True)
+
+    restored = NamedBarrierValueAfterFinish(str, {"a", "b"}).from_checkpoint(cp)
+    assert restored.is_available()
+
+
+def test_named_barrier_after_finish_copy_is_independent() -> None:
+    channel = NamedBarrierValueAfterFinish(str, {"a", "b"}).from_checkpoint(MISSING)
+    channel.update(["a"])
+    channel.update(["b"])
+    copy = channel.copy()
+    copy.finish()
+    assert copy.is_available()
+    assert not channel.is_available(), "original must not be affected by copy's finish()"
