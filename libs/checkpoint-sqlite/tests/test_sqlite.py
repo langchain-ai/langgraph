@@ -1,4 +1,5 @@
 from typing import Any, cast
+from uuid import uuid4
 
 import pytest
 from langchain_core.runnables import RunnableConfig
@@ -197,6 +198,24 @@ class TestSqliteSaver:
         for malicious_key in malicious_keys:
             with pytest.raises(ValueError, match="Invalid filter key"):
                 _metadata_predicate({malicious_key: "dummy"})
+
+    def test_delete_thread_ignores_late_writes(self) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            config: RunnableConfig = {
+                "configurable": {
+                    "thread_id": "thread-delete",
+                    "checkpoint_ns": "",
+                }
+            }
+
+            stored = saver.put(config, empty_checkpoint(), {}, {})
+            saver.delete_thread("thread-delete")
+
+            saver.put(stored, empty_checkpoint(), {"step": 99}, {})
+            saver.put_writes(stored, [("ch", "late-write")], str(uuid4()))
+
+            assert saver.get_tuple({"configurable": {"thread_id": "thread-delete"}}) is None
+            assert list(saver.list({"configurable": {"thread_id": "thread-delete"}})) == []
 
     def test_checkpoint_search_sql_injection_prevention(self) -> None:
         """Test that SQL injection via malicious filter keys is prevented in checkpoint search."""
