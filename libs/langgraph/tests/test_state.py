@@ -7,7 +7,7 @@ from typing import Annotated as Annotated2
 
 import pytest
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -15,6 +15,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.graph.state import (
     StateGraph,
     _get_node_name,
+    _get_pydantic_alias_map,
     _is_field_channel,
     _warn_invalid_state_schema,
 )
@@ -371,3 +372,43 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+def test_get_pydantic_alias_map() -> None:
+    """Test _get_pydantic_alias_map extracts alias mappings correctly."""
+
+    # Non-Pydantic schema returns empty dict
+    class NonPydantic(TypedDict):
+        foo: str
+
+    assert _get_pydantic_alias_map(NonPydantic) == {}
+
+    # Pydantic model without aliases returns empty dict
+    class NoAliases(BaseModel):
+        foo: str
+        bar: int
+
+    assert _get_pydantic_alias_map(NoAliases) == {}
+
+    # Pydantic model with single alias
+    class SingleAlias(BaseModel):
+        foo: str = Field(alias="bar")
+
+    assert _get_pydantic_alias_map(SingleAlias) == {"bar": "foo"}
+
+    # Pydantic model with multiple aliases
+    class MultipleAliases(BaseModel):
+        first_name: str = Field(alias="firstName")
+        last_name: str = Field(alias="lastName")
+        age: int
+
+    assert _get_pydantic_alias_map(MultipleAliases) == {
+        "firstName": "first_name",
+        "lastName": "last_name",
+    }
+
+    # Alias same as field name is not included
+    class SameAlias(BaseModel):
+        foo: str = Field(alias="foo")
+
+    assert _get_pydantic_alias_map(SameAlias) == {}
