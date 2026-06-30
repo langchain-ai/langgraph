@@ -1,6 +1,7 @@
 """Test SQLite store Time-To-Live (TTL) functionality."""
 
 import asyncio
+import datetime
 import os
 import tempfile
 import time
@@ -44,6 +45,61 @@ def test_ttl_basic(temp_db_file: str) -> None:
 
         item = store.get(("test",), "item1")
         assert item is None
+
+
+def test_ttl_sweep_is_deterministic_with_explicit_cutoff(temp_db_file: str) -> None:
+    """Test deterministic prune behavior at TTL boundaries with explicit cutoff."""
+    with SqliteStore.from_conn_string(temp_db_file) as store:
+        store.setup()
+
+        store.put(("test",), "older", {"value": "older"})
+        store.put(("test",), "newer", {"value": "newer"})
+
+        cutoff = datetime.datetime(2026, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+        older_expires_at = cutoff - datetime.timedelta(microseconds=1)
+        newer_expires_at = cutoff + datetime.timedelta(microseconds=1)
+
+        with store._cursor() as cur:
+            cur.execute(
+                "UPDATE store SET expires_at = ?, ttl_minutes = 1 WHERE prefix = ? AND key = ?",
+                (older_expires_at, "test", "older"),
+            )
+            cur.execute(
+                "UPDATE store SET expires_at = ?, ttl_minutes = 1 WHERE prefix = ? AND key = ?",
+                (newer_expires_at, "test", "newer"),
+            )
+
+        swept = store.sweep_ttl(now=cutoff)
+        assert swept == 1
+        assert store.get(("test",), "older") is None
+        assert store.get(("test",), "newer") is not None
+
+
+def test_ttl_sweep_keeps_equal_second_boundary_with_mixed_timestamp_formats(
+    temp_db_file: str,
+) -> None:
+    """Rows exactly at cutoff second are not swept when formats differ."""
+    with SqliteStore.from_conn_string(temp_db_file) as store:
+        store.setup()
+        store.put(("test",), "boundary", {"value": "boundary"})
+        store.put(("test",), "expired", {"value": "expired"})
+
+        cutoff = datetime.datetime(2026, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+
+        with store._cursor() as cur:
+            cur.execute(
+                "UPDATE store SET expires_at = DATETIME(?) WHERE prefix = ? AND key = ?",
+                ("2026-01-01T00:00:00+00:00", "test", "boundary"),
+            )
+            cur.execute(
+                "UPDATE store SET expires_at = DATETIME(?) WHERE prefix = ? AND key = ?",
+                ("2025-12-31T23:59:59+00:00", "test", "expired"),
+            )
+
+        swept = store.sweep_ttl(now=cutoff)
+        assert swept == 1
+        assert store.get(("test",), "boundary") is not None
+        assert store.get(("test",), "expired") is None
 
 
 @pytest.mark.flaky(retries=3)
@@ -254,6 +310,65 @@ async def test_async_ttl_basic(temp_db_file: str) -> None:
         # Item should be gone now
         item = await store.aget(("test",), "item1")
         assert item is None
+
+
+@pytest.mark.asyncio
+async def test_async_ttl_sweep_is_deterministic_with_explicit_cutoff(
+    temp_db_file: str,
+) -> None:
+    """Test deterministic async prune behavior at TTL boundaries with explicit cutoff."""
+    async with AsyncSqliteStore.from_conn_string(temp_db_file) as store:
+        await store.setup()
+
+        await store.aput(("test",), "older", {"value": "older"})
+        await store.aput(("test",), "newer", {"value": "newer"})
+
+        cutoff = datetime.datetime(2026, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+        older_expires_at = cutoff - datetime.timedelta(microseconds=1)
+        newer_expires_at = cutoff + datetime.timedelta(microseconds=1)
+
+        async with store._cursor() as cur:
+            await cur.execute(
+                "UPDATE store SET expires_at = ?, ttl_minutes = 1 WHERE prefix = ? AND key = ?",
+                (older_expires_at, "test", "older"),
+            )
+            await cur.execute(
+                "UPDATE store SET expires_at = ?, ttl_minutes = 1 WHERE prefix = ? AND key = ?",
+                (newer_expires_at, "test", "newer"),
+            )
+
+        swept = await store.sweep_ttl(now=cutoff)
+        assert swept == 1
+        assert await store.aget(("test",), "older") is None
+        assert await store.aget(("test",), "newer") is not None
+
+
+@pytest.mark.asyncio
+async def test_async_ttl_sweep_keeps_equal_second_boundary_with_mixed_formats(
+    temp_db_file: str,
+) -> None:
+    """Async sweep keeps rows exactly at cutoff second."""
+    async with AsyncSqliteStore.from_conn_string(temp_db_file) as store:
+        await store.setup()
+        await store.aput(("test",), "boundary", {"value": "boundary"})
+        await store.aput(("test",), "expired", {"value": "expired"})
+
+        cutoff = datetime.datetime(2026, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+
+        async with store._cursor() as cur:
+            await cur.execute(
+                "UPDATE store SET expires_at = DATETIME(?) WHERE prefix = ? AND key = ?",
+                ("2026-01-01T00:00:00+00:00", "test", "boundary"),
+            )
+            await cur.execute(
+                "UPDATE store SET expires_at = DATETIME(?) WHERE prefix = ? AND key = ?",
+                ("2025-12-31T23:59:59+00:00", "test", "expired"),
+            )
+
+        swept = await store.sweep_ttl(now=cutoff)
+        assert swept == 1
+        assert await store.aget(("test",), "boundary") is not None
+        assert await store.aget(("test",), "expired") is None
 
 
 @pytest.mark.asyncio
