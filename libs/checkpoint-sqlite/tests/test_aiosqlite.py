@@ -188,3 +188,111 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_latest_checkpoint_uses_timestamp_not_id(self) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            first_checkpoint = empty_checkpoint()
+            first_checkpoint["id"] = "z-older"
+            first_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+            first_config: RunnableConfig = {
+                "configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}
+            }
+            stored_first = await saver.aput(
+                first_config, first_checkpoint, {"step": 0}, {}
+            )
+
+            second_checkpoint = empty_checkpoint()
+            second_checkpoint["id"] = "a-newer"
+            second_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+            second_config: RunnableConfig = {
+                "configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}
+            }
+            second_config["configurable"]["checkpoint_id"] = stored_first[
+                "configurable"
+            ]["checkpoint_id"]
+            await saver.aput(second_config, second_checkpoint, {"step": 1}, {})
+
+            latest = await saver.aget_tuple(
+                {"configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}}
+            )
+            assert latest is not None
+            assert latest.checkpoint["id"] == "a-newer"
+
+            before_results = [
+                c
+                async for c in saver.alist(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-non-lex",
+                            "checkpoint_ns": "",
+                        }
+                    },
+                    before={"configurable": {"checkpoint_id": "a-newer"}},
+                )
+            ]
+            assert [result.checkpoint["id"] for result in before_results] == ["z-older"]
+
+    async def test_before_checkpoint_only_cursor_resolves_across_namespaces(
+        self,
+    ) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            older_checkpoint = empty_checkpoint()
+            older_checkpoint["id"] = "older-subgraph"
+            older_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+            await saver.aput(
+                {
+                    "configurable": {
+                        "thread_id": "thread-cross-ns",
+                        "checkpoint_ns": "child",
+                    }
+                },
+                older_checkpoint,
+                {"step": 0},
+                {},
+            )
+
+            parent_checkpoint = empty_checkpoint()
+            parent_checkpoint["id"] = "parent-bound"
+            parent_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+            await saver.aput(
+                {
+                    "configurable": {
+                        "thread_id": "thread-cross-ns",
+                        "checkpoint_ns": "",
+                    }
+                },
+                parent_checkpoint,
+                {"step": 0},
+                {},
+            )
+
+            newer_checkpoint = empty_checkpoint()
+            newer_checkpoint["id"] = "newer-subgraph"
+            newer_checkpoint["ts"] = "2026-01-01T00:00:02+00:00"
+            await saver.aput(
+                {
+                    "configurable": {
+                        "thread_id": "thread-cross-ns",
+                        "checkpoint_ns": "child",
+                    }
+                },
+                newer_checkpoint,
+                {"step": 1},
+                {},
+            )
+
+            before_results = [
+                result
+                async for result in saver.alist(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-cross-ns",
+                            "checkpoint_ns": "child",
+                        }
+                    },
+                    before={"configurable": {"checkpoint_id": "parent-bound"}},
+                )
+            ]
+            assert [result.checkpoint["id"] for result in before_results] == [
+                "older-subgraph"
+            ]

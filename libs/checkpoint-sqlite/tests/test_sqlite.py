@@ -130,14 +130,157 @@ class TestSqliteSaver:
 
     def test_search_where(self) -> None:
         # call method / assertions
-        expected_predicate_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? AND json_extract(CAST(metadata AS TEXT), '$.step') = ? AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? AND json_extract(CAST(metadata AS TEXT), '$.score') = ? AND checkpoint_id < ?"
-        expected_param_values_1 = ["input", 2, "{}", 1, "1"]
-        assert search_where(
-            None, cast(dict[str, Any], self.metadata_1), self.config_1
-        ) == (
-            expected_predicate_1,
-            expected_param_values_1,
+        expected_predicate_1 = (
+            "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? "
+            "AND json_extract(CAST(metadata AS TEXT), '$.step') = ? "
+            "AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? "
+            "AND json_extract(CAST(metadata AS TEXT), '$.score') = ? "
+            "AND ("
+            " (SELECT rowid FROM checkpoints WHERE thread_id = ? AND checkpoint_id = ? ORDER BY rowid DESC LIMIT 1) IS NULL"
+            " OR rowid < (SELECT rowid FROM checkpoints WHERE thread_id = ? AND checkpoint_id = ? ORDER BY rowid DESC LIMIT 1)"
+            " "
+            ")"
         )
+        expected_param_values_1 = [
+            "input",
+            2,
+            "{}",
+            1,
+            "thread-1",
+            "1",
+            "thread-1",
+            "1",
+        ]
+        actual_predicate, actual_params = search_where(
+            None, cast(dict[str, Any], self.metadata_1), self.config_1
+        )
+        assert " ".join(actual_predicate.split()) == " ".join(
+            expected_predicate_1.split()
+        )
+        assert list(actual_params) == expected_param_values_1
+
+    def test_latest_checkpoint_uses_timestamp_not_id(self) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            first_checkpoint = empty_checkpoint()
+            first_checkpoint["id"] = "z-older"
+            first_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+            first_config: RunnableConfig = {
+                "configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}
+            }
+            stored_first = saver.put(first_config, first_checkpoint, {"step": 0}, {})
+
+            second_checkpoint = empty_checkpoint()
+            second_checkpoint["id"] = "a-newer"
+            second_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+            second_config: RunnableConfig = {
+                "configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}
+            }
+            second_config["configurable"]["checkpoint_id"] = stored_first[
+                "configurable"
+            ]["checkpoint_id"]
+            saver.put(second_config, second_checkpoint, {"step": 1}, {})
+
+            latest = saver.get_tuple(
+                {"configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}}
+            )
+            assert latest is not None
+            assert latest.checkpoint["id"] == "a-newer"
+
+            before_results = list(
+                saver.list(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-non-lex",
+                            "checkpoint_ns": "",
+                        }
+                    },
+                    before={
+                        "configurable": {
+                            "thread_id": "thread-non-lex",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": "a-newer",
+                        }
+                    },
+                )
+            )
+            assert [result.checkpoint["id"] for result in before_results] == ["z-older"]
+
+            checkpoint_only_before_results = list(
+                saver.list(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-non-lex",
+                            "checkpoint_ns": "",
+                        }
+                    },
+                    before={"configurable": {"checkpoint_id": "a-newer"}},
+                )
+            )
+            assert [
+                result.checkpoint["id"] for result in checkpoint_only_before_results
+            ] == ["z-older"]
+
+    def test_before_checkpoint_only_cursor_resolves_across_namespaces(self) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            older_checkpoint = empty_checkpoint()
+            older_checkpoint["id"] = "older-subgraph"
+            older_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+            saver.put(
+                {
+                    "configurable": {
+                        "thread_id": "thread-cross-ns",
+                        "checkpoint_ns": "child",
+                    }
+                },
+                older_checkpoint,
+                {"step": 0},
+                {},
+            )
+
+            parent_checkpoint = empty_checkpoint()
+            parent_checkpoint["id"] = "parent-bound"
+            parent_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+            saver.put(
+                {
+                    "configurable": {
+                        "thread_id": "thread-cross-ns",
+                        "checkpoint_ns": "",
+                    }
+                },
+                parent_checkpoint,
+                {"step": 0},
+                {},
+            )
+
+            newer_checkpoint = empty_checkpoint()
+            newer_checkpoint["id"] = "newer-subgraph"
+            newer_checkpoint["ts"] = "2026-01-01T00:00:02+00:00"
+            saver.put(
+                {
+                    "configurable": {
+                        "thread_id": "thread-cross-ns",
+                        "checkpoint_ns": "child",
+                    }
+                },
+                newer_checkpoint,
+                {"step": 1},
+                {},
+            )
+
+            before_results = list(
+                saver.list(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-cross-ns",
+                            "checkpoint_ns": "child",
+                        }
+                    },
+                    before={"configurable": {"checkpoint_id": "parent-bound"}},
+                )
+            )
+            assert [result.checkpoint["id"] for result in before_results] == [
+                "older-subgraph"
+            ]
 
     def test_metadata_predicate(self) -> None:
         # call method / assertions

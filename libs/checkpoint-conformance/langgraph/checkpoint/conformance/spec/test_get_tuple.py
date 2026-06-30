@@ -50,6 +50,41 @@ async def test_get_tuple_latest_when_no_checkpoint_id(
     )
 
 
+async def test_get_tuple_latest_uses_checkpoint_timestamp_not_id(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """Latest lookup should use checkpoint recency even when ids sort backwards."""
+    tid = str(uuid4())
+
+    first_config = generate_config(tid)
+    first_checkpoint = generate_checkpoint(checkpoint_id="z-older")
+    first_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+    stored_first = await saver.aput(
+        first_config,
+        first_checkpoint,
+        generate_metadata(step=0),
+        {},
+    )
+
+    second_config = generate_config(tid)
+    second_config["configurable"]["checkpoint_id"] = stored_first["configurable"][
+        "checkpoint_id"
+    ]
+    second_checkpoint = generate_checkpoint(checkpoint_id="a-newer")
+    second_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+    await saver.aput(
+        second_config,
+        second_checkpoint,
+        generate_metadata(step=1),
+        {},
+    )
+
+    tup = await saver.aget_tuple(generate_config(tid))
+    assert tup is not None
+    assert tup.checkpoint["id"] == "a-newer"
+    assert tup.metadata["step"] == 1
+
+
 async def test_get_tuple_specific_checkpoint_id(
     saver: BaseCheckpointSaver,
 ) -> None:
@@ -217,6 +252,7 @@ async def test_get_tuple_nonexistent_checkpoint_id(
 ALL_GET_TUPLE_TESTS = [
     test_get_tuple_nonexistent_returns_none,
     test_get_tuple_latest_when_no_checkpoint_id,
+    test_get_tuple_latest_uses_checkpoint_timestamp_not_id,
     test_get_tuple_specific_checkpoint_id,
     test_get_tuple_config_structure,
     test_get_tuple_checkpoint_fields,
