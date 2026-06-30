@@ -172,13 +172,11 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
                 overwrite_idx = i
         if overwrite_idx is not None:
             _, overwrite_value = _get_overwrite(values[overwrite_idx])
-            base = (
+            self.value = (
                 _copy.copy(overwrite_value)
                 if overwrite_value is not None
                 else self.typ()
             )
-            remaining = [v for i, v in enumerate(values) if i != overwrite_idx]
-            self.value = self.reducer(base, remaining) if remaining else base
             return True
         base = self.typ() if self.value is MISSING else self.value
         self.value = self.reducer(base, list(values))

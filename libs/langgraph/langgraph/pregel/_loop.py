@@ -70,6 +70,7 @@ from langgraph.callbacks import (
     GraphResumeEvent,
 )
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.binop import _get_overwrite
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
@@ -220,6 +221,11 @@ class PregelLoop:
     # synthetic step-prefixed task_id used to preserve chronological order
     # under the saver's `ORDER BY task_id, idx` sorting.
     _exit_delta_writes: list[tuple[int, str, str, Any]] | None = None
+
+    # Delta channels that saw an Overwrite since the last checkpoint. These
+    # channels must snapshot after live update applies overwrite semantics so
+    # sparse replay starts from the same post-overwrite value.
+    _delta_channels_with_overwrite: set[str]
 
     # The checkpoint_config that points at the parent loaded at `__enter__`
     # (or the synthetic-empty checkpoint, on first run). We capture it
@@ -677,6 +683,11 @@ class PregelLoop:
     def after_tick(self) -> None:
         # finish superstep
         writes = [w for t in self.tasks.values() for w in t.writes]
+        self._delta_channels_with_overwrite.update(
+            ch
+            for ch, v in writes
+            if isinstance(self.specs.get(ch), DeltaChannel) and _get_overwrite(v)[0]
+        )
         # all tasks have finished
         self.updated_channels = apply_writes(
             self.checkpoint,
@@ -980,6 +991,11 @@ class PregelLoop:
                 manager=None,
                 updated_channels=updated_channels,
             )
+            self._delta_channels_with_overwrite.update(
+                c
+                for c, v in input_writes
+                if isinstance(self.specs.get(c), DeltaChannel) and _get_overwrite(v)[0]
+            )
             # apply input writes
             updated_channels = apply_writes(
                 self.checkpoint,
@@ -1120,6 +1136,7 @@ class PregelLoop:
         # create new checkpoint
         channels_to_snapshot = (
             delta_channels_to_snapshot(self.channels, new_counters)
+            | self._delta_channels_with_overwrite
             if do_checkpoint
             else set()
         )
@@ -1136,6 +1153,8 @@ class PregelLoop:
         )
         for k in channels_to_snapshot:
             new_counters[k] = (0, 0)
+        if do_checkpoint:
+            self._delta_channels_with_overwrite.difference_update(channels_to_snapshot)
         non_zero = {k: v for k, v in new_counters.items() if v != (0, 0)}
         if non_zero:
             self.checkpoint_metadata["counters_since_delta_snapshot"] = non_zero
@@ -1218,7 +1237,10 @@ class PregelLoop:
         counters = dict(
             self.checkpoint_metadata.get("counters_since_delta_snapshot") or {}
         )
-        channels_to_snapshot = delta_channels_to_snapshot(self.channels, counters)
+        channels_to_snapshot = (
+            delta_channels_to_snapshot(self.channels, counters)
+            | self._delta_channels_with_overwrite
+        )
 
         pending = [
             (step, tid, ch, v)
@@ -1662,6 +1684,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         )
         self._delta_write_futs = []
         self._error_handler_write_futs = []
+        self._delta_channels_with_overwrite = set()
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
         )
@@ -1919,6 +1942,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         )
         self._delta_write_futs = []
         self._error_handler_write_futs = []
+        self._delta_channels_with_overwrite = set()
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
         )
