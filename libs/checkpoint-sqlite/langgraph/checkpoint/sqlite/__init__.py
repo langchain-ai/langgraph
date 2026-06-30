@@ -237,7 +237,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 )
             else:
                 cur.execute(
-                    "SELECT thread_id, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND checkpoint_ns = ? ORDER BY checkpoint_id DESC LIMIT 1",
+                    "SELECT thread_id, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND checkpoint_ns = ? ORDER BY checkpoint_id DESC, rowid DESC LIMIT 1",
                     (str(config["configurable"]["thread_id"]), checkpoint_ns),
                 )
             # if a checkpoint is found, return it
@@ -335,7 +335,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         query = f"""SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata
         FROM checkpoints
         {where}
-        ORDER BY checkpoint_id DESC"""
+        ORDER BY checkpoint_id DESC, rowid DESC"""
         if limit is not None:
             query += " LIMIT ?"
             param_values = (*param_values, limit)
