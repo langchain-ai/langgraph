@@ -40,15 +40,25 @@ from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import NotRequired, TypedDict
 
-from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
+from langgraph._internal._constants import (
+    CONFIG_KEY_NODE_FINISHED,
+    CONFIG_KEY_SEND,
+    ERROR,
+    PULL,
+)
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
-from langgraph.config import get_stream_writer
-from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
+from langgraph.config import get_config, get_stream_writer
+from langgraph.errors import (
+    GraphInterrupt,
+    GraphRecursionError,
+    InvalidUpdateError,
+    ParentCommand,
+)
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
@@ -4805,6 +4815,111 @@ def test_parent_command(
         tasks=(),
         interrupts=(),
     )
+
+
+def test_pending_send_write_persists_on_interrupt(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        quickjs_checkpoint: dict
+        result: str
+
+    def node(state: State) -> dict[str, Any]:
+        send = get_config()["configurable"][CONFIG_KEY_SEND]
+        send([("quickjs_checkpoint", {"snapshot": "abc"})])
+        value = interrupt("trip")
+        return {"result": value}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    builder.add_edge("node", END)
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    first = graph.invoke({"quickjs_checkpoint": {}, "result": ""}, config)
+    assert "__interrupt__" in first
+
+    snapshot = graph.get_state(config)
+    assert snapshot.values["quickjs_checkpoint"] == {"snapshot": "abc"}
+    assert snapshot.next == ("node",)
+    assert snapshot.tasks[0].interrupts
+
+    second = graph.invoke(Command(resume="ok"), config)
+    assert second["quickjs_checkpoint"] == {"snapshot": "abc"}
+    assert second["result"] == "ok"
+    assert graph.get_state(config).values["quickjs_checkpoint"] == {"snapshot": "abc"}
+
+
+def test_pending_send_write_persists_on_tool_subgraph_interrupt(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    from langchain_core.tools import tool
+
+    class SubgraphState(TypedDict):
+        value: str
+
+    def subgraph_node(state: SubgraphState) -> dict[str, Any]:
+        value = interrupt("subgraph trip")
+        return {"value": value}
+
+    subgraph_builder = StateGraph(SubgraphState)
+    subgraph_builder.add_node("subgraph_node", subgraph_node)
+    subgraph_builder.add_edge(START, "subgraph_node")
+    subgraph = subgraph_builder.compile(checkpointer=True)
+
+    class ParentState(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+        quickjs_checkpoint: dict
+
+    @tool
+    def task_tool() -> str:
+        """Run the interrupting subgraph task."""
+        send = get_config()["configurable"][CONFIG_KEY_SEND]
+        try:
+            response = subgraph.invoke({"value": ""})
+        except GraphInterrupt:
+            send([("quickjs_checkpoint", {"snapshot": "tool"})])
+            raise
+        return response["value"]
+
+    def call_tool(state: ParentState) -> dict[str, Any]:
+        return {
+            "messages": AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "task_tool",
+                        "args": {},
+                        "id": "tool_call_1",
+                    }
+                ],
+            )
+        }
+
+    builder = StateGraph(ParentState)
+    builder.add_node("agent", call_tool)
+    builder.add_node("tools", ToolNode([task_tool]))
+    builder.add_edge(START, "agent")
+    builder.add_edge("agent", "tools")
+    builder.add_edge("tools", END)
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    first = graph.invoke(
+        {"messages": [HumanMessage(content="start")], "quickjs_checkpoint": {}}, config
+    )
+    assert "__interrupt__" in first
+
+    snapshot = graph.get_state(config)
+    assert snapshot.values["quickjs_checkpoint"] == {"snapshot": "tool"}
+    assert snapshot.next == ("tools",)
+    assert snapshot.tasks[0].interrupts
+
+    second = graph.invoke(Command(resume="ok"), config)
+    assert second["quickjs_checkpoint"] == {"snapshot": "tool"}
+    assert second["messages"][-1].content == "ok"
+    assert graph.get_state(config).values["quickjs_checkpoint"] == {"snapshot": "tool"}
 
 
 def test_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver):
