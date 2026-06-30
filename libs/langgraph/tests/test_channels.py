@@ -12,6 +12,10 @@ from langgraph._internal._typing import MISSING
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
+from langgraph.channels.named_barrier_value import (
+    NamedBarrierValue,
+    NamedBarrierValueAfterFinish,
+)
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -801,3 +805,108 @@ def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_sentinel() -> 
     ch = spec.from_checkpoint(None)
     ch.replay_writes([("t0", "x", "after")])
     assert ch.get() == "after"
+
+
+# ---------------------------------------------------------------------------
+# NamedBarrierValue / NamedBarrierValueAfterFinish
+# ---------------------------------------------------------------------------
+
+
+def test_named_barrier_value() -> None:
+    channel = NamedBarrierValue(str, {"a", "b"})
+    assert channel.ValueType is str
+    assert channel.UpdateType is str
+
+    # Barrier is not available until every named value is seen.
+    assert not channel.is_available()
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+
+    # Unknown names are rejected.
+    with pytest.raises(InvalidUpdateError):
+        channel.update(["c"])
+
+    # Seeing one of two names changes state but does not complete the barrier.
+    assert channel.update(["a"])
+    assert not channel.is_available()
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+    # A duplicate update is a no-op.
+    assert not channel.update(["a"])
+
+    # Seeing the final name completes the barrier.
+    assert channel.update(["b"])
+    assert channel.is_available()
+    assert channel.get() is None
+    assert channel.checkpoint() == {"a", "b"}
+
+    # consume() resets the barrier so it can be reused.
+    assert channel.consume()
+    assert not channel.is_available()
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+    assert not channel.consume()
+
+
+def test_named_barrier_value_checkpoint_and_copy() -> None:
+    channel = NamedBarrierValue(str, {"a", "b"})
+    channel.update(["a", "b"])
+
+    # A restored channel preserves the seen set.
+    restored = NamedBarrierValue(str, {"a", "b"}).from_checkpoint(channel.checkpoint())
+    assert restored.is_available()
+    assert restored.get() is None
+
+    # copy() is independent of the source channel.
+    source = NamedBarrierValue(str, {"a", "b"})
+    source.update(["a"])
+    clone = source.copy()
+    assert clone.update(["b"])
+    assert clone.is_available()
+    assert not source.is_available()
+
+
+def test_named_barrier_value_after_finish() -> None:
+    channel = NamedBarrierValueAfterFinish(str, {"a", "b"})
+    assert channel.ValueType is str
+    assert channel.UpdateType is str
+
+    with pytest.raises(InvalidUpdateError):
+        channel.update(["c"])
+
+    # Even with every name seen, the barrier stays closed until finish().
+    assert channel.update(["a", "b"])
+    assert not channel.is_available()
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+
+    # finish() opens the barrier once it is complete, and is idempotent after.
+    assert channel.finish()
+    assert channel.is_available()
+    assert channel.get() is None
+    assert channel.checkpoint() == ({"a", "b"}, True)
+    assert not channel.finish()
+
+    # consume() clears both the seen set and the finished flag.
+    assert channel.consume()
+    assert not channel.is_available()
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+    assert not channel.consume()
+
+
+def test_named_barrier_value_after_finish_incomplete_cannot_finish() -> None:
+    channel = NamedBarrierValueAfterFinish(str, {"a", "b"})
+    assert channel.update(["a"])
+    # finish() is a no-op while the barrier is incomplete.
+    assert not channel.finish()
+    assert not channel.is_available()
+
+    # A checkpoint roundtrip restores both seen and finished.
+    channel.update(["b"])
+    channel.finish()
+    restored = NamedBarrierValueAfterFinish(str, {"a", "b"}).from_checkpoint(
+        channel.checkpoint()
+    )
+    assert restored.is_available()
+    assert restored.get() is None

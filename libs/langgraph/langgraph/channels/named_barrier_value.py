@@ -21,7 +21,7 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
     def __init__(self, typ: type[Value], names: set[Value]) -> None:
         super().__init__(typ)
         self.names = names
-        self.seen: set[str] = set()
+        self.seen: set[Value] = set()
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, NamedBarrierValue) and value.names == self.names
@@ -90,11 +90,12 @@ class NamedBarrierValueAfterFinish(
 
     names: set[Value]
     seen: set[Value]
+    finished: bool
 
     def __init__(self, typ: type[Value], names: set[Value]) -> None:
         super().__init__(typ)
         self.names = names
-        self.seen: set[str] = set()
+        self.seen: set[Value] = set()
         self.finished = False
 
     def __eq__(self, value: object) -> bool:
