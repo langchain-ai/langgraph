@@ -816,6 +816,26 @@ class Pregel(
         self.step_timeout = step_timeout
         self.debug = debug if debug is not None else get_debug()
         self.checkpointer = checkpointer
+        # Warn early when static interrupts are configured but the user has explicitly disabled
+        # checkpointing (`checkpointer=False`). Without a checkpointer the graph cannot persist
+        # state, so the GraphInterrupt that fires for an `interrupt_before` / `interrupt_after`
+        # node will propagate as an unrecoverable exception rather than a resumable pause.
+        # We only warn for the explicit-False case here: `checkpointer=None` may legitimately
+        # inherit a parent checkpointer when this Pregel is compiled as a subgraph, so a
+        # compile-time warning for `None` would be noisy. The runtime `interrupt()` helper
+        # surfaces a second warning for that ambiguous case once the effective config is known.
+        if checkpointer is False and (
+            self.interrupt_before_nodes or self.interrupt_after_nodes
+        ):
+            warnings.warn(
+                "`interrupt_before` / `interrupt_after` are configured but `checkpointer=False` "
+                "was passed to compile(). Static interrupts will raise `GraphInterrupt` but "
+                "the graph cannot persist state for resumption -- the run will terminate. "
+                "Pass a checkpointer (e.g. `InMemorySaver()`) to compile() to enable human-in-"
+                "the-loop pause/resume.",
+                UserWarning,
+                stacklevel=3,
+            )
         self.store = store
         self.cache = cache
         self.retry_policy = (

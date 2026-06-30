@@ -898,8 +898,11 @@ def interrupt(value: Any) -> Any:
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
     """
+    import warnings as _warnings
+
     from langgraph._internal._constants import (
         CONFIG_KEY_CHECKPOINT_NS,
+        CONFIG_KEY_CHECKPOINTER,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,
         RESUME,
@@ -923,7 +926,24 @@ def interrupt(value: Any) -> Any:
         scratchpad.resume.append(v)
         conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
         return v
-    # no resume value found
+    # No resume value found -- we are about to raise GraphInterrupt to pause the graph.
+    # If the surrounding Pregel runtime has no checkpointer wired up (neither a top-level
+    # `compile(checkpointer=...)` nor an inherited parent), the GraphInterrupt cannot be
+    # resumed: it will propagate to the caller as an unhandled exception and the pending
+    # value (often a destructive tool call) is silently abandoned. The class docstring
+    # already states a checkpointer is required, but users frequently miss that requirement
+    # until they hit it in production. Emit a one-time UserWarning so the misconfiguration
+    # is visible in logs.
+    if conf.get(CONFIG_KEY_CHECKPOINTER) in (None, False):
+        _warnings.warn(
+            "`interrupt()` was called but no checkpointer is configured for this graph. "
+            "The GraphInterrupt cannot be persisted and the run will terminate instead of "
+            "pausing. Compile the graph with a checkpointer (e.g. "
+            "`builder.compile(checkpointer=InMemorySaver())`) to enable human-in-the-loop "
+            "pause/resume.",
+            UserWarning,
+            stacklevel=2,
+        )
     raise GraphInterrupt(
         (
             Interrupt.from_ns(
