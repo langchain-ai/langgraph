@@ -59,7 +59,7 @@ test = [
     "langgraph-checkpoint-sqlite",
     "langgraph-checkpoint-postgres",
     "langgraph-sdk",
-    "psycopg[binary]",
+    "psycopg[binary]; python_version < '3.14'",
     "uvloop==0.22.1",
     "pyperf",
     "py-spy",
@@ -79,14 +79,13 @@ dev = [
     "jupyter",
 ]
 
-
 [tool.uv.sources]
-langgraph-prebuilt = { path = "../prebuilt", editable = true }
-langgraph-checkpoint = { path = "../checkpoint", editable = true }
-langgraph-checkpoint-sqlite = { path = "../checkpoint-sqlite", editable = true }
-langgraph-checkpoint-postgres = { path = "../checkpoint-postgres", editable = true }
-langgraph-sdk = { path = "../sdk-py", editable = true }
-langgraph-cli = { path = "../cli", editable = true }
+langgraph-prebuilt = { workspace = true }
+langgraph-checkpoint = { workspace = true }
+langgraph-checkpoint-sqlite = { workspace = true }
+langgraph-checkpoint-postgres = { workspace = true }
+langgraph-sdk = { workspace = true }
+langgraph-cli = { workspace = true }
 
 [tool.ruff]
 lint.select = [ "E", "F", "I", "TID251", "UP" ]

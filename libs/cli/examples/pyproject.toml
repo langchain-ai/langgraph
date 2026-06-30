@@ -14,8 +14,8 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-langgraph-cli = { path = "../cli", editable = true }
-langgraph-sdk = { path = "../sdk_py", editable = true }
+langgraph-cli = { workspace = true }
+langgraph-sdk = { workspace = true }
 
 [tool.hatch.build]
 packages = []
