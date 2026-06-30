@@ -976,3 +976,9 @@ class Overwrite:
 
     value: Any
     """The value to write directly to the channel, bypassing any reducer."""
+
+    type: Literal["__overwrite__"] = "__overwrite__"
+    """Discriminator field. Lets the channel reducer recognise an `Overwrite`
+    even after its dataclass form is JSON-serialised and the typed instance
+    is lost (e.g. an `orjson`-encoded state update routed through the
+    LangGraph API server)."""
