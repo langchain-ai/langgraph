@@ -861,8 +861,11 @@ class BaseStore(ABC):
                 Example: `("documents", "user123")`
             key: Unique identifier within the namespace. Together with namespace forms
                 the complete path to the item.
-            value: Dictionary containing the item's data. Must contain string keys
-                and JSON-serializable values.
+            value: Dictionary containing the item's data. Must be a `dict` with
+                string keys and JSON-serializable values. `None` is not a valid
+                stored value: a top-level `None` is reserved as the delete signal
+                (prefer `delete()`). To store a marker or "empty" entry, use an
+                empty dict (`{}`), not `None`.
             index: Controls how the item's fields are indexed for search:
 
                 - None (default): Use `fields` you configured when creating the store (if any)
@@ -893,6 +896,13 @@ class BaseStore(ABC):
 
             ```python
             store.put(("docs",), "report", {"memory": "Will likes ai"})
+            ```
+
+            Store a set/list-like marker entry. Use an empty dict, not `None`
+            (which would delete the item):
+
+            ```python
+            store.put(("seen",), "user123", {})
             ```
 
             Do not index item for semantic search. Still accessible through `get()`
@@ -950,8 +960,10 @@ class BaseStore(ABC):
         find specific collections, or navigate the namespace hierarchy.
 
         Args:
-            prefix: Filter namespaces that start with this path.
-            suffix: Filter namespaces that end with this path.
+            prefix: Filter namespaces that start with this path. Matched exactly and
+                case-sensitively.
+            suffix: Filter namespaces that end with this path. Matched exactly and
+                case-sensitively.
             max_depth: Return namespaces up to this depth in the hierarchy.
                 Namespaces deeper than this level will be truncated.
             limit: Maximum number of namespaces to return.
@@ -960,6 +972,11 @@ class BaseStore(ABC):
         Returns:
             A list of namespace tuples that match the criteria. Each tuple represents a
                 full namespace path up to `max_depth`.
+
+        Note:
+            Namespace matching is case-sensitive. There is no case-insensitive
+            matching option. If you need case-insensitive lookups, normalize the
+            namespace casing when you write items (e.g. lowercase each label).
 
         ???+ example "Examples":
 
@@ -1114,8 +1131,11 @@ class BaseStore(ABC):
                 Example: `("documents", "user123")`
             key: Unique identifier within the namespace. Together with namespace forms
                 the complete path to the item.
-            value: Dictionary containing the item's data. Must contain string keys
-                and JSON-serializable values.
+            value: Dictionary containing the item's data. Must be a `dict` with
+                string keys and JSON-serializable values. `None` is not a valid
+                stored value: a top-level `None` is reserved as the delete signal
+                (prefer `adelete()`). To store a marker or "empty" entry, use an
+                empty dict (`{}`), not `None`.
             index: Controls how the item's fields are indexed for search:
 
                 - None (default): Use `fields` you configured when creating the store (if any)
@@ -1211,8 +1231,10 @@ class BaseStore(ABC):
         find specific collections, or navigate the namespace hierarchy.
 
         Args:
-            prefix: Filter namespaces that start with this path.
-            suffix: Filter namespaces that end with this path.
+            prefix: Filter namespaces that start with this path. Matched exactly and
+                case-sensitively.
+            suffix: Filter namespaces that end with this path. Matched exactly and
+                case-sensitively.
             max_depth: Return namespaces up to this depth in the hierarchy.
                 Namespaces deeper than this level will be truncated to this depth.
             limit: Maximum number of namespaces to return.
@@ -1221,6 +1243,11 @@ class BaseStore(ABC):
         Returns:
             A list of namespace tuples that match the criteria. Each tuple represents a
                 full namespace path up to `max_depth`.
+
+        Note:
+            Namespace matching is case-sensitive. There is no case-insensitive
+            matching option. If you need case-insensitive lookups, normalize the
+            namespace casing when you write items (e.g. lowercase each label).
 
         ???+ example "Examples"
 
