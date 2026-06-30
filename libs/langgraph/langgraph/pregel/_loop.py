@@ -31,6 +31,7 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    EmptyChannelError,
     PendingWrite,
 )
 from langgraph.store.base import BaseStore
@@ -77,6 +78,7 @@ from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
     GraphInterrupt,
+    InvalidUpdateError,
 )
 from langgraph.managed.base import (
     ManagedValueMapping,
@@ -1078,6 +1080,46 @@ class PregelLoop:
             self._push_graph_lifecycle_event("resume")
         return updated_channels
 
+    def _validate_output_state(self) -> None:
+        """Validate output state against schema before checkpoint save.
+
+        Raises InvalidUpdateError if validation fails, preventing corrupted
+        checkpoints from being saved.
+        """
+        if not hasattr(self, "tasks") or not self.tasks:
+            return
+
+        for task in self.tasks.values():
+            node = self.nodes.get(task.name)
+            if not (node and node.mapper_output):
+                continue
+
+            try:
+                if isinstance(node.channels, list):
+                    # Multiple channels: build state dict from channel values
+                    state_dict = {}
+                    for k in node.channels:
+                        try:
+                            state_dict[k] = self.channels[k].get()
+                        except EmptyChannelError:
+                            # Skip empty channels (e.g., optional fields)
+                            pass
+                else:
+                    # Single channel: pass value directly (not a proper State dict)
+                    state_dict = self.channels[node.channels].get()
+
+                node.mapper_output(state_dict)
+            except EmptyChannelError:
+                # Skip validation if single channel is empty
+                pass
+            except InvalidUpdateError:
+                raise
+            except Exception as exc:
+                raise InvalidUpdateError(
+                    f"Node '{task.name}' produced invalid output state "
+                    f"that violates schema: {exc}"
+                ) from exc
+
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         # `is` (object identity) — not `==`. Three of four call sites pass a
         # fresh dict ({"source":"input"|"loop"|"fork"}); only
@@ -1174,6 +1216,9 @@ class PregelLoop:
         # bail if no checkpointer
 
         if do_checkpoint and self._checkpointer_put_after_previous is not None:
+            # Validate output state before saving checkpoint
+            self._validate_output_state()
+
             self.prev_checkpoint_config = (
                 self.checkpoint_config
                 if CONFIG_KEY_CHECKPOINT_ID in self.checkpoint_config[CONF]
