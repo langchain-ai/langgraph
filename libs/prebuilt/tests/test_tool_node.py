@@ -623,6 +623,59 @@ def test_tool_node_node_interrupt() -> None:
             assert exc_info.value == "foo"
 
 
+def _tool_interrupt_input() -> dict[str, list[AIMessage]]:
+    return {
+        "messages": [
+            AIMessage(
+                "hi?",
+                tool_calls=[
+                    {
+                        "name": "tool_interrupt",
+                        "args": {"some_val": 0},
+                        "id": "some 0",
+                    }
+                ],
+            )
+        ]
+    }
+
+
+@pytest.mark.parametrize("use_async_wrapper", [False, True])
+async def test_tool_node_interrupt_with_wrap_tool_call(
+    use_async_wrapper: bool,
+) -> None:
+    """GraphBubbleUp must propagate through wrap/awrap_tool_call middleware."""
+
+    def tool_interrupt(some_val: int) -> None:
+        """Tool docstring."""
+        raise GraphBubbleUp("foo")
+
+    def wrap_tool_call(request, execute):
+        return execute(request)
+
+    async def awrap_tool_call(request, execute):
+        return await execute(request)
+
+    node_kwargs: dict[str, Any] = {
+        "handle_tool_errors": lambda e: f"Tool call failed ({type(e).__name__}): {e}",
+    }
+    if use_async_wrapper:
+        node_kwargs["awrap_tool_call"] = awrap_tool_call
+    else:
+        node_kwargs["wrap_tool_call"] = wrap_tool_call
+
+    node = ToolNode([tool_interrupt], **node_kwargs)
+    config = _create_config_with_runtime()
+
+    with pytest.raises(GraphBubbleUp) as exc_info:
+        if use_async_wrapper:
+            await node.ainvoke(_tool_interrupt_input(), config=config)
+        else:
+            node.invoke(_tool_interrupt_input(), config=config)
+
+    assert exc_info.value.args[0] == "foo"
+
+
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
 async def test_tool_node_command(input_type: str) -> None:
     from langchain_core.tools.base import InjectedToolCallId
