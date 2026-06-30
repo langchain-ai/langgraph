@@ -144,3 +144,57 @@ class TestLangSmithTracingPayload:
         assert captured["json"]["langsmith_tracer"] == {
             "project_name": "my-project",
         }
+
+    def test_langsmith_tracing_project_names_only(self):
+        """Test that langsmith_tracing works with multiple project_names."""
+        from langgraph_sdk._sync.runs import SyncRunsClient
+
+        captured: dict[str, Any] = {}
+
+        def mock_post(_path, *, json=None, **_kwargs):
+            captured["json"] = json
+            return {"run_id": "r1", "status": "pending"}
+
+        http = MagicMock()
+        http.post = MagicMock(side_effect=mock_post)
+        client = SyncRunsClient(http)
+
+        client.create(
+            thread_id="t1",
+            assistant_id="a1",
+            langsmith_tracing={"project_names": ["first", "second"]},
+        )
+
+        assert captured["json"]["langsmith_tracer"] == {
+            "project_names": ["first", "second"],
+        }
+
+    def test_langsmith_tracing_project_name_and_project_names(self):
+        """Test that langsmith_tracing passes both project_name and project_names."""
+        from langgraph_sdk._sync.runs import SyncRunsClient
+
+        captured: dict[str, Any] = {}
+
+        def mock_post(_path, *, json=None, **_kwargs):
+            captured["json"] = json
+            return {"run_id": "r1", "status": "pending"}
+
+        http = MagicMock()
+        http.post = MagicMock(side_effect=mock_post)
+        client = SyncRunsClient(http)
+
+        client.create(
+            thread_id="t1",
+            assistant_id="a1",
+            langsmith_tracing={
+                "project_name": "first",
+                "project_names": ["second", "third"],
+                "example_id": "example-123",
+            },
+        )
+
+        assert captured["json"]["langsmith_tracer"] == {
+            "project_name": "first",
+            "project_names": ["second", "third"],
+            "example_id": "example-123",
+        }
