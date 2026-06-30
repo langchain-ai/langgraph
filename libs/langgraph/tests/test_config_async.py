@@ -1,10 +1,25 @@
+import sys
+
 import pytest
 from langchain_core.callbacks import AsyncCallbackManager, BaseCallbackHandler
 
 from langgraph._internal._config import get_async_callback_manager_for_config
+from langgraph.config import get_config
 from langgraph.graph import StateGraph
 
 pytestmark = pytest.mark.anyio
+
+
+def test_get_config_raises_on_async_use_py310(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "version_info", (3, 10, 0, "final", 0))
+
+    async def call_in_async() -> None:
+        get_config()
+
+    with pytest.raises(RuntimeError, match="Python 3.11 or later"):
+        import asyncio
+
+        asyncio.run(call_in_async())
 
 
 def test_new_async_manager_includes_tags() -> None:
