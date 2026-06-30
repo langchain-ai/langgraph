@@ -262,6 +262,14 @@ class JsonPlusSerializer(SerializerProtocol):
             return "bytes", obj
         elif isinstance(obj, bytearray):
             return "bytearray", obj
+        elif (pd_mod := sys.modules.get("pandas")) is not None and isinstance(
+            obj, pd_mod.DataFrame
+        ):
+            return "msgpack", _msgpack_enc_pandas_dataframe(obj)
+        elif (pd_mod := sys.modules.get("pandas")) is not None and isinstance(
+            obj, pd_mod.Series
+        ):
+            return "msgpack", _msgpack_enc_pandas_series(obj)
         else:
             try:
                 return "msgpack", _msgpack_enc(obj)
@@ -300,6 +308,55 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
+EXT_PANDAS_DATAFRAME = 8
+EXT_PANDAS_SERIES = 9
+
+
+def _msgpack_enc_pandas_dataframe(obj: Any) -> bytes:
+    import io
+    import pyarrow as pa
+
+    try:
+        table = pa.Table.from_pandas(obj)
+        buf = io.BytesIO()
+        writer = pa.ipc.new_file(buf, table.schema)
+        writer.write_table(table)
+        writer.close()
+        return ormsgpack.packb(
+            ormsgpack.Ext(EXT_PANDAS_DATAFRAME, b"A" + buf.getvalue()),
+            option=_option,
+        )
+    except Exception:
+        pass
+    tight = obj.to_dict(orient="tight")
+    return ormsgpack.packb(
+        ormsgpack.Ext(EXT_PANDAS_DATAFRAME, b"D" + _msgpack_enc(tight)),
+        option=_option,
+    )
+
+
+def _msgpack_enc_pandas_series(obj: Any) -> bytes:
+    import io
+    import pyarrow as pa
+
+    try:
+        table = pa.Table.from_pandas(obj.to_frame())
+        buf = io.BytesIO()
+        writer = pa.ipc.new_file(buf, table.schema)
+        writer.write_table(table)
+        writer.close()
+        return ormsgpack.packb(
+            ormsgpack.Ext(EXT_PANDAS_SERIES, b"A" + buf.getvalue()),
+            option=_option,
+        )
+    except Exception:
+        pass
+    name = obj.name
+    tight = obj.to_frame().to_dict(orient="tight")
+    return ormsgpack.packb(
+        ormsgpack.Ext(EXT_PANDAS_SERIES, b"D" + _msgpack_enc((name, tight))),
+        option=_option,
+    )
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -739,6 +796,48 @@ def _create_msgpack_ext_hook(
                 return arr.reshape(shape, order=order)
             except Exception:
                 return None
+        elif code == EXT_PANDAS_DATAFRAME:
+            try:
+                import pandas as _pd
+                import pyarrow as _pa
+
+                if data[:1] == b"A":
+                    reader = _pa.ipc.open_file(data[1:])
+                    table = reader.read_all()
+                    return table.to_pandas()
+                else:
+                    tight = ormsgpack.unpackb(
+                        data[1:],
+                        ext_hook=ext_hook,
+                        option=ormsgpack.OPT_NON_STR_KEYS,
+                    )
+                    return _pd.DataFrame.from_dict(tight, orient="tight")
+            except Exception:
+                return None
+        elif code == EXT_PANDAS_SERIES:
+            try:
+                import pandas as _pd
+                import pyarrow as _pa
+
+                if data[:1] == b"A":
+                    reader = _pa.ipc.open_file(data[1:])
+                    table = reader.read_all()
+                    df = table.to_pandas()
+                    series = df.iloc[:, 0]
+                    series.name = df.columns[0]
+                    return series
+                else:
+                    name, tight = ormsgpack.unpackb(
+                        data[1:],
+                        ext_hook=ext_hook,
+                        option=ormsgpack.OPT_NON_STR_KEYS,
+                    )
+                    df = _pd.DataFrame.from_dict(tight, orient="tight")
+                    series = df.iloc[:, 0]
+                    series.name = name
+                    return series
+            except Exception:
+                return None
         return None
 
     return ext_hook
@@ -835,6 +934,47 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
             return arr.reshape(shape, order=order).tolist()
+        except Exception:
+            return
+    elif code == EXT_PANDAS_DATAFRAME:
+        try:
+            import pandas as _pd
+
+            if data[:1] == b"A":
+                import pyarrow as _pa
+
+                reader = _pa.ipc.open_file(data[1:])
+                table = reader.read_all()
+                return table.to_pandas().to_dict(orient="tight")
+            else:
+                tight = ormsgpack.unpackb(
+                    data[1:],
+                    ext_hook=_msgpack_ext_hook_to_json,
+                    option=ormsgpack.OPT_NON_STR_KEYS,
+                )
+                return tight
+        except Exception:
+            return
+    elif code == EXT_PANDAS_SERIES:
+        try:
+            import pandas as _pd
+
+            if data[:1] == b"A":
+                import pyarrow as _pa
+
+                reader = _pa.ipc.open_file(data[1:])
+                table = reader.read_all()
+                df = table.to_pandas()
+                series = df.iloc[:, 0]
+                series.name = df.columns[0]
+                return series.to_dict(orient="tight")
+            else:
+                name, tight = ormsgpack.unpackb(
+                    data[1:],
+                    ext_hook=_msgpack_ext_hook_to_json,
+                    option=ormsgpack.OPT_NON_STR_KEYS,
+                )
+                return tight
         except Exception:
             return
 

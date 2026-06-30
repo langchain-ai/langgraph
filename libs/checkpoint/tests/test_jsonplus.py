@@ -729,10 +729,10 @@ def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
     ],
 )
 def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
-    serde = JsonPlusSerializer(pickle_fallback=True)
+    serde = JsonPlusSerializer()
 
     dumped = serde.dumps_typed(df)
-    assert dumped[0] == "pickle"
+    assert dumped[0] == "msgpack"
     result = serde.loads_typed(dumped)
     assert result.equals(df)
 
@@ -783,10 +783,10 @@ def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
     ],
 )
 def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
-    serde = JsonPlusSerializer(pickle_fallback=True)
+    serde = JsonPlusSerializer()
     dumped = serde.dumps_typed(series)
 
-    assert dumped[0] == "pickle"
+    assert dumped[0] == "msgpack"
     result = serde.loads_typed(dumped)
     assert result.equals(series)
 

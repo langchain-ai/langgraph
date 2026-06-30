@@ -20,6 +20,9 @@ _SENTINEL = cast(None, object())
 
 SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
     {
+        # pandas
+        ("pandas.core.frame", "DataFrame"),
+        ("pandas.core.series", "Series"),
         # datetime types
         ("datetime", "datetime"),
         ("datetime", "date"),
