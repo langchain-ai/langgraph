@@ -533,6 +533,39 @@ async def test_tool_node_handle_tool_errors_false() -> None:
         )
 
 
+async def test_tool_node_default_handler_catches_tool_exception() -> None:
+    """Regression test for #6449.
+
+    ToolException raised by a tool (e.g. from an MCP adapter) must be caught
+    and returned as an error ToolMessage when using the default handler.
+    Previously, only ToolInvocationError was caught; a plain ToolException
+    would be re-raised and crash the graph.
+    """
+    result = await ToolNode([tool2]).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool2",
+                            "args": {"some_val": 0, "some_other_val": "bar"},
+                            "id": "mcp-call-id",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    assert len(result["messages"]) == 1
+    msg = result["messages"][0]
+    assert msg.type == "tool"
+    assert msg.status == "error"
+    assert msg.tool_call_id == "mcp-call-id"
+    assert "Test error" in msg.content
+
+
 def test_tool_node_individual_tool_error_handling() -> None:
     # test error handling on individual tools (and that it overrides overall error handling!)
     result_individual_tool_error_handler = ToolNode(
