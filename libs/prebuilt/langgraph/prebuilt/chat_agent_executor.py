@@ -439,7 +439,10 @@ def create_react_agent(
                 the content "Sorry, need more steps to process this request.".
                 No `GraphRecusionError` will be raised in this case.
 
-        context_schema: An optional schema for runtime context.
+        context_schema: An optional schema for runtime context. When provided, the
+            schema type is used to annotate the `runtime` parameter of dynamic model
+            callables (e.g., `(state, runtime: Runtime[MyContext]) -> BaseChatModel`).
+            Pass context values at invocation time via `config={"configurable": {"context": MyContext(...)}}`.
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
