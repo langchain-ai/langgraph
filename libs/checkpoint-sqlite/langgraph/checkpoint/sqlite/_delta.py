@@ -1,37 +1,50 @@
 """Shared helpers for `get_delta_channel_history` on sqlite savers.
 
-Mirrors the two-stage shape of `BasePostgresSaver` (ancestor walk +
-per-channel UNION ALL writes fetch), but adapted for sqlite's
-constraints. The structural differences:
+Mirrors the supersteps-based two-pass shape of `BasePostgresSaver`
+(ancestor walk bounded by `counters_since_delta_snapshot` + per-channel
+UNION ALL writes fetch), adapted for sqlite's constraints:
 
 * No JSONB — to inspect `channel_values` for a checkpoint we must
-  deserialize the full blob. Stage 1 streams the cursor row-by-row and
-  deserializes only the rows the merged walk visits, freeing each blob
-  before advancing.
+  deserialize the full blob. The WALK streams the cursor row-by-row and
+  deserializes only the seed checkpoints (the ones at a channel's
+  `supersteps` depth), freeing each blob before advancing.
 * No separate blob table — `channel_values` lives inline in the
-  checkpoint, so seeds come back from stage 1 with no second fetch.
-* Single merged walk (not K independent walks): each visited cid is
-  deserialized exactly once, regardless of how many channels are still
-  seeking their seed.
+  checkpoint, so seeds come back from the WALK with no second fetch.
+* Single shared parent-chain walk: each requested channel slices the
+  same chain to its own `supersteps` depth.
 
-The streaming design keeps peak in-flight memory at roughly one
-deserialized checkpoint at a time, instead of holding the entire
-ancestor chain's worth of raw blobs as a `fetchall()`-materialized list.
+Walk depth is driven by the *supersteps since last snapshot* counter,
+not by scanning `channel_values` for the snapshot marker — the only
+reliable way to locate seeds that aren't a `_DeltaSnapshot` sentinel
+(e.g. legacy plain-value blobs from a thread migrated off a non-delta
+channel).
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from langgraph.checkpoint.base import DeltaChannelHistory, PendingWrite
+from langgraph.checkpoint.base import (
+    DeltaChannelHistory,
+    PendingWrite,
+    _parse_supersteps_since_last_snapshot_by_channel,
+)
+from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
-# Stage 1 streams ancestors of `target_cid` newest-first. The `<=`
+logger = logging.getLogger(__name__)
+
+# Re-exported under the package-local name used by the sqlite savers.
+parse_supersteps_since_last_snapshot_by_channel = (
+    _parse_supersteps_since_last_snapshot_by_channel
+)
+
+# The WALK streams ancestors of `target_id` newest-first. The `<=`
 # predicate keeps target itself in the stream so we can read its
-# `parent_checkpoint_id` from the first row without a separate lookup;
-# the caller skips target's own writes/seed (matches the
-# `BaseCheckpointSaver` contract).
-DELTA_STAGE1_SQL = (
+# `parent_checkpoint_id` from the first matching row without a separate
+# lookup; target's own writes/seed are not part of the contract.
+DELTA_WALK_SQL = (
     "SELECT checkpoint_id, parent_checkpoint_id, type, checkpoint "
     "FROM checkpoints "
     "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id <= ? "
@@ -39,12 +52,12 @@ DELTA_STAGE1_SQL = (
 )
 
 
-def build_delta_stage2_sql(*, chain_lens: Sequence[int]) -> str:
-    """Stage-2 per-channel UNION ALL fetching writes from `writes`.
+def build_delta_writes_fetch_sql(*, chain_lens: Sequence[int]) -> str:
+    """Per-channel UNION ALL fetching writes from `writes`.
 
     One branch per channel with a non-empty chain. Each branch inlines its
     own `IN (?, ?, ...)` placeholder list because sqlite has no array-bind
-    equivalent of postgres's `= ANY(%s)`. Caller passes parameters in
+    equivalent of postgres's `= ANY(?)`. Caller passes parameters in
     matching order: `[thread_id, checkpoint_ns, channel, *chain_cids]` per
     branch.
 
@@ -65,7 +78,7 @@ def build_delta_stage2_sql(*, chain_lens: Sequence[int]) -> str:
     return " UNION ALL ".join(branches)
 
 
-def step_walk_with_row(
+def step_walk_supersteps(
     *,
     cid: str,
     parent_cid: str | None,
@@ -73,75 +86,142 @@ def step_walk_with_row(
     blob: bytes,
     target_id: str,
     serde: Any,
-    chain_by_ch: dict[str, list[str]],
-    seed_val_by_ch: dict[str, Any],
+    shared_cpid_chain: list[str],
     walk_state: dict[str, Any],
-    seeded: set[str],
+    max_supersteps: int,
+    needed_depths: set[int],
+    seed_values_by_depth: dict[int, dict[str, Any]],
     channels: Sequence[str],
 ) -> bool:
-    """Process one streamed stage-1 row in the merged ancestor walk.
+    """Process one streamed WALK row, extending the shared parent chain.
 
-    The cursor returns (cid, parent_cid, type, blob) rows in
-    `checkpoint_id` DESC order starting at target. The first row is
-    target itself; we read its parent_cid to seed the walk and otherwise
-    skip it (target's own writes/seed are not part of the contract).
+    The cursor returns `(cid, parent_cid, type, checkpoint)` rows in
+    `checkpoint_id` DESC order starting at target. The first row is target
+    itself; we read its `parent_cid` to seed the walk and skip it (target's
+    own writes/seed are not part of the contract). Off-path rows (a sibling
+    branch on the same thread) advance the cursor without doing work.
 
-    For each subsequent row, if `cid` matches the walk's current
-    position, we deserialize the blob, append the cid to every
-    not-yet-seeded channel's chain, and check `channel_values` for
-    seeds. The deserialized checkpoint is dropped before advancing — no
-    cross-row cache, so peak in-flight is one deserialized checkpoint.
+    For each on-path ancestor we append its cid to `shared_cpid_chain`
+    (newest first). When the ancestor sits at a depth some channel needs as
+    its seed (`len(chain)` ∈ `needed_depths`), we deserialize it once and
+    record its `channel_values` for the requested channels. The
+    deserialized checkpoint is dropped immediately — peak in-flight is one
+    deserialized checkpoint.
 
-    Off-path rows (different branch on the same thread) advance the
-    cursor without doing any work.
-
-    Returns True when every requested channel is seeded — the caller
-    can stop iterating and close the cursor.
+    Sets `walk_state["reached_root"]` when an ancestor has no parent.
+    Returns True when the walk can stop: chain reached `max_supersteps`, or
+    the root was reached.
     """
     if "started" not in walk_state:
         if cid == target_id:
             walk_state["started"] = True
             walk_state["cur_cid"] = parent_cid
-            walk_state["active"] = {ch for ch in channels if ch not in seeded}
+            if parent_cid is None:
+                walk_state["reached_root"] = True
+                return True
         # Not target yet (or target not present): keep streaming.
         return False
-    active: set[str] = walk_state["active"]
-    if not active:
+    if len(shared_cpid_chain) >= max_supersteps:
         return True
     if cid != walk_state["cur_cid"]:
         # Off-path row from a sibling branch — skip without deserializing.
         return False
-    for ch in active:
-        chain_by_ch[ch].append(cid)
-    ckpt = serde.loads_typed((type_tag, blob))
-    channel_values: Mapping[str, Any] = ckpt.get("channel_values") or {}
-    for ch in [ch for ch in active if ch in channel_values]:
-        seed_val_by_ch[ch] = channel_values[ch]
-        seeded.add(ch)
-        active.discard(ch)
-    del ckpt, channel_values
+    shared_cpid_chain.append(cid)
+    depth = len(shared_cpid_chain)  # 1-indexed position along the chain
+    # Capture channel_values at any depth a channel may use as its seed: the
+    # exact `supersteps` depths, plus the root-most checkpoint (the seed
+    # candidate when the chain is shorter than `supersteps`).
+    if depth in needed_depths or parent_cid is None:
+        ckpt = serde.loads_typed((type_tag, blob))
+        channel_values: Mapping[str, Any] = ckpt.get("channel_values") or {}
+        seed_values_by_depth[depth] = {
+            ch: channel_values[ch] for ch in channels if ch in channel_values
+        }
+        del ckpt, channel_values
+    if parent_cid is None:
+        walk_state["reached_root"] = True
+        return True
     walk_state["cur_cid"] = parent_cid
-    return not active
+    return len(shared_cpid_chain) >= max_supersteps
+
+
+def resolve_delta_chains(
+    *,
+    channels: Sequence[str],
+    supersteps_by_ch: Mapping[str, int],
+    shared_cpid_chain: Sequence[str],
+    seed_values_by_depth: Mapping[int, Mapping[str, Any]],
+    has_reached_root: bool,
+    thread_id: str,
+) -> tuple[
+    dict[str, list[str]],
+    dict[str, str | None],
+    dict[str, Any],
+]:
+    """Slice the shared parent chain into per-channel chain/seed mappings.
+
+    For each channel the seed snapshot sits `supersteps` hops back: the seed
+    checkpoint is `shared_cpid_chain[supersteps - 1]` and the chain is
+    `shared_cpid_chain[:supersteps]` (newest first), with the seed's inline
+    `channel_values[ch]` captured during the walk.
+
+    When the chain is shorter than `supersteps` but the walk reached the
+    root, the persisted chain is "compressed" relative to the logical
+    superstep count (`durability="exit"`, or a thread that never
+    snapshotted). The seed candidate is then the oldest persisted checkpoint
+    (`shared_cpid_chain[-1]`); if its `channel_values[ch]` is absent the
+    channel has no seed and replays the full chain on an empty baseline.
+    """
+    chained_cpid_by_ch: dict[str, list[str]] = {ch: [] for ch in channels}
+    seed_cpid_by_ch: dict[str, str | None] = {ch: None for ch in channels}
+    seed_value_by_ch: dict[str, Any] = {}
+    for ch in channels:
+        bound = supersteps_by_ch.get(ch, 0)
+        if bound <= 0:
+            continue
+        if len(shared_cpid_chain) >= bound:
+            seed_depth = bound
+        elif has_reached_root:
+            seed_depth = len(shared_cpid_chain)
+        else:
+            logger.warning(
+                "cannot find seed snapshot for delta channel "
+                "(thread_id=%s, channel=%s)",
+                thread_id,
+                ch,
+            )
+            continue
+        if seed_depth <= 0:
+            continue
+        chained_cpid_by_ch[ch] = list(shared_cpid_chain[:seed_depth])
+        seed_cpid_by_ch[ch] = shared_cpid_chain[seed_depth - 1]
+        seed_vals = seed_values_by_depth.get(seed_depth, {})
+        if ch in seed_vals:
+            seed_value_by_ch[ch] = seed_vals[ch]
+    return chained_cpid_by_ch, seed_cpid_by_ch, seed_value_by_ch
 
 
 def build_delta_channels_writes_history(
     *,
     channels: Sequence[str],
-    chain_by_ch: Mapping[str, list[str]],
-    seed_val_by_ch: Mapping[str, Any],
-    seeded: set[str],
+    chained_cpid_by_ch: Mapping[str, Sequence[str]],
+    seed_cpid_by_ch: Mapping[str, str | None],
+    seed_value_by_ch: Mapping[str, Any],
     stage2_rows: Sequence[tuple[str, str, str, int, str, bytes]],
     serde: Any,
 ) -> dict[str, DeltaChannelHistory]:
-    """Demux stage-2 rows per channel; produce per-channel histories.
+    """Demux writes rows per channel; produce per-channel histories.
 
-    Stage-2 rows are `(checkpoint_id, channel, task_id, idx, type, value)`.
+    `stage2_rows` are `(checkpoint_id, channel, task_id, idx, type, value)`.
     Final write order is oldest→newest globally and `(task_id, idx)` within
     a checkpoint, matching the contract on `DeltaChannelHistory.writes`.
 
-    `seed` is omitted when the walk reached a true root with no snapshot
-    found (channel never entered `seeded`); consumers treat absence as
-    "start empty".
+    The seed checkpoint's own writes are replayed on top of a
+    `_DeltaSnapshot` seed (the snapshot is the value *prior* to its own
+    writes), but skipped for a migrated plain-value seed (a legacy
+    non-delta blob already incorporates those writes). `seed` is omitted
+    when no seed was located (implicit empty baseline); consumers treat
+    absence as "start empty".
     """
     writes_by_ch_by_cid: dict[str, dict[str, list[tuple[str, bytes, str, int]]]] = {
         ch: {} for ch in channels
@@ -156,17 +236,26 @@ def build_delta_channels_writes_history(
 
     result: dict[str, DeltaChannelHistory] = {}
     for ch in channels:
-        chain_cids = chain_by_ch.get(ch, [])
+        entry: DeltaChannelHistory = {"writes": []}
+
+        skip_seed_checkpoint_writes = False
+        if ch in seed_value_by_ch:
+            seed_value = seed_value_by_ch[ch]
+            entry["seed"] = seed_value
+            skip_seed_checkpoint_writes = not isinstance(seed_value, _DeltaSnapshot)
+
         cid_writes = writes_by_ch_by_cid.get(ch, {})
-        collected: list[PendingWrite] = []
-        # Chain is newest-first; iterate oldest-first for the public order.
-        for cid in reversed(chain_cids):
-            for type_tag, value_blob, task_id, _idx in cid_writes.get(cid, []):
-                collected.append(
-                    (task_id, ch, serde.loads_typed((type_tag, value_blob)))
-                )
-        entry: DeltaChannelHistory = {"writes": collected}
-        if ch in seeded:
-            entry["seed"] = seed_val_by_ch[ch]
+        if cid_writes:
+            collected: list[PendingWrite] = []
+            seed_cpid = seed_cpid_by_ch.get(ch)
+            # Chain is newest→oldest; replay oldest→newest.
+            for cid in reversed(list(chained_cpid_by_ch.get(ch, []))):
+                if skip_seed_checkpoint_writes and cid == seed_cpid:
+                    continue
+                for type_tag, value_blob, task_id, _idx in cid_writes.get(cid, []):
+                    collected.append(
+                        (task_id, ch, serde.loads_typed((type_tag, value_blob)))
+                    )
+            entry["writes"] = collected
         result[ch] = entry
     return result

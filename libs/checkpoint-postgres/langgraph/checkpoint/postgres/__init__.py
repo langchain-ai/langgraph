@@ -14,6 +14,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     DeltaChannelHistory,
+    _parse_supersteps_since_last_snapshot_by_channel,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
@@ -28,9 +29,11 @@ from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import (
     _DELTA_PAGE_SIZE,
     BasePostgresSaver,
-    _build_delta_stage1_sql,
-    _build_delta_stage2_sql,
+    _advance_shared_chain,
+    _build_delta_fetch_sql,
+    _build_delta_walk_sql,
     _DeltaStage2Row,
+    _ingest_walk_page,
 )
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
@@ -446,107 +449,137 @@ class PostgresSaver(BasePostgresSaver):
     ) -> Mapping[str, DeltaChannelHistory]:
         """Fast-path override of `BaseCheckpointSaver.get_delta_channel_history`.
 
-        Two-stage query, both stages cover ALL requested channels:
+        Reconstructs each delta channel's state for the target checkpoint by
+        walking the parent chain `supersteps` hops (read from the target's
+        `counters_since_delta_snapshot` metadata) to its seed snapshot, then
+        collecting the writes between the seed and the target.
 
-        * Stage 1 (paged): dynamic SELECT over `checkpoints` with K parallel
-          JSONB key lookups (one column pair per channel) — no subquery, no
-          aggregation. Pages newest-first by `checkpoint_id` with a cursor;
-          page size is `_DELTA_PAGE_SIZE`. Stops paging when every channel
-          has found its seed or the chain is exhausted.
+        Two passes (see the `# Multi-channel two-pass` comment in `base.py`):
 
-        * Stage 2 (per-channel UNION ALL): one branch per channel reading
-          `checkpoint_writes` filtered to that channel's specific
-          `chain_cids`, plus one branch per channel that has a seed reading
-          `checkpoint_blobs` for that channel + version. Avoids the
-          over-fetch of a single `channel = ANY(channels)` filter when
-          channels have different chain depths.
+        * WALK (paged): dynamic SELECT over `checkpoints` with K parallel
+          JSONB lookups for `channel_versions[ch]` (the seed blob version),
+          following `parent_checkpoint_id` newest-first. Page size is
+          `_DELTA_PAGE_SIZE`; stops once the shared chain reaches the deepest
+          requested `supersteps`, the root is reached, or the chain is
+          exhausted.
+
+        * FETCH (per-channel UNION ALL): one branch per channel reading
+          `checkpoint_writes` for its `chain_cids`, plus one branch per
+          channel that located a seed reading `checkpoint_blobs` at the
+          seed's version.
         """
         if not channels:
             return {}
         channels = list(channels)
         thread_id = config["configurable"]["thread_id"]
+        if not thread_id:
+            raise ValueError("empty thread ID")
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_id = get_checkpoint_id(config)
-        if checkpoint_id is None:
-            target = self.get_tuple(config)
-            if target is None:
-                return {ch: {"writes": []} for ch in channels}
-            checkpoint_id = target.config["configurable"]["checkpoint_id"]
 
-        # Stage 1: paged K-JSONB-lookup scan, walking the parent chain in
-        # Python after each page. Stops as soon as every channel has its seed.
-        stage1_sql = _build_delta_stage1_sql(channels, paged=True)
+        # Resolve the target checkpoint id + its metadata (for supersteps).
+        checkpoint_id = get_checkpoint_id(config)
+        with self._cursor() as cur:
+            if checkpoint_id is None:
+                cur.execute(
+                    "SELECT checkpoint_id, metadata FROM checkpoints "
+                    "WHERE thread_id = %s AND checkpoint_ns = %s "
+                    "ORDER BY checkpoint_id DESC LIMIT 1",
+                    (thread_id, checkpoint_ns),
+                )
+            else:
+                cur.execute(
+                    "SELECT checkpoint_id, metadata FROM checkpoints "
+                    "WHERE thread_id = %s AND checkpoint_ns = %s "
+                    "AND checkpoint_id = %s",
+                    (thread_id, checkpoint_ns, checkpoint_id),
+                )
+            target_row = cur.fetchone()
+        if target_row is None:
+            return {ch: {"writes": []} for ch in channels}
+        target_id = cast(str, target_row["checkpoint_id"])
+        supersteps_by_ch = _parse_supersteps_since_last_snapshot_by_channel(
+            target_row["metadata"] or {}, channels
+        )
+        max_supersteps = max(supersteps_by_ch.values(), default=0)
+
+        # WALK: page the parent chain, bounded by the deepest supersteps.
+        walk_sql = _build_delta_walk_sql(channels)
         parent_of: dict[str, str | None] = {}
         ver_by_i_by_cid: list[dict[str, str | None]] = [{} for _ in channels]
-        hs_by_i_by_cid: list[dict[str, bool]] = [{} for _ in channels]
-        chain_by_ch: dict[str, list[str]] = {ch: [] for ch in channels}
-        seed_ver_by_ch: dict[str, str | None] = {ch: None for ch in channels}
-        walk_cursor_by_ch: dict[str, str | None] = {}
-        seeded: set[str] = set()
+        shared_cpid_chain: list[str] = []
+        has_reached_root = False
         cursor: str | None = None
 
-        with self._cursor() as cur:
-            while True:
-                stage1_params: list[Any] = []
-                for ch in channels:
-                    stage1_params.extend([ch, ch])
-                stage1_params.extend(
-                    [thread_id, checkpoint_ns, cursor, cursor, _DELTA_PAGE_SIZE]
-                )
-                cur.execute(stage1_sql, stage1_params)
+        while max_supersteps > 0:
+            walk_params: list[Any] = [
+                *channels,
+                thread_id,
+                checkpoint_ns,
+                cursor,
+                cursor,
+                _DELTA_PAGE_SIZE,
+            ]
+            with self._cursor() as cur:
+                cur.execute(walk_sql, walk_params)
                 page = cur.fetchall()
-                if not page:
-                    break
-                oldest = self._ingest_stage1_page(
-                    cast("list[Mapping[str, Any]]", page),
-                    channels,
-                    parent_of,
-                    ver_by_i_by_cid,
-                    hs_by_i_by_cid,
-                )
-                self._try_advance_walks(
-                    checkpoint_id,
-                    channels,
-                    parent_of,
-                    ver_by_i_by_cid,
-                    hs_by_i_by_cid,
-                    chain_by_ch,
-                    seed_ver_by_ch,
-                    walk_cursor_by_ch,
-                    seeded,
-                )
-                # Stop if every channel is seeded, or the page was short
-                # (chain exhausted — no more rows to fetch).
-                if len(seeded) == len(channels) or len(page) < _DELTA_PAGE_SIZE:
-                    break
-                cursor = oldest
+            if not page:
+                break
+            oldest = _ingest_walk_page(
+                cast("list[Mapping[str, Any]]", page),
+                channels,
+                parent_of,
+                ver_by_i_by_cid,
+            )
+            has_reached_root = _advance_shared_chain(
+                target_id, parent_of, shared_cpid_chain, max_supersteps
+            )
+            if (
+                has_reached_root
+                or len(shared_cpid_chain) >= max_supersteps
+                or len(page) < _DELTA_PAGE_SIZE
+            ):
+                break
+            cursor = oldest
 
-        # Stage 2: per-channel UNION ALL — one writes branch per channel
-        # with non-empty chain, plus one blob branch per seeded channel.
-        channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
+        chained_cpid_by_ch, seed_cpid_by_ch, seed_ver_by_ch = (
+            self._resolve_delta_chains(
+                channels,
+                supersteps_by_ch,
+                shared_cpid_chain,
+                ver_by_i_by_cid,
+                has_reached_root,
+                thread_id,
+            )
+        )
+
+        # FETCH: per-channel UNION ALL — writes branch per chained channel,
+        # blob branch per seeded channel.
+        channels_with_chain = [ch for ch in channels if chained_cpid_by_ch[ch]]
         channels_with_seed = [ch for ch in channels if seed_ver_by_ch[ch] is not None]
-        stage2_sql = _build_delta_stage2_sql(
+        fetch_sql = _build_delta_fetch_sql(
             channels_with_chain=channels_with_chain,
             channels_with_seed=channels_with_seed,
         )
-
-        if stage2_sql:
-            stage2_params: list[Any] = []
+        if fetch_sql:
+            fetch_params: list[Any] = []
             for ch in channels_with_chain:
-                stage2_params.extend([thread_id, checkpoint_ns, ch, chain_by_ch[ch]])
+                fetch_params.extend(
+                    [thread_id, checkpoint_ns, ch, chained_cpid_by_ch[ch]]
+                )
             for ch in channels_with_seed:
-                stage2_params.extend([thread_id, checkpoint_ns, ch, seed_ver_by_ch[ch]])
+                fetch_params.extend([thread_id, checkpoint_ns, ch, seed_ver_by_ch[ch]])
             with self._cursor() as cur:
-                cur.execute(stage2_sql, stage2_params)
-                stage2_rows = cur.fetchall()
+                cur.execute(fetch_sql, fetch_params)
+                fetch_rows = cur.fetchall()
         else:
-            stage2_rows = []
+            fetch_rows = []
 
-        return self._build_delta_channels_writes_history(
+        return self._assemble_delta_history(
             channels=channels,
-            chain_by_ch=chain_by_ch,
+            chained_cpid_by_ch=chained_cpid_by_ch,
+            seed_cpid_by_ch=seed_cpid_by_ch,
             seed_ver_by_ch=seed_ver_by_ch,
-            stage2_rows=cast("list[_DeltaStage2Row]", stage2_rows),
+            fetch_rows=cast("list[_DeltaStage2Row]", fetch_rows),
         )
 
     def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:

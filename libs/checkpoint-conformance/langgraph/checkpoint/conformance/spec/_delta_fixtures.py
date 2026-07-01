@@ -54,6 +54,12 @@ async def build_delta_chain(
     stored: list[RunnableConfig] = []
     parent_cfg: RunnableConfig | None = None
 
+    # Track supersteps since the channel's last snapshot, mirroring Pregel's
+    # `counters_since_delta_snapshot` bookkeeping: every step increments the
+    # counter; a snapshot step resets it (and carries no counter entry, so
+    # the walk locates the seed exactly `supersteps` hops back).
+    supersteps_since_snapshot = 0
+
     for step in range(total_steps):
         config: RunnableConfig = {
             "configurable": {
@@ -68,11 +74,19 @@ async def build_delta_chain(
 
         channel_values: dict[str, Any] = {}
         channel_versions: dict[str, int] = {}
+        supersteps_since_snapshot += 1
+        counters: dict[str, tuple[int, int]] = {}
         if step in snapshot_set:
             channel_values[channel] = _DeltaSnapshot(
                 write_value_fn(step),
             )
             channel_versions[channel] = step + 1
+            supersteps_since_snapshot = 0
+        else:
+            counters[channel] = (
+                supersteps_since_snapshot,
+                supersteps_since_snapshot,
+            )
 
         cp = Checkpoint(
             v=1,
@@ -84,9 +98,10 @@ async def build_delta_chain(
             updated_channels=None,
         )
         new_versions = dict(channel_versions)
-        parent_cfg = await saver.aput(
-            config, cp, generate_metadata(step=step), new_versions
-        )
+        md = generate_metadata(step=step)
+        if counters:
+            md["counters_since_delta_snapshot"] = counters
+        parent_cfg = await saver.aput(config, cp, md, new_versions)
         stored.append(parent_cfg)
 
         # Write a pending write for non-snapshot steps so the walk has
