@@ -1,0 +1,20 @@
+libs/langgraph/langgraph/pregel/main.py
+  s_a1b5c4b23631ae::t_b317c8548b3430 2541-2544
+  s_a1b5c4b23631ae::t_a7a58930101f0b 2048-2051
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "8e77945f406926c5b26f4f4fe2a8a1983a60156a",
+  "prompts": {},
+  "sessions": {
+    "s_a1b5c4b23631ae": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cc2a5546-6de5-4ed3-a8d5-eebad31a502b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Quanzheng Long <long@langchain.dev>"
+    }
+  }
+}
