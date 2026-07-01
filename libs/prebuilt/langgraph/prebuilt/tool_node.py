@@ -25,7 +25,7 @@ Key Components:
 Typical Usage:
     ```python
     from langchain_core.tools import tool
-    from langchain.tools import ToolNode
+    from langgraph.prebuilt import ToolNode
 
 
     @tool
@@ -702,7 +702,7 @@ class ToolNode(RunnableCallable):
         Basic usage:
 
         ```python
-        from langchain.tools import ToolNode
+        from langgraph.prebuilt import ToolNode
         from langchain_core.tools import tool
 
         @tool
@@ -1613,8 +1613,7 @@ def tools_condition(
 
         ```python
         from langgraph.graph import StateGraph
-        from langchain.tools import ToolNode
-        from langchain.tools.tool_node import tools_condition
+        from langgraph.prebuilt import ToolNode, tools_condition
         from typing_extensions import TypedDict
 
 
