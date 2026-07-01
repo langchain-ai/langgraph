@@ -16,7 +16,7 @@ dependencies = [
     "orjson>=3.11.5",
     "langchain-protocol>=0.0.15",
     "langchain-core>=1.4.0,<2",
-    "websockets>=14,<16",
+    "websockets>=14,<17",
 ]
 
 [tool.hatch.version]
