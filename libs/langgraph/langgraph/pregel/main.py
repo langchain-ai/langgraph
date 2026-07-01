@@ -2045,11 +2045,14 @@ class Pregel(
                 saved.metadata if saved else None,
                 updated_channel_names,
             )
+            # Keep `updated_channels` at its default (None) — matching the
+            # historical checkpoint shape here — so resume/trigger semantics
+            # (e.g. deferred nodes) are unaffected. `get_next_version` /
+            # `channels_to_snapshot` are no-ops unless a delta channel snapshots.
             checkpoint = create_checkpoint(
                 checkpoint,
                 channels,
                 step + 1,
-                updated_channels=updated_channel_names,
                 get_next_version=checkpointer.get_next_version,
                 channels_to_snapshot=channels_to_snapshot,
             )
@@ -2535,11 +2538,14 @@ class Pregel(
                 saved.metadata if saved else None,
                 updated_channel_names,
             )
+            # Keep `updated_channels` at its default (None) — matching the
+            # historical checkpoint shape here — so resume/trigger semantics
+            # (e.g. deferred nodes) are unaffected. `get_next_version` /
+            # `channels_to_snapshot` are no-ops unless a delta channel snapshots.
             checkpoint = create_checkpoint(
                 checkpoint,
                 channels,
                 step + 1,
-                updated_channels=updated_channel_names,
                 get_next_version=checkpointer.get_next_version,
                 channels_to_snapshot=channels_to_snapshot,
             )
