@@ -23,6 +23,7 @@ from langgraph.checkpoint.base import (
     DeltaChannelHistory,
     PendingWrite,
     SerializerProtocol,
+    _parse_supersteps_since_last_snapshot_by_channel,
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
@@ -144,14 +145,20 @@ class InMemorySaver(
     ) -> Mapping[str, DeltaChannelHistory]:
         """Override: walk the parent chain ONCE for all requested channels.
 
-        Each channel terminates independently at the nearest ancestor
-        whose stored blob is non-empty. Other channels keep walking until
-        they find their own terminator or hit the root.
+        Walk depth is driven by the target checkpoint's
+        `counters_since_delta_snapshot[ch]` supersteps counter: each
+        channel's seed snapshot sits exactly `supersteps` hops back along
+        the parent chain. This locates seeds reliably even when they aren't
+        a `_DeltaSnapshot` sentinel — e.g. a legacy plain-value blob from a
+        thread migrated off a non-delta channel.
 
-        Pre-delta plain-value blobs subsume their ancestor's pending
-        writes (the value already includes them); `_DeltaSnapshot` blobs
-        do not (snapshot is the value AT that ancestor, prior to its own
-        pending writes that produce the child).
+        Pre-delta plain-value seeds subsume their own checkpoint's pending
+        writes (the value already includes them), so those are skipped;
+        `_DeltaSnapshot` seeds do not (the snapshot is the value AT that
+        ancestor, prior to its own pending writes), so they are replayed.
+        When the chain reaches the root short of `supersteps`, the snapshot
+        was never persisted (implicit empty baseline) — replay the full
+        chain with no seed.
         """
         if not channels:
             return {}
@@ -159,72 +166,98 @@ class InMemorySaver(
         # module import; only this override needs the runtime check.
         from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
+        channels = list(channels)
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_id = config["configurable"].get("checkpoint_id", "")
         ns_storage = self.storage.get(thread_id, {}).get(checkpoint_ns, {})
 
+        # Resolve the target checkpoint id + its metadata (for supersteps).
+        checkpoint_id = get_checkpoint_id(config)
+        if checkpoint_id is None:
+            checkpoint_id = next(reversed(ns_storage), None)
+        target_entry = ns_storage.get(checkpoint_id) if checkpoint_id else None
+        if target_entry is None:
+            return {ch: {"writes": []} for ch in channels}
+        metadata = self.serde.loads_typed(target_entry[1])
+        supersteps_by_ch = _parse_supersteps_since_last_snapshot_by_channel(
+            metadata or {}, channels
+        )
+        max_supersteps = max(supersteps_by_ch.values(), default=0)
+
+        # Walk the parent chain (newest first) up to the deepest supersteps.
         chain: list[str] = []
-        target_entry = ns_storage.get(checkpoint_id)
-        current: str | None = target_entry[2] if target_entry is not None else None
-        while current is not None:
+        has_reached_root = False
+        current: str | None = target_entry[2]
+        while current is not None and len(chain) < max_supersteps:
             entry = ns_storage.get(current)
             if entry is None:
                 break
             chain.append(current)
-            _, _, parent = entry
-            current = parent
-
-        collected_by_ch: dict[str, list[PendingWrite]] = {c: [] for c in channels}
-        seed_by_ch: dict[str, Any] = {}
-        remaining: set[str] = set(channels)
-
-        for cp_id in chain:
-            if not remaining:
+            parent = entry[2]
+            if parent is None:
+                has_reached_root = True
                 break
-            entry = ns_storage.get(cp_id)
-            ckpt = self.serde.loads_typed(entry[0]) if entry is not None else None
-
-            terminated_here: set[str] = set()
-            blob_value_by_ch: dict[str, Any] = {}
-            if ckpt is not None:
-                versions = ckpt.get("channel_versions", {})
-                for ch in remaining:
-                    ver = versions.get(ch)
-                    if ver is None:
-                        continue
-                    blob_entry = self.blobs.get((thread_id, checkpoint_ns, ch, ver))
-                    if blob_entry is None or blob_entry[0] == "empty":
-                        continue
-                    blob_value_by_ch[ch] = self.serde.loads_typed(blob_entry)
-                    terminated_here.add(ch)
-
-            step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
-            for (_task_id, _idx), (tid, ch, serialized, _) in sorted(
-                step_writes.items(), reverse=True
-            ):
-                if ch not in remaining:
-                    continue
-                blob_value = blob_value_by_ch.get(ch)
-                if blob_value is not None and not isinstance(
-                    blob_value, _DeltaSnapshot
-                ):
-                    continue
-                collected_by_ch[ch].append(
-                    (tid, ch, self.serde.loads_typed(serialized))
-                )
-
-            for ch in terminated_here:
-                seed_by_ch[ch] = blob_value_by_ch[ch]
-                remaining.discard(ch)
+            current = parent
 
         result: dict[str, DeltaChannelHistory] = {}
         for ch in channels:
-            entry_h: DeltaChannelHistory = {
-                "writes": list(reversed(collected_by_ch[ch]))
-            }
-            if ch in seed_by_ch:
-                entry_h["seed"] = seed_by_ch[ch]
+            entry_h: DeltaChannelHistory = {"writes": []}
+            bound = supersteps_by_ch.get(ch, 0)
+            if bound <= 0:
+                result[ch] = entry_h
+                continue
+            if len(chain) >= bound:
+                seed_depth = bound
+            elif has_reached_root:
+                seed_depth = len(chain)
+            else:
+                logger.warning(
+                    "cannot find seed snapshot for delta channel "
+                    "(thread_id=%s, channel=%s)",
+                    thread_id,
+                    ch,
+                )
+                result[ch] = entry_h
+                continue
+            if seed_depth <= 0:
+                result[ch] = entry_h
+                continue
+            chain_slice: list[str] = chain[:seed_depth]
+            seed_cpid: str | None = chain[seed_depth - 1]
+
+            skip_seed_checkpoint_writes = False
+            seed_entry = ns_storage.get(seed_cpid)
+            if seed_entry is not None:
+                ckpt = self.serde.loads_typed(seed_entry[0])
+                ver = (ckpt.get("channel_versions") or {}).get(ch)
+                blob_entry = (
+                    self.blobs.get((thread_id, checkpoint_ns, ch, ver))
+                    if ver is not None
+                    else None
+                )
+                if blob_entry is not None and blob_entry[0] != "empty":
+                    seed_value = self.serde.loads_typed(blob_entry)
+                    entry_h["seed"] = seed_value
+                    skip_seed_checkpoint_writes = not isinstance(
+                        seed_value, _DeltaSnapshot
+                    )
+                else:
+                    # No stored value at the oldest checkpoint → empty
+                    # baseline; the chain's own writes replay from empty.
+                    seed_cpid = None
+
+            collected: list[PendingWrite] = []
+            # Chain is newest→oldest; replay oldest→newest.
+            for cp_id in reversed(chain_slice):
+                if skip_seed_checkpoint_writes and cp_id == seed_cpid:
+                    continue
+                step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
+                for (_task_id, _idx), (tid, w_ch, serialized, _) in sorted(
+                    step_writes.items()
+                ):
+                    if w_ch == ch:
+                        collected.append((tid, ch, self.serde.loads_typed(serialized)))
+            entry_h["writes"] = collected
             result[ch] = entry_h
         return result
 
