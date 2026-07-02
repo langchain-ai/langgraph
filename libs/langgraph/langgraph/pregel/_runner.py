@@ -128,7 +128,11 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
                 self.counter -= 1
                 # Wake waiter when all tracked futures are done, or when runner-level
                 # stop condition is met (for example, a non-handled fatal exception).
-                if self.counter == 0 or self.should_stop(self.done):
+                # Only the just-completed future can newly satisfy the stop condition,
+                # since futures already in `self.done` are terminal — their
+                # `cancelled()`/`exception()` state is immutable, so re-scanning the
+                # whole set on every callback would be O(T^2) for T parallel tasks.
+                if self.counter == 0 or self.should_stop({fut}):
                     self.event.set()
 
 
