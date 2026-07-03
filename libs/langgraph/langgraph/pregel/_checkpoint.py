@@ -70,6 +70,42 @@ def delta_channels_to_snapshot(
     return result
 
 
+def advance_delta_counters(
+    channels: Mapping[str, BaseChannel],
+    prev_metadata: Mapping[str, Any] | None,
+    updated_channels: set[str] | None,
+) -> tuple[dict[str, tuple[int, int]], set[str]]:
+    """Advance per-delta-channel `(updates, supersteps)` counters one step.
+
+    Mirrors the counter bookkeeping in `PregelLoop._put_checkpoint`: every
+    superstep bumps `supersteps` for all delta channels and `updates` for
+    those written this step, then channels that hit their snapshot cadence
+    are reset to `(0, 0)`.
+
+    Used by `update_state` (which creates a delta checkpoint outside the
+    main loop) so the written checkpoint carries a correct
+    `counters_since_delta_snapshot` — without it, the supersteps-based
+    `get_delta_channel_history` walk can't locate the seed. Returns
+    `(new_counters, channels_to_snapshot)`; callers drop `(0, 0)` entries
+    before writing the metadata field.
+    """
+    prev = dict((prev_metadata or {}).get("counters_since_delta_snapshot") or {})
+    updated = updated_channels or set()
+    new_counters: dict[str, tuple[int, int]] = {}
+    for name, ch in channels.items():
+        if not isinstance(ch, DeltaChannel):
+            continue
+        u, s = prev.get(name, (0, 0))
+        s += 1
+        if name in updated:
+            u += 1
+        new_counters[name] = (u, s)
+    channels_to_snapshot = delta_channels_to_snapshot(channels, new_counters)
+    for k in channels_to_snapshot:
+        new_counters[k] = (0, 0)
+    return new_counters, channels_to_snapshot
+
+
 def create_checkpoint(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel] | None,

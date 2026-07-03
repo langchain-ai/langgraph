@@ -130,6 +130,7 @@ from langgraph.pregel._algo import (
 from langgraph.pregel._call import identifier
 from langgraph.pregel._checkpoint import (
     achannels_from_checkpoint,
+    advance_delta_counters,
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
@@ -2032,15 +2033,40 @@ class Pregel(
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            # Advance delta-channel snapshot counters for this manual super-
+            # step so the written checkpoint carries a correct
+            # `counters_since_delta_snapshot` (mirrors the main loop). Without
+            # it, the supersteps-based delta history walk can't find the seed.
+            updated_channel_names = {
+                c for task in run_tasks for c, _ in task.writes if c != PUSH
+            }
+            new_counters, channels_to_snapshot = advance_delta_counters(
+                channels,
+                saved.metadata if saved else None,
+                updated_channel_names,
+            )
+            # Keep `updated_channels` at its default (None) — matching the
+            # historical checkpoint shape here — so resume/trigger semantics
+            # (e.g. deferred nodes) are unaffected. `get_next_version` /
+            # `channels_to_snapshot` are no-ops unless a delta channel snapshots.
+            checkpoint = create_checkpoint(
+                checkpoint,
+                channels,
+                step + 1,
+                get_next_version=checkpointer.get_next_version,
+                channels_to_snapshot=channels_to_snapshot,
+            )
+            update_metadata: dict[str, Any] = {
+                "source": "update",
+                "step": step + 1,
+                "parents": saved.metadata.get("parents", {}) if saved else {},
+            }
+            if non_zero := {k: v for k, v in new_counters.items() if v != (0, 0)}:
+                update_metadata["counters_since_delta_snapshot"] = non_zero
             next_config = checkpointer.put(
                 checkpoint_config,
                 checkpoint,
-                {
-                    "source": "update",
-                    "step": step + 1,
-                    "parents": saved.metadata.get("parents", {}) if saved else {},
-                },
+                update_metadata,
                 get_new_channel_versions(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),
@@ -2500,16 +2526,41 @@ class Pregel(
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            # Advance delta-channel snapshot counters for this manual super-
+            # step so the written checkpoint carries a correct
+            # `counters_since_delta_snapshot` (mirrors the main loop). Without
+            # it, the supersteps-based delta history walk can't find the seed.
+            updated_channel_names = {
+                c for task in run_tasks for c, _ in task.writes if c != PUSH
+            }
+            new_counters, channels_to_snapshot = advance_delta_counters(
+                channels,
+                saved.metadata if saved else None,
+                updated_channel_names,
+            )
+            # Keep `updated_channels` at its default (None) — matching the
+            # historical checkpoint shape here — so resume/trigger semantics
+            # (e.g. deferred nodes) are unaffected. `get_next_version` /
+            # `channels_to_snapshot` are no-ops unless a delta channel snapshots.
+            checkpoint = create_checkpoint(
+                checkpoint,
+                channels,
+                step + 1,
+                get_next_version=checkpointer.get_next_version,
+                channels_to_snapshot=channels_to_snapshot,
+            )
+            update_metadata: dict[str, Any] = {
+                "source": "update",
+                "step": step + 1,
+                "parents": saved.metadata.get("parents", {}) if saved else {},
+            }
+            if non_zero := {k: v for k, v in new_counters.items() if v != (0, 0)}:
+                update_metadata["counters_since_delta_snapshot"] = non_zero
             # save checkpoint, after applying writes
             next_config = await checkpointer.aput(
                 checkpoint_config,
                 checkpoint,
-                {
-                    "source": "update",
-                    "step": step + 1,
-                    "parents": saved.metadata.get("parents", {}) if saved else {},
-                },
+                update_metadata,
                 get_new_channel_versions(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),

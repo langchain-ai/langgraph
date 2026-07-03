@@ -34,6 +34,37 @@ PendingWrite = tuple[str, str, Any]
 logger = logging.getLogger(__name__)
 
 
+def _parse_supersteps_since_last_snapshot_by_channel(
+    metadata: Mapping[str, Any],
+    channels: Sequence[str],
+) -> dict[str, int]:
+    """Per-channel supersteps-since-last-snapshot, parsed from metadata.
+
+    Reads `metadata.counters_since_delta_snapshot[ch]`, a `(updates,
+    supersteps)` pair, and returns `{ch: supersteps}` for channels whose
+    supersteps count is positive. Channels with no counter entry (just
+    snapshotted, or never written) are omitted — their seed, if any, is the
+    target checkpoint itself and needs no ancestor walk.
+
+    Used to drive the ancestor-walk depth in `get_delta_channel_history`:
+    a channel's seed snapshot sits exactly `supersteps` hops back along the
+    parent chain.
+    """
+    counters = metadata.get("counters_since_delta_snapshot") or {}
+    result: dict[str, int] = {}
+    for ch in channels:
+        entry = counters.get(ch)
+        if not isinstance(entry, (list, tuple)) or len(entry) < 2:
+            continue
+        try:
+            supersteps = int(entry[1])
+        except (TypeError, ValueError):
+            continue
+        if supersteps > 0:
+            result[ch] = supersteps
+    return result
+
+
 # Marked as total=False to allow for future expansion.
 class CheckpointMetadata(TypedDict, total=False):
     """Metadata associated with a checkpoint."""
@@ -619,34 +650,30 @@ class BaseCheckpointSaver(Generic[V]):
         """
         if not channels:
             return {}
-        collected_by_ch: dict[str, list[PendingWrite]] = {c: [] for c in channels}
-        seed_by_ch: dict[str, Any] = {}
-        remaining: set[str] = set(channels)
+        channels = list(channels)
         target_tuple = self.get_tuple(config)
-        cursor_config: RunnableConfig | None = (
-            target_tuple.parent_config if target_tuple else None
+        if target_tuple is None:
+            return {ch: {"writes": []} for ch in channels}
+        supersteps_by_ch = _parse_supersteps_since_last_snapshot_by_channel(
+            target_tuple.metadata or {}, channels
         )
-        while cursor_config is not None and remaining:
+        max_supersteps = max(supersteps_by_ch.values(), default=0)
+
+        chain: list[CheckpointTuple] = []
+        has_reached_root = False
+        cursor_config: RunnableConfig | None = target_tuple.parent_config
+        while cursor_config is not None and len(chain) < max_supersteps:
             tup = self.get_tuple(cursor_config)
             if tup is None:
                 break
-            if tup.pending_writes:
-                for write in reversed(tup.pending_writes):
-                    ch = write[1]
-                    if ch in remaining:
-                        collected_by_ch[ch].append(write)
-            for ch in list(remaining):
-                if ch in tup.checkpoint["channel_values"]:
-                    seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]
-                    remaining.discard(ch)
+            chain.append(tup)
+            if tup.parent_config is None:
+                has_reached_root = True
+                break
             cursor_config = tup.parent_config
-        result: dict[str, DeltaChannelHistory] = {}
-        for ch in channels:
-            entry: DeltaChannelHistory = {"writes": list(reversed(collected_by_ch[ch]))}
-            if ch in seed_by_ch:
-                entry["seed"] = seed_by_ch[ch]
-            result[ch] = entry
-        return result
+        return self._assemble_default_delta_history(
+            channels, supersteps_by_ch, chain, has_reached_root, config
+        )
 
     async def aget_delta_channel_history(
         self, *, config: RunnableConfig, channels: Sequence[str]
@@ -660,32 +687,106 @@ class BaseCheckpointSaver(Generic[V]):
         """
         if not channels:
             return {}
-        collected_by_ch: dict[str, list[PendingWrite]] = {c: [] for c in channels}
-        seed_by_ch: dict[str, Any] = {}
-        remaining: set[str] = set(channels)
+        channels = list(channels)
         target_tuple = await self.aget_tuple(config)
-        cursor_config: RunnableConfig | None = (
-            target_tuple.parent_config if target_tuple else None
+        if target_tuple is None:
+            return {ch: {"writes": []} for ch in channels}
+        supersteps_by_ch = _parse_supersteps_since_last_snapshot_by_channel(
+            target_tuple.metadata or {}, channels
         )
-        while cursor_config is not None and remaining:
+        max_supersteps = max(supersteps_by_ch.values(), default=0)
+
+        chain: list[CheckpointTuple] = []
+        has_reached_root = False
+        cursor_config: RunnableConfig | None = target_tuple.parent_config
+        while cursor_config is not None and len(chain) < max_supersteps:
             tup = await self.aget_tuple(cursor_config)
             if tup is None:
                 break
-            if tup.pending_writes:
-                for write in reversed(tup.pending_writes):
-                    ch = write[1]
-                    if ch in remaining:
-                        collected_by_ch[ch].append(write)
-            for ch in list(remaining):
-                if ch in tup.checkpoint["channel_values"]:
-                    seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]
-                    remaining.discard(ch)
+            chain.append(tup)
+            if tup.parent_config is None:
+                has_reached_root = True
+                break
             cursor_config = tup.parent_config
+        return self._assemble_default_delta_history(
+            channels, supersteps_by_ch, chain, has_reached_root, config
+        )
+
+    def _assemble_default_delta_history(
+        self,
+        channels: Sequence[str],
+        supersteps_by_ch: Mapping[str, int],
+        chain: Sequence[CheckpointTuple],
+        has_reached_root: bool,
+        config: RunnableConfig,
+    ) -> dict[str, DeltaChannelHistory]:
+        """Slice the walked parent chain into per-channel histories.
+
+        For each channel the seed snapshot sits `supersteps` hops back along
+        `chain` (newest first): the seed checkpoint is `chain[supersteps - 1]`
+        and its `channel_values[ch]` is the seed value. The seed checkpoint's
+        own writes are replayed on top of a `_DeltaSnapshot` seed but skipped
+        for a migrated plain-value seed (the legacy non-delta blob already
+        incorporates them).
+
+        When the chain is shorter than `supersteps` but the root was reached,
+        the persisted chain is "compressed" relative to the logical superstep
+        count (`durability="exit"`, or a thread that never snapshotted). The
+        seed candidate is then the oldest checkpoint (`chain[-1]`); if its
+        `channel_values[ch]` is absent the channel has no seed and replays
+        the full chain on an empty baseline.
+        """
+        # Imported lazily to avoid a hard checkpoint→serde-types coupling at
+        # module import; only the delta surface needs the runtime check.
+        from langgraph.checkpoint.serde.types import _DeltaSnapshot
+
+        thread_id = config["configurable"].get("thread_id")
         result: dict[str, DeltaChannelHistory] = {}
         for ch in channels:
-            entry: DeltaChannelHistory = {"writes": list(reversed(collected_by_ch[ch]))}
-            if ch in seed_by_ch:
-                entry["seed"] = seed_by_ch[ch]
+            entry: DeltaChannelHistory = {"writes": []}
+            bound = supersteps_by_ch.get(ch, 0)
+            if bound <= 0:
+                result[ch] = entry
+                continue
+            if len(chain) >= bound:
+                seed_depth = bound
+            elif has_reached_root:
+                seed_depth = len(chain)
+            else:
+                logger.warning(
+                    "cannot find seed snapshot for delta channel "
+                    "(thread_id=%s, channel=%s)",
+                    thread_id,
+                    ch,
+                )
+                result[ch] = entry
+                continue
+            if seed_depth <= 0:
+                result[ch] = entry
+                continue
+            chain_slice: Sequence[CheckpointTuple] = chain[:seed_depth]
+            seed_tuple: CheckpointTuple | None = chain[seed_depth - 1]
+
+            skip_seed_checkpoint_writes = False
+            channel_values = seed_tuple.checkpoint["channel_values"]
+            if ch in channel_values:
+                seed_value = channel_values[ch]
+                entry["seed"] = seed_value
+                skip_seed_checkpoint_writes = not isinstance(seed_value, _DeltaSnapshot)
+            else:
+                # No stored value at the oldest checkpoint → empty baseline,
+                # so the chain's own writes are all replayed from empty.
+                seed_tuple = None
+
+            collected: list[PendingWrite] = []
+            # Chain is newest→oldest; replay oldest→newest.
+            for tup in reversed(list(chain_slice)):
+                if skip_seed_checkpoint_writes and tup is seed_tuple:
+                    continue
+                for write in tup.pending_writes or []:
+                    if write[1] == ch:
+                        collected.append(write)
+            entry["writes"] = collected
             result[ch] = entry
         return result
 

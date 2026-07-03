@@ -87,6 +87,10 @@ async def test_history_multi_channel(
 
     from langgraph.checkpoint.conformance.test_utils import generate_metadata
 
+    # Per-channel supersteps since last snapshot ("a" snapshots at step 1,
+    # "b" at step 3). Drives the per-channel walk depth from the head.
+    s_a = 0
+    s_b = 0
     for step in range(5):
         config = {"configurable": {"thread_id": tid, "checkpoint_ns": ""}}
         if parent_cfg:
@@ -95,12 +99,21 @@ async def test_history_multi_channel(
             ]
         cv: dict = {}
         cvs: dict = {}
+        s_a += 1
+        s_b += 1
+        counters: dict = {}
         if step == 1:
             cv["a"] = _DeltaSnapshot("snap_a")
             cvs["a"] = step + 1
+            s_a = 0
+        else:
+            counters["a"] = (s_a, s_a)
         if step == 3:
             cv["b"] = _DeltaSnapshot("snap_b")
             cvs["b"] = step + 1
+            s_b = 0
+        else:
+            counters["b"] = (s_b, s_b)
         cp = Checkpoint(
             v=1,
             id=str(uuid6(clock_seq=-1)),
@@ -110,7 +123,10 @@ async def test_history_multi_channel(
             versions_seen={},
             updated_channels=None,
         )
-        parent_cfg = await saver.aput(config, cp, generate_metadata(step=step), cvs)
+        md = generate_metadata(step=step)
+        if counters:
+            md["counters_since_delta_snapshot"] = counters
+        parent_cfg = await saver.aput(config, cp, md, cvs)
         configs.append(parent_cfg)
         await saver.aput_writes(parent_cfg, [("a", step), ("b", step)], str(uuid4()))
 
@@ -148,7 +164,12 @@ async def test_history_walk_to_root_no_seed(
     )
     head = configs[-1]
     result = await saver.aget_delta_channel_history(config=head, channels=["ch"])
+    # The head's supersteps counter (4) runs one hop past the real root —
+    # the snapshot checkpoint was never persisted (implicit empty baseline).
+    # No seed, and the full chain (steps 0..2) replays from empty.
     assert "seed" not in result["ch"], f"Expected no seed, got {result['ch']}"
+    values = [w[2] for w in result["ch"]["writes"]]
+    assert values == [0, 1, 2], f"Expected full-chain writes [0,1,2], got {values}"
 
 
 async def test_history_migration_plain_value_as_seed(
@@ -170,6 +191,10 @@ async def test_history_migration_plain_value_as_seed(
     configs: list = []
     parent_cfg = None
 
+    # The channel was a non-delta channel through step 1 (plain value, no
+    # delta counter), then migrated to DeltaChannel at step 2. Supersteps
+    # count from the migration boundary: step 2 -> 1, step 3 -> 2, so the
+    # head (step 3) walks 2 hops back to the plain-value seed at step 1.
     for step in range(4):
         config = {"configurable": {"thread_id": tid, "checkpoint_ns": ""}}
         if parent_cfg:
@@ -182,6 +207,9 @@ async def test_history_migration_plain_value_as_seed(
         if step == 1:
             cv["ch"] = [10, 20, 30]
             cvs["ch"] = step + 1
+        md = generate_metadata(step=step)
+        if step >= 2:
+            md["counters_since_delta_snapshot"] = {"ch": (step - 1, step - 1)}
         cp = Checkpoint(
             v=1,
             id=str(uuid6(clock_seq=-1)),
@@ -191,7 +219,7 @@ async def test_history_migration_plain_value_as_seed(
             versions_seen={},
             updated_channels=None,
         )
-        parent_cfg = await saver.aput(config, cp, generate_metadata(step=step), cvs)
+        parent_cfg = await saver.aput(config, cp, md, cvs)
         configs.append(parent_cfg)
         if step != 1:
             await saver.aput_writes(parent_cfg, [("ch", step)], str(uuid4()))
@@ -208,6 +236,67 @@ async def test_history_migration_plain_value_as_seed(
     assert values == [2], f"Expected [2], got {values}"
 
 
+async def test_history_migration_skips_seed_checkpoint_writes(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """A migrated plain-value seed already incorporates its own checkpoint's
+    writes, so those writes must NOT be re-emitted in the history.
+
+    This is the discriminating case for non-additive reducers (e.g. an
+    even-only filter): re-applying the seed checkpoint's writes on top of
+    the seed would corrupt the reconstructed value. The saver contract is
+    to skip them — only writes strictly after the seed are returned.
+    """
+    from langgraph.checkpoint.base import Checkpoint
+    from langgraph.checkpoint.base.id import uuid6
+
+    from langgraph.checkpoint.conformance.test_utils import generate_metadata
+
+    tid = str(uuid4())
+    configs: list = []
+    parent_cfg = None
+
+    for step in range(4):
+        config = {"configurable": {"thread_id": tid, "checkpoint_ns": ""}}
+        if parent_cfg:
+            config["configurable"]["checkpoint_id"] = parent_cfg["configurable"][
+                "checkpoint_id"
+            ]
+        cv: dict = {}
+        cvs: dict = {}
+        # Step 1: pre-delta plain accumulated value AND its own writes.
+        if step == 1:
+            cv["ch"] = [2, 4]
+            cvs["ch"] = step + 1
+        md = generate_metadata(step=step)
+        if step >= 2:
+            md["counters_since_delta_snapshot"] = {"ch": (step - 1, step - 1)}
+        cp = Checkpoint(
+            v=1,
+            id=str(uuid6(clock_seq=-1)),
+            ts="",
+            channel_values=cv,
+            channel_versions=cvs,
+            versions_seen={},
+            updated_channels=None,
+        )
+        parent_cfg = await saver.aput(config, cp, md, cvs)
+        configs.append(parent_cfg)
+        # The seed checkpoint (step 1) carries writes that the plain value
+        # already subsumes; later steps carry post-migration delta writes.
+        write_value = 99 if step == 1 else step * 10
+        await saver.aput_writes(parent_cfg, [("ch", write_value)], str(uuid4()))
+
+    head = configs[-1]
+    result = await saver.aget_delta_channel_history(config=head, channels=["ch"])
+    assert result["ch"].get("seed") == [2, 4], (
+        f"Expected plain seed [2, 4], got {result['ch'].get('seed')}"
+    )
+    values = [w[2] for w in result["ch"]["writes"]]
+    # Seed checkpoint's own write (99) is skipped; step 2's write (20) kept.
+    assert values == [20], f"Expected only post-seed writes [20], got {values}"
+
+
 ALL_DELTA_CHANNEL_HISTORY_TESTS = [
     test_history_returns_writes_oldest_first,
     test_history_seed_is_nearest_snapshot,
@@ -216,6 +305,7 @@ ALL_DELTA_CHANNEL_HISTORY_TESTS = [
     test_history_empty_channels_returns_empty,
     test_history_walk_to_root_no_seed,
     test_history_migration_plain_value_as_seed,
+    test_history_migration_skips_seed_checkpoint_writes,
 ]
 
 

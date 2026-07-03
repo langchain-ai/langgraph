@@ -14,6 +14,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     DeltaChannelHistory,
+    _parse_supersteps_since_last_snapshot_by_channel,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
 )
@@ -28,9 +29,11 @@ from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import (
     _DELTA_PAGE_SIZE,
     BasePostgresSaver,
-    _build_delta_stage1_sql,
-    _build_delta_stage2_sql,
+    _advance_shared_chain,
+    _build_delta_fetch_sql,
+    _build_delta_walk_sql,
     _DeltaStage2Row,
+    _ingest_walk_page,
 )
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 
@@ -408,89 +411,122 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """Fast-path override of `BaseCheckpointSaver.aget_delta_channel_history`.
 
         See `PostgresSaver.get_delta_channel_history` for design notes; this is
-        the async equivalent with internal stage-1 paging and per-channel
-        UNION ALL stage-2.
+        the async equivalent: paged supersteps-bounded WALK + per-channel
+        UNION ALL FETCH.
         """
         if not channels:
             return {}
         channels = list(channels)
         thread_id = config["configurable"]["thread_id"]
+        if not thread_id:
+            raise ValueError("empty thread ID")
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_id = get_checkpoint_id(config)
-        if checkpoint_id is None:
-            target = await self.aget_tuple(config)
-            if target is None:
-                return {ch: {"writes": []} for ch in channels}
-            checkpoint_id = target.config["configurable"]["checkpoint_id"]
 
-        stage1_sql = _build_delta_stage1_sql(channels, paged=True)
+        # Resolve the target checkpoint id + its metadata (for supersteps).
+        checkpoint_id = get_checkpoint_id(config)
+        async with self._cursor() as cur:
+            if checkpoint_id is None:
+                await cur.execute(
+                    "SELECT checkpoint_id, metadata FROM checkpoints "
+                    "WHERE thread_id = %s AND checkpoint_ns = %s "
+                    "ORDER BY checkpoint_id DESC LIMIT 1",
+                    (thread_id, checkpoint_ns),
+                )
+            else:
+                await cur.execute(
+                    "SELECT checkpoint_id, metadata FROM checkpoints "
+                    "WHERE thread_id = %s AND checkpoint_ns = %s "
+                    "AND checkpoint_id = %s",
+                    (thread_id, checkpoint_ns, checkpoint_id),
+                )
+            target_row = await cur.fetchone()
+        if target_row is None:
+            return {ch: {"writes": []} for ch in channels}
+        target_id = cast(str, target_row["checkpoint_id"])
+        supersteps_by_ch = _parse_supersteps_since_last_snapshot_by_channel(
+            target_row["metadata"] or {}, channels
+        )
+        max_supersteps = max(supersteps_by_ch.values(), default=0)
+
+        # WALK: page the parent chain, bounded by the deepest supersteps.
+        walk_sql = _build_delta_walk_sql(channels)
         parent_of: dict[str, str | None] = {}
         ver_by_i_by_cid: list[dict[str, str | None]] = [{} for _ in channels]
-        hs_by_i_by_cid: list[dict[str, bool]] = [{} for _ in channels]
-        chain_by_ch: dict[str, list[str]] = {ch: [] for ch in channels}
-        seed_ver_by_ch: dict[str, str | None] = {ch: None for ch in channels}
-        walk_cursor_by_ch: dict[str, str | None] = {}
-        seeded: set[str] = set()
+        shared_cpid_chain: list[str] = []
+        has_reached_root = False
         cursor: str | None = None
 
-        async with self._cursor() as cur:
-            while True:
-                stage1_params: list[Any] = []
-                for ch in channels:
-                    stage1_params.extend([ch, ch])
-                stage1_params.extend(
-                    [thread_id, checkpoint_ns, cursor, cursor, _DELTA_PAGE_SIZE]
-                )
-                await cur.execute(stage1_sql, stage1_params)
+        while max_supersteps > 0:
+            walk_params: list[Any] = [
+                *channels,
+                thread_id,
+                checkpoint_ns,
+                cursor,
+                cursor,
+                _DELTA_PAGE_SIZE,
+            ]
+            async with self._cursor() as cur:
+                await cur.execute(walk_sql, walk_params)
                 page = await cur.fetchall()
-                if not page:
-                    break
-                oldest = self._ingest_stage1_page(
-                    cast("list[Mapping[str, Any]]", page),
-                    channels,
-                    parent_of,
-                    ver_by_i_by_cid,
-                    hs_by_i_by_cid,
-                )
-                self._try_advance_walks(
-                    checkpoint_id,
-                    channels,
-                    parent_of,
-                    ver_by_i_by_cid,
-                    hs_by_i_by_cid,
-                    chain_by_ch,
-                    seed_ver_by_ch,
-                    walk_cursor_by_ch,
-                    seeded,
-                )
-                if len(seeded) == len(channels) or len(page) < _DELTA_PAGE_SIZE:
-                    break
-                cursor = oldest
+            if not page:
+                break
+            oldest = _ingest_walk_page(
+                cast("list[Mapping[str, Any]]", page),
+                channels,
+                parent_of,
+                ver_by_i_by_cid,
+            )
+            has_reached_root = _advance_shared_chain(
+                target_id, parent_of, shared_cpid_chain, max_supersteps
+            )
+            if (
+                has_reached_root
+                or len(shared_cpid_chain) >= max_supersteps
+                or len(page) < _DELTA_PAGE_SIZE
+            ):
+                break
+            cursor = oldest
 
-        channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
+        chained_cpid_by_ch, seed_cpid_by_ch, seed_ver_by_ch = (
+            self._resolve_delta_chains(
+                channels,
+                supersteps_by_ch,
+                shared_cpid_chain,
+                ver_by_i_by_cid,
+                has_reached_root,
+                thread_id,
+            )
+        )
+
+        # FETCH: per-channel UNION ALL — writes branch per chained channel,
+        # blob branch per seeded channel.
+        channels_with_chain = [ch for ch in channels if chained_cpid_by_ch[ch]]
         channels_with_seed = [ch for ch in channels if seed_ver_by_ch[ch] is not None]
-        stage2_sql = _build_delta_stage2_sql(
+        fetch_sql = _build_delta_fetch_sql(
             channels_with_chain=channels_with_chain,
             channels_with_seed=channels_with_seed,
         )
 
-        if stage2_sql:
-            stage2_params: list[Any] = []
+        if fetch_sql:
+            fetch_params: list[Any] = []
             for ch in channels_with_chain:
-                stage2_params.extend([thread_id, checkpoint_ns, ch, chain_by_ch[ch]])
+                fetch_params.extend(
+                    [thread_id, checkpoint_ns, ch, chained_cpid_by_ch[ch]]
+                )
             for ch in channels_with_seed:
-                stage2_params.extend([thread_id, checkpoint_ns, ch, seed_ver_by_ch[ch]])
+                fetch_params.extend([thread_id, checkpoint_ns, ch, seed_ver_by_ch[ch]])
             async with self._cursor() as cur:
-                await cur.execute(stage2_sql, stage2_params)
-                stage2_rows = await cur.fetchall()
+                await cur.execute(fetch_sql, fetch_params)
+                fetch_rows = await cur.fetchall()
         else:
-            stage2_rows = []
+            fetch_rows = []
 
-        return self._build_delta_channels_writes_history(
+        return self._assemble_delta_history(
             channels=channels,
-            chain_by_ch=chain_by_ch,
+            chained_cpid_by_ch=chained_cpid_by_ch,
+            seed_cpid_by_ch=seed_cpid_by_ch,
             seed_ver_by_ch=seed_ver_by_ch,
-            stage2_rows=cast("list[_DeltaStage2Row]", stage2_rows),
+            fetch_rows=cast("list[_DeltaStage2Row]", fetch_rows),
         )
 
     async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:

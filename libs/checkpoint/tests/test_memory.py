@@ -351,9 +351,12 @@ class TestInMemorySaverDeltaChannel:
         cp1["id"] = "cp1"
         cp2 = empty_checkpoint()
         cp2["id"] = "cp2"
+        # Target (cp2) carries the supersteps counter; no snapshot was ever
+        # taken, so the walk runs back to the root → no seed, empty baseline.
+        cp2_md = {"counters_since_delta_snapshot": {channel: [1, 2]}}
         saver.storage[thread_id][ns] = {
             "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), None),
-            "cp2": (serde.dumps_typed(cp2), serde.dumps_typed({}), "cp1"),
+            "cp2": (serde.dumps_typed(cp2), serde.dumps_typed(cp2_md), "cp1"),
         }
         # Writes stored at cp1 produced the cp1 snapshot; part of history.
         saver.writes[(thread_id, ns, "cp1")][("task1", 0)] = (
@@ -456,10 +459,15 @@ class TestBaseFallbackGetChannelWrites:
         cp1["id"] = "00000000000000000000000000000002.0000000000000000"
         cp2 = empty_checkpoint()
         cp2["id"] = "00000000000000000000000000000003.0000000000000000"
+        # The target (cp2) carries `counters_since_delta_snapshot` — the
+        # supersteps-since-last-snapshot driving the ancestor-walk depth. No
+        # snapshot was ever taken, so the count runs back past the oldest
+        # persisted checkpoint (root) → implicit empty baseline, no seed.
+        cp2_md = {"counters_since_delta_snapshot": {channel: [2, 3]}}
         saver.storage[thread_id][ns] = {
             cp0["id"]: (serde.dumps_typed(cp0), serde.dumps_typed({}), None),
             cp1["id"]: (serde.dumps_typed(cp1), serde.dumps_typed({}), cp0["id"]),
-            cp2["id"]: (serde.dumps_typed(cp2), serde.dumps_typed({}), cp1["id"]),
+            cp2["id"]: (serde.dumps_typed(cp2), serde.dumps_typed(cp2_md), cp1["id"]),
         }
         # Writes under cp0 produced cp1's state; writes under cp1 produced cp2's.
         saver.writes[(thread_id, ns, cp0["id"])][("task1", 0)] = (
@@ -607,10 +615,14 @@ class TestPreDeltaBlobTerminator:
         cp3["id"] = "cp3"
         cp3["channel_versions"][channel] = v3
 
+        # cp1 is the pre-delta (migration) seed; the channel became a
+        # DeltaChannel at cp2, so its supersteps counter starts there: cp2 -> 1,
+        # cp3 -> 2. The target (cp3) walks 2 hops back to the cp1 seed blob.
+        cp3_md = {"counters_since_delta_snapshot": {channel: [2, 2]}}
         saver.storage[thread_id][ns] = {
             "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), None),
             "cp2": (serde.dumps_typed(cp2), serde.dumps_typed({}), "cp1"),
-            "cp3": (serde.dumps_typed(cp3), serde.dumps_typed({}), "cp2"),
+            "cp3": (serde.dumps_typed(cp3), serde.dumps_typed(cp3_md), "cp2"),
         }
         # Write under cp1 would be from the pre-delta era and MUST be ignored
         # (the blob already captures it). We add one and assert it is not
