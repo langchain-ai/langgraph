@@ -621,13 +621,13 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watch" },
-    { name = "ruff", specifier = "==0.15.12" },
+    { name = "ruff", specifier = "==0.15.20" },
     { name = "starlette" },
     { name = "ty" },
 ]
 lint = [
     { name = "codespell" },
-    { name = "ruff", specifier = "==0.15.12" },
+    { name = "ruff", specifier = "==0.15.20" },
     { name = "starlette" },
     { name = "ty" },
 ]
