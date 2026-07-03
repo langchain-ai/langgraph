@@ -67,9 +67,7 @@ EXCLUDED_FRAME_FNAMES = (
     "concurrent/futures/_base.py",
 )
 
-SKIP_RERAISE_SET: weakref.WeakSet[concurrent.futures.Future | asyncio.Future] = (
-    weakref.WeakSet()
-)
+from langgraph.pregel._constants import SKIP_RERAISE_SET
 
 
 class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):

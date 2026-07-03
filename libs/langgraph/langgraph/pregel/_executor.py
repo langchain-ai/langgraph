@@ -19,6 +19,7 @@ from typing_extensions import ParamSpec
 
 from langgraph._internal._future import CONTEXT_NOT_SUPPORTED, run_coroutine_threadsafe
 from langgraph.errors import GraphBubbleUp
+from langgraph.pregel._constants import SKIP_RERAISE_SET
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -113,6 +114,8 @@ class BackgroundExecutor(AbstractContextManager):
             for task, (_, reraise) in tasks.items():
                 if not reraise:
                     continue
+                if task in SKIP_RERAISE_SET:
+                    continue
                 try:
                     task.result()
                 except concurrent.futures.CancelledError:
@@ -203,6 +206,8 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
             # re-raise the first exception that occurred in a task
             for task, (_, reraise) in tasks.items():
                 if not reraise:
+                    continue
+                if task in SKIP_RERAISE_SET:
                     continue
                 try:
                     if exc := task.exception():
