@@ -236,7 +236,7 @@ def swap_roles(state: InterviewState, name: str):
     converted = []
     for message in state["messages"]:
         if isinstance(message, AIMessage) and message.name != name:
-            message = HumanMessage(**message.dict(exclude={"type"}))
+            message = HumanMessage(**message.model_dump(exclude={"type"}))
         converted.append(message)
     return {"messages": converted}
 
