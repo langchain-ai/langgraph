@@ -2941,3 +2941,63 @@ async def test_pregel_user_raised_cancellederror_fails_run():
     with pytest.raises(NodeCancelledError) as excinfo:
         await graph.ainvoke({"vals": []})
     assert excinfo.value.node == "boom"
+
+
+def test_graph_error_handler_suppresses_exception_in_parallel_superstep():
+    """error_handler should suppress the exception even when the failing node
+    runs in parallel with other tasks in the same superstep (issue #8277)."""
+    import operator
+
+    class S(TypedDict):
+        xs: Annotated[list, operator.add]
+
+    def boom(state: S) -> S:
+        raise RuntimeError("boom")
+
+    def handler(state: S, error: NodeError) -> dict:
+        return {"xs": ["degraded"]}
+
+    graph = (
+        StateGraph(S)
+        .add_node("boom", boom, error_handler=handler)
+        .add_node("ok", lambda s: {"xs": ["ok"]})
+        .add_edge(START, "boom")
+        .add_edge(START, "ok")
+        .add_edge("boom", END)
+        .add_edge("ok", END)
+        .compile()
+    )
+
+    # Before fix this raised RuntimeError: boom
+    result = graph.invoke({"xs": []})
+    assert set(result["xs"]) == {"degraded", "ok"}
+
+
+@pytest.mark.anyio
+async def test_graph_error_handler_suppresses_exception_in_parallel_superstep_async():
+    """Async variant of test_graph_error_handler_suppresses_exception_in_parallel_superstep."""
+    import operator
+
+    class S(TypedDict):
+        xs: Annotated[list, operator.add]
+
+    async def boom(state: S) -> S:
+        raise RuntimeError("boom")
+
+    def handler(state: S, error: NodeError) -> dict:
+        return {"xs": ["degraded"]}
+
+    graph = (
+        StateGraph(S)
+        .add_node("boom", boom, error_handler=handler)
+        .add_node("ok", lambda s: {"xs": ["ok"]})
+        .add_edge(START, "boom")
+        .add_edge(START, "ok")
+        .add_edge("boom", END)
+        .add_edge("ok", END)
+        .compile()
+    )
+
+    # Before fix this raised RuntimeError: boom
+    result = await graph.ainvoke({"xs": []})
+    assert set(result["xs"]) == {"degraded", "ok"}
