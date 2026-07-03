@@ -24,6 +24,9 @@
     "@langchain/core": "^1.2.1",
     "@langchain/langgraph": "^1.4.7"
   },
+  "resolutions": {
+    "@langchain/langgraph-checkpoint": "1.0.4"
+  },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
     "@eslint/js": "^10.0.1",
