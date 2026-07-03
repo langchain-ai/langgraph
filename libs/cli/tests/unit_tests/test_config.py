@@ -39,6 +39,7 @@ def _write_uv_lock_workspace(
     agent_sources: str = "",
     shared_uv_config: str = "",
     agent_dependencies: list[str] | None = None,
+    workspace_exclude: str = "",
 ) -> tuple[pathlib.Path, pathlib.Path]:
     project_root = tmpdir_path / "workspace"
     config_dir = project_root / config_relative_dir
@@ -61,6 +62,7 @@ def _write_uv_lock_workspace(
 
             [tool.uv.workspace]
             members = ["apps/*", "libs/*"]
+            {workspace_exclude}
 
             {root_sources}
 
@@ -1447,6 +1449,63 @@ def test_config_to_docker_uv_lock():
             '"agent": "/deps/workspace/apps/agent/src/agent/graph.py:graph"' in docker
         )
         assert "rm /usr/bin/uv /usr/bin/uvx" in docker
+
+
+@pytest.mark.parametrize(
+    "excluded_pyproject",
+    [
+        pytest.param(
+            "[tool.ruff]\nline-length = 100\n",
+            id="tool-only-pyproject-without-project-name",
+        ),
+        pytest.param(
+            '[project]\nname = "shared"\nversion = "0.0.0"\n',
+            id="name-colliding-with-real-member",
+        ),
+    ],
+)
+def test_config_to_docker_uv_lock_honors_workspace_exclude(excluded_pyproject):
+    """Dirs matched by [tool.uv.workspace].exclude are not workspace members.
+
+    uv only requires directories included by the `members` globs *and not
+    excluded by the `exclude` globs* to be valid packages, so `uv lock`
+    accepts workspaces whose excluded dirs have tool-only pyprojects or
+    duplicate package names. Discovery must skip them the same way.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        project_root, config_path = _write_uv_lock_workspace(
+            tmpdir_path,
+            agent_sources="[tool.uv.sources]\nshared = { workspace = true }",
+            workspace_exclude='exclude = ["libs/scratch"]',
+        )
+        scratch_dir = project_root / "libs" / "scratch"
+        scratch_dir.mkdir(parents=True)
+        (scratch_dir / "pyproject.toml").write_text(excluded_pyproject)
+
+        config = validate_config(
+            {
+                "python_version": "3.11",
+                "graphs": {
+                    "agent": "../../apps/agent/src/agent/graph.py:graph",
+                },
+                "source": {"kind": "uv", "root": "../..", "package": "agent"},
+            }
+        )
+        docker, _ = config_to_docker(
+            config_path, config, base_image="langchain/langgraph-api:0.2.47"
+        )
+
+        assert "# -- Adding workspace package libs/scratch --" not in docker
+        assert "libs/scratch /deps/workspace/libs/scratch" not in docker
+        assert (
+            "COPY --from=uv-workspace-root apps/agent /deps/workspace/apps/agent"
+            in docker
+        )
+        assert (
+            "COPY --from=uv-workspace-root libs/shared /deps/workspace/libs/shared"
+            in docker
+        )
 
 
 def test_config_to_docker_uv_lock_honors_root_workspace_sources():

@@ -358,13 +358,28 @@ def _discover_uv_lock_workspace_packages(
     if isinstance(root_project, dict) and isinstance(root_project.get("name"), str):
         candidate_roots.append(project_root)
 
-    workspace_members = (
-        root_data.get("tool", {}).get("uv", {}).get("workspace", {}).get("members", [])
-    )
+    workspace_table = root_data.get("tool", {}).get("uv", {}).get("workspace", {})
+    workspace_members = workspace_table.get("members", [])
     if workspace_members and not isinstance(workspace_members, list):
         raise click.UsageError(
             "source.kind 'uv' requires [tool.uv.workspace].members to be a list."
         )
+    workspace_excludes = workspace_table.get("exclude", [])
+    if workspace_excludes and not isinstance(workspace_excludes, list):
+        raise click.UsageError(
+            "source.kind 'uv' requires [tool.uv.workspace].exclude to be a list."
+        )
+
+    excluded_roots: set[pathlib.Path] = set()
+    for pattern in workspace_excludes:
+        if not isinstance(pattern, str):
+            raise click.UsageError(
+                "source.kind 'uv' requires every [tool.uv.workspace].exclude "
+                "entry to be a string."
+            )
+        for match in project_root.glob(pattern):
+            excluded_root = match if match.is_dir() else match.parent
+            excluded_roots.add(excluded_root.resolve())
 
     for pattern in workspace_members:
         if not isinstance(pattern, str):
@@ -375,6 +390,8 @@ def _discover_uv_lock_workspace_packages(
         for match in sorted(project_root.glob(pattern)):
             package_root = match if match.is_dir() else match.parent
             package_root = package_root.resolve()
+            if package_root in excluded_roots:
+                continue
             if (package_root / "pyproject.toml").is_file():
                 candidate_roots.append(package_root)
 
