@@ -95,7 +95,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
         the first time checkpointer is used.
         """
         async with self._cursor() as cur:
+            # When using pipeline mode, we must ensure we sync after each statement
+            if self.pipe:
+                await self.pipe.sync()  # Ensure pipeline is ready
             await cur.execute(self.MIGRATIONS[0])
+            if self.pipe:
+                await self.pipe.sync()
             results = await cur.execute(
                 "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
             )
@@ -110,10 +115,15 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 strict=False,
             ):
                 await cur.execute(migration)
+                if self.pipe:
+                    await self.pipe.sync()
                 await cur.execute(
                     "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
                 )
+                if self.pipe:
+                    await self.pipe.sync()
         if self.pipe:
+            await self.pipe.sync()  # Final sync to ensure all operations completed
             await self.pipe.sync()
 
     async def alist(
