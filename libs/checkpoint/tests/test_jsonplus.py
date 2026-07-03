@@ -1235,3 +1235,27 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_unsupported_type_raises_actionable_error_message() -> None:
+    """Unsupported types should raise a TypeError that explains what's
+    natively supported and how to plug in a custom serializer, instead of
+    a bare "Object of type X is not serializable" message.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/2557
+    """
+
+    class Unsupported:
+        """A plain object with no dataclass/pydantic/etc. support."""
+
+        pass
+
+    serde = JsonPlusSerializer()
+
+    with pytest.raises(TypeError) as exc_info:
+        serde.dumps_typed(Unsupported())
+
+    message = str(exc_info.value)
+    assert "Unsupported" in message
+    assert "SerializerProtocol" in message
+    assert "serde=" in message

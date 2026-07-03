@@ -92,6 +92,32 @@ class JsonPlusSerializer(SerializerProtocol):
         Set the environment variable ``LANGGRAPH_STRICT_MSGPACK=true`` to restrict
         deserialization to a built-in allowlist of safe types.  You can also pass
         an explicit ``allowed_msgpack_modules`` to the constructor.
+
+    !!! info "Custom serialization"
+
+        If your graph state contains a type this serializer doesn't natively
+        support (e.g. a file handle, socket, or other unpicklable/unpacklable
+        object), you have two options:
+
+        1. Convert the object to a natively-supported type (str, int, dict,
+           dataclass, Pydantic model, etc.) before returning it from a node.
+        2. Implement `SerializerProtocol` and pass it to your checkpointer:
+
+        ```python
+        from langgraph.checkpoint.serde.base import SerializerProtocol
+        from langgraph.checkpoint.memory import MemorySaver
+
+        class MyCustomSerializer(SerializerProtocol):
+            def dumps_typed(self, obj):
+                # return (type_name, bytes)
+                ...
+
+            def loads_typed(self, data):
+                # data is (type_name, bytes); return the original object
+                ...
+
+        checkpointer = MemorySaver(serde=MyCustomSerializer())
+        ```
     """
 
     def __init__(
@@ -268,7 +294,21 @@ class JsonPlusSerializer(SerializerProtocol):
             except ormsgpack.MsgpackEncodeError as exc:
                 if self.pickle_fallback:
                     return "pickle", pickle.dumps(obj)
-                raise exc
+                raise TypeError(
+                    f"Object of type {type(obj).__name__!r} is not serializable "
+                    "by JsonPlusSerializer.\n\n"
+                    "Natively supported types include Python builtins (str, "
+                    "int, float, bool, list, dict, tuple, set, bytes), "
+                    "dataclasses, Pydantic models, datetime/date/time/"
+                    "timedelta, UUID, Decimal, Enum, pathlib.Path, ipaddress "
+                    "types, numpy arrays, and LangChain messages/documents.\n\n"
+                    "To store this type in graph state, either:\n"
+                    "  1. Convert it to a natively-supported type before "
+                    "returning it from a node, or\n"
+                    "  2. Implement `SerializerProtocol` "
+                    "(langgraph.checkpoint.serde.base) and pass it to your "
+                    "checkpointer, e.g. MemorySaver(serde=MyCustomSerializer())."
+                ) from exc
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
         type_, data_ = data
@@ -531,6 +571,9 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:
+        # Note: this TypeError is caught by ormsgpack and re-raised as
+        # MsgpackEncodeError before it reaches the caller, so the caller-facing
+        # message is constructed in `JsonPlusSerializer.dumps_typed` instead.
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
 
 
