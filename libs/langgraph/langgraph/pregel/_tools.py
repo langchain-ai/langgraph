@@ -9,6 +9,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from langgraph._internal._constants import NS_SEP
 from langgraph.constants import TAG_NOSTREAM
+from langgraph.errors import GraphBubbleUp
 from langgraph.pregel.protocol import StreamChunk
 
 try:
@@ -188,6 +189,8 @@ class StreamToolCallHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             return
         ns, tool_call_id, token = info
         self._reset_writer(token)
+        if isinstance(error, GraphBubbleUp):
+            return
         self.stream(
             (
                 ns,

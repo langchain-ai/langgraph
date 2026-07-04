@@ -13,6 +13,7 @@ from typing import Annotated, Any
 import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt import ToolNode, ToolRuntime
 from typing_extensions import TypedDict
 
@@ -20,6 +21,7 @@ from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.pregel._tools import _tool_call_writer
+from langgraph.types import interrupt
 
 
 class _State(TypedDict):
@@ -195,6 +197,68 @@ class TestAsyncGraphAsyncTool:
         kinds = [p["event"] for _, p in events]
         assert kinds == ["tool-started", "tool-output-delta", "tool-finished"]
         assert events[1][1]["delta"] == "hi"
+
+
+class TestToolInterrupt:
+    def test_interrupt_not_reported_as_tool_error_sync(self) -> None:
+        @tool
+        def ask_human(question: str) -> str:
+            """Pause for human input."""
+            return interrupt(question)
+
+        sg = StateGraph(_State)
+        sg.add_node("caller", _caller_sync("ask_human", {"question": "ok?"}))
+        sg.add_node("tools", ToolNode([ask_human]))
+        sg.add_edge(START, "caller")
+        sg.add_edge("caller", "tools")
+        sg.add_edge("tools", END)
+        graph = sg.compile(checkpointer=InMemorySaver())
+
+        config = {"configurable": {"thread_id": "t1"}}
+        events = _tool_events(
+            graph.stream(
+                {"messages": []},
+                config=config,
+                stream_mode=["tools"],
+                subgraphs=True,
+            )
+        )
+
+        kinds = [p["event"] for _, p in events]
+        assert "tool-error" not in kinds
+        assert kinds == ["tool-started"]
+        assert graph.get_state(config).interrupts
+
+    @pytest.mark.anyio
+    async def test_interrupt_not_reported_as_tool_error_async(self) -> None:
+        @tool
+        async def ask_human(question: str) -> str:
+            """Pause for human input."""
+            return interrupt(question)
+
+        sg = StateGraph(_State)
+        sg.add_node("caller", _caller_async("ask_human", {"question": "ok?"}))
+        sg.add_node("tools", ToolNode([ask_human]))
+        sg.add_edge(START, "caller")
+        sg.add_edge("caller", "tools")
+        sg.add_edge("tools", END)
+        graph = sg.compile(checkpointer=InMemorySaver())
+
+        config = {"configurable": {"thread_id": "t1"}}
+        events: list[tuple[tuple[str, ...], dict]] = []
+        async for ns, mode, payload in graph.astream(
+            {"messages": []},
+            config=config,
+            stream_mode=["tools"],
+            subgraphs=True,
+        ):
+            if mode == "tools":
+                events.append((tuple(ns), payload))
+
+        kinds = [p["event"] for _, p in events]
+        assert "tool-error" not in kinds
+        assert kinds == ["tool-started"]
+        assert (await graph.aget_state(config)).interrupts
 
 
 class TestConcurrentToolCalls:
