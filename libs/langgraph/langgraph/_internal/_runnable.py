@@ -475,7 +475,7 @@ class RunnableCallable(Runnable):
             run_manager = await callback_manager.on_chain_start(
                 None,
                 input,
-                name=config.get("run_name") or self.name,
+                name=config.get("run_name") or self.get_name(),
                 run_id=config.pop("run_id", None),
             )
             try:

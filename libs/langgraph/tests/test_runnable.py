@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from functools import partial
 from typing import Any, Optional
 
 import pytest
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.store.base import BaseStore
 
@@ -72,6 +74,50 @@ async def test_runnable_callable_basic():
     # Test asynchronous ainvoke
     result_async = await runnable_async.ainvoke("test")
     assert result_async == "test"
+
+
+async def test_runnable_callable_trace_name_defaults_to_class_name() -> None:
+    """A nameless node should trace under the same name sync and async.
+
+    When no explicit name can be derived (e.g. a partial with no `__name__`),
+    `invoke` and `ainvoke` must both report the class-name fallback from
+    `get_name()` to `on_chain_start`. Previously `ainvoke` passed the raw
+    `self.name` (`None`), which downstream tracers coerce to "Unnamed", while
+    `invoke` correctly used `get_name()`.
+    """
+
+    class NameCapture(BaseCallbackHandler):
+        def __init__(self) -> None:
+            self.names: list[str | None] = []
+
+        def on_chain_start(
+            self,
+            serialized: Any,
+            inputs: Any,
+            **kwargs: Any,
+        ) -> None:
+            self.names.append(kwargs.get("name"))
+
+    def sync_func(x: Any) -> str:
+        return f"{x}"
+
+    async def async_func(x: Any) -> str:
+        return f"{x}"
+
+    # Wrapping in partial removes `__name__` so no name is derived and the
+    # class-name fallback in `get_name()` is what should be reported.
+    runnable_sync = RunnableCallable(func=partial(sync_func))
+    runnable_async = RunnableCallable(func=None, afunc=partial(async_func))
+    assert runnable_sync.name is None
+    assert runnable_async.name is None
+
+    sync_handler = NameCapture()
+    runnable_sync.invoke("test", {"callbacks": [sync_handler]})
+    assert sync_handler.names == ["RunnableCallable"]
+
+    async_handler = NameCapture()
+    await runnable_async.ainvoke("test", {"callbacks": [async_handler]})
+    assert async_handler.names == ["RunnableCallable"]
 
 
 def test_runnable_callable_injectable_arguments() -> None:
