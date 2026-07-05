@@ -11,7 +11,9 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._shared.utilities import _quote_path_param
+from langgraph_sdk._sync.stream import SyncThreadStream
 from langgraph_sdk.client import (
     AssistantsClient,
     CronClient,
@@ -339,6 +341,46 @@ class TestAsyncPathEncoding:
 
         assert captured == ["/threads/550e8400-e29b-41d4-a716-446655440000"]
 
+    async def test_thread_stream_agent_get_tree_encodes_assistant_id(self) -> None:
+        captured: list[str] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(_wire_path(request))
+            return httpx.Response(200, json={"nodes": [], "edges": []})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            stream = AsyncThreadStream(
+                http=HttpClient(client),
+                thread_id="thread-1",
+                assistant_id="../threads/pivot",
+            )
+            await stream.agent.get_tree()
+
+        assert captured == ["/assistants/..%2Fthreads%2Fpivot/graph"]
+
+    async def test_thread_stream_fetch_state_encodes_thread_id(self) -> None:
+        captured: list[str] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(_wire_path(request))
+            return httpx.Response(200, json={})
+
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            stream = AsyncThreadStream(
+                http=HttpClient(client),
+                thread_id="../assistants/pivot",
+                assistant_id="assistant-1",
+            )
+            await stream._fetch_state()
+
+        assert captured == ["/threads/..%2Fassistants%2Fpivot/state"]
+
 
 class TestSyncPathEncoding:
     """Sync-client tests that mirror the async coverage on a representative subset."""
@@ -446,3 +488,43 @@ class TestSyncPathEncoding:
             threads_client.get("550e8400-e29b-41d4-a716-446655440000")
 
         assert captured == ["/threads/550e8400-e29b-41d4-a716-446655440000"]
+
+    def test_thread_stream_agent_get_tree_encodes_assistant_id(self) -> None:
+        captured: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(_wire_path(request))
+            return httpx.Response(200, json={"nodes": [], "edges": []})
+
+        transport = httpx.MockTransport(handler)
+        with httpx.Client(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            stream = SyncThreadStream(
+                http=SyncHttpClient(client),
+                thread_id="thread-1",
+                assistant_id="../threads/pivot",
+            )
+            stream.agent.get_tree()
+
+        assert captured == ["/assistants/..%2Fthreads%2Fpivot/graph"]
+
+    def test_thread_stream_fetch_state_encodes_thread_id(self) -> None:
+        captured: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured.append(_wire_path(request))
+            return httpx.Response(200, json={})
+
+        transport = httpx.MockTransport(handler)
+        with httpx.Client(
+            transport=transport, base_url="https://example.com"
+        ) as client:
+            stream = SyncThreadStream(
+                http=SyncHttpClient(client),
+                thread_id="../assistants/pivot",
+                assistant_id="assistant-1",
+            )
+            stream._fetch_state()
+
+        assert captured == ["/threads/..%2Fassistants%2Fpivot/state"]
