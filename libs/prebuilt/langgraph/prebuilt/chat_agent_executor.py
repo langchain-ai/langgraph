@@ -626,9 +626,9 @@ def create_react_agent(
         )
         remaining_steps = _get_state_value(state, "remaining_steps", None)
         if remaining_steps is not None:
-            if remaining_steps < 1 and all_tools_return_direct:
+            if remaining_steps < 1:
                 return True
-            elif remaining_steps < 2 and has_tool_calls:
+            elif remaining_steps < 2 and has_tool_calls and not all_tools_return_direct:
                 return True
 
         return False
