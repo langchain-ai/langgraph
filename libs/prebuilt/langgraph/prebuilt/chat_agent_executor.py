@@ -619,16 +619,19 @@ def create_react_agent(
 
     def _are_more_steps_needed(state: StateSchema, response: BaseMessage) -> bool:
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
-        all_tools_return_direct = (
-            all(call["name"] in should_return_direct for call in response.tool_calls)
-            if isinstance(response, AIMessage)
-            else False
+        if not has_tool_calls:
+            return False
+
+        all_tools_return_direct = all(
+            call["name"] in should_return_direct for call in response.tool_calls
         )
         remaining_steps = _get_state_value(state, "remaining_steps", None)
         if remaining_steps is not None:
-            if remaining_steps < 1 and all_tools_return_direct:
-                return True
-            elif remaining_steps < 2 and has_tool_calls:
+            # Return_direct tools don't consume steps, so no abort needed
+            if all_tools_return_direct:
+                return False
+            # Non-return_direct tools need at least 2 steps (execute, then run agent again)
+            elif remaining_steps < 2:
                 return True
 
         return False
