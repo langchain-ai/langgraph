@@ -102,6 +102,11 @@ def create_checkpoint(
                 continue
             ch = channels[k]
             if k in channels_to_snapshot:
+                # Callers force a full snapshot blob here: exit mode when a
+                # delta channel reaches its snapshot cadence, and update_state
+                # on a fresh thread (no ancestor to replay writes from). The
+                # manual version-bump below only applies to the exit-mode case.
+                #
                 # In exit mode, the snapshot decision is deferred to exit
                 # time (intermediate steps have do_checkpoint=False). The
                 # channel's count may have reached snapshot_frequency over
