@@ -57,6 +57,7 @@ from langgraph.channels.named_barrier_value import (
     NamedBarrierValue,
     NamedBarrierValueAfterFinish,
 )
+from langgraph.channels.topic import Topic
 from langgraph.constants import END, START, TAG_HIDDEN
 from langgraph.errors import (
     ErrorCode,
@@ -82,6 +83,8 @@ from langgraph.types import (
     CachePolicy,
     Checkpointer,
     Command,
+    NodeMode,
+    Publish,
     RetryPolicy,
     Send,
     TimeoutPolicy,
@@ -135,6 +138,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     Each state key can optionally be annotated with a reducer function that
     will be used to aggregate the values of that key received from multiple nodes.
     The signature of a reducer function is `(Value, Value) -> Value`.
+
+    Nodes are activated by **workflow** control flow (edges, `Command`, `Send`)
+    and/or by **pub-sub** topics (`add_topic`, `Publish`, `subscribes`). See
+    `add_topic`, `publish`, `subscribe`, and [`Publish`][langgraph.types.Publish].
 
     !!! warning
 
@@ -205,6 +212,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     managed: dict[str, ManagedValueSpec]
     schemas: dict[type[Any], dict[str, BaseChannel | ManagedValueSpec]]
     waiting_edges: set[tuple[tuple[str, ...], str]]
+    topics: dict[str, Topic[Any]]
+    """Registered pub-sub topics (name → `Topic` channel)."""
 
     compiled: bool
     state_schema: type[StateT]
@@ -256,6 +265,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self.managed = {}
         self.compiled = False
         self.waiting_edges = set()
+        self.topics = {}
 
         self.state_schema = state_schema
         self.input_schema = cast(type[InputT], input_schema or state_schema)
@@ -267,6 +277,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self._add_schema(self.state_schema)
         self._add_schema(self.input_schema, allow_managed=False)
         self._add_schema(self.output_schema, allow_managed=False)
+        # State keys that are already Topic channels are pub-sub topics.
+        for name, channel in self.channels.items():
+            if isinstance(channel, Topic):
+                self.topics[name] = channel
 
     def set_node_defaults(
         self,
@@ -333,6 +347,142 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             defaults.timeout = coerce_timeout_policy(timeout)
         return self
 
+    def add_topic(
+        self,
+        name: str,
+        *,
+        typ: type[Any] = Any,  # type: ignore[assignment]
+        accumulate: bool = False,
+    ) -> Self:
+        """Register a pub-sub topic.
+
+        Topics are named channels that publishers write to and subscribers
+        trigger on. A topic may also be declared as a state key with
+        `Annotated[Sequence[T], Topic(T)]`; calling `add_topic` with the same
+        name reuses that channel when compatible.
+
+        Args:
+            name: Topic name (also the channel key).
+            typ: Payload type stored on the topic (used when creating a new
+                channel). Ignored when reusing an existing compatible `Topic`.
+            accumulate: If `True`, messages accumulate across supersteps.
+                If `False` (default), the topic is emptied after each step.
+
+        Returns:
+            Self, for chaining.
+
+        Example:
+            ```python
+            builder.add_topic("events")
+            builder.add_node("src", src, publishes=["events"])
+            builder.add_node("dst", dst, mode="pubsub", subscribes=["events"])
+            ```
+        """
+        if self.compiled:
+            logger.warning(
+                "Adding a topic to a graph that has already been compiled. This will "
+                "not be reflected in the compiled graph."
+            )
+        if name in (START, END):
+            raise ValueError(f"Topic name `{name}` is reserved.")
+        existing = self.channels.get(name)
+        if existing is not None:
+            if not isinstance(existing, Topic):
+                raise ValueError(
+                    f"Channel `{name}` already exists and is not a Topic "
+                    f"({type(existing).__name__}). Choose a different topic name "
+                    "or declare the state key with Topic."
+                )
+            # Reuse existing Topic; accumulate/typ mismatches are errors if explicit
+            if existing.accumulate != accumulate:
+                raise ValueError(
+                    f"Topic `{name}` already exists with accumulate="
+                    f"{existing.accumulate}, cannot re-register with "
+                    f"accumulate={accumulate}."
+                )
+            self.topics[name] = existing
+            return self
+
+        topic: Topic[Any] = Topic(typ, accumulate=accumulate)
+        topic.key = name
+        self.channels[name] = topic
+        self.topics[name] = topic
+        return self
+
+    def publish(self, node: str, *topics: str) -> Self:
+        """Declare that `node` publishes to the given topics.
+
+        Used for diagram edges and validation. Runtime publishing is done by
+        returning [`Publish`][langgraph.types.Publish] (or writing a Topic state
+        key). Call after `add_node`.
+
+        Args:
+            node: Node name.
+            *topics: One or more registered topic names.
+
+        Returns:
+            Self, for chaining.
+        """
+        if not topics:
+            raise ValueError("publish() requires at least one topic name")
+        if node not in self.nodes:
+            raise ValueError(f"Need to add_node `{node}` first")
+        self._ensure_topics_registered(*topics)
+        spec = self.nodes[node]
+        merged = tuple(dict.fromkeys((*spec.publishes, *topics)))
+        self.nodes[node] = _replace_node_spec(spec, publishes=merged)
+        return self
+
+    def subscribe(self, node: str, *topics: str) -> Self:
+        """Subscribe `node` to the given topics (pub-sub activation).
+
+        Ensures the node has `pubsub` in its modes (added if missing). If the
+        node was explicitly `mode="workflow"` only, raises.
+
+        Args:
+            node: Node name.
+            *topics: One or more registered topic names.
+
+        Returns:
+            Self, for chaining.
+        """
+        if not topics:
+            raise ValueError("subscribe() requires at least one topic name")
+        if node not in self.nodes:
+            raise ValueError(f"Need to add_node `{node}` first")
+        self._ensure_topics_registered(*topics)
+        spec = self.nodes[node]
+        modes = set(spec.modes)
+        if "pubsub" not in modes:
+            if modes == {"workflow"}:
+                # Common case: subscribe() after add_node without mode= —
+                # enable pubsub while keeping workflow so hybrid still works.
+                modes.add("pubsub")
+            else:
+                raise ValueError(
+                    f"Node `{node}` cannot subscribe: modes={sorted(spec.modes)} "
+                    "do not include 'pubsub'."
+                )
+        merged = tuple(dict.fromkeys((*spec.subscribes, *topics)))
+        self.nodes[node] = _replace_node_spec(
+            spec, modes=frozenset(cast(set[NodeMode], modes)), subscribes=merged
+        )
+        return self
+
+    def _ensure_topics_registered(self, *topics: str) -> None:
+        for topic in topics:
+            if topic not in self.topics:
+                # Auto-register a default Topic for convenience if no channel yet
+                if topic in self.channels:
+                    channel = self.channels[topic]
+                    if isinstance(channel, Topic):
+                        self.topics[topic] = channel
+                        continue
+                    raise ValueError(
+                        f"Topic `{topic}` conflicts with existing non-Topic channel"
+                    )
+                self.add_topic(topic)
+
     @property
     def _all_edges(self) -> set[tuple[str, str]]:
         return self.edges | {
@@ -384,6 +534,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
+        mode: NodeMode | Sequence[NodeMode] | Literal["both"] | None = None,
+        publishes: Sequence[str] | None = None,
+        subscribes: Sequence[str] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -453,6 +606,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
+        mode: NodeMode | Sequence[NodeMode] | Literal["both"] | None = None,
+        publishes: Sequence[str] | None = None,
+        subscribes: Sequence[str] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph` where input schema is specified.
@@ -527,6 +683,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
+        mode: NodeMode | Sequence[NodeMode] | Literal["both"] | None = None,
+        publishes: Sequence[str] | None = None,
+        subscribes: Sequence[str] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -596,6 +755,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
+        mode: NodeMode | Sequence[NodeMode] | Literal["both"] | None = None,
+        publishes: Sequence[str] | None = None,
+        subscribes: Sequence[str] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is specified.
@@ -672,6 +834,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
+        mode: NodeMode | Sequence[NodeMode] | Literal["both"] | None = None,
+        publishes: Sequence[str] | None = None,
+        subscribes: Sequence[str] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`.
@@ -710,6 +875,13 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 and the retry policy (if any) decides whether to retry. Timeouts
                 are supported only for async nodes; sync nodes cannot be safely
                 cancelled in-process.
+            mode: Activation mode(s): `'workflow'` (default, edges/Command),
+                `'pubsub'` (topics), a sequence of both, or `'both'`.
+            publishes: Topic names this node may publish to (for diagrams and
+                validation). Publish at runtime with
+                [`Publish`][langgraph.types.Publish].
+            subscribes: Topic names that wake this node. Implies `pubsub` mode
+                unless `mode` is set explicitly to exclude it (which errors).
 
         Example:
             ```python
@@ -850,6 +1022,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         if destinations is not None:
             ends = destinations
 
+        publish_topics = tuple(publishes or ())
+        subscribe_topics = tuple(subscribes or ())
+        if publish_topics:
+            self._ensure_topics_registered(*publish_topics)
+        if subscribe_topics:
+            self._ensure_topics_registered(*subscribe_topics)
+        node_modes = _normalize_node_modes(mode, subscribes=subscribe_topics)
+
         resolved_input_schema: type[Any] = (
             input_schema or inferred_input_schema or self.state_schema
         )
@@ -880,6 +1060,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
+                modes=node_modes,
+                publishes=publish_topics,
+                subscribes=subscribe_topics,
             )
         elif inferred_input_schema is not None:
             self.nodes[node] = StateNodeSpec(
@@ -892,6 +1075,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
+                modes=node_modes,
+                publishes=publish_topics,
+                subscribes=subscribe_topics,
             )
         else:
             self.nodes[node] = StateNodeSpec[StateT, ContextT](
@@ -904,6 +1090,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
+                modes=node_modes,
+                publishes=publish_topics,
+                subscribes=subscribe_topics,
             )
 
         input_schema = input_schema or inferred_input_schema
@@ -1153,6 +1342,70 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for target in all_targets:
             if target not in self.nodes and target != END:
                 raise ValueError(f"Found edge ending at unknown node `{target}`")
+        # validate pub-sub
+        for name, spec in self.nodes.items():
+            if not spec.modes:
+                raise ValueError(f"Node `{name}` has empty modes")
+            if spec.subscribes and "pubsub" not in spec.modes:
+                raise ValueError(
+                    f"Node `{name}` subscribes to topics but modes "
+                    f"{sorted(spec.modes)} do not include 'pubsub'"
+                )
+            if (
+                "pubsub" in spec.modes
+                and not spec.subscribes
+                and not spec.is_error_handler
+            ):
+                raise ValueError(
+                    f"Node `{name}` has mode 'pubsub' but no subscriptions. "
+                    "Pass subscribes=... or call subscribe()."
+                )
+            for topic in (*spec.publishes, *spec.subscribes):
+                if topic not in self.topics:
+                    raise ValueError(
+                        f"Node `{name}` references unknown topic `{topic}`. "
+                        "Call add_topic() or declare a Topic state key."
+                    )
+            # Same-topic subscribe+publish can recurse until the step limit
+            overlap = set(spec.publishes) & set(spec.subscribes)
+            if overlap and not spec.is_error_handler:
+                warnings.warn(
+                    f"Node `{name}` both subscribes to and publishes on "
+                    f"topic(s) {sorted(overlap)}. This can loop until the "
+                    "recursion limit unless the node stops publishing.",
+                    stacklevel=2,
+                )
+            # Node must have at least one activation path
+            if (
+                not spec.is_error_handler
+                and "workflow" not in spec.modes
+                and not spec.subscribes
+            ):
+                raise ValueError(
+                    f"Node `{name}` has no activation path "
+                    "(no workflow mode and no topic subscriptions)"
+                )
+        # Edges / Command destinations only activate workflow-mode nodes
+        workflow_targets = {end for _, end in self._all_edges if end != END}
+        for start, branches in self.branches.items():
+            for branch in branches.values():
+                if branch.ends is not None:
+                    workflow_targets.update(e for e in branch.ends.values() if e != END)
+        for name, spec in self.nodes.items():
+            if spec.ends:
+                if isinstance(spec.ends, dict):
+                    workflow_targets.update(e for e in spec.ends if e != END)
+                else:
+                    workflow_targets.update(e for e in spec.ends if e != END)
+        for target in workflow_targets:
+            if target in self.nodes and "workflow" not in self.nodes[target].modes:
+                raise ValueError(
+                    f"Edge or destination targets node `{target}` which has "
+                    f"modes={sorted(self.nodes[target].modes)} without 'workflow'. "
+                    "Pub-sub-only nodes are activated by topics, not edges. "
+                    "Use mode='both' (or include 'workflow') if this node should "
+                    "also accept edges."
+                )
         # validate interrupts
         if interrupt:
             for node in interrupt:
@@ -1447,6 +1700,13 @@ class CompiledStateGraph(
                 return None
             elif isinstance(input, dict):
                 return [(k, v) for k, v in input.items() if k in output_keys]
+            elif isinstance(input, Publish):
+                if input.topic not in output_keys:
+                    raise InvalidUpdateError(
+                        f"Unknown topic `{input.topic}`. "
+                        "Register it with add_topic() or a Topic state key."
+                    )
+                return [(input.topic, input.value)]
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:
                     return None
@@ -1456,7 +1716,7 @@ class CompiledStateGraph(
             elif (
                 isinstance(input, (list, tuple))
                 and input
-                and any(isinstance(i, Command) for i in input)
+                and any(isinstance(i, (Command, Publish)) for i in input)
             ):
                 updates: list[tuple[str, Any]] = []
                 for i in input:
@@ -1478,10 +1738,17 @@ class CompiledStateGraph(
                 )
                 raise InvalidUpdateError(msg)
 
+        publish_static = (
+            _publish_static(node.publishes)
+            if node is not None and node.publishes
+            else None
+        )
+
         # state updaters
         write_entries: tuple[ChannelWriteEntry | ChannelWriteTupleEntry, ...] = (
             ChannelWriteTupleEntry(
-                mapper=_get_root if output_keys == ["__root__"] else _get_updates
+                mapper=_get_root if output_keys == ["__root__"] else _get_updates,
+                static=publish_static,
             ),
             ChannelWriteTupleEntry(
                 mapper=_control_branch,
@@ -1502,12 +1769,25 @@ class CompiledStateGraph(
         elif node is not None:
             input_schema = node.input_schema if node else self.builder.state_schema
             input_channels = list(self.builder.schemas[input_schema])
-            is_single_input = len(input_channels) == 1 and "__root__" in input_channels
+            # Subscribers also read their topics so payloads appear in input.
+            extra_topic_channels = [
+                t for t in node.subscribes if t not in input_channels
+            ]
+            read_channels = (
+                input_channels
+                if not extra_topic_channels
+                else [*input_channels, *extra_topic_channels]
+            )
+            is_single_input = len(read_channels) == 1 and "__root__" in read_channels
             if input_schema in self.schema_to_mapper:
                 mapper = self.schema_to_mapper[input_schema]
             else:
                 mapper = _pick_mapper(input_channels, input_schema)
                 self.schema_to_mapper[input_schema] = mapper
+            if mapper is not None and extra_topic_channels:
+                mapper = partial(
+                    _coerce_state_with_topics, mapper, tuple(extra_topic_channels)
+                )
 
             branch_channel = _CHANNEL_BRANCH_TO.format(key)
             self.channels[branch_channel] = (
@@ -1515,15 +1795,38 @@ class CompiledStateGraph(
                 if node.defer
                 else EphemeralValue(Any, guard=False)
             )
+
+            triggers: list[str] = []
+            if "workflow" in node.modes:
+                triggers.append(branch_channel)
+            if "pubsub" in node.modes:
+                triggers.extend(node.subscribes)
+            # Error handlers / legacy specs: always keep a control-flow trigger
+            if not triggers:
+                triggers.append(branch_channel)
+
+            # Only annotate diagrams when pub-sub is in play (avoid noise on
+            # pure workflow graphs and snapshot churn).
+            meta = dict(node.metadata or {})
+            uses_pubsub = bool(
+                node.publishes or node.subscribes or "pubsub" in node.modes
+            )
+            if uses_pubsub:
+                meta["mode"] = "+".join(sorted(node.modes))
+                if node.publishes:
+                    meta["publishes"] = ",".join(node.publishes)
+                if node.subscribes:
+                    meta["subscribes"] = ",".join(node.subscribes)
+
             self.nodes[key] = PregelNode(
-                triggers=[branch_channel],
-                # read state keys and managed values
-                channels=("__root__" if is_single_input else input_channels),
+                triggers=triggers,
+                # read state keys and managed values (+ subscribed topics)
+                channels=("__root__" if is_single_input else read_channels),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=mapper,
                 # publish to state keys
                 writers=[ChannelWrite(write_entries)],
-                metadata=node.metadata,
+                metadata=meta or None,
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
                 is_error_handler=node.is_error_handler,
@@ -1732,6 +2035,88 @@ def _coerce_state(schema: type[_S], input: dict[str, Any]) -> _S:
     return schema(**input)
 
 
+def _coerce_state_with_topics(
+    base_mapper: Callable[[dict[str, Any]], Any],
+    extra_topics: tuple[str, ...],
+    input: dict[str, Any],
+) -> Any:
+    """Coerce the schema portion of input; keep side-topic keys as a dict.
+
+    When a subscriber reads topics that are not fields of a pydantic/dataclass
+    schema, we cannot attach arbitrary attributes to the model safely. In that
+    case the node receives a plain `dict` with both schema fields and topic
+    payloads. Prefer declaring topics on the state schema when you need typed
+    models.
+    """
+    extras = {k: input[k] for k in extra_topics if k in input}
+    core = {k: v for k, v in input.items() if k not in extra_topics}
+    coerced = base_mapper(core)
+    if not extras:
+        return coerced
+    if isinstance(coerced, dict):
+        return {**coerced, **extras}
+    if hasattr(coerced, "model_dump"):
+        return {**coerced.model_dump(), **extras}
+    if is_dataclass(coerced) and not isinstance(coerced, type):
+        from dataclasses import asdict
+
+        return {**asdict(coerced), **extras}
+    raise TypeError(
+        "Subscribed side topics require a dict-like node input when the input "
+        "schema is not a TypedDict/dict. Declare the topic on the state schema "
+        f"or use a TypedDict. Extra topics: {sorted(extras)}"
+    )
+
+
+def _normalize_node_modes(
+    mode: NodeMode | Sequence[NodeMode] | Literal["both"] | None,
+    *,
+    subscribes: Sequence[str],
+) -> frozenset[NodeMode]:
+    """Normalize `mode` / `subscribes` into a frozenset of node modes."""
+    explicit = mode is not None
+    if mode is None:
+        modes: set[str] = {"workflow"}
+    elif mode == "both":
+        modes = {"workflow", "pubsub"}
+    elif isinstance(mode, str):
+        if mode not in ("workflow", "pubsub"):
+            raise ValueError(
+                f"Invalid mode {mode!r}. Expected 'workflow', 'pubsub', 'both', "
+                "or a sequence of those."
+            )
+        modes = {mode}
+    else:
+        modes = set(mode)
+        invalid = modes - {"workflow", "pubsub"}
+        if invalid:
+            raise ValueError(
+                f"Invalid mode values {sorted(invalid)}. "
+                "Expected 'workflow' and/or 'pubsub'."
+            )
+        if not modes:
+            raise ValueError("mode sequence must be non-empty")
+
+    if subscribes:
+        if explicit and "pubsub" not in modes:
+            raise ValueError(
+                "subscribes=... requires mode to include 'pubsub' "
+                f"(got mode={sorted(modes)}). Pass mode='pubsub', mode='both', "
+                "or omit mode to auto-enable pubsub."
+            )
+        modes.add("pubsub")
+
+    return frozenset(cast(set[NodeMode], modes))
+
+
+def _replace_node_spec(
+    spec: StateNodeSpec[Any, Any], **changes: Any
+) -> StateNodeSpec[Any, Any]:
+    from dataclasses import replace
+
+    return replace(spec, **changes)
+
+
 def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
     if isinstance(value, Send):
         return ((TASKS, value),)
@@ -1775,7 +2160,16 @@ def _control_static(
         ]
 
 
+def _publish_static(
+    topics: Sequence[str],
+) -> Sequence[tuple[str, Any, str | None]]:
+    """Declared topic writes for static graph visualization."""
+    return [(topic, None, f"topic:{topic}") for topic in topics]
+
+
 def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
+    if isinstance(input, Publish):
+        return [(input.topic, input.value)]
     if isinstance(input, Command):
         if input.graph == Command.PARENT:
             return ()
@@ -1783,7 +2177,7 @@ def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
     elif (
         isinstance(input, (list, tuple))
         and input
-        and any(isinstance(i, Command) for i in input)
+        and any(isinstance(i, (Command, Publish)) for i in input)
     ):
         updates: list[tuple[str, Any]] = []
         for i in input:
@@ -1791,6 +2185,8 @@ def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
                 if i.graph == Command.PARENT:
                     continue
                 updates.extend(i._update_as_tuples())
+            elif isinstance(i, Publish):
+                updates.append((i.topic, i.value))
             else:
                 updates.append(("__root__", i))
         return updates

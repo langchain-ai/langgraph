@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Generic, Protocol, TypeAlias
 
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -9,7 +9,13 @@ from langgraph.store.base import BaseStore
 
 from langgraph._internal._typing import EMPTY_SEQ
 from langgraph.runtime import Runtime
-from langgraph.types import CachePolicy, RetryPolicy, StreamWriter, TimeoutPolicy
+from langgraph.types import (
+    CachePolicy,
+    NodeMode,
+    RetryPolicy,
+    StreamWriter,
+    TimeoutPolicy,
+)
 from langgraph.typing import ContextT, NodeInputT, NodeInputT_contra
 
 
@@ -93,3 +99,11 @@ class StateNodeSpec(Generic[NodeInputT, ContextT]):
     ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
     defer: bool = False
     timeout: TimeoutPolicy | None = None
+    modes: frozenset[NodeMode] = field(
+        default_factory=lambda: frozenset({"workflow"})  # type: ignore[arg-type]
+    )
+    """Activation modes: `workflow` (edges/Command), `pubsub` (topics), or both."""
+    publishes: tuple[str, ...] = ()
+    """Topic names this node is declared to publish to (diagram + validation)."""
+    subscribes: tuple[str, ...] = ()
+    """Topic names that wake this node when `pubsub` is in `modes`."""

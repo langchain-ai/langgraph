@@ -24,11 +24,21 @@ class Topic(
     Generic[Value],
     BaseChannel[Sequence[Value], Value | list[Value], list[Value]],
 ):
-    """A configurable PubSub Topic.
+    """A configurable pub-sub topic channel.
+
+    Multiple nodes can publish values in the same step; subscribers see the
+    collected sequence. Used as:
+
+    - A **state key**: `events: Annotated[Sequence[T], Topic(T)]`
+    - A **graph topic**: `builder.add_topic("events", typ=T)` (Graph API pub-sub)
+
+    With the Graph API, pair topics with `publishes` / `subscribes` on nodes and
+    [`Publish`][langgraph.types.Publish] return values. See the pub-sub how-to.
 
     Args:
         typ: The type of the value stored in the channel.
-        accumulate: Whether to accumulate values across steps. If `False`, the channel will be emptied after each step.
+        accumulate: Whether to accumulate values across steps. If `False`, the
+            channel will be emptied after each step.
     """
 
     __slots__ = ("values", "accumulate")

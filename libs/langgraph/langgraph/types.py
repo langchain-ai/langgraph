@@ -77,6 +77,8 @@ __all__ = (
     "StateSnapshot",
     "Send",
     "Command",
+    "Publish",
+    "NodeMode",
     "Durability",
     "interrupt",
     "Overwrite",
@@ -753,6 +755,49 @@ class Send:
 
 
 N = TypeVar("N", bound=Hashable)
+
+NodeMode = Literal["workflow", "pubsub"]
+"""How a graph node is activated.
+
+- `'workflow'`: woken by edges / `Command(goto=...)` / `Send` (control-flow channels).
+- `'pubsub'`: woken by subscribed topics.
+
+A node may use either mode or both (pass a sequence, or the string `'both'`).
+Publishing with [`Publish`][langgraph.types.Publish] is independent of mode:
+any node may publish; mode only controls **how the node is started**.
+"""
+
+
+@dataclass(slots=True)
+class Publish:
+    """Publish a value to a named topic (classical pub-sub).
+
+    Use from a node return value to send a message to every node that
+    `subscribe`s to the same topic. Publishers do not name subscribers;
+    subscribers do not name publishers.
+
+    Can be returned alone, or combined with a state update / `Command`:
+
+    ```python
+    return Publish("events", {"kind": "created"})
+    return {"count": 1}, Publish("events", "tick")
+    return [Command(update={"count": 1}), Publish("events", "tick")]
+    ```
+
+    Topics are registered with `StateGraph.add_topic` or as state keys
+    annotated with [`Topic`][langgraph.channels.Topic].
+
+    See the pub-sub how-to for full examples.
+    """
+
+    topic: str
+    """Topic name to publish to (must be a registered topic / channel)."""
+    value: Any
+    """Payload delivered to the topic channel (and to subscribers' state if the
+    topic is a state key or is included in the subscriber's read channels)."""
+
+    def __repr__(self) -> str:
+        return f"Publish(topic={self.topic!r}, value={self.value!r})"
 
 
 @dataclass(**_DC_KWARGS)
