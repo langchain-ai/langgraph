@@ -1,7 +1,7 @@
 import asyncio
 import json
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -1044,3 +1044,17 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+def test_upsert_preserves_created_at() -> None:
+    store = InMemoryStore()
+    store.put(("ns",), "k", {"v": 1})
+    # Simulate an item that was originally created in the past.
+    original = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    store._data[("ns",)]["k"].created_at = original
+    # Upsert the same key with a new value.
+    store.put(("ns",), "k", {"v": 2})
+    item = store.get(("ns",), "k")
+    assert item is not None
+    assert item.created_at == original  # creation timestamp must be retained
+    assert item.updated_at > original  # update timestamp should advance
