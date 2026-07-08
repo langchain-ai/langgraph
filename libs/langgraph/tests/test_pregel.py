@@ -234,6 +234,67 @@ def test_checkpoint_errors() -> None:
         )
 
 
+def test_sync_durability_failed_delta_writes_skip_checkpoint() -> None:
+    class FaultyDeltaWriteCheckpointer(InMemorySaver):
+        put_sources: list[str | None]
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.put_sources = []
+
+        def put(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: dict[str, str | int | float] | None = None,
+        ) -> RunnableConfig:
+            self.put_sources.append(metadata.get("source"))
+            return super().put(config, checkpoint, metadata, new_versions)
+
+        def put_writes(
+            self,
+            config: RunnableConfig,
+            writes: Sequence[tuple[str, Any]],
+            task_id: str,
+            task_path: str = "",
+        ) -> None:
+            if any(
+                channel == "messages"
+                and isinstance(value, list)
+                and any(
+                    isinstance(message, AIMessage) and message.content == "reply"
+                    for message in value
+                )
+                for channel, value in writes
+            ):
+                time.sleep(0.05)
+                raise ValueError("Faulty delta put_writes")
+            return super().put_writes(config, writes, task_id, task_path)
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        return {"messages": [AIMessage(content="reply", id="ai1")]}
+
+    checkpointer = FaultyDeltaWriteCheckpointer()
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    graph = builder.compile(checkpointer=checkpointer)
+
+    with pytest.raises(ValueError, match="Faulty delta put_writes"):
+        graph.invoke(
+            {"messages": [HumanMessage(content="hello", id="h1")]},
+            {"configurable": {"thread_id": "failed-delta-sync"}},
+            durability="sync",
+        )
+
+    assert "input" in checkpointer.put_sources
+    assert checkpointer.put_sources.count("loop") == 1
+
+
 def test_context_json_schema() -> None:
     """Test that config json schema is generated properly."""
     chain = NodeBuilder().subscribe_only("input").write_to("output")

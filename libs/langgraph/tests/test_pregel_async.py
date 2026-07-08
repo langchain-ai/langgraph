@@ -8,6 +8,7 @@ import random
 import sys
 import uuid
 from collections import Counter, deque
+from collections.abc import Sequence
 from dataclasses import replace
 from time import perf_counter
 from typing import (
@@ -21,7 +22,7 @@ from uuid import UUID
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from langchain_core.utils.aiter import aclosing
 from langchain_core.version import VERSION as LANGCHAIN_CORE_VERSION
@@ -45,6 +46,7 @@ from typing_extensions import NotRequired, TypedDict
 from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph._internal._queue import AsyncQueue
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.errors import (
@@ -55,7 +57,7 @@ from langgraph.errors import (
 )
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import MessagesState, add_messages
+from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
 from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.pregel._loop import AsyncPregelLoop
 from langgraph.pregel._runner import PregelRunner
@@ -216,6 +218,67 @@ async def test_checkpoint_errors() -> None:
             "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
         ):
             pass
+
+
+async def test_sync_durability_failed_delta_writes_skip_checkpoint_async() -> None:
+    class FaultyDeltaWriteCheckpointer(InMemorySaver):
+        put_sources: list[str | None]
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.put_sources = []
+
+        async def aput(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+            new_versions: ChannelVersions,
+        ) -> RunnableConfig:
+            self.put_sources.append(metadata.get("source"))
+            return await super().aput(config, checkpoint, metadata, new_versions)
+
+        async def aput_writes(
+            self,
+            config: RunnableConfig,
+            writes: Sequence[tuple[str, Any]],
+            task_id: str,
+            task_path: str = "",
+        ) -> None:
+            if any(
+                channel == "messages"
+                and isinstance(value, list)
+                and any(
+                    isinstance(message, AIMessage) and message.content == "reply"
+                    for message in value
+                )
+                for channel, value in writes
+            ):
+                await asyncio.sleep(0.05)
+                raise ValueError("Faulty delta put_writes")
+            return await super().aput_writes(config, writes, task_id, task_path)
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        return {"messages": [AIMessage(content="reply", id="ai1")]}
+
+    checkpointer = FaultyDeltaWriteCheckpointer()
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+    graph = builder.compile(checkpointer=checkpointer)
+
+    with pytest.raises(ValueError, match="Faulty delta put_writes"):
+        await graph.ainvoke(
+            {"messages": [HumanMessage(content="hello", id="h1")]},
+            {"configurable": {"thread_id": "failed-delta-async"}},
+            durability="sync",
+        )
+
+    assert "input" in checkpointer.put_sources
+    assert checkpointer.put_sources.count("loop") == 1
 
 
 @NEEDS_CONTEXTVARS
