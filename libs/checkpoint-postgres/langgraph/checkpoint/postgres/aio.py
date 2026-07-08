@@ -82,8 +82,17 @@ class AsyncPostgresSaver(BasePostgresSaver):
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
-                async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                force_no_ssl = "sslmode=disable" not in conn_string.lower()
+                if force_no_ssl:
+                    import warnings
+                    warnings.warn(
+                        "AsyncPipeline is not compatible with SSL connections. "
+                        "Falling back to non-pipeline mode."
+                    )
+                    yield cls(conn=conn, serde=serde)
+                else:
+                    async with conn.pipeline() as pipe:
+                        yield cls(conn=conn, pipe=pipe, serde=serde)
             else:
                 yield cls(conn=conn, serde=serde)
 
