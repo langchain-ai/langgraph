@@ -55,6 +55,7 @@ To improve your LLM application development, pair LangGraph with:
 - [LangChain](https://docs.langchain.com/oss/python/langchain/overview) – Provides integrations and composable components to streamline LLM application development.
 - [LangSmith](https://www.langchain.com/langsmith) – Helpful for agent evals and observability. Debug poor-performing LLM app runs, evaluate agent trajectories, gain visibility in production, and improve performance over time.
 - [LangSmith Deployment](https://docs.langchain.com/langsmith/deployments) – Deploy and scale agents effortlessly with a purpose-built deployment platform for long-running, stateful workflows. Discover, reuse, configure, and share agents across teams – and iterate quickly with visual prototyping in [LangSmith Studio](https://docs.langchain.com/langsmith/studio).
+- [llm-box](https://github.com/alib8b8/llm-box) – Terminal-first workflow automation engine with MCP server mode. Generate and execute YAML workflows from plain English descriptions, featuring 20+ built-in nodes and 15+ LLM providers.
 
 ---
 
