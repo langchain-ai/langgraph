@@ -5598,7 +5598,6 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                     {
                         "id": AnyStr(),
                         "value": "test",
-                        "kind": "human",
                     },
                 ],
                 "name": "graph",
@@ -5643,7 +5642,6 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                             {
                                 "id": AnyStr(),
                                 "value": "test",
-                                "kind": "human",
                             },
                         ),
                         "name": "graph",

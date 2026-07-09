@@ -10,6 +10,10 @@ INTERRUPT = sys.intern("__interrupt__")
 # for dynamic interrupts raised by nodes
 RESUME = sys.intern("__resume__")
 # for values passed to resume a node after an interrupt
+FETCH = sys.intern("__fetch__")
+# for data dependencies declared by nodes via fetch(); sibling of INTERRUPT
+FETCH_RESULT = sys.intern("__fetch_result__")
+# for values fulfilling a fetch(), keyed by content-addressed id; sibling of RESUME
 ERROR = sys.intern("__error__")
 # for errors raised by nodes
 ERROR_SOURCE_NODE = sys.intern("__error_source_node__")
@@ -71,6 +75,8 @@ CONFIG_KEY_RUNTIME = sys.intern("__pregel_runtime")
 # holds a `Runtime` instance with context, store, stream writer, etc.
 CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 # holds a mapping of task ns -> resume value for resuming tasks
+CONFIG_KEY_FETCH_MAP = sys.intern("__pregel_fetch_map")
+# holds a mapping of fetch content-id -> value for fulfilling fetch() dependencies
 CONFIG_KEY_STREAM_MESSAGES_V2 = sys.intern("__pregel_stream_messages_v2")
 # when True, attach StreamMessagesHandlerV2 so content-block (v2) events
 # flow through stream_mode="messages"; set by StreamingHandler only.
@@ -104,6 +110,8 @@ RESERVED = {
     INPUT,
     INTERRUPT,
     RESUME,
+    FETCH,
+    FETCH_RESULT,
     ERROR,
     ERROR_SOURCE_NODE,
     NO_WRITES,

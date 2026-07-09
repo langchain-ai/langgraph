@@ -42,6 +42,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_FETCH_MAP,
     CONFIG_KEY_REPLAY_STATE,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RESUMING,
@@ -52,6 +53,8 @@ from langgraph._internal._constants import (
     CONFIG_KEY_THREAD_ID,
     ERROR,
     ERROR_SOURCE_NODE,
+    FETCH,
+    FETCH_RESULT,
     INPUT,
     INTERRUPT,
     NS_END,
@@ -75,6 +78,7 @@ from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
+    GraphFetch,
     GraphInterrupt,
 )
 from langgraph.managed.base import (
@@ -662,7 +666,8 @@ class PregelLoop:
 
     def _match_writes(self, tasks: Mapping[str, PregelExecutableTask]) -> None:
         for tid, k, v in self.checkpoint_pending_writes:
-            if k in (ERROR, ERROR_SOURCE_NODE, INTERRUPT, RESUME):
+            if k in (ERROR, ERROR_SOURCE_NODE, INTERRUPT, RESUME, FETCH, FETCH_RESULT):
+                # fetch-related writes do not mark tasks as done; they should re-run
                 continue
             if task := tasks.get(tid):
                 task.writes.append((k, v))
@@ -753,7 +758,9 @@ class PregelLoop:
 
         # map command to writes
         if input_is_command:
-            if (resume := cast(Command, self.input).resume) is not None:
+            command = cast(Command, self.input)
+            resume_is_map = False
+            if (resume := command.resume) is not None:
                 if not self.checkpointer:
                     raise RuntimeError(
                         "Cannot use Command(resume=...) without checkpointer"
@@ -771,12 +778,29 @@ class PregelLoop:
                             "Docs: https://docs.langchain.com/oss/python/langgraph/add-human-in-the-loop#resume-multiple-interrupts-with-one-invocation."
                         )
 
+            # fulfill data dependencies declared via fetch(), keyed by content-id
+            fetch_is_map = False
+            if command.fetch is not None:
+                if not self.checkpointer:
+                    raise RuntimeError(
+                        "Cannot use Command(fetch=...) without checkpointer"
+                    )
+                if not (
+                    isinstance(command.fetch, dict)
+                    and all(is_xxh3_128_hexdigest(k) for k in command.fetch)
+                ):
+                    raise ValueError(
+                        "Command(fetch=...) must be a mapping of FetchRequest.id -> value"
+                    )
+                self.config[CONF][CONFIG_KEY_FETCH_MAP] = command.fetch
+                fetch_is_map = True
+
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
-            for tid, c, v in map_command(cmd=cast(Command, self.input)):
+            for tid, c, v in map_command(cmd=command):
                 if not (c == RESUME and resume_is_map):
                     writes[tid].append((c, v))
-            if not writes and not resume_is_map:
+            if not writes and not resume_is_map and not fetch_is_map:
                 raise EmptyInputError("Received empty Command input")
             # save writes
             for tid, ws in writes.items():
@@ -1027,11 +1051,12 @@ class PregelLoop:
         ):
             self._put_checkpoint(self.checkpoint_metadata)
             self._put_pending_writes()
-        # suppress interrupt
-        if isinstance(exc_value, GraphInterrupt) and not self.is_nested:
-            interrupt = exc_value
-            interrupts = tuple(interrupt.args[0]) if interrupt.args else ()
-            self._push_graph_lifecycle_event("interrupt", interrupts=interrupts)
+        # suppress interrupt / fetch — both bubble up to suspend the graph
+        if isinstance(exc_value, (GraphInterrupt, GraphFetch)) and not self.is_nested:
+            is_interrupt = isinstance(exc_value, GraphInterrupt)
+            payload = tuple(exc_value.args[0]) if exc_value.args else ()
+            if is_interrupt:
+                self._push_graph_lifecycle_event("interrupt", interrupts=payload)
             # emit one last "values" event, with pending writes applied
             if (
                 hasattr(self, "tasks")
@@ -1057,16 +1082,16 @@ class PregelLoop:
                         [w for t in self.tasks.values() for w in t.writes],
                         self.channels,
                     )
-            # emit INTERRUPT if exception is empty (otherwise emitted by put_writes)
-            if not interrupt.args or not interrupt.args[0]:
-                interrupt_payload = interrupt.args[0] if interrupt.args else ()
+            # emit marker if exception is empty (otherwise emitted by put_writes)
+            if not exc_value.args or not exc_value.args[0]:
+                marker_key = INTERRUPT if is_interrupt else FETCH
                 self._emit(
                     "updates",
-                    lambda: iter([{INTERRUPT: interrupt_payload}]),
+                    lambda: iter([{marker_key: payload}]),
                 )
             # save final output
             self.output = read_channels(self.channels, self.output_keys)
-            # suppress interrupt
+            # suppress interrupt / fetch
             return True
         elif exc_type is None:
             # save final output
@@ -1144,6 +1169,24 @@ class PregelLoop:
                     # self.output_keys is a string, stream chunk contains only interrupts
                     else:
                         self._emit("values", lambda: iter(interrupts))
+            elif writes[0][0] == FETCH:
+                # emit data-dependency requests on the updates stream, keyed by FETCH
+                fetch_reqs = [
+                    {
+                        FETCH: tuple(
+                            v
+                            for w in writes
+                            if w[0] == FETCH
+                            for v in (w[1] if isinstance(w[1], Sequence) else (w[1],))
+                        )
+                    }
+                ]
+                if (
+                    fetch_reqs[0][FETCH]
+                    and self.stream
+                    and "updates" in self.stream.modes
+                ):
+                    self._emit("updates", lambda: iter(fetch_reqs))
             elif writes[0][0] != ERROR:
                 self._emit(
                     "updates",

@@ -31,6 +31,8 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CALL,
     CONFIG_KEY_SCRATCHPAD,
     ERROR,
+    FETCH,
+    FETCH_RESULT,
     INTERRUPT,
     NO_WRITES,
     RESUME,
@@ -40,7 +42,7 @@ from langgraph._internal._future import chain_future, run_coroutine_threadsafe
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import MISSING
 from langgraph.constants import TAG_HIDDEN
-from langgraph.errors import GraphBubbleUp, GraphInterrupt
+from langgraph.errors import GraphBubbleUp, GraphFetch, GraphInterrupt
 from langgraph.pregel._algo import Call
 from langgraph.pregel._executor import Submit
 from langgraph.pregel._retry import arun_with_retry, run_with_retry
@@ -585,8 +587,20 @@ class PregelRunner:
                 # save interrupt to checkpointer
                 if exception.args[0]:
                     writes = [(INTERRUPT, exception.args[0])]
-                    if resumes := [w for w in task.writes if w[0] == RESUME]:
-                        writes.extend(resumes)
+                    # preserve resolution writes (resume values + fetch results) so a
+                    # fetch resolved before the interrupt stays resolved on re-run
+                    writes.extend(
+                        w for w in task.writes if w[0] in (RESUME, FETCH_RESULT)
+                    )
+                    self.put_writes()(task.id, writes)  # type: ignore[misc]
+            elif isinstance(exception, GraphFetch):
+                # save data-dependency requests to checkpointer (sibling of INTERRUPT)
+                if exception.args[0]:
+                    writes = [(FETCH, exception.args[0])]
+                    # preserve resolution writes (resume values + fetch results)
+                    writes.extend(
+                        w for w in task.writes if w[0] in (RESUME, FETCH_RESULT)
+                    )
                     self.put_writes()(task.id, writes)  # type: ignore[misc]
             elif isinstance(exception, GraphBubbleUp):
                 # exception will be raised in _panic_or_proceed
@@ -666,6 +680,7 @@ def _panic_or_proceed(
         else:
             inflight.add(fut)
     interrupts: list[GraphInterrupt] = []
+    fetches: list[GraphFetch] = []
     while done:
         # if any task failed
         fut = done.pop()
@@ -682,11 +697,17 @@ def _panic_or_proceed(
                 if isinstance(exc, GraphInterrupt):
                     # collect interrupts
                     interrupts.append(exc)
+                elif isinstance(exc, GraphFetch):
+                    # collect fetch (data-dependency) suspensions
+                    fetches.append(exc)
                 elif fut not in SKIP_RERAISE_SET:
                     raise exc
-    # raise combined interrupts
+    # raise combined interrupts (human interrupts take precedence; fetch requests
+    # are already persisted as FETCH writes and will be surfaced regardless)
     if interrupts:
         raise GraphInterrupt(tuple(i for exc in interrupts for i in exc.args[0]))
+    if fetches:
+        raise GraphFetch(tuple(r for exc in fetches for r in exc.args[0]))
     if inflight:
         # if we got here means we timed out
         while inflight:

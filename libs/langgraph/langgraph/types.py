@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import sys
+import time
 from collections import deque
 from collections.abc import Callable, Hashable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import timedelta
 from typing import (
     TYPE_CHECKING,
@@ -80,6 +81,7 @@ __all__ = (
     "Durability",
     "interrupt",
     "fetch",
+    "fetch_all",
     "Overwrite",
     "GraphOutput",
     "ensure_valid_checkpointer",
@@ -552,25 +554,13 @@ class Interrupt:
     id: str
     """The ID of the interrupt. Can be used to resume the interrupt directly."""
 
-    kind: Literal["human", "fetch"]
-    """Semantic kind of this interrupt.
-
-    - `"human"`: execution is paused waiting for a human decision. Resume is
-      indeterminate — may never happen.
-    - `"fetch"`: execution is paused waiting for an automated data dependency.
-      The serving layer is expected to fulfill the request and always resume,
-      within a bounded SLA.
-    """
-
     def __init__(
         self,
         value: Any,
         id: str = _DEFAULT_INTERRUPT_ID,
-        kind: Literal["human", "fetch"] = "human",
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         self.value = value
-        self.kind = kind
 
         if (
             (ns := deprecated_kwargs.get("ns", MISSING)) is not MISSING
@@ -582,13 +572,8 @@ class Interrupt:
             self.id = id
 
     @classmethod
-    def from_ns(
-        cls,
-        value: Any,
-        ns: str,
-        kind: Literal["human", "fetch"] = "human",
-    ) -> Interrupt:
-        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()), kind=kind)
+    def from_ns(cls, value: Any, ns: str) -> Interrupt:
+        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()))
 
     @property
     @deprecated("`interrupt_id` is deprecated. Use `id` instead.", category=None)
@@ -607,6 +592,73 @@ class StateUpdate(NamedTuple):
     task_id: str | None = None
 
 
+@final
+@dataclass(frozen=True)
+class FetchRequest:
+    """A service-to-service data dependency declared via [`fetch`][langgraph.types.fetch].
+
+    Sibling of [`Interrupt`][langgraph.types.Interrupt] but for automated data
+    dependencies rather than human decisions. The serving layer is expected to
+    fulfill the request and resume execution within a bounded SLA. Surfaced on a
+    suspended task via `PregelTask.fetches`, and fulfilled by content-addressed
+    `id` (never positionally).
+
+    !!! version-added "Added in version 0.6.x"
+    """
+
+    id: str
+    """Content-addressed dependency id. Deterministic for a given (thread, node,
+    request); used to fulfill this specific dependency."""
+
+    value: Any
+    """The request payload surfaced to the serving layer (what data is needed)."""
+
+    deadline: float | None = None
+    """Absolute SLA expiry (epoch seconds). Past this the request resolves as
+    `expired` — a terminal failure, never a silent success. `None` never expires."""
+
+    created_at: float | None = None
+    """When the dependency was first declared (epoch seconds)."""
+
+    owner: str | None = None
+    """Optional source service expected to fulfill this dependency. Lets the serving
+    layer route requests without inspecting the payload."""
+
+
+FetchStatus = Literal["fulfilled", "failed", "expired", "cancelled"]
+"""Terminal outcome of a data dependency. `fulfilled` returns a value; the rest
+raise [`FetchError`][langgraph.errors.FetchError] inside the node."""
+
+
+@final
+@dataclass(frozen=True)
+class FetchResult:
+    """The terminal resolution of a [`FetchRequest`][langgraph.types.FetchRequest].
+
+    !!! version-added "Added in version 0.6.x"
+    """
+
+    id: str
+    """The content-addressed id of the request this resolves."""
+
+    value: Any = None
+    """The value provided by the serving layer (for `status="fulfilled"`)."""
+
+    status: FetchStatus = "fulfilled"
+    """Terminal outcome. `fulfilled` returns `value`; `failed`/`expired`/`cancelled`
+    raise `FetchError`."""
+
+    error: str | None = None
+    """Optional error detail (for `status="failed"`)."""
+
+    value_digest: str | None = None
+    """Content digest of `value`, recorded on fulfillment. Lets the serving layer
+    verify/deduplicate what satisfied the dependency without holding the value."""
+
+    resolved_at: float | None = None
+    """When the terminal outcome was recorded (epoch seconds)."""
+
+
 class PregelTask(NamedTuple):
     """A Pregel task."""
 
@@ -617,15 +669,12 @@ class PregelTask(NamedTuple):
     interrupts: tuple[Interrupt, ...] = ()
     state: None | RunnableConfig | StateSnapshot = None
     result: Any | None = None
+    fetches: tuple[FetchRequest, ...] = ()
+    """Data dependencies declared via `fetch()` — separate from human interrupts.
 
-    @property
-    def fetches(self) -> tuple[Interrupt, ...]:
-        """Interrupts with `kind="fetch"` — automated data dependencies.
-
-        Serving layer code can use this to distinguish data-fetch requests
-        from human-in-the-loop interrupts without inspecting interrupt payloads.
-        """
-        return tuple(i for i in self.interrupts if i.kind == "fetch")
+    Serving layer code uses this to route automated data-fetch requests without
+    inspecting interrupt payloads.
+    """
 
 
 if sys.version_info > (3, 11):
@@ -804,6 +853,13 @@ class Command(Generic[N], ToolOutputMixin):
     update: Any | None = None
     resume: dict[str, Any] | Any | None = None
     goto: Send | Sequence[Send | N] | N = ()
+    fetch: dict[str, Any] | None = None
+    """Fulfill one or more data dependencies declared via [`fetch()`][langgraph.types.fetch].
+
+    A mapping of `FetchRequest.id` -> value. Unlike `resume`, fetch fulfillment is
+    always keyed by content-addressed id (never positional), so one value satisfies
+    exactly one dependency.
+    """
 
     def __repr__(self) -> str:
         # get all non-None values
@@ -830,7 +886,7 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
-def interrupt(value: Any, *, _kind: Literal["human", "fetch"] = "human") -> Any:
+def interrupt(value: Any) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
     The `interrupt` function enables human-in-the-loop workflows by pausing graph
@@ -951,47 +1007,225 @@ def interrupt(value: Any, *, _kind: Literal["human", "fetch"] = "human") -> Any:
             Interrupt.from_ns(
                 value=value,
                 ns=conf[CONFIG_KEY_CHECKPOINT_NS],
-                kind=_kind,
             ),
         )
     )
 
 
-def fetch(value: Any) -> Any:
-    """Declare a data dependency from within a node or tool.
+def _fetch_id(ns: str, value: Any, key: Hashable | None) -> str:
+    """Content-addressed id for a data dependency.
 
-    Semantically distinct from `interrupt()`: a `fetch()` call signals that
-    the graph needs an automated data response — not a human decision. The
-    serving layer is expected to always fulfill the request and resume execution
-    within a bounded SLA.
+    Deterministic for a given (task namespace, request) so that re-execution and
+    retries are idempotent, and a *different* request yields a *different* id (no
+    stale replay). `key` overrides the request digest when the payload is not
+    stably hashable, or to deliberately share an id (opt-in fan-out / dedup).
+    """
+    digest = key if key is not None else default_cache_key(value)
+    return xxh3_128_hexdigest(f"{ns}|{digest}".encode())
 
-    Thin wrapper over `interrupt()` that sets `kind="fetch"` on the resulting
-    `Interrupt`, enabling the serving layer to route fetch requests separately
-    from human interrupts without inspecting payloads:
+
+def _value_digest(value: Any) -> str:
+    """Stable content digest of a fulfilled value (for FetchResult.value_digest)."""
+    try:
+        return xxh3_128_hexdigest(str(default_cache_key(value)).encode())
+    except Exception:
+        return xxh3_128_hexdigest(repr(value).encode())
+
+
+def _resolve_fetch(
+    conf: dict,
+    scratchpad: Any,
+    fid: str,
+    value: Any,
+    deadline_ttl: float | None,
+    now: float,
+    owner: str | None = None,
+) -> Any:
+    """Resolve a single data dependency by content-addressed id.
+
+    Returns the fulfilled value, a pending `FetchRequest` (caller suspends via
+    `GraphFetch`), or raises `FetchError` on a terminal failure (expired / failed /
+    cancelled). Records terminal outcomes as a `FETCH_RESULT` write so re-execution is
+    deterministic.
+    """
+    from langgraph._internal._constants import CONFIG_KEY_SEND, FETCH_RESULT
+    from langgraph.errors import FetchError
+
+    def _record(result: FetchResult) -> Any:
+        # stamp resolved_at (and value_digest for fulfilled) if the serving layer
+        # didn't already provide them
+        if result.resolved_at is None:
+            result = replace(result, resolved_at=now)
+        if result.status == "fulfilled" and result.value_digest is None:
+            result = replace(result, value_digest=_value_digest(result.value))
+        # accumulate in the (persisted) results map and re-send the full map, so
+        # multiple resolutions in one run and later re-suspensions all persist.
+        scratchpad.fetch_results[fid] = result
+        conf[CONFIG_KEY_SEND]([(FETCH_RESULT, dict(scratchpad.fetch_results))])
+        if result.status == "fulfilled":
+            return result.value
+        raise FetchError(fid, result.status, result.error)
+
+    # 1. already recorded terminal result — honor as-is. A value fulfilled before its
+    #    deadline stays valid even if the graph resumes later (fulfillment-deadline is
+    #    not resume-timing).
+    recorded = scratchpad.fetch_results.get(fid)
+    if isinstance(recorded, FetchResult):
+        if recorded.status == "fulfilled":
+            return recorded.value
+        raise FetchError(fid, recorded.status, recorded.error)
+
+    # deadline: reuse the one fixed at first suspension, else compute from the ttl.
+    existing = scratchpad.fetch_pending.get(fid)
+    if existing is not None:
+        deadline = existing.deadline
+        created_at = existing.created_at
+        owner = existing.owner if existing.owner is not None else owner
+    else:
+        created_at = now
+        deadline = now + deadline_ttl if deadline_ttl is not None else None
+    expired = deadline is not None and now > deadline
+
+    # 2. fresh delivery this run via Command(fetch=...).
+    if fid in scratchpad.fetch_delivered:
+        delivered = scratchpad.fetch_delivered[fid]
+        result = (
+            delivered
+            if isinstance(delivered, FetchResult)
+            else FetchResult(id=fid, value=delivered, status="fulfilled")
+        )
+        # D5: the deadline is authoritative — a late fulfillment is rejected, never a
+        # silent success.
+        if expired and result.status == "fulfilled":
+            result = FetchResult(id=fid, status="expired")
+        return _record(result)
+
+    # 3. no delivery: lazy expiry (deadline authoritative), else still pending.
+    if expired:
+        return _record(FetchResult(id=fid, status="expired"))
+    return FetchRequest(
+        id=fid, value=value, deadline=deadline, created_at=created_at, owner=owner
+    )
+
+
+def fetch(
+    value: Any,
+    *,
+    key: Hashable | None = None,
+    deadline: float | None = None,
+    owner: str | None = None,
+) -> Any:
+    """Declare a service-to-service data dependency from within a node or tool.
+
+    Semantically distinct from [`interrupt()`][langgraph.types.interrupt]: a
+    `fetch()` signals that the graph needs an automated data response — not a
+    human decision. The serving layer is expected to fulfill the request and
+    resume execution within a bounded SLA.
+
+    `fetch()` is a **sibling** of `interrupt()`, not a variant of it. On the first
+    invocation it suspends the graph (via `GraphFetch`), surfacing a
+    [`FetchRequest`][langgraph.types.FetchRequest] on the task's `fetches`. Unlike
+    interrupts, fetches are fulfilled by **content-addressed id** — one value
+    satisfies exactly one dependency:
 
     ```python
     snapshot = graph.get_state(config)
     for task in snapshot.tasks:
-        for req in task.fetches:          # kind="fetch" — always automated
+        for req in task.fetches:              # automated data dependencies
             result = data_layer.get(req.value)
-            graph.invoke(Command(resume={req.id: result}), config)
-        for intr in task.interrupts:
-            if intr.kind == "human":
-                ui.show(intr.value)
+            graph.invoke(Command(fetch={req.id: result}), config)
+        for intr in task.interrupts:          # human decisions
+            ui.show(intr.value)
     ```
+
+    A checkpointer must be enabled, as suspension relies on persisting state.
 
     Args:
         value: Describes the data needed. Surfaced to the serving layer as
-            `Interrupt.value` on the suspended task.
+            `FetchRequest.value` on the suspended task.
+        key: Optional stable key for the content-addressed id. Provide when
+            `value` is not stably hashable, or to deliberately share an id across
+            calls (fan-out / dedup). Defaults to a digest of `value`.
+        deadline: Optional SLA in seconds from when the dependency is first
+            declared. Past it, the fetch resolves as `expired` — raising
+            [`FetchError`][langgraph.errors.FetchError] inside the node — and a
+            late fulfillment is rejected. `None` never expires.
+        owner: Optional source service expected to fulfill the request, surfaced on
+            `FetchRequest.owner` for routing.
 
     Returns:
-        Any: The value provided by the serving layer when resuming.
+        Any: The value provided by the serving layer when the dependency is
+            fulfilled.
 
     Raises:
-        GraphInterrupt: On the first invocation within the node, checkpoints
-            state and suspends execution.
+        GraphFetch: On the first invocation within the node, checkpoints state and
+            suspends execution until the dependency is fulfilled.
+        FetchError: If the dependency resolves to a terminal failure (expired,
+            failed, or cancelled).
     """
-    return interrupt(value, _kind="fetch")
+    from langgraph._internal._constants import (
+        CONFIG_KEY_CHECKPOINT_NS,
+        CONFIG_KEY_SCRATCHPAD,
+    )
+    from langgraph.config import get_config
+    from langgraph.errors import GraphFetch
+
+    conf = get_config()["configurable"]
+    scratchpad = conf[CONFIG_KEY_SCRATCHPAD]
+    ns = conf[CONFIG_KEY_CHECKPOINT_NS]
+    fid = _fetch_id(ns, value, key)
+    resolved = _resolve_fetch(
+        conf, scratchpad, fid, value, deadline, time.time(), owner
+    )
+    if isinstance(resolved, FetchRequest):
+        raise GraphFetch((resolved,))
+    return resolved
+
+
+def fetch_all(values: Sequence[Any], *, deadline: float | None = None) -> list[Any]:
+    """Declare multiple data dependencies at once — one suspension, resolved together.
+
+    Equivalent to calling [`fetch()`][langgraph.types.fetch] per value, but suspends
+    with all still-pending requests in a single `GraphFetch` so the serving layer can
+    fulfill them concurrently. On re-execution the already-fulfilled dependencies
+    return immediately and only the outstanding ones re-suspend (partial fulfillment).
+
+    Args:
+        values: The data dependencies to declare.
+        deadline: Optional SLA in seconds applied to each dependency (see
+            [`fetch()`][langgraph.types.fetch]).
+
+    Returns:
+        list[Any]: The fulfilled values, in the same order as `values`.
+
+    Raises:
+        FetchError: If any dependency resolves to a terminal failure.
+    """
+    from langgraph._internal._constants import (
+        CONFIG_KEY_CHECKPOINT_NS,
+        CONFIG_KEY_SCRATCHPAD,
+    )
+    from langgraph.config import get_config
+    from langgraph.errors import GraphFetch
+
+    conf = get_config()["configurable"]
+    scratchpad = conf[CONFIG_KEY_SCRATCHPAD]
+    ns = conf[CONFIG_KEY_CHECKPOINT_NS]
+    now = time.time()
+
+    results: list[Any] = []
+    pending: list[FetchRequest] = []
+    for value in values:
+        fid = _fetch_id(ns, value, None)
+        resolved = _resolve_fetch(conf, scratchpad, fid, value, deadline, now)
+        if isinstance(resolved, FetchRequest):
+            results.append(MISSING)
+            pending.append(resolved)
+        else:
+            results.append(resolved)
+    if pending:
+        raise GraphFetch(tuple(pending))
+    return results
 
 
 @dataclass(slots=True)

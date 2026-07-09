@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from langgraph._internal._constants import (
     ERROR,
+    FETCH,
     INTERRUPT,
     NULL_TASK_ID,
     RESUME,
@@ -127,6 +128,7 @@ def map_output_updates(
         if (not t.config or TAG_HIDDEN not in t.config.get("tags", EMPTY_SEQ))
         and ww[0][0] != ERROR
         and ww[0][0] != INTERRUPT
+        and ww[0][0] != FETCH
     ]
     if not output_tasks:
         return

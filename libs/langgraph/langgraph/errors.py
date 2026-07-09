@@ -10,7 +10,7 @@ from warnings import warn
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
 from typing_extensions import deprecated
 
-from langgraph.types import Command, Interrupt
+from langgraph.types import Command, FetchRequest, Interrupt
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 __all__ = (
@@ -106,6 +106,17 @@ class GraphInterrupt(GraphBubbleUp):
         super().__init__(interrupts)
 
 
+class GraphFetch(GraphBubbleUp):
+    """Raised when a node declares a service-to-service data dependency via
+    [`fetch`][langgraph.types.fetch]. Sibling of `GraphInterrupt` (both bubble up
+    without failing the run), but routed separately: fetches are resolved by
+    content-addressed id, not by the positional human-interrupt resume path.
+    Never raised directly, or surfaced to the user."""
+
+    def __init__(self, requests: Sequence[FetchRequest] = ()) -> None:
+        super().__init__(requests)
+
+
 @deprecated(
     "NodeInterrupt is deprecated. Please use [`interrupt`][langgraph.types.interrupt] instead.",
     category=None,
@@ -130,6 +141,34 @@ class ParentCommand(GraphBubbleUp):
 
     def __init__(self, command: Command) -> None:
         super().__init__(command)
+
+
+class FetchError(Exception):
+    """Raised inside a node when a [`fetch()`][langgraph.types.fetch] data dependency
+    resolves to a terminal failure instead of a value.
+
+    Unlike `GraphFetch` (an internal suspend signal), `FetchError` is surfaced to the
+    node: a fetch that expired past its SLA, failed closed, or was cancelled raises this
+    so the node can `try/except` it or let the run fail deterministically.
+
+    !!! version-added "Added in version 0.6.x"
+    """
+
+    def __init__(
+        self,
+        id: str,
+        status: str,
+        error: str | None = None,
+    ) -> None:
+        self.id = id
+        """Content-addressed id of the failed dependency."""
+        self.status = status
+        """Terminal outcome: `"expired"`, `"failed"`, or `"cancelled"`."""
+        self.error = error
+        """Optional error detail provided by the serving layer (for `failed`)."""
+        super().__init__(
+            f"fetch {id!r} resolved as {status!r}" + (f": {error}" if error else "")
+        )
 
 
 class EmptyInputError(Exception):

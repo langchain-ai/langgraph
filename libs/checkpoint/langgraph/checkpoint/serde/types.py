@@ -13,6 +13,8 @@ ERROR = "__error__"
 SCHEDULED = "__scheduled__"
 INTERRUPT = "__interrupt__"
 RESUME = "__resume__"
+FETCH = "__fetch__"
+FETCH_RESULT = "__fetch_result__"
 TASKS = "__pregel_tasks"
 
 

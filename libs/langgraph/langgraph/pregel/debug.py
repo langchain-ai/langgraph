@@ -13,6 +13,8 @@ from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     ERROR,
+    FETCH,
+    FETCH_RESULT,
     INTERRUPT,
     NS_END,
     NS_SEP,
@@ -24,6 +26,7 @@ from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel._io import read_channels
 from langgraph.types import (
     CheckpointPayload,
+    FetchRequest,
     PregelExecutableTask,
     PregelTask,
     StateSnapshot,
@@ -212,10 +215,26 @@ def tasks_w_writes(
             for v in (vv if isinstance(vv, Sequence) else [vv])
         )
 
+        # ids already fulfilled for this task (persisted as FETCH_RESULT); a stale
+        # FETCH request whose id is fulfilled is no longer pending (e.g. a fetch
+        # resolved before the node hit a later interrupt)
+        fulfilled_fetch_ids: set[str] = set()
+        for tid, n, vv in pending_writes:
+            if tid == task.id and n == FETCH_RESULT and isinstance(vv, dict):
+                fulfilled_fetch_ids.update(vv)
+        task_fetches = tuple(
+            v
+            for tid, n, vv in pending_writes
+            if tid == task.id and n == FETCH
+            for v in (vv if isinstance(vv, Sequence) else [vv])
+            if isinstance(v, FetchRequest) and v.id not in fulfilled_fetch_ids
+        )
+
         task_writes = [
             (chan, val)
             for tid, chan, val in pending_writes
-            if tid == task.id and chan not in (ERROR, INTERRUPT, RETURN)
+            if tid == task.id
+            and chan not in (ERROR, INTERRUPT, FETCH, FETCH_RESULT, RETURN)
         ]
 
         if rtn is not MISSING:
@@ -239,7 +258,8 @@ def tasks_w_writes(
             task_result = mapped_writes if filtered_writes else {}
 
         has_writes = rtn is not MISSING or any(
-            w[0] == task.id and w[1] not in (ERROR, INTERRUPT) for w in pending_writes
+            w[0] == task.id and w[1] not in (ERROR, INTERRUPT, FETCH, FETCH_RESULT)
+            for w in pending_writes
         )
 
         out.append(
@@ -251,6 +271,7 @@ def tasks_w_writes(
                 task_interrupts,
                 states.get(task.id) if states else None,
                 task_result if has_writes else None,
+                task_fetches,
             )
         )
     return tuple(out)

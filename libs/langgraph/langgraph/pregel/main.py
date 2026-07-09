@@ -4,7 +4,10 @@ import asyncio
 import concurrent
 import concurrent.futures
 import contextlib
+import logging
 import queue
+import threading
+import time
 import warnings
 import weakref
 from collections import defaultdict, deque
@@ -12,6 +15,7 @@ from collections.abc import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Iterable,
     Iterator,
     Mapping,
     Sequence,
@@ -178,6 +182,8 @@ from langgraph.types import (
     Checkpointer,
     Command,
     Durability,
+    FetchRequest,
+    FetchResult,
     GraphOutput,
     Interrupt,
     Send,
@@ -197,6 +203,8 @@ except ImportError:
     _StreamingCallbackHandler = None  # type: ignore
 
 __all__ = ("NodeBuilder", "Pregel")
+
+logger = logging.getLogger(__name__)
 
 _WriteValue = Callable[[Input], Output] | Any
 
@@ -1387,6 +1395,185 @@ class Pregel(
             tuple([i for task in tasks_with_writes for i in task.interrupts]),
         )
 
+    # --- fetch() serving layer ------------------------------------------------
+    # Convenience surface for driving service-to-service data dependencies declared
+    # with fetch()/fetch_all(). Fulfillment is always keyed by content-addressed id.
+
+    def pending_fetches(self, config: RunnableConfig) -> list[FetchRequest]:
+        """Return the data dependencies (`fetch()`) awaiting fulfillment on `config`.
+
+        Distinct from `get_state().tasks[].interrupts` — these are automated requests
+        the serving layer is expected to fulfill by id, not human interrupts.
+        """
+        return [f for task in self.get_state(config).tasks for f in task.fetches]
+
+    async def apending_fetches(self, config: RunnableConfig) -> list[FetchRequest]:
+        """Async variant of [`pending_fetches`][langgraph.pregel.Pregel.pending_fetches]."""
+        state = await self.aget_state(config)
+        return [f for task in state.tasks for f in task.fetches]
+
+    def fulfill(self, config: RunnableConfig, id: str, value: Any) -> Any:
+        """Fulfill a data dependency by content-addressed id and resume the graph.
+
+        One value satisfies exactly one dependency. A fulfillment arriving past the
+        request's deadline is rejected (the dependency resolves as `expired`).
+        """
+        return self.invoke(Command(fetch={id: value}), config)
+
+    async def afulfill(self, config: RunnableConfig, id: str, value: Any) -> Any:
+        """Async variant of [`fulfill`][langgraph.pregel.Pregel.fulfill]."""
+        return await self.ainvoke(Command(fetch={id: value}), config)
+
+    def fail_fetch(
+        self, config: RunnableConfig, id: str, error: str | None = None
+    ) -> Any:
+        """Fail a data dependency closed by id — it resolves as `failed`, raising
+        `FetchError` inside the node."""
+        return self.invoke(
+            Command(fetch={id: FetchResult(id=id, status="failed", error=error)}),
+            config,
+        )
+
+    async def afail_fetch(
+        self, config: RunnableConfig, id: str, error: str | None = None
+    ) -> Any:
+        """Async variant of [`fail_fetch`][langgraph.pregel.Pregel.fail_fetch]."""
+        return await self.ainvoke(
+            Command(fetch={id: FetchResult(id=id, status="failed", error=error)}),
+            config,
+        )
+
+    def _due_fetch_ids(self, pending: list[FetchRequest], now: float) -> list[str]:
+        return [f.id for f in pending if f.deadline is not None and now > f.deadline]
+
+    def expire_fetches(self, config: RunnableConfig) -> list[str]:
+        """Resume `config` so any past-deadline fetches self-resolve as `expired`.
+
+        This is the mechanism the background sweeper drives (see
+        [`start_fetch_sweeper`][langgraph.pregel.Pregel.start_fetch_sweeper]): the node
+        re-runs, records the terminal `expired` outcome, and advances. Returns the ids
+        that were past their deadline. May raise `FetchError` if a node lets the
+        terminal failure propagate (fail-closed).
+        """
+        due = self._due_fetch_ids(self.pending_fetches(config), time.time())
+        if due:
+            self.invoke(None, config)
+        return due
+
+    async def aexpire_fetches(self, config: RunnableConfig) -> list[str]:
+        """Async variant of [`expire_fetches`][langgraph.pregel.Pregel.expire_fetches]."""
+        due = self._due_fetch_ids(await self.apending_fetches(config), time.time())
+        if due:
+            await self.ainvoke(None, config)
+        return due
+
+    def cancel_fetches(
+        self, config: RunnableConfig, ids: Sequence[str] | None = None
+    ) -> list[str]:
+        """Cancel pending data dependencies (all, or the given `ids`).
+
+        Each resolves as `cancelled` — a terminal failure raising `FetchError` inside
+        the node. Returns the cancelled ids.
+        """
+        target = (
+            list(ids)
+            if ids is not None
+            else [f.id for f in self.pending_fetches(config)]
+        )
+        if target:
+            self.invoke(
+                Command(
+                    fetch={i: FetchResult(id=i, status="cancelled") for i in target}
+                ),
+                config,
+            )
+        return target
+
+    async def acancel_fetches(
+        self, config: RunnableConfig, ids: Sequence[str] | None = None
+    ) -> list[str]:
+        """Async variant of [`cancel_fetches`][langgraph.pregel.Pregel.cancel_fetches]."""
+        target = (
+            list(ids)
+            if ids is not None
+            else [f.id for f in await self.apending_fetches(config)]
+        )
+        if target:
+            await self.ainvoke(
+                Command(
+                    fetch={i: FetchResult(id=i, status="cancelled") for i in target}
+                ),
+                config,
+            )
+        return target
+
+    def start_fetch_sweeper(
+        self,
+        threads: Callable[[], Iterable[RunnableConfig]] | Iterable[RunnableConfig],
+        *,
+        interval_seconds: float = 300.0,
+    ) -> concurrent.futures.Future[None]:
+        """Start an in-process daemon that periodically expires past-deadline fetches.
+
+        Models the store TTL sweeper: an opt-in background thread that, every
+        `interval_seconds`, calls [`expire_fetches`][langgraph.pregel.Pregel.expire_fetches]
+        for each thread in `threads` — so a graph that is never otherwise resumed still
+        reaches its terminal `expired` state within its SLA.
+
+        `threads` may be a static iterable of thread configs or a callable returning
+        one (re-evaluated each sweep, so newly-created threads are picked up). Errors in
+        a single thread's sweep are logged and do not stop the loop.
+
+        Returns a `Future` that can be cancelled; call
+        [`stop_fetch_sweeper`][langgraph.pregel.Pregel.stop_fetch_sweeper] to stop.
+
+        Note: this covers deployments with a running host process. Discovering *all*
+        threads is checkpointer-specific — pass a `threads` provider that enumerates
+        them (e.g. via `checkpointer.list`). Scaled-to-zero deployments need an external
+        durable timer instead.
+        """
+        existing = getattr(self, "_fetch_sweeper_thread", None)
+        if existing is not None and existing.is_alive():
+            fut: concurrent.futures.Future[None] = concurrent.futures.Future()
+            fut.set_result(None)
+            return fut
+        stop_event = threading.Event()
+        self._fetch_sweeper_stop = stop_event
+        future: concurrent.futures.Future[None] = concurrent.futures.Future()
+
+        def _sweep_loop() -> None:
+            try:
+                while not stop_event.is_set():
+                    if stop_event.wait(interval_seconds):
+                        break
+                    configs = threads() if callable(threads) else threads
+                    for cfg in configs:
+                        try:
+                            self.expire_fetches(cfg)
+                        except Exception as exc:  # noqa: BLE001
+                            logger.exception(
+                                "fetch sweep failed for thread", exc_info=exc
+                            )
+                future.set_result(None)
+            except Exception as exc:  # noqa: BLE001
+                future.set_exception(exc)
+
+        thread = threading.Thread(target=_sweep_loop, daemon=True, name="fetch-sweeper")
+        self._fetch_sweeper_thread = thread
+        thread.start()
+        future.add_done_callback(lambda f: stop_event.set() if f.cancelled() else None)
+        return future
+
+    def stop_fetch_sweeper(self) -> None:
+        """Stop the background fetch sweeper started by `start_fetch_sweeper`."""
+        stop_event = getattr(self, "_fetch_sweeper_stop", None)
+        if stop_event is not None:
+            stop_event.set()
+        thread = getattr(self, "_fetch_sweeper_thread", None)
+        if thread is not None:
+            thread.join(timeout=5)
+            self._fetch_sweeper_thread = None  # type: ignore[assignment]
+
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
@@ -1474,6 +1661,10 @@ class Pregel(
             recurse=checkpointer if subgraphs else None,
             apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
         )
+
+    # --- fetch() serving layer ------------------------------------------------
+    # Convenience surface for driving service-to-service data dependencies declared
+    # with fetch()/fetch_all(). Fulfillment is always keyed by content-addressed id.
 
     def get_state_history(
         self,
@@ -1987,6 +2178,7 @@ class Pregel(
                                     None,
                                     step,
                                     step + 2,
+                                    None,
                                 ),
                                 channels,
                                 managed,
@@ -2432,6 +2624,7 @@ class Pregel(
                                     None,
                                     step,
                                     step + 2,
+                                    None,
                                 ),
                                 channels,
                                 managed,

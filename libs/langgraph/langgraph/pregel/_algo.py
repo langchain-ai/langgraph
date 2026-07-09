@@ -39,6 +39,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_FETCH_MAP,
     CONFIG_KEY_NODE_ERROR,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUME_MAP,
@@ -49,6 +50,8 @@ from langgraph._internal._constants import (
     CONFIG_KEY_THREAD_ID,
     ERROR,
     ERROR_SOURCE_NODE,
+    FETCH,
+    FETCH_RESULT,
     INTERRUPT,
     NO_WRITES,
     NS_END,
@@ -300,6 +303,8 @@ def apply_writes(
                 PUSH,
                 RESUME,
                 INTERRUPT,
+                FETCH,
+                FETCH_RESULT,
                 RETURN,
                 ERROR,
                 ERROR_SOURCE_NODE,
@@ -631,6 +636,7 @@ def prepare_single_task(
                 config[CONF].get(CONFIG_KEY_RESUME_MAP),
                 step,
                 stop,
+                config[CONF].get(CONFIG_KEY_FETCH_MAP),
             )
             # create task input
             try:
@@ -878,6 +884,7 @@ def prepare_push_task_functional(
             configurable.get(CONFIG_KEY_RESUME_MAP),
             step,
             stop,
+            configurable.get(CONFIG_KEY_FETCH_MAP),
         )
         runtime = cast(Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME))
         runtime = runtime.override(
@@ -1040,6 +1047,7 @@ def prepare_push_task_send(
             config[CONF].get(CONFIG_KEY_RESUME_MAP),
             step,
             stop,
+            config[CONF].get(CONFIG_KEY_FETCH_MAP),
         )
         runtime = cast(Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME))
         runtime = runtime.override(
@@ -1189,6 +1197,7 @@ def prepare_node_error_handler_task(
         config[CONF].get(CONFIG_KEY_RESUME_MAP),
         step,
         stop,
+        config[CONF].get(CONFIG_KEY_FETCH_MAP),
     )
     runtime = cast(Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME))
     runtime = runtime.override(
@@ -1285,7 +1294,26 @@ def _scratchpad(
     resume_map: dict[str, Any] | None,
     step: int,
     stop: int,
+    fetch_map: dict[str, Any] | None = None,
 ) -> PregelScratchpad:
+    # build fetch state for this task, keyed by content-addressed fetch id:
+    #  - fetch_results: terminal FetchResults persisted from prior runs (FETCH_RESULT)
+    #  - fetch_pending: FetchRequests from prior suspension (FETCH), for deadline reuse
+    #  - fetch_delivered: fresh Command(fetch=...) deliveries threaded via fetch_map
+    # fetch()/fetch_all() look up their own ids across these.
+    fetch_results: dict[str, Any] = {}
+    fetch_pending: dict[str, Any] = {}
+    for w in pending_writes:
+        if w[0] != task_id:
+            continue
+        if w[1] == FETCH_RESULT and isinstance(w[2], dict):
+            fetch_results.update(w[2])
+        elif w[1] == FETCH:
+            for req in w[2] if isinstance(w[2], (list, tuple)) else [w[2]]:
+                rid = getattr(req, "id", None)
+                if rid is not None:
+                    fetch_pending[rid] = req
+    fetch_delivered: dict[str, Any] = dict(fetch_map) if fetch_map else {}
     if len(pending_writes) > 0:
         # find global resume value
         for w in pending_writes:
@@ -1340,6 +1368,10 @@ def _scratchpad(
         interrupt_counter=LazyAtomicCounter(),
         resume=task_resume_write,
         get_null_resume=get_null_resume,
+        # fetch
+        fetch_results=fetch_results,
+        fetch_delivered=fetch_delivered,
+        fetch_pending=fetch_pending,
         # subgraph
         subgraph_counter=LazyAtomicCounter(),
     )
