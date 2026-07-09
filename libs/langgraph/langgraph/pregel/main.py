@@ -108,6 +108,7 @@ from langgraph.callbacks import (
     get_sync_graph_callback_manager_for_config,
 )
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.topic import Topic
 from langgraph.config import get_config
 from langgraph.constants import END
@@ -133,8 +134,6 @@ from langgraph.pregel._checkpoint import (
     copy_checkpoint,
     create_checkpoint,
     empty_checkpoint,
-    update_state_channel_writes,
-    update_state_channels_plan,
 )
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
@@ -1997,17 +1996,13 @@ class Pregel(
                         },
                     ),
                 )
-            updated_channels, channels_to_snapshot = update_state_channels_plan(
-                run_tasks, channels
-            )
-            if saved is not None:
-                for task_id, task in zip(run_task_ids, run_tasks):
-                    if channel_writes := update_state_channel_writes(
-                        task.writes, channels_to_snapshot
-                    ):
-                        checkpointer.put_writes(
-                            checkpoint_config, channel_writes, task_id
-                        )
+            # save task writes
+            for task_id, task in zip(run_task_ids, run_tasks):
+                # channel writes are saved to current checkpoint
+                channel_writes = [w for w in task.writes if w[0] != PUSH]
+                if saved and channel_writes:
+                    checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
+            # apply to checkpoint and save
             apply_writes(
                 checkpoint,
                 channels,
@@ -2015,13 +2010,20 @@ class Pregel(
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
+            # On a fresh thread there is no ancestor to replay DeltaChannel
+            # writes from, so force a self-contained snapshot in the first
+            # checkpoint instead of relying on ancestor write-replay.
+            delta_snapshot = (
+                {
+                    k
+                    for k, ch in channels.items()
+                    if isinstance(ch, DeltaChannel) and ch.is_available()
+                }
+                if saved is None
+                else None
+            )
             checkpoint = create_checkpoint(
-                checkpoint,
-                channels,
-                step + 1,
-                updated_channels=updated_channels,
-                get_next_version=checkpointer.get_next_version,
-                channels_to_snapshot=channels_to_snapshot,
+                checkpoint, channels, step + 1, channels_to_snapshot=delta_snapshot
             )
             next_config = checkpointer.put(
                 checkpoint_config,
@@ -2036,11 +2038,7 @@ class Pregel(
                 ),
             )
             for task_id, task in zip(run_task_ids, run_tasks):
-                if saved is None:
-                    if channel_writes := update_state_channel_writes(
-                        task.writes, channels_to_snapshot
-                    ):
-                        checkpointer.put_writes(next_config, channel_writes, task_id)
+                # save push writes
                 if push_writes := [w for w in task.writes if w[0] == PUSH]:
                     checkpointer.put_writes(next_config, push_writes, task_id)
 
@@ -2458,17 +2456,14 @@ class Pregel(
                     ),
                 )
             # save task writes
-            updated_channels, channels_to_snapshot = update_state_channels_plan(
-                run_tasks, channels
-            )
-            if saved is not None:
-                for task_id, task in zip(run_task_ids, run_tasks):
-                    if channel_writes := update_state_channel_writes(
-                        task.writes, channels_to_snapshot
-                    ):
-                        await checkpointer.aput_writes(
-                            checkpoint_config, channel_writes, task_id
-                        )
+            for task_id, task in zip(run_task_ids, run_tasks):
+                # channel writes are saved to current checkpoint
+                channel_writes = [w for w in task.writes if w[0] != PUSH]
+                if saved and channel_writes:
+                    await checkpointer.aput_writes(
+                        checkpoint_config, channel_writes, task_id
+                    )
+            # apply to checkpoint and save
             apply_writes(
                 checkpoint,
                 channels,
@@ -2476,14 +2471,22 @@ class Pregel(
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            checkpoint = create_checkpoint(
-                checkpoint,
-                channels,
-                step + 1,
-                updated_channels=updated_channels,
-                get_next_version=checkpointer.get_next_version,
-                channels_to_snapshot=channels_to_snapshot,
+            # On a fresh thread there is no ancestor to replay DeltaChannel
+            # writes from, so force a self-contained snapshot in the first
+            # checkpoint instead of relying on ancestor write-replay.
+            delta_snapshot = (
+                {
+                    k
+                    for k, ch in channels.items()
+                    if isinstance(ch, DeltaChannel) and ch.is_available()
+                }
+                if saved is None
+                else None
             )
+            checkpoint = create_checkpoint(
+                checkpoint, channels, step + 1, channels_to_snapshot=delta_snapshot
+            )
+            # save checkpoint, after applying writes
             next_config = await checkpointer.aput(
                 checkpoint_config,
                 checkpoint,
@@ -2497,13 +2500,7 @@ class Pregel(
                 ),
             )
             for task_id, task in zip(run_task_ids, run_tasks):
-                if saved is None:
-                    if channel_writes := update_state_channel_writes(
-                        task.writes, channels_to_snapshot
-                    ):
-                        await checkpointer.aput_writes(
-                            next_config, channel_writes, task_id
-                        )
+                # save push writes
                 if push_writes := [w for w in task.writes if w[0] == PUSH]:
                     await checkpointer.aput_writes(next_config, push_writes, task_id)
             return patch_checkpoint_map(next_config, saved.metadata if saved else None)
