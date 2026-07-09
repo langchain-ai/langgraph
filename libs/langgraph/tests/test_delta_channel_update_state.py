@@ -5,10 +5,10 @@ thread silently dropped the first write to a `DeltaChannel`-backed channel
 because channel writes were only persisted when a previous checkpoint existed
 and no snapshot was written either, so the checkpoint reconstructed to empty.
 
-Fixed by forcing a self-contained `_DeltaSnapshot` blob into the first
-checkpoint on a fresh thread (`saved is None`), so the value is stored inline
-and no ancestor write-replay is required. This keeps the read/replay path
-untouched.
+Fixed by forcing a self-contained `_DeltaSnapshot` blob into every
+`update_state` checkpoint for updated DeltaChannels, so Postgres readers that
+skip ancestor walks when `counters_since_delta_snapshot` is absent can still
+reconstruct state.
 
 Coverage:
 
@@ -16,8 +16,8 @@ Coverage:
 * non-fresh thread: `update_state` after `invoke`, after another `update_state`,
   and `bulk_update_state` with multiple per-superstep updates
 * update-by-id end-to-end via `update_state` (DeltaChannel reducer semantics)
-* state-history chain shape on a fresh thread (single self-contained update
-  checkpoint with the snapshot inline and no parent)
+* head checkpoint snapshots updated DeltaChannels on every update_state
+  (fresh thread, consecutive updates, and after invoke)
 """
 
 from typing import Annotated, Any
@@ -25,6 +25,7 @@ from typing import Annotated, Any
 import pytest
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
@@ -136,9 +137,7 @@ async def test_aupdate_state_after_invoke_delta_channel() -> None:
 
 
 def test_consecutive_update_states_delta_channel() -> None:
-    """First update_state forces a self-contained snapshot seed; the second
-    sees a real parent (`saved is not None`) and anchors its writes under that
-    seed. Both messages must round-trip in chronological order."""
+    """Each update_state must leave a snapshotted head so later reads round-trip."""
     saver = InMemorySaver()
     graph = _build_graph(saver)
     config = {"configurable": {"thread_id": "consecutive-sync"}}
@@ -157,6 +156,14 @@ def test_consecutive_update_states_delta_channel() -> None:
     state = graph.get_state(config)
     assert [m.content for m in state.values["messages"]] == ["first", "second"]
     assert [m.id for m in state.values["messages"]] == ["m1", "m2"]
+
+    head = saver.get_tuple(config)
+    assert head is not None
+    assert isinstance(head.checkpoint["channel_values"].get("messages"), _DeltaSnapshot)
+    assert [m.content for m in head.checkpoint["channel_values"]["messages"].value] == [
+        "first",
+        "second",
+    ]
 
 
 async def test_aconsecutive_update_states_delta_channel() -> None:
@@ -204,6 +211,10 @@ def test_update_state_replaces_message_by_id_delta_channel() -> None:
     assert len(msgs) == 1
     assert msgs[0].id == "h1"
     assert msgs[0].content == "updated"
+
+    head = saver.get_tuple(config)
+    assert head is not None
+    assert isinstance(head.checkpoint["channel_values"].get("messages"), _DeltaSnapshot)
 
 
 # ---------------------------------------------------------------------------
