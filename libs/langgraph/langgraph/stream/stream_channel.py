@@ -232,7 +232,7 @@ class StreamChannel(Generic[T]):
                     raise self._error
                 return
             elif self._arequest_more is not None:
-                if not await self._arequest_more():
+                if not await asyncio.shield(self._arequest_more()):
                     if not self._items and not self._closed:
                         return
             else:

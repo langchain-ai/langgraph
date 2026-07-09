@@ -8,6 +8,7 @@ import sys
 import time
 from typing import Annotated, Any
 
+import anyio
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
@@ -764,6 +765,71 @@ class TestStreamV2Async:
                 await consumer
             except asyncio.CancelledError:
                 pass
+
+    async def test_abort_cleans_up_from_cancelled_anyio_scope(self) -> None:
+        class CountState(TypedDict):
+            count: int
+
+        runs: list[int] = []
+        finally_seen = anyio.Event()
+        scope_holder: dict[str, anyio.CancelScope] = {}
+        run_holder: dict[str, AsyncGraphRunStream] = {}
+
+        async def sub_node(state: CountState) -> dict:
+            runs.append(state["count"] + 1)
+            await asyncio.sleep(0.05)
+            return {"count": state["count"] + 1}
+
+        sub_graph = (
+            StateGraph(CountState)
+            .add_node("sub_node", sub_node)
+            .set_entry_point("sub_node")
+            .add_conditional_edges(
+                "sub_node",
+                lambda s: END if s["count"] >= 10 else "sub_node",
+            )
+            .compile()
+        )
+
+        async def main_node(state: CountState) -> None:
+            await sub_graph.ainvoke({"count": 0})
+
+        main_graph = (
+            StateGraph(CountState)
+            .add_node("main_node", main_node)
+            .set_entry_point("main_node")
+            .compile()
+        )
+
+        async def handler() -> None:
+            with anyio.CancelScope() as scope:
+                scope_holder["scope"] = scope
+                run = await main_graph.astream_events({"count": 0}, version="v3")
+                run_holder["run"] = run
+                try:
+                    async for _e in run:
+                        pass
+                finally:
+                    finally_seen.set()
+                    await run.abort()
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(handler)
+            while len(runs) < 2 or "scope" not in scope_holder:
+                await anyio.sleep(0.01)
+            scope_holder["scope"].cancel()
+            await finally_seen.wait()
+            with anyio.fail_after(2):
+                while (abort_task := run_holder["run"]._abort_task) is not None:
+                    if abort_task.done():
+                        break
+                    await anyio.sleep(0.01)
+            tg.cancel_scope.cancel()
+
+        runs_at_abort = len(runs)
+        await anyio.sleep(0.3)
+        assert len(runs) == runs_at_abort
+        assert len(runs) < 10
 
     async def test_extensions_has_native_keys(self) -> None:
         run = await _build_simple_graph().astream_events(

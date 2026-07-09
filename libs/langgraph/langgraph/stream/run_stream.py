@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import sys
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from types import MappingProxyType, TracebackType
 from typing import TYPE_CHECKING, Any
@@ -360,6 +362,7 @@ class AsyncGraphRunStream:
         self._pumping = False
         self._anext_task: asyncio.Future[Any] | None = None
         self._aborting = False
+        self._abort_task: asyncio.Task[None] | None = None
         for key in mux.native_keys:
             setattr(self, key, mux.extensions[key])
         if wire_pump:
@@ -426,15 +429,16 @@ class AsyncGraphRunStream:
                 # is running ("asynchronous generator is already running").
                 self._anext_task = asyncio.ensure_future(self._graph_aiter.__anext__())
                 try:
-                    part = await self._anext_task
+                    part = await asyncio.shield(self._anext_task)
                 except asyncio.CancelledError:
                     if self._aborting:
                         # Abort-initiated cancel: stop gracefully.
                         self._exhausted = True
                         return False
-                    # Genuine external cancel of this task: also stop the
-                    # in-flight pull, then propagate.
-                    self._anext_task.cancel()
+                    # Genuine external cancel of this task: start the same
+                    # cleanup path as `abort()` before propagating, so callers
+                    # running inside a cancelled scope still stop the graph.
+                    self.abort()
                     raise
                 finally:
                     self._anext_task = None
@@ -455,29 +459,12 @@ class AsyncGraphRunStream:
                 self._pumping = False
                 self._pump_cond.notify_all()
 
-    async def abort(self) -> None:
-        """Stop the run early.
-
-        Marks the stream exhausted and wakes any pump-waiters. Cancels an
-        in-flight pull if one is running, then closes the underlying graph
-        iterator, so running nodes and nested subgraphs are cancelled
-        whether or not a pump is mid-pull. Closes the mux; any `apush`
-        blocked on backpressure wakes and returns without appending.
-        Idempotent.
-        """
-        async with self._pump_cond:
-            if self._exhausted:
-                return
-            self._exhausted = True
-            self._aborting = True
-            graph_aiter = self._graph_aiter
-            self._graph_aiter = None
-            anext_task = self._anext_task
-            self._pump_cond.notify_all()
-        # If a pump is mid-pull, cancel it so the cancellation propagates
-        # into running nodes and nested subgraphs. Once it settles the
-        # generator is no longer running, so the `aclose()` below is a safe
-        # final cleanup (and handles the no-in-flight-pull case directly).
+    async def _abort_cleanup(
+        self,
+        graph_aiter: AsyncIterator[Any] | None,
+        anext_task: asyncio.Future[Any] | None,
+    ) -> None:
+        """Finish abort cleanup outside the caller's cancellation scope."""
         if anext_task is not None and not anext_task.done():
             anext_task.cancel()
             try:
@@ -496,6 +483,57 @@ class AsyncGraphRunStream:
             await self._mux.aclose()
         except Exception:
             pass
+        async with self._pump_cond:
+            self._pump_cond.notify_all()
+
+    # Regular `def` is intentional: callers may invoke `await run.abort()`
+    # from an already-cancelled AnyIO scope, so cleanup must be scheduled
+    # before the await expression reaches its first cancellation checkpoint.
+    def abort(self) -> asyncio.Future[None]:
+        """Stop the run early.
+
+        Marks the stream exhausted and wakes any pump-waiters. Cancels an
+        in-flight pull if one is running, then closes the underlying graph
+        iterator, so running nodes and nested subgraphs are cancelled
+        whether or not a pump is mid-pull. Closes the mux; any `apush`
+        blocked on backpressure wakes and returns without appending.
+        Idempotent.
+        """
+        if self._abort_task is not None:
+            return asyncio.shield(self._abort_task)
+
+        loop = asyncio.get_running_loop()
+        if self._exhausted:
+            done = loop.create_future()
+            done.set_result(None)
+            return done
+
+        self._exhausted = True
+        self._aborting = True
+        graph_aiter = self._graph_aiter
+        self._graph_aiter = None
+        anext_task = self._anext_task
+        if anext_task is not None and not anext_task.done():
+            anext_task.cancel()
+        if sys.version_info >= (3, 11):
+            create_task: Any = asyncio.create_task
+            self._abort_task = create_task(
+                self._abort_cleanup(graph_aiter, anext_task),
+                context=contextvars.Context(),
+            )
+        else:
+            self._abort_task = contextvars.Context().run(
+                lambda: asyncio.create_task(
+                    self._abort_cleanup(graph_aiter, anext_task)
+                )
+            )
+
+        def clear_abort_task(task: asyncio.Task[None]) -> None:
+            if self._abort_task is task:
+                self._abort_task = None
+
+        self._abort_task.add_done_callback(clear_abort_task)
+        return asyncio.shield(self._abort_task)
 
     async def __aenter__(self) -> AsyncGraphRunStream:
         return self
