@@ -437,7 +437,7 @@ def create_react_agent(
                 If `remaining_steps` is less than 2 and tool calls are present in the response,
                 the react agent will return a final AI Message with
                 the content "Sorry, need more steps to process this request.".
-                No `GraphRecusionError` will be raised in this case.
+                No `GraphRecursionError` will be raised in this case.
 
         context_schema: An optional schema for runtime context.
         checkpointer: An optional checkpoint saver object. This is used for persisting
