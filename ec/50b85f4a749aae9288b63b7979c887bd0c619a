@@ -1,0 +1,25 @@
+libs/langgraph/pyproject.toml
+  s_c4fa7ccfd0e4bb::t_dbce7d73f51ec3 7
+libs/langgraph/uv.lock
+  s_c4fa7ccfd0e4bb::t_d9d778e6bf2ed8 1441
+libs/prebuilt/uv.lock
+  s_c4fa7ccfd0e4bb::t_5c44f0f6631c51 288
+libs/sdk-py/uv.lock
+  s_c4fa7ccfd0e4bb::t_0a31e232ce4342 301
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ec50b85f4a749aae9288b63b7979c887bd0c619a",
+  "prompts": {},
+  "sessions": {
+    "s_c4fa7ccfd0e4bb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "4840e0e8-cab8-480b-85bd-1580e3cb60c6",
+        "model": "default"
+      },
+      "human_author": "Quanzheng Long <long@langchain.dev>"
+    }
+  }
+}
