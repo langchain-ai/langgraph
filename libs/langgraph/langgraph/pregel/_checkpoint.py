@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
 from typing import Any, cast
 
@@ -14,6 +14,7 @@ from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
 from langgraph._internal._config import DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT
+from langgraph._internal._constants import PUSH
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.delta import DeltaChannel
@@ -68,6 +69,81 @@ def delta_channels_to_snapshot(
         ):
             result.add(name)
     return result
+
+
+def get_updated_channels_from_tasks(
+    run_tasks: Iterable[Any],
+) -> set[str]:
+    """Channel names written by an update_state superstep (excluding PUSH)."""
+    return {c for task in run_tasks for c, _ in task.writes if c != PUSH}
+
+
+def get_delta_channels_from_all_channels(
+    channels: Mapping[str, BaseChannel],
+) -> set[str]:
+    """DeltaChannels to snapshot on the first update_state of a fresh thread."""
+    return {
+        k
+        for k, ch in channels.items()
+        if isinstance(ch, DeltaChannel) and ch.is_available()
+    }
+
+
+def create_metadata_for_update_state_api(
+    channels: Mapping[str, BaseChannel],
+    updated_channels: set[str],
+    *,
+    prev_metadata: Mapping[str, Any] | None,
+) -> dict[str, tuple[int, int]]:
+    """Advance ``counters_since_delta_snapshot`` for update_state on a non-fresh thread.
+
+    Mirrors the per-superstep counter bump in ``_loop._put_checkpoint``.
+    """
+    prev_counters = dict(
+        (prev_metadata or {}).get("counters_since_delta_snapshot") or {}
+    )
+    new_counters: dict[str, tuple[int, int]] = {}
+    for ch_name, ch in channels.items():
+        if not isinstance(ch, DeltaChannel):
+            continue
+        u, s = prev_counters.get(ch_name, (0, 0))
+        s += 1
+        if ch_name in updated_channels:
+            u += 1
+        new_counters[ch_name] = (u, s)
+    return new_counters
+
+
+def create_checkpoint_plan_for_update_state_api(
+    channels: Mapping[str, BaseChannel],
+    updated_channels: set[str],
+    *,
+    step: int,
+    parents: dict[str, Any],
+    saved_metadata: Mapping[str, Any] | None,
+    is_fresh_thread: bool,
+) -> tuple[set[str], dict[str, Any]]:
+    """Return ``(channels_to_snapshot, metadata)`` for an update_state head."""
+    metadata: dict[str, Any] = {
+        "source": "update",
+        "step": step,
+        "parents": parents,
+    }
+    if is_fresh_thread:
+        return get_delta_channels_from_all_channels(channels), metadata
+
+    new_counters = create_metadata_for_update_state_api(
+        channels,
+        updated_channels,
+        prev_metadata=saved_metadata,
+    )
+    channels_to_snapshot = delta_channels_to_snapshot(channels, new_counters)
+    for k in channels_to_snapshot:
+        new_counters[k] = (0, 0)
+    non_zero = {k: v for k, v in new_counters.items() if v != (0, 0)}
+    if non_zero:
+        metadata["counters_since_delta_snapshot"] = non_zero
+    return channels_to_snapshot, metadata
 
 
 def create_checkpoint(

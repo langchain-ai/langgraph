@@ -1,23 +1,19 @@
 """Tests for `update_state` / `aupdate_state` against `DeltaChannel`.
 
-Originally a regression suite for deepagents#3774 — `update_state` on a *fresh*
-thread silently dropped the first write to a `DeltaChannel`-backed channel
-because channel writes were only persisted when a previous checkpoint existed
-and no snapshot was written either, so the checkpoint reconstructed to empty.
+Regression suite for deepagents#3774 and Postgres read-path compatibility.
 
-Fixed by forcing a self-contained `_DeltaSnapshot` blob into the first
-checkpoint on a fresh thread (`saved is None`), so the value is stored inline
-and no ancestor write-replay is required. This keeps the read/replay path
-untouched.
+Fresh-thread ``update_state`` force-snapshots DeltaChannels (1.2.8). Non-fresh
+``update_state`` persists ``checkpoint_writes`` on the parent, advances
+``counters_since_delta_snapshot`` on the new head, and snapshots when a
+channel reaches ``snapshot_frequency`` (mirroring normal run cadence).
 
 Coverage:
 
-* fresh-thread regression: single `update_state` writes a message and reads back
-* non-fresh thread: `update_state` after `invoke`, after another `update_state`,
-  and `bulk_update_state` with multiple per-superstep updates
-* update-by-id end-to-end via `update_state` (DeltaChannel reducer semantics)
-* state-history chain shape on a fresh thread (single self-contained update
-  checkpoint with the snapshot inline and no parent)
+* fresh-thread regression: single ``update_state`` writes a message and reads back
+* non-fresh thread: ``update_state`` after ``invoke``, after another ``update_state``,
+  and ``bulk_update_state`` with multiple per-superstep updates
+* update-by-id end-to-end via ``update_state`` (DeltaChannel reducer semantics)
+* fresh-thread head is snapshotted; non-fresh heads carry delta replay counters
 """
 
 from typing import Annotated, Any
@@ -25,6 +21,7 @@ from typing import Annotated, Any
 import pytest
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
@@ -34,13 +31,20 @@ from langgraph.graph.message import _messages_delta_reducer
 pytestmark = pytest.mark.anyio
 
 
-def _build_graph(checkpointer: InMemorySaver, *, two_nodes: bool = False) -> Any:
+def _build_graph(
+    checkpointer: InMemorySaver,
+    *,
+    two_nodes: bool = False,
+    snapshot_frequency: int = 1000,
+) -> Any:
     """Compile a minimal DeltaChannel-backed `messages` graph.
 
     `two_nodes=True` adds a second writer node so `bulk_update_state` can route
     distinct updates to different `as_node` values within a single superstep.
     """
-    channel = DeltaChannel(_messages_delta_reducer)
+    channel = DeltaChannel(
+        _messages_delta_reducer, snapshot_frequency=snapshot_frequency
+    )
     State = TypedDict("State", {"messages": Annotated[list, channel]})  # type: ignore[call-overload]  # noqa: UP013
 
     def model(state: dict) -> dict:
@@ -90,14 +94,30 @@ async def test_aupdate_state_fresh_thread_delta_channel() -> None:
     assert [m.content for m in state.values["messages"]] == ["hello"]
 
 
+def test_fresh_update_state_head_snapshots_delta_channel() -> None:
+    saver = InMemorySaver()
+    graph = _build_graph(saver)
+    config = {"configurable": {"thread_id": "fresh-head-snapshot"}}
+
+    graph.update_state(
+        config,
+        {"messages": [HumanMessage(content="hello", id="m1")]},
+        as_node="model",
+    )
+
+    head = saver.get_tuple(config)
+    assert head is not None
+    assert isinstance(head.checkpoint["channel_values"].get("messages"), _DeltaSnapshot)
+    assert head.metadata is not None
+    assert "counters_since_delta_snapshot" not in head.metadata
+
+
 # ---------------------------------------------------------------------------
 # Non-fresh thread: update_state after invoke
 # ---------------------------------------------------------------------------
 
 
 def test_update_state_after_invoke_delta_channel() -> None:
-    """The non-fresh-thread path was already working before the fix; pin it
-    down so the forced-snapshot change for fresh threads doesn't regress it."""
     saver = InMemorySaver()
     graph = _build_graph(saver)
     config = {"configurable": {"thread_id": "after-invoke-sync"}}
@@ -112,6 +132,12 @@ def test_update_state_after_invoke_delta_channel() -> None:
     state = graph.get_state(config)
     assert [m.content for m in state.values["messages"]] == ["seed", "appended"]
     assert [m.id for m in state.values["messages"]] == ["m1", "m2"]
+
+    head = saver.get_tuple(config)
+    assert head is not None
+    assert "messages" not in head.checkpoint["channel_values"]
+    assert head.metadata is not None
+    assert head.metadata["counters_since_delta_snapshot"]["messages"] == [2, 4]
 
 
 async def test_aupdate_state_after_invoke_delta_channel() -> None:
@@ -136,9 +162,6 @@ async def test_aupdate_state_after_invoke_delta_channel() -> None:
 
 
 def test_consecutive_update_states_delta_channel() -> None:
-    """First update_state forces a self-contained snapshot seed; the second
-    sees a real parent (`saved is not None`) and anchors its writes under that
-    seed. Both messages must round-trip in chronological order."""
     saver = InMemorySaver()
     graph = _build_graph(saver)
     config = {"configurable": {"thread_id": "consecutive-sync"}}
@@ -157,6 +180,39 @@ def test_consecutive_update_states_delta_channel() -> None:
     state = graph.get_state(config)
     assert [m.content for m in state.values["messages"]] == ["first", "second"]
     assert [m.id for m in state.values["messages"]] == ["m1", "m2"]
+
+    head = saver.get_tuple(config)
+    assert head is not None
+    assert "messages" not in head.checkpoint["channel_values"]
+    assert head.metadata is not None
+    assert head.metadata["counters_since_delta_snapshot"]["messages"] == [1, 1]
+
+
+def test_update_state_snapshots_at_frequency() -> None:
+    """Non-fresh update_state snapshots when counters reach snapshot_frequency."""
+    saver = InMemorySaver()
+    graph = _build_graph(saver, snapshot_frequency=1)
+    config = {"configurable": {"thread_id": "snapshot-at-freq"}}
+
+    graph.update_state(
+        config,
+        {"messages": [HumanMessage(content="first", id="m1")]},
+        as_node="model",
+    )
+    graph.update_state(
+        config,
+        {"messages": [HumanMessage(content="second", id="m2")]},
+        as_node="model",
+    )
+
+    state = graph.get_state(config)
+    assert [m.content for m in state.values["messages"]] == ["first", "second"]
+
+    head = saver.get_tuple(config)
+    assert head is not None
+    assert isinstance(head.checkpoint["channel_values"].get("messages"), _DeltaSnapshot)
+    assert head.metadata is not None
+    assert "counters_since_delta_snapshot" not in head.metadata
 
 
 async def test_aconsecutive_update_states_delta_channel() -> None:
@@ -255,7 +311,7 @@ def test_bulk_update_state_multi_task_per_superstep_delta_channel() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Public-API observation of the forced-snapshot mechanism
+# Public-API observation of fresh-thread checkpoint shape
 # ---------------------------------------------------------------------------
 
 
