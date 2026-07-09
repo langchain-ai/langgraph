@@ -1,0 +1,38 @@
+libs/langgraph/tests/test_delta_channel_update_state.py
+  s_c4fa7ccfd0e4bb::t_f80fb1f995c4f3 140
+  s_c4fa7ccfd0e4bb::t_0637159b811393 19-20
+  s_c4fa7ccfd0e4bb::t_931a8a15fec601 28
+  s_c4fa7ccfd0e4bb::t_a27cdcd7960a7c 217-218
+  s_c4fa7ccfd0e4bb::t_9015b138c81ee5 160-167
+  s_c4fa7ccfd0e4bb::t_87ec065bc3233b 8-11
+  s_c4fa7ccfd0e4bb::t_6d03ef40425785 215-216
+libs/langgraph/langgraph/pregel/_checkpoint.py
+  s_c4fa7ccfd0e4bb::t_bd019128f55910 4
+  s_c4fa7ccfd0e4bb::t_0ac764b37a620c 74-93
+  s_c4fa7ccfd0e4bb::t_457556f9639431 17
+  s_c4fa7ccfd0e4bb::t_bd4e59ef3428f3 130-131
+  s_c4fa7ccfd0e4bb::t_412298beb6b8b6 128-129
+libs/langgraph/langgraph/pregel/main.py
+  s_c4fa7ccfd0e4bb::t_10f020414595da 136-137
+  s_c4fa7ccfd0e4bb::t_e22526ef4f28a4 2039-2042
+  s_c4fa7ccfd0e4bb::t_89a69abf9fadcc 2000-2010,2019-2024
+  s_c4fa7ccfd0e4bb::t_ff964fb89d1af2 2043
+  s_c4fa7ccfd0e4bb::t_a6649519187b71 2461-2471,2480-2485
+  s_c4fa7ccfd0e4bb::t_2c5e17785aeb51 2500-2506
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "924c9f5e19be72cebf8915b258c1d4f7b0abe03b",
+  "prompts": {},
+  "sessions": {
+    "s_c4fa7ccfd0e4bb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "4840e0e8-cab8-480b-85bd-1580e3cb60c6",
+        "model": "default"
+      },
+      "human_author": "Quanzheng Long <long@langchain.dev>"
+    }
+  }
+}
