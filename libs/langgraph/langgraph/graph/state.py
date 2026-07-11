@@ -1446,6 +1446,19 @@ class CompiledStateGraph(
             if input is None:
                 return None
             elif isinstance(input, dict):
+                if key != START:
+                    undeclared = [k for k in input if k not in output_keys]
+                    if undeclared:
+                        warnings.warn(
+                            f"Node '{key}' returned "
+                            f"{'key' if len(undeclared) == 1 else 'keys'} "
+                            f"{undeclared!r} not declared in the state schema; "
+                            f"{'it' if len(undeclared) == 1 else 'they'} will be "
+                            f"ignored. Add {'it' if len(undeclared) == 1 else 'them'} "
+                            f"to your TypedDict to persist the value.",
+                            UserWarning,
+                            stacklevel=2,
+                        )
                 return [(k, v) for k, v in input.items() if k in output_keys]
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:
