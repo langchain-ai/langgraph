@@ -2154,3 +2154,75 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_action_request_carries_tool_call_id(
+    sync_checkpointer: BaseCheckpointSaver,
+    version: Literal["v1", "v2"],
+) -> None:
+    """ActionRequest should carry the originating tool_call_id so that
+    external HITL consumers can correlate the interrupt back to the
+    specific tool call in message history without out-of-band recovery."""
+
+    @dec_tool
+    def ask_human(question: str, tool_call_id: Annotated[str, InjectedToolCallId]):
+        """Ask a human a question."""
+        from langgraph.prebuilt.interrupt import HumanInterrupt
+
+        request: HumanInterrupt = {
+            "action_request": {
+                "action": "human_approval",
+                "args": {"question": question},
+                "tool_call_id": tool_call_id,
+            },
+            "config": {
+                "allow_ignore": True,
+                "allow_respond": True,
+                "allow_edit": False,
+                "allow_accept": True,
+            },
+            "description": question,
+        }
+        response = interrupt([request])[0]
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content=f"Human responded: {response}",
+                        tool_call_id=tool_call_id,
+                    )
+                ],
+            }
+        )
+
+    tool_calls = [
+        [{"args": {"question": "Is this OK?"}, "id": "call_42", "name": "ask_human"}]
+    ]
+    model = FakeToolCallingModel(tool_calls=tool_calls)
+    agent = create_react_agent(
+        model,
+        [ask_human],
+        checkpointer=sync_checkpointer,
+        version=version,
+    )
+    config = {"configurable": {"thread_id": "test_tool_call_id"}}
+    # Run until interrupted
+    agent.invoke({"messages": [("user", "approve this")]}, config)
+
+    # Verify the interrupt payload carries the tool_call_id
+    state = agent.get_state(config)
+    task = state.tasks[0]
+    interrupts = task.interrupts
+    assert len(interrupts) == 1
+    payload = interrupts[0].value
+    assert isinstance(payload, list)
+    action_request = payload[0]["action_request"]
+    assert action_request["tool_call_id"] == "call_42"
+    assert action_request["action"] == "human_approval"
+
+    # Resume and verify the tool_call_id round-trips correctly
+    result = agent.invoke(Command(resume="yes"), config)
+    tool_message = result["messages"][-2]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.tool_call_id == "call_42"

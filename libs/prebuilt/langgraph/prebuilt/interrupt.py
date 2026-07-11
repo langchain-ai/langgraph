@@ -1,7 +1,8 @@
 from typing import Literal
 
+from typing_extensions import NotRequired, TypedDict, deprecated
+
 from langgraph.warnings import LangGraphDeprecatedSinceV10
-from typing_extensions import TypedDict, deprecated
 
 
 @deprecated(
@@ -38,10 +39,14 @@ class ActionRequest(TypedDict):
     Attributes:
         action: The type or name of action being requested (e.g., `"Approve XYZ action"`)
         args: Key-value pairs of arguments needed for the action
+        tool_call_id: Optional originating tool call ID when the interrupt is
+            produced by a tool call, allowing the consumer to correlate the
+            approval artifact back to the specific call in message history.
     """
 
     action: str
     args: dict
+    tool_call_id: NotRequired[str | None]
 
 
 @deprecated(
