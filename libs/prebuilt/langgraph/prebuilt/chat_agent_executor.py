@@ -491,7 +491,7 @@ def create_react_agent(
             Note over A: Prompt + LLM
             loop while tool_calls present
                 A->>T: Execute tools
-                T-->>A: ToolMessage for each tool_calls
+                T-->>A: ToolMessage for each tool_call
             end
             A->>U: Return final state
     ```
