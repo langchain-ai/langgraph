@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from importlib.metadata import version as get_version
 from typing import Any, TypedDict, cast
 
@@ -15,8 +15,8 @@ from langgraph.checkpoint.base import (
     PendingWrite,
     get_checkpoint_id,
 )
+from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import TASKS
-from psycopg.types.json import Jsonb
 
 # Page size for stage-1 paged scan in `get_delta_channel_history`. Internal
 # constant — exposing this as a kwarg is left as a follow-up.
@@ -305,6 +305,15 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
     supports_pipeline: bool
 
+    def __init__(
+        self,
+        serde: SerializerProtocol | None = None,
+        *,
+        jsonb: Callable[[Any], Any] | None = None,
+    ) -> None:
+        super().__init__(serde=serde)
+        self._jsonb = jsonb or (lambda value: value)
+
     def _migrate_pending_sends(
         self,
         pending_sends: list[tuple[bytes, bytes]],
@@ -583,7 +592,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         # construct predicate for metadata filter
         if filter:
             wheres.append("metadata @> %s ")
-            param_values.append(Jsonb(filter))
+            param_values.append(self._jsonb(filter))
 
         # construct predicate for `before`
         if before is not None:

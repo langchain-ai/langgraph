@@ -19,12 +19,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
-from psycopg import Capabilities, Connection, Cursor, Pipeline
-from psycopg.rows import DictRow, dict_row
-from psycopg.types.json import Jsonb
-from psycopg_pool import ConnectionPool
 
-from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import (
     _DELTA_PAGE_SIZE,
     BasePostgresSaver,
@@ -32,9 +27,15 @@ from langgraph.checkpoint.postgres.base import (
     _build_delta_stage2_sql,
     _DeltaStage2Row,
 )
+from langgraph.checkpoint.postgres.driver import (
+    PostgresDriverAdapter,
+    PsycopgDriverAdapter,
+    SyncCursor,
+    SyncPostgresDriverAdapter,
+)
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
-Conn = _internal.Conn  # For backward compatibility
+Conn = Any  # For backward compatibility
 
 
 class PostgresSaver(BasePostgresSaver):
@@ -44,12 +45,15 @@ class PostgresSaver(BasePostgresSaver):
 
     def __init__(
         self,
-        conn: _internal.Conn,
-        pipe: Pipeline | None = None,
+        conn: Any,
+        pipe: Any | None = None,
         serde: SerializerProtocol | None = None,
+        *,
+        adapter: SyncPostgresDriverAdapter | None = None,
     ) -> None:
-        super().__init__(serde=serde)
-        if isinstance(conn, ConnectionPool) and pipe is not None:
+        self.adapter = adapter or PsycopgDriverAdapter()
+        super().__init__(serde=serde, jsonb=self.adapter.jsonb)
+        if self.adapter.is_pool(conn) and pipe is not None:
             raise ValueError(
                 "Pipeline should be used only with a single Connection, not ConnectionPool."
             )
@@ -57,12 +61,16 @@ class PostgresSaver(BasePostgresSaver):
         self.conn = conn
         self.pipe = pipe
         self.lock = threading.Lock()
-        self.supports_pipeline = Capabilities().has_pipeline()
+        self.supports_pipeline = self.adapter.supports_pipeline()
 
     @classmethod
     @contextmanager
     def from_conn_string(
-        cls, conn_string: str, *, pipeline: bool = False
+        cls,
+        conn_string: str,
+        *,
+        pipeline: bool = False,
+        adapter: SyncPostgresDriverAdapter | None = None,
     ) -> Iterator[PostgresSaver]:
         """Create a new PostgresSaver instance from a connection string.
 
@@ -73,14 +81,13 @@ class PostgresSaver(BasePostgresSaver):
         Returns:
             PostgresSaver: A new PostgresSaver instance.
         """
-        with Connection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
+        driver = adapter or PsycopgDriverAdapter()
+        with driver.connect(conn_string) as conn:
             if pipeline:
-                with conn.pipeline() as pipe:
-                    yield cls(conn, pipe)
+                with driver.pipeline(conn) as pipe:
+                    yield cls(conn, pipe, adapter=driver)
             else:
-                yield cls(conn)
+                yield cls(conn, adapter=driver)
 
     def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -107,7 +114,7 @@ class PostgresSaver(BasePostgresSaver):
                 cur.execute(migration)
                 cur.execute("INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,))
         if self.pipe:
-            self.pipe.sync()
+            self.adapter.sync_pipeline(self.pipe)
 
     def list(
         self,
@@ -338,8 +345,10 @@ class PostgresSaver(BasePostgresSaver):
                     checkpoint_ns,
                     checkpoint["id"],
                     checkpoint_id,
-                    Jsonb(copy),
-                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
+                    self.adapter.jsonb(copy),
+                    self.adapter.jsonb(
+                        get_serializable_checkpoint_metadata(config, metadata)
+                    ),
                 ),
             )
         return next_config
@@ -402,7 +411,7 @@ class PostgresSaver(BasePostgresSaver):
             )
 
     @contextmanager
-    def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
+    def _cursor(self, *, pipeline: bool = False) -> Iterator[SyncCursor]:
         """Create a database cursor as a context manager.
 
         Args:
@@ -410,35 +419,35 @@ class PostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the PostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
-        with self.lock, _internal.get_connection(self.conn) as conn:
+        with self.lock, self.adapter.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
                 # used at a time
                 try:
-                    with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                    with self.adapter.cursor(conn) as cur:
                         yield cur
                 finally:
                     if pipeline:
-                        self.pipe.sync()
+                        self.adapter.sync_pipeline(self.pipe)
             elif pipeline:
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
                     with (
-                        conn.pipeline(),
-                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                        self.adapter.pipeline(conn),
+                        self.adapter.cursor(conn) as cur,
                     ):
                         yield cur
                 else:
                     # Use connection's transaction context manager when pipeline mode not supported
                     with (
-                        conn.transaction(),
-                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                        self.adapter.transaction(conn),
+                        self.adapter.cursor(conn) as cur,
                     ):
                         yield cur
             else:
-                with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                with self.adapter.cursor(conn) as cur:
                     yield cur
 
     def get_delta_channel_history(
@@ -549,7 +558,7 @@ class PostgresSaver(BasePostgresSaver):
             stage2_rows=cast("list[_DeltaStage2Row]", stage2_rows),
         )
 
-    def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
+    def _load_checkpoint_tuple(self, value: Mapping[str, Any]) -> CheckpointTuple:
         """
         Convert a database row into a CheckpointTuple object.
 
@@ -592,4 +601,12 @@ class PostgresSaver(BasePostgresSaver):
         )
 
 
-__all__ = ["PostgresSaver", "BasePostgresSaver", "ShallowPostgresSaver", "Conn"]
+__all__ = [
+    "Conn",
+    "BasePostgresSaver",
+    "PostgresSaver",
+    "PostgresDriverAdapter",
+    "PsycopgDriverAdapter",
+    "ShallowPostgresSaver",
+    "SyncPostgresDriverAdapter",
+]

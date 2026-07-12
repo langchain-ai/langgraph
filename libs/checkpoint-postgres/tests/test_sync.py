@@ -20,11 +20,48 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
+from langgraph.checkpoint.postgres.driver import PsycopgDriverAdapter
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
 def _exclude_keys(config: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in config.items() if k not in EXCLUDED_METADATA_KEYS}
+
+
+class _TracingCursor:
+    def __init__(self, cursor: Any, adapter: "_TracingPsycopgAdapter") -> None:
+        self.cursor = cursor
+        self.adapter = adapter
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        self.adapter.execute_calls += 1
+        return self.cursor.execute(*args, **kwargs)
+
+    def executemany(self, *args: Any, **kwargs: Any) -> Any:
+        self.adapter.executemany_calls += 1
+        return self.cursor.executemany(*args, **kwargs)
+
+    def __iter__(self):
+        return iter(self.cursor)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.cursor, name)
+
+
+class _TracingPsycopgAdapter(PsycopgDriverAdapter):
+    def __init__(self) -> None:
+        self.execute_calls = 0
+        self.executemany_calls = 0
+        self.jsonb_values: list[Any] = []
+
+    @contextmanager
+    def cursor(self, conn: Any):
+        with super().cursor(conn) as cursor:
+            yield _TracingCursor(cursor, self)
+
+    def jsonb(self, value: Any) -> Any:
+        self.jsonb_values.append(value)
+        return super().jsonb(value)
 
 
 @contextmanager
@@ -208,6 +245,31 @@ def test_combined_metadata(saver_name: str, test_data) -> None:
             **metadata,
             "run_id": "my_run_id",
         }
+
+
+def test_custom_driver_adapter_handles_database_operations() -> None:
+    adapter = _TracingPsycopgAdapter()
+    with Connection.connect(
+        DEFAULT_POSTGRES_URI,
+        autocommit=True,
+        prepare_threshold=0,
+        row_factory=dict_row,
+    ) as conn:
+        saver = PostgresSaver(conn, adapter=adapter)
+        saver.setup()
+        config = {"configurable": {"thread_id": "adapter", "checkpoint_ns": ""}}
+        checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+        next_config = saver.put(config, checkpoint, {"source": "input", "step": 0}, {})
+        saver.put_writes(next_config, [("custom", "value")], "task")
+
+        assert saver.get_tuple(next_config) is not None
+
+    assert adapter.execute_calls > 0
+    assert adapter.executemany_calls > 0
+    assert adapter.jsonb_values == [
+        checkpoint,
+        {"source": "input", "step": 0},
+    ]
 
 
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])

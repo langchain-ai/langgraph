@@ -16,21 +16,16 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import TASKS
-from psycopg import (
-    AsyncConnection,
-    AsyncCursor,
-    AsyncPipeline,
-    Capabilities,
-    Connection,
-    Cursor,
-    Pipeline,
-)
-from psycopg.rows import DictRow, dict_row
-from psycopg.types.json import Jsonb
-from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
-from langgraph.checkpoint.postgres import _ainternal, _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.driver import (
+    AsyncCursor,
+    AsyncPostgresDriverAdapter,
+    AsyncPsycopgDriverAdapter,
+    PsycopgDriverAdapter,
+    SyncCursor,
+    SyncPostgresDriverAdapter,
+)
 
 """
 To add a new migration, add a new string to the MIGRATIONS list.
@@ -185,9 +180,11 @@ class ShallowPostgresSaver(BasePostgresSaver):
 
     def __init__(
         self,
-        conn: _internal.Conn,
-        pipe: Pipeline | None = None,
+        conn: Any,
+        pipe: Any | None = None,
         serde: SerializerProtocol | None = None,
+        *,
+        adapter: SyncPostgresDriverAdapter | None = None,
     ) -> None:
         warnings.warn(
             "ShallowPostgresSaver is deprecated as of version 2.0.20 and will be removed in 3.0.0. "
@@ -195,8 +192,9 @@ class ShallowPostgresSaver(BasePostgresSaver):
             DeprecationWarning,
             stacklevel=2,
         )
-        super().__init__(serde=serde)
-        if isinstance(conn, ConnectionPool) and pipe is not None:
+        self.adapter = adapter or PsycopgDriverAdapter()
+        super().__init__(serde=serde, jsonb=self.adapter.jsonb)
+        if self.adapter.is_pool(conn) and pipe is not None:
             raise ValueError(
                 "Pipeline should be used only with a single Connection, not ConnectionPool."
             )
@@ -204,12 +202,16 @@ class ShallowPostgresSaver(BasePostgresSaver):
         self.conn = conn
         self.pipe = pipe
         self.lock = threading.Lock()
-        self.supports_pipeline = Capabilities().has_pipeline()
+        self.supports_pipeline = self.adapter.supports_pipeline()
 
     @classmethod
     @contextmanager
     def from_conn_string(
-        cls, conn_string: str, *, pipeline: bool = False
+        cls,
+        conn_string: str,
+        *,
+        pipeline: bool = False,
+        adapter: SyncPostgresDriverAdapter | None = None,
     ) -> Iterator["ShallowPostgresSaver"]:
         """Create a new ShallowPostgresSaver instance from a connection string.
 
@@ -220,14 +222,13 @@ class ShallowPostgresSaver(BasePostgresSaver):
         Returns:
             ShallowPostgresSaver: A new ShallowPostgresSaver instance.
         """
-        with Connection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
+        driver = adapter or PsycopgDriverAdapter()
+        with driver.connect(conn_string) as conn:
             if pipeline:
-                with conn.pipeline() as pipe:
-                    yield cls(conn, pipe)
+                with driver.pipeline(conn) as pipe:
+                    yield cls(conn, pipe, adapter=driver)
             else:
-                yield cls(conn)
+                yield cls(conn, adapter=driver)
 
     def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -254,7 +255,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                 cur.execute(migration)
                 cur.execute("INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,))
         if self.pipe:
-            self.pipe.sync()
+            self.adapter.sync_pipeline(self.pipe)
 
     def list(
         self,
@@ -443,8 +444,10 @@ class ShallowPostgresSaver(BasePostgresSaver):
                 (
                     thread_id,
                     checkpoint_ns,
-                    Jsonb(copy),
-                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
+                    self.adapter.jsonb(copy),
+                    self.adapter.jsonb(
+                        get_serializable_checkpoint_metadata(config, metadata)
+                    ),
                 ),
             )
         return next_config
@@ -484,7 +487,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
             )
 
     @contextmanager
-    def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
+    def _cursor(self, *, pipeline: bool = False) -> Iterator[SyncCursor]:
         """Create a database cursor as a context manager.
 
         Args:
@@ -492,37 +495,37 @@ class ShallowPostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the ShallowPostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
-        with _internal.get_connection(self.conn) as conn:
+        with self.adapter.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
                 # used at a time
                 try:
-                    with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                    with self.adapter.cursor(conn) as cur:
                         yield cur
                 finally:
                     if pipeline:
-                        self.pipe.sync()
+                        self.adapter.sync_pipeline(self.pipe)
             elif pipeline:
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
                     with (
                         self.lock,
-                        conn.pipeline(),
-                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                        self.adapter.pipeline(conn),
+                        self.adapter.cursor(conn) as cur,
                     ):
                         yield cur
                 else:
                     # Use connection's transaction context manager when pipeline mode not supported
                     with (
                         self.lock,
-                        conn.transaction(),
-                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                        self.adapter.transaction(conn),
+                        self.adapter.cursor(conn) as cur,
                     ):
                         yield cur
             else:
-                with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
+                with self.lock, self.adapter.cursor(conn) as cur:
                     yield cur
 
 
@@ -544,9 +547,11 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
 
     def __init__(
         self,
-        conn: _ainternal.Conn,
-        pipe: AsyncPipeline | None = None,
+        conn: Any,
+        pipe: Any | None = None,
         serde: SerializerProtocol | None = None,
+        *,
+        adapter: AsyncPostgresDriverAdapter | None = None,
     ) -> None:
         warnings.warn(
             "AsyncShallowPostgresSaver is deprecated as of version 2.0.20 and will be removed in 3.0.0. "
@@ -554,8 +559,9 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             DeprecationWarning,
             stacklevel=2,
         )
-        super().__init__(serde=serde)
-        if isinstance(conn, AsyncConnectionPool) and pipe is not None:
+        self.adapter = adapter or AsyncPsycopgDriverAdapter()
+        super().__init__(serde=serde, jsonb=self.adapter.jsonb)
+        if self.adapter.is_pool(conn) and pipe is not None:
             raise ValueError(
                 "Pipeline should be used only with a single AsyncConnection, not AsyncConnectionPool."
             )
@@ -564,7 +570,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         self.pipe = pipe
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
-        self.supports_pipeline = Capabilities().has_pipeline()
+        self.supports_pipeline = self.adapter.supports_pipeline()
 
     @classmethod
     @asynccontextmanager
@@ -574,6 +580,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         *,
         pipeline: bool = False,
         serde: SerializerProtocol | None = None,
+        adapter: AsyncPostgresDriverAdapter | None = None,
     ) -> AsyncIterator["AsyncShallowPostgresSaver"]:
         """Create a new AsyncShallowPostgresSaver instance from a connection string.
 
@@ -584,14 +591,13 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         Returns:
             AsyncShallowPostgresSaver: A new AsyncShallowPostgresSaver instance.
         """
-        async with await AsyncConnection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
+        driver = adapter or AsyncPsycopgDriverAdapter()
+        async with driver.connect(conn_string) as conn:
             if pipeline:
-                async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                async with driver.pipeline(conn) as pipe:
+                    yield cls(conn=conn, pipe=pipe, serde=serde, adapter=driver)
             else:
-                yield cls(conn=conn, serde=serde)
+                yield cls(conn=conn, serde=serde, adapter=driver)
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -620,7 +626,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                     "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
                 )
         if self.pipe:
-            await self.pipe.sync()
+            await self.adapter.sync_pipeline(self.pipe)
 
     async def alist(
         self,
@@ -781,8 +787,10 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                 (
                     thread_id,
                     checkpoint_ns,
-                    Jsonb(copy),
-                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
+                    self.adapter.jsonb(copy),
+                    self.adapter.jsonb(
+                        get_serializable_checkpoint_metadata(config, metadata)
+                    ),
                 ),
             )
         return next_config
@@ -821,9 +829,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             await cur.executemany(query, params)
 
     @asynccontextmanager
-    async def _cursor(
-        self, *, pipeline: bool = False
-    ) -> AsyncIterator[AsyncCursor[DictRow]]:
+    async def _cursor(self, *, pipeline: bool = False) -> AsyncIterator[AsyncCursor]:
         """Create a database cursor as a context manager.
 
         Args:
@@ -831,39 +837,39 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the AsyncShallowPostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
-        async with _ainternal.get_connection(self.conn) as conn:
+        async with self.adapter.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
                 # used at a time
                 try:
-                    async with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                    async with self.adapter.cursor(conn) as cur:
                         yield cur
                 finally:
                     if pipeline:
-                        await self.pipe.sync()
+                        await self.adapter.sync_pipeline(self.pipe)
             elif pipeline:
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
                     async with (
                         self.lock,
-                        conn.pipeline(),
-                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                        self.adapter.pipeline(conn),
+                        self.adapter.cursor(conn) as cur,
                     ):
                         yield cur
                 else:
                     # Use connection's transaction context manager when pipeline mode not supported
                     async with (
                         self.lock,
-                        conn.transaction(),
-                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                        self.adapter.transaction(conn),
+                        self.adapter.cursor(conn) as cur,
                     ):
                         yield cur
             else:
                 async with (
                     self.lock,
-                    conn.cursor(binary=True, row_factory=dict_row) as cur,
+                    self.adapter.cursor(conn) as cur,
                 ):
                     yield cur
 

@@ -22,11 +22,48 @@ from langgraph.checkpoint.postgres.aio import (
     AsyncPostgresSaver,
     AsyncShallowPostgresSaver,
 )
+from langgraph.checkpoint.postgres.driver import AsyncPsycopgDriverAdapter
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
 def _exclude_keys(config: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in config.items() if k not in EXCLUDED_METADATA_KEYS}
+
+
+class _TracingAsyncCursor:
+    def __init__(self, cursor: Any, adapter: "_TracingAsyncPsycopgAdapter") -> None:
+        self.cursor = cursor
+        self.adapter = adapter
+
+    async def execute(self, *args: Any, **kwargs: Any) -> Any:
+        self.adapter.execute_calls += 1
+        return await self.cursor.execute(*args, **kwargs)
+
+    async def executemany(self, *args: Any, **kwargs: Any) -> Any:
+        self.adapter.executemany_calls += 1
+        return await self.cursor.executemany(*args, **kwargs)
+
+    def __aiter__(self):
+        return self.cursor.__aiter__()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.cursor, name)
+
+
+class _TracingAsyncPsycopgAdapter(AsyncPsycopgDriverAdapter):
+    def __init__(self) -> None:
+        self.execute_calls = 0
+        self.executemany_calls = 0
+        self.jsonb_values: list[Any] = []
+
+    @asynccontextmanager
+    async def cursor(self, conn: Any):
+        async with super().cursor(conn) as cursor:
+            yield _TracingAsyncCursor(cursor, self)
+
+    def jsonb(self, value: Any) -> Any:
+        self.jsonb_values.append(value)
+        return super().jsonb(value)
 
 
 @asynccontextmanager
@@ -226,6 +263,33 @@ async def test_combined_metadata(saver_name: str, test_data) -> None:
             **metadata,
             "run_id": "my_run_id",
         }
+
+
+async def test_custom_async_driver_adapter_handles_database_operations() -> None:
+    adapter = _TracingAsyncPsycopgAdapter()
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI,
+        autocommit=True,
+        prepare_threshold=0,
+        row_factory=dict_row,
+    ) as conn:
+        saver = AsyncPostgresSaver(conn, adapter=adapter)
+        await saver.setup()
+        config = {"configurable": {"thread_id": "adapter", "checkpoint_ns": ""}}
+        checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+        next_config = await saver.aput(
+            config, checkpoint, {"source": "input", "step": 0}, {}
+        )
+        await saver.aput_writes(next_config, [("custom", "value")], "task")
+
+        assert await saver.aget_tuple(next_config) is not None
+
+    assert adapter.execute_calls > 0
+    assert adapter.executemany_calls > 0
+    assert adapter.jsonb_values == [
+        checkpoint,
+        {"source": "input", "step": 0},
+    ]
 
 
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])

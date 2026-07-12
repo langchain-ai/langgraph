@@ -18,7 +18,13 @@ uv add langgraph-checkpoint-postgres
 
 This library provides a Postgres implementation of LangGraph's checkpoint saver. Use it when you want LangGraph state persistence backed by Postgres for durable, long-running workflows and agents.
 
-By default, `langgraph-checkpoint-postgres` installs `psycopg` (Psycopg 3) without any extras. You can choose a specific installation that best suits your needs in the [Psycopg installation docs](https://www.psycopg.org/psycopg3/docs/basic/install.html), for example `psycopg[binary]`.
+`langgraph-checkpoint-postgres` includes a built-in adapter for Psycopg 3. Install it with the `psycopg` extra:
+
+```bash
+uv add "langgraph-checkpoint-postgres[psycopg]"
+```
+
+You can choose a specific Psycopg installation in the [Psycopg installation docs](https://www.psycopg.org/psycopg3/docs/basic/install.html), for example `psycopg[binary]`. The core package does not require Psycopg at install time: provide a `SyncPostgresDriverAdapter` or `AsyncPostgresDriverAdapter` when using another Postgres driver. An adapter owns connection and cursor lifecycle, transactions/pipelines, JSONB parameters, and any SQL placeholder translation; cursors must return mapping-like rows.
 
 ## 📖 Documentation
 

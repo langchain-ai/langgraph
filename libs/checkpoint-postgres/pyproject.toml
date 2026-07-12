@@ -14,6 +14,10 @@ license-files = ['LICENSE']
 dependencies = [
   "langgraph-checkpoint>=4.1.0,<5.0.0",
   "orjson>=3.11.5",
+]
+
+[project.optional-dependencies]
+psycopg = [
   "psycopg>=3.2.0",
   "psycopg-pool>=3.2.0",
 ]
@@ -31,6 +35,7 @@ test = [
   "pytest-asyncio",
   "pytest-mock",
   "psycopg[binary]",
+  "psycopg-pool>=3.2.0",
   "langgraph-checkpoint",
   "pytest-watcher",
 ]
