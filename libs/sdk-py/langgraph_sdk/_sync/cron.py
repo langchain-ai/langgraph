@@ -7,7 +7,11 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, tzinfo
 from typing import Any
 
-from langgraph_sdk._shared.utilities import _quote_path_param, _resolve_timezone
+from langgraph_sdk._shared.utilities import (
+    NOT_PROVIDED,
+    _quote_path_param,
+    _resolve_timezone,
+)
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import (
     All,
@@ -313,7 +317,7 @@ class SyncCronClient:
         cron_id: str,
         *,
         schedule: str | None = None,
-        end_time: datetime | None = None,
+        end_time: datetime | None = NOT_PROVIDED,
         input: Input | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -337,7 +341,8 @@ class SyncCronClient:
             cron_id: The cron ID to update.
             schedule: The cron schedule to execute this job on.
                 Schedules are interpreted in UTC unless a timezone is specified.
-            end_time: The end date to stop running the cron.
+            end_time: The end date to stop running the cron. Pass ``None`` to
+                clear a previously set end time; omit to leave it unchanged.
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
@@ -375,7 +380,6 @@ class SyncCronClient:
         """
         payload = {
             "schedule": schedule,
-            "end_time": end_time.isoformat() if end_time else None,
             "input": input,
             "metadata": metadata,
             "config": config,
@@ -392,6 +396,10 @@ class SyncCronClient:
             "durability": durability,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
+        # An explicit end_time=None clears the end time; NOT_PROVIDED leaves it
+        # unchanged. Inject after the None-strip so the explicit null survives.
+        if end_time is not NOT_PROVIDED:
+            payload["end_time"] = end_time.isoformat() if end_time is not None else None
         return self.http.patch(
             f"/runs/crons/{_quote_path_param(cron_id)}",
             json=payload,

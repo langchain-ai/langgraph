@@ -396,6 +396,32 @@ async def test_async_update_with_end_time():
     assert result == cron
 
 
+@pytest.mark.asyncio
+async def test_async_update_clears_end_time():
+    """Test that CronClient.update sends an explicit null end_time to clear it."""
+    cron = _cron_response()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PATCH"
+        assert request.url.path == "/runs/crons/cron_123"
+
+        body = json.loads(request.content)
+        assert "end_time" in body  # Explicit None must survive the None-strip
+        assert body["end_time"] is None
+
+        return httpx.Response(200, json=cron)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        http_client = HttpClient(client)
+        cron_client = CronClient(http_client)
+        result = await cron_client.update(cron_id="cron_123", end_time=None)
+
+    assert result == cron
+
+
 def test_sync_update():
     """Test that SyncCronClient.update works with schedule and enabled parameters."""
     cron = _cron_response()
@@ -452,6 +478,29 @@ def test_sync_update_with_end_time():
             end_time=end_time,
             enabled=True,
         )
+
+    assert result == cron
+
+
+def test_sync_update_clears_end_time():
+    """Test that SyncCronClient.update sends an explicit null end_time to clear it."""
+    cron = _cron_response()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PATCH"
+        assert request.url.path == "/runs/crons/cron_123"
+
+        body = json.loads(request.content)
+        assert "end_time" in body  # Explicit None must survive the None-strip
+        assert body["end_time"] is None
+
+        return httpx.Response(200, json=cron)
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        cron_client = SyncCronClient(http_client)
+        result = cron_client.update(cron_id="cron_123", end_time=None)
 
     assert result == cron
 
