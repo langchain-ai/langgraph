@@ -112,6 +112,9 @@ def test_serde_jsonplus() -> None:
 
     to_serialize = {
         "path": pathlib.Path("foo", "bar"),
+        "pure_posix_path": pathlib.PurePosixPath("foo", "bar"),
+        "pure_windows_path": pathlib.PureWindowsPath("foo", "bar"),
+        "range": range(0, 10, 2),
         "re": re.compile(r"foo", re.DOTALL),
         "decimal": Decimal("1.10101"),
         "set": {1, 2, frozenset({1, 2})},
@@ -216,6 +219,9 @@ def test_serde_jsonplus_json_mode() -> None:
 
     to_serialize = {
         "path": pathlib.Path("foo", "bar"),
+        "pure_posix_path": pathlib.PurePosixPath("foo", "bar"),
+        "pure_windows_path": pathlib.PureWindowsPath("foo", "bar"),
+        "range": range(0, 10, 2),
         "re": re.compile(r"foo", re.DOTALL),
         "decimal": Decimal("1.10101"),
         "set": {1, 2, frozenset({1, 2})},
@@ -268,6 +274,9 @@ def test_serde_jsonplus_json_mode() -> None:
 
     expected_result = {
         "path": ["foo", "bar"],
+        "pure_posix_path": ["foo", "bar"],
+        "pure_windows_path": ["foo", "bar"],
+        "range": [0, 10, 2],
         "re": ["foo", 48],
         "decimal": "1.10101",
         "set": [1, 2, [1, 2]],
@@ -321,6 +330,34 @@ def test_serde_jsonplus_json_mode() -> None:
         expected_result["my_secret_str_v1"] = "meow"
 
     assert result == expected_result
+
+
+def test_serde_jsonplus_range_and_purepath_strict(monkeypatch) -> None:
+    """range and pathlib PurePath variants must round-trip under strict msgpack mode.
+
+    Regression test for: https://github.com/langchain-ai/langgraph/issues/8231
+    (same root cause as #8185): ``_msgpack_default`` did not special-case ``range``,
+    and its ``pathlib.Path`` check excluded ``PurePosixPath``/``PureWindowsPath``
+    because they are not ``Path`` subclasses. Both are now in SAFE_MSGPACK_TYPES so
+    they deserialize even when ``LANGGRAPH_STRICT_MSGPACK=true``.
+    """
+    monkeypatch.setenv("LANGGRAPH_STRICT_MSGPACK", "true")
+
+    serde = JsonPlusSerializer()
+
+    values = [
+        range(0, 10, 2),
+        range(1, 20, 3),
+        range(5),
+        pathlib.PurePosixPath("/a/b"),
+        pathlib.PureWindowsPath("C:/x/y"),
+        pathlib.Path("/foo/bar"),
+    ]
+
+    for value in values:
+        restored = serde.loads_typed(serde.dumps_typed(value))
+        assert restored == value
+        assert type(restored) is type(value)
 
 
 def test_serde_jsonplus_bytes() -> None:
