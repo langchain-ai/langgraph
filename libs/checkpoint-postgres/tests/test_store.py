@@ -972,10 +972,10 @@ def test_omit_expired_search_pagination(store: PostgresStore) -> None:
     store.put(ns, "expired", {"k": "x"}, ttl=TTL_MINUTES)
     _expire_now(store, ns, "expired")
 
-    # Order by updated_at DESC = a, expired, b, c, so the expired row sits inside
+    seconds_ago = {"a": 1, "expired": 2, "b": 3, "c": 4}
+    # updated_at DESC orders these a, expired, b, c, so the expired row sits inside
     # the first limit=2 window. Correct (pre-LIMIT) filtering yields live pages
     # [a, b] then [c]; post-LIMIT filtering would underfill page 1 to just [a].
-    seconds_ago = {"a": 1, "expired": 2, "b": 3, "c": 4}
     with store._cursor() as cur:
         for key, secs in seconds_ago.items():
             cur.execute(

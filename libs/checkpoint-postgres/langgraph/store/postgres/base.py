@@ -240,6 +240,11 @@ class BasePostgresStore(Generic[C]):
     index_config: PostgresIndexConfig | None
     ttl_config: TTLConfig | None
 
+    @property
+    def _omit_expired(self) -> bool:
+        """Whether expired-but-unswept rows should be filtered from reads."""
+        return bool(self.ttl_config and self.ttl_config.get("omit_expired"))
+
     def _get_batch_GET_ops_queries(
         self,
         get_ops: Sequence[tuple[int, GetOp]],
@@ -259,7 +264,7 @@ class BasePostgresStore(Generic[C]):
             namespace_groups[op.namespace].append((idx, op.key))
             refresh_ttls[op.namespace].append(op.refresh_ttl)
 
-        omit_expired = bool(self.ttl_config and self.ttl_config.get("omit_expired"))
+        omit_expired = self._omit_expired
         expiry_clause = (
             "AND (s.expires_at IS NULL OR s.expires_at > NOW())" if omit_expired else ""
         )
@@ -430,7 +435,7 @@ class BasePostgresStore(Generic[C]):
         - embedding_requests: list of (original_index_in_search_ops, text_query)
         """
 
-        omit_expired = bool(self.ttl_config and self.ttl_config.get("omit_expired"))
+        omit_expired = self._omit_expired
         search_expiry_clause = (
             "AND (store.expires_at IS NULL OR store.expires_at > NOW())"
             if omit_expired
@@ -606,7 +611,7 @@ class BasePostgresStore(Generic[C]):
             """
             params: list[Any] = [op.max_depth, op.max_depth]
 
-            omit_expired = bool(self.ttl_config and self.ttl_config.get("omit_expired"))
+            omit_expired = self._omit_expired
             conditions = []
             if omit_expired:
                 conditions.append("(expires_at IS NULL OR expires_at > NOW())")
