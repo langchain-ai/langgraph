@@ -113,7 +113,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 await cur.execute(
                     "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
                 )
-        if self.pipe:
+            # If using pipeline, synchronize after all migrations to avoid SSL issues
+            if self.pipe:
+                await self.pipe.sync()
             await self.pipe.sync()
 
     async def alist(
