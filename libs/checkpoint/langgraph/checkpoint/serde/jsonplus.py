@@ -350,7 +350,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 ),
             ),
         )
-    elif isinstance(obj, pathlib.Path):
+    elif isinstance(obj, pathlib.PurePath):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
@@ -528,6 +528,13 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             meta = (obj.dtype.str, obj.shape, order, buf)
             return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
 
+    elif isinstance(obj, range):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_POS_ARGS,
+            _msgpack_enc(
+                ("builtins", "range", (obj.start, obj.stop, obj.step)),
+            ),
+        )
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:
