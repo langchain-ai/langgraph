@@ -4,8 +4,6 @@ from typing import Annotated
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import NotRequired, TypedDict
 
 from langgraph._internal._typing import MISSING
@@ -14,6 +12,8 @@ from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
@@ -801,3 +801,138 @@ def test_delta_channel_from_checkpoint_seed_none_is_distinct_from_sentinel() -> 
     ch = spec.from_checkpoint(None)
     ch.replay_writes([("t0", "x", "after")])
     assert ch.get() == "after"
+
+
+def test_channel_aliasing_last_value() -> None:
+    from langgraph.channels.last_value import LastValue
+
+    # LastValue
+    chan = LastValue(list).from_checkpoint(MISSING)
+    original = [1, 2]
+    chan.update([original])
+    assert chan.get() is not original
+    assert chan.get() == original
+
+    # Modify original
+    original.append(3)
+    assert chan.get() == [1, 2]
+
+
+def test_channel_aliasing_last_value_after_finish() -> None:
+    from langgraph.channels.last_value import LastValueAfterFinish
+
+    # LastValueAfterFinish
+    chan = LastValueAfterFinish(list).from_checkpoint(MISSING)
+    original = [1, 2]
+    chan.update([original])
+    chan.finish()
+    assert chan.get() is not original
+    assert chan.get() == original
+
+    # Modify original
+    original.append(3)
+    assert chan.get() == [1, 2]
+
+
+def test_channel_aliasing_binop() -> None:
+    from langgraph.channels.binop import BinaryOperatorAggregate
+
+    # BinaryOperatorAggregate
+    chan = BinaryOperatorAggregate(list, operator.add).from_checkpoint(MISSING)
+    original = [1, 2]
+    chan.update([original])
+    assert chan.get() is not original
+    assert chan.get() == original
+
+    original.append(3)
+    assert chan.get() == [1, 2]
+
+
+def test_channel_aliasing_any_value() -> None:
+    from langgraph.channels.any_value import AnyValue
+
+    chan = AnyValue(list).from_checkpoint(MISSING)
+    original = [1, 2]
+    chan.update([original])
+    assert chan.get() is not original
+    assert chan.get() == original
+
+    original.append(3)
+    assert chan.get() == [1, 2]
+
+
+def test_channel_aliasing_ephemeral_value() -> None:
+    from langgraph.channels.ephemeral_value import EphemeralValue
+
+    chan = EphemeralValue(list).from_checkpoint(MISSING)
+    original = [1, 2]
+    chan.update([original])
+    assert chan.get() is not original
+    assert chan.get() == original
+
+    original.append(3)
+    assert chan.get() == [1, 2]
+
+
+def test_channel_aliasing_untracked_value() -> None:
+    from langgraph.channels.untracked_value import UntrackedValue
+
+    chan = UntrackedValue(list).from_checkpoint(MISSING)
+    original = [1, 2]
+    chan.update([original])
+    assert chan.get() is not original
+    assert chan.get() == original
+
+    original.append(3)
+    assert chan.get() == [1, 2]
+
+
+def test_channel_aliasing_integration() -> None:
+    from langgraph.graph import END, START, StateGraph
+
+    class State(TypedDict):
+        items: list
+
+    def node_a(state: State) -> dict:
+        return {}
+
+    def router(state: State) -> str:
+        items = state["items"]
+        items.append("MUTATED_BY_ROUTER")
+        return "b"
+
+    def node_b(state: State) -> dict:
+        return {}
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.add_node("b", node_b)
+    builder.add_edge(START, "a")
+    builder.add_conditional_edges("a", router, {"b": "b", "__end__": END})
+    builder.add_edge("b", END)
+    graph = builder.compile()
+
+    original = ["x", "y"]
+    result = graph.invoke({"items": original})
+
+    # Verify that the caller's input list was NOT mutated
+    assert original == ["x", "y"]
+    # The channel itself holds the mutated value because router mutated the returned view,
+    # which is expected since read-side in-place mutation remains unsafe (as documented).
+    assert result["items"] == ["x", "y", "MUTATED_BY_ROUTER"]
+
+    # Plain node mutation leak case
+    def mutating_node(state: State) -> dict:
+        state["items"].append("MUTATED_BY_NODE")
+        return {}
+
+    builder2 = StateGraph(State)
+    builder2.add_node("mutating", mutating_node)
+    builder2.add_edge(START, "mutating")
+    builder2.add_edge("mutating", END)
+    graph2 = builder2.compile()
+
+    original_2 = ["x", "y"]
+    result_2 = graph2.invoke({"items": original_2})
+    assert original_2 == ["x", "y"]
+    assert result_2["items"] == ["x", "y", "MUTATED_BY_NODE"]

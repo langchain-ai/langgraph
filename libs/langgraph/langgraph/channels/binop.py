@@ -1,4 +1,5 @@
 import collections.abc
+import copy
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
@@ -65,6 +66,13 @@ def _operators_equal(a: Callable, b: Callable) -> bool:
 class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the result of applying a binary operator to the current value and each new value.
 
+    Note:
+        This channel performs a shallow copy of updates (initial values and
+        overwrites) at the write boundary to prevent caller-owned mutable inputs
+        from directly becoming channel storage. However, `get()` still returns
+        a direct reference to the channel's stored value, so mutating it in-place
+        remains unsafe.
+
     ```python
     import operator
 
@@ -124,7 +132,7 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         if not values:
             return False
         if self.value is MISSING:
-            self.value = values[0]
+            self.value = copy.copy(values[0])
             values = values[1:]
         seen_overwrite: bool = False
         for value in values:
@@ -136,7 +144,7 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
                         error_code=ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE,
                     )
                     raise InvalidUpdateError(msg)
-                self.value = overwrite_value
+                self.value = copy.copy(overwrite_value)
                 seen_overwrite = True
                 continue
             if not seen_overwrite:
@@ -144,6 +152,12 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         return True
 
     def get(self) -> Value:
+        """Return the current value of the channel.
+
+        Note:
+            This returns a reference to the stored value. Mutating the returned
+            value in-place is unsafe because it will mutate the channel's internal state.
+        """
         if self.value is MISSING:
             raise EmptyChannelError()
         return self.value

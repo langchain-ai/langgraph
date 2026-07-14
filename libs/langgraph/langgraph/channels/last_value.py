@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections.abc import Sequence
 from typing import Any, Generic
 
@@ -18,7 +19,14 @@ __all__ = ("LastValue", "LastValueAfterFinish")
 
 
 class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
-    """Stores the last value received, can receive at most one value per step."""
+    """Stores the last value received, can receive at most one value per step.
+
+    Note:
+        This channel performs a shallow copy of updates at the write boundary
+        to prevent caller-owned mutable inputs from directly becoming channel
+        storage. However, `get()` still returns a direct reference to the
+        channel's stored value, so mutating it in-place remains unsafe.
+    """
 
     __slots__ = ("value",)
 
@@ -63,10 +71,16 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
             )
             raise InvalidUpdateError(msg)
 
-        self.value = values[-1]
+        self.value = copy.copy(values[-1])
         return True
 
     def get(self) -> Value:
+        """Return the current value of the channel.
+
+        Note:
+            This returns a reference to the stored value. Mutating the returned
+            value in-place is unsafe because it will mutate the channel's internal state.
+        """
         if self.value is MISSING:
             raise EmptyChannelError()
         return self.value
@@ -82,7 +96,14 @@ class LastValueAfterFinish(
     Generic[Value], BaseChannel[Value, Value, tuple[Value, bool]]
 ):
     """Stores the last value received, but only made available after finish().
-    Once made available, clears the value."""
+    Once made available, clears the value.
+
+    Note:
+        This channel performs a shallow copy of updates at the write boundary
+        to prevent caller-owned mutable inputs from directly becoming channel
+        storage. However, `get()` still returns a direct reference to the
+        channel's stored value, so mutating it in-place remains unsafe.
+    """
 
     __slots__ = ("value", "finished")
 
@@ -124,7 +145,7 @@ class LastValueAfterFinish(
             return False
 
         self.finished = False
-        self.value = values[-1]
+        self.value = copy.copy(values[-1])
         return True
 
     def consume(self) -> bool:
@@ -143,6 +164,12 @@ class LastValueAfterFinish(
             return False
 
     def get(self) -> Value:
+        """Return the current value of the channel.
+
+        Note:
+            This returns a reference to the stored value. Mutating the returned
+            value in-place is unsafe because it will mutate the channel's internal state.
+        """
         if self.value is MISSING or not self.finished:
             raise EmptyChannelError()
         return self.value

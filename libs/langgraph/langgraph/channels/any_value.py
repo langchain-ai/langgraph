@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections.abc import Sequence
 from typing import Any, Generic
 
@@ -14,7 +15,14 @@ __all__ = ("AnyValue",)
 
 class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, assumes that if multiple values are
-    received, they are all equal."""
+    received, they are all equal.
+
+    Note:
+        This channel performs a shallow copy of updates at the write boundary
+        to prevent caller-owned mutable inputs from directly becoming channel
+        storage. However, `get()` still returns a direct reference to the
+        channel's stored value, so mutating it in-place remains unsafe.
+    """
 
     __slots__ = ("typ", "value")
 
@@ -57,10 +65,16 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
                 self.value = MISSING
                 return True
 
-        self.value = values[-1]
+        self.value = copy.copy(values[-1])
         return True
 
     def get(self) -> Value:
+        """Return the current value of the channel.
+
+        Note:
+            This returns a reference to the stored value. Mutating the returned
+            value in-place is unsafe because it will mutate the channel's internal state.
+        """
         if self.value is MISSING:
             raise EmptyChannelError()
         return self.value

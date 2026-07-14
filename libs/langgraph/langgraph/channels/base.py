@@ -70,6 +70,10 @@ class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
     def get(self) -> Value:
         """Return the current value of the channel.
 
+        Note:
+            This returns a reference to the stored value. Mutating the returned
+            value in-place is unsafe because it will mutate the channel's internal state.
+
         Raises `EmptyChannelError` if the channel is empty (never updated yet)."""
 
     def is_available(self) -> bool:
