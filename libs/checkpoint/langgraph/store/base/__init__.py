@@ -552,6 +552,14 @@ class TTLConfig(TypedDict, total=False):
     This can be overridden per-operation by explicitly setting `refresh_ttl`.
     Defaults to `True` if not configured.
     """
+    omit_expired: bool
+    """Whether to omit expired items from read operations.
+
+    If `True`, and if the store supports this option, expired items will not be
+    returned by `GET` or `SEARCH`, or included in namespace listings, even before
+    a TTL sweep deletes them.
+    Defaults to `False` if not configured.
+    """
     default_ttl: float | None
     """Default TTL (time-to-live) in minutes for new items.
     
