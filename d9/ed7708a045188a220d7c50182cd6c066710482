@@ -1,0 +1,19 @@
+libs/sdk-py/langgraph_sdk/schema.py
+  s_580d8c65e6b5c6::t_2a7e291c0b60a7 493
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "d9ed7708a045188a220d7c50182cd6c066710482",
+  "prompts": {},
+  "sessions": {
+    "s_580d8c65e6b5c6": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "3a5f79cc-c45e-4f8e-af91-8f2e11c658bd",
+        "model": "composer-2.5"
+      },
+      "human_author": "Josh Rogers <josh@langchain.dev>"
+    }
+  }
+}
