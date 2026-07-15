@@ -128,7 +128,12 @@ class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
                 self.counter -= 1
                 # Wake waiter when all tracked futures are done, or when runner-level
                 # stop condition is met (for example, a non-handled fatal exception).
-                if self.counter == 0 or self.should_stop(self.done):
+                # Only the just-completed future needs checking: every future passes
+                # through `on_done` exactly once and previously completed futures are
+                # terminal, so re-scanning `self.done` here would be O(tasks^2) waste.
+                # The authoritative stop/panic decision is still made against the full
+                # set in `tick` / `_panic_or_proceed`; this is only an early wake-up.
+                if self.counter == 0 or self.should_stop({fut}):
                     self.event.set()
 
 
