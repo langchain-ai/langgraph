@@ -1786,8 +1786,12 @@ def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -
         client,
         lambda c: c.list_deployments(name_contains=name_contains),
     )
-    resources = response.get("resources", []) if isinstance(response, dict) else []
-    deployments = [item for item in resources if isinstance(item, dict)]
+    resources = response.get("resources") if isinstance(response, dict) else None
+    deployments = (
+        [item for item in resources if isinstance(item, dict)]
+        if isinstance(resources, list)
+        else []
+    )
     if not deployments:
         click.echo("No deployments found.")
         return
@@ -1831,8 +1835,12 @@ def deploy_revisions_list(
         client,
         lambda c: c.list_revisions(deployment_id, limit=limit),
     )
-    resources = response.get("resources", []) if isinstance(response, dict) else []
-    revisions = [item for item in resources if isinstance(item, dict)]
+    resources = response.get("resources") if isinstance(response, dict) else None
+    revisions = (
+        [item for item in resources if isinstance(item, dict)]
+        if isinstance(resources, list)
+        else []
+    )
     if not revisions:
         click.echo(f"No revisions found for deployment {deployment_id}.")
         return
