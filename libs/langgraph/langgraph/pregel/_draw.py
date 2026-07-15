@@ -228,7 +228,18 @@ def draw_graph(
             metadata["__interrupt"] = "before"
         elif name in interrupt_after_nodes:
             metadata["__interrupt"] = "after"
-        graph.add_node(node.bound, name, metadata=metadata or None)
+        # a node's `bound` may be a thin wrapper around its actual subgraph
+        # (see `_SubgraphNodeRunnable` in `langgraph.graph.state`, used when
+        # a compiled subgraph is directly a node's action), in which case
+        # the subgraph itself, not the wrapper, is what should show up in
+        # the drawn graph. Checked by attribute rather than isinstance to
+        # avoid importing `langgraph.graph.state` here, which would create
+        # a circular import.
+        graph.add_node(
+            getattr(node.bound, "subgraph_bound", None) or node.bound,
+            name,
+            metadata=metadata or None,
+        )
     # add start node
     if START not in nodes:
         graph.add_node(None, START)

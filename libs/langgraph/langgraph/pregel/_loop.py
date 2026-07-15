@@ -42,6 +42,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_DELTA_CHANNELS,
     CONFIG_KEY_REPLAY_STATE,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RESUMING,
@@ -312,6 +313,9 @@ class PregelLoop:
         self.interrupt_before = interrupt_before
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
+        self._delta_channels_sink: set[str] | None = self.config.get(CONF, {}).get(
+            CONFIG_KEY_DELTA_CHANNELS
+        )
         self.is_replaying = CONFIG_KEY_CHECKPOINT_ID in config[CONF]
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
@@ -696,6 +700,8 @@ class PregelLoop:
             self.checkpointer_get_next_version,
             self.trigger_to_nodes,
         )
+        if self._delta_channels_sink is not None:
+            self._delta_channels_sink.update(self.updated_channels)
         # produce values output
         if not self.updated_channels.isdisjoint(
             (self.output_keys,)

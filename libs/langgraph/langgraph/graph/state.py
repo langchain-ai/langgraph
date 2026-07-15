@@ -33,7 +33,9 @@ from pydantic import BaseModel, TypeAdapter
 from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
 from langgraph._internal import _serde
+from langgraph._internal._config import patch_config
 from langgraph._internal._constants import (
+    CONFIG_KEY_DELTA_CHANNELS,
     INTERRUPT,
     NS_END,
     NS_SEP,
@@ -45,7 +47,7 @@ from langgraph._internal._fields import (
     get_update_as_tuples,
 )
 from langgraph._internal._pydantic import create_model
-from langgraph._internal._runnable import coerce_to_runnable
+from langgraph._internal._runnable import RunnableCallable, coerce_to_runnable
 from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
 from langgraph.channels.base import BaseChannel
@@ -72,6 +74,7 @@ from langgraph.managed.base import (
 )
 from langgraph.pregel import Pregel
 from langgraph.pregel._read import ChannelRead, PregelNode
+from langgraph.pregel._utils import find_subgraph_pregel
 from langgraph.pregel._write import (
     ChannelWrite,
     ChannelWriteEntry,
@@ -1388,6 +1391,64 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         return compiled.validate()
 
 
+class _SubgraphNodeRunnable(RunnableCallable):
+    """Wraps a compiled subgraph that is used directly as a node's action.
+
+    A compiled graph's `invoke` always returns every key in its output
+    schema, including keys that were only seeded from the parent's state
+    and that none of its own nodes actually wrote to during this call. For
+    a plain last value key this is harmless, since writing the same value
+    again is a no op. But for a key with a custom reducer (declared with
+    `Annotated[T, reducer]`, backed by a `BinaryOperatorAggregate` channel)
+    it is not: the reducer runs again on a value it never actually produced,
+    which for a reducer like a counter can silently double count. See
+    https://github.com/langchain-ai/langgraph/issues/6290.
+
+    Each call here is tagged with `CONFIG_KEY_DELTA_CHANNELS`, a fresh set
+    that the subgraph's own loop fills in with the channels it genuinely
+    wrote to. Only `BinaryOperatorAggregate` keyed output that is not in
+    that set gets dropped before the writers see it; every other key is
+    passed through unchanged, the same as before this wrapper existed.
+    """
+
+    def __init__(self, bound: Runnable) -> None:
+        self.subgraph_bound = bound
+        self.subgraph_reducer_channels = frozenset(
+            key
+            for key, channel in getattr(bound, "channels", {}).items()
+            if isinstance(channel, BinaryOperatorAggregate)
+        )
+        super().__init__(self._invoke, self._ainvoke, name=None, trace=False)
+
+    def get_name(self, suffix: str | None = None, *, name: str | None = None) -> str:
+        return self.subgraph_bound.get_name(suffix, name=name)
+
+    def _filter(self, output: Any, delta: set[str]) -> Any:
+        if not isinstance(output, dict):
+            return output
+        return {
+            k: v
+            for k, v in output.items()
+            if k in delta or k not in self.subgraph_reducer_channels
+        }
+
+    def _invoke(self, input: Any, config: RunnableConfig) -> Any:
+        delta: set[str] = set()
+        output = self.subgraph_bound.invoke(
+            input,
+            patch_config(config, configurable={CONFIG_KEY_DELTA_CHANNELS: delta}),
+        )
+        return self._filter(output, delta)
+
+    async def _ainvoke(self, input: Any, config: RunnableConfig) -> Any:
+        delta: set[str] = set()
+        output = await self.subgraph_bound.ainvoke(
+            input,
+            patch_config(config, configurable={CONFIG_KEY_DELTA_CHANNELS: delta}),
+        )
+        return self._filter(output, delta)
+
+
 class CompiledStateGraph(
     Pregel[StateT, ContextT, InputT, OutputT],
     Generic[StateT, ContextT, InputT, OutputT],
@@ -1515,6 +1576,18 @@ class CompiledStateGraph(
                 if node.defer
                 else EphemeralValue(Any, guard=False)
             )
+            # a node whose action is directly a compiled subgraph gets its
+            # bound runnable wrapped so its output only carries the channels
+            # it actually wrote, not its whole output schema (issue #6290).
+            # subgraphs=[subgraph] is passed explicitly below because
+            # PregelNode's own auto detection would otherwise look at the
+            # wrapper instead of the real subgraph.
+            subgraph = find_subgraph_pregel(node.runnable, deep=False)
+            bound: Runnable = (
+                _SubgraphNodeRunnable(node.runnable)
+                if subgraph is not None
+                else node.runnable
+            )
             self.nodes[key] = PregelNode(
                 triggers=[branch_channel],
                 # read state keys and managed values
@@ -1528,7 +1601,8 @@ class CompiledStateGraph(
                 cache_policy=node.cache_policy,
                 is_error_handler=node.is_error_handler,
                 error_handler_node=node.error_handler_node,
-                bound=node.runnable,  # type: ignore[arg-type]
+                bound=bound,  # type: ignore[arg-type]
+                subgraphs=[subgraph] if subgraph is not None else None,
                 timeout=node.timeout,
             )
         else:

@@ -44,17 +44,33 @@ def get_new_channel_versions(
     return new_versions
 
 
-def find_subgraph_pregel(candidate: Runnable) -> PregelProtocol | None:
+def find_subgraph_pregel(
+    candidate: Runnable, *, deep: bool = True
+) -> PregelProtocol | None:
+    """Find a `Pregel`-like runnable reachable from `candidate`.
+
+    When `deep` is `False`, only `candidate` itself is tested - the search
+    does not unwrap sequences, lambdas, or nonlocals of a plain callable.
+    Callers that need a guarantee that a subgraph they find is the runnable
+    actually invoked (e.g. to inject config into its call) should use
+    `deep=False`, since the deep search may find a subgraph buried inside a
+    user-authored function that is not guaranteed to receive injected config.
+    """
     from langgraph.pregel import Pregel
+
+    def _is_subgraph(c: Runnable) -> bool:
+        return isinstance(c, PregelProtocol) and (
+            # subgraphs that disabled checkpointing are not considered
+            not isinstance(c, Pregel) or c.checkpointer is not False
+        )
+
+    if not deep:
+        return candidate if _is_subgraph(candidate) else None
 
     candidates: list[Runnable] = [candidate]
 
     for c in candidates:
-        if (
-            isinstance(c, PregelProtocol)
-            # subgraphs that disabled checkpointing are not considered
-            and (not isinstance(c, Pregel) or c.checkpointer is not False)
-        ):
+        if _is_subgraph(c):
             return c
         elif isinstance(c, RunnableSequence) or isinstance(c, RunnableSeq):
             candidates.extend(c.steps)

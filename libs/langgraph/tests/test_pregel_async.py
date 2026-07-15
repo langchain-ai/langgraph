@@ -7078,6 +7078,196 @@ async def test_multiple_subgraphs(async_checkpointer: BaseCheckpointSaver) -> No
     }
 
 
+async def test_subgraph_node_reducer_only_writes_on_real_change() -> None:
+    """A shared reducer key should only update from a subgraph node that
+    actually writes it, not from a sibling subgraph that merely echoes it
+    back unchanged. Regression test for
+    https://github.com/langchain-ai/langgraph/issues/6290.
+    """
+
+    def bump_on_flag(count: int, is_increment: bool) -> int:
+        return count + 1 if is_increment else count
+
+    class State(TypedDict):
+        retry_count: Annotated[int, bump_on_flag]
+        max_retry: int
+
+    async def noop_node(state: State) -> dict:
+        return {}
+
+    subgraph_1 = (
+        StateGraph(State).add_node("noop", noop_node).add_edge(START, "noop")
+    ).compile()
+
+    async def bump_node(state: State) -> dict:
+        return {"retry_count": True}
+
+    subgraph_2 = (
+        StateGraph(State).add_node("bump", bump_node).add_edge(START, "bump")
+    ).compile()
+
+    def should_continue(state: State) -> str:
+        return END if state["retry_count"] >= state["max_retry"] else "subgraph_1"
+
+    parent = (
+        StateGraph(State)
+        .add_node("subgraph_1", subgraph_1)
+        .add_node("subgraph_2", subgraph_2)
+        .add_edge(START, "subgraph_1")
+        .add_edge("subgraph_1", "subgraph_2")
+        .add_conditional_edges("subgraph_2", should_continue, ["subgraph_1", END])
+        .compile()
+    )
+
+    result = await parent.ainvoke({"retry_count": 0, "max_retry": 3})
+    assert result["retry_count"] == 3
+
+
+async def test_subgraph_node_output_excludes_untouched_shared_keys() -> None:
+    """A subgraph node's output should only carry the channels its own nodes
+    wrote to during that call, not every key in its schema. Both `a` and `b`
+    are plain last-value keys here, so the expected output is a simple
+    overwrite, not an accumulation.
+    """
+
+    class State(TypedDict):
+        a: int
+        b: str
+
+    async def write_a_only(state: State) -> dict:
+        return {"a": state["a"] + 1}
+
+    subgraph = (
+        StateGraph(State).add_node("write_a", write_a_only).add_edge(START, "write_a")
+    ).compile()
+
+    parent = (
+        StateGraph(State).add_node("sub", subgraph).add_edge(START, "sub").compile()
+    )
+
+    result = await parent.ainvoke({"a": 0, "b": "initial"})
+    assert result == {"a": 1, "b": "initial"}
+
+    # a second, independent invocation of the same compiled parent should
+    # not carry over stray writes from a leaked delta set on the wrapper.
+    result_again = await parent.ainvoke({"a": 10, "b": "other"})
+    assert result_again == {"a": 11, "b": "other"}
+
+
+async def test_subgraph_node_no_shared_keys_unaffected() -> None:
+    """Subgraphs with an output schema disjoint from other parent keys keep
+    working as before; the delta filtering does not drop legitimate output.
+    """
+
+    class State(TypedDict):
+        a: int
+        b: int
+
+    class Output(TypedDict):
+        result: int
+
+    async def add(state: State) -> dict:
+        return {"result": state["a"] + state["b"]}
+
+    add_subgraph = (
+        StateGraph(State, output_schema=Output)
+        .add_node(add)
+        .add_edge(START, "add")
+        .compile()
+    )
+
+    parent = (
+        StateGraph(State, output_schema=Output)
+        .add_node("add_subgraph", add_subgraph)
+        .add_edge(START, "add_subgraph")
+        .compile()
+    )
+
+    assert await parent.ainvoke({"a": 2, "b": 3}) == {"result": 5}
+
+
+async def test_subgraph_node_full_write_when_all_keys_touched() -> None:
+    """A subgraph node that legitimately writes every output key on every
+    call keeps propagating all of them; the delta filter only drops keys
+    that were never actually written.
+    """
+
+    class State(TypedDict):
+        a: int
+        b: int
+
+    async def write_both(state: State) -> dict:
+        return {"a": state["a"] + 1, "b": state["b"] + 1}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("write_both", write_both)
+        .add_edge(START, "write_both")
+    ).compile()
+
+    parent = (
+        StateGraph(State).add_node("sub", subgraph).add_edge(START, "sub").compile()
+    )
+
+    assert await parent.ainvoke({"a": 1, "b": 1}) == {"a": 2, "b": 2}
+
+
+async def test_doubly_nested_subgraph_node_reducer_only_writes_on_real_change() -> None:
+    """The same untouched-key echo bug, one level deeper: a subgraph node
+    that itself contains a subgraph node should still only propagate real
+    writes up through each level.
+    """
+
+    def bump_on_flag(count: int, is_increment: bool) -> int:
+        return count + 1 if is_increment else count
+
+    class State(TypedDict):
+        retry_count: Annotated[int, bump_on_flag]
+        max_retry: int
+
+    async def noop_node(state: State) -> dict:
+        return {}
+
+    inner_noop = (
+        StateGraph(State).add_node("noop", noop_node).add_edge(START, "noop")
+    ).compile()
+
+    subgraph_1 = (
+        StateGraph(State)
+        .add_node("inner_noop", inner_noop)
+        .add_edge(START, "inner_noop")
+    ).compile()
+
+    async def bump_node(state: State) -> dict:
+        return {"retry_count": True}
+
+    inner_bump = (
+        StateGraph(State).add_node("bump", bump_node).add_edge(START, "bump")
+    ).compile()
+
+    subgraph_2 = (
+        StateGraph(State)
+        .add_node("inner_bump", inner_bump)
+        .add_edge(START, "inner_bump")
+    ).compile()
+
+    def should_continue(state: State) -> str:
+        return END if state["retry_count"] >= state["max_retry"] else "subgraph_1"
+
+    parent = (
+        StateGraph(State)
+        .add_node("subgraph_1", subgraph_1)
+        .add_node("subgraph_2", subgraph_2)
+        .add_edge(START, "subgraph_1")
+        .add_edge("subgraph_1", "subgraph_2")
+        .add_conditional_edges("subgraph_2", should_continue, ["subgraph_1", END])
+        .compile()
+    )
+
+    result = await parent.ainvoke({"retry_count": 0, "max_retry": 3})
+    assert result["retry_count"] == 3
+
+
 @NEEDS_CONTEXTVARS
 async def test_multiple_subgraphs_functional(
     async_checkpointer: BaseCheckpointSaver,

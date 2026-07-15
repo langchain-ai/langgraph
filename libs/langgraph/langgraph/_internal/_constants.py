@@ -63,6 +63,12 @@ CONFIG_KEY_TIMED_ATTEMPT_OBSERVER = sys.intern("__pregel_timed_attempt_observer"
 # holds a callback to be called when an idle-timed node attempt starts or finishes
 CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
 # holds a mutable dict for temporary storage scoped to the current task
+CONFIG_KEY_DELTA_CHANNELS = sys.intern("__pregel_delta_channels")
+# internal only: when present in a nested run's config, holds a `set[str]`
+# that the loop fills in with channels genuinely written during that run
+# (excluding the initial input-seed step). Used by subgraph-node invocation
+# to avoid echoing untouched, merely-seeded keys back to the parent as
+# writes, which would otherwise re-trigger their reducers on every call.
 CONFIG_KEY_RUNNER_SUBMIT = sys.intern("__pregel_runner_submit")
 # holds a function that receives tasks from runner, executes them and returns results
 CONFIG_KEY_DURABILITY = sys.intern("__pregel_durability")
