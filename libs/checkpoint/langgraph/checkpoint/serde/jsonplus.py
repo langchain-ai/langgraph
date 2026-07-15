@@ -350,11 +350,18 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 ),
             ),
         )
-    elif isinstance(obj, pathlib.Path):
+    elif isinstance(obj, pathlib.PurePath):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, obj.parts),
+            ),
+        )
+    elif isinstance(obj, range):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_POS_ARGS,
+            _msgpack_enc(
+                ("builtins", "range", (obj.start, obj.stop, obj.step)),
             ),
         )
     elif isinstance(obj, re.Pattern):
@@ -813,71 +820,4 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             # for pydantic objects we can't find/reconstruct
             # let's return the kwargs dict instead
             return
-    elif code == EXT_PYDANTIC_V2:
-        try:
-            tup = ormsgpack.unpackb(
-                data,
-                ext_hook=_msgpack_ext_hook_to_json,
-                option=ormsgpack.OPT_NON_STR_KEYS,
-            )
-            # module, name, kwargs, method
-            return tup[2]
-        except Exception:
-            return
-    elif code == EXT_NUMPY_ARRAY:
-        try:
-            import numpy as _np
-
-            dtype_str, shape, order, buf = ormsgpack.unpackb(
-                data,
-                ext_hook=_msgpack_ext_hook_to_json,
-                option=ormsgpack.OPT_NON_STR_KEYS,
-            )
-            arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
-            return arr.reshape(shape, order=order).tolist()
-        except Exception:
-            return
-
-
-class InvalidModuleError(Exception):
-    """Exception raised when a module is not in the allowlist."""
-
-    def __init__(self, message: str):
-        self.message = message
-
-
-_option = (
-    ormsgpack.OPT_NON_STR_KEYS
-    | ormsgpack.OPT_PASSTHROUGH_DATACLASS
-    | ormsgpack.OPT_PASSTHROUGH_DATETIME
-    | ormsgpack.OPT_PASSTHROUGH_ENUM
-    | ormsgpack.OPT_PASSTHROUGH_UUID
-    | ormsgpack.OPT_REPLACE_SURROGATES
-)
-
-
-def _msgpack_enc(data: Any) -> bytes:
-    return ormsgpack.packb(data, default=_msgpack_default, option=_option)
-
-
-def _normalize_allowlist(
-    allowlist: AllowedMsgpackModules | Literal[True] | None,
-) -> set[tuple[str, ...]] | Literal[True] | None:
-    if allowlist is True:
-        return allowlist
-    elif allowlist:
-        return _normalize_module_keys(allowlist)
-    else:
-        return None
-
-
-def _normalize_module_keys(
-    modules: AllowedMsgpackModules,
-) -> set[tuple[str, ...]]:
-    normalized: set[tuple[str, ...]] = set()
-    for module in modules:
-        if isclass(module):
-            normalized.add((module.__module__, module.__name__))
-        else:
-            normalized.add(cast(tuple[str, ...], module))
-    return normalized
+    elif code == EXT_PYDA
