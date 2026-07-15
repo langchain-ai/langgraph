@@ -1044,3 +1044,16 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+def test_upsert_preserves_created_at() -> None:
+    """created_at should survive an upsert; only updated_at should advance."""
+    store = InMemoryStore()
+    store.put(("ns",), "k1", {"v": 1})
+    original = store.get(("ns",), "k1").created_at
+
+    store.put(("ns",), "k1", {"v": 2})
+    item = store.get(("ns",), "k1")
+
+    assert item.created_at == original
+    assert item.updated_at >= original

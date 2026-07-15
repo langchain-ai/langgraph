@@ -407,11 +407,15 @@ class InMemoryStore(BaseStore):
                 self._data[namespace].pop(key, None)
                 self._vectors[namespace].pop(key, None)
             else:
+                existing = self._data[namespace].get(key)
+                created_at = (
+                    existing.created_at if existing else datetime.now(timezone.utc)
+                )
                 self._data[namespace][key] = Item(
                     value=op.value,
                     key=key,
                     namespace=namespace,
-                    created_at=datetime.now(timezone.utc),
+                    created_at=created_at,
                     updated_at=datetime.now(timezone.utc),
                 )
 
