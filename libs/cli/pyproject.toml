@@ -23,7 +23,10 @@ dependencies = [
 path = "langgraph_cli/__init__.py"
 [project.optional-dependencies]
 inmem = [
-    "langgraph-api>=0.5.35,<1.0.0 ; python_version >= '3.11'",
+    "langgraph-api>=0.5.35,<1.0.0 ; python_version >= '3.11' and python_version < '3.14'",
+    # langgraph-api < 0.7.67 caps jsonschema-rs below 0.34.0, the first release
+    # with Python 3.14 wheels; older versions fail to build from source on 3.14.
+    "langgraph-api>=0.7.67,<1.0.0 ; python_version >= '3.14'",
     "langgraph-runtime-inmem>=0.7 ; python_version >= '3.11'",
 ]
 
