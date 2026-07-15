@@ -625,10 +625,12 @@ def create_react_agent(
             else False
         )
         remaining_steps = _get_state_value(state, "remaining_steps", None)
-        if remaining_steps is not None:
-            if remaining_steps < 1 and all_tools_return_direct:
-                return True
-            elif remaining_steps < 2 and has_tool_calls:
+        if remaining_steps is not None and has_tool_calls:
+            # return_direct tools only consume 1 step (tool call → done, no LLM re-entry).
+            # Non-direct tools need at least 2 steps: one for tool execution and one
+            # for the subsequent LLM call to process the tool result.
+            min_steps_needed = 1 if all_tools_return_direct else 2
+            if remaining_steps < min_steps_needed:
                 return True
 
         return False
