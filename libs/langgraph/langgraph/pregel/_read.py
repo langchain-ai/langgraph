@@ -138,6 +138,10 @@ class PregelNode:
     metadata: Mapping[str, Any] | None
     """Metadata to attach to the node for tracing."""
 
+    trace_inputs: Callable[[Any], Any] | None
+    """Optional callable to transform the node's input before it is recorded on
+    the node's trace run. Does not affect the value passed to `bound`."""
+
     is_error_handler: bool
     """Whether this node is registered as an error handler node."""
 
@@ -156,6 +160,7 @@ class PregelNode:
         writers: list[Runnable] | None = None,
         tags: list[str] | None = None,
         metadata: Mapping[str, Any] | None = None,
+        trace_inputs: Callable[[Any], Any] | None = None,
         bound: Runnable[Any, Any] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
@@ -177,6 +182,7 @@ class PregelNode:
         self.timeout = coerce_timeout_policy(timeout)
         self.tags = tags
         self.metadata = metadata
+        self.trace_inputs = trace_inputs
         self.is_error_handler = is_error_handler
         self.error_handler_node = error_handler_node
         if subgraphs is not None:
@@ -227,9 +233,9 @@ class PregelNode:
         elif self.bound is DEFAULT_BOUND and len(writers) == 1:
             return writers[0]
         elif self.bound is DEFAULT_BOUND:
-            return RunnableSeq(*writers)
+            return RunnableSeq(*writers, trace_inputs=self.trace_inputs)
         elif writers:
-            return RunnableSeq(self.bound, *writers)
+            return RunnableSeq(self.bound, *writers, trace_inputs=self.trace_inputs)
         else:
             return self.bound
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Generic, Protocol, TypeAlias
 
@@ -93,3 +93,6 @@ class StateNodeSpec(Generic[NodeInputT, ContextT]):
     ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
     defer: bool = False
     timeout: TimeoutPolicy | None = None
+    trace_inputs: Callable[[Any], Any] | None = None
+    """Optional callable to transform the node's input before it is recorded on
+    the node's trace run. Does not affect the value passed to the node itself."""
