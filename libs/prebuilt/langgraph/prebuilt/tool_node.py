@@ -25,7 +25,7 @@ Key Components:
 Typical Usage:
     ```python
     from langchain_core.tools import tool
-    from langchain.tools import ToolNode
+    from langgraph.prebuilt import ToolNode
 
 
     @tool
@@ -702,7 +702,7 @@ class ToolNode(RunnableCallable):
         Basic usage:
 
         ```python
-        from langchain.tools import ToolNode
+        from langgraph.prebuilt import ToolNode
         from langchain_core.tools import tool
 
         @tool
@@ -717,7 +717,7 @@ class ToolNode(RunnableCallable):
 
         ```python
         from typing_extensions import Annotated
-        from langchain.tools import InjectedState
+        from langgraph.prebuilt import InjectedState
 
         @tool
         def context_tool(query: str, state: Annotated[dict, InjectedState]) -> str:
@@ -1613,8 +1613,7 @@ def tools_condition(
 
         ```python
         from langgraph.graph import StateGraph
-        from langchain.tools import ToolNode
-        from langchain.tools.tool_node import tools_condition
+        from langgraph.prebuilt import ToolNode, tools_condition
         from typing_extensions import TypedDict
 
 
@@ -1688,7 +1687,7 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     Example:
         ```python
         from langchain_core.tools import tool
-        from langchain.tools import ToolRuntime
+        from langgraph.prebuilt import ToolRuntime
 
         @tool
         def my_tool(x: int, runtime: ToolRuntime) -> str:
@@ -1770,7 +1769,8 @@ class InjectedState(InjectedToolArg):
         from typing_extensions import Annotated, TypedDict
 
         from langchain_core.messages import BaseMessage, AIMessage
-        from langchain.tools import InjectedState, ToolNode, tool
+        from langchain_core.tools import tool
+        from langgraph.prebuilt import InjectedState, ToolNode
 
 
         class AgentState(TypedDict):
@@ -1845,7 +1845,8 @@ class InjectedStore(InjectedToolArg):
         ```python
         from typing_extensions import Annotated
         from langgraph.store.memory import InMemoryStore
-        from langchain.tools import InjectedStore, ToolNode, tool
+        from langchain_core.tools import tool
+        from langgraph.prebuilt import InjectedStore, ToolNode
 
         @tool
         def save_preference(
