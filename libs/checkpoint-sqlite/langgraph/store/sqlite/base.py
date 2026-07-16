@@ -94,11 +94,21 @@ class SqliteIndexConfig(IndexConfig):
 
 
 def _namespace_to_text(
-    namespace: tuple[str, ...], handle_wildcards: bool = False
+    namespace: tuple[str, ...],
+    handle_wildcards: bool = False,
+    escape_like: bool = False,
 ) -> str:
     """Convert namespace tuple to text string."""
-    if handle_wildcards:
-        namespace = tuple("%" if val == "*" else val for val in namespace)
+    if escape_like or handle_wildcards:
+
+        def _escape(val: str) -> str:
+            if handle_wildcards and val == "*":
+                return "%"
+            if escape_like:
+                return val.replace("\\", "\\\\").replace("_", "\\_").replace("%", "\\%")
+            return val
+
+        namespace = tuple(_escape(val) for val in namespace)
     return ".".join(namespace)
 
 
@@ -461,8 +471,12 @@ class BaseSqliteStore:
                     else " AND " + " AND ".join(filter_conditions)
                 )
                 if op.namespace_prefix:
-                    prefix_filter_str = f"WHERE s.prefix LIKE ? {filter_str} "
-                    ns_args: Sequence = (f"{_namespace_to_text(op.namespace_prefix)}%",)
+                    prefix_filter_str = (
+                        f"WHERE s.prefix LIKE ? ESCAPE '\\\\' {filter_str} "
+                    )
+                    ns_args: Sequence = (
+                        f"{_namespace_to_text(op.namespace_prefix, escape_like=True)}%",
+                    )
                 else:
                     ns_args = ()
                     if filter_str:
@@ -506,9 +520,11 @@ class BaseSqliteStore:
                 base_query = """
                     SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, NULL as score
                     FROM store
-                    WHERE prefix LIKE ?
+                    WHERE prefix LIKE ? ESCAPE '\\'
                 """
-                params = [f"{_namespace_to_text(op.namespace_prefix)}%"]
+                params = [
+                    f"{_namespace_to_text(op.namespace_prefix, escape_like=True)}%"
+                ]
 
                 if filter_conditions:
                     params.extend(filter_params)
@@ -550,14 +566,14 @@ class BaseSqliteStore:
             if op.match_conditions:
                 for cond in op.match_conditions:
                     if cond.match_type == "prefix":
-                        where_clauses.append("prefix LIKE ?")
+                        where_clauses.append("prefix LIKE ? ESCAPE '\\\\'")
                         params.append(
-                            f"{_namespace_to_text(cond.path, handle_wildcards=True)}%"
+                            f"{_namespace_to_text(cond.path, handle_wildcards=True, escape_like=True)}%"
                         )
                     elif cond.match_type == "suffix":
-                        where_clauses.append("prefix LIKE ?")
+                        where_clauses.append("prefix LIKE ? ESCAPE '\\\\'")
                         params.append(
-                            f"%{_namespace_to_text(cond.path, handle_wildcards=True)}"
+                            f"%{_namespace_to_text(cond.path, handle_wildcards=True, escape_like=True)}"
                         )
                     else:
                         logger.warning(

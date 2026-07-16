@@ -444,7 +444,9 @@ class BasePostgresStore(Generic[C]):
             ns_param: Sequence[str] | None = None
             if op.namespace_prefix:
                 ns_condition = "store.prefix LIKE %s"
-                ns_param = (f"{_namespace_to_text(op.namespace_prefix)}%",)
+                ns_param = (
+                    f"{_namespace_to_text(op.namespace_prefix, escape_like=True)}%",
+                )
             else:
                 ns_param = ()
 
@@ -597,12 +599,12 @@ class BasePostgresStore(Generic[C]):
                     if condition.match_type == "prefix":
                         conditions.append("prefix LIKE %s")
                         params.append(
-                            f"{_namespace_to_text(condition.path, handle_wildcards=True)}%"
+                            f"{_namespace_to_text(condition.path, handle_wildcards=True, escape_like=True)}%"
                         )
                     elif condition.match_type == "suffix":
                         conditions.append("prefix LIKE %s")
                         params.append(
-                            f"%{_namespace_to_text(condition.path, handle_wildcards=True)}"
+                            f"%{_namespace_to_text(condition.path, handle_wildcards=True, escape_like=True)}"
                         )
                     else:
                         logger.warning(
@@ -1249,11 +1251,21 @@ def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
 
 
 def _namespace_to_text(
-    namespace: tuple[str, ...], handle_wildcards: bool = False
+    namespace: tuple[str, ...],
+    handle_wildcards: bool = False,
+    escape_like: bool = False,
 ) -> str:
     """Convert namespace tuple to text string."""
-    if handle_wildcards:
-        namespace = tuple("%" if val == "*" else val for val in namespace)
+    if escape_like or handle_wildcards:
+
+        def _escape(val: str) -> str:
+            if handle_wildcards and val == "*":
+                return "%"
+            if escape_like:
+                return val.replace("\\", "\\\\").replace("_", "\\_").replace("%", "\\%")
+            return val
+
+        namespace = tuple(_escape(val) for val in namespace)
     return ".".join(namespace)
 
 
