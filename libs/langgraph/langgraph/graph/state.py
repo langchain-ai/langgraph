@@ -384,6 +384,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
+        trace_inputs: Callable[[Any], Any] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -453,6 +454,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
+        trace_inputs: Callable[[Any], Any] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph` where input schema is specified.
@@ -527,6 +529,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
+        trace_inputs: Callable[[Any], Any] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -596,6 +599,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
+        trace_inputs: Callable[[Any], Any] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is specified.
