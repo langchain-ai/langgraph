@@ -505,8 +505,10 @@ def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
         X_norm = np.linalg.norm(X_arr)
         Y_norm = np.linalg.norm(Y_arr, axis=1)
 
-        # Avoid division by zero
-        mask = Y_norm != 0
+        # Avoid division by zero: a zero-norm query or candidate vector has an
+        # undefined cosine similarity, so score it 0.0 (matching the pure-Python
+        # path below) instead of producing nan.
+        mask = (Y_norm != 0) & (X_norm != 0)
         similarities = np.zeros_like(Y_norm)
         similarities[mask] = np.dot(Y_arr[mask], X_arr) / (Y_norm[mask] * X_norm)
         return similarities.tolist()

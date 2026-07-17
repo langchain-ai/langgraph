@@ -716,6 +716,28 @@ async def test_async_vector_update_with_embedding(
     assert not any(r.key == "doc4" for r in results_new)
 
 
+@pytest.mark.parametrize("use_numpy", [True, False])
+def test_cosine_similarity_zero_norm_vectors(use_numpy: bool) -> None:
+    """A zero-norm query or candidate vector must score 0.0, not nan, on both
+    the numpy and pure-Python code paths."""
+    import langgraph.store.memory as memory_module
+    from langgraph.store.memory import _cosine_similarity
+
+    original = memory_module._check_numpy
+    memory_module._check_numpy = lambda: use_numpy
+    try:
+        # zero-norm query vector against non-zero candidates
+        result = _cosine_similarity([0.0, 0.0], [[1.0, 2.0], [3.0, 4.0]])
+        assert result == [0.0, 0.0]
+
+        # zero-norm candidate vector mixed with a normal one
+        mixed = _cosine_similarity([1.0, 0.0], [[0.0, 0.0], [1.0, 0.0]])
+        assert mixed[0] == 0.0
+        assert mixed[1] == pytest.approx(1.0)
+    finally:
+        memory_module._check_numpy = original
+
+
 def test_vector_search_with_filters(fake_embeddings: CharacterEmbeddings) -> None:
     """Test combining vector search with filters."""
     inmem_store = InMemoryStore(
