@@ -66,14 +66,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
         cls,
         conn_string: str,
         *,
-        pipeline: bool = False,
         serde: SerializerProtocol | None = None,
     ) -> AsyncIterator[AsyncPostgresSaver]:
         """Create a new AsyncPostgresSaver instance from a connection string.
 
         Args:
             conn_string: The Postgres connection info string.
-            pipeline: whether to use AsyncPipeline
 
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
@@ -81,11 +79,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         async with await AsyncConnection.connect(
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
-            if pipeline:
-                async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
-            else:
-                yield cls(conn=conn, serde=serde)
+            yield cls(conn=conn, serde=serde)
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
