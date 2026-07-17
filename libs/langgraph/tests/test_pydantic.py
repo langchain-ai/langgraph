@@ -360,3 +360,138 @@ def test_interrupt_functional_pydantic(sync_checkpointer: BaseCheckpointSaver) -
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar", "b": "bar"}
     assert called_count == 1
+
+
+def test_pydantic_default_factory_with_reducer():
+    """Test that Field(default_factory=...) works with Annotated reducer (issue #5225)."""
+
+    def extend_list(original: list, new: list):
+        original.extend(new)
+        return original
+
+    class State(BaseModel):
+        variable: Annotated[list[str], extend_list] = Field(
+            default_factory=lambda: ["default"]
+        )
+
+    def node(state: State) -> dict:
+        return {"variable": ["new_item"]}
+
+    graph = StateGraph(State)
+    graph.add_node("process", node)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+    compiled = graph.compile()
+
+    result = compiled.invoke({})
+    assert result["variable"] == ["default", "new_item"]
+
+
+def test_pydantic_static_default_with_reducer():
+    """Test that Field(default=...) works with Annotated reducer."""
+    import operator
+
+    class State(BaseModel):
+        count: Annotated[int, operator.add] = Field(default=100)
+
+    def node(state: State) -> dict:
+        return {"count": 5}
+
+    graph = StateGraph(State)
+    graph.add_node("process", node)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+
+    result = graph.compile().invoke({})
+    assert result["count"] == 105
+
+
+def test_pydantic_default_with_reducer_and_initial_input():
+    """Test that defaults combine with user-provided initial input via the reducer."""
+    import operator
+
+    class State(BaseModel):
+        messages: Annotated[list[str], operator.add] = Field(
+            default_factory=lambda: ["system"]
+        )
+
+    def node(state: State) -> dict:
+        return {"messages": ["from_node"]}
+
+    graph = StateGraph(State)
+    graph.add_node("process", node)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+
+    result = graph.compile().invoke({"messages": ["user"]})
+    assert result["messages"] == ["system", "user", "from_node"]
+
+
+def test_pydantic_default_with_reducer_mutable_safety():
+    """Test that mutable defaults are not shared across invocations."""
+
+    def extend_list(original: list, new: list):
+        original.extend(new)
+        return original
+
+    class State(BaseModel):
+        items: Annotated[list[str], extend_list] = Field(
+            default_factory=lambda: ["init"]
+        )
+
+    def node(state: State) -> dict:
+        return {"items": ["added"]}
+
+    graph = StateGraph(State)
+    graph.add_node("process", node)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+    compiled = graph.compile()
+
+    for _ in range(3):
+        result = compiled.invoke({})
+        assert result["items"] == ["init", "added"]
+
+
+def test_pydantic_no_default_with_reducer_backward_compat():
+    """Test that Pydantic fields without defaults still work as before."""
+    import operator
+
+    class State(BaseModel):
+        messages: Annotated[list[str], operator.add]
+
+    def node(state: State) -> dict:
+        return {"messages": ["new"]}
+
+    graph = StateGraph(State)
+    graph.add_node("process", node)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+
+    result = graph.compile().invoke({})
+    assert result["messages"] == ["new"]
+
+
+def test_pydantic_mixed_fields_with_and_without_defaults():
+    """Test mixing reducer fields with defaults and regular fields."""
+    import operator
+
+    class State(BaseModel):
+        logs: Annotated[list[str], operator.add] = Field(
+            default_factory=lambda: ["started"]
+        )
+        score: Annotated[int, operator.add] = Field(default=0)
+        name: str = Field(default="unnamed")
+
+    def node(state: State) -> dict:
+        return {"logs": ["processed"], "score": 10, "name": "test"}
+
+    graph = StateGraph(State)
+    graph.add_node("process", node)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+
+    result = graph.compile().invoke({})
+    assert result["logs"] == ["started", "processed"]
+    assert result["score"] == 10
+    assert result["name"] == "test"

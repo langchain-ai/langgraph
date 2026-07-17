@@ -76,6 +76,11 @@ def _is_readonly_type(type_: Any) -> bool:
 _DEFAULT_KEYS: frozenset[str] = frozenset()
 
 
+def _is_pydantic_undefined(value: Any) -> bool:
+    """Check if a value is Pydantic's PydanticUndefined sentinel."""
+    return getattr(type(value), "__name__", "") == "PydanticUndefinedType"
+
+
 def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
     """Determine the default value for a field in a state schema.
 
@@ -83,6 +88,8 @@ def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
         If TypedDict:
             - Required/NotRequired
             - total=False -> everything optional
+        If Pydantic BaseModel:
+            - Field(default=...) and Field(default_factory=...)
         - Type annotation (Optional/Union[None])
     """
     optional_keys = getattr(schema, "__optional_keys__", _DEFAULT_KEYS)
@@ -113,6 +120,13 @@ def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
                 return field_info.default
             elif field_info.default_factory is not dataclasses.MISSING:
                 return field_info.default_factory()
+    if isinstance(schema, type) and issubclass(schema, BaseModel):
+        if hasattr(schema, "model_fields") and name in schema.model_fields:
+            fi = schema.model_fields[name]
+            if fi.default_factory is not None:
+                return fi.default_factory()
+            if not _is_pydantic_undefined(fi.default):
+                return fi.default
     # Note, we ignore ReadOnly attributes,
     # as they don't make much sense. (we don't care if you mutate the state in your node)
     # and mutating state in your node has no effect on our graph state.
