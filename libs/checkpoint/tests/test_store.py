@@ -716,6 +716,29 @@ async def test_async_vector_update_with_embedding(
     assert not any(r.key == "doc4" for r in results_new)
 
 
+def test_search_numeric_filter_with_missing_or_non_numeric_values() -> None:
+    """Range operators must not crash when items lack the field or store a
+    non-numeric value; such items simply do not match."""
+    store = InMemoryStore()
+    store.put(("users",), "alice", {"name": "Alice", "age": 30})
+    store.put(("users",), "bob", {"name": "Bob"})  # missing "age"
+    store.put(("users",), "cara", {"name": "Cara", "age": "unknown"})  # non-numeric
+
+    # Previously raised TypeError/ValueError from float(None) / float("unknown").
+    for operator, threshold in (("$gt", 25), ("$gte", 30), ("$lt", 40), ("$lte", 30)):
+        results = store.search(("users",), filter={"age": {operator: threshold}})
+        # only the comparable numeric item can match; missing/non-numeric drop out
+        assert [r.key for r in results] == ["alice"]
+
+    # A threshold that excludes the only numeric item yields no matches (no error)
+    assert store.search(("users",), filter={"age": {"$gt": 100}}) == []
+
+    # Numeric comparisons still work across multiple comparable items
+    store.put(("users",), "dave", {"name": "Dave", "age": 45})
+    keys = {r.key for r in store.search(("users",), filter={"age": {"$gte": 30}})}
+    assert keys == {"alice", "dave"}
+
+
 def test_vector_search_with_filters(fake_embeddings: CharacterEmbeddings) -> None:
     """Test combining vector search with filters."""
     inmem_store = InMemoryStore(
