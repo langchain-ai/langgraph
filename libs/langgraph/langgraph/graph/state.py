@@ -1446,6 +1446,16 @@ class CompiledStateGraph(
             if input is None:
                 return None
             elif isinstance(input, dict):
+                if output_keys != ["__root__"]:
+                    dropped = [k for k in input if k not in output_keys]
+                    if dropped:
+                        warnings.warn(
+                            f"Node {key!r} returned keys {dropped!r} that are not "
+                            f"declared in the state schema and will be dropped. "
+                            f"Declare them in your TypedDict/schema to persist them.",
+                            UserWarning,
+                            stacklevel=5,
+                        )
                 return [(k, v) for k, v in input.items() if k in output_keys]
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:

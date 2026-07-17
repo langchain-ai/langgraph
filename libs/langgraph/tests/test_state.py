@@ -371,3 +371,53 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+class TestOutputSchemaFeedback:
+    """
+    When a node returns keys that are not part of the defined state schema,
+    those keys must not appear in the final graph output.
+    If the framework provides feedback about such unrecognized outputs,
+    that feedback should be observable.
+    """
+
+    class SmallState(TypedDict):
+        x: int
+
+    def _graph(self):
+        # We define a node that returns a declared key ('x') and an undeclared one ('extra_field')
+        def node(state) -> dict:
+            return {"x": 1, "extra_field": "should not appear"}
+
+        g = StateGraph(self.SmallState)
+        g.add_node("n", node)
+        g.add_edge(START, "n")
+        g.add_edge("n", END)
+        return g.compile()
+
+    def test_declared_key_is_written(self):
+        result = self._graph().invoke({"x": 0})
+        assert result["x"] == 1
+
+    def test_undeclared_key_is_absent_from_result(self):
+        result = self._graph().invoke({"x": 0})
+        assert "extra_field" not in result, (
+            "Unrecognized output key leaked into the result"
+        )
+
+    def test_unrecognized_outputs_generate_feedback(self):
+        """
+        If the runtime warns about unrecognized outputs, this test will
+        catch the warning and verify that it mentions the offending key.
+        """
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            self._graph().invoke({"x": 0})
+
+        user_warnings = [
+            str(w.message) for w in caught if issubclass(w.category, UserWarning)
+        ]
+        assert any("extra_field" in m for m in user_warnings), (
+            f"No UserWarning referencing 'extra_field' was emitted. "
+            f"Warnings seen: {user_warnings}"
+        )
