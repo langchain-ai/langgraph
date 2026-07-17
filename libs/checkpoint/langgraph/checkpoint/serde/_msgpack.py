@@ -33,6 +33,7 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
         # collections
         ("builtins", "set"),
         ("builtins", "frozenset"),
+        ("builtins", "range"),
         ("collections", "deque"),
         # ip addresses
         ("ipaddress", "IPv4Address"),
@@ -45,6 +46,9 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
         ("pathlib", "Path"),
         ("pathlib", "PosixPath"),
         ("pathlib", "WindowsPath"),
+        ("pathlib", "PurePath"),
+        ("pathlib", "PurePosixPath"),
+        ("pathlib", "PureWindowsPath"),
         # pathlib in Python 3.13+
         ("pathlib._local", "Path"),
         ("pathlib._local", "PosixPath"),
