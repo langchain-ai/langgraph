@@ -1235,3 +1235,30 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_serde_jsonplus_purepath() -> None:
+    """PurePath subclasses (PurePosixPath, PureWindowsPath) survive round-trip."""
+    serde = JsonPlusSerializer()
+
+    for p in [
+        pathlib.PurePosixPath("/tmp/foo/bar"),
+        pathlib.PurePosixPath("relative/path"),
+        pathlib.PurePosixPath("."),
+    ]:
+        assert serde.loads_typed(serde.dumps_typed(p)) == p
+
+
+def test_serde_jsonplus_range() -> None:
+    """range objects survive round-trip."""
+    serde = JsonPlusSerializer()
+
+    for r in [
+        range(10),
+        range(0, 10, 2),
+        range(5, 0, -1),
+        range(0),
+    ]:
+        result = serde.loads_typed(serde.dumps_typed(r))
+        assert result == r
+        assert isinstance(result, range)
