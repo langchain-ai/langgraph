@@ -127,6 +127,24 @@ def _get_node_name(node: StateNode[Any, ContextT]) -> str:
         raise TypeError(f"Unsupported node type: {type(node)}")
 
 
+def _extract_command_ends(command_arg: Any) -> tuple[Any, ...] | None:
+    """Extract the `goto` destinations declared in a `Command` type argument.
+
+    Accepts either a single `Literal["a", "b"]` or a union of literals such as
+    `Literal["a"] | Literal["b"]`, which the typing spec treats as equivalent.
+    Returns `None` when the destinations can't be read statically.
+    """
+    if get_origin(command_arg) is Literal:
+        return get_args(command_arg)
+    if get_origin(command_arg) is Union:
+        members = get_args(command_arg)
+        if all(get_origin(member) is Literal for member in members):
+            return (
+                tuple(value for member in members for value in get_args(member)) or None
+            )
+    return None
+
+
 class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
 
@@ -840,8 +858,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                     if (
                         rtn_origin is Command
                         and (rargs := get_args(rtn))
-                        and get_origin(rargs[0]) is Literal
-                        and (vals := get_args(rargs[0]))
+                        and (vals := _extract_command_ends(rargs[0])) is not None
                     ):
                         ends = vals
         except (NameError, TypeError, StopIteration):

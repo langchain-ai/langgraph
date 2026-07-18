@@ -2,7 +2,7 @@ import inspect
 import operator
 import warnings
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Union
+from typing import Annotated, Any, Literal, Union
 from typing import Annotated as Annotated2
 
 import pytest
@@ -14,10 +14,12 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.graph.state import (
     StateGraph,
+    _extract_command_ends,
     _get_node_name,
     _is_field_channel,
     _warn_invalid_state_schema,
 )
+from langgraph.types import Command
 
 
 class State(BaseModel):
@@ -371,3 +373,37 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+def test_extract_command_ends_handles_union_of_literals() -> None:
+    # A single Literal with multiple values.
+    assert _extract_command_ends(Literal["a", "b"]) == ("a", "b")
+    # A union of single-value Literals is equivalent per the typing spec.
+    assert _extract_command_ends(Literal["a"] | Literal["b"]) == ("a", "b")
+    assert _extract_command_ends(Union[Literal["a"], Literal["b"]]) == ("a", "b")  # noqa: UP007
+    # Not statically resolvable to a set of destinations.
+    assert _extract_command_ends(Literal["a"] | str) is None
+    assert _extract_command_ends(str) is None
+
+
+def test_command_return_hint_union_of_literals_infers_ends() -> None:
+    """Regression for edge inference (#8369): a node returning
+    Command[Literal["a"] | Literal["b"]] must expose the same destinations as
+    Command[Literal["a", "b"]], so conditional edges are inferred and drawn."""
+
+    class S(TypedDict):
+        x: str
+
+    def router(state: S) -> Command[Literal["a"] | Literal["b"]]:
+        return Command(goto="a")
+
+    union_builder = StateGraph(S)
+    union_builder.add_node(router)
+    assert union_builder.nodes["router"].ends == ("a", "b")
+
+    def router_single(state: S) -> Command[Literal["a", "b"]]:
+        return Command(goto="a")
+
+    single_builder = StateGraph(S)
+    single_builder.add_node("router", router_single)
+    assert single_builder.nodes["router"].ends == ("a", "b")
