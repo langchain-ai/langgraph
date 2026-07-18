@@ -2,7 +2,7 @@ import inspect
 import operator
 import warnings
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Union
+from typing import Annotated, Any, Literal, Union
 from typing import Annotated as Annotated2
 
 import pytest
@@ -18,6 +18,7 @@ from langgraph.graph.state import (
     _is_field_channel,
     _warn_invalid_state_schema,
 )
+from langgraph.types import Command
 
 
 class State(BaseModel):
@@ -133,6 +134,49 @@ def test_state_schema_with_type_hint():
             assert c[node_name] == foo_state
         else:
             assert c[node_name] == output_state
+
+
+def test_command_literal_union_infers_node_ends() -> None:
+    class State(TypedDict):
+        foo: str
+
+    def router_one_command(
+        state: State,
+    ) -> Command[Literal["foo", "bar"]]:
+        return Command(goto="foo")
+
+    def router_one_command_union_literal(
+        state: State,
+    ) -> Command[Literal["foo"] | Literal["bar"]]:
+        return Command(goto="foo")
+
+    def router_union_command(
+        state: State,
+    ) -> Command[Literal["foo"]] | Command[Literal["bar"]]:
+        return Command(goto="foo")
+
+    def node(state: State) -> State:
+        return state
+
+    for router in (
+        router_one_command,
+        router_one_command_union_literal,
+        router_union_command,
+    ):
+        builder = StateGraph(State)
+        builder.add_node("router", router)
+        builder.add_node("foo", node)
+        builder.add_node("bar", node)
+        builder.add_edge("__start__", "router")
+        builder.add_edge("foo", "__end__")
+        builder.add_edge("bar", "__end__")
+
+        graph = builder.compile().get_graph()
+
+        router_edges = {
+            edge.target for edge in graph.edges if edge.source == "router"
+        }
+        assert router_edges == {"foo", "bar"}
 
 
 @pytest.mark.parametrize("total_", [True, False])

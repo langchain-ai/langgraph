@@ -10,7 +10,7 @@ from dataclasses import dataclass, is_dataclass
 from datetime import timedelta
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
-from types import FunctionType
+from types import FunctionType, UnionType
 from types import NoneType as NoneType
 from typing import (
     Any,
@@ -96,6 +96,36 @@ logger = logging.getLogger(__name__)
 
 _CHANNEL_BRANCH_TO = "branch:to:{}"
 _DEFAULT_ERROR_HANDLER_NODE = "__default_error_handler__"
+
+
+def _is_union_type(hint: Any) -> bool:
+    return get_origin(hint) in (Union, UnionType)
+
+
+def _get_literal_values(hint: Any) -> tuple[str, ...]:
+    if get_origin(hint) is Literal:
+        return get_args(hint)
+
+    if _is_union_type(hint):
+        return tuple(
+            value for arg in get_args(hint) for value in _get_literal_values(arg)
+        )
+
+    return EMPTY_SEQ
+
+
+def _get_command_destinations(hint: Any) -> tuple[str, ...]:
+    if get_origin(hint) is Command and (command_args := get_args(hint)):
+        return _get_literal_values(command_args[0])
+
+    if _is_union_type(hint):
+        return tuple(
+            destination
+            for arg in get_args(hint)
+            for destination in _get_command_destinations(arg)
+        )
+
+    return EMPTY_SEQ
 
 
 @dataclass(slots=True)
@@ -824,26 +854,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                         if isinstance(input_hint, type) and get_type_hints(input_hint):
                             inferred_input_schema = input_hint
                 if rtn := hints.get("return"):
-                    # Handle Union types
-                    rtn_origin = get_origin(rtn)
-                    if rtn_origin is Union:
-                        rtn_args = get_args(rtn)
-                        # Look for Command in the union
-                        for arg in rtn_args:
-                            arg_origin = get_origin(arg)
-                            if arg_origin is Command:
-                                rtn = arg
-                                rtn_origin = arg_origin
-                                break
-
-                    # Check if it's a Command type
-                    if (
-                        rtn_origin is Command
-                        and (rargs := get_args(rtn))
-                        and get_origin(rargs[0]) is Literal
-                        and (vals := get_args(rargs[0]))
-                    ):
-                        ends = vals
+                    if destinations := _get_command_destinations(rtn):
+                        ends = destinations
         except (NameError, TypeError, StopIteration):
             pass
 
