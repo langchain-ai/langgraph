@@ -94,25 +94,32 @@ class AsyncPostgresSaver(BasePostgresSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        async with self._cursor() as cur:
-            await cur.execute(self.MIGRATIONS[0])
-            results = await cur.execute(
-                "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-            )
-            row = await results.fetchone()
-            if row is None:
-                version = -1
-            else:
-                version = row["v"]
-            for v, migration in zip(
-                range(version + 1, len(self.MIGRATIONS)),
-                self.MIGRATIONS[version + 1 :],
-                strict=False,
-            ):
-                await cur.execute(migration)
-                await cur.execute(
-                    "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
+        async def _run() -> None:
+            async with self._cursor() as cur:
+                await cur.execute(self.MIGRATIONS[0])
+                results = await cur.execute(
+                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
                 )
+                row = await results.fetchone()
+                if row is None:
+                    version = -1
+                else:
+                    version = row["v"]
+                for v, migration in zip(
+                    range(version + 1, len(self.MIGRATIONS)),
+                    self.MIGRATIONS[version + 1 :],
+                    strict=False,
+                ):
+                    await cur.execute(migration)
+                    await cur.execute(
+                        "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
+                    )
+        if self.pipe:
+            async with self.conn.pipeline() as pipe:
+                self.pipe = pipe  # update the stored pipe reference
+                await _run()
+        else:
+            await _run()
         if self.pipe:
             await self.pipe.sync()
 
