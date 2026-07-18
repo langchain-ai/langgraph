@@ -1446,6 +1446,18 @@ class CompiledStateGraph(
             if input is None:
                 return None
             elif isinstance(input, dict):
+                undeclared = [k for k in input if k not in output_keys]
+                if undeclared:
+                    warnings.warn(
+                        (
+                            f"Node '{key}' returned state keys not declared in the "
+                            f"graph state schema and they were ignored: {undeclared}. "
+                            "Add them to the state schema (or stop returning them) to "
+                            "persist these values."
+                        ),
+                        UserWarning,
+                        stacklevel=2,
+                    )
                 return [(k, v) for k, v in input.items() if k in output_keys]
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:
