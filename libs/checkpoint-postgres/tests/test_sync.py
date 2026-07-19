@@ -331,6 +331,47 @@ def test_pending_sends_migration(saver_name: str) -> None:
 
 
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+def test_pending_sends_migration_multiple_threads(saver_name: str) -> None:
+    """Regression test: listing checkpoints across multiple threads must
+    migrate pending sends for every thread, not just the first row's thread."""
+    with _saver(saver_name) as saver:
+        sends_by_thread = {
+            "thread-1": ["send-1", "send-2"],
+            "thread-2": ["send-3", "send-4"],
+        }
+        for thread_id, sends in sends_by_thread.items():
+            config = {
+                "configurable": {
+                    "thread_id": thread_id,
+                    "checkpoint_ns": "",
+                }
+            }
+            # create the first checkpoint and put some pending sends
+            checkpoint_0 = empty_checkpoint()
+            config = saver.put(config, checkpoint_0, {}, {})
+            saver.put_writes(config, [(TASKS, s) for s in sends], task_id="task-1")
+            # create the second checkpoint (pending sends attach to it)
+            checkpoint_1 = create_checkpoint(checkpoint_0, {}, 1)
+            saver.put(config, checkpoint_1, {}, {})
+
+        # list across all threads: each thread's second checkpoint must have
+        # its own migrated pending sends
+        search_results = list(saver.list(None))
+        assert len(search_results) == 4
+        migrated = [c for c in search_results if c.parent_config is not None]
+        assert len(migrated) == 2
+        channel_values_by_thread = {
+            c.config["configurable"]["thread_id"]: c.checkpoint["channel_values"]
+            for c in migrated
+        }
+        assert channel_values_by_thread == {
+            thread_id: {TASKS: sends} for thread_id, sends in sends_by_thread.items()
+        }
+        for c in migrated:
+            assert TASKS in c.checkpoint["channel_versions"]
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
 def test_get_checkpoint_no_channel_values(
     monkeypatch, saver_name: str, test_data
 ) -> None:
