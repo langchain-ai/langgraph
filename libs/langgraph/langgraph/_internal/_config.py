@@ -171,12 +171,15 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
                 if base_value := base.get(key):
                     base[key] = [*base_value, *value]  # type: ignore
                 else:
-                    base[key] = value  # type: ignore[literal-required]
+                    # copy, not alias: callers mutate merged configs in place,
+                    # which must not corrupt the input config's list
+                    base[key] = list(value)  # type: ignore[literal-required]
             elif key == CONF:
                 if base_value := base.get(key):
                     base[key] = {**base_value, **value}  # type: ignore[dict-item]
                 else:
-                    base[key] = value
+                    # copy, not alias: same reasoning as tags above
+                    base[key] = dict(value)
             elif key == "callbacks":
                 base["callbacks"] = _merge_callbacks(
                     base.get("callbacks"), cast(Callbacks, value)

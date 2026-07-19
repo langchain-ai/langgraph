@@ -610,6 +610,22 @@ def test_ensure_config_metadata_later_wins_per_key() -> None:
     assert merged["metadata"]["shared"] == "from_b"
 
 
+def test_merge_configs_copies_single_source_mutables() -> None:
+    """Mutating a merged config must never corrupt the input configs.
+
+    Regression: when only one input carried `configurable` or `tags`, the
+    merged config aliased that input's dict/list instead of copying it, so
+    in-place mutation of the merge result silently corrupted the caller's
+    (often shared parent) config.
+    """
+    c1: RunnableConfig = {"configurable": {"a": 1}, "tags": ["t1"]}
+    merged = merge_configs(c1, {"metadata": {"m": 1}})
+    merged["configurable"]["b"] = 2
+    merged["tags"].append("t2")
+    assert c1["configurable"] == {"a": 1}
+    assert c1["tags"] == ["t1"]
+
+
 def test_merge_configs_merges_metadata_lc_versions() -> None:
     a = {
         "metadata": {
