@@ -159,9 +159,14 @@ async def monitor_stream(
             overrun = False
         except asyncio.LimitOverrunError as e:
             if stream._buffer.startswith(sep, e.consumed):
-                line = stream._buffer[: e.consumed + seplen]
+                line = bytes(stream._buffer[: e.consumed + seplen])
+                # remove the consumed bytes, otherwise the next readuntil()
+                # raises the same LimitOverrunError forever (infinite loop)
+                del stream._buffer[: e.consumed + seplen]
             else:
-                line = stream._buffer.clear()
+                # bytearray.clear() returns None, so capture the bytes first
+                line = bytes(stream._buffer)
+                stream._buffer.clear()
             overrun = True
             stream._maybe_resume_transport()
         await asyncio.to_thread(handle, line, overrun)
