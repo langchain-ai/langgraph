@@ -582,6 +582,9 @@ def run_with_retry(
         # this is a runtime safety net for paths that may bypass that validation.
         raise sync_timeout_unsupported(task.name)
     attempts = 0
+    # failed tries per policy (keyed by index in retry_policy) — kept separate
+    # from `attempts` so each policy spends only its own max_attempts budget
+    policy_attempts: dict[int, int] = {}
     node_first_attempt_time = time.time()
     config = task.config
     if configurable is not None:
@@ -644,33 +647,12 @@ def run_with_retry(
             if not retry_policy:
                 raise
 
-            # Check which retry policy applies to this exception
-            matching_policy = None
-            for policy in retry_policy:
-                if _should_retry_on(policy, exc):
-                    matching_policy = policy
-                    break
-
-            if not matching_policy:
+            sleep_time = _next_retry_delay(retry_policy, exc, policy_attempts)
+            if sleep_time is None:
+                # no policy matches, or the matching policy is out of attempts
                 raise
-
             # attempts tracks failed tries only; it increments after a failure.
             attempts += 1
-            # check if we should give up
-            if attempts >= matching_policy.max_attempts:
-                raise
-            # sleep before retrying
-            interval = matching_policy.initial_interval
-            # Apply backoff factor based on attempt count
-            interval = min(
-                matching_policy.max_interval,
-                interval * (matching_policy.backoff_factor ** (attempts - 1)),
-            )
-
-            # Apply jitter if configured
-            sleep_time = (
-                interval + random.uniform(0, 1) if matching_policy.jitter else interval
-            )
             time.sleep(sleep_time)
 
             # log the retry
@@ -696,6 +678,9 @@ async def arun_with_retry(
         _resolve_timeout(task.timeout) if task.timeout is not None else None
     )
     attempts = 0
+    # failed tries per policy (keyed by index in retry_policy) — kept separate
+    # from `attempts` so each policy spends only its own max_attempts budget
+    policy_attempts: dict[int, int] = {}
     node_first_attempt_time = time.time()
     config = task.config
     if configurable is not None:
@@ -799,34 +784,13 @@ async def arun_with_retry(
             if not retry_policy:
                 raise
 
-            # Check which retry policy applies to this exception
-            matching_policy = None
-            for policy in retry_policy:
-                if _should_retry_on(policy, exc):
-                    matching_policy = policy
-                    break
-
-            if not matching_policy:
+            sleep_time = _next_retry_delay(retry_policy, exc, policy_attempts)
+            if sleep_time is None:
+                # no policy matches, or the matching policy is out of attempts
                 raise
-
             # attempts tracks failed tries only; it increments after a failure.
             # The next execution's node_attempt is derived as attempts + 1.
             attempts += 1
-            # check if we should give up
-            if attempts >= matching_policy.max_attempts:
-                raise
-            # sleep before retrying
-            interval = matching_policy.initial_interval
-            # Apply backoff factor based on attempt count
-            interval = min(
-                matching_policy.max_interval,
-                interval * (matching_policy.backoff_factor ** (attempts - 1)),
-            )
-
-            # Apply jitter if configured
-            sleep_time = (
-                interval + random.uniform(0, 1) if matching_policy.jitter else interval
-            )
             await asyncio.sleep(sleep_time)
 
             # log the retry
@@ -836,6 +800,34 @@ async def arun_with_retry(
             )
             # signal subgraphs to resume (if available)
             config = patch_configurable(config, {CONFIG_KEY_RESUMING: True})
+
+
+def _next_retry_delay(
+    retry_policy: Sequence[RetryPolicy],
+    exc: Exception,
+    policy_attempts: dict[int, int],
+) -> float | None:
+    """Return the sleep before the next retry, or None if `exc` must not be retried.
+
+    Attempts are tracked per policy (keyed by position in `retry_policy` via
+    `policy_attempts`) so that one policy's failures never consume another
+    policy's `max_attempts` budget or inflate its backoff — a node that
+    exhausts retries for `ValueError` still gets the full budget when it later
+    raises `KeyError`.
+    """
+    for idx, policy in enumerate(retry_policy):
+        if _should_retry_on(policy, exc):
+            break
+    else:
+        return None
+    attempts = policy_attempts[idx] = policy_attempts.get(idx, 0) + 1
+    if attempts >= policy.max_attempts:
+        return None
+    interval = min(
+        policy.max_interval,
+        policy.initial_interval * policy.backoff_factor ** (attempts - 1),
+    )
+    return interval + random.uniform(0, 1) if policy.jitter else interval
 
 
 def _should_retry_on(retry_policy: RetryPolicy, exc: Exception) -> bool:

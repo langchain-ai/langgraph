@@ -50,6 +50,7 @@ from langgraph.pregel._read import PregelNode
 from langgraph.pregel._retry import (
     _checkpoint_ns_for_parent_command,
     _ensure_execution_info,
+    _next_retry_delay,
     _should_retry_on,
     _TimedAttemptScope,
     arun_with_retry,
@@ -441,6 +442,87 @@ def test_graph_with_multiple_retry_policies():
 
     assert attempt_counts["key_error"] == 3
     assert result_key_error["foo"] == "recovered_from_key_error"
+
+
+def test_multiple_retry_policies_use_independent_budgets():
+    """Each policy spends only its own max_attempts budget.
+
+    Regression: a single shared attempts counter meant earlier failures under
+    one policy consumed another policy's budget — after two ValueErrors, the
+    first KeyError was already "attempt 3", so a max_attempts=3 KeyError
+    policy gave up without retrying it even once.
+    """
+
+    class State(TypedDict):
+        foo: str
+
+    errors = deque([ValueError("v1"), ValueError("v2"), KeyError("k1"), KeyError("k2")])
+
+    def flaky(state):
+        if errors:
+            raise errors.popleft()
+        return {"foo": "recovered"}
+
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "flaky",
+            flaky,
+            retry_policy=(
+                RetryPolicy(
+                    max_attempts=5,
+                    initial_interval=0.01,
+                    jitter=False,
+                    retry_on=ValueError,
+                ),
+                RetryPolicy(
+                    max_attempts=3,
+                    initial_interval=0.01,
+                    jitter=False,
+                    retry_on=KeyError,
+                ),
+            ),
+        )
+        .add_edge(START, "flaky")
+        .compile()
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke({"foo": ""})
+
+    assert result["foo"] == "recovered"
+    assert not errors
+
+
+def test_next_retry_delay_tracks_backoff_per_policy():
+    """Backoff escalation for one policy must not inflate another's."""
+    policies = [
+        RetryPolicy(
+            max_attempts=10,
+            initial_interval=1.0,
+            backoff_factor=2.0,
+            max_interval=100.0,
+            jitter=False,
+            retry_on=ValueError,
+        ),
+        RetryPolicy(
+            max_attempts=10,
+            initial_interval=1.0,
+            backoff_factor=2.0,
+            max_interval=100.0,
+            jitter=False,
+            retry_on=KeyError,
+        ),
+    ]
+    counts: dict[int, int] = {}
+    # consecutive ValueError failures escalate the first policy's backoff
+    assert _next_retry_delay(policies, ValueError(), counts) == 1.0
+    assert _next_retry_delay(policies, ValueError(), counts) == 2.0
+    assert _next_retry_delay(policies, ValueError(), counts) == 4.0
+    # the first KeyError starts at the beginning of its own schedule
+    assert _next_retry_delay(policies, KeyError(), counts) == 1.0
+    # an unmatched exception is never retried
+    assert _next_retry_delay(policies, TypeError(), counts) is None
 
 
 def test_graph_with_max_attempts_exceeded():
