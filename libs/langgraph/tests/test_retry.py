@@ -525,6 +525,145 @@ def test_next_retry_delay_tracks_backoff_per_policy():
     assert _next_retry_delay(policies, TypeError(), counts) is None
 
 
+def test_multiple_retry_policies_respect_overall_attempt_ceiling():
+    """Total executions never exceed the most permissive policy's max_attempts.
+
+    Per-policy budgets alone would allow up to `1 + sum(max_attempts_i - 1)`
+    executions; the overall safeguard keeps the documented per-node ceiling
+    ("including the first") at `max(max_attempts)` — the same worst-case bound
+    as the original single-counter implementation.
+    """
+
+    class State(TypedDict):
+        foo: str
+
+    executions = {"count": 0}
+
+    def alternating(state):
+        executions["count"] += 1
+        if executions["count"] % 2 == 1:
+            raise ValueError(f"exec {executions['count']}")
+        raise KeyError(f"exec {executions['count']}")
+
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "alternating",
+            alternating,
+            retry_policy=(
+                RetryPolicy(
+                    max_attempts=3,
+                    initial_interval=0.01,
+                    jitter=False,
+                    retry_on=ValueError,
+                ),
+                RetryPolicy(
+                    max_attempts=3,
+                    initial_interval=0.01,
+                    jitter=False,
+                    retry_on=KeyError,
+                ),
+            ),
+        )
+        .add_edge(START, "alternating")
+        .compile()
+    )
+
+    with patch("time.sleep"), pytest.raises(ValueError):
+        graph.invoke({"foo": ""})
+
+    assert executions["count"] == 3
+
+
+def test_multiple_retry_policies_exhaust_after_cross_policy_transition():
+    """A policy's own budget still gives up correctly after switching policies."""
+
+    class State(TypedDict):
+        foo: str
+
+    errors = deque([ValueError("v1"), KeyError("k1"), KeyError("k2")])
+
+    def flaky(state):
+        if errors:
+            raise errors.popleft()
+        return {"foo": "unreachable"}
+
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "flaky",
+            flaky,
+            retry_policy=(
+                RetryPolicy(
+                    max_attempts=5,
+                    initial_interval=0.01,
+                    jitter=False,
+                    retry_on=ValueError,
+                ),
+                RetryPolicy(
+                    max_attempts=2,
+                    initial_interval=0.01,
+                    jitter=False,
+                    retry_on=KeyError,
+                ),
+            ),
+        )
+        .add_edge(START, "flaky")
+        .compile()
+    )
+
+    # KeyError budget (max_attempts=2) exhausts on its own second failure,
+    # well under both the ValueError budget and the overall ceiling.
+    with patch("time.sleep"), pytest.raises(KeyError, match="k2"):
+        graph.invoke({"foo": ""})
+    assert len(errors) == 0
+
+
+@pytest.mark.anyio
+async def test_multiple_retry_policies_use_independent_budgets_async():
+    """Async counterpart of the independent-budgets regression test."""
+
+    class State(TypedDict):
+        foo: str
+
+    errors = deque([ValueError("v1"), ValueError("v2"), KeyError("k1"), KeyError("k2")])
+
+    async def flaky(state):
+        if errors:
+            raise errors.popleft()
+        return {"foo": "recovered"}
+
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "flaky",
+            flaky,
+            retry_policy=(
+                RetryPolicy(
+                    max_attempts=5,
+                    initial_interval=0.01,
+                    jitter=False,
+                    retry_on=ValueError,
+                ),
+                RetryPolicy(
+                    max_attempts=3,
+                    initial_interval=0.01,
+                    jitter=False,
+                    retry_on=KeyError,
+                ),
+            ),
+        )
+        .add_edge(START, "flaky")
+        .compile()
+    )
+
+    with patch("asyncio.sleep"):
+        result = await graph.ainvoke({"foo": ""})
+
+    assert result["foo"] == "recovered"
+    assert not errors
+
+
 def test_graph_with_max_attempts_exceeded():
     """Test a graph where max_attempts is exceeded."""
 

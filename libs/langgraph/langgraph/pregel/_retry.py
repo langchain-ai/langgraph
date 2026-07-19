@@ -814,6 +814,15 @@ def _next_retry_delay(
     policy's `max_attempts` budget or inflate its backoff — a node that
     exhausts retries for `ValueError` still gets the full budget when it later
     raises `KeyError`.
+
+    Independent budgets are additionally bounded by an overall safeguard: the
+    total failed tries across all policies never reach the most permissive
+    policy's `max_attempts`. This preserves the documented per-node ceiling
+    ("maximum number of attempts ... including the first") — total executions
+    never exceed `max(max_attempts)` — which is the same worst-case bound the
+    single-counter implementation had, while still letting a late-appearing
+    exception type spend its own budget up to that ceiling instead of being
+    denied retries by another policy's failures.
     """
     for idx, policy in enumerate(retry_policy):
         if _should_retry_on(policy, exc):
@@ -822,6 +831,10 @@ def _next_retry_delay(
         return None
     attempts = policy_attempts[idx] = policy_attempts.get(idx, 0) + 1
     if attempts >= policy.max_attempts:
+        return None
+    # Overall safeguard: only failures that matched a policy are counted, so
+    # the sum across policies is the node's total failed tries.
+    if sum(policy_attempts.values()) >= max(p.max_attempts for p in retry_policy):
         return None
     interval = min(
         policy.max_interval,
