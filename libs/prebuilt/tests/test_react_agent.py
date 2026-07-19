@@ -2154,3 +2154,118 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
+
+class _StateWithPlainRemainingSteps(TypedDict):
+    """State schema with a regular (non-managed) `remaining_steps` channel.
+
+    Allows tests to set `remaining_steps` directly in the input, which is not
+    possible with the managed `RemainingSteps` value.
+    """
+
+    messages: Annotated[list[AnyMessage], add_messages]
+    remaining_steps: int
+
+
+@dec_tool
+def _echo_weather(city: str) -> str:
+    """Get the weather in a city."""
+    return "sunny"
+
+
+@dec_tool(return_direct=True)
+def _echo_weather_direct(city: str) -> str:
+    """Get the weather in a city."""
+    return "sunny"
+
+
+def test_final_answer_preserved_when_remaining_steps_exhausted() -> None:
+    """A response with no tool calls is a final answer and must be kept even
+    when `remaining_steps` is exhausted (previously `all([])` made
+    `all_tools_return_direct` truthy and replaced it with a 'Sorry' message)."""
+    model = FakeToolCallingModel()  # never emits tool calls
+    agent = create_react_agent(
+        model, [_echo_weather], state_schema=_StateWithPlainRemainingSteps
+    )
+    result = agent.invoke(
+        {"messages": [HumanMessage("what is the weather?")], "remaining_steps": 0}
+    )
+    last_message = result["messages"][-1]
+    assert last_message.content == "what is the weather?"
+    assert "Sorry, need more steps" not in last_message.content
+
+
+async def test_final_answer_preserved_when_remaining_steps_exhausted_async() -> None:
+    """Async variant of the final-answer preservation test."""
+    model = FakeToolCallingModel()
+    agent = create_react_agent(
+        model, [_echo_weather], state_schema=_StateWithPlainRemainingSteps
+    )
+    result = await agent.ainvoke(
+        {"messages": [HumanMessage("what is the weather?")], "remaining_steps": 0}
+    )
+    last_message = result["messages"][-1]
+    assert last_message.content == "what is the weather?"
+    assert "Sorry, need more steps" not in last_message.content
+
+
+def test_return_direct_tool_calls_still_blocked_when_out_of_steps() -> None:
+    """A response whose tool calls are all `return_direct` at
+    `remaining_steps < 1` must still be replaced with the 'Sorry' message."""
+    model = FakeToolCallingModel(
+        tool_calls=[
+            [{"args": {"city": "sf"}, "id": "1", "name": "_echo_weather_direct"}],
+            [],
+        ]
+    )
+    agent = create_react_agent(
+        model, [_echo_weather_direct], state_schema=_StateWithPlainRemainingSteps
+    )
+    result = agent.invoke(
+        {"messages": [HumanMessage("what is the weather?")], "remaining_steps": 0}
+    )
+    last_message = result["messages"][-1]
+    assert last_message.content == "Sorry, need more steps to process this request."
+
+
+def test_route_tool_responses_empty_messages() -> None:
+    """`route_tool_responses` must raise a clear ValueError on empty messages
+    instead of an unbound-variable NameError."""
+    model = FakeToolCallingModel(
+        tool_calls=[
+            [{"args": {"city": "sf"}, "id": "1", "name": "_echo_weather_direct"}],
+            [],
+        ]
+    )
+    # a `return_direct` tool is required for the `route_tool_responses`
+    # conditional edge to be added
+    agent = create_react_agent(model, [_echo_weather_direct])
+    route = agent.builder.branches["tools"]["route_tool_responses"].path
+    with pytest.raises(ValueError, match="No messages found in state"):
+        route.invoke({"messages": []})
+
+
+def test_post_model_hook_router_no_ai_message() -> None:
+    """`post_model_hook_router` must not crash when the post model hook
+    removed all messages (no AIMessage left): the run ends gracefully."""
+
+    def post_model_hook(state: dict) -> dict:
+        return {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]}
+
+    model = FakeToolCallingModel()  # plain answer, no tool calls
+    agent = create_react_agent(model, [_echo_weather], post_model_hook=post_model_hook)
+    result = agent.invoke({"messages": [HumanMessage("hi")]})
+    # all messages were removed by the hook and the graph ended without error
+    assert result["messages"] == []
+
+
+def test_post_model_hook_router_no_ai_message_direct() -> None:
+    """Direct check: the router returns END when no AIMessage is in state."""
+
+    def post_model_hook(state: dict) -> dict:
+        return {}
+
+    model = FakeToolCallingModel()
+    agent = create_react_agent(model, [_echo_weather], post_model_hook=post_model_hook)
+    route = agent.builder.branches["post_model_hook"]["post_model_hook_router"].path
+    assert route.invoke({"messages": []}) == "__end__"

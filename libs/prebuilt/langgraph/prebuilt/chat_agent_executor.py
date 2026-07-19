@@ -626,7 +626,7 @@ def create_react_agent(
         )
         remaining_steps = _get_state_value(state, "remaining_steps", None)
         if remaining_steps is not None:
-            if remaining_steps < 1 and all_tools_return_direct:
+            if remaining_steps < 1 and has_tool_calls and all_tools_return_direct:
                 return True
             elif remaining_steps < 2 and has_tool_calls:
                 return True
@@ -930,11 +930,13 @@ def create_react_agent(
                 m.tool_call_id for m in messages if isinstance(m, ToolMessage)
             ]
             last_ai_message = next(
-                m for m in reversed(messages) if isinstance(m, AIMessage)
+                (m for m in reversed(messages) if isinstance(m, AIMessage)), None
             )
-            pending_tool_calls = [
-                c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
-            ]
+            pending_tool_calls = (
+                [c for c in last_ai_message.tool_calls if c["id"] not in tool_messages]
+                if last_ai_message is not None
+                else []
+            )
 
             if pending_tool_calls:
                 return [
@@ -948,7 +950,7 @@ def create_react_agent(
                     )
                     for call in pending_tool_calls
                 ]
-            elif isinstance(messages[-1], ToolMessage):
+            elif messages and isinstance(messages[-1], ToolMessage):
                 return entrypoint
             elif response_format is not None:
                 return "generate_structured_response"
@@ -968,7 +970,11 @@ def create_react_agent(
     )
 
     def route_tool_responses(state: StateSchema) -> str:
-        for m in reversed(_get_state_value(state, "messages")):
+        messages = _get_state_value(state, "messages")
+        if not messages:
+            msg = "No messages found in state"
+            raise ValueError(msg)
+        for m in reversed(messages):
             if not isinstance(m, ToolMessage):
                 break
             if m.name in should_return_direct:
