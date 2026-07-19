@@ -2579,6 +2579,44 @@ def test_set_node_defaults_error_handler_collides_with_user_node():
         builder.compile()
 
 
+def test_set_node_defaults_error_handler_compile_twice():
+    """compile() must not mutate the builder: the auto-generated default error
+    handler node must not leak into `builder.nodes`, and compiling the same
+    builder multiple times (e.g. once bare, once with a checkpointer) works."""
+
+    class State(TypedDict):
+        foo: str
+
+    def always_failing(state: State) -> State:
+        raise RuntimeError("boom")
+
+    def default_handler(state: State, error: NodeError) -> State:
+        return {"foo": f"handled_{error.node}"}
+
+    builder = (
+        StateGraph(State)
+        .set_node_defaults(error_handler=default_handler)
+        .add_node("always_failing", always_failing)
+        .add_edge(START, "always_failing")
+    )
+
+    graph1 = builder.compile()
+    # the builder must not be polluted by compile()
+    assert "__default_error_handler__" not in builder.nodes
+    assert builder.nodes["always_failing"].error_handler_node is None
+
+    # second compile of the same builder (supported pattern) must not raise
+    graph2 = builder.compile(checkpointer=MemorySaver())
+    assert "__default_error_handler__" not in builder.nodes
+
+    # both compiled graphs route failures to the default handler
+    assert graph1.invoke({"foo": ""})["foo"] == "handled_always_failing"
+    result2 = graph2.invoke(
+        {"foo": ""}, config={"configurable": {"thread_id": str(uuid4())}}
+    )
+    assert result2["foo"] == "handled_always_failing"
+
+
 def test_set_node_defaults_retry_policy():
     class State(TypedDict):
         foo: str
