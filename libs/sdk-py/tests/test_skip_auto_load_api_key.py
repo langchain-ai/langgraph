@@ -3,6 +3,7 @@
 import pytest
 
 from langgraph_sdk import get_client, get_sync_client
+from langgraph_sdk._shared.utilities import _get_headers
 
 
 class TestSkipAutoLoadApiKey:
@@ -68,3 +69,45 @@ class TestSkipAutoLoadApiKey:
         assert "x-api-key" in client.http.client.headers
         assert client.http.client.headers["x-api-key"] == "explicit-key"
         client.close()
+
+
+class TestReservedHeaders:
+    """Reserved headers must be rejected regardless of the caller's casing."""
+
+    def test_get_headers_rejects_lowercase_reserved_header(self):
+        with pytest.raises(ValueError, match="x-api-key"):
+            _get_headers("explicit-key", {"x-api-key": "sneaky"})
+
+    @pytest.mark.parametrize("name", ["X-Api-Key", "X-API-KEY", "x-API-key"])
+    def test_get_headers_rejects_mixed_case_reserved_header(self, name):
+        """HTTP header names are case-insensitive; casing must not bypass the guard."""
+        with pytest.raises(ValueError, match=name):
+            _get_headers("explicit-key", {name: "sneaky"})
+
+    @pytest.mark.parametrize("name", ["x-api-key", "X-Api-Key"])
+    def test_get_headers_rejects_reserved_header_without_api_key(self, name):
+        """The guard applies even when no api_key is supplied (current intent)."""
+        with pytest.raises(ValueError, match=r"(?i)x-api-key"):
+            _get_headers(None, {name: "sneaky"})
+
+    @pytest.mark.asyncio
+    async def test_get_client_rejects_mixed_case_reserved_header(self):
+        with pytest.raises(ValueError, match="X-Api-Key"):
+            get_client(
+                url="http://localhost:8123",
+                api_key="explicit-key",
+                headers={"X-Api-Key": "sneaky"},
+            )
+
+    def test_get_sync_client_rejects_mixed_case_reserved_header(self):
+        with pytest.raises(ValueError, match="X-Api-Key"):
+            get_sync_client(
+                url="http://localhost:8123",
+                api_key="explicit-key",
+                headers={"X-Api-Key": "sneaky"},
+            )
+
+    def test_non_reserved_headers_pass_through(self):
+        headers = _get_headers("explicit-key", {"X-Custom": "ok"})
+        assert headers["X-Custom"] == "ok"
+        assert headers["x-api-key"] == "explicit-key"
