@@ -4,7 +4,6 @@ import os
 import pathlib
 import platform
 import threading
-import urllib.error
 import urllib.request
 from typing import Any, TypedDict
 
@@ -15,6 +14,11 @@ from langgraph_cli.constants import (
     SUPABASE_URL,
 )
 from langgraph_cli.version import __version__
+
+# Upper bound (seconds) on the telemetry POST so an unreachable host can't hang
+# the CLI. The default socket timeout is None (block forever), which combined
+# with a non-daemon worker thread would stall interpreter exit.
+ANALYTICS_TIMEOUT_SECONDS = 1.0
 
 
 class LogData(TypedDict):
@@ -78,8 +82,12 @@ def log_data(data: LogData) -> None:
     )
 
     try:
-        urllib.request.urlopen(req)
-    except urllib.error.URLError:
+        # Bound the request so a black-holed/unreachable telemetry host cannot
+        # block the worker thread (and, in turn, interpreter exit) indefinitely.
+        urllib.request.urlopen(req, timeout=ANALYTICS_TIMEOUT_SECONDS)
+    except Exception:
+        # Telemetry is best-effort and must never surface to the user; swallow
+        # every failure (network errors, timeouts, unexpected responses).
         pass
 
 
@@ -98,7 +106,9 @@ def log_command(func):
             "params": get_anonymized_params(kwargs, cli_command=func.__name__),
         }
 
-        background_thread = threading.Thread(target=log_data, args=(data,))
+        # daemon=True so a slow/hung telemetry request never keeps the
+        # interpreter alive after the command's own work is done.
+        background_thread = threading.Thread(target=log_data, args=(data,), daemon=True)
         background_thread.start()
         return func(*args, **kwargs)
 
