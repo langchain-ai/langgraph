@@ -138,10 +138,12 @@ async def monitor_stream(
 
         if display:
             sys.stdout.buffer.write(line)
-        if overrun:
-            return
         if collect:
+            # collect overrun chunks too, so the returned output is complete
             ba.extend(line)
+        if overrun:
+            # skip on_line for partial chunks — it expects whole lines
+            return
         if on_line:
             if on_line(line.decode()):
                 on_line = None

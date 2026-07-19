@@ -55,12 +55,12 @@ async def test_monitor_stream_overrun_without_separator_passes_bytes() -> None:
     assert payload in displayed, (
         f"oversized chunk was dropped; displayed only {displayed!r}"
     )
-    # overrun chunks are intentionally excluded from the collected output
-    assert result == b""
+    # overrun chunks are collected too, so returned output is complete
+    assert bytes(result) == payload
 
 
 async def test_monitor_stream_overrun_with_separator_after_limit() -> None:
-    """Separator found beyond the limit: line up to the separator is kept."""
+    """Separator found beyond the limit: full output is collected."""
     limit = 8
     stream = asyncio.StreamReader(limit=limit)
     long_line = b"y" * (limit * 3) + b"\n"
@@ -68,9 +68,28 @@ async def test_monitor_stream_overrun_with_separator_after_limit() -> None:
     stream.feed_eof()
 
     collected = await monitor_stream(stream, collect=True, display=False)
-    # non-overrun data after the long line is still collected
+    # the oversized line and the data after it are both collected
     assert collected is not None
-    assert b"tail\n" in bytes(collected)
+    assert bytes(collected) == long_line + b"tail\n"
+
+
+async def test_monitor_stream_collect_preserves_oversized_chunks() -> None:
+    """Regression test: `collect=True` must not silently drop oversized lines.
+
+    Previously `handle()` returned on overrun before `ba.extend(line)`, so
+    `subp_exec(..., collect=True, verbose=False)` lost every line longer
+    than the stream limit.
+    """
+    limit = 8
+    stream = asyncio.StreamReader(limit=limit)
+    stream.feed_data(b"x" * 24 + b"\n" + b"tail\n")
+    stream.feed_eof()
+
+    collected = await monitor_stream(stream, collect=True, display=False)
+    assert collected is not None
+    out = bytes(collected)
+    assert out.count(b"x") == 24, f"lost oversized data: {out!r}"
+    assert b"tail\n" in out
 
 
 async def test_monitor_stream_plain_lines_collected() -> None:
