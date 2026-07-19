@@ -6,7 +6,7 @@ import re
 import shlex
 import textwrap
 from collections import Counter
-from typing import Literal, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 import click
 import httpx
@@ -1129,36 +1129,51 @@ def _build_python_install_commands(
     return local_reqs_pip_install, global_reqs_pip_install, pip_config_file_str
 
 
+def _json_env_value(obj: Any) -> str:
+    """Serialize `obj` to JSON safe to wrap in single quotes in a Dockerfile.
+
+    `json.dumps` does not escape ASCII single quotes, so a `'` inside any
+    config value would terminate the surrounding quote in `ENV KEY='...'`,
+    breaking the build (and allowing Dockerfile line injection). Escape it
+    as `\\u0027`, which is a valid JSON string escape: `json.loads`
+    round-trips it, so consumers parsing the env var as JSON see the
+    original value. Output is unchanged for values without single quotes.
+    """
+    return json.dumps(obj).replace("'", "\\u0027")
+
+
 def _build_runtime_env_vars(config: Config) -> list[str]:
     env_vars = []
 
     if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
+        env_vars.append(f"ENV LANGGRAPH_STORE='{_json_env_value(store_config)}'")
 
     if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
+        env_vars.append(f"ENV LANGGRAPH_AUTH='{_json_env_value(auth_config)}'")
 
     if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
+        env_vars.append(
+            f"ENV LANGGRAPH_ENCRYPTION='{_json_env_value(encryption_config)}'"
+        )
 
     if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
+        env_vars.append(f"ENV LANGGRAPH_HTTP='{_json_env_value(http_config)}'")
 
     if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
+        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{_json_env_value(webhooks_config)}'")
 
     if (checkpointer_config := config.get("checkpointer")) is not None:
         env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
+            f"ENV LANGGRAPH_CHECKPOINTER='{_json_env_value(checkpointer_config)}'"
         )
 
     if (ui := config.get("ui")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
+        env_vars.append(f"ENV LANGGRAPH_UI='{_json_env_value(ui)}'")
 
     if (ui_config := config.get("ui_config")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
+        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{_json_env_value(ui_config)}'")
 
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{_json_env_value(config['graphs'])}'")
     return env_vars
 
 

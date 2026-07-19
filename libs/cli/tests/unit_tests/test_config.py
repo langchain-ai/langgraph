@@ -11,7 +11,9 @@ import pytest
 
 from langgraph_cli.config import (
     _BUILD_TOOLS,
+    _build_runtime_env_vars,
     _get_pip_cleanup_lines,
+    _json_env_value,
     config_to_compose,
     config_to_docker,
     default_base_image,
@@ -3424,3 +3426,62 @@ class TestHasDisallowedBuildCommandContent:
     )
     def test_valid_commands_allowed(self, cmd: str) -> None:
         assert not has_disallowed_build_command_content(cmd)
+
+
+class TestRuntimeEnvVarQuoting:
+    """Single quotes in config values must not break Dockerfile ENV quoting.
+
+    `json.dumps` does not escape `'`, so `ENV KEY='{json}'` was terminated
+    early by any apostrophe in a config value. `_json_env_value` escapes it
+    as `\\u0027`, which `json.loads` round-trips.
+    """
+
+    def _payload(self, env_line: str, key: str) -> str:
+        prefix = f"ENV {key}='"
+        assert env_line.startswith(prefix), env_line
+        assert env_line.endswith("'"), env_line
+        return env_line[len(prefix) : -1]
+
+    def test_single_quote_in_store_field(self) -> None:
+        config = validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "store": {"index": {"embed": "./emb.py:embed", "fields": ["O'Brien"]}},
+            }
+        )
+        env_vars = _build_runtime_env_vars(config)
+        store_line = next(line for line in env_vars if "LANGGRAPH_STORE" in line)
+        payload = self._payload(store_line, "LANGGRAPH_STORE")
+        # no raw single quote inside the single-quoted JSON payload
+        assert "'" not in payload
+        # json.loads round-trips the original value
+        assert json.loads(payload) == config["store"]
+        assert json.loads(payload)["index"]["fields"] == ["O'Brien"]
+
+    def test_single_quote_in_graph_id(self) -> None:
+        config = validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": {"O'Brien": "./agent.py:graph"},
+            }
+        )
+        env_vars = _build_runtime_env_vars(config)
+        graphs_line = next(line for line in env_vars if "LANGSERVE_GRAPHS" in line)
+        payload = self._payload(graphs_line, "LANGSERVE_GRAPHS")
+        assert "'" not in payload
+        assert json.loads(payload) == {"O'Brien": "./agent.py:graph"}
+
+    def test_output_unchanged_without_single_quotes(self) -> None:
+        obj = {"agent": "./agent.py:graph", "n": 3, "nested": {"a": [1, 2]}}
+        assert _json_env_value(obj) == json.dumps(obj)
+
+    def test_control_chars_and_backslashes_stay_escaped(self) -> None:
+        obj = {"k": "line1\nline2\ttab\\slash'quote"}
+        payload = _json_env_value(obj)
+        # json.dumps escapes control characters; no raw newline, tab or
+        # single quote may reach the Dockerfile line
+        assert "\n" not in payload
+        assert "\t" not in payload
+        assert "'" not in payload
+        assert json.loads(payload) == obj
