@@ -1196,6 +1196,9 @@ class ToolNode(RunnableCallable):
     ) -> tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         input_type: Literal["list", "dict", "tool_calls"]
         if isinstance(input, list):
+            if not input:
+                msg = "No message found in input"
+                raise ValueError(msg)
             if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
                 input_type = "tool_calls"
                 tool_calls = cast("list[ToolCall]", input)
@@ -1614,7 +1617,7 @@ def tools_condition(
         tool calls are present, which is the standard output format for tool-calling
         language models.
     """
-    if isinstance(state, list):
+    if isinstance(state, list) and state:
         ai_message = state[-1]
     elif (isinstance(state, dict) and (messages := state.get(messages_key, []))) or (
         messages := getattr(state, messages_key, [])

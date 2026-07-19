@@ -2428,3 +2428,37 @@ def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     tool_call_ids = {m.tool_call_id for m in all_msgs}
     assert list_tool_id in tool_call_ids
     assert regular_tool_id in tool_call_ids
+
+
+@dec_tool
+def _simple_add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
+
+
+def test_tool_node_empty_list_input() -> None:
+    """An empty message list must raise the intended 'No message found in
+    input' ValueError instead of an IndexError from `input[-1]`."""
+    node = ToolNode([_simple_add])
+    with pytest.raises(ValueError, match="No message found in input"):
+        node.invoke([], _create_config_with_runtime())
+
+
+async def test_tool_node_empty_list_input_async() -> None:
+    """Async variant of the empty message list guard."""
+    node = ToolNode([_simple_add])
+    with pytest.raises(ValueError, match="No message found in input"):
+        await node.ainvoke([], _create_config_with_runtime())
+
+
+def test_tools_condition_empty_list() -> None:
+    """An empty message list must follow the same 'no messages' ValueError
+    path as the dict/attr branches instead of raising an IndexError."""
+    with pytest.raises(ValueError, match="No messages found in input state"):
+        tools_condition([])
+
+
+def test_tools_condition_empty_dict_messages() -> None:
+    """Sanity check: empty dict state raises the same ValueError."""
+    with pytest.raises(ValueError, match="No messages found in input state"):
+        tools_condition({"messages": []})
