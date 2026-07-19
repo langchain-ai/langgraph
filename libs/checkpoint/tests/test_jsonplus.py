@@ -580,9 +580,9 @@ def test_lc2_json_safe_type_pickle_payload_does_not_execute() -> None:
     except Exception:
         pass
 
-    assert not os.path.exists(marker), (
-        "Pickle gadget executed via parse_raw on AIMessage lc=2 envelope"
-    )
+    assert not os.path.exists(
+        marker
+    ), "Pickle gadget executed via parse_raw on AIMessage lc=2 envelope"
 
 
 def test_serde_jsonplus_bytearray() -> None:
@@ -814,9 +814,9 @@ def test_msgpack_safe_types_no_warning(caplog: pytest.LogCaptureFixture) -> None
         caplog.clear()
         dumped = serde.dumps_typed(obj)
         result = serde.loads_typed(dumped)
-        assert "unregistered type" not in caplog.text.lower(), (
-            f"Unexpected warning for {type(obj)}"
-        )
+        assert (
+            "unregistered type" not in caplog.text.lower()
+        ), f"Unexpected warning for {type(obj)}"
         assert result is not None
 
 
@@ -1235,3 +1235,146 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+# --- Counter / OrderedDict round-trip tests (issue #8184) ---
+
+
+def test_serde_jsonplus_counter_roundtrip() -> None:
+    """Counter (a dict subclass) must survive a msgpack round-trip with type and
+    count semantics intact, instead of being silently downcast to plain dict.
+
+    Regression coverage for issue #8184.
+    """
+    from collections import Counter
+
+    serde = JsonPlusSerializer()
+    original = Counter({"a": 3, "b": 1, "c": 2})
+
+    restored = serde.loads_typed(serde.dumps_typed(original))
+
+    assert (
+        type(restored) is Counter
+    ), f"Counter must round-trip as Counter, got {type(restored).__name__}"
+    assert restored == original, "Counter values must be preserved"
+    # Counter-specific behaviour must survive the round-trip
+    assert restored.most_common(2) == original.most_common(
+        2
+    ), "Counter.most_common() must work on restored instance"
+
+
+def test_serde_jsonplus_ordereddict_roundtrip() -> None:
+    """OrderedDict (a dict subclass) must survive a msgpack round-trip with type
+    and order intact, instead of being silently downcast to plain dict.
+
+    Regression coverage for issue #8184.
+    """
+    from collections import OrderedDict
+
+    serde = JsonPlusSerializer()
+    # Use non-alphabetical key order so order preservation is observable
+    original = OrderedDict([("z", 1), ("a", 2), ("m", 3)])
+
+    restored = serde.loads_typed(serde.dumps_typed(original))
+
+    assert (
+        type(restored) is OrderedDict
+    ), f"OrderedDict must round-trip as OrderedDict, got {type(restored).__name__}"
+    assert restored == original, "OrderedDict values must be preserved"
+    assert list(restored.keys()) == list(
+        original.keys()
+    ), "OrderedDict insertion order must be preserved"
+    # OrderedDict-specific behaviour must survive the round-trip
+    restored.move_to_end("z")
+    assert list(restored.keys()) == [
+        "a",
+        "m",
+        "z",
+    ], "OrderedDict.move_to_end() must work on restored instance"
+
+
+def test_serde_jsonplus_counter_in_nested_state() -> None:
+    """A Counter held inside a larger state dict must round-trip with its type
+    preserved, mirroring how it would be used in real graph state.
+    """
+    from collections import Counter
+
+    serde = JsonPlusSerializer()
+    state = {
+        "counts": Counter({"red": 2, "blue": 5, "green": 1}),
+        "name": "test",
+        "plain_dict": {"keep": "me"},
+    }
+
+    restored = serde.loads_typed(serde.dumps_typed(state))
+
+    assert (
+        type(restored["counts"]) is Counter
+    ), f"Nested Counter must round-trip as Counter, got {type(restored['counts']).__name__}"
+    assert restored["counts"] == state["counts"]
+    assert (
+        type(restored["plain_dict"]) is dict
+    ), "Plain dict must remain plain dict (not be upcast)"
+
+
+def test_serde_jsonplus_ordereddict_in_nested_state() -> None:
+    """An OrderedDict held inside a larger state dict must round-trip with its
+    type and order preserved.
+    """
+    from collections import OrderedDict
+
+    serde = JsonPlusSerializer()
+    state = {
+        "ordered": OrderedDict([("first", 1), ("second", 2), ("third", 3)]),
+        "name": "test",
+    }
+
+    restored = serde.loads_typed(serde.dumps_typed(state))
+
+    assert (
+        type(restored["ordered"]) is OrderedDict
+    ), f"Nested OrderedDict must round-trip as OrderedDict, got {type(restored['ordered']).__name__}"
+    assert list(restored["ordered"].keys()) == ["first", "second", "third"]
+
+
+def test_serde_jsonplus_empty_counter_roundtrip() -> None:
+    """An empty Counter must round-trip without error (edge case)."""
+    from collections import Counter
+
+    serde = JsonPlusSerializer()
+    original = Counter()
+
+    restored = serde.loads_typed(serde.dumps_typed(original))
+
+    assert type(restored) is Counter
+    assert restored == original
+    assert len(restored) == 0
+
+
+def test_serde_jsonplus_empty_ordereddict_roundtrip() -> None:
+    """An empty OrderedDict must round-trip without error (edge case)."""
+    from collections import OrderedDict
+
+    serde = JsonPlusSerializer()
+    original = OrderedDict()
+
+    restored = serde.loads_typed(serde.dumps_typed(original))
+
+    assert type(restored) is OrderedDict
+    assert restored == original
+    assert len(restored) == 0
+
+
+def test_serde_jsonplus_plain_dict_still_round_trips_as_dict() -> None:
+    """Backward-compat: plain dicts must continue to round-trip as plain dict,
+    not be upcast to OrderedDict or Counter by accident.
+    """
+    serde = JsonPlusSerializer()
+    original = {"a": 1, "b": 2}
+
+    restored = serde.loads_typed(serde.dumps_typed(original))
+
+    assert (
+        type(restored) is dict
+    ), f"Plain dict must round-trip as dict, got {type(restored).__name__}"
+    assert restored == original

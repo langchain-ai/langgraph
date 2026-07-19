@@ -10,7 +10,7 @@ import pathlib
 import pickle
 import re
 import sys
-from collections import deque
+from collections import Counter, OrderedDict, deque
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
@@ -378,6 +378,34 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
             ),
         )
+    elif isinstance(obj, Counter):
+        # Counter is a dict subclass; without OPT_PASSTHROUGH_SUBCLASS ormsgpack
+        # would encode it as a plain map and lose the type. Reconstruct via
+        # Counter(dict(items)) — Counter's __init__ accepts a dict and preserves
+        # count semantics (.most_common(), arithmetic, etc.).
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc(
+                (obj.__class__.__module__, obj.__class__.__name__, dict(obj)),
+            ),
+        )
+    elif isinstance(obj, OrderedDict):
+        # OrderedDict is a dict subclass; encode as list of pairs so
+        # OrderedDict([(k, v), ...]) round-trips and order is explicit
+        # (matters for code that relies on move_to_end / iteration order
+        # semantics that differ from plain dict in some edge cases).
+        # Use EXT_CONSTRUCTOR_SINGLE_ARG (not POS_ARGS) because OrderedDict's
+        # __init__ takes a single iterable of pairs, not multiple positional args.
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc(
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__name__,
+                    list(obj.items()),
+                ),
+            ),
+        )
     elif isinstance(obj, (set, frozenset, deque)):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
@@ -531,6 +559,20 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:
+        # OPT_PASSTHROUGH_SUBCLASS routes all native-base subclasses (str/int/
+        # float/list/dict/bytes subclasses, including numpy scalars like np.int64)
+        # through this default function rather than letting ormsgpack encode them
+        # natively. The branches above handle the subclasses we explicitly care
+        # about (Counter, OrderedDict, set/frozenset/deque subclasses, Enum, etc.);
+        # for any *other* native-base subclass, fall back to encoding the instance
+        # as its base type so we don't regress on types that ormsgpack previously
+        # encoded directly. This mirrors what ormsgpack does internally without
+        # OPT_PASSTHROUGH_SUBCLASS, restoring the pre-passthrough behavior for
+        # unregistered subclasses while still letting our explicit branches above
+        # intercept the ones we want to round-trip with type preservation.
+        for base_type in (str, int, float, bool, list, dict, bytes, bytearray):
+            if isinstance(obj, base_type):
+                return base_type(obj)
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
 
 
@@ -851,6 +893,7 @@ _option = (
     | ormsgpack.OPT_PASSTHROUGH_DATACLASS
     | ormsgpack.OPT_PASSTHROUGH_DATETIME
     | ormsgpack.OPT_PASSTHROUGH_ENUM
+    | ormsgpack.OPT_PASSTHROUGH_SUBCLASS
     | ormsgpack.OPT_PASSTHROUGH_UUID
     | ormsgpack.OPT_REPLACE_SURROGATES
 )

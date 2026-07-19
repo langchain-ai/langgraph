@@ -34,6 +34,8 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
         ("builtins", "set"),
         ("builtins", "frozenset"),
         ("collections", "deque"),
+        ("collections", "Counter"),
+        ("collections", "OrderedDict"),
         # ip addresses
         ("ipaddress", "IPv4Address"),
         ("ipaddress", "IPv4Interface"),
