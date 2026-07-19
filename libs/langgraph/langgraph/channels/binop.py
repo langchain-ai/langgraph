@@ -123,9 +123,6 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     def update(self, values: Sequence[Value]) -> bool:
         if not values:
             return False
-        if self.value is MISSING:
-            self.value = values[0]
-            values = values[1:]
         seen_overwrite: bool = False
         for value in values:
             is_overwrite, overwrite_value = _get_overwrite(value)
@@ -139,7 +136,11 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
                 self.value = overwrite_value
                 seen_overwrite = True
                 continue
-            if not seen_overwrite:
+            if seen_overwrite:
+                continue
+            if self.value is MISSING:
+                self.value = value
+            else:
                 self.value = self.operator(self.value, value)
         return True
 

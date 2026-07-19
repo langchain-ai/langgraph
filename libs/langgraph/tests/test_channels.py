@@ -105,6 +105,52 @@ def test_binop() -> None:
     assert channel.get() == 10
 
 
+def test_binop_overwrite_on_empty_channel() -> None:
+    """A leading `Overwrite` on an empty channel must be unwrapped, not stored
+    as the wrapper object itself."""
+    # `int | None` is not instantiable, so the channel starts empty (MISSING)
+    channel = BinaryOperatorAggregate(int | None, operator.add)
+    assert not channel.is_available()
+
+    channel.update([Overwrite(5)])
+    assert channel.get() == 5
+
+    # subsequent reduces must operate on the unwrapped value
+    channel.update([1, 2])
+    assert channel.get() == 8
+
+
+def test_binop_overwrite_dict_forms_on_empty_channel() -> None:
+    """Both dict-encoded `Overwrite` forms must be unwrapped when they are the
+    first-ever update on an empty channel."""
+    from langgraph._internal._constants import OVERWRITE
+
+    for update in ({OVERWRITE: 7}, {"type": OVERWRITE, "value": 7}):
+        channel = BinaryOperatorAggregate(int | None, operator.add)
+        channel.update([update])
+        assert channel.get() == 7
+
+
+def test_binop_overwrite_then_value_on_empty_channel() -> None:
+    """Values after an `Overwrite` in the same step are ignored, mirroring the
+    non-empty channel semantics."""
+    channel = BinaryOperatorAggregate(int | None, operator.add)
+    channel.update([Overwrite(5), 100])
+    assert channel.get() == 5
+
+    # same semantics as when the channel already holds a value
+    non_empty = BinaryOperatorAggregate(int, operator.add)
+    non_empty.update([Overwrite(5), 100])
+    assert non_empty.get() == 5
+
+
+def test_binop_two_overwrites_on_empty_channel_raises() -> None:
+    """Two Overwrites in one super-step must raise, even on an empty channel."""
+    channel = BinaryOperatorAggregate(int | None, operator.add)
+    with pytest.raises(InvalidUpdateError):
+        channel.update([Overwrite(1), Overwrite(2)])
+
+
 def test_untracked_value() -> None:
     channel = UntrackedValue(dict).from_checkpoint(MISSING)
     assert channel.ValueType is dict
