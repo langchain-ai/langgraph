@@ -1,12 +1,14 @@
 """Unit tests for tool call interceptor in ToolNode."""
 
 from collections.abc import Callable
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
 from langchain_core.messages import AIMessage, ToolCall, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+from langgraph.errors import GraphBubbleUp
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
@@ -1471,3 +1473,144 @@ def test_tool_call_request_is_frozen() -> None:
     assert fresh_new_request.tool == add  # Other fields should remain the same
     assert fresh_new_request.state == state
     assert fresh_new_request.runtime is None
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: the wrap_tool_call path must handle exceptions exactly
+# like the non-wrapped path — GraphBubbleUp (interrupts) must always
+# propagate, and the handle_tool_errors type filter must be respected.
+# ---------------------------------------------------------------------------
+
+
+@tool
+def interrupting_tool(a: int) -> int:
+    """A tool that bubbles up a GraphInterrupt (as `interrupt()` does)."""
+    raise GraphBubbleUp("please confirm")
+
+
+@tool
+def key_error_tool(a: int) -> int:
+    """A tool that raises a KeyError."""
+    raise KeyError("missing")
+
+
+def _interrupt_message() -> dict[str, Any]:
+    return {
+        "messages": [
+            AIMessage(
+                "calling",
+                tool_calls=[
+                    {"name": "interrupting_tool", "args": {"a": 1}, "id": "call_int"}
+                ],
+            )
+        ]
+    }
+
+
+def _key_error_message() -> dict[str, Any]:
+    return {
+        "messages": [
+            AIMessage(
+                "calling",
+                tool_calls=[
+                    {"name": "key_error_tool", "args": {"a": 1}, "id": "call_ke"}
+                ],
+            )
+        ]
+    }
+
+
+@pytest.mark.parametrize("handle_tool_errors", [True, "handled", (GraphBubbleUp,)])
+def test_wrap_tool_call_propagates_interrupt(handle_tool_errors: Any) -> None:
+    """A GraphBubbleUp raised through a wrapper must not be swallowed.
+
+    Regression: previously the wrap_tool_call ``except Exception`` converted
+    the interrupt into an error ToolMessage whenever handle_tool_errors was
+    truthy, silently breaking human-in-the-loop.
+    """
+
+    def passthrough(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        return execute(request)
+
+    tool_node = ToolNode(
+        [interrupting_tool],
+        wrap_tool_call=passthrough,
+        handle_tool_errors=handle_tool_errors,
+    )
+
+    with pytest.raises(GraphBubbleUp):
+        tool_node.invoke(_interrupt_message(), config=_create_config_with_runtime())
+
+
+@pytest.mark.parametrize("handle_tool_errors", [True, "handled", (GraphBubbleUp,)])
+async def test_wrap_tool_call_propagates_interrupt_async(
+    handle_tool_errors: Any,
+) -> None:
+    """Async counterpart of ``test_wrap_tool_call_propagates_interrupt``."""
+
+    def passthrough(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        return execute(request)
+
+    tool_node = ToolNode(
+        [interrupting_tool],
+        wrap_tool_call=passthrough,
+        handle_tool_errors=handle_tool_errors,
+    )
+
+    with pytest.raises(GraphBubbleUp):
+        await tool_node.ainvoke(
+            _interrupt_message(), config=_create_config_with_runtime()
+        )
+
+
+def test_wrap_tool_call_respects_error_type_filter() -> None:
+    """A wrapper path must honor a tuple handle_tool_errors type filter.
+
+    Regression: previously the wrapper path caught every exception once
+    handle_tool_errors was truthy, ignoring the configured type filter — so a
+    KeyError was swallowed even though only ValueError was meant to be handled.
+    """
+
+    def passthrough(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        return execute(request)
+
+    # KeyError is not in the handled set -> must propagate.
+    tool_node = ToolNode(
+        [key_error_tool],
+        wrap_tool_call=passthrough,
+        handle_tool_errors=(ValueError,),
+    )
+    with pytest.raises(KeyError):
+        tool_node.invoke(_key_error_message(), config=_create_config_with_runtime())
+
+    # ValueError IS in the handled set -> converted to an error ToolMessage.
+    tool_node_handled = ToolNode(
+        [failing_tool],  # raises ValueError
+        wrap_tool_call=passthrough,
+        handle_tool_errors=(ValueError,),
+    )
+    result = tool_node_handled.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "calling",
+                    tool_calls=[
+                        {"name": "failing_tool", "args": {"a": 1}, "id": "call_ve"}
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    message = result["messages"][-1]
+    assert isinstance(message, ToolMessage)
+    assert message.status == "error"

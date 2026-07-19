@@ -919,6 +919,63 @@ class ToolNode(RunnableCallable):
             combined_outputs.append(parent_command)
         return combined_outputs
 
+    def _handle_tool_call_exception(self, e: Exception, call: ToolCall) -> ToolMessage:
+        """Route a tool-execution exception through `handle_tool_errors`.
+
+        Shared by the direct-execution paths (`_execute_tool_sync` /
+        `_execute_tool_async`) and the wrapper paths (`_run_one` /
+        `_arun_one`) so all four handle errors identically.
+
+        `GraphBubbleUp` (raised by `interrupt()` and by interrupted
+        subgraphs) is always re-raised so human-in-the-loop pauses are
+        never swallowed into an error `ToolMessage`. Exceptions whose type
+        is not covered by `handle_tool_errors` are re-raised too. Only a
+        handled exception is converted to an error `ToolMessage`.
+
+        Must be called from within an active `except` block.
+        """
+        # GraphInterrupt is a special exception that will always be raised.
+        # It can be triggered in the following scenarios,
+        # Where GraphInterrupt(GraphBubbleUp) is raised from an `interrupt`
+        # invocation most commonly:
+        # (1) a GraphInterrupt is raised inside a tool
+        # (2) a GraphInterrupt is raised inside a graph node for a graph called
+        #     as a tool
+        # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a
+        #     graph called as a tool
+        # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
+        if isinstance(e, GraphBubbleUp):
+            raise e
+
+        # Determine which exception types are handled
+        handled_types: tuple[type[Exception], ...]
+        if isinstance(self._handle_tool_errors, type) and issubclass(
+            self._handle_tool_errors, Exception
+        ):
+            handled_types = (self._handle_tool_errors,)
+        elif isinstance(self._handle_tool_errors, tuple):
+            handled_types = self._handle_tool_errors
+        elif callable(self._handle_tool_errors) and not isinstance(
+            self._handle_tool_errors, type
+        ):
+            handled_types = _infer_handled_types(self._handle_tool_errors)
+        else:
+            # default behavior is catching all exceptions
+            handled_types = (Exception,)
+
+        # Check if this error should be handled
+        if not self._handle_tool_errors or not isinstance(e, handled_types):
+            raise e
+
+        # Error is handled - create error ToolMessage
+        content = _handle_tool_error(e, flag=self._handle_tool_errors)
+        return ToolMessage(
+            content=content,
+            name=call["name"],
+            tool_call_id=call["id"],
+            status="error",
+        )
+
     def _execute_tool_sync(
         self,
         request: ToolCallRequest,
@@ -970,46 +1027,8 @@ class ToolNode(RunnableCallable):
                 response, request.tool_call, input_type
             )
 
-        # GraphInterrupt is a special exception that will always be raised.
-        # It can be triggered in the following scenarios,
-        # Where GraphInterrupt(GraphBubbleUp) is raised from an `interrupt` invocation
-        # most commonly:
-        # (1) a GraphInterrupt is raised inside a tool
-        # (2) a GraphInterrupt is raised inside a graph node for a graph called as a tool
-        # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph
-        #     called as a tool
-        # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
-        except GraphBubbleUp:
-            raise
         except Exception as e:
-            # Determine which exception types are handled
-            handled_types: tuple[type[Exception], ...]
-            if isinstance(self._handle_tool_errors, type) and issubclass(
-                self._handle_tool_errors, Exception
-            ):
-                handled_types = (self._handle_tool_errors,)
-            elif isinstance(self._handle_tool_errors, tuple):
-                handled_types = self._handle_tool_errors
-            elif callable(self._handle_tool_errors) and not isinstance(
-                self._handle_tool_errors, type
-            ):
-                handled_types = _infer_handled_types(self._handle_tool_errors)
-            else:
-                # default behavior is catching all exceptions
-                handled_types = (Exception,)
-
-            # Check if this error should be handled
-            if not self._handle_tool_errors or not isinstance(e, handled_types):
-                raise
-
-            # Error is handled - create error ToolMessage
-            content = _handle_tool_error(e, flag=self._handle_tool_errors)
-            return ToolMessage(
-                content=content,
-                name=call["name"],
-                tool_call_id=call["id"],
-                status="error",
-            )
+            return self._handle_tool_call_exception(e, call)
 
     def _run_one(
         self,
@@ -1054,17 +1073,11 @@ class ToolNode(RunnableCallable):
         try:
             return self._wrap_tool_call(tool_request, execute)
         except Exception as e:
-            # Wrapper threw an exception
-            if not self._handle_tool_errors:
-                raise
-            # Convert to error message
-            content = _handle_tool_error(e, flag=self._handle_tool_errors)
-            return ToolMessage(
-                content=content,
-                name=tool_request.tool_call["name"],
-                tool_call_id=tool_request.tool_call["id"],
-                status="error",
-            )
+            # Wrapper (or the wrapped tool) threw. Route through the shared
+            # handler so GraphBubbleUp still propagates and the configured
+            # handle_tool_errors type filter is respected, exactly as on the
+            # non-wrapped path.
+            return self._handle_tool_call_exception(e, tool_request.tool_call)
 
     async def _execute_tool_async(
         self,
@@ -1117,46 +1130,8 @@ class ToolNode(RunnableCallable):
                 response, request.tool_call, input_type
             )
 
-        # GraphInterrupt is a special exception that will always be raised.
-        # It can be triggered in the following scenarios,
-        # Where GraphInterrupt(GraphBubbleUp) is raised from an `interrupt` invocation
-        # most commonly:
-        # (1) a GraphInterrupt is raised inside a tool
-        # (2) a GraphInterrupt is raised inside a graph node for a graph called as a tool
-        # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph
-        #     called as a tool
-        # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
-        except GraphBubbleUp:
-            raise
         except Exception as e:
-            # Determine which exception types are handled
-            handled_types: tuple[type[Exception], ...]
-            if isinstance(self._handle_tool_errors, type) and issubclass(
-                self._handle_tool_errors, Exception
-            ):
-                handled_types = (self._handle_tool_errors,)
-            elif isinstance(self._handle_tool_errors, tuple):
-                handled_types = self._handle_tool_errors
-            elif callable(self._handle_tool_errors) and not isinstance(
-                self._handle_tool_errors, type
-            ):
-                handled_types = _infer_handled_types(self._handle_tool_errors)
-            else:
-                # default behavior is catching all exceptions
-                handled_types = (Exception,)
-
-            # Check if this error should be handled
-            if not self._handle_tool_errors or not isinstance(e, handled_types):
-                raise
-
-            # Error is handled - create error ToolMessage
-            content = _handle_tool_error(e, flag=self._handle_tool_errors)
-            return ToolMessage(
-                content=content,
-                name=call["name"],
-                tool_call_id=call["id"],
-                status="error",
-            )
+            return self._handle_tool_call_exception(e, call)
 
     async def _arun_one(
         self,
@@ -1209,17 +1184,11 @@ class ToolNode(RunnableCallable):
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
             return self._wrap_tool_call(tool_request, _sync_execute)
         except Exception as e:
-            # Wrapper threw an exception
-            if not self._handle_tool_errors:
-                raise
-            # Convert to error message
-            content = _handle_tool_error(e, flag=self._handle_tool_errors)
-            return ToolMessage(
-                content=content,
-                name=tool_request.tool_call["name"],
-                tool_call_id=tool_request.tool_call["id"],
-                status="error",
-            )
+            # Wrapper (or the wrapped tool) threw. Route through the shared
+            # handler so GraphBubbleUp still propagates and the configured
+            # handle_tool_errors type filter is respected, exactly as on the
+            # non-wrapped path.
+            return self._handle_tool_call_exception(e, tool_request.tool_call)
 
     def _parse_input(
         self,
