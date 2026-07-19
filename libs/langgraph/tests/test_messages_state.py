@@ -367,3 +367,25 @@ def test_push_messages_in_graph():
             messages.append(message)
 
     assert values["messages"] == messages
+
+
+@pytest.mark.parametrize(
+    "callbacks",
+    [
+        None,
+        [object()],  # list with non-BaseCallbackHandler elements
+    ],
+)
+def test_push_message_without_usable_callbacks(callbacks) -> None:
+    """push_message must not raise UnboundLocalError when config callbacks are
+    None or a list containing non-handler objects; it should behave like an
+    empty handler list (no stream emit, message still returned)."""
+    from langchain_core.runnables.config import var_child_runnable_config
+
+    config = {"callbacks": callbacks, "metadata": {}, "configurable": {}}
+    token = var_child_runnable_config.set(config)
+    try:
+        message = push_message(AIMessage(content="Hello", id="1"), state_key=None)
+        assert message == AIMessage(content="Hello", id="1")
+    finally:
+        var_child_runnable_config.reset(token)
