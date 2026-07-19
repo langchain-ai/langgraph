@@ -167,15 +167,20 @@ class PostgresSaver(BasePostgresSaver):
                 for v in values
                 if v["checkpoint"]["v"] < 4 and v["parent_checkpoint_id"]
             ]:
-                # the results may span multiple threads, and the pending
-                # sends query filters by a single thread_id, so group by
-                # (thread_id, parent_checkpoint_id) and run the query once
-                # per distinct thread_id
+                # the results may span multiple threads and namespaces;
+                # checkpoint identity is (thread_id, checkpoint_ns,
+                # checkpoint_id), so group by the full identity of the parent
+                # and run the query once per distinct thread_id, matching
+                # rows only within their namespace
                 grouped_by_parent = defaultdict(list)
                 parent_ids_by_thread = defaultdict(set)
                 for value in to_migrate:
                     grouped_by_parent[
-                        (value["thread_id"], value["parent_checkpoint_id"])
+                        (
+                            value["thread_id"],
+                            value["checkpoint_ns"],
+                            value["parent_checkpoint_id"],
+                        )
                     ].append(value)
                     parent_ids_by_thread[value["thread_id"]].add(
                         value["parent_checkpoint_id"]
@@ -187,7 +192,11 @@ class PostgresSaver(BasePostgresSaver):
                     )
                     for sends in cur.fetchall():
                         for value in grouped_by_parent[
-                            (thread_id, sends["checkpoint_id"])
+                            (
+                                thread_id,
+                                sends["checkpoint_ns"],
+                                sends["checkpoint_id"],
+                            )
                         ]:
                             if value["channel_values"] is None:
                                 value["channel_values"] = []
@@ -259,7 +268,16 @@ class PostgresSaver(BasePostgresSaver):
                     self.SELECT_PENDING_SENDS_SQL,
                     (thread_id, [value["parent_checkpoint_id"]]),
                 )
-                if sends := cur.fetchone():
+                # the same checkpoint_id may exist in other namespaces; only
+                # this namespace's writes belong to this checkpoint's parent
+                if sends := next(
+                    (
+                        row
+                        for row in cur.fetchall()
+                        if row["checkpoint_ns"] == value["checkpoint_ns"]
+                    ),
+                    None,
+                ):
                     if value["channel_values"] is None:
                         value["channel_values"] = []
                     self._migrate_pending_sends(

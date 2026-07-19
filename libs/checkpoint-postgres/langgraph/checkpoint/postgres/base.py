@@ -119,13 +119,14 @@ from checkpoints """
 
 SELECT_PENDING_SENDS_SQL = f"""
 select
+    checkpoint_ns,
     checkpoint_id,
     array_agg(array[type::bytea, blob] order by task_path, task_id, idx) as sends
 from checkpoint_writes
 where thread_id = %s
     and checkpoint_id = any(%s)
     and channel = '{TASKS}'
-group by checkpoint_id
+group by checkpoint_ns, checkpoint_id
 """
 
 UPSERT_CHECKPOINT_BLOBS_SQL = """
