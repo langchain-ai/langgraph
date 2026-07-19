@@ -1569,6 +1569,76 @@ async def test_wrap_tool_call_propagates_interrupt_async(
         )
 
 
+@pytest.mark.parametrize("handle_tool_errors", [True, "handled", (GraphBubbleUp,)])
+async def test_awrap_tool_call_propagates_interrupt(handle_tool_errors: Any) -> None:
+    """An ASYNC wrapper (`awrap_tool_call`) must not swallow interrupts either.
+
+    Distinct from the `wrap_tool_call`-fallback async test: this exercises the
+    `self._awrap_tool_call is not None` branch of `_arun_one`.
+    """
+
+    async def apassthrough(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], Any],
+    ) -> ToolMessage | Command:
+        return await execute(request)
+
+    tool_node = ToolNode(
+        [interrupting_tool],
+        awrap_tool_call=apassthrough,
+        handle_tool_errors=handle_tool_errors,
+    )
+
+    with pytest.raises(GraphBubbleUp):
+        await tool_node.ainvoke(
+            _interrupt_message(), config=_create_config_with_runtime()
+        )
+
+
+async def test_awrap_tool_call_respects_error_type_filter() -> None:
+    """The async wrapper path must honor the handle_tool_errors type filter."""
+
+    async def apassthrough(
+        request: ToolCallRequest,
+        execute: Callable[[ToolCallRequest], Any],
+    ) -> ToolMessage | Command:
+        return await execute(request)
+
+    # KeyError is not in the handled set -> must propagate.
+    tool_node = ToolNode(
+        [key_error_tool],
+        awrap_tool_call=apassthrough,
+        handle_tool_errors=(ValueError,),
+    )
+    with pytest.raises(KeyError):
+        await tool_node.ainvoke(
+            _key_error_message(), config=_create_config_with_runtime()
+        )
+
+    # ValueError IS in the handled set -> converted to an error ToolMessage.
+    tool_node_handled = ToolNode(
+        [failing_tool],
+        awrap_tool_call=apassthrough,
+        handle_tool_errors=(ValueError,),
+    )
+    result = await tool_node_handled.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "calling",
+                    tool_calls=[
+                        {"name": "failing_tool", "args": {"a": 1}, "id": "call_ve_a"}
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    message = result["messages"][-1]
+    assert isinstance(message, ToolMessage)
+    assert message.status == "error"
+
+
 def test_wrap_tool_call_respects_error_type_filter() -> None:
     """A wrapper path must honor a tuple handle_tool_errors type filter.
 

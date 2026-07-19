@@ -945,7 +945,7 @@ class ToolNode(RunnableCallable):
         #     graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         if isinstance(e, GraphBubbleUp):
-            raise e
+            raise
 
         # Determine which exception types are handled
         handled_types: tuple[type[Exception], ...]
@@ -965,7 +965,7 @@ class ToolNode(RunnableCallable):
 
         # Check if this error should be handled
         if not self._handle_tool_errors or not isinstance(e, handled_types):
-            raise e
+            raise
 
         # Error is handled - create error ToolMessage
         content = _handle_tool_error(e, flag=self._handle_tool_errors)

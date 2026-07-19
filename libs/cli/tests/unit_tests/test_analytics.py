@@ -9,6 +9,8 @@ import threading
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 from langgraph_cli import analytics
 
 
@@ -35,11 +37,20 @@ def test_log_data_uses_timeout() -> None:
     assert analytics.ANALYTICS_TIMEOUT_SECONDS > 0
 
 
-def test_log_data_swallows_all_errors() -> None:
+@pytest.mark.parametrize(
+    "error",
+    [
+        TimeoutError("blackholed host"),
+        OSError("network unreachable"),
+        ConnectionResetError("reset by peer"),
+        ValueError("unexpected response"),
+    ],
+)
+def test_log_data_swallows_all_errors(error: Exception) -> None:
     """Telemetry is best-effort: timeouts and other errors must not surface."""
     with patch(
         "langgraph_cli.analytics.urllib.request.urlopen",
-        side_effect=TimeoutError("blackholed host"),
+        side_effect=error,
     ):
         # Must not raise.
         analytics.log_data(_sample_data())

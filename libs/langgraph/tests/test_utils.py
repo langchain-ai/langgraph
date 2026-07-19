@@ -625,6 +625,14 @@ def test_merge_configs_copies_single_source_mutables() -> None:
     assert c1["configurable"] == {"a": 1}
     assert c1["tags"] == ["t1"]
 
+    # same guarantee when the mutables come from a LATER input only
+    c2: RunnableConfig = {"configurable": {"x": 1}, "tags": ["late"]}
+    merged_late = merge_configs({"metadata": {"m": 1}}, c2)
+    merged_late["configurable"]["y"] = 2
+    merged_late["tags"].append("t3")
+    assert c2["configurable"] == {"x": 1}
+    assert c2["tags"] == ["late"]
+
 
 def test_merge_configs_merges_metadata_lc_versions() -> None:
     a = {
