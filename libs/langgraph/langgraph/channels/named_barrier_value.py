@@ -44,13 +44,18 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
         return empty
 
     def checkpoint(self) -> set[Value]:
-        return self.seen
+        # return a snapshot, not the live set: update() mutates self.seen
+        # in place, which would otherwise mutate previously captured
+        # checkpoints before they are serialized
+        return set(self.seen)
 
     def from_checkpoint(self, checkpoint: set[Value]) -> Self:
         empty = self.__class__(self.typ, self.names)
         empty.key = self.key
         if checkpoint is not MISSING:
-            empty.seen = checkpoint
+            # copy on ingest: update() mutates self.seen in place, which
+            # would otherwise mutate the caller's checkpoint value
+            empty.seen = set(checkpoint)
         return empty
 
     def update(self, values: Sequence[Value]) -> bool:
@@ -122,13 +127,20 @@ class NamedBarrierValueAfterFinish(
         return empty
 
     def checkpoint(self) -> tuple[set[Value], bool]:
-        return (self.seen, self.finished)
+        # return a snapshot, not the live set: update() mutates self.seen
+        # in place, which would otherwise mutate previously captured
+        # checkpoints before they are serialized
+        return (set(self.seen), self.finished)
 
     def from_checkpoint(self, checkpoint: tuple[set[Value], bool]) -> Self:
         empty = self.__class__(self.typ, self.names)
         empty.key = self.key
         if checkpoint is not MISSING:
-            empty.seen, empty.finished = checkpoint
+            seen, finished = checkpoint
+            # copy on ingest: update() mutates self.seen in place, which
+            # would otherwise mutate the caller's checkpoint value
+            empty.seen = set(seen)
+            empty.finished = finished
         return empty
 
     def update(self, values: Sequence[Value]) -> bool:

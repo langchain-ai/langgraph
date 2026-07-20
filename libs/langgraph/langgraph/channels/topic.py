@@ -61,17 +61,22 @@ class Topic(
         return empty
 
     def checkpoint(self) -> list[Value]:
-        return self.values
+        # return a snapshot, not the live list: update() mutates self.values
+        # in place, which would otherwise mutate previously captured
+        # checkpoints before they are serialized
+        return list(self.values)
 
     def from_checkpoint(self, checkpoint: list[Value]) -> Self:
         empty = self.__class__(self.typ, self.accumulate)
         empty.key = self.key
         if checkpoint is not MISSING:
+            # copy on ingest: update() mutates self.values in place, which
+            # would otherwise mutate the caller's checkpoint value
             if isinstance(checkpoint, tuple):
                 # backwards compatibility
-                empty.values = checkpoint[1]
+                empty.values = list(checkpoint[1])
             else:
-                empty.values = checkpoint
+                empty.values = list(checkpoint)
         return empty
 
     def update(self, values: Sequence[Value | list[Value]]) -> bool:
