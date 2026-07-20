@@ -71,6 +71,7 @@ __all__ = (
     "TimeoutPolicy",
     "CachePolicy",
     "TracePolicy",
+    "OmitFromTrace",
     "Interrupt",
     "StateUpdate",
     "PregelTask",
@@ -540,6 +541,25 @@ class TracePolicy:
     process_outputs: Callable[[Any], Any] | None = None
     """Optional callable to transform the node's output before it is recorded on the
     node's trace run. Does not affect the value returned by the node."""
+
+
+class _OmitFromTrace:
+    """Annotation marker for a state key that should be omitted from trace payloads.
+
+    Add to a channel's `Annotated[...]` metadata to drop that key from the recorded
+    trace inputs/outputs of every node, without affecting graph execution:
+
+        messages: Annotated[list, add_messages, OmitFromTrace]
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "OmitFromTrace"
+
+
+OmitFromTrace = _OmitFromTrace()
+"""Marker to omit a state key from trace payloads (see `_OmitFromTrace`)."""
 
 
 _DEFAULT_INTERRUPT_ID = "placeholder-id"
