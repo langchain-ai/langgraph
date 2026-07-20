@@ -86,3 +86,42 @@ async def test_validation_node(tool_schema: Any, use_message_key: bool):
     if use_message_key:
         result_sync = result_sync["messages"]
     check_results(result_sync)
+
+
+async def test_validation_node_unknown_tool_name():
+    """A tool call naming an unknown tool must produce an error ToolMessage
+    instead of raising an uncaught KeyError."""
+    validation_node = ValidationNode([MyModel])
+    inputs = [
+        AIMessage(
+            "hi?",
+            tool_calls=[
+                {
+                    "name": "not_a_tool",
+                    "args": {"some_val": 1},
+                    "id": "call 0",
+                },
+                {
+                    "name": "MyModel",
+                    "args": {"some_val": 1, "some_other_val": "foo"},
+                    "id": "call 1",
+                },
+            ],
+        ),
+    ]
+
+    def check_results(messages: list):
+        assert len(messages) == 2
+        assert all(m.type == "tool" for m in messages)
+        error_msg = messages[0]
+        assert error_msg.status == "error"
+        assert error_msg.additional_kwargs.get("is_error")
+        assert error_msg.name == "not_a_tool"
+        assert error_msg.tool_call_id == "call 0"
+        assert "not_a_tool is not a valid tool" in error_msg.content
+        assert "MyModel" in error_msg.content
+        # The valid call is still validated normally.
+        assert not messages[1].additional_kwargs.get("is_error")
+
+    check_results(validation_node.invoke(inputs))
+    check_results(await validation_node.ainvoke(inputs))
