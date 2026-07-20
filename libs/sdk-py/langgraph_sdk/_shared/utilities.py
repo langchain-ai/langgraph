@@ -54,8 +54,10 @@ def _get_headers(
 ) -> dict[str, str]:
     """Combine api_key and custom user-provided headers."""
     custom_headers = custom_headers or {}
+    # HTTP header names are case-insensitive; reject any casing of reserved keys.
+    lower_custom = {str(name).lower() for name in custom_headers}
     for header in RESERVED_HEADERS:
-        if header in custom_headers:
+        if header in lower_custom:
             raise ValueError(f"Cannot set reserved header '{header}'")
 
     headers = {
