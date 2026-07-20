@@ -205,11 +205,12 @@ class InMemorySaver(
             ):
                 if ch not in remaining:
                     continue
-                blob_value = blob_value_by_ch.get(ch)
-                if blob_value is not None and not isinstance(
-                    blob_value, _DeltaSnapshot
-                ):
-                    continue
+                # Always collect writes for visited ancestors, matching the
+                # reference BaseCheckpointSaver.get_delta_channel_history and
+                # the SqliteSaver override.  A plain-value (pre-migration) seed
+                # does NOT subsume its own checkpoint's pending writes, so
+                # skipping them silently loses the first post-migration write
+                # (fixes #8384).
                 collected_by_ch[ch].append(
                     (tid, ch, self.serde.loads_typed(serialized))
                 )
