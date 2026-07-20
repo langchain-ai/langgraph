@@ -205,6 +205,25 @@ def test_serde_jsonplus() -> None:
     assert serde.loads_typed(serde.dumps_typed(surrogates)) == surrogates
 
 
+def test_serde_jsonplus_set_of_tuples() -> None:
+    """Sets and frozensets containing tuples must round-trip.
+
+    msgpack has no tuple type, so tuple members decode as lists, which are
+    unhashable. Without special handling, reconstructing the set raises and the
+    value is silently lost. See regression for the ``{(1, 2), (3, 4)}`` case.
+    """
+    serde = JsonPlusSerializer()
+    values: list[set | frozenset] = [
+        {(1, 2), (3, 4)},
+        frozenset({(1, 2), (3, 4)}),
+        {(1, (2, 3))},  # nested tuples
+        {("a", "b"), ("c",)},  # tuples of strings
+        {1, (2, 3), "x"},  # mixed hashable members
+    ]
+    for value in values:
+        assert serde.loads_typed(serde.dumps_typed(value)) == value
+
+
 def test_serde_jsonplus_json_mode() -> None:
     uid = uuid.UUID(int=1)
     deque_instance = deque([1, 2, 3])

@@ -534,6 +534,19 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
 
 
+def _restore_hashable(obj: Any) -> Any:
+    """Recursively convert decoded lists back into tuples.
+
+    msgpack has no tuple type, so tuples are encoded as arrays and decode as
+    lists. Members of a `set` / `frozenset` must be hashable, so their list
+    members (which were originally tuples) are restored to tuples here before
+    the container is reconstructed.
+    """
+    if isinstance(obj, list):
+        return tuple(_restore_hashable(el) for el in obj)
+    return obj
+
+
 def _send_from_args(args: Sequence[Any]) -> Any:
     # ya we have a cyclic import here ¯\_(ツ)_/¯
     from langgraph.types import Send  # type: ignore
@@ -648,7 +661,13 @@ def _create_msgpack_ext_hook(
                     # it would be validated upon construction.
                     return tup[2]
                 # module, name, arg
-                return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                arg = tup[2]
+                if isinstance(cls, type) and issubclass(cls, (set, frozenset)):
+                    # set/frozenset members must be hashable; tuples decode as
+                    # (unhashable) lists, so restore them before reconstructing.
+                    arg = [_restore_hashable(el) for el in arg]
+                return cls(arg)
             except Exception:
                 return None
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
