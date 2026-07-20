@@ -6,7 +6,7 @@ import typing
 import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
-from dataclasses import dataclass, is_dataclass, replace
+from dataclasses import dataclass, is_dataclass
 from datetime import timedelta
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
@@ -82,7 +82,6 @@ from langgraph.types import (
     CachePolicy,
     Checkpointer,
     Command,
-    OmitFromTrace,
     RetryPolicy,
     Send,
     TimeoutPolicy,
@@ -1545,7 +1544,7 @@ class CompiledStateGraph(
                 error_handler_node=node.error_handler_node,
                 bound=node.runnable,  # type: ignore[arg-type]
                 timeout=node.timeout,
-                trace_policy=_merge_trace_policy(node.trace_policy, input_schema),
+                trace_policy=node.trace_policy,
             )
         else:
             raise RuntimeError
@@ -1812,50 +1811,6 @@ def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
         return updates
     elif input is not None:
         return [("__root__", input)]
-
-
-def _get_trace_omit_keys(schema: type[Any]) -> frozenset[str]:
-    """Collect state keys annotated with `OmitFromTrace` in `schema`."""
-    if not hasattr(schema, "__annotations__"):
-        return frozenset()
-    try:
-        hints = get_type_hints(schema, include_extras=True)
-    except Exception:
-        return frozenset()
-    return frozenset(
-        name
-        for name, typ in hints.items()
-        if any(m is OmitFromTrace for m in getattr(typ, "__metadata__", ()))
-    )
-
-
-def _compose_drop(
-    omit: frozenset[str], fn: Callable[[Any], Any] | None
-) -> Callable[[Any], Any]:
-    """Return a trace processor that drops `omit` keys, then applies `fn` (if any)."""
-
-    def _process(value: Any) -> Any:
-        if isinstance(value, dict):
-            value = {k: v for k, v in value.items() if k not in omit}
-        return fn(value) if fn is not None else value
-
-    return _process
-
-
-def _merge_trace_policy(
-    policy: TracePolicy | None, input_schema: type[Any]
-) -> TracePolicy | None:
-    """Compile `OmitFromTrace`-annotated keys from `input_schema` into `policy`'s
-    processors (drop-then-user-fn), so the annotation is sugar over the callables."""
-    omit = _get_trace_omit_keys(input_schema)
-    if not omit:
-        return policy
-    policy = policy or TracePolicy()
-    return replace(
-        policy,
-        process_inputs=_compose_drop(omit, policy.process_inputs),
-        process_outputs=_compose_drop(omit, policy.process_outputs),
-    )
 
 
 def _get_channels(
