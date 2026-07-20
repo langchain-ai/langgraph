@@ -281,7 +281,13 @@ class PregelRunner:
         handled_futures: set[concurrent.futures.Future[Any]] = set()
         while len(futures) > (1 if get_waiter is not None else 0):
             done, inflight = concurrent.futures.wait(
-                futures,
+                # wait over a snapshot: worker threads can insert new futures
+                # into `futures` (via `call()` -> `_call`) while we wait, and
+                # `concurrent.futures.wait` iterates the collection it's given.
+                # Any future added after the snapshot is picked up on the next
+                # loop iteration (the loop re-reads `futures`), and the final
+                # `futures.event.wait()` below covers all tracked futures.
+                tuple(futures),
                 return_when=concurrent.futures.FIRST_COMPLETED,
                 timeout=(max(0, end_time - time.monotonic()) if end_time else None),
             )
@@ -370,11 +376,7 @@ class PregelRunner:
             Awaitable[PregelExecutableTask | None],
         ],
     ) -> AsyncIterator[None]:
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        loop = asyncio.get_running_loop()
         tasks = tuple(tasks)
         futures = FuturesDict(
             callback=weakref.WeakMethod(self.commit),
