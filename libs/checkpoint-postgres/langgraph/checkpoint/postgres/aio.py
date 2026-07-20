@@ -82,10 +82,18 @@ class AsyncPostgresSaver(BasePostgresSaver):
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
+                # Pipeline must be managed carefully: the connection must not
+                # be used outside the pipeline context. We yield the instance
+                # and then flush/sync before exiting.
                 async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                    instance = cls(conn=conn, pipe=pipe, serde=serde)
+                    await instance.setup()  # ensure migrations run inside pipeline
+                    yield instance
+                    # Flush pending operations before exiting pipeline
+                    await pipe.sync()
             else:
-                yield cls(conn=conn, serde=serde)
+                instance = cls(conn=conn, serde=serde)
+                yield instance
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
