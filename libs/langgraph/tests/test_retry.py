@@ -675,6 +675,80 @@ def _make_task(
     )
 
 
+def test_call_reuses_inflight_push_task_on_parent_retry():
+    """When a parent is retried, _call must not re-schedule an in-flight PUSH child.
+
+    Regression for comparing task.id (str) vs PregelExecutableTask (object).
+    """
+    import concurrent.futures
+    import weakref
+
+    from langgraph._internal._constants import CONFIG_KEY_SCRATCHPAD
+    from langgraph._internal._scratchpad import PregelScratchpad
+    from langgraph.pregel._runner import FuturesDict, _call
+
+    child_id = "child-task-id"
+    child_task = _make_task(Mock(), name="child", task_id=child_id)
+
+    existing_fut: concurrent.futures.Future = concurrent.futures.Future()
+    event = threading.Event()
+
+    futures_dict = FuturesDict(
+        event,
+        weakref.ref(lambda _task, _exc: None),
+        lambda _done: False,
+        concurrent.futures.Future,
+    )
+    futures_dict[existing_fut] = child_task
+
+    call_counter = [0]
+
+    def increment_call_counter() -> int:
+        call_counter[0] += 1
+        return call_counter[0]
+
+    scratchpad = PregelScratchpad(
+        step=1,
+        stop=100,
+        call_counter=increment_call_counter,
+        interrupt_counter=lambda: 0,
+        get_null_resume=lambda _: None,
+        resume=[],
+        subgraph_counter=lambda: 0,
+    )
+
+    parent = _make_task(Mock(), name="parent", task_id="parent-id")
+    parent.config[CONF][CONFIG_KEY_SCRATCHPAD] = scratchpad
+
+    # Same id, new object — simulates parent retry
+    retry_child = _make_task(Mock(), name="child", task_id=child_id)
+
+    def schedule_task(_parent_task, _counter, _call_obj):
+        return retry_child
+
+    submit_calls: list[tuple[tuple, dict]] = []
+
+    def mock_submit():
+        def submit_fn(*args, **kwargs):
+            submit_calls.append((args, kwargs))
+            return concurrent.futures.Future()
+
+        return submit_fn
+
+    _call(
+        weakref.ref(parent),
+        lambda x: x,
+        None,
+        futures=weakref.ref(futures_dict),
+        schedule_task=schedule_task,
+        submit=weakref.ref(mock_submit),
+    )
+
+    assert submit_calls == [], (
+        "Should reuse in-flight child task, not schedule a duplicate"
+    )
+
+
 def _idle_timeout(value: float | timedelta) -> TimeoutPolicy:
     return TimeoutPolicy(idle_timeout=value)
 
