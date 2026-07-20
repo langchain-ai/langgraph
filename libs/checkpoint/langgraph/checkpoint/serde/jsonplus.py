@@ -79,6 +79,18 @@ def _warn_once(
     logger.warning(msg, *args)
 
 
+def _warn_reconstruction_failed(module: str, name: str, exc: BaseException) -> None:
+    logger.warning(
+        "Failed to reconstruct %s.%s from checkpoint: %s: %s. "
+        "Returning the raw deserialized payload instead. This usually means "
+        "the type's definition changed since the checkpoint was written.",
+        module,
+        name,
+        type(exc).__name__,
+        exc,
+    )
+
+
 class JsonPlusSerializer(SerializerProtocol):
     """Serializer that uses ormsgpack, with optional fallbacks.
 
@@ -647,8 +659,14 @@ def _create_msgpack_ext_hook(
                     # is using this in the context of a pydantic state, etc., then
                     # it would be validated upon construction.
                     return tup[2]
-                # module, name, arg
-                return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+                try:
+                    # module, name, arg
+                    return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+                except Exception as exc:
+                    # Degrade to the raw payload (same as blocked types) rather
+                    # than silently replacing the value with None.
+                    _warn_reconstruction_failed(tup[0], tup[1], exc)
+                    return tup[2]
             except Exception:
                 return None
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
@@ -658,10 +676,14 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
-                if tup[0] == "langgraph.types" and tup[1] == "Send":
-                    return _send_from_args(tup[2])
-                # module, name, args
-                return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
+                try:
+                    if tup[0] == "langgraph.types" and tup[1] == "Send":
+                        return _send_from_args(tup[2])
+                    # module, name, args
+                    return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
+                except Exception as exc:
+                    _warn_reconstruction_failed(tup[0], tup[1], exc)
+                    return tup[2]
             except Exception:
                 return None
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
@@ -671,8 +693,12 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
-                # module, name, kwargs
-                return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+                try:
+                    # module, name, kwargs
+                    return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+                except Exception as exc:
+                    _warn_reconstruction_failed(tup[0], tup[1], exc)
+                    return tup[2]
             except Exception:
                 return None
         elif code == EXT_METHOD_SINGLE_ARG:
@@ -682,10 +708,14 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed_method(tup[0], tup[1], tup[3]):
                     return tup[2]
-                # module, name, arg, method
-                return getattr(
-                    getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
-                )(tup[2])
+                try:
+                    # module, name, arg, method
+                    return getattr(
+                        getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
+                    )(tup[2])
+                except Exception as exc:
+                    _warn_reconstruction_failed(tup[0], f"{tup[1]}.{tup[3]}", exc)
+                    return tup[2]
             except Exception:
                 return None
         elif code == EXT_PYDANTIC_V1:
@@ -701,13 +731,15 @@ def _create_msgpack_ext_hook(
                     return cls(**tup[2])
                 except Exception:
                     return cls.construct(**tup[2])
-            except Exception:
+            except Exception as exc:
                 # for pydantic objects we can't find/reconstruct
                 # let's return the kwargs dict instead
                 try:
-                    return tup[2]
+                    payload = tup[2]
                 except NameError:
                     return None
+                _warn_reconstruction_failed(tup[0], tup[1], exc)
+                return payload
         elif code == EXT_PYDANTIC_V2:
             try:
                 tup = ormsgpack.unpackb(
@@ -721,13 +753,15 @@ def _create_msgpack_ext_hook(
                     return cls(**tup[2])
                 except Exception:
                     return cls.model_construct(**tup[2])
-            except Exception:
+            except Exception as exc:
                 # for pydantic objects we can't find/reconstruct
                 # let's return the kwargs dict instead
                 try:
-                    return tup[2]
+                    payload = tup[2]
                 except NameError:
                     return None
+                _warn_reconstruction_failed(tup[0], tup[1], exc)
+                return payload
         elif code == EXT_NUMPY_ARRAY:
             try:
                 import numpy as _np

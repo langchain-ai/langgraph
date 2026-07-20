@@ -30,6 +30,7 @@ from langgraph.checkpoint.serde.event_hooks import (
     register_serde_event_listener,
 )
 from langgraph.checkpoint.serde.jsonplus import (
+    EXT_CONSTRUCTOR_POS_ARGS,
     EXT_METHOD_SINGLE_ARG,
     InvalidModuleError,
     JsonPlusSerializer,
@@ -99,6 +100,21 @@ class MyEnum(Enum):
 @dataclasses.dataclass
 class Person:
     name: str
+
+
+@dataclasses.dataclass
+class DriftingDataclass:
+    foo: str
+    bar: int
+
+
+class DriftingEnum(Enum):
+    ALPHA = "alpha"
+    BETA = "beta"
+
+
+class DriftingPydantic(BaseModel):
+    foo: str
 
 
 def test_serde_jsonplus() -> None:
@@ -1235,3 +1251,168 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def _reconstruction_warnings(
+    caplog: pytest.LogCaptureFixture, needle: str
+) -> list[logging.LogRecord]:
+    return [
+        r
+        for r in caplog.records
+        if r.name == "langgraph.checkpoint.serde.jsonplus"
+        and r.levelno == logging.WARNING
+        and "failed to reconstruct" in r.getMessage().lower()
+        and needle in r.getMessage()
+    ]
+
+
+def test_msgpack_allowed_dataclass_drift_degrades_to_payload(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reconstruction failure of an allowed dataclass (EXT_CONSTRUCTOR_KW_ARGS)
+    must degrade to the raw kwargs payload and log a warning, not become None."""
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("tests.test_jsonplus", "DriftingDataclass")]
+    )
+    dumped = serde.dumps_typed(DriftingDataclass(foo="x", bar=1))
+
+    # Simulate schema drift: ``bar`` was renamed to ``baz`` between the time
+    # the checkpoint was written and the time it is read back, so the
+    # constructor rejects the stored kwargs.
+    @dataclasses.dataclass
+    class DriftedDataclass:
+        foo: str
+        baz: int
+
+    monkeypatch.setattr(sys.modules[__name__], "DriftingDataclass", DriftedDataclass)
+
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+    caplog.clear()
+    result = serde.loads_typed(dumped)
+
+    assert result == {"foo": "x", "bar": 1}, (
+        "Reconstruction failure of an allowed type must degrade to the raw "
+        f"payload dict, got: {result!r}"
+    )
+    records = _reconstruction_warnings(caplog, "tests.test_jsonplus.DriftingDataclass")
+    assert records, (
+        "Expected a WARNING referencing tests.test_jsonplus.DriftingDataclass; "
+        f"got records: {[(r.name, r.levelname, r.getMessage()) for r in caplog.records]}"
+    )
+    assert "TypeError" in records[0].getMessage()
+
+
+def test_msgpack_allowed_enum_drift_degrades_to_payload(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reconstruction failure of an allowed enum (EXT_CONSTRUCTOR_SINGLE_ARG)
+    must degrade to the raw enum value and log a warning, not become None."""
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("tests.test_jsonplus", "DriftingEnum")]
+    )
+    dumped = serde.dumps_typed(DriftingEnum.BETA)
+
+    # Simulate schema drift: the ``BETA`` member was removed after the
+    # checkpoint was written, so ``DriftingEnum("beta")`` raises ValueError.
+    class DriftedEnum(Enum):
+        ALPHA = "alpha"
+
+    monkeypatch.setattr(sys.modules[__name__], "DriftingEnum", DriftedEnum)
+
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+    caplog.clear()
+    result = serde.loads_typed(dumped)
+
+    assert result == "beta"
+    records = _reconstruction_warnings(caplog, "tests.test_jsonplus.DriftingEnum")
+    assert records, (
+        "Expected a WARNING referencing tests.test_jsonplus.DriftingEnum; "
+        f"got records: {[(r.name, r.levelname, r.getMessage()) for r in caplog.records]}"
+    )
+    assert "ValueError" in records[0].getMessage()
+
+
+def test_msgpack_allowed_pos_args_drift_degrades_to_payload(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Reconstruction failure of an allowed type via EXT_CONSTRUCTOR_POS_ARGS
+    must degrade to the raw positional-args payload, not None."""
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("tests.test_jsonplus", "DriftingDataclass")]
+    )
+    # DriftingDataclass requires two args; a single positional arg simulates a
+    # signature change between write and read.
+    payload = ormsgpack.packb(
+        ormsgpack.Ext(
+            EXT_CONSTRUCTOR_POS_ARGS,
+            _msgpack_enc(("tests.test_jsonplus", "DriftingDataclass", ("only",))),
+        ),
+        option=ormsgpack.OPT_NON_STR_KEYS,
+    )
+
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+    caplog.clear()
+    result = serde.loads_typed(("msgpack", payload))
+
+    assert result == ["only"]
+    records = _reconstruction_warnings(caplog, "tests.test_jsonplus.DriftingDataclass")
+    assert records, (
+        "Expected a WARNING referencing tests.test_jsonplus.DriftingDataclass; "
+        f"got records: {[(r.name, r.levelname, r.getMessage()) for r in caplog.records]}"
+    )
+
+
+def test_msgpack_allowed_method_failure_degrades_to_payload(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Failure of an allowed method call (EXT_METHOD_SINGLE_ARG) must degrade
+    to the raw argument payload, not None."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    # datetime.datetime.fromisoformat is in SAFE_MSGPACK_METHODS but raises
+    # ValueError on a malformed timestamp.
+    payload = ormsgpack.packb(
+        ormsgpack.Ext(
+            EXT_METHOD_SINGLE_ARG,
+            _msgpack_enc(("datetime", "datetime", "not-a-date", "fromisoformat")),
+        ),
+        option=ormsgpack.OPT_NON_STR_KEYS,
+    )
+
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+    caplog.clear()
+    result = serde.loads_typed(("msgpack", payload))
+
+    assert result == "not-a-date"
+    records = _reconstruction_warnings(caplog, "datetime.datetime.fromisoformat")
+    assert records, (
+        "Expected a WARNING referencing datetime.datetime.fromisoformat; "
+        f"got records: {[(r.name, r.levelname, r.getMessage()) for r in caplog.records]}"
+    )
+
+
+def test_msgpack_allowed_pydantic_missing_class_degrades_with_warning(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An allowed pydantic model whose class no longer exists degrades to its
+    kwargs dict (existing behavior) and now logs a warning."""
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("tests.test_jsonplus", "DriftingPydantic")]
+    )
+    dumped = serde.dumps_typed(DriftingPydantic(foo="x"))
+
+    # Simulate the class being deleted/renamed between write and read.
+    monkeypatch.delattr(sys.modules[__name__], "DriftingPydantic")
+
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+    caplog.clear()
+    result = serde.loads_typed(dumped)
+
+    assert result == {"foo": "x"}
+    records = _reconstruction_warnings(caplog, "tests.test_jsonplus.DriftingPydantic")
+    assert records, (
+        "Expected a WARNING referencing tests.test_jsonplus.DriftingPydantic; "
+        f"got records: {[(r.name, r.levelname, r.getMessage()) for r in caplog.records]}"
+    )
