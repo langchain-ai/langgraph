@@ -2462,3 +2462,100 @@ def test_tools_condition_empty_dict_messages() -> None:
     """Sanity check: empty dict state raises the same ValueError."""
     with pytest.raises(ValueError, match="No messages found in input state"):
         tools_condition({"messages": []})
+
+
+def test_tool_node_param_named_runtime_with_other_annotation_not_hijacked() -> None:
+    """A parameter merely named `runtime` with a non-ToolRuntime annotation is a
+    regular model-provided argument: it stays in the tool schema and receives
+    the model-supplied value instead of an injected ToolRuntime instance."""
+
+    @dec_tool
+    def sched(task: str, runtime: str) -> str:
+        """Schedule a task at the given runtime."""
+        assert isinstance(runtime, str)
+        return f"scheduled {task} at {runtime}"
+
+    # The param must remain visible in the schema presented to the model.
+    assert "runtime" in sched.tool_call_schema.model_json_schema()["properties"]
+
+    from langgraph.prebuilt.tool_node import _get_all_injected_args
+
+    assert _get_all_injected_args(sched).runtime is None
+
+    result = ToolNode([sched]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "sched",
+                            "args": {"task": "standup", "runtime": "9am"},
+                            "id": "call_sched",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.status != "error"
+    assert tool_message.content == "scheduled standup at 9am"
+
+
+def test_tool_node_param_annotated_tool_runtime_still_injected() -> None:
+    """A parameter annotated with ToolRuntime is still injected and hidden
+    from the tool schema presented to the model."""
+
+    @dec_tool
+    def rt_tool(x: int, runtime: ToolRuntime) -> str:
+        """Tool that accesses runtime."""
+        assert isinstance(runtime, ToolRuntime)
+        return f"x={x}, tool_call_id={runtime.tool_call_id}"
+
+    assert "runtime" not in rt_tool.tool_call_schema.model_json_schema().get(
+        "properties", {}
+    )
+
+    from langgraph.prebuilt.tool_node import _get_all_injected_args
+
+    assert _get_all_injected_args(rt_tool).runtime == "runtime"
+
+    result = ToolNode([rt_tool]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "rt_tool",
+                            "args": {"x": 1},
+                            "id": "call_rt",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.status != "error"
+    assert tool_message.content == "x=1, tool_call_id=call_rt"
+
+
+def test_tool_runtime_forward_ref_detection() -> None:
+    """String/ForwardRef annotations naming ToolRuntime are treated as the
+    runtime slot; anything else is not."""
+    from typing import ForwardRef
+
+    from langgraph.prebuilt.tool_node import _is_tool_runtime_forward_ref
+
+    assert _is_tool_runtime_forward_ref("ToolRuntime")
+    assert _is_tool_runtime_forward_ref("ToolRuntime[Context, State]")
+    assert _is_tool_runtime_forward_ref(ForwardRef("ToolRuntime"))
+    assert not _is_tool_runtime_forward_ref("str")
+    assert not _is_tool_runtime_forward_ref(str)
+    assert not _is_tool_runtime_forward_ref(ToolRuntime)  # real class handled elsewhere

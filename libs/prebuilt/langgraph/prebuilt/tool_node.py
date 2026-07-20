@@ -50,6 +50,7 @@ from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
+    ForwardRef,
     Generic,
     Literal,
     TypedDict,
@@ -1936,6 +1937,19 @@ def _get_injection_from_type(
     return None
 
 
+def _is_tool_runtime_forward_ref(type_: Any) -> bool:
+    """Check if an annotation is an unresolved forward reference to ToolRuntime.
+
+    Handles string annotations (e.g. `"ToolRuntime"` or `"ToolRuntime[Ctx, State]"`)
+    and `ForwardRef` instances that could not be resolved to the actual class.
+    """
+    if isinstance(type_, ForwardRef):
+        type_ = type_.__forward_arg__
+    if isinstance(type_, str):
+        return type_ == "ToolRuntime" or type_.startswith("ToolRuntime[")
+    return False
+
+
 def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
     """Extract all injected arguments from tool in a single pass.
 
@@ -1971,8 +1985,11 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
         if _is_injected_arg_type(type_):
             all_injected_keys.add(name)
 
-        # Check for runtime (special case: parameter named "runtime")
-        if name == "runtime":
+        # Check for an unresolved `ToolRuntime` forward reference on a parameter
+        # named "runtime". A parameter merely named `runtime` with a different
+        # annotation (e.g. `runtime: str`) is a regular model-provided argument
+        # and must not be hijacked for injection.
+        if name == "runtime" and _is_tool_runtime_forward_ref(type_):
             runtime_arg = name
 
         # Check for InjectedState
