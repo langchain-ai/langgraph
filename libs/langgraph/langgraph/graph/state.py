@@ -85,6 +85,7 @@ from langgraph.types import (
     RetryPolicy,
     Send,
     TimeoutPolicy,
+    TracePolicy,
     ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
@@ -384,7 +385,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
-        trace_inputs: Callable[[Any], Any] | None = None,
+        trace_policy: TracePolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -454,7 +455,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
-        trace_inputs: Callable[[Any], Any] | None = None,
+        trace_policy: TracePolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph` where input schema is specified.
@@ -529,7 +530,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
-        trace_inputs: Callable[[Any], Any] | None = None,
+        trace_policy: TracePolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
@@ -599,7 +600,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
-        trace_inputs: Callable[[Any], Any] | None = None,
+        trace_policy: TracePolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is specified.
@@ -676,7 +677,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
-        trace_inputs: Callable[[Any], Any] | None = None,
+        trace_policy: TracePolicy | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`.
@@ -696,10 +697,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 If a sequence is provided, the first matching policy will be applied.
             cache_policy: The cache policy for the node.
             error_handler: Optional node-level error handler callable for this node.
-            trace_inputs: Optional callable to transform this node's input before it
-                is recorded on the node's trace run. Use to omit or summarize large
-                payloads (e.g. message history) from traces without changing the
-                value passed to the node. Does not affect execution.
+            trace_policy: Optional policy controlling what this node records on its
+                trace run. Its `process_inputs`/`process_outputs` callables transform
+                the node's input/output before they are recorded (e.g. to omit or
+                summarize large message history), without changing the values passed
+                to or returned by the node. Does not affect execution.
             destinations: Destinations that indicate where a node can route to.
 
                 Useful for edgeless graphs with nodes that return `Command` objects.
@@ -889,7 +891,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
-                trace_inputs=trace_inputs,
+                trace_policy=trace_policy,
             )
         elif inferred_input_schema is not None:
             self.nodes[node] = StateNodeSpec(
@@ -902,7 +904,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
-                trace_inputs=trace_inputs,
+                trace_policy=trace_policy,
             )
         else:
             self.nodes[node] = StateNodeSpec[StateT, ContextT](
@@ -915,7 +917,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 ends=ends,
                 defer=defer,
                 timeout=timeout,
-                trace_inputs=trace_inputs,
+                trace_policy=trace_policy,
             )
 
         input_schema = input_schema or inferred_input_schema
@@ -1542,7 +1544,7 @@ class CompiledStateGraph(
                 error_handler_node=node.error_handler_node,
                 bound=node.runnable,  # type: ignore[arg-type]
                 timeout=node.timeout,
-                trace_inputs=node.trace_inputs,
+                trace_policy=node.trace_policy,
             )
         else:
             raise RuntimeError
