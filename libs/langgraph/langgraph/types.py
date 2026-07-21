@@ -530,7 +530,7 @@ class CachePolicy(Generic[KeyFuncT]):
 
 @dataclass(**_DC_KWARGS)
 class TracePolicy:
-    """Configuration for what a node records on its trace run.
+    """Configuration for how a node's run is traced.
 
     Scope: this only transforms what the node's *own* run records. Child runs created
     by a traced `bound` runnable (e.g. a `RunnableLambda`, a chain, or a `prompt | model`)
@@ -550,6 +550,12 @@ class TracePolicy:
     process_outputs: Callable[[Any], Any] | None = None
     """Optional callable to transform the node's output before it is recorded on the
     node's trace run. Does not affect the value returned by the node."""
+
+    hidden: bool = False
+    """Whether to hide this node's run from the trace tree by tagging it
+    `langsmith:hidden_middleware`. The run is still sent, but LangSmith omits it from the
+    trace view. Unlike `langsmith:hidden`, this does not affect LangGraph's
+    `stream`/debug output."""
 
 
 _DEFAULT_INTERRUPT_ID = "placeholder-id"

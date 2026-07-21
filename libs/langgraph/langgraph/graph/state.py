@@ -57,7 +57,7 @@ from langgraph.channels.named_barrier_value import (
     NamedBarrierValue,
     NamedBarrierValueAfterFinish,
 )
-from langgraph.constants import END, START, TAG_HIDDEN
+from langgraph.constants import END, START, TAG_HIDDEN, TAG_HIDDEN_MIDDLEWARE
 from langgraph.errors import (
     ErrorCode,
     InvalidUpdateError,
@@ -1529,6 +1529,7 @@ class CompiledStateGraph(
                 if node.defer
                 else EphemeralValue(Any, guard=False)
             )
+            hidden = node.trace_policy is not None and node.trace_policy.hidden
             self.nodes[key] = PregelNode(
                 triggers=[branch_channel],
                 # read state keys and managed values
@@ -1537,6 +1538,7 @@ class CompiledStateGraph(
                 mapper=mapper,
                 # publish to state keys
                 writers=[ChannelWrite(write_entries)],
+                tags=[TAG_HIDDEN_MIDDLEWARE] if hidden else None,
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
