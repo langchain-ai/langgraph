@@ -4590,6 +4590,45 @@ def test_debug_nested_subgraphs(
                 assert stream_task.get("state") == history_task.state
 
 
+def test_debug_stream_error_events(durability: Durability):
+    """task_result events with errors must be yielded when stream_mode='debug'.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/5764.
+    """
+    class State(TypedDict):
+        pass
+
+    def failing_node(state: State):
+        raise ValueError("node failure")
+
+    builder = StateGraph(State)
+    builder.add_node("failer", failing_node)
+    builder.add_edge(START, "failer")
+    builder.add_edge("failer", END)
+    graph = builder.compile()
+
+    task_result_found = False
+    try:
+        for event in graph.stream(
+            {},
+            stream_mode="debug",
+            durability=durability,
+        ):
+            if (
+                isinstance(event, dict)
+                and event.get("type") == "task_result"
+                and event.get("payload", {}).get("error") is not None
+            ):
+                task_result_found = True
+    except Exception:
+        pass
+
+    assert task_result_found, (
+        "Expected a task_result event with error when using stream_mode='debug'. "
+        "The error event was not yielded before the exception was raised."
+    )
+
+
 def test_add_sequence():
     class State(TypedDict):
         foo: Annotated[list[str], operator.add]

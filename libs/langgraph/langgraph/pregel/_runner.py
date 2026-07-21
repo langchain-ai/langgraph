@@ -245,6 +245,7 @@ class PregelRunner:
                         ):
                             tb = tb.tb_next
                         exc.__traceback__ = tb
+                    yield  # drain stream queue before raising (e.g. task_result events)
                     raise
             if not futures and not scheduled_error_handler:
                 # maybe `t` scheduled another task
@@ -436,6 +437,7 @@ class PregelRunner:
                         ):
                             tb = tb.tb_next
                         exc.__traceback__ = tb
+                    yield  # drain stream queue before raising (e.g. task_result events)
                     raise
             if not futures and not scheduled_error_handler:
                 # maybe `t` scheduled another task
