@@ -735,7 +735,7 @@ def _call(
             (
                 f
                 for f, t in list(futures().items())  # type: ignore[union-attr]
-                if t is not None and t == next_task.id
+                if t is not None and t.id == next_task.id
             ),
             None,
         ):
@@ -882,7 +882,7 @@ async def _acall_impl(
                 (
                     f
                     for f, t in list(futures().items())  # type: ignore[union-attr]
-                    if t is not None and t == next_task.id
+                    if t is not None and t.id == next_task.id
                 ),
                 None,
             ):
