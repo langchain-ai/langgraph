@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from collections import deque
 from collections.abc import Callable, Hashable, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import timedelta
 from typing import (
     TYPE_CHECKING,
@@ -70,7 +70,6 @@ __all__ = (
     "RetryPolicy",
     "TimeoutPolicy",
     "CachePolicy",
-    "TracePolicy",
     "Interrupt",
     "StateUpdate",
     "PregelTask",
@@ -526,29 +525,6 @@ class CachePolicy(Generic[KeyFuncT]):
 
     ttl: int | None = None
     """Time to live for the cache entry in seconds. If `None`, the entry never expires."""
-
-
-@dataclass(**_DC_KWARGS)
-class TracePolicy:
-    """Configuration for how a node's run is traced.
-
-    Scope: this only transforms what the node's *own* run records. Child runs created
-    by a traced `bound` runnable (e.g. a `RunnableLambda`, a chain, or a `prompt | model`)
-    and the root graph run are not affected. Plain function nodes are traced with
-    `trace=False`, so they have no such child runs.
-
-    This is a trace-payload/latency tool, not a secret-redaction control. To redact
-    inputs/outputs across all runs (children included), use the LangSmith client's
-    `hide_inputs`/`hide_outputs`/`anonymizer` instead.
-    """
-
-    process_inputs: Callable[[Any], Any] | None = None
-    """Optional callable to transform the node's input before it is recorded on the
-    node's trace run. Use to omit or summarize large payloads (e.g. message history).
-    Does not affect the value passed to the node."""
-
-    tags: list[str] = field(default_factory=list)
-    """Tags to attach to this node's trace run."""
 
 
 _DEFAULT_INTERRUPT_ID = "placeholder-id"

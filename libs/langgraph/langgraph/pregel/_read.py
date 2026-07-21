@@ -16,7 +16,7 @@ from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph.pregel._utils import find_subgraph_pregel
 from langgraph.pregel._write import ChannelWrite
 from langgraph.pregel.protocol import PregelProtocol
-from langgraph.types import CachePolicy, RetryPolicy, TimeoutPolicy, TracePolicy
+from langgraph.types import CachePolicy, RetryPolicy, TimeoutPolicy
 
 READ_TYPE = Callable[[str | Sequence[str], bool], Any | dict[str, Any]]
 INPUT_CACHE_KEY_TYPE = tuple[Callable[..., Any], tuple[str, ...]]
@@ -138,9 +138,6 @@ class PregelNode:
     metadata: Mapping[str, Any] | None
     """Metadata to attach to the node for tracing."""
 
-    trace_policy: TracePolicy | None
-    """Optional policy controlling what this node records on its trace run."""
-
     is_error_handler: bool
     """Whether this node is registered as an error handler node."""
 
@@ -159,7 +156,6 @@ class PregelNode:
         writers: list[Runnable] | None = None,
         tags: list[str] | None = None,
         metadata: Mapping[str, Any] | None = None,
-        trace_policy: TracePolicy | None = None,
         bound: Runnable[Any, Any] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
@@ -181,7 +177,6 @@ class PregelNode:
         self.timeout = coerce_timeout_policy(timeout)
         self.tags = tags
         self.metadata = metadata
-        self.trace_policy = trace_policy
         self.is_error_handler = is_error_handler
         self.error_handler_node = error_handler_node
         if subgraphs is not None:
@@ -227,15 +222,14 @@ class PregelNode:
     def node(self) -> Runnable[Any, Any] | None:
         """Get a runnable that combines `bound` and `writers`."""
         writers = self.flat_writers
-        trace_inputs = self.trace_policy.process_inputs if self.trace_policy else None
         if self.bound is DEFAULT_BOUND and not writers:
             return None
         elif self.bound is DEFAULT_BOUND and len(writers) == 1:
             return writers[0]
         elif self.bound is DEFAULT_BOUND:
-            return RunnableSeq(*writers, trace_inputs=trace_inputs)
+            return RunnableSeq(*writers)
         elif writers:
-            return RunnableSeq(self.bound, *writers, trace_inputs=trace_inputs)
+            return RunnableSeq(self.bound, *writers)
         else:
             return self.bound
 
