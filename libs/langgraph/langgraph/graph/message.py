@@ -393,12 +393,7 @@ def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
             if message.id and message.additional_kwargs:
                 saved_kwargs[message.id] = message.additional_kwargs
 
-        # include_id was added in langchain-core 0.3.78; fall back for
-        # older versions that don't support it yet.
-        try:
-            openai_msgs = convert_to_openai_messages(messages, include_id=True)
-        except TypeError:
-            openai_msgs = convert_to_openai_messages(messages)
+        openai_msgs = convert_to_openai_messages(messages, include_id=True)
 
         formatted = convert_to_messages(openai_msgs)
 
