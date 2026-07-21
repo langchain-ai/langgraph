@@ -1,4 +1,4 @@
-"""End-to-end tests for `TracePolicy` (input processing + hidden tag) on node runs."""
+"""End-to-end tests for `TracePolicy` (input processing + run tags) on node runs."""
 
 from typing import Any
 
@@ -8,6 +8,11 @@ from typing_extensions import TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import TracePolicy
 from tests.fake_tracer import FakeTracer, Run
+
+# TracePolicy is marked @beta; constructing it here (outside langchain) would warn.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore::langchain_core._api.beta_decorator.LangChainBetaWarning"
+)
 
 
 class State(TypedDict):

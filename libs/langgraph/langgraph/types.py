@@ -17,6 +17,7 @@ from typing import (
 )
 from warnings import warn
 
+from langchain_core._api import beta
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
@@ -528,6 +529,7 @@ class CachePolicy(Generic[KeyFuncT]):
     """Time to live for the cache entry in seconds. If `None`, the entry never expires."""
 
 
+@beta()
 @dataclass(**_DC_KWARGS)
 class TracePolicy:
     """Configuration for how a node's run is traced.
