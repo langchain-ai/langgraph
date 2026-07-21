@@ -4,7 +4,7 @@ import json
 import random
 import sqlite3
 import threading
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from typing import Any, cast
 
@@ -16,12 +16,19 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    DeltaChannelHistory,
     SerializerProtocol,
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
+from langgraph.checkpoint.sqlite._delta import (
+    DELTA_STAGE1_SQL,
+    build_delta_channels_writes_history,
+    build_delta_stage2_sql,
+    step_walk_with_row,
+)
 from langgraph.checkpoint.sqlite.utils import search_where
 
 _AIO_ERROR_MSG = (
@@ -492,6 +499,88 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 "DELETE FROM writes WHERE thread_id = ?",
                 (str(thread_id),),
             )
+
+    def get_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        """Fast-path override of `BaseCheckpointSaver.get_delta_channel_history`.
+
+        Two-stage query:
+
+        * Stage 1 (paged): newest-first slice of `checkpoints` returning
+          `(checkpoint_id, parent_checkpoint_id, type, checkpoint)` per
+          ancestor. Sqlite has no JSONB, so we ship the full serialized
+          checkpoint blob and inspect `channel_values` in Python. Pages
+          newest-first by `checkpoint_id` with a `< cursor` predicate;
+          page size is `DELTA_PAGE_SIZE`. Stops paging when every channel
+          has found its seed or the chain is exhausted.
+
+        * Stage 2 (per-channel UNION ALL): one branch per channel reading
+          `writes` filtered to that channel's specific `chain_cids`. No
+          separate seed-blob fetch — sqlite stores `channel_values` inline
+          in the checkpoint blob, so seeds come back from stage 1.
+        """
+        if not channels:
+            return {}
+        channels = list(channels)
+        thread_id = str(config["configurable"]["thread_id"])
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = get_checkpoint_id(config)
+        if checkpoint_id is None:
+            target = self.get_tuple(config)
+            if target is None:
+                return {ch: {"writes": []} for ch in channels}
+            checkpoint_id = target.config["configurable"]["checkpoint_id"]
+
+        chain_by_ch: dict[str, list[str]] = {ch: [] for ch in channels}
+        seed_val_by_ch: dict[str, Any] = {}
+        walk_state: dict[str, Any] = {}
+        seeded: set[str] = set()
+
+        with self.cursor(transaction=False) as cur:
+            cur.execute(DELTA_STAGE1_SQL, (thread_id, checkpoint_ns, checkpoint_id))
+            for row in cur:
+                cid, parent_cid, type_tag, blob = row
+                if step_walk_with_row(
+                    cid=cid,
+                    parent_cid=parent_cid,
+                    type_tag=type_tag,
+                    blob=blob,
+                    target_id=checkpoint_id,
+                    serde=self.serde,
+                    chain_by_ch=chain_by_ch,
+                    seed_val_by_ch=seed_val_by_ch,
+                    walk_state=walk_state,
+                    seeded=seeded,
+                    channels=channels,
+                ):
+                    break
+
+            channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
+            stage2_sql = build_delta_stage2_sql(
+                chain_lens=[len(chain_by_ch[ch]) for ch in channels_with_chain],
+            )
+            if stage2_sql:
+                stage2_params: list[Any] = []
+                for ch in channels_with_chain:
+                    stage2_params.extend(
+                        [thread_id, checkpoint_ns, ch, *chain_by_ch[ch]]
+                    )
+                cur.execute(stage2_sql, stage2_params)
+                stage2_rows = cast(
+                    "list[tuple[str, str, str, int, str, bytes]]", cur.fetchall()
+                )
+            else:
+                stage2_rows = []
+
+        return build_delta_channels_writes_history(
+            channels=channels,
+            chain_by_ch=chain_by_ch,
+            seed_val_by_ch=seed_val_by_ch,
+            seeded=seeded,
+            stage2_rows=stage2_rows,
+            serde=self.serde,
+        )
 
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database asynchronously.

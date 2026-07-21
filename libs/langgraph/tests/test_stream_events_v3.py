@@ -1,6 +1,6 @@
 """Tests for v2 streaming format (StreamPart TypedDicts).
 
-This file is checked by mypy directly — no subprocess workarounds.
+This file is checked by ty directly.
 Type-narrowing is validated via `assert_type` calls in `_check_type_narrowing`.
 """
 
@@ -19,9 +19,11 @@ from typing_extensions import TypedDict, assert_type
 
 from langgraph._internal._constants import INTERRUPT
 from langgraph.constants import END, START
+from langgraph.errors import GraphDrained
 from langgraph.func import entrypoint
 from langgraph.graph import StateGraph
 from langgraph.graph.message import MessagesState
+from langgraph.runtime import RunControl
 from langgraph.types import (
     CheckpointPayload,
     CheckpointStreamPart,
@@ -228,6 +230,32 @@ class TestV2Stream:
         assert {"values", "updates"} <= types_seen
         for c in chunks:
             _assert_stream_part_shape(c)
+
+    def test_stream_events_v3_accepts_control_for_drain(self) -> None:
+        class DrainState(TypedDict, total=False):
+            value: str
+            skipped: str
+
+        control = RunControl()
+
+        def first_node(state: DrainState) -> dict[str, str]:
+            control.request_drain("sigterm")
+            return {"value": "done"}
+
+        def second_node(state: DrainState) -> dict[str, str]:
+            return {"skipped": "nope"}
+
+        builder = StateGraph(DrainState)
+        builder.add_node("first", first_node)
+        builder.add_node("second", second_node)
+        builder.add_edge(START, "first")
+        builder.add_edge("first", "second")
+        builder.add_edge("second", END)
+        graph = builder.compile()
+
+        run = graph.stream_events({}, control=control, version="v3")
+        with pytest.raises(GraphDrained, match="sigterm"):
+            list(run.values)
 
     def test_subgraphs_ns(self) -> None:
         outer = _make_subgraph()
@@ -1096,7 +1124,7 @@ class TestV2ValidationErrors:
 
     _INVALID_INPUT: dict[str, Any] = {"value": [1, 2, 3], "items": []}
 
-    def test_stream_v2_pydantic_validation_error(self) -> None:
+    def test_stream_events_v3_pydantic_validation_error(self) -> None:
         """Invalid input to stream with v2 + pydantic state raises ValidationError."""
         graph = _make_pydantic_graph()
         with pytest.raises(ValidationError):

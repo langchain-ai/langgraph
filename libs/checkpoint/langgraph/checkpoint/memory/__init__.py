@@ -6,7 +6,7 @@ import pickle
 import random
 import shutil
 from collections import defaultdict
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from types import TracebackType
 from typing import Any
@@ -20,6 +20,8 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    DeltaChannelHistory,
+    PendingWrite,
     SerializerProtocol,
     get_checkpoint_id,
     get_checkpoint_metadata,
@@ -121,16 +123,115 @@ class InMemorySaver(
         return self.stack.__exit__(__exc_type, __exc_value, __traceback)
 
     def _load_blobs(
-        self, thread_id: str, checkpoint_ns: str, versions: ChannelVersions
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        versions: ChannelVersions,
     ) -> dict[str, Any]:
-        channel_values: dict[str, Any] = {}
-        for k, v in versions.items():
-            kk = (thread_id, checkpoint_ns, k, v)
-            if kk in self.blobs:
-                vv = self.blobs[kk]
-                if vv[0] != "empty":
-                    channel_values[k] = self.serde.loads_typed(vv)
-        return channel_values
+        result: dict[str, Any] = {}
+        for k, ver in versions.items():
+            kk = (thread_id, checkpoint_ns, k, ver)
+            if kk not in self.blobs:
+                continue
+            vv = self.blobs[kk]
+            if vv[0] == "empty":
+                continue
+            result[k] = self.serde.loads_typed(vv)
+        return result
+
+    def get_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        """Override: walk the parent chain ONCE for all requested channels.
+
+        Each channel terminates independently at the nearest ancestor
+        whose stored blob is non-empty. Other channels keep walking until
+        they find their own terminator or hit the root.
+
+        Pre-delta plain-value blobs subsume their ancestor's pending
+        writes (the value already includes them); `_DeltaSnapshot` blobs
+        do not (snapshot is the value AT that ancestor, prior to its own
+        pending writes that produce the child).
+        """
+        if not channels:
+            return {}
+        # Imported lazily to avoid a hard checkpoint→serde-types coupling at
+        # module import; only this override needs the runtime check.
+        from langgraph.checkpoint.serde.types import _DeltaSnapshot
+
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = config["configurable"].get("checkpoint_id", "")
+        ns_storage = self.storage.get(thread_id, {}).get(checkpoint_ns, {})
+
+        chain: list[str] = []
+        target_entry = ns_storage.get(checkpoint_id)
+        current: str | None = target_entry[2] if target_entry is not None else None
+        while current is not None:
+            entry = ns_storage.get(current)
+            if entry is None:
+                break
+            chain.append(current)
+            _, _, parent = entry
+            current = parent
+
+        collected_by_ch: dict[str, list[PendingWrite]] = {c: [] for c in channels}
+        seed_by_ch: dict[str, Any] = {}
+        remaining: set[str] = set(channels)
+
+        for cp_id in chain:
+            if not remaining:
+                break
+            entry = ns_storage.get(cp_id)
+            ckpt = self.serde.loads_typed(entry[0]) if entry is not None else None
+
+            terminated_here: set[str] = set()
+            blob_value_by_ch: dict[str, Any] = {}
+            if ckpt is not None:
+                versions = ckpt.get("channel_versions", {})
+                for ch in remaining:
+                    ver = versions.get(ch)
+                    if ver is None:
+                        continue
+                    blob_entry = self.blobs.get((thread_id, checkpoint_ns, ch, ver))
+                    if blob_entry is None or blob_entry[0] == "empty":
+                        continue
+                    blob_value_by_ch[ch] = self.serde.loads_typed(blob_entry)
+                    terminated_here.add(ch)
+
+            step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
+            for (_task_id, _idx), (tid, ch, serialized, _) in sorted(
+                step_writes.items(), reverse=True
+            ):
+                if ch not in remaining:
+                    continue
+                blob_value = blob_value_by_ch.get(ch)
+                if blob_value is not None and not isinstance(
+                    blob_value, _DeltaSnapshot
+                ):
+                    continue
+                collected_by_ch[ch].append(
+                    (tid, ch, self.serde.loads_typed(serialized))
+                )
+
+            for ch in terminated_here:
+                seed_by_ch[ch] = blob_value_by_ch[ch]
+                remaining.discard(ch)
+
+        result: dict[str, DeltaChannelHistory] = {}
+        for ch in channels:
+            entry_h: DeltaChannelHistory = {
+                "writes": list(reversed(collected_by_ch[ch]))
+            }
+            if ch in seed_by_ch:
+                entry_h["seed"] = seed_by_ch[ch]
+            result[ch] = entry_h
+        return result
+
+    async def aget_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        return self.get_delta_channel_history(config=config, channels=channels)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.

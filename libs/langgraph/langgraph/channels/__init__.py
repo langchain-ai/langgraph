@@ -1,6 +1,7 @@
 from langgraph.channels.any_value import AnyValue
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.named_barrier_value import (
@@ -20,6 +21,7 @@ __all__ = (
     "UntrackedValue",
     "EphemeralValue",
     "BinaryOperatorAggregate",
+    "DeltaChannel",
     "NamedBarrierValue",
     "NamedBarrierValueAfterFinish",
     # topics

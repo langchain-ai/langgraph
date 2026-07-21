@@ -184,13 +184,28 @@
             "pip_installer": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "pip",
+                    "uv"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UvSource"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
+              "description": "Optional. Explicit deployment source configuration.\n\n`root/pyproject.toml` and `root/uv.lock`. If `root` is a workspace and the\ntarget is ambiguous, set `package` to the desired workspace member.\n"
             },
             "store": {
               "anyOf": [
@@ -232,6 +247,240 @@
           "required": [
             "dependencies",
             "graphs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "python_version": {
+              "type": "string",
+              "description": "Optional. Python version in 'major.minor' format (e.g. '3.11').\nMust be at least 3.11 or greater for this deployment to function properly.\n",
+              "enum": [
+                "3.11",
+                "3.12",
+                "3.13"
+              ]
+            },
+            "pip_config_file": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Path to a pip config file (e.g., \"/etc/pip.conf\" or \"pip.ini\") for controlling\npackage installation (custom indices, credentials, etc.).\n\nOnly relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.\n"
+            },
+            "_INTERNAL_docker_tag": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Internal use only.\n"
+            },
+            "api_version": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Which semantic version of the LangGraph API server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
+            },
+            "auth": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AuthConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom authentication config, including the path to your Python auth logic and\nthe OpenAPI security definitions it uses.\n"
+            },
+            "base_image": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Base image to use for the LangGraph API server.\n\nDefaults to langchain/langgraph-api or langchain/langgraphjs-api.\n"
+            },
+            "checkpointer": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CheckpointerConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).\n"
+            },
+            "dependencies": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "List of Python dependencies to install, either from PyPI or local paths.\n"
+            },
+            "dockerfile_lines": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional. Additional Docker instructions that will be appended to your base Dockerfile.\n\nUseful for installing OS packages, setting environment variables, etc."
+            },
+            "encryption": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EncryptionConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom at-rest encryption config, including the path to your Python encryption logic.\n\nAllows you to implement custom encryption for sensitive data stored in the database.\n"
+            },
+            "env": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "description": "Optional. Environment variables to set for your deployment.\n\n- If given as a dict, keys are variable names and values are their values.\n- If given as a string, it must be a path to a file containing lines in KEY=VALUE format.\n\nenv=\".env\n"
+            },
+            "graphs": {
+              "type": "object",
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/GraphDef"
+                  }
+                ]
+              },
+              "description": "Optional. Named definitions of graphs, each pointing to a Python object.\n\n\nGraphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context\nmanagers that accept a single configuration argument (of type RunnableConfig) and return a pregel object\n(instance of Stategraph, etc.).\n\nor objects with a \"path\" key and optional \"description\" key."
+            },
+            "http": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HttpConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed\nand how cross-origin requests are handled.\n"
+            },
+            "image_distro": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "bookworm",
+                    "debian",
+                    "wolfi"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Linux distribution for the base image.\n\nMust be one of 'wolfi', 'debian', or 'bookworm'.\nIf omitted, defaults to 'debian' ('latest').\n"
+            },
+            "keep_pkg_tools": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Control whether to retain Python packaging tools in the final image.\n\nYou can also set to true to include all packaging tools.\n"
+            },
+            "pip_installer": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "pip",
+                    "uv"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/UvSource"
+            },
+            "store": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StoreConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Configuration for the built-in long-term memory store, including semantic search indexing.\n\nIf omitted, no vector index is set up (the object store will still be present, however).\n"
+            },
+            "ui": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.\n"
+            },
+            "webhooks": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WebhooksConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Webhooks configuration for outbound event delivery.\n\nForwarded into the container as `LANGGRAPH_WEBHOOKS`. See `WebhooksConfig`\nfor URL policy and header templating details.\n"
+            }
+          },
+          "required": [
+            "graphs",
+            "source"
           ]
         },
         {
@@ -405,13 +654,28 @@
             "pip_installer": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "pip",
+                    "uv"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/UvSource"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
+              "description": "Optional. Explicit deployment source configuration.\n\n`root/pyproject.toml` and `root/uv.lock`. If `root` is a workspace and the\ntarget is ambiguous, set `package` to the desired workspace member.\n"
             },
             "store": {
               "anyOf": [
@@ -905,6 +1169,27 @@
         }
       },
       "required": []
+    },
+    "UvSource": {
+      "title": "UvSource",
+      "description": "Deployment source rooted at a uv project or workspace.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "uv"
+          ]
+        },
+        "package": {
+          "type": "string"
+        },
+        "root": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ]
     },
     "StoreConfig": {
       "title": "StoreConfig",

@@ -1,4 +1,3 @@
-# mypy: disable-error-code="operator"
 import asyncio
 import json
 from collections.abc import Iterable

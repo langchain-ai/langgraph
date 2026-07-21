@@ -9,6 +9,7 @@ import pytest
 from langchain_core.messages import AIMessage, AnyMessage, ToolCall
 from langchain_core.runnables import RunnableConfig, RunnableMap, RunnablePick
 from langchain_core.tools import tool
+from langchain_core.version import VERSION as LANGCHAIN_CORE_VERSION
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
@@ -1396,10 +1397,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
-                "_type": "generic-fake-chat-model",
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
         (
@@ -1409,6 +1410,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 tool_call_id="tool_call123",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 2,
                 "langgraph_node": "tools",
                 "langgraph_triggers": (PUSH,),
@@ -1458,10 +1460,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
-                "_type": "generic-fake-chat-model",
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
     ]
@@ -1474,6 +1476,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 tool_call_id="tool_call234",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
                 "langgraph_triggers": (PUSH,),
@@ -1488,6 +1491,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 tool_call_id="tool_call567",
             ),
             {
+                "ls_integration": "langgraph",
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
                 "langgraph_triggers": (PUSH,),
@@ -1509,10 +1513,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
-                "_type": "generic-fake-chat-model",
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
     ]
@@ -6881,10 +6885,10 @@ def test_weather_subgraph(
                     "langgraph_path": ("__pregel_pull", "router_node"),
                     "langgraph_checkpoint_ns": AnyStr("router_node:"),
                     "checkpoint_ns": AnyStr("router_node:"),
-                    "_type": "fake-messages-list-chat-model",
                     "ls_provider": "fakemessageslistchatmodel",
                     "ls_model_type": "chat",
                     "ls_integration": "langchain_chat_model",
+                    "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
                 },
             ),
         ),
@@ -6909,10 +6913,10 @@ def test_weather_subgraph(
                     "langgraph_path": ("__pregel_pull", "model_node"),
                     "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                     "checkpoint_ns": AnyStr("weather_graph:"),
-                    "_type": "fake-messages-list-chat-model",
                     "ls_provider": "fakemessageslistchatmodel",
                     "ls_model_type": "chat",
                     "ls_integration": "langchain_chat_model",
+                    "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
                 },
             ),
         ),
@@ -6946,10 +6950,10 @@ def test_weather_subgraph(
                 "langgraph_path": ("__pregel_pull", "router_node"),
                 "langgraph_checkpoint_ns": AnyStr("router_node:"),
                 "checkpoint_ns": AnyStr("router_node:"),
-                "_type": "fake-messages-list-chat-model",
                 "ls_provider": "fakemessageslistchatmodel",
                 "ls_model_type": "chat",
                 "ls_integration": "langchain_chat_model",
+                "lc_versions": {"langchain-core": LANGCHAIN_CORE_VERSION},
             },
         ),
     ]

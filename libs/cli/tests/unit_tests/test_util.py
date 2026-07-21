@@ -1,12 +1,11 @@
 from unittest.mock import patch
 
-from langgraph_cli.util import (
+from langgraph_cli.deploy import (
     _extract_deployment_url,
-    clean_empty_lines,
     format_deployments_table,
     format_revisions_table,
-    warn_non_wolfi_distro,
 )
+from langgraph_cli.util import clean_empty_lines, warn_non_wolfi_distro
 
 
 def test_clean_empty_lines():

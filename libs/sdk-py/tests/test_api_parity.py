@@ -45,7 +45,13 @@ def _normalize_return_annotation(ann: object) -> str:
     s = re.sub(r"Generator\[([^,\]]+)(?:,[^\]]*)?\]", r"Iterator[\1]", s)
     s = re.sub(r"AsyncIterator\[(.+)\]", r"Iterator[\1]", s)
     s = re.sub(r"AsyncIterable\[(.+)\]", r"Iterable[\1]", s)
+    # Normalize Async/Sync class prefixes so AsyncFoo and SyncFoo both compare as Foo.
+    s = re.sub(r"\bAsync([A-Z])", r"\1", s)
+    s = re.sub(r"\bSync([A-Z])", r"\1", s)
     return s
+
+
+ASYNC_ONLY_METHODS: dict[str, set[str]] = {}
 
 
 @pytest.mark.parametrize(
@@ -62,12 +68,16 @@ def test_sync_api_matches_async(async_cls, sync_cls):
     async_methods = _public_methods(async_cls)
     sync_methods = _public_methods(sync_cls)
 
-    # Method name parity
-    assert set(sync_methods.keys()) == set(async_methods.keys()), (
-        f"Method sets differ: async-only={set(async_methods) - set(sync_methods)}, sync-only={set(sync_methods) - set(async_methods)}"
+    allowlist = ASYNC_ONLY_METHODS.get(async_cls.__name__, set())
+    async_method_names = set(async_methods.keys()) - allowlist
+
+    # Method name parity (modulo the async-only allowlist).
+    assert sync_methods.keys() == async_method_names, (
+        f"Method sets differ: async-only={async_method_names - set(sync_methods)}, sync-only={set(sync_methods) - async_method_names}"
     )
 
-    for name, async_fn in async_methods.items():
+    for name in async_method_names:
+        async_fn = async_methods[name]
         sync_fn = sync_methods[name]
 
         # Use inspect.signature for parameter names (robust across versions)

@@ -7,9 +7,10 @@ import textwrap
 from contextlib import contextmanager
 from pathlib import Path
 
+import click
 from click.testing import CliRunner
 
-import langgraph_cli.cli as cli_module
+import langgraph_cli.deploy as deploy_module
 from langgraph_cli.cli import cli, prepare_args_and_stdin
 from langgraph_cli.config import Config, _get_pip_cleanup_lines, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
@@ -319,6 +320,31 @@ def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
     assert "[Beta] List LangSmith Deployments." in deploy_list_line
 
 
+def test_dev_command_requires_ssl_certfile_and_keyfile_together(tmp_path) -> None:
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text(
+        json.dumps({"dependencies": [], "graphs": {"agent": "./agent.py:graph"}}),
+        encoding="utf-8",
+    )
+    certfile = tmp_path / "cert.pem"
+    certfile.write_text("cert", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "dev",
+            "--config",
+            str(config_path),
+            "--ssl-certfile",
+            str(certfile),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Both --ssl-certfile and --ssl-keyfile must be provided" in result.output
+
+
 def test_deploy_list_command(monkeypatch) -> None:
     runner = CliRunner()
     captured: dict[str, str] = {}
@@ -346,7 +372,7 @@ def test_deploy_list_command(monkeypatch) -> None:
                 ]
             }
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -386,7 +412,7 @@ def test_deploy_list_command_no_results(monkeypatch) -> None:
         def list_deployments(self, name_contains: str = ""):
             return {"resources": []}
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -432,7 +458,7 @@ def test_deploy_revisions_list_command(monkeypatch) -> None:
                 ]
             }
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -473,7 +499,7 @@ def test_deploy_revisions_list_command_no_results(monkeypatch) -> None:
         def list_revisions(self, deployment_id: str, limit: int = 1):
             return {"resources": []}
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -506,7 +532,7 @@ def test_deploy_revisions_list_command_with_explicit_limit(monkeypatch) -> None:
             captured["limit"] = str(limit)
             return {"resources": []}
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -552,7 +578,7 @@ def test_deploy_delete_command(monkeypatch) -> None:
             captured["deployment_id"] = deployment_id
             return None
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -576,7 +602,8 @@ def test_deploy_delete_command(monkeypatch) -> None:
         "deployment_id": "dep-123",
     }
     assert (
-        "Are you sure you want to delete deployment ID dep-123? (Y/n):" in result.output
+        "Are you sure you want to delete deployment ID dep-123? (Y/n):"
+        in click.unstyle(result.output)
     )
     assert result.output.strip().endswith("Deleted deployment dep-123.")
 
@@ -594,7 +621,7 @@ def test_deploy_delete_command_cancelled(monkeypatch) -> None:
             deleted = True
             return None
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,
@@ -629,7 +656,7 @@ def test_deploy_delete_command_force(monkeypatch) -> None:
             captured["deployment_id"] = deployment_id
             return None
 
-    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+    monkeypatch.setattr(deploy_module, "HostBackendClient", FakeClient)
 
     result = runner.invoke(
         cli,

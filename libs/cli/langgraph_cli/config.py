@@ -3,13 +3,16 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import textwrap
 from collections import Counter
 from typing import Literal, NamedTuple
 
 import click
+import httpx
 
 from langgraph_cli.schemas import Config, Distros
+from langgraph_cli.uv_lock import python_config_to_docker_uv_lock
 
 MIN_NODE_VERSION = "20"
 DEFAULT_NODE_VERSION = "20"
@@ -33,6 +36,37 @@ DISALLOWED_BUILD_COMMAND_CHARS = [
 # This blocks background execution (cmd &) while allowing command
 # chaining (cmd1 && cmd2) which is common in build commands.
 _SINGLE_AMPERSAND_RE = re.compile(r"(?<!&)&(?:&&)*(?!&)")
+_API_VERSION_PATTERN = re.compile(
+    r"^(?P<major>\d+)"
+    r"(?:\.(?P<minor>\d+))?"
+    r"(?:\.(?P<patch>\d+))?"
+    r"(?:(?:\.|)(?:[A-Za-z][0-9A-Za-z]*))?$"
+)
+_API_VERSION_RANGE_PATTERN = re.compile(r"^(?P<operator>~=|>~=)\s*(?P<version>.+)$")
+_API_VERSION_PART_PATTERN = re.compile(
+    r"^(?P<major>\d+)"
+    r"(?:\.(?P<minor>\d+))?"
+    r"(?:\.(?P<patch>\d+))?"
+    r"(?:(?:\.|)(?P<pre>dev|rc)(?P<pre_n>\d+))?$"
+)
+
+
+class _ParsedApiVersion(NamedTuple):
+    release: tuple[int, ...]
+    prerelease: str | None
+    prerelease_number: int
+
+
+class _ApiVersionRange(NamedTuple):
+    floor: _ParsedApiVersion
+    allow_future_stable: bool
+
+
+_PRERELEASE_ORDER = {
+    "dev": 0,
+    "rc": 1,
+    None: 2,
+}
 
 
 def has_disallowed_build_command_content(command: str) -> bool:
@@ -121,6 +155,145 @@ def _parse_node_version(version_str: str) -> int:
         ) from None
 
 
+def _parse_api_version_parts(version_str: str) -> tuple[int, ...]:
+    """Parse an API version into numeric components.
+
+    Supports optional prerelease suffixes, e.g. `0.9.0rc1`.
+    """
+    version_core = version_str.split("-", 1)[0]
+    match = _API_VERSION_PATTERN.fullmatch(version_core)
+    if not match:
+        raise ValueError("Version must be major or major.minor or major.minor.patch.")
+    return tuple(int(part) for part in match.groups() if part is not None)
+
+
+def _parse_api_version(version_str: str) -> _ParsedApiVersion:
+    match = _API_VERSION_PART_PATTERN.fullmatch(version_str)
+    if not match:
+        raise ValueError("Version must be major or major.minor or major.minor.patch.")
+    release = tuple(
+        int(part)
+        for part in (
+            match.group("major"),
+            match.group("minor"),
+            match.group("patch"),
+        )
+        if part is not None
+    )
+    prerelease = match.group("pre")
+    prerelease_number = int(match.group("pre_n") or 0)
+    return _ParsedApiVersion(release, prerelease, prerelease_number)
+
+
+def _api_version_sort_key(
+    version: _ParsedApiVersion,
+) -> tuple[tuple[int, ...], int, int]:
+    return (
+        version.release,
+        _PRERELEASE_ORDER[version.prerelease],
+        version.prerelease_number,
+    )
+
+
+def _api_version_upper_bound(version: _ParsedApiVersion) -> tuple[int, ...]:
+    release = version.release
+    if len(release) <= 2:
+        return (release[0] + 1,)
+    return (release[0], release[1] + 1)
+
+
+def _is_compatible_api_version_candidate(
+    candidate: _ParsedApiVersion,
+    version_range: _ApiVersionRange,
+    upper_bound: tuple[int, ...],
+) -> bool:
+    floor = version_range.floor
+    if _api_version_sort_key(candidate) < _api_version_sort_key(floor):
+        return False
+    outside_compatible_range = candidate.release[: len(upper_bound)] >= upper_bound
+    if outside_compatible_range and not version_range.allow_future_stable:
+        return False
+    if outside_compatible_range and candidate.prerelease is not None:
+        return False
+    if floor.prerelease == "dev" and candidate.prerelease == "dev":
+        return candidate == floor
+    return True
+
+
+def _ensure_compatible_api_version_base_image(base_image: str) -> None:
+    if ":" in base_image:
+        raise click.UsageError(
+            "Compatible api_version ranges cannot be used with a tagged base_image."
+        )
+
+
+def _get_pypi_versions(package_name: str) -> list[str]:
+    try:
+        response = httpx.get(
+            f"https://pypi.org/pypi/{package_name}/json",
+            timeout=10,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.UsageError(
+            f"Failed to fetch PyPI versions for {package_name}: {exc}"
+        ) from None
+    payload = response.json()
+    releases = payload.get("releases", {})
+    if not isinstance(releases, dict):
+        raise click.UsageError(
+            f"Failed to fetch PyPI versions for {package_name}: invalid response."
+        )
+    return [version for version in releases if isinstance(version, str)]
+
+
+def _resolve_compatible_api_version(
+    api_version: str,
+    base_image: str,
+    version_distro_tag: str,
+) -> str:
+    match = _API_VERSION_RANGE_PATTERN.fullmatch(api_version)
+    if not match:
+        return api_version
+
+    floor_str = match.group("version").strip()
+    try:
+        floor = _parse_api_version(floor_str)
+    except ValueError:
+        raise click.UsageError(
+            f"Invalid compatible api_version range: {api_version}.\n\n"
+            "Use a compatible version range, e.g.:\n"
+            '  "api_version": "~=0.11.0.dev5"\n'
+            "or a stable-floating range, e.g.:\n"
+            '  "api_version": ">~=0.11.0.dev5"'
+        ) from None
+
+    version_range = _ApiVersionRange(
+        floor=floor,
+        allow_future_stable=match.group("operator") == ">~=",
+    )
+    _ensure_compatible_api_version_base_image(base_image)
+    pypi_versions = _get_pypi_versions("langgraph-api")
+
+    candidates: list[tuple[_ParsedApiVersion, str]] = []
+    upper_bound = _api_version_upper_bound(floor)
+    for candidate_str in pypi_versions:
+        try:
+            candidate = _parse_api_version(candidate_str)
+        except ValueError:
+            continue
+        if _is_compatible_api_version_candidate(candidate, version_range, upper_bound):
+            candidates.append((candidate, candidate_str))
+
+    if not candidates:
+        raise click.UsageError(
+            f"No PyPI releases match compatible api_version range {api_version!r} "
+            f"for {base_image} with {version_distro_tag!r}."
+        )
+
+    return max(candidates, key=lambda item: _api_version_sort_key(item[0]))[1]
+
+
 def _is_node_graph(spec: str | dict) -> bool:
     """Check if a graph is a Node.js graph based on the file extension."""
     if isinstance(spec, dict):
@@ -137,6 +310,14 @@ def _is_node_graph(spec: str | dict) -> bool:
         ".mjs",
         ".cjs",
     ]
+
+
+def _get_source_kind(config: Config) -> str | None:
+    source = config.get("source")
+    if not isinstance(source, dict):
+        return None
+    kind = source.get("kind")
+    return kind if isinstance(kind, str) else None
 
 
 def validate_config(config: Config) -> Config:
@@ -157,6 +338,8 @@ def validate_config(config: Config) -> Config:
     image_distro = config.get("image_distro", DEFAULT_IMAGE_DISTRO)
     internal_docker_tag = config.get("_INTERNAL_docker_tag")
     api_version = config.get("api_version")
+    legacy_project_root = config.get("project_root")
+    legacy_package = config.get("package")
     if internal_docker_tag:
         if api_version:
             raise click.UsageError(
@@ -164,19 +347,29 @@ def validate_config(config: Config) -> Config:
             )
     if api_version:
         try:
-            parts = tuple(map(int, api_version.split("-")[0].split(".")))
+            compatible_match = _API_VERSION_RANGE_PATTERN.fullmatch(api_version)
+            parts = _parse_api_version_parts(
+                compatible_match.group("version").strip()
+                if compatible_match
+                else api_version
+            )
             if len(parts) > 3:
                 raise ValueError(
                     "Version must be major or major.minor or major.minor.patch."
                 )
-        except TypeError:
-            raise click.UsageError(f"Invalid version format: {api_version}") from None
+        except (TypeError, ValueError):
+            raise click.UsageError(
+                f"Invalid version format: {api_version}.\n\n"
+                "Pin to a minor version, e.g.:\n"
+                '  "api_version": "0.8"'
+            ) from None
 
     config = {
         "node_version": node_version,
         "python_version": python_version,
         "pip_config_file": config.get("pip_config_file"),
         "pip_installer": config.get("pip_installer", "auto"),
+        "source": config.get("source"),
         "base_image": config.get("base_image"),
         "image_distro": image_distro,
         "dependencies": config.get("dependencies", []),
@@ -207,25 +400,51 @@ def validate_config(config: Config) -> Config:
             if major < min_major:
                 raise click.UsageError(
                     f"Node.js version {node_version} is not supported. "
-                    f"Minimum required version is {MIN_NODE_VERSION}."
+                    f"Minimum required version is {MIN_NODE_VERSION}.\n\n"
+                    f"Set node_version to {MIN_NODE_VERSION} or higher:\n"
+                    f'  "node_version": "{MIN_NODE_VERSION}"'
                 )
         except ValueError as e:
             raise click.UsageError(str(e)) from None
+
+    if pip_installer := config.get("pip_installer"):
+        if pip_installer not in ["auto", "pip", "uv"]:
+            raise click.UsageError(
+                f"Invalid pip_installer: '{pip_installer}'. "
+                "Consider using uv-based source management instead:\n\n"
+                '  "source": {"kind": "uv", "root": ".."}'
+            )
+
+    source = config.get("source")
+    source_kind = _get_source_kind(config)
+    if source is not None and not isinstance(source, dict):
+        raise click.UsageError(
+            "`source` must be an object, e.g.:\n"
+            '  "source": {"kind": "uv", "root": ".."}'
+        )
+    if source is not None and source_kind != "uv":
+        raise click.UsageError(
+            "Invalid source.kind. The only supported value is 'uv':\n"
+            '  "source": {"kind": "uv", "root": ".."}'
+        )
 
     if config.get("python_version"):
         pyversion = config["python_version"]
         if not pyversion.count(".") == 1 or not all(
             part.isdigit() for part in pyversion.split("-")[0].split(".")
         ):
+            parts = pyversion.split("-")[0].split(".")
+            fix = f"{parts[0]}.{parts[1]}" if len(parts) >= 2 else MIN_PYTHON_VERSION
             raise click.UsageError(
                 f"Invalid Python version format: {pyversion}. "
-                "Use 'major.minor' format (e.g., '3.11'). "
-                "Patch version cannot be specified."
+                "Use 'major.minor' format — patch version cannot be specified.\n\n"
+                f'  "python_version": "{fix}"'
             )
         if _parse_version(pyversion) < _parse_version(MIN_PYTHON_VERSION):
             raise click.UsageError(
                 f"Python version {pyversion} is not supported. "
-                f"Minimum required version is {MIN_PYTHON_VERSION}."
+                f"Minimum required version is {MIN_PYTHON_VERSION}.\n\n"
+                f'  "python_version": "{MIN_PYTHON_VERSION}"'
             )
         if "bullseye" in pyversion:
             raise click.UsageError(
@@ -233,15 +452,19 @@ def validate_config(config: Config) -> Config:
                 "Please use 'bookworm' or 'debian' instead."
             )
 
-        if not config["dependencies"]:
+        if source_kind != "uv" and not config["dependencies"]:
             raise click.UsageError(
                 "No dependencies found in config. "
-                "Add at least one dependency to 'dependencies' list."
+                "Consider using uv-based source management:\n\n"
+                '  "source": {"kind": "uv", "root": ".."}'
             )
 
     if not config.get("graphs"):
         raise click.UsageError(
-            "No graphs found in config. Add at least one graph to 'graphs' dictionary."
+            "No graphs found in config. Add at least one graph, e.g.:\n"
+            '  "graphs": {\n'
+            '    "agent": "./my_agent/graph.py:graph"\n'
+            "  }"
         )
 
     # Validate image_distro config
@@ -254,15 +477,46 @@ def validate_config(config: Config) -> Config:
         if image_distro not in Distros.__args__:
             raise click.UsageError(
                 f"Invalid image_distro: '{image_distro}'. "
-                "Must be one of 'debian', 'wolfi', or 'bookworm'."
+                f"Must be one of: {', '.join(repr(d) for d in Distros.__args__)}.\n\n"
+                '  "image_distro": "wolfi"  (recommended)'
             )
 
-    if pip_installer := config.get("pip_installer"):
-        if pip_installer not in ["auto", "pip", "uv"]:
-            raise click.UsageError(
-                f"Invalid pip_installer: '{pip_installer}'. "
-                "Must be 'auto', 'pip', or 'uv'."
+    if source_kind == "uv":
+        errors: list[str] = []
+        if not config.get("python_version"):
+            errors.append(
+                "source.kind 'uv' requires `python_version` — "
+                "it is a Python-only deployment mode. "
+                "Node.js-only graphs are not supported."
             )
+        if config["dependencies"]:
+            errors.append(
+                "Remove `dependencies` from your config. With "
+                '`source.kind = "uv"`, all dependencies '
+                "are read from your pyproject.toml and uv.lock instead."
+            )
+        root = source.get("root", ".") if source else "."
+        if not isinstance(root, str):
+            errors.append(f"`source.root` must be a string, got {type(root).__name__}.")
+        elif not root.strip():
+            errors.append('`source.root` must be a non-empty string. Use `"."`.')
+        package_name = source.get("package") if source else None
+        if package_name is not None and (
+            not isinstance(package_name, str) or not package_name.strip()
+        ):
+            errors.append("`source.package` must be a non-empty string.")
+        if errors:
+            detail = "\n".join(f"  - {e}" for e in errors)
+            raise click.UsageError(
+                "source.kind 'uv' requires a different "
+                f"config shape than dependency-based installs:\n{detail}"
+            )
+
+    if legacy_project_root or legacy_package:
+        raise click.UsageError(
+            "Top-level `project_root` and `package` are no longer supported. "
+            "Use `source.root` and `source.package` instead."
+        )
 
     # Validate auth config
     if auth_conf := config.get("auth"):
@@ -304,6 +558,51 @@ def validate_config(config: Config) -> Config:
                 " 'pip', 'setuptools', and/or 'wheel')."
             )
     return config
+
+
+# Keys recognized by validate_config (used to detect unknown fields).
+_KNOWN_CONFIG_KEYS = {
+    "python_version",
+    "node_version",
+    "api_version",
+    "base_image",
+    "image_distro",
+    "pip_config_file",
+    "pip_installer",
+    "source",
+    "dependencies",
+    "dockerfile_lines",
+    "graphs",
+    "env",
+    "store",
+    "auth",
+    "encryption",
+    "http",
+    "webhooks",
+    "checkpointer",
+    "ui",
+    "ui_config",
+    "keep_pkg_tools",
+    # Internal / legacy (still recognized, may error separately)
+    "_INTERNAL_docker_tag",
+    "project_root",
+    "package",
+}
+
+
+def get_unknown_keys(raw_config: dict) -> list[str]:
+    """Return warnings for unrecognized top-level keys (typos, etc.)."""
+    import difflib
+
+    unknown = set(raw_config) - _KNOWN_CONFIG_KEYS
+    warnings: list[str] = []
+    for key in sorted(unknown):
+        close = difflib.get_close_matches(key, _KNOWN_CONFIG_KEYS, n=1)
+        if close:
+            warnings.append(f"Unknown key '{key}' — did you mean '{close[0]}'?")
+        else:
+            warnings.append(f"Unknown key '{key}' is not a recognized config field.")
+    return warnings
 
 
 def validate_config_file(config_path: pathlib.Path) -> Config:
@@ -807,9 +1106,65 @@ def _update_http_app_path(
         http_config["app"] = f"{module_str}:{attr_str}"
 
 
-def _get_node_pm_install_cmd(config_path: pathlib.Path, config: Config) -> str:
+def _build_python_install_commands(
+    config: Config, install_cmd: str
+) -> tuple[str, str, str]:
+    base_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
+    local_reqs_pip_install = base_install
+    global_reqs_pip_install = base_install
+
+    if config.get("pip_config_file"):
+        local_reqs_pip_install = (
+            f"PIP_CONFIG_FILE=/pipconfig.txt {local_reqs_pip_install}"
+        )
+        global_reqs_pip_install = (
+            f"PIP_CONFIG_FILE=/pipconfig.txt {global_reqs_pip_install}"
+        )
+
+    pip_config_file_str = (
+        f"ADD {config['pip_config_file']} /pipconfig.txt"
+        if config.get("pip_config_file")
+        else ""
+    )
+    return local_reqs_pip_install, global_reqs_pip_install, pip_config_file_str
+
+
+def _build_runtime_env_vars(config: Config) -> list[str]:
+    env_vars = []
+
+    if (store_config := config.get("store")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
+
+    if (auth_config := config.get("auth")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
+
+    if (encryption_config := config.get("encryption")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
+
+    if (http_config := config.get("http")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
+
+    if (webhooks_config := config.get("webhooks")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
+
+    if (checkpointer_config := config.get("checkpointer")) is not None:
+        env_vars.append(
+            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
+        )
+
+    if (ui := config.get("ui")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
+
+    if (ui_config := config.get("ui_config")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
+
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    return env_vars
+
+
+def _get_node_pm_install_cmd(project_dir: pathlib.Path) -> str:
     def test_file(file_name):
-        full_path = config_path.parent / file_name
+        full_path = project_dir / file_name
         try:
             return full_path.is_file()
         except OSError:
@@ -818,7 +1173,7 @@ def _get_node_pm_install_cmd(config_path: pathlib.Path, config: Config) -> str:
     # inspired by `package-manager-detector`
     def get_pkg_manager_name():
         try:
-            with open(config_path.parent / "package.json") as f:
+            with open(project_dir / "package.json") as f:
                 pkg = json.load(f)
 
                 if (pkg_manager_name := pkg.get("packageManager")) and isinstance(
@@ -914,8 +1269,17 @@ def python_config_to_docker(
     escape_variables: bool = False,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
+    source_kind = _get_source_kind(config)
     pip_installer = config.get("pip_installer", "auto")
     build_tools_to_uninstall = get_build_tools_to_uninstall(config)
+    if source_kind == "uv":
+        return python_config_to_docker_uv_lock(
+            config_path,
+            config,
+            base_image,
+            api_version=api_version,
+            build_tools_to_uninstall=build_tools_to_uninstall,
+        )
     if pip_installer == "auto":
         if _image_supports_uv(base_image):
             pip_installer = "uv"
@@ -928,21 +1292,11 @@ def python_config_to_docker(
     else:
         raise ValueError(f"Invalid pip_installer: {pip_installer}")
 
-    # configure pip
-    local_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
-    global_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
-    if config.get("pip_config_file"):
-        local_reqs_pip_install = (
-            f"PIP_CONFIG_FILE=/pipconfig.txt {local_reqs_pip_install}"
-        )
-        global_reqs_pip_install = (
-            f"PIP_CONFIG_FILE=/pipconfig.txt {global_reqs_pip_install}"
-        )
-    pip_config_file_str = (
-        f"ADD {config['pip_config_file']} /pipconfig.txt"
-        if config.get("pip_config_file")
-        else ""
-    )
+    (
+        local_reqs_pip_install,
+        global_reqs_pip_install,
+        pip_config_file_str,
+    ) = _build_python_install_commands(config, install_cmd)
 
     # collect dependencies
     pypi_deps = [dep for dep in config["dependencies"] if not dep.startswith(".")]
@@ -998,7 +1352,7 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/outer-{fullpath.name}/pyproject.toml; \\
+        echo "$line" >> {shlex.quote(f"/deps/outer-{fullpath.name}/pyproject.toml")}; \\
     done
 # -- End of non-package dependency {fullpath.name} --"""
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
@@ -1017,56 +1371,50 @@ ADD {relpath} /deps/{name}
         for fullpath, (relpath, name) in local_deps.real_pkgs.items()
     )
 
+    additional_contexts: dict[str, str] = {}
+    additional_context_names: dict[pathlib.Path, str] = {}
+    used_context_names: set[str] = set()
+
+    def register_additional_context(path: pathlib.Path, preferred_name: str) -> str:
+        if path in additional_context_names:
+            return additional_context_names[path]
+
+        name = preferred_name
+        suffix = 1
+        while name in used_context_names:
+            name = f"{preferred_name}_{suffix}"
+            suffix += 1
+
+        used_context_names.add(name)
+        additional_context_names[path] = name
+        additional_contexts[name] = str(path)
+        return name
+
+    for p in local_deps.additional_contexts:
+        if p in local_deps.real_pkgs:
+            preferred_name = local_deps.real_pkgs[p][1]
+        elif p in local_deps.faux_pkgs:
+            preferred_name = f"outer-{p.name}"
+        else:
+            raise RuntimeError(f"Unknown additional context: {p}")
+        register_additional_context(p, preferred_name)
+
     install_node_str: str = (
         "RUN /storage/install-node.sh"
         if (config.get("ui") or config.get("node_version")) and local_deps.working_dir
         else ""
     )
 
+    install_steps = [install_node_str, pip_config_file_str, pip_pkgs_str, pip_reqs_str]
+    install_steps.extend([local_pkgs_str, faux_pkgs_str])
     installs = f"{os.linesep}{os.linesep}".join(
         filter(
             None,
-            [
-                install_node_str,
-                pip_config_file_str,
-                pip_pkgs_str,
-                pip_reqs_str,
-                local_pkgs_str,
-                faux_pkgs_str,
-            ],
+            install_steps,
         )
     )
 
-    env_vars = []
-
-    if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
-
-    if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
-
-    if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
-
-    if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
-
-    # Inject webhooks configuration if provided
-    if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
-
-    if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
-        )
-
-    if (ui := config.get("ui")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
-
-    if (ui_config := config.get("ui_config")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
-
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    env_vars = _build_runtime_env_vars(config)
 
     js_inst_str: str = ""
     if (config.get("ui") or config.get("node_version")) and local_deps.working_dir:
@@ -1074,7 +1422,8 @@ ADD {relpath} /deps/{name}
             [
                 "# -- Installing JS dependencies --",
                 f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
-                f"RUN cd {local_deps.working_dir} && {_get_node_pm_install_cmd(config_path, config)} && tsx /api/langgraph_api/js/build.mts",
+                f"WORKDIR {local_deps.working_dir}",
+                f"RUN {_get_node_pm_install_cmd(config_path.parent)} && tsx /api/langgraph_api/js/build.mts",
                 "# -- End of JS dependencies install --",
             ]
         )
@@ -1084,7 +1433,7 @@ ADD {relpath} /deps/{name}
     docker_file_contents = []
 
     # Add syntax directive if we have additional contexts (requires BuildKit frontend.contexts capability)
-    if local_deps.additional_contexts:
+    if additional_contexts:
         docker_file_contents.extend(
             [
                 "# syntax=docker/dockerfile:1.4",
@@ -1094,6 +1443,13 @@ ADD {relpath} /deps/{name}
 
     # Add main dockerfile content
     dep_vname = "$$dep" if escape_variables else "$dep"
+    local_deps_install_str = f"""RUN for dep in /deps/*; do \
+            echo "Installing {dep_vname}"; \
+            if [ -d "{dep_vname}" ]; then \
+                echo "Installing {dep_vname}"; \
+                (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
+            fi; \
+        done"""
     docker_file_contents.extend(
         [
             f"FROM {image_str}",
@@ -1103,13 +1459,7 @@ ADD {relpath} /deps/{name}
             installs,
             "",
             "# -- Installing all local dependencies --",
-            f"""RUN for dep in /deps/*; do \
-            echo "Installing {dep_vname}"; \
-            if [ -d "{dep_vname}" ]; then \
-                echo "Installing {dep_vname}"; \
-                (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
-            fi; \
-        done""",
+            local_deps_install_str,
             "# -- End of local dependencies install --",
             os.linesep.join(env_vars),
             "",
@@ -1126,16 +1476,6 @@ ADD {relpath} /deps/{name}
         ]
     )
 
-    additional_contexts: dict[str, str] = {}
-    for p in local_deps.additional_contexts:
-        if p in local_deps.real_pkgs:
-            name = local_deps.real_pkgs[p][1]
-        elif p in local_deps.faux_pkgs:
-            name = f"outer-{p.name}"
-        else:
-            raise RuntimeError(f"Unknown additional context: {p}")
-        additional_contexts[name] = str(p)
-
     return os.linesep.join(docker_file_contents), additional_contexts
 
 
@@ -1149,6 +1489,10 @@ def node_config_to_docker(
     build_context: str | None = None,
 ) -> tuple[str, dict[str, str]]:
     # Calculate paths for monorepo support
+    install_root = (
+        pathlib.Path(build_context).resolve() if build_context else config_path.parent
+    )
+    install_cmd = install_command or _get_node_pm_install_cmd(install_root)
     if build_context:
         relative_workdir = _calculate_relative_workdir(config_path, build_context)
         container_name = pathlib.Path(build_context).name
@@ -1160,59 +1504,31 @@ def node_config_to_docker(
         # Backward compatibility: use the original behavior
         faux_path = f"/deps/{config_path.parent.name}"
 
-    # Use custom install command or auto-detect
-    if install_command:
-        install_cmd = install_command
-    else:
-        install_cmd = _get_node_pm_install_cmd(config_path, config)
-
     image_str = docker_tag(config, base_image, api_version)
 
-    env_vars: list[str] = []
-
-    if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
-
-    if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
-
-    if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
-
-    if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
-
-    # Inject webhooks configuration if provided
-    if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
-
-    if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
-        )
-
-    if ui := config.get("ui"):
-        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
-
-    if ui_config := config.get("ui_config"):
-        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
-
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    env_vars = _build_runtime_env_vars(config)
 
     # For monorepo support, we need to handle install and build commands differently
     if build_context:
         # Monorepo case: install from root, build from config directory
         container_root = f"/deps/{pathlib.Path(build_context).name}"
-        install_step = f"RUN cd {container_root} && {install_cmd}"
+        install_workdir = container_root
+        install_step = f"RUN {install_cmd}"
 
         if build_command:
-            build_step = f"RUN cd {faux_path} && {build_command}"
+            build_step = f"RUN {build_command}"
         else:
             build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
     else:
         # Original behavior: everything happens in the same directory
-        install_step = f"RUN cd {faux_path} && {install_cmd}"
+        install_workdir = faux_path
+        install_step = f"RUN {install_cmd}"
         build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
+
+    if build_context:
+        build_workdir = faux_path
+    else:
+        build_workdir = faux_path
 
     docker_file_contents = [
         f"FROM {image_str}",
@@ -1221,11 +1537,13 @@ def node_config_to_docker(
         "",
         f"ADD . {faux_path if not build_context else container_root}",
         "",
+        f"WORKDIR {install_workdir}",
+        "",
         install_step,
         "",
         os.linesep.join(env_vars),
         "",
-        f"WORKDIR {faux_path}",
+        f"WORKDIR {build_workdir}",
         "",
         build_step,
     ]
@@ -1270,6 +1588,9 @@ def docker_tag(
 
     # Prepend API version if provided
     if api_version:
+        api_version = _resolve_compatible_api_version(
+            api_version, base_image, f"{language}{version_distro_tag}"
+        )
         full_tag = f"{api_version}-{language}{version_distro_tag}"
     elif "/langgraph-server" in base_image and version_distro_tag not in base_image:
         return f"{base_image}-{language}{version_distro_tag}"

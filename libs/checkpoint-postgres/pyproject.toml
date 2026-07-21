@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-postgres"
-version = "3.0.5"
+version = "3.1.0"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 authors = []
 requires-python = ">=3.10"
@@ -12,7 +12,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
-  "langgraph-checkpoint>=2.1.2,<5.0.0",
+  "langgraph-checkpoint>=4.1.0,<5.0.0",
   "orjson>=3.11.5",
   "psycopg>=3.2.0",
   "psycopg-pool>=3.2.0",
@@ -20,7 +20,7 @@ dependencies = [
 
 [project.urls]
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint-postgres"
-Twitter = "https://x.com/LangChain"
+Twitter = "https://x.com/langchain_oss"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
@@ -37,7 +37,7 @@ test = [
 lint = [
   "ruff",
   "codespell",
-  "mypy",
+  "ty",
 ]
 dev = [
   {include-group = "test"},
@@ -69,15 +69,15 @@ lint.select = [
 lint.ignore = ["E501", "B008"]
 target-version = "py310"
 
-[tool.mypy]
-# https://mypy.readthedocs.io/en/stable/config_file.html
-disallow_untyped_defs = "True"
-explicit_package_bases = "True"
-warn_no_return = "False"
-warn_unused_ignores = "True"
-warn_redundant_casts = "True"
-allow_redefinition = "True"
-disable_error_code = "typeddict-item, return-value"
+[tool.ty.rules]
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-key = "ignore"
+invalid-return-type = "ignore"
+invalid-typed-dict-field = "ignore"
+invalid-yield = "ignore"
+no-matching-overload = "ignore"
+unused-type-ignore-comment = "ignore"
 
 [tool.pytest-watcher]
 now = true

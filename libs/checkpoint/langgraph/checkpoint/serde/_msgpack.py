@@ -1,3 +1,10 @@
+"""Msgpack deserialization safety controls.
+
+Set ``LANGGRAPH_STRICT_MSGPACK=true`` to restrict checkpoint deserialization
+to the types listed in ``SAFE_MSGPACK_TYPES``.  Without this, any Python
+callable stored in checkpoint data will be imported and executed on load.
+"""
+
 import os
 from collections.abc import Iterable
 from typing import cast
@@ -66,6 +73,7 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
         ("langchain_core.documents.base", "Document"),
         # langgraph
         ("langgraph.types", "Send"),
+        ("langgraph.types", "TimeoutPolicy"),
         ("langgraph.types", "Interrupt"),
         ("langgraph.types", "Command"),
         ("langgraph.types", "StateSnapshot"),

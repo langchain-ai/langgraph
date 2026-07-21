@@ -7,6 +7,7 @@ from typing import Any, Literal, cast, overload
 
 import httpx
 
+from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import (
     Assistant,
@@ -83,7 +84,9 @@ class SyncAssistantsClient:
 
         """
         return self.http.get(
-            f"/assistants/{assistant_id}", headers=headers, params=params
+            f"/assistants/{_quote_path_param(assistant_id)}",
+            headers=headers,
+            params=params,
         )
 
     def get_graph(
@@ -136,7 +139,9 @@ class SyncAssistantsClient:
         if params:
             query_params.update(params)
         return self.http.get(
-            f"/assistants/{assistant_id}/graph", params=query_params, headers=headers
+            f"/assistants/{_quote_path_param(assistant_id)}/graph",
+            params=query_params,
+            headers=headers,
         )
 
     def get_schemas(
@@ -269,7 +274,9 @@ class SyncAssistantsClient:
 
         """
         return self.http.get(
-            f"/assistants/{assistant_id}/schemas", headers=headers, params=params
+            f"/assistants/{_quote_path_param(assistant_id)}/schemas",
+            headers=headers,
+            params=params,
         )
 
     def get_subgraphs(
@@ -297,13 +304,13 @@ class SyncAssistantsClient:
             get_params = {**get_params, **dict(params)}
         if namespace is not None:
             return self.http.get(
-                f"/assistants/{assistant_id}/subgraphs/{namespace}",
+                f"/assistants/{_quote_path_param(assistant_id)}/subgraphs/{_quote_path_param(namespace)}",
                 params=get_params,
                 headers=headers,
             )
         else:
             return self.http.get(
-                f"/assistants/{assistant_id}/subgraphs",
+                f"/assistants/{_quote_path_param(assistant_id)}/subgraphs",
                 params=get_params,
                 headers=headers,
             )
@@ -438,7 +445,7 @@ class SyncAssistantsClient:
         if description:
             payload["description"] = description
         return self.http.patch(
-            f"/assistants/{assistant_id}",
+            f"/assistants/{_quote_path_param(assistant_id)}",
             json=payload,
             headers=headers,
             params=params,
@@ -481,7 +488,7 @@ class SyncAssistantsClient:
         if params:
             query_params.update(params)
         self.http.delete(
-            f"/assistants/{assistant_id}",
+            f"/assistants/{_quote_path_param(assistant_id)}",
             headers=headers,
             params=query_params or None,
         )
@@ -685,7 +692,7 @@ class SyncAssistantsClient:
         if metadata:
             payload["metadata"] = metadata
         return self.http.post(
-            f"/assistants/{assistant_id}/versions",
+            f"/assistants/{_quote_path_param(assistant_id)}/versions",
             json=payload,
             headers=headers,
             params=params,
@@ -724,7 +731,7 @@ class SyncAssistantsClient:
         payload: dict[str, Any] = {"version": version}
 
         return self.http.post(
-            f"/assistants/{assistant_id}/latest",
+            f"/assistants/{_quote_path_param(assistant_id)}/latest",
             json=payload,
             headers=headers,
             params=params,

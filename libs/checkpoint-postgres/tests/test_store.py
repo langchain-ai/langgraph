@@ -863,6 +863,133 @@ def test_store_ttl(store):
     assert len(res) == 0
 
 
+def _expire_now(store: PostgresStore, ns: tuple[str, ...], key: str) -> None:
+    """Backdate a row's expires_at into the past without deleting it (unswept)."""
+    with store._cursor() as cur:
+        cur.execute(
+            "UPDATE store SET expires_at = NOW() - INTERVAL '1 minute' "
+            "WHERE prefix = %s AND key = %s",
+            (".".join(ns), key),
+        )
+
+
+def _row_exists(store: PostgresStore, ns: tuple[str, ...], key: str) -> bool:
+    with store._cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM store WHERE prefix = %s AND key = %s",
+            (".".join(ns), key),
+        )
+        return cur.fetchone()["n"] == 1
+
+
+def _stored_expires_at(store: PostgresStore, ns: tuple[str, ...], key: str):
+    with store._cursor() as cur:
+        cur.execute(
+            "SELECT expires_at FROM store WHERE prefix = %s AND key = %s",
+            (".".join(ns), key),
+        )
+        return cur.fetchone()["expires_at"]
+
+
+def test_omit_expired_filters_read_paths(store: PostgresStore) -> None:
+    store.stop_ttl_sweeper()  # deterministic: no background deletion
+    store.ttl_config["omit_expired"] = True
+
+    expired_ns = ("omit", "expired")
+    control_ns = ("omit", "control")
+    store.put(expired_ns, "e", {"data": "gone"}, ttl=TTL_MINUTES)
+    store.put(control_ns, "c", {"data": "keep"}, ttl=None)
+    _expire_now(store, expired_ns, "e")
+
+    # The row is expired but physically still present (unswept).
+    assert _row_exists(store, expired_ns, "e")
+
+    # get omits it; the never-expiring control is still returned.
+    assert store.get(expired_ns, "e") is None
+    assert store.get(control_ns, "c") is not None
+
+    # search omits it but returns the control.
+    assert store.search(expired_ns) == []
+    assert [i.key for i in store.search(control_ns)] == ["c"]
+
+    # list_namespaces drops the expired-only namespace, keeps the control.
+    namespaces = store.list_namespaces(prefix=("omit",))
+    assert expired_ns not in namespaces
+    assert control_ns in namespaces
+
+
+@pytest.mark.parametrize("omit", [None, False], ids=["default", "explicit-false"])
+def test_omit_expired_disabled_preserves_expired_rows(
+    store: PostgresStore, omit
+) -> None:
+    store.stop_ttl_sweeper()
+    if omit is not None:
+        store.ttl_config["omit_expired"] = omit
+
+    ns = ("keep",)
+    store.put(ns, "k", {"data": "still-here"}, ttl=TTL_MINUTES)
+    _expire_now(store, ns, "k")
+
+    assert store.get(ns, "k", refresh_ttl=False) is not None
+    assert [i.key for i in store.search(ns, refresh_ttl=False)] == ["k"]
+    assert ns in store.list_namespaces(prefix=("keep",))
+
+
+def test_omit_expired_refresh_ttl_only_refreshes_live_rows(
+    store: PostgresStore,
+) -> None:
+    store.stop_ttl_sweeper()
+    store.ttl_config["omit_expired"] = True
+
+    ns = ("refresh",)
+    store.put(ns, "expired", {"n": 0}, ttl=TTL_MINUTES)
+    store.put(ns, "live_get", {"n": 1}, ttl=TTL_MINUTES)
+    store.put(ns, "live_search", {"n": 2}, ttl=TTL_MINUTES)
+    _expire_now(store, ns, "expired")
+
+    expired_before = _stored_expires_at(store, ns, "expired")
+    get_before = _stored_expires_at(store, ns, "live_get")
+    search_before = _stored_expires_at(store, ns, "live_search")
+
+    # refresh_ttl=True must NOT resurrect the expired row (via get or search)...
+    assert store.get(ns, "expired", refresh_ttl=True) is None
+    assert "expired" not in [i.key for i in store.search(ns, refresh_ttl=True)]
+    assert _stored_expires_at(store, ns, "expired") == expired_before
+
+    # ...but must still extend the live rows that were read.
+    assert store.get(ns, "live_get", refresh_ttl=True) is not None
+    assert _stored_expires_at(store, ns, "live_get") > get_before
+    assert _stored_expires_at(store, ns, "live_search") > search_before
+
+
+def test_omit_expired_search_pagination(store: PostgresStore) -> None:
+    store.stop_ttl_sweeper()
+    store.ttl_config["omit_expired"] = True
+
+    ns = ("page",)
+    for k in ("a", "b", "c"):
+        store.put(ns, k, {"k": k}, ttl=TTL_MINUTES)
+    store.put(ns, "expired", {"k": "x"}, ttl=TTL_MINUTES)
+    _expire_now(store, ns, "expired")
+
+    seconds_ago = {"a": 1, "expired": 2, "b": 3, "c": 4}
+    # updated_at DESC orders these a, expired, b, c, so the expired row sits inside
+    # the first limit=2 window. Correct (pre-LIMIT) filtering yields live pages
+    # [a, b] then [c]; post-LIMIT filtering would underfill page 1 to just [a].
+    with store._cursor() as cur:
+        for key, secs in seconds_ago.items():
+            cur.execute(
+                "UPDATE store SET updated_at = NOW() - (%s * INTERVAL '1 second') "
+                "WHERE prefix = %s AND key = %s",
+                (secs, ".".join(ns), key),
+            )
+
+    page1 = store.search(ns, limit=2, offset=0)
+    page2 = store.search(ns, limit=2, offset=2)
+    assert [i.key for i in page1] == ["a", "b"]
+    assert [i.key for i in page2] == ["c"]
+
+
 @pytest.mark.parametrize(
     "vector_type,distance_type",
     [

@@ -17,7 +17,7 @@ jobs:
       run:
         working-directory: libs/langgraph
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - run: SHA=$(git rev-parse HEAD) && echo "SHA=$SHA" >> $GITHUB_ENV
       - name: Set up Python 3.11
         uses: ./.github/actions/uv_setup
@@ -30,7 +30,7 @@ jobs:
       - name: Run benchmarks
         run: OUTPUT=out/benchmark-baseline.json make -s benchmark
       - name: Save outputs
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ runner.os }}-benchmark-baseline-${{ env.SHA }}
           path: |

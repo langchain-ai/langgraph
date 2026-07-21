@@ -107,6 +107,16 @@ Durability = Literal["sync", "async", "exit"]
 - `"async"`: Changes are persisted asynchronously while the next step executes.
 - `"exit"`: Changes are persisted only when the graph exits."""
 
+
+class LangSmithTracing(TypedDict, total=False):
+    """Configuration for LangSmith tracing."""
+
+    project_name: str
+    """The LangSmith project name to trace to."""
+    example_id: str
+    """The LangSmith example/dataset ID to associate with the trace."""
+
+
 All = Literal["*"]
 """Represents a wildcard or 'all' selector."""
 
