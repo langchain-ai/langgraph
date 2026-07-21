@@ -45,17 +45,10 @@ class AsyncPostgresSaver(BasePostgresSaver):
     def __init__(
         self,
         conn: _ainternal.Conn,
-        pipe: AsyncPipeline | None = None,
         serde: SerializerProtocol | None = None,
     ) -> None:
         super().__init__(serde=serde)
-        if isinstance(conn, AsyncConnectionPool) and pipe is not None:
-            raise ValueError(
-                "Pipeline should be used only with a single AsyncConnection, not AsyncConnectionPool."
-            )
-
         self.conn = conn
-        self.pipe = pipe
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
         self.supports_pipeline = Capabilities().has_pipeline()
