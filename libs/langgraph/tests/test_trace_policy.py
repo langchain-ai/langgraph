@@ -88,11 +88,13 @@ async def test_trace_policy_transforms_recorded_inputs_async() -> None:
     assert run.outputs == {"value": 6}
 
 
-def test_trace_policy_hidden_tags_run() -> None:
+def test_trace_policy_tags_applied_to_run() -> None:
     graph = (
         StateGraph(State)
         .add_node("shown", _incr)
-        .add_node("hush", _incr, trace_policy=TracePolicy(hidden=True))
+        .add_node(
+            "hush", _incr, trace_policy=TracePolicy(tags=["langsmith:hidden_middleware"])
+        )
         .add_edge(START, "shown")
         .add_edge("shown", "hush")
         .add_edge("hush", END)
@@ -102,6 +104,6 @@ def test_trace_policy_hidden_tags_run() -> None:
     tracer = FakeTracer()
     graph.invoke({"value": 0}, {"callbacks": [tracer]})
 
-    # the hidden node's run is tagged for LangSmith to omit; the other isn't
+    # the policy's tags land on the node's run; other nodes are unaffected
     assert "langsmith:hidden_middleware" in _node_run(tracer, "hush").tags
     assert "langsmith:hidden_middleware" not in _node_run(tracer, "shown").tags

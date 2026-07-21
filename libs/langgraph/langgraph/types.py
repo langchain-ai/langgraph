@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from collections import deque
 from collections.abc import Callable, Hashable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import timedelta
 from typing import (
     TYPE_CHECKING,
@@ -547,11 +547,8 @@ class TracePolicy:
     node's trace run. Use to omit or summarize large payloads (e.g. message history).
     Does not affect the value passed to the node."""
 
-    hidden: bool = False
-    """Whether to hide this node's run from the trace tree by tagging it
-    `langsmith:hidden_middleware`. The run is still sent, but LangSmith omits it from the
-    trace view. Unlike `langsmith:hidden`, this does not affect LangGraph's
-    `stream`/debug output."""
+    tags: list[str] = field(default_factory=list)
+    """Tags to attach to this node's trace run."""
 
 
 _DEFAULT_INTERRUPT_ID = "placeholder-id"

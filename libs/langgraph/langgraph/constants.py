@@ -12,7 +12,6 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10
 __all__ = (
     "TAG_NOSTREAM",
     "TAG_HIDDEN",
-    "TAG_HIDDEN_MIDDLEWARE",
     "START",
     "END",
     # retained for backwards compatibility (mostly langgraph-api), should be removed in v2 (or earlier)
@@ -26,9 +25,6 @@ TAG_NOSTREAM = sys.intern("nostream")
 """Tag to disable streaming for a chat model."""
 TAG_HIDDEN = sys.intern("langsmith:hidden")
 """Tag to hide a node/edge from certain tracing/streaming environments."""
-TAG_HIDDEN_MIDDLEWARE = sys.intern("langsmith:hidden_middleware")
-"""Tag to hide a node from the LangSmith trace tree only. Unlike `TAG_HIDDEN`,
-LangGraph does not filter it from `stream`/debug output."""
 END = sys.intern("__end__")
 """The last (maybe virtual) node in graph-style Pregel."""
 START = sys.intern("__start__")
