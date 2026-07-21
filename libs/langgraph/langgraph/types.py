@@ -547,10 +547,6 @@ class TracePolicy:
     node's trace run. Use to omit or summarize large payloads (e.g. message history).
     Does not affect the value passed to the node."""
 
-    process_outputs: Callable[[Any], Any] | None = None
-    """Optional callable to transform the node's output before it is recorded on the
-    node's trace run. Does not affect the value returned by the node."""
-
     hidden: bool = False
     """Whether to hide this node's run from the trace tree by tagging it
     `langsmith:hidden_middleware`. The run is still sent, but LangSmith omits it from the

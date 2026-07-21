@@ -697,11 +697,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 If a sequence is provided, the first matching policy will be applied.
             cache_policy: The cache policy for the node.
             error_handler: Optional node-level error handler callable for this node.
-            trace_policy: Optional policy controlling what this node records on its
-                trace run. Its `process_inputs`/`process_outputs` callables transform
-                the node's input/output before they are recorded (e.g. to omit or
-                summarize large message history), without changing the values passed
-                to or returned by the node. Does not affect execution.
+            trace_policy: Optional policy controlling how this node's run is traced. Its
+                `process_inputs` callable transforms the node's input before it is
+                recorded (e.g. to omit or summarize large message history) without
+                changing the value passed to the node, and `hidden` hides the run from
+                the trace tree. Does not affect execution.
             destinations: Destinations that indicate where a node can route to.
 
                 Useful for edgeless graphs with nodes that return `Command` objects.

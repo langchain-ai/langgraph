@@ -1,4 +1,4 @@
-"""End-to-end tests for `TracePolicy` input/output processing on node trace runs."""
+"""End-to-end tests for `TracePolicy` (input processing + hidden tag) on node runs."""
 
 from typing import Any
 
@@ -22,26 +22,16 @@ def _incr(state: State) -> State:
     return {"value": state["value"] + 1}
 
 
-def test_trace_policy_transforms_recorded_inputs_and_outputs() -> None:
+def test_trace_policy_transforms_recorded_inputs() -> None:
     seen: dict[str, Any] = {}
 
     def process_inputs(inp: Any) -> Any:
         seen["inputs"] = inp
         return {"scrubbed_in": True}
 
-    def process_outputs(out: Any) -> Any:
-        seen["outputs"] = out
-        return {"scrubbed_out": True}
-
     graph = (
         StateGraph(State)
-        .add_node(
-            "n",
-            _incr,
-            trace_policy=TracePolicy(
-                process_inputs=process_inputs, process_outputs=process_outputs
-            ),
-        )
+        .add_node("n", _incr, trace_policy=TracePolicy(process_inputs=process_inputs))
         .add_edge(START, "n")
         .add_edge("n", END)
         .compile()
@@ -52,12 +42,11 @@ def test_trace_policy_transforms_recorded_inputs_and_outputs() -> None:
     assert graph.invoke({"value": 1}, {"callbacks": [tracer]}) == {"value": 2}
 
     run = _node_run(tracer, "n")
-    # only the recorded trace payload is transformed
+    # the recorded input is transformed; the output is recorded as-is
     assert run.inputs == {"scrubbed_in": True}
-    assert run.outputs == {"scrubbed_out": True}
-    # the processors observed the real, untransformed payloads
+    assert run.outputs == {"value": 2}
+    # process_inputs observed the real, untransformed input
     assert seen["inputs"] == {"value": 1}
-    assert seen["outputs"] == {"value": 2}
 
 
 def test_trace_policy_none_records_real_payloads() -> None:
@@ -78,16 +67,13 @@ def test_trace_policy_none_records_real_payloads() -> None:
 
 
 @pytest.mark.anyio
-async def test_trace_policy_transforms_recorded_payloads_async() -> None:
+async def test_trace_policy_transforms_recorded_inputs_async() -> None:
     graph = (
         StateGraph(State)
         .add_node(
             "n",
             _incr,
-            trace_policy=TracePolicy(
-                process_inputs=lambda _: {"scrubbed_in": True},
-                process_outputs=lambda _: {"scrubbed_out": True},
-            ),
+            trace_policy=TracePolicy(process_inputs=lambda _: {"scrubbed_in": True}),
         )
         .add_edge(START, "n")
         .add_edge("n", END)
@@ -99,4 +85,23 @@ async def test_trace_policy_transforms_recorded_payloads_async() -> None:
 
     run = _node_run(tracer, "n")
     assert run.inputs == {"scrubbed_in": True}
-    assert run.outputs == {"scrubbed_out": True}
+    assert run.outputs == {"value": 6}
+
+
+def test_trace_policy_hidden_tags_run() -> None:
+    graph = (
+        StateGraph(State)
+        .add_node("shown", _incr)
+        .add_node("hush", _incr, trace_policy=TracePolicy(hidden=True))
+        .add_edge(START, "shown")
+        .add_edge("shown", "hush")
+        .add_edge("hush", END)
+        .compile()
+    )
+
+    tracer = FakeTracer()
+    graph.invoke({"value": 0}, {"callbacks": [tracer]})
+
+    # the hidden node's run is tagged for LangSmith to omit; the other isn't
+    assert "langsmith:hidden_middleware" in _node_run(tracer, "hush").tags
+    assert "langsmith:hidden_middleware" not in _node_run(tracer, "shown").tags

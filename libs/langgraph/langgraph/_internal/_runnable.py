@@ -572,7 +572,6 @@ class RunnableSeq(Runnable):
         *steps: RunnableLike,
         name: str | None = None,
         trace_inputs: Callable[[Any], Any] | None = None,
-        trace_outputs: Callable[[Any], Any] | None = None,
     ) -> None:
         """Create a new RunnableSeq.
 
@@ -598,7 +597,6 @@ class RunnableSeq(Runnable):
         self.steps = steps_flat
         self.name = name
         self.trace_inputs = trace_inputs
-        self.trace_outputs = trace_outputs
 
     def __or__(
         self,
@@ -691,9 +689,7 @@ class RunnableSeq(Runnable):
             run_manager.on_chain_error(e)
             raise
         else:
-            run_manager.on_chain_end(
-                self.trace_outputs(input) if self.trace_outputs is not None else input
-            )
+            run_manager.on_chain_end(input)
             return input
 
     async def ainvoke(
@@ -746,9 +742,7 @@ class RunnableSeq(Runnable):
             await run_manager.on_chain_error(e)
             raise
         else:
-            await run_manager.on_chain_end(
-                self.trace_outputs(input) if self.trace_outputs is not None else input
-            )
+            await run_manager.on_chain_end(input)
             return input
 
     def stream(
@@ -809,11 +803,7 @@ class RunnableSeq(Runnable):
                 run_manager.on_chain_error(e)
                 raise
             else:
-                run_manager.on_chain_end(
-                    self.trace_outputs(output)
-                    if self.trace_outputs is not None
-                    else output
-                )
+                run_manager.on_chain_end(output)
 
     async def astream(
         self,
@@ -883,11 +873,7 @@ class RunnableSeq(Runnable):
                     await run_manager.on_chain_error(e)
                     raise
                 else:
-                    await run_manager.on_chain_end(
-                        self.trace_outputs(output)
-                        if self.trace_outputs is not None
-                        else output
-                    )
+                    await run_manager.on_chain_end(output)
         else:
             try:
                 async with AsyncExitStack() as stack:
@@ -917,11 +903,7 @@ class RunnableSeq(Runnable):
                 await run_manager.on_chain_error(e)
                 raise
             else:
-                await run_manager.on_chain_end(
-                    self.trace_outputs(output)
-                    if self.trace_outputs is not None
-                    else output
-                )
+                await run_manager.on_chain_end(output)
 
 
 def _consume_iter(it: Iterator[Any]) -> Any:
