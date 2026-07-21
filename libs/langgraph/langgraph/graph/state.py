@@ -1446,12 +1446,31 @@ class CompiledStateGraph(
             if input is None:
                 return None
             elif isinstance(input, dict):
+                undeclared = [k for k in input if k not in output_keys]
+                if undeclared:
+                    warnings.warn(
+                        f"Node '{key}' returned keys not declared in the state "
+                        f"schema: {undeclared}. These keys will be ignored. "
+                        f"Add them to your state TypedDict/dataclass to persist them.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
                 return [(k, v) for k, v in input.items() if k in output_keys]
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:
                     return None
+                tuples = input._update_as_tuples()
+                undeclared = [k for k, _ in tuples if k not in output_keys]
+                if undeclared:
+                    warnings.warn(
+                        f"Node '{key}' returned Command with keys not declared in "
+                        f"the state schema: {undeclared}. These keys will be ignored. "
+                        f"Add them to your state TypedDict/dataclass to persist them.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
                 return [
-                    (k, v) for k, v in input._update_as_tuples() if k in output_keys
+                    (k, v) for k, v in tuples if k in output_keys
                 ]
             elif (
                 isinstance(input, (list, tuple))
