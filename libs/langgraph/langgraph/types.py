@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from collections import deque
 from collections.abc import Callable, Hashable, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import timedelta
 from typing import (
     TYPE_CHECKING,
@@ -546,9 +546,6 @@ class TracePolicy:
     """Optional callable to transform the node's input before it is recorded on the
     node's trace run. Use to omit or summarize large payloads (e.g. message history).
     Does not affect the value passed to the node."""
-
-    tags: list[str] = field(default_factory=list)
-    """Tags to attach to this node's trace run."""
 
 
 _DEFAULT_INTERRUPT_ID = "placeholder-id"

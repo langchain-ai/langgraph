@@ -700,8 +700,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             trace_policy: Optional policy controlling how this node's run is traced. Its
                 `process_inputs` callable transforms the node's input before it is
                 recorded (e.g. to omit or summarize large message history) without
-                changing the value passed to the node, and `tags` attaches tags to the
-                run (e.g. to hide it from the trace tree). Does not affect execution.
+                changing the value passed to the node. Does not affect execution.
             destinations: Destinations that indicate where a node can route to.
 
                 Useful for edgeless graphs with nodes that return `Command` objects.
@@ -1529,7 +1528,6 @@ class CompiledStateGraph(
                 if node.defer
                 else EphemeralValue(Any, guard=False)
             )
-            trace_tags = node.trace_policy.tags if node.trace_policy else None
             self.nodes[key] = PregelNode(
                 triggers=[branch_channel],
                 # read state keys and managed values
@@ -1538,7 +1536,6 @@ class CompiledStateGraph(
                 mapper=mapper,
                 # publish to state keys
                 writers=[ChannelWrite(write_entries)],
-                tags=list(trace_tags) if trace_tags else None,
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
