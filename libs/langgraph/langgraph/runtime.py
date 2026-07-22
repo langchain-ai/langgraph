@@ -243,8 +243,8 @@ class Runtime(Generic[ContextT]):
         If a value is not provided in the other runtime, the value from the current runtime is used.
         """
         return Runtime(
-            context=other.context or self.context,
-            store=other.store or self.store,
+            context=other.context if other.context is not None else self.context,
+            store=other.store if other.store is not None else self.store,
             stream_writer=other.stream_writer
             if other.stream_writer is not _no_op_stream_writer
             else self.stream_writer,
@@ -252,9 +252,9 @@ class Runtime(Generic[ContextT]):
             if other.heartbeat is not _no_op_heartbeat
             else self.heartbeat,
             previous=self.previous if other.previous is None else other.previous,
-            execution_info=other.execution_info or self.execution_info,
-            server_info=other.server_info or self.server_info,
-            control=other.control or self.control,
+            execution_info=other.execution_info if other.execution_info is not None else self.execution_info,
+            server_info=other.server_info if other.server_info is not None else self.server_info,
+            control=other.control if other.control is not None else self.control,
         )
 
     def override(
