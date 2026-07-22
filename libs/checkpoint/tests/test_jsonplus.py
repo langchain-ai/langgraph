@@ -1082,6 +1082,34 @@ def test_msgpack_regex_still_works_strict(caplog: pytest.LogCaptureFixture) -> N
     assert result.flags == pattern.flags
 
 
+
+
+def test_msgpack_purepath_serialization() -> None:
+    """PurePosixPath and PureWindowsPath must serialize without error."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    p = pathlib.PurePosixPath("/foo/bar")
+    result = serde.loads_typed(serde.dumps_typed(p))
+    assert result == p, f"Expected {p}, got {result}"
+
+    p = pathlib.PureWindowsPath(r"C:\foo\bar")
+    result = serde.loads_typed(serde.dumps_typed(p))
+    assert result == p, f"Expected {p}, got {result}"
+
+
+def test_msgpack_range_serialization() -> None:
+    """range objects must serialize and deserialize faithfully."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    for r in (range(10), range(0, 10, 2), range(5, -5, -1)):
+        result = serde.loads_typed(serde.dumps_typed(r))
+        assert result == r, f"Expected {r}, got {result}"
+
+
+def test_msgpack_slice_serialization() -> None:
+    """slice serialization is a regression guard — slice is also not a Collection."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    s = slice(1, 10, 2)
+    result = serde.loads_typed(serde.dumps_typed(s))
+    assert result == s, f"Expected {s}, got {result}"
 def test_msgpack_path_constructor_still_works() -> None:
     serde = JsonPlusSerializer(allowed_msgpack_modules=None)
     path_obj = pathlib.Path("/tmp/foo")
