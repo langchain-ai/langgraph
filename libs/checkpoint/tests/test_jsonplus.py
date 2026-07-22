@@ -1212,6 +1212,73 @@ def test_msgpack_safe_types_value_equality(caplog: pytest.LogCaptureFixture) -> 
             assert result == obj, f"Value mismatch for {type(obj)}: {result} != {obj}"
 
 
+def test_serde_purepath_roundtrip() -> None:
+    """PurePath variants (not just Path) must serialize and deserialize."""
+    serde = JsonPlusSerializer()
+    cases = [
+        pathlib.PurePosixPath("/foo/bar"),
+        pathlib.PureWindowsPath("C:\\Users\\test"),
+        pathlib.PurePath("relative/path"),
+    ]
+    for p in cases:
+        dumped = serde.dumps_typed(p)
+        assert dumped[0] == "msgpack"
+        result = serde.loads_typed(dumped)
+        assert result == p, f"Failed for {type(p).__name__}: {result} != {p}"
+        assert isinstance(result, type(p))
+
+
+def test_serde_range_roundtrip() -> None:
+    """range objects must serialize and deserialize with correct values."""
+    serde = JsonPlusSerializer()
+    cases = [
+        range(10),
+        range(0, 10, 2),
+        range(5, 1, -1),
+        range(0, 100, 1),
+    ]
+    for r in cases:
+        dumped = serde.dumps_typed(r)
+        assert dumped[0] == "msgpack"
+        result = serde.loads_typed(dumped)
+        assert isinstance(result, range)
+        assert result == r, f"Failed for range({r.start}, {r.stop}, {r.step})"
+        assert list(result) == list(r)
+
+
+def test_serde_purepath_and_range_in_dict() -> None:
+    """PurePath and range inside a dict must survive a round-trip."""
+    serde = JsonPlusSerializer()
+    obj = {
+        "paths": [pathlib.PurePosixPath("/a/b"), pathlib.PureWindowsPath("C:\\d")],
+        "ranges": [range(5), range(0, 10, 3)],
+        "mixed": pathlib.PurePath("just/a/path"),
+    }
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+    assert result == obj
+
+
+def test_msgpack_safe_types_purepath_and_range(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """PurePath variants and range must deserialize without warnings in strict mode."""
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+
+    for obj in [
+        pathlib.PurePosixPath("/tmp/test"),
+        pathlib.PureWindowsPath("C:\\tmp"),
+        range(10),
+        range(0, 5, 2),
+    ]:
+        caplog.clear()
+        dumped = serde.dumps_typed(obj)
+        result = serde.loads_typed(dumped)
+        assert "blocked" not in caplog.text.lower()
+        assert "unregistered" not in caplog.text.lower(), f"Warning for {type(obj)}"
+        assert result == obj
+
+
 def test_msgpack_nested_pydantic_serializes_as_dict(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
