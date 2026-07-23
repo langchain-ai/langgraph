@@ -337,6 +337,75 @@ def test_remove_all_messages():
         _AnyIdHumanMessage(content="Updated hi there"),
     ]
 
+    # messages after REMOVE_ALL still participate in ID merge/replace
+    left = [HumanMessage(content="old", id="0")]
+    right = [
+        RemoveMessage(id=REMOVE_ALL_MESSAGES),
+        HumanMessage(content="Hello", id="1"),
+        AIMessage(content="Hi", id="1"),
+    ]
+    result = add_messages(left, right)
+    assert result == [AIMessage(content="Hi", id="1")]
+
+    # RemoveMessage tombstones after REMOVE_ALL are applied to the new history
+    left = [HumanMessage(content="old", id="0")]
+    right = [
+        RemoveMessage(id=REMOVE_ALL_MESSAGES),
+        HumanMessage(content="temp", id="1"),
+        RemoveMessage(id="1"),
+    ]
+    result = add_messages(left, right)
+    assert result == []
+
+
+@pytest.mark.skipif(
+    condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
+    reason="Requires langchain_core>=0.3.11.",
+)
+def test_remove_all_messages_applies_format():
+    # format must still run on the post-clear tail
+    right = [
+        RemoveMessage(id=REMOVE_ALL_MESSAGES),
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "hi",
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ],
+        },
+    ]
+    result = add_messages([], right, format="langchain-openai")
+    assert len(result) == 1
+    assert result[0].content == "hi"
+
+
+def test_remove_all_messages_in_graph():
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    def clear_and_rewrite(_: State) -> dict:
+        return {
+            "messages": [
+                RemoveMessage(id=REMOVE_ALL_MESSAGES),
+                HumanMessage(content="a", id="1"),
+                AIMessage(content="b", id="1"),
+                HumanMessage(content="temp", id="2"),
+                RemoveMessage(id="2"),
+            ]
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("n", clear_and_rewrite)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    app = builder.compile()
+
+    out = app.invoke({"messages": [HumanMessage(content="old", id="0")]})
+    assert out["messages"] == [AIMessage(content="b", id="1")]
+
 
 def test_push_messages_in_graph():
     class MessagesState(TypedDict):

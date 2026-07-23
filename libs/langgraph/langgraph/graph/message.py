@@ -209,8 +209,13 @@ def add_messages(
         if isinstance(m, RemoveMessage) and m.id == REMOVE_ALL_MESSAGES:
             remove_all_idx = idx
 
+    # REMOVE_ALL clears prior state and any messages before the sentinel.
+    # The remaining tail must still go through ID merge / RemoveMessage
+    # tombstoning and optional formatting — otherwise duplicate IDs and
+    # RemoveMessage objects can leak into message history.
     if remove_all_idx is not None:
-        return right[remove_all_idx + 1 :]
+        left = []
+        right = right[remove_all_idx + 1 :]
 
     # merge
     merged = left.copy()
