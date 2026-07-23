@@ -279,8 +279,8 @@ def _build_delta_stage2_sql(
         )
     for _ in channels_with_seed:
         branches.append(
-            "SELECT 'b'::text, NULL, channel, "
-            "type, blob, NULL, NULL, version "
+            "SELECT 'b'::text AS _kind, NULL::text AS checkpoint_id, channel, "
+            "type, blob, NULL::text AS task_id, NULL::int AS idx, version "
             "FROM checkpoint_blobs "
             "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
             "AND version = %s"

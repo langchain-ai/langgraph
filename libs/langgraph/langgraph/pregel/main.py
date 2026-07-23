@@ -132,7 +132,9 @@ from langgraph.pregel._checkpoint import (
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
+    create_checkpoint_plan_for_update_state_api,
     empty_checkpoint,
+    get_updated_channels_from_tasks,
 )
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
@@ -1995,13 +1997,14 @@ class Pregel(
                         },
                     ),
                 )
-            # save task writes
-            for task_id, task in zip(run_task_ids, run_tasks):
-                # channel writes are saved to current checkpoint
-                channel_writes = [w for w in task.writes if w[0] != PUSH]
-                if saved and channel_writes:
-                    checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
-            # apply to checkpoint and save
+            updated_channels = get_updated_channels_from_tasks(run_tasks)
+            if saved is not None:
+                for task_id, task in zip(run_task_ids, run_tasks):
+                    channel_writes = [w for w in task.writes if w[0] != PUSH]
+                    if channel_writes:
+                        checkpointer.put_writes(
+                            checkpoint_config, channel_writes, task_id
+                        )
             apply_writes(
                 checkpoint,
                 channels,
@@ -2009,21 +2012,35 @@ class Pregel(
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            channels_to_snapshot, checkpoint_metadata = (
+                create_checkpoint_plan_for_update_state_api(
+                    channels,
+                    updated_channels,
+                    step=step + 1,
+                    parents=saved.metadata.get("parents", {}) if saved else {},
+                    saved_metadata=saved.metadata if saved else None,
+                    is_fresh_thread=saved is None,
+                )
+            )
+            checkpoint = create_checkpoint(
+                checkpoint,
+                channels,
+                step + 1,
+                updated_channels=updated_channels if channels_to_snapshot else None,
+                get_next_version=checkpointer.get_next_version
+                if channels_to_snapshot
+                else None,
+                channels_to_snapshot=channels_to_snapshot,
+            )
             next_config = checkpointer.put(
                 checkpoint_config,
                 checkpoint,
-                {
-                    "source": "update",
-                    "step": step + 1,
-                    "parents": saved.metadata.get("parents", {}) if saved else {},
-                },
+                checkpoint_metadata,
                 get_new_channel_versions(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),
             )
             for task_id, task in zip(run_task_ids, run_tasks):
-                # save push writes
                 if push_writes := [w for w in task.writes if w[0] == PUSH]:
                     checkpointer.put_writes(next_config, push_writes, task_id)
 
@@ -2440,15 +2457,14 @@ class Pregel(
                         },
                     ),
                 )
-            # save task writes
-            for task_id, task in zip(run_task_ids, run_tasks):
-                # channel writes are saved to current checkpoint
-                channel_writes = [w for w in task.writes if w[0] != PUSH]
-                if saved and channel_writes:
-                    await checkpointer.aput_writes(
-                        checkpoint_config, channel_writes, task_id
-                    )
-            # apply to checkpoint and save
+            updated_channels = get_updated_channels_from_tasks(run_tasks)
+            if saved is not None:
+                for task_id, task in zip(run_task_ids, run_tasks):
+                    channel_writes = [w for w in task.writes if w[0] != PUSH]
+                    if channel_writes:
+                        await checkpointer.aput_writes(
+                            checkpoint_config, channel_writes, task_id
+                        )
             apply_writes(
                 checkpoint,
                 channels,
@@ -2456,22 +2472,35 @@ class Pregel(
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
-            # save checkpoint, after applying writes
+            channels_to_snapshot, checkpoint_metadata = (
+                create_checkpoint_plan_for_update_state_api(
+                    channels,
+                    updated_channels,
+                    step=step + 1,
+                    parents=saved.metadata.get("parents", {}) if saved else {},
+                    saved_metadata=saved.metadata if saved else None,
+                    is_fresh_thread=saved is None,
+                )
+            )
+            checkpoint = create_checkpoint(
+                checkpoint,
+                channels,
+                step + 1,
+                updated_channels=updated_channels if channels_to_snapshot else None,
+                get_next_version=checkpointer.get_next_version
+                if channels_to_snapshot
+                else None,
+                channels_to_snapshot=channels_to_snapshot,
+            )
             next_config = await checkpointer.aput(
                 checkpoint_config,
                 checkpoint,
-                {
-                    "source": "update",
-                    "step": step + 1,
-                    "parents": saved.metadata.get("parents", {}) if saved else {},
-                },
+                checkpoint_metadata,
                 get_new_channel_versions(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),
             )
             for task_id, task in zip(run_task_ids, run_tasks):
-                # save push writes
                 if push_writes := [w for w in task.writes if w[0] == PUSH]:
                     await checkpointer.aput_writes(next_config, push_writes, task_id)
             return patch_checkpoint_map(next_config, saved.metadata if saved else None)
@@ -2835,7 +2864,9 @@ class Pregel(
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             # build server_info from metadata + parent runtime
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            parent_runtime = _coerce_parent_runtime(
+                config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            )
             server_info = _build_server_info(config, parent_runtime)
 
             runtime = Runtime(
@@ -3276,7 +3307,9 @@ class Pregel(
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             # build server_info from metadata + parent runtime
-            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            parent_runtime = _coerce_parent_runtime(
+                config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            )
             server_info = _build_server_info(config, parent_runtime)
 
             runtime = Runtime(
@@ -4251,6 +4284,23 @@ def _resolve_parent_ns(
     if not ns:
         return ()
     return tuple(ns.split(NS_SEP))
+
+
+def _coerce_parent_runtime(value: Any) -> Runtime[Any]:
+    """Normalize the value stored under `CONFIG_KEY_RUNTIME` into a `Runtime`.
+
+    During a graph run this is always a `Runtime` the framework created and
+    published for child tasks to inherit. Layers outside the run (for example a
+    server's graph-factory path) may instead seed an object that only carries
+    `context`/`store`. Adopt its `context` so context set at the graph level
+    plumbs through (`merge` lets the run's own `context` take precedence when
+    one is provided). `store` is resolved separately (passed to the graph
+    directly), so it is not read off here. `merge` then combines this with the
+    run's own runtime, including the framework's `control`.
+    """
+    if isinstance(value, Runtime):
+        return value
+    return Runtime(context=getattr(value, "context", None))
 
 
 def _build_server_info(

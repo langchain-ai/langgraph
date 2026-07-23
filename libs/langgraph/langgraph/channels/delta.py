@@ -26,6 +26,15 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     """Reducer channel that stores only a sentinel in checkpoint blobs and
     reconstructs state by replaying ancestor writes through the reducer.
 
+    !!! warning "Beta"
+
+        `DeltaChannel` is in beta. The API and on-disk representation may
+        change in future releases. Threads written with `DeltaChannel` today
+        are expected to remain readable, but the surrounding contract
+        (`BaseCheckpointSaver.get_delta_channel_history`, the
+        `_DeltaSnapshot` blob shape, the `counters_since_delta_snapshot`
+        metadata field) is not yet stable.
+
     The reducer receives the current accumulated value and a batch of writes
     in one call: `reducer(state, [write1, write2, ...]) -> new_state`.
 
@@ -38,9 +47,12 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
     This lets LangGraph replay checkpointed writes in larger batches than they
     were originally produced without changing reconstructed state.
 
-    Snapshot cadence is driven by per-channel update count. `create_checkpoint`
-    writes a full `_DeltaSnapshot` blob every `snapshot_frequency` updates to
-    this channel, bounding replay depth.
+    Snapshot cadence is driven by two counters: per-channel update count and
+    total supersteps since last snapshot. `create_checkpoint` writes a full
+    `_DeltaSnapshot` blob when EITHER the update count reaches
+    `snapshot_frequency` OR the supersteps count reaches the system-wide
+    `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT` bound (default 5000), bounding
+    replay depth even for channels that stop receiving writes.
 
     Parameters:
         reducer: `(state, list[writes]) -> new_state`. Must be deterministic
@@ -160,13 +172,11 @@ class DeltaChannel(Generic[Value], BaseChannel[Any, Any, Any]):
                 overwrite_idx = i
         if overwrite_idx is not None:
             _, overwrite_value = _get_overwrite(values[overwrite_idx])
-            base = (
+            self.value = (
                 _copy.copy(overwrite_value)
                 if overwrite_value is not None
                 else self.typ()
             )
-            remaining = [v for i, v in enumerate(values) if i != overwrite_idx]
-            self.value = self.reducer(base, remaining) if remaining else base
             return True
         base = self.typ() if self.value is MISSING else self.value
         self.value = self.reducer(base, list(values))

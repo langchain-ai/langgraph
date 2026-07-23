@@ -12,10 +12,11 @@ class Progress:
         while True:
             yield from "|/-\\"
 
-    def __init__(self, *, message="", elapsed: bool = False):
+    def __init__(self, *, message="", elapsed: bool = False, json_mode: bool = False):
         self.message = message
         self._base_message = message
         self._show_elapsed = elapsed
+        self._json_mode = json_mode
         # use this to make sure we don't kill thread when we set msg to ""
         self._stop = threading.Event()
         # signalled when the spinner has no text on screen
@@ -69,6 +70,9 @@ class Progress:
             self._line_clear.set()
 
     def __enter__(self) -> Callable[[str], None]:
+        if self._json_mode:
+            return lambda message: None
+
         if sys.stdout.isatty():
             self.thread = threading.Thread(target=self.spinner_task)
             self.thread.start()
@@ -90,6 +94,8 @@ class Progress:
             return set_message
 
     def __exit__(self, exception, value, tb):
+        if self._json_mode:
+            return
         if sys.stdout.isatty():
             self.message = ""
             self._stop.set()

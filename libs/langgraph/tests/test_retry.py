@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import operator
 import sys
 import threading
@@ -15,7 +16,7 @@ from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, BaseCallback
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from langchain_core.runnables import RunnableLambda, RunnableParallel
+from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableParallel
 from langgraph.checkpoint.memory import InMemorySaver, MemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from typing_extensions import TypedDict
@@ -35,7 +36,13 @@ from langgraph._internal._runnable import RunnableCallable
 from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
-from langgraph.errors import GraphInterrupt, NodeError, NodeTimeoutError, ParentCommand
+from langgraph.errors import (
+    GraphInterrupt,
+    NodeCancelledError,
+    NodeError,
+    NodeTimeoutError,
+    ParentCommand,
+)
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph, add_messages
 from langgraph.pregel import NodeBuilder, Pregel
@@ -61,6 +68,18 @@ from langgraph.types import (
 NEEDS_CONTEXTVARS = pytest.mark.skipif(
     sys.version_info < (3, 11),
     reason="Python 3.11+ is required for async contextvars support",
+)
+
+# `asyncio.Task.cancelling()` is Python 3.11+. The LSD-1507 fix in
+# `langgraph/pregel/_retry.py` falls back to a no-op on 3.10 (preserves the
+# existing CancelledError-as-silent-tear-down behaviour) because there is no
+# reliable way to distinguish user-raised from framework-initiated
+# cancellation without that API. Tests for the converted behaviour gate on
+# the same Python version boundary.
+NEEDS_TASK_CANCELLING = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="LSD-1507 user-cancellation conversion requires Python 3.11+ "
+    "(asyncio.Task.cancelling)",
 )
 
 
@@ -1674,15 +1693,28 @@ async def test_arun_with_retry_timeout_observer_tracks_attempts():
 async def test_arun_with_retry_timeout_observer_emits_progress_on_heartbeat():
     events: list = []
 
+    # `_TimedAttemptScope.__init__` sets `_last_progress` to `time.monotonic()`,
+    # but the watchdog itself doesn't start running until after `wrap_config`
+    # and task scheduling — under CI load that gap can be large enough to eat
+    # the entire idle window before the task body's first await even runs. We
+    # defend against that by:
+    #   1. Using a generous idle_timeout so scheduling slack stays well within it.
+    #   2. Calling `runtime.heartbeat()` BEFORE the first sleep, which resets
+    #      `_last_progress` to "now" the moment the task body actually starts.
+    idle_timeout_s = 1.0
+
     class HeartbeatProc:
         async def ainvoke(self, input, config):
             runtime = config[CONF][CONFIG_KEY_RUNTIME]
+            runtime.heartbeat()  # reset the idle clock at task-body entry
             for _ in range(8):
                 await asyncio.sleep(0.05)
                 runtime.heartbeat()
             return "ok"
 
-    task = _make_task(HeartbeatProc(), timeout=_idle_timeout(0.2), name="heartbeat")
+    task = _make_task(
+        HeartbeatProc(), timeout=_idle_timeout(idle_timeout_s), name="heartbeat"
+    )
     task.config[CONF][CONFIG_KEY_TIMED_ATTEMPT_OBSERVER] = events.append
     assert await arun_with_retry(task, retry_policy=None) == "ok"
 
@@ -1691,13 +1723,13 @@ async def test_arun_with_retry_timeout_observer_emits_progress_on_heartbeat():
     assert by_event[-1] == "finish"
     progress = [ev for ev in events if ev.event == "progress"]
     assert progress, "expected at least one progress event from heartbeat"
-    # Rate limit is `idle_timeout / 4` = 0.05s; with 8 heartbeats spaced ~0.05s
-    # we should see at most ~one progress event per heartbeat (well below 8).
+    # Rate limit is `idle_timeout / 4` = 0.25s; with the task running for
+    # ~400ms we expect 1–2 progress events (well below the 9 heartbeats).
     assert len(progress) <= len(by_event)
     for ev in progress:
         assert ev.context.task_name == "heartbeat"
         assert ev.context.attempt == 1
-        assert ev.context.idle_timeout_secs == 0.2
+        assert ev.context.idle_timeout_secs == idle_timeout_s
         assert isinstance(ev.progress_at, datetime)
 
 
@@ -2267,3 +2299,645 @@ def test_node_without_error_handler_still_fails_run():
 
     with pytest.raises(ValueError, match="no handler"):
         graph.invoke({"foo": ""})
+
+
+# ---------------------------------------------------------------------------
+# set_node_defaults()
+# ---------------------------------------------------------------------------
+
+
+def test_set_node_defaults_error_handler_catches_all_nodes():
+    class State(TypedDict):
+        route: str
+        foo: Annotated[list[str], operator.add]
+
+    def route_node(state: State) -> Command:
+        return Command(goto=state["route"])
+
+    def fail_a(state: State) -> State:
+        raise RuntimeError("a failed")
+
+    def fail_b(state: State) -> State:
+        raise RuntimeError("b failed")
+
+    captured: dict[str, list[str]] = {"nodes": []}
+
+    def default_handler(state: State, error: NodeError) -> State:
+        captured["nodes"].append(error.node)
+        return {"foo": [f"handled_{error.node}"]}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(error_handler=default_handler)
+        .add_node("route_node", route_node)
+        .add_node("fail_a", fail_a)
+        .add_node("fail_b", fail_b)
+        .add_edge(START, "route_node")
+        .add_conditional_edges(
+            "route_node", lambda s: s["route"], path_map=["fail_a", "fail_b"]
+        )
+        .compile()
+    )
+
+    result_a = graph.invoke({"route": "fail_a", "foo": []})
+    result_b = graph.invoke({"route": "fail_b", "foo": []})
+    assert result_a["foo"] == ["handled_fail_a"]
+    assert result_b["foo"] == ["handled_fail_b"]
+    assert "fail_a" in captured["nodes"]
+    assert "fail_b" in captured["nodes"]
+
+
+def test_set_node_defaults_error_handler_overridden_by_node_handler():
+    class State(TypedDict):
+        route: str
+        foo: Annotated[list[str], operator.add]
+
+    def route_node(state: State) -> Command:
+        return Command(goto=state["route"])
+
+    def fail_a(state: State) -> State:
+        raise RuntimeError("a failed")
+
+    def fail_b(state: State) -> State:
+        raise RuntimeError("b failed")
+
+    captured: dict[str, list[str]] = {"handler": []}
+
+    def node_handler(state: State, error: NodeError) -> State:
+        captured["handler"].append(f"node:{error.node}")
+        return {"foo": [f"node_handled_{error.node}"]}
+
+    def default_handler(state: State, error: NodeError) -> State:
+        captured["handler"].append(f"default:{error.node}")
+        return {"foo": [f"default_handled_{error.node}"]}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(error_handler=default_handler)
+        .add_node("route_node", route_node)
+        .add_node("fail_a", fail_a, error_handler=node_handler)
+        .add_node("fail_b", fail_b)
+        .add_edge(START, "route_node")
+        .add_conditional_edges(
+            "route_node", lambda s: s["route"], path_map=["fail_a", "fail_b"]
+        )
+        .compile()
+    )
+
+    result_a = graph.invoke({"route": "fail_a", "foo": []})
+    assert result_a["foo"] == ["node_handled_fail_a"]
+    assert "node:fail_a" in captured["handler"]
+    assert "default:fail_a" not in captured["handler"]
+
+    result_b = graph.invoke({"route": "fail_b", "foo": []})
+    assert result_b["foo"] == ["default_handled_fail_b"]
+    assert "default:fail_b" in captured["handler"]
+
+
+def test_set_node_defaults_error_handler_skips_per_node_handler_nodes():
+    """If a per-node error handler itself raises, the default handler must NOT
+    catch it -- the run should fail."""
+
+    class State(TypedDict):
+        foo: str
+
+    def always_failing(state: State) -> State:
+        raise RuntimeError("node boom")
+
+    def broken_handler(state: State, error: NodeError) -> State:
+        raise RuntimeError("handler boom")
+
+    def default_handler(state: State, error: NodeError) -> State:
+        return {"foo": "default recovered"}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(error_handler=default_handler)
+        .add_node("always_failing", always_failing, error_handler=broken_handler)
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    with pytest.raises(RuntimeError, match="handler boom"):
+        graph.invoke({"foo": ""})
+
+
+def test_set_node_defaults_error_handler_failure_fails_run():
+    """When the default handler itself raises, the run fails (no infinite
+    recursion, no double-routing)."""
+
+    class State(TypedDict):
+        foo: str
+
+    def always_failing(state: State) -> State:
+        raise RuntimeError("node boom")
+
+    def broken_default_handler(state: State, error: NodeError) -> State:
+        raise RuntimeError("default handler boom")
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(error_handler=broken_default_handler)
+        .add_node("always_failing", always_failing)
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    with pytest.raises(RuntimeError, match="default handler boom"):
+        graph.invoke({"foo": ""})
+
+
+def test_set_node_defaults_error_handler_receives_runnable_config():
+    class State(TypedDict):
+        foo: str
+
+    def always_failing(state: State) -> State:
+        raise RuntimeError("boom")
+
+    captured: dict[str, Any] = {}
+
+    def default_handler(
+        state: State, error: NodeError, config: RunnableConfig
+    ) -> State:
+        captured["thread_id"] = config["configurable"].get("thread_id")
+        return {"foo": "handled"}
+
+    checkpointer = MemorySaver()
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(error_handler=default_handler)
+        .add_node("always_failing", always_failing)
+        .add_edge(START, "always_failing")
+        .compile(checkpointer=checkpointer)
+    )
+
+    thread_id = str(uuid4())
+    result = graph.invoke(
+        {"foo": ""}, config={"configurable": {"thread_id": thread_id}}
+    )
+    assert result["foo"] == "handled"
+    assert captured["thread_id"] == thread_id
+
+
+def test_set_node_defaults_error_handler_collides_with_user_node():
+    class State(TypedDict):
+        foo: str
+
+    def default_handler(state: State, error: NodeError) -> State:
+        return {"foo": "handled"}
+
+    builder = (
+        StateGraph(State)
+        .set_node_defaults(error_handler=default_handler)
+        .add_node("__default_error_handler__", lambda s: s)
+        .add_edge(START, "__default_error_handler__")
+    )
+
+    with pytest.raises(ValueError, match="__default_error_handler__"):
+        builder.compile()
+
+
+def test_set_node_defaults_retry_policy():
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+
+    def flaky_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise ValueError("not yet")
+        return {"foo": "ok"}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(
+            retry_policy=RetryPolicy(
+                max_attempts=3, initial_interval=0.01, jitter=False, retry_on=ValueError
+            )
+        )
+        .add_node("flaky", flaky_node)
+        .add_edge(START, "flaky")
+        .compile()
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke({"foo": ""})
+
+    assert result["foo"] == "ok"
+    assert attempts == 3
+
+
+def test_set_node_defaults_retry_policy_per_node_wins():
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+
+    def flaky_node(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 2:
+            raise ValueError("not yet")
+        return {"foo": "ok"}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(
+            retry_policy=RetryPolicy(
+                max_attempts=1, initial_interval=0.01, jitter=False, retry_on=ValueError
+            )
+        )
+        .add_node(
+            "flaky",
+            flaky_node,
+            retry_policy=RetryPolicy(
+                max_attempts=3,
+                initial_interval=0.01,
+                jitter=False,
+                retry_on=ValueError,
+            ),
+        )
+        .add_edge(START, "flaky")
+        .compile()
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke({"foo": ""})
+
+    assert result["foo"] == "ok"
+    assert attempts == 2
+
+
+@pytest.mark.anyio
+async def test_set_node_defaults_timeout():
+    class State(TypedDict):
+        foo: str
+
+    async def slow_node(state: State) -> State:
+        await asyncio.sleep(10)
+        return {"foo": "should-not-happen"}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(timeout=TimeoutPolicy(run_timeout=0.05))
+        .add_node("slow", slow_node)
+        .add_edge(START, "slow")
+        .compile()
+    )
+
+    from langgraph.errors import NodeTimeoutError
+
+    with pytest.raises(NodeTimeoutError):
+        await graph.ainvoke({"foo": ""})
+
+
+@pytest.mark.anyio
+async def test_set_node_defaults_timeout_per_node_wins():
+    """Per-node timeout overrides the default; a generous per-node timeout
+    allows a node to complete even when the builder default is very short."""
+
+    class State(TypedDict):
+        foo: str
+
+    async def quick_node(state: State) -> State:
+        await asyncio.sleep(0.05)
+        return {"foo": "done"}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(timeout=TimeoutPolicy(run_timeout=0.01))
+        .add_node("quick", quick_node, timeout=TimeoutPolicy(run_timeout=5.0))
+        .add_edge(START, "quick")
+        .compile()
+    )
+
+    result = await graph.ainvoke({"foo": ""})
+    assert result["foo"] == "done"
+
+
+def test_set_node_defaults_chaining():
+    """set_node_defaults() is chainable and can be called in any order relative to add_node."""
+
+    class State(TypedDict):
+        foo: str
+
+    def always_failing(state: State) -> State:
+        raise RuntimeError("boom")
+
+    def handler(state: State, error: NodeError) -> State:
+        return {"foo": "handled"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("a", always_failing)
+        .add_edge(START, "a")
+        .set_node_defaults(
+            retry_policy=RetryPolicy(
+                max_attempts=1, initial_interval=0.01, jitter=False
+            ),
+            error_handler=handler,
+        )
+        .compile()
+    )
+
+    result = graph.invoke({"foo": ""})
+    assert result["foo"] == "handled"
+
+
+def test_set_node_defaults_combined_retry_and_error_handler():
+    """Retries are exhausted first, then the error handler runs."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempts = 0
+    captured: dict[str, Any] = {}
+
+    def always_failing(state: State) -> State:
+        nonlocal attempts
+        attempts += 1
+        raise ValueError("Always fails")
+
+    def handler(state: State, error: NodeError) -> State:
+        captured["error"] = str(error.error)
+        return {"foo": "handled"}
+
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(
+            retry_policy=RetryPolicy(
+                max_attempts=2,
+                initial_interval=0.01,
+                jitter=False,
+                retry_on=ValueError,
+            ),
+            error_handler=handler,
+        )
+        .add_node("fail", always_failing)
+        .add_edge(START, "fail")
+        .compile()
+    )
+
+    with patch("time.sleep"):
+        result = graph.invoke({"foo": ""})
+
+    assert result["foo"] == "handled"
+    assert attempts == 2
+    assert captured["error"] == "Always fails"
+
+
+def test_error_handler_resumes_after_crash():
+    """If the error handler crashes, resuming should re-schedule the handler
+    (not re-execute the original failed node)."""
+
+    class State(TypedDict):
+        foo: str
+
+    call_count = {"node": 0, "handler": 0}
+    captured_errors: list[NodeError] = []
+
+    def failing_node(state: State) -> State:
+        call_count["node"] += 1
+        raise RuntimeError("boom")
+
+    handler_should_fail = [True]
+
+    def handler(state: State, error: NodeError) -> State:
+        call_count["handler"] += 1
+        captured_errors.append(error)
+        if handler_should_fail[0]:
+            raise RuntimeError("handler crash")
+        return {"foo": "recovered"}
+
+    checkpointer = MemorySaver()
+    graph = (
+        StateGraph(State)
+        .set_node_defaults(error_handler=handler)
+        .add_node("fail", failing_node)
+        .add_edge(START, "fail")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "t1"}}
+
+    # First invoke: node fails -> handler runs -> handler crashes -> run fails
+    with pytest.raises(RuntimeError, match="handler crash"):
+        graph.invoke({"foo": ""}, config)
+
+    assert call_count["node"] == 1
+    assert call_count["handler"] == 1
+    assert captured_errors[0].node == "fail"
+    assert isinstance(captured_errors[0].error, RuntimeError)
+    assert str(captured_errors[0].error) == "boom"
+
+    # Resume: handler should run again, NOT the original node
+    handler_should_fail[0] = False
+    result = graph.invoke(None, config)
+
+    assert result["foo"] == "recovered"
+    assert call_count["node"] == 1  # NOT re-executed
+    assert call_count["handler"] == 2  # ran again on resume
+    # on resume the error was round-tripped through the checkpointer, so it
+    # may be deserialized as a string representation rather than the original
+    # exception type — verify the node name and that the error content matches.
+    assert captured_errors[1].node == "fail"
+    assert "boom" in str(captured_errors[1].error)
+
+
+def test_error_handler_resumes_after_crash_multiple_nodes():
+    """When multiple nodes fail in the same superstep and all have error handlers:
+    - error handlers start running while other nodes may still be in-flight
+    - resuming re-schedules each handler (not re-executes the original nodes)
+    """
+
+    class State(TypedDict):
+        results: Annotated[list[str], operator.add]
+
+    call_count = {"a": 0, "b": 0, "handler_a": 0, "handler_b": 0}
+    handler_a_started = threading.Event()
+
+    def node_a(state: State) -> State:
+        call_count["a"] += 1
+        raise RuntimeError("a failed")
+
+    def node_b(state: State) -> State:
+        call_count["b"] += 1
+        # Block until handler_a has started — proves the error handler runs
+        # concurrently with in-flight nodes in the same superstep.
+        assert handler_a_started.wait(timeout=5), "handler_a never started"
+        raise RuntimeError("b failed")
+
+    handler_should_fail = [True]
+
+    def handler_a(state: State, error: NodeError) -> State:
+        call_count["handler_a"] += 1
+        assert error.node == "a"
+        assert "a failed" in str(error.error)
+        handler_a_started.set()
+        if handler_should_fail[0]:
+            raise RuntimeError("handler_a crash")
+        return {"results": [f"recovered_a:{error.node}"]}
+
+    def handler_b(state: State, error: NodeError) -> State:
+        call_count["handler_b"] += 1
+        assert error.node == "b"
+        assert "b failed" in str(error.error)
+        if handler_should_fail[0]:
+            raise RuntimeError("handler_b crash")
+        return {"results": [f"recovered_b:{error.node}"]}
+
+    checkpointer = MemorySaver()
+    graph = (
+        StateGraph(State)
+        .add_node("a", node_a, error_handler=handler_a)
+        .add_node("b", node_b, error_handler=handler_b)
+        .add_edge(START, "a")
+        .add_edge(START, "b")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "t1"}}
+
+    # First invoke: node_a fails immediately -> handler_a starts (sets event) ->
+    # node_b unblocks and fails -> handler_b starts -> both handlers crash
+    with pytest.raises(RuntimeError):
+        graph.invoke({"results": []}, config)
+
+    assert call_count["a"] == 1
+    assert call_count["b"] == 1
+    assert call_count["handler_a"] == 1
+    assert call_count["handler_b"] == 1
+
+    # Resume: both handlers should run again, NOT the original nodes
+    handler_should_fail[0] = False
+    handler_a_started.clear()
+    result = graph.invoke(None, config)
+
+    assert call_count["a"] == 1  # NOT re-executed
+    assert call_count["b"] == 1  # NOT re-executed
+    assert call_count["handler_a"] == 2  # ran again on resume
+    assert call_count["handler_b"] == 2  # ran again on resume
+    assert "recovered_a:a" in result["results"]
+    assert "recovered_b:b" in result["results"]
+
+
+@NEEDS_TASK_CANCELLING
+@pytest.mark.anyio
+async def test_arun_with_retry_user_raised_cancelled_becomes_node_cancelled():
+    class UserCancelsProc:
+        async def ainvoke(self, input, config):
+            raise asyncio.CancelledError("nope")
+
+    task = _make_task(UserCancelsProc(), name="user-cancel")
+
+    with pytest.raises(NodeCancelledError) as excinfo:
+        await arun_with_retry(task, retry_policy=None)
+    assert excinfo.value.node == "user-cancel"
+    # original CancelledError chained for debugging
+    assert isinstance(excinfo.value.__cause__, asyncio.CancelledError)
+
+
+@NEEDS_TASK_CANCELLING
+@pytest.mark.anyio
+async def test_arun_with_retry_user_raised_cancelled_with_timeout_policy():
+    """The timeout path runs the node in a child task; the conversion must
+    still trigger for user-raised ``CancelledError``."""
+
+    class UserCancelsProc:
+        async def ainvoke(self, input, config):
+            raise asyncio.CancelledError
+
+    task = _make_task(
+        UserCancelsProc(), timeout=_idle_timeout(1.0), name="user-cancel-timed"
+    )
+
+    with pytest.raises(NodeCancelledError) as excinfo:
+        await arun_with_retry(task, retry_policy=None)
+    assert excinfo.value.node == "user-cancel-timed"
+
+
+def test_run_with_retry_sync_node_raising_cancelled_becomes_node_cancelled():
+    class SyncUserCancelsProc:
+        def invoke(self, input, config):
+            raise asyncio.CancelledError("sync nope")
+
+    task = _make_task(SyncUserCancelsProc(), timeout=None, name="sync-user-cancel")
+
+    with pytest.raises(NodeCancelledError) as excinfo:
+        run_with_retry(task, retry_policy=None)
+    assert excinfo.value.node == "sync-user-cancel"
+    assert isinstance(excinfo.value.__cause__, asyncio.CancelledError)
+
+
+@NEEDS_TASK_CANCELLING
+@pytest.mark.anyio
+async def test_arun_with_retry_external_cancel_propagates_as_cancelled():
+    """When the asyncio task running ``arun_with_retry`` is cancelled from the
+    outside, the cancellation must still propagate as
+    ``asyncio.CancelledError``. Converting it to ``NodeCancelledError`` would
+    break the runner's ability to cancel sibling tasks during cleanup."""
+
+    started = asyncio.Event()
+    observed: list[BaseException] = []
+
+    class SlowProc:
+        async def ainvoke(self, input, config):
+            started.set()
+            await asyncio.sleep(10.0)
+            return "never"
+
+    task = _make_task(SlowProc(), timeout=None, name="external-cancel")
+
+    async def runner():
+        try:
+            await arun_with_retry(task, retry_policy=None)
+        except BaseException as exc:
+            observed.append(exc)
+            raise
+
+    bg = asyncio.create_task(runner())
+    await started.wait()
+    bg.cancel()
+    # We expect the cancellation to surface to us as well; swallow it here so
+    # the test runner's own task isn't poisoned by the cancel.
+    with contextlib.suppress(asyncio.CancelledError):
+        await bg
+    assert observed, "runner did not observe any exception"
+    # Framework cancellation must remain a CancelledError, not be rewritten as
+    # NodeCancelledError.
+    assert isinstance(observed[0], asyncio.CancelledError)
+    assert not isinstance(observed[0], NodeCancelledError)
+
+
+@NEEDS_TASK_CANCELLING
+@pytest.mark.anyio
+async def test_pregel_user_raised_cancellederror_fails_run():
+    """End-to-end: a two-branch graph where one branch raises
+    ``asyncio.CancelledError`` must fail the run instead of returning
+    a partial-success state. This is the LSD-1507 customer scenario."""
+
+    class _S(TypedDict, total=False):
+        vals: Annotated[list[str], operator.add]
+
+    async def ok(state: _S) -> _S:
+        return {"vals": ["ok"]}
+
+    async def boom(state: _S) -> _S:
+        raise asyncio.CancelledError("user-raised in node body")
+
+    graph = (
+        StateGraph(_S)
+        .add_node("ok", ok)
+        .add_node("boom", boom)
+        .add_edge(START, "ok")
+        .add_edge(START, "boom")
+        .add_edge("ok", END)
+        .add_edge("boom", END)
+        .compile()
+    )
+
+    with pytest.raises(NodeCancelledError) as excinfo:
+        await graph.ainvoke({"vals": []})
+    assert excinfo.value.node == "boom"

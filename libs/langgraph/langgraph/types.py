@@ -32,7 +32,7 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10, LangGraphDeprecatedS
 
 # Local TypeVars for generic stream TypedDicts.
 # We use separate TypeVars here (rather than importing from langgraph.typing)
-# because the typing module TypeVars have defaults that cause mypy issues
+# because the typing module TypeVars have defaults that cause type checker issues
 # when used in standalone type aliases.
 StateT = TypeVar("StateT")
 OutputT = TypeVar("OutputT")
@@ -151,6 +151,16 @@ class TaskPayload(TypedDict):
     """Input data passed to the task."""
     triggers: list[str]
     """List of triggers that caused this task to be executed (e.g. channel writes)."""
+    metadata: NotRequired[dict[str, Any]]
+    """Framework-resolved metadata associated with the task.
+
+    Generic dict carrier following the messages-stream pattern. Populated by
+    `map_debug_tasks` from `task.config["metadata"]` when non-empty, so the
+    same keys `stream_mode="messages"` consumers see (e.g. `lc_agent_name`,
+    `langgraph_node`, `langgraph_step`) are available to stream transformers.
+
+    Consumers should ignore unrecognized keys.
+    """
 
 
 class TaskResultPayload(TypedDict):
@@ -1036,3 +1046,9 @@ class Overwrite:
 
     value: Any
     """The value to write directly to the channel, bypassing any reducer."""
+
+    type: Literal["__overwrite__"] = "__overwrite__"
+    """Discriminator field. Lets the channel reducer recognise an `Overwrite`
+    even after its dataclass form is JSON-serialised and the typed instance
+    is lost (e.g. an `orjson`-encoded state update routed through the
+    LangGraph API server)."""

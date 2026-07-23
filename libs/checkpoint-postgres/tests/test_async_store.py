@@ -739,3 +739,135 @@ async def test_store_ttl(store):
     # Now has been (TTL_SECONDS-2)*2 > TTL_SECONDS + TTL_SECONDS/2
     results = await store.asearch(ns, query="bar", refresh_ttl=False)
     assert len(results) == 0
+
+
+async def _aexpire_now(
+    store: AsyncPostgresStore, ns: tuple[str, ...], key: str
+) -> None:
+    """Backdate a row's expires_at into the past without deleting it (unswept)."""
+    async with store._cursor() as cur:
+        await cur.execute(
+            "UPDATE store SET expires_at = NOW() - INTERVAL '1 minute' "
+            "WHERE prefix = %s AND key = %s",
+            (".".join(ns), key),
+        )
+
+
+async def _arow_exists(
+    store: AsyncPostgresStore, ns: tuple[str, ...], key: str
+) -> bool:
+    async with store._cursor() as cur:
+        await cur.execute(
+            "SELECT COUNT(*) AS n FROM store WHERE prefix = %s AND key = %s",
+            (".".join(ns), key),
+        )
+        return (await cur.fetchone())["n"] == 1
+
+
+async def _astored_expires_at(store: AsyncPostgresStore, ns: tuple[str, ...], key: str):
+    async with store._cursor() as cur:
+        await cur.execute(
+            "SELECT expires_at FROM store WHERE prefix = %s AND key = %s",
+            (".".join(ns), key),
+        )
+        return (await cur.fetchone())["expires_at"]
+
+
+async def test_omit_expired_filters_read_paths(store: AsyncPostgresStore) -> None:
+    await store.stop_ttl_sweeper()  # deterministic: no background deletion
+    store.ttl_config["omit_expired"] = True
+
+    expired_ns = ("omit", "expired")
+    control_ns = ("omit", "control")
+    await store.aput(expired_ns, "e", {"data": "gone"}, ttl=TTL_MINUTES)
+    await store.aput(control_ns, "c", {"data": "keep"}, ttl=None)
+    await _aexpire_now(store, expired_ns, "e")
+
+    # The row is expired but physically still present (unswept).
+    assert await _arow_exists(store, expired_ns, "e")
+
+    # aget omits it; the never-expiring control is still returned.
+    assert await store.aget(expired_ns, "e") is None
+    assert await store.aget(control_ns, "c") is not None
+
+    # asearch omits it but returns the control.
+    assert await store.asearch(expired_ns) == []
+    assert [i.key for i in await store.asearch(control_ns)] == ["c"]
+
+    # alist_namespaces drops the expired-only namespace, keeps the control.
+    namespaces = await store.alist_namespaces(prefix=("omit",))
+    assert expired_ns not in namespaces
+    assert control_ns in namespaces
+
+
+@pytest.mark.parametrize("omit", [None, False], ids=["default", "explicit-false"])
+async def test_omit_expired_disabled_preserves_expired_rows(
+    store: AsyncPostgresStore, omit
+) -> None:
+    await store.stop_ttl_sweeper()
+    if omit is not None:
+        store.ttl_config["omit_expired"] = omit
+
+    ns = ("keep",)
+    await store.aput(ns, "k", {"data": "still-here"}, ttl=TTL_MINUTES)
+    await _aexpire_now(store, ns, "k")
+
+    assert await store.aget(ns, "k", refresh_ttl=False) is not None
+    assert [i.key for i in await store.asearch(ns, refresh_ttl=False)] == ["k"]
+    assert ns in await store.alist_namespaces(prefix=("keep",))
+
+
+async def test_omit_expired_refresh_ttl_only_refreshes_live_rows(
+    store: AsyncPostgresStore,
+) -> None:
+    await store.stop_ttl_sweeper()
+    store.ttl_config["omit_expired"] = True
+
+    ns = ("refresh",)
+    await store.aput(ns, "expired", {"n": 0}, ttl=TTL_MINUTES)
+    await store.aput(ns, "live_get", {"n": 1}, ttl=TTL_MINUTES)
+    await store.aput(ns, "live_search", {"n": 2}, ttl=TTL_MINUTES)
+    await _aexpire_now(store, ns, "expired")
+
+    expired_before = await _astored_expires_at(store, ns, "expired")
+    get_before = await _astored_expires_at(store, ns, "live_get")
+    search_before = await _astored_expires_at(store, ns, "live_search")
+
+    # refresh_ttl=True must NOT resurrect the expired row (via aget or asearch)...
+    assert await store.aget(ns, "expired", refresh_ttl=True) is None
+    live_keys = [i.key for i in await store.asearch(ns, refresh_ttl=True)]
+    assert "expired" not in live_keys
+    assert await _astored_expires_at(store, ns, "expired") == expired_before
+
+    # ...but must still extend the live rows that were read.
+    assert await store.aget(ns, "live_get", refresh_ttl=True) is not None
+    assert await _astored_expires_at(store, ns, "live_get") > get_before
+    assert await _astored_expires_at(store, ns, "live_search") > search_before
+
+
+async def test_omit_expired_search_pagination(store: AsyncPostgresStore) -> None:
+    await store.stop_ttl_sweeper()
+    store.ttl_config["omit_expired"] = True
+
+    ns = ("page",)
+    for k in ("a", "b", "c"):
+        await store.aput(ns, k, {"k": k}, ttl=TTL_MINUTES)
+    await store.aput(ns, "expired", {"k": "x"}, ttl=TTL_MINUTES)
+    await _aexpire_now(store, ns, "expired")
+
+    seconds_ago = {"a": 1, "expired": 2, "b": 3, "c": 4}
+    # updated_at DESC orders these a, expired, b, c, so the expired row sits inside
+    # the first limit=2 window. Correct (pre-LIMIT) filtering yields live pages
+    # [a, b] then [c]; post-LIMIT filtering would underfill page 1 to just [a].
+    async with store._cursor() as cur:
+        for key, secs in seconds_ago.items():
+            await cur.execute(
+                "UPDATE store SET updated_at = NOW() - (%s * INTERVAL '1 second') "
+                "WHERE prefix = %s AND key = %s",
+                (secs, ".".join(ns), key),
+            )
+
+    page1 = await store.asearch(ns, limit=2, offset=0)
+    page2 = await store.asearch(ns, limit=2, offset=2)
+    assert [i.key for i in page1] == ["a", "b"]
+    assert [i.key for i in page2] == ["c"]

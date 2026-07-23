@@ -27,10 +27,10 @@ Trusted by companies shaping the future of agents – including Klarna, Replit, 
 pip install -U langgraph
 ```
 
-If you're looking to quickly build agents with LangChain's `create_agent` (built on LangGraph), check out the [LangChain Agents documentation](https://docs.langchain.com/oss/python/langchain/agents).
+> [!TIP]
+> If you're looking to quickly build agents, check out **[Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview)** — a higher-level package built on LangGraph for agents that can plan, use subagents, and leverage file systems for complex tasks.
 
-> [!NOTE]
-> Looking for the JS/TS library? Check out [LangGraph.js](https://github.com/langchain-ai/langgraphjs) and the [JS docs](https://docs.langchain.com/oss/javascript/langgraph/overview).
+For an equivalent JS/TS library, check out [LangGraph.js](https://github.com/langchain-ai/langgraphjs) and the [JS docs](https://docs.langchain.com/oss/javascript/langgraph/overview).
 
 ## Why use LangGraph?
 
@@ -51,7 +51,7 @@ While LangGraph can be used standalone, it also integrates seamlessly with any L
 
 To improve your LLM application development, pair LangGraph with:
 
-- [Deep Agents](https://github.com/langchain-ai/deepagents) *(new!)* – Build agents that can plan, use subagents, and leverage file systems for complex tasks.
+- [Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview) – Build agents that can plan, use subagents, and leverage file systems for complex tasks.
 - [LangChain](https://docs.langchain.com/oss/python/langchain/overview) – Provides integrations and composable components to streamline LLM application development.
 - [LangSmith](https://www.langchain.com/langsmith) – Helpful for agent evals and observability. Debug poor-performing LLM app runs, evaluate agent trajectories, gain visibility in production, and improve performance over time.
 - [LangSmith Deployment](https://docs.langchain.com/langsmith/deployments) – Deploy and scale agents effortlessly with a purpose-built deployment platform for long-running, stateful workflows. Discover, reuse, configure, and share agents across teams – and iterate quickly with visual prototyping in [LangSmith Studio](https://docs.langchain.com/langsmith/studio).

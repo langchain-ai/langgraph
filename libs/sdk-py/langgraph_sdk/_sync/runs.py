@@ -11,6 +11,7 @@ import httpx
 
 from langgraph_sdk._shared.utilities import (
     _get_run_metadata_from_response,
+    _quote_path_param,
     _sse_to_v2_dict,
 )
 from langgraph_sdk._sync.http import SyncHttpClient
@@ -49,7 +50,7 @@ def _wrap_stream_v2_sync(
     for part in raw:
         v2 = _sse_to_v2_dict(part.event, part.data)
         if v2 is not None:
-            yield v2
+            yield v2  # ty: ignore[invalid-yield]
 
 
 class SyncRunsClient:
@@ -332,7 +333,7 @@ class SyncRunsClient:
             "langsmith_tracer": langsmith_tracing,
         }
         endpoint = (
-            f"/threads/{thread_id}/runs/stream"
+            f"/threads/{_quote_path_param(thread_id)}/runs/stream"
             if thread_id is not None
             else "/runs/stream"
         )
@@ -591,7 +592,7 @@ class SyncRunsClient:
                 on_run_created(metadata)
 
         return self.http.post(
-            f"/threads/{thread_id}/runs" if thread_id else "/runs",
+            f"/threads/{_quote_path_param(thread_id)}/runs" if thread_id else "/runs",
             json=payload,
             params=params,
             headers=headers,
@@ -825,7 +826,9 @@ class SyncRunsClient:
                 on_run_created(metadata)
 
         endpoint = (
-            f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
+            f"/threads/{_quote_path_param(thread_id)}/runs/wait"
+            if thread_id is not None
+            else "/runs/wait"
         )
         return self.http.request_reconnect(
             endpoint,
@@ -879,7 +882,9 @@ class SyncRunsClient:
         if params:
             query_params.update(params)
         return self.http.get(
-            f"/threads/{thread_id}/runs", params=query_params, headers=headers
+            f"/threads/{_quote_path_param(thread_id)}/runs",
+            params=query_params,
+            headers=headers,
         )
 
     def get(
@@ -912,7 +917,9 @@ class SyncRunsClient:
         """
 
         return self.http.get(
-            f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
+            f"/threads/{_quote_path_param(thread_id)}/runs/{_quote_path_param(run_id)}",
+            headers=headers,
+            params=params,
         )
 
     def cancel(
@@ -960,14 +967,14 @@ class SyncRunsClient:
             query_params.update(params)
         if wait:
             return self.http.request_reconnect(
-                f"/threads/{thread_id}/runs/{run_id}/cancel",
+                f"/threads/{_quote_path_param(thread_id)}/runs/{_quote_path_param(run_id)}/cancel",
                 "POST",
                 json=None,
                 params=query_params,
                 headers=headers,
             )
         return self.http.post(
-            f"/threads/{thread_id}/runs/{run_id}/cancel",
+            f"/threads/{_quote_path_param(thread_id)}/runs/{_quote_path_param(run_id)}/cancel",
             json=None,
             params=query_params,
             headers=headers,
@@ -1063,7 +1070,7 @@ class SyncRunsClient:
 
         """
         return self.http.request_reconnect(
-            f"/threads/{thread_id}/runs/{run_id}/join",
+            f"/threads/{_quote_path_param(thread_id)}/runs/{_quote_path_param(run_id)}/join",
             "GET",
             headers=headers,
             params=params,
@@ -1117,7 +1124,7 @@ class SyncRunsClient:
         if params:
             query_params.update(params)
         return self.http.stream(
-            f"/threads/{thread_id}/runs/{run_id}/stream",
+            f"/threads/{_quote_path_param(thread_id)}/runs/{_quote_path_param(run_id)}/stream",
             "GET",
             params=query_params,
             headers={
@@ -1158,5 +1165,7 @@ class SyncRunsClient:
 
         """
         self.http.delete(
-            f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
+            f"/threads/{_quote_path_param(thread_id)}/runs/{_quote_path_param(run_id)}",
+            headers=headers,
+            params=params,
         )

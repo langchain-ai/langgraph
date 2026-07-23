@@ -21,6 +21,7 @@ __all__ = (
     "InvalidUpdateError",
     "GraphBubbleUp",
     "GraphInterrupt",
+    "NodeCancelledError",
     "NodeError",
     "NodeInterrupt",
     "NodeTimeoutError",
@@ -162,6 +163,28 @@ class NodeError:
 
     error: BaseException
     """Exception raised by the failed node."""
+
+
+class NodeCancelledError(Exception):
+    """Raised when a node body raises ``asyncio.CancelledError`` itself.
+
+    ``asyncio.CancelledError`` is a ``BaseException`` and the pregel runner
+    treats cancelled task futures as silent tear-down (e.g. when it stops
+    sibling tasks after a peer fails). That is the correct behaviour for
+    *framework-initiated* cancellation, but a user node that raises
+    ``asyncio.CancelledError`` from its own body should surface as a node
+    failure, the same way any other exception would.
+
+    The retry layer converts user-raised ``asyncio.CancelledError`` into this
+    type so it flows through the normal error path and the run reports as
+    ``error`` instead of silently succeeding.
+    """
+
+    node: str
+
+    def __init__(self, node: str, message: str | None = None) -> None:
+        super().__init__(message or f"Node {node!r} raised asyncio.CancelledError")
+        self.node = node
 
 
 class NodeTimeoutError(Exception):

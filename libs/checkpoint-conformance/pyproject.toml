@@ -43,7 +43,11 @@ asyncio_mode = "auto"
 # The extended methods (acopy_thread, adelete_for_runs, aprune) are checked
 # at runtime via capability detection and may not exist on the installed
 # base class. Dict literal inference is also overly strict for RunnableConfig.
+# Delta-channel tests import from `langgraph` (not a declared dep of this
+# package — at test time it is installed alongside); private `_DeltaSnapshot`
+# imports are intentional (beta surface).
 unresolved-attribute = "ignore"
+unresolved-import = "ignore"
 invalid-argument-type = "ignore"
 invalid-return-type = "ignore"
 
@@ -57,6 +61,9 @@ lint.select = [
 ]
 lint.ignore = ["E501", "B008"]
 target-version = "py310"
+
+[tool.uv.sources]
+langgraph-checkpoint = {path = "../checkpoint", editable = true}
 
 [[tool.uv.index]]
 name = "testpypi"

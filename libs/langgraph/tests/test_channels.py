@@ -186,6 +186,50 @@ def test_delta_channel_overwrite() -> None:
     assert ch.get()[0].content == "new"
 
 
+def test_overwrite_dataclass_form_survives_json_roundtrip() -> None:
+    """`Overwrite` serialised with `orjson` collapses to a plain dict but
+    must still be recognised as an overwrite by the channel reducer.
+
+    Without the `type` discriminator the dataclass-erased shape (`{"value":
+    ...}`) is indistinguishable from a literal channel value, and downstream
+    reducers raise `MESSAGE_COERCION_FAILURE` (or similar) on read.
+    """
+    import orjson
+
+    from langgraph._internal._constants import OVERWRITE
+    from langgraph.channels.binop import _get_overwrite
+
+    ow = Overwrite(value=[HumanMessage(content="new", id="h2")])
+    erased = orjson.loads(orjson.dumps(ow, default=lambda o: o.model_dump()))
+
+    assert erased["type"] == OVERWRITE
+    is_overwrite, value = _get_overwrite(erased)
+    assert is_overwrite
+    assert isinstance(value, list)
+    assert value[0]["content"] == "new"
+
+
+def test_overwrite_sentinel_dict_still_recognised() -> None:
+    """The pre-existing `{"__overwrite__": value}` dict form continues to be
+    recognised. This is the canonical sentinel emitted by producers that do
+    not have an `Overwrite` dataclass available."""
+    from langgraph._internal._constants import OVERWRITE
+    from langgraph.channels.binop import _get_overwrite
+
+    is_overwrite, value = _get_overwrite({OVERWRITE: ["b"]})
+    assert is_overwrite
+    assert value == ["b"]
+
+
+def test_overwrite_non_matching_dict_not_recognised() -> None:
+    """Dicts that resemble the erased shape but do not carry the
+    `__overwrite__` discriminator must not be misclassified as overwrites."""
+    from langgraph.channels.binop import _get_overwrite
+
+    assert _get_overwrite({"value": ["b"]}) == (False, None)
+    assert _get_overwrite({"type": "human", "value": "hi"}) == (False, None)
+
+
 def test_delta_channel_remove_message_and_replay() -> None:
     """RemoveMessage must round-trip correctly when writes are replayed."""
     spec = DeltaChannel(_messages_delta_reducer, list)
@@ -395,6 +439,93 @@ def test_delta_channel_inmemory_saver_assembles_writes() -> None:
 
     state = graph.get_state(config)
     assert len(state.values["messages"]) == 4  # 2 human + 2 AI
+
+
+def test_delta_channel_overwrite_superstep_snapshots() -> None:
+    def reducer(state: list[str], writes: Sequence[list[str]]) -> list[str]:
+        result = list(state)
+        for write in writes:
+            result.extend(write)
+        return result
+
+    class State(TypedDict):
+        items: Annotated[
+            list[str], DeltaChannel(reducer, list, snapshot_frequency=1000)
+        ]
+
+    def node_a(state: State) -> dict:
+        return {"items": ["a"]}
+
+    def node_b(state: State) -> dict:
+        return {"items": Overwrite(["b"])}
+
+    def node_c(state: State) -> dict:
+        return {"items": ["c"]}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_node("node_c", node_c)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_a", "node_c")
+
+    saver = InMemorySaver()
+    graph = builder.compile(checkpointer=saver)
+    config = {"configurable": {"thread_id": "overwrite-snapshot"}}
+
+    result = graph.invoke({"items": ["START"]}, config)
+    assert result == {"items": ["b"]}
+
+    saved = saver.get_tuple(config)
+    assert saved is not None
+    snapshot = saved.checkpoint["channel_values"].get("items")
+    assert isinstance(snapshot, _DeltaSnapshot)
+    assert snapshot.value == ["b"]
+    assert saved.metadata.get("counters_since_delta_snapshot", {}).get("items") is None
+
+
+def test_delta_channel_replay_after_overwrite_snapshot() -> None:
+    def reducer(state: list[str], writes: Sequence[list[str]]) -> list[str]:
+        result = list(state)
+        for write in writes:
+            result.extend(write)
+        return result
+
+    class State(TypedDict):
+        items: Annotated[
+            list[str], DeltaChannel(reducer, list, snapshot_frequency=1000)
+        ]
+
+    calls = 0
+
+    def node(state: State) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"items": Overwrite(["reset"])}
+        return {"items": ["after"]}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+
+    saver = InMemorySaver()
+    graph = builder.compile(checkpointer=saver)
+    config = {"configurable": {"thread_id": "overwrite-replay"}}
+
+    assert graph.invoke({"items": ["before"]}, config) == {"items": ["reset"]}
+    first_saved = saver.get_tuple(config)
+    assert first_saved is not None
+    assert isinstance(
+        first_saved.checkpoint["channel_values"].get("items"), _DeltaSnapshot
+    )
+
+    assert graph.invoke({"items": []}, config) == {"items": ["reset", "after"]}
+    second_saved = saver.get_tuple(config)
+    assert second_saved is not None
+    assert "items" not in second_saved.checkpoint["channel_values"]
+    assert graph.get_state(config).values == {"items": ["reset", "after"]}
 
 
 # ---------------------------------------------------------------------------

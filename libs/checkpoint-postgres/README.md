@@ -1,10 +1,28 @@
 # LangGraph Checkpoint Postgres
 
-Implementation of LangGraph CheckpointSaver that uses Postgres.
+[![PyPI - Version](https://img.shields.io/pypi/v/langgraph-checkpoint-postgres?label=%20)](https://pypi.org/project/langgraph-checkpoint-postgres/#history)
+[![PyPI - License](https://img.shields.io/pypi/l/langgraph-checkpoint-postgres)](https://opensource.org/licenses/MIT)
+[![PyPI - Downloads](https://img.shields.io/pepy/dt/langgraph-checkpoint-postgres)](https://pypistats.org/packages/langgraph-checkpoint-postgres)
+[![Twitter](https://img.shields.io/twitter/url/https/twitter.com/langchain_oss.svg?style=social&label=Follow%20%40LangChain)](https://x.com/langchain_oss)
 
-## Dependencies
+To help you ship LangGraph apps to production faster, check out [LangSmith](https://www.langchain.com/langsmith).
+[LangSmith](https://www.langchain.com/langsmith) is a unified developer platform for building, testing, and monitoring LLM applications.
 
-By default `langgraph-checkpoint-postgres` installs `psycopg` (Psycopg 3) without any extras. However, you can choose a specific installation that best suits your needs [here](https://www.psycopg.org/psycopg3/docs/basic/install.html) (for example, `psycopg[binary]`).
+## Quick Install
+
+```bash
+uv add langgraph-checkpoint-postgres
+```
+
+## 🤔 What is this?
+
+This library provides a Postgres implementation of LangGraph's checkpoint saver. Use it when you want LangGraph state persistence backed by Postgres for durable, long-running workflows and agents.
+
+By default, `langgraph-checkpoint-postgres` installs `psycopg` (Psycopg 3) without any extras. You can choose a specific installation that best suits your needs in the [Psycopg installation docs](https://www.psycopg.org/psycopg3/docs/basic/install.html), for example `psycopg[binary]`.
+
+## 📖 Documentation
+
+For full documentation, see the [API reference](https://reference.langchain.com/python/langgraph.checkpoint.postgres). For conceptual guides on persistence and memory, see the [LangGraph Docs](https://docs.langchain.com/oss/python/langgraph/overview).
 
 ## Security
 
@@ -20,10 +38,12 @@ By default `langgraph-checkpoint-postgres` installs `psycopg` (Psycopg 3) withou
 > When manually creating Postgres connections and passing them to `PostgresSaver` or `AsyncPostgresSaver`, make sure to include `autocommit=True` and `row_factory=dict_row` (`from psycopg.rows import dict_row`). See a full example in this [how-to guide](https://langchain-ai.github.io/langgraph/how-tos/persistence_postgres/).
 >
 > **Why these parameters are required:**
+>
 > - `autocommit=True`: Required for the `.setup()` method to properly commit the checkpoint tables to the database. Without this, table creation may not be persisted.
 > - `row_factory=dict_row`: Required because the PostgresSaver implementation accesses database rows using dictionary-style syntax (e.g., `row["column_name"]`). The default `tuple_row` factory returns tuples that only support index-based access (e.g., `row[0]`), which will cause `TypeError` exceptions when the checkpointer tries to access columns by name.
 >
 > **Example of incorrect usage:**
+>
 > ```python
 > # ❌ This will fail with TypeError during checkpointer operations
 > with psycopg.connect(DB_URI) as conn:  # Missing autocommit=True and row_factory=dict_row
@@ -118,3 +138,13 @@ async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
     # list checkpoints
     [c async for c in checkpointer.alist(read_config)]
 ```
+
+## 📕 Releases & Versioning
+
+See our [Releases](https://docs.langchain.com/oss/python/release-policy) and [Versioning](https://docs.langchain.com/oss/python/versioning) policies.
+
+## 💁 Contributing
+
+As an open-source project in a rapidly developing field, we are extremely open to contributions, whether it be in the form of a new feature, improved infrastructure, or better documentation.
+
+For detailed information on how to contribute, see the [Contributing Guide](https://docs.langchain.com/oss/python/contributing/overview).

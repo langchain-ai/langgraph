@@ -1237,7 +1237,7 @@ class ToolNode(RunnableCallable):
             isinstance(input, dict) and input.get("__type") == "tool_call_with_context"
         ):
             # Handle ToolCallWithContext from Send API
-            # mypy will not be able to type narrow correctly since the signature
+            # Type checkers cannot narrow correctly since the signature
             # for input contains dict[str, Any]. We'd need to narrow dict[str, Any]
             # before we can apply correct typing.
             input_with_ctx = cast("ToolCallWithContext", input)

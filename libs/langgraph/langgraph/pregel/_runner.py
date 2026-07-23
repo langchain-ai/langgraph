@@ -31,6 +31,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CALL,
     CONFIG_KEY_SCRATCHPAD,
     ERROR,
+    ERROR_SOURCE_NODE,
     INTERRUPT,
     NO_WRITES,
     RESUME,
@@ -597,7 +598,7 @@ class PregelRunner:
                 if self._should_route_to_error_handler(task) and not isinstance(
                     exception, GraphBubbleUp
                 ):
-                    # Mark early in commit path; loop-side routing may happen later.
+                    task.writes.append((ERROR_SOURCE_NODE, task.name))
                     self._handled_exception_ids.add(id(exception))
                 self.put_writes()(task.id, task.writes)  # type: ignore[misc]
         else:

@@ -5,10 +5,40 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from langchain_core.messages import ToolMessage
 from langgraph.stream._types import ProtocolEvent, StreamTransformer
 from langgraph.stream.stream_channel import StreamChannel
 
 from langgraph.prebuilt._tool_call_stream import ToolCallStream
+
+
+def _is_serialized_tool_message(value: Any) -> bool:
+    """Detect a serialized LangChain `ToolMessage` payload.
+
+    Example:
+        {
+            "lc": 1,
+            "type": "constructor",
+            "id": ["langchain_core", "messages", "ToolMessage"],
+            "kwargs": {"content": "raw tool result", "tool_call_id": "call_1"},
+        }
+    """
+    return (
+        isinstance(value, dict)
+        and value.get("type") == "constructor"
+        and isinstance(value.get("id"), list)
+        and value["id"][-1] == "ToolMessage"
+    )
+
+
+def _normalize_tool_output(output: Any) -> Any:
+    if isinstance(output, ToolMessage):
+        return output.content
+    if _is_serialized_tool_message(output):
+        kwargs = output.get("kwargs")
+        if isinstance(kwargs, dict):
+            return kwargs.get("content")
+    return output
 
 
 class ToolCallTransformer(StreamTransformer):
@@ -109,7 +139,7 @@ class ToolCallTransformer(StreamTransformer):
         elif event_type == "tool-finished":
             stream = self._active.pop(tool_call_id, None)
             if stream is not None:
-                stream._finish(data.get("output"))
+                stream._finish(_normalize_tool_output(data.get("output")))
         elif event_type == "tool-error":
             stream = self._active.pop(tool_call_id, None)
             if stream is not None:

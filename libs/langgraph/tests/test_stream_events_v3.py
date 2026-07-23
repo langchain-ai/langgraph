@@ -1,6 +1,6 @@
 """Tests for v2 streaming format (StreamPart TypedDicts).
 
-This file is checked by mypy directly — no subprocess workarounds.
+This file is checked by ty directly.
 Type-narrowing is validated via `assert_type` calls in `_check_type_narrowing`.
 """
 

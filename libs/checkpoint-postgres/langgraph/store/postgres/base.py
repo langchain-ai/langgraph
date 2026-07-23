@@ -238,6 +238,12 @@ class BasePostgresStore(Generic[C]):
     conn: C
     _deserializer: Callable[[bytes | orjson.Fragment], dict[str, Any]] | None
     index_config: PostgresIndexConfig | None
+    ttl_config: TTLConfig | None
+
+    @property
+    def _omit_expired(self) -> bool:
+        """Whether expired-but-unswept rows should be filtered from reads."""
+        return bool(self.ttl_config and self.ttl_config.get("omit_expired"))
 
     def _get_batch_GET_ops_queries(
         self,
@@ -258,12 +264,17 @@ class BasePostgresStore(Generic[C]):
             namespace_groups[op.namespace].append((idx, op.key))
             refresh_ttls[op.namespace].append(op.refresh_ttl)
 
+        omit_expired = self._omit_expired
+        expiry_clause = (
+            "AND (s.expires_at IS NULL OR s.expires_at > NOW())" if omit_expired else ""
+        )
+
         results = []
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
 
-            query = """
+            query = f"""
                 WITH passed_in AS (
                     SELECT unnest(%s::text[]) AS key,
                         unnest(%s::bool[])  AS do_refresh
@@ -276,12 +287,14 @@ class BasePostgresStore(Generic[C]):
                     AND s.key    = p.key
                     AND p.do_refresh = TRUE
                     AND s.ttl_minutes IS NOT NULL
+                    {expiry_clause}
                     RETURNING s.key
                 )
                 SELECT s.key, s.value, s.created_at, s.updated_at
                 FROM store s
                 JOIN passed_in p ON s.key = p.key
                 WHERE s.prefix = %s
+                {expiry_clause}
             """
             ns_text = _namespace_to_text(namespace)
             params = (
@@ -422,6 +435,13 @@ class BasePostgresStore(Generic[C]):
         - embedding_requests: list of (original_index_in_search_ops, text_query)
         """
 
+        omit_expired = self._omit_expired
+        search_expiry_clause = (
+            "AND (store.expires_at IS NULL OR store.expires_at > NOW())"
+            if omit_expired
+            else ""
+        )
+
         queries = []
         embedding_requests = []
         for idx, (_, op) in enumerate(search_ops):
@@ -491,7 +511,7 @@ class BasePostgresStore(Generic[C]):
                             {score_operator} AS neg_score
                         FROM store
                         JOIN store_vectors sv ON store.prefix = sv.prefix AND store.key = sv.key
-                        WHERE {ns_condition} {extra_filters}
+                        WHERE {ns_condition} {extra_filters} {search_expiry_clause}
                         ORDER BY {score_operator} ASC
                         LIMIT %s
                     """
@@ -527,7 +547,7 @@ class BasePostgresStore(Generic[C]):
                 base_query = f"""
                         SELECT store.prefix, store.key, store.value, store.created_at, store.updated_at, NULL AS score
                         FROM store
-                        WHERE {ns_condition} {extra_filters}
+                        WHERE {ns_condition} {extra_filters} {search_expiry_clause}
                         ORDER BY store.updated_at DESC
                         LIMIT %s
                         OFFSET %s
@@ -591,7 +611,10 @@ class BasePostgresStore(Generic[C]):
             """
             params: list[Any] = [op.max_depth, op.max_depth]
 
+            omit_expired = self._omit_expired
             conditions = []
+            if omit_expired:
+                conditions.append("(expires_at IS NULL OR expires_at > NOW())")
             if op.match_conditions:
                 for condition in op.match_conditions:
                     if condition.match_type == "prefix":
