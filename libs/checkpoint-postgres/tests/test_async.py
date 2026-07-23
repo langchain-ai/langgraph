@@ -415,3 +415,67 @@ async def test_delta_channel_chain_reconstruction(saver_name: str) -> None:
         assert msgs[1].content == "reply-1"
         assert msgs[2].content == "there"
         assert msgs[3].content == "reply-3"
+
+
+async def test_supports_pipeline_explicit() -> None:
+    """supports_pipeline parameter can be explicitly set to override auto-detection."""
+    from psycopg import Capabilities
+
+    database = f"test_{uuid4().hex[:16]}"
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncConnectionPool(
+            DEFAULT_POSTGRES_URI + database,
+            max_size=2,
+            kwargs={"autocommit": True, "row_factory": dict_row},
+        ) as pool:
+            # Explicitly disable pipeline
+            cp = AsyncPostgresSaver(pool, supports_pipeline=False)
+            assert cp.supports_pipeline is False
+            assert cp.supports_pipeline != Capabilities().has_pipeline()
+
+            # Explicitly enable pipeline
+            cp2 = AsyncPostgresSaver(pool, supports_pipeline=True)
+            assert cp2.supports_pipeline is True
+
+            # Default behavior: auto-detect (same as Capabilities().has_pipeline())
+            cp3 = AsyncPostgresSaver(pool)
+            assert cp3.supports_pipeline == Capabilities().has_pipeline()
+    finally:
+        # drop unique db
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+async def test_supports_pipeline_prevents_pipeline_usage() -> None:
+    """When supports_pipeline=False, _cursor() must not open a pipeline."""
+    database = f"test_{uuid4().hex[:16]}"
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncConnectionPool(
+            DEFAULT_POSTGRES_URI + database,
+            max_size=2,
+            kwargs={"autocommit": True, "row_factory": dict_row},
+        ) as pool:
+            cp = AsyncPostgresSaver(pool, supports_pipeline=False)
+            await cp.setup()
+            # aget_tuple must succeed without raising — uses _cursor(pipeline=False),
+            # which hits the conn.transaction() fallback when supports_pipeline=False
+            result = await cp.aget_tuple(
+                {"configurable": {"thread_id": "test-supports-pipeline"}}
+            )
+            assert result is None  # no checkpoint yet, but no error
+    finally:
+        # drop unique db
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")

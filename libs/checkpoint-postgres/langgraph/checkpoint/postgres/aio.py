@@ -47,6 +47,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
         conn: _ainternal.Conn,
         pipe: AsyncPipeline | None = None,
         serde: SerializerProtocol | None = None,
+        *,
+        supports_pipeline: bool | None = None,
     ) -> None:
         super().__init__(serde=serde)
         if isinstance(conn, AsyncConnectionPool) and pipe is not None:
@@ -58,7 +60,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
         self.pipe = pipe
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
-        self.supports_pipeline = Capabilities().has_pipeline()
+        self.supports_pipeline = (
+            supports_pipeline
+            if supports_pipeline is not None
+            else Capabilities().has_pipeline()
+        )
 
     @classmethod
     @asynccontextmanager
@@ -68,12 +74,19 @@ class AsyncPostgresSaver(BasePostgresSaver):
         *,
         pipeline: bool = False,
         serde: SerializerProtocol | None = None,
+        supports_pipeline: bool | None = None,
     ) -> AsyncIterator[AsyncPostgresSaver]:
         """Create a new AsyncPostgresSaver instance from a connection string.
 
         Args:
             conn_string: The Postgres connection info string.
             pipeline: whether to use AsyncPipeline
+            serde: The serializer to use for encoding/decoding checkpoints.
+            supports_pipeline: Whether the connection supports PostgreSQL
+                pipeline protocol. When ``None`` (default), auto-detection
+                is used via ``Capabilities().has_pipeline()``. Set to
+                ``False`` when connecting through PgBouncer in transaction
+                mode, which is incompatible with pipeline protocol.
 
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
@@ -83,9 +96,18 @@ class AsyncPostgresSaver(BasePostgresSaver):
         ) as conn:
             if pipeline:
                 async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                    yield cls(
+                        conn=conn,
+                        pipe=pipe,
+                        serde=serde,
+                        supports_pipeline=supports_pipeline,
+                    )
             else:
-                yield cls(conn=conn, serde=serde)
+                yield cls(
+                    conn=conn,
+                    serde=serde,
+                    supports_pipeline=supports_pipeline,
+                )
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
