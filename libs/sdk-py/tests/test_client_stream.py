@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -438,6 +438,125 @@ def test_sync_stream_v2_client_side_conversion() -> None:
         "data": {"state": "full"},
         "interrupts": [],
     }
+
+
+# --- join_stream honors the v2 stream format ---
+
+
+class _FakeAsyncHttp:
+    """Minimal async http stub whose `stream` replays a fixed list of parts."""
+
+    def __init__(self, parts: list[StreamPart]) -> None:
+        self._parts = parts
+
+    def stream(self, *args: Any, **kwargs: Any) -> Any:  # noqa: ARG002
+        async def gen() -> Any:
+            for part in self._parts:
+                yield part
+
+        return gen()
+
+
+class _FakeSyncHttp:
+    """Minimal sync http stub whose `stream` replays a fixed list of parts."""
+
+    def __init__(self, parts: list[StreamPart]) -> None:
+        self._parts = parts
+
+    def stream(self, *args: Any, **kwargs: Any) -> Any:  # noqa: ARG002
+        def gen() -> Any:
+            yield from self._parts
+
+        return gen()
+
+
+@pytest.mark.asyncio
+async def test_async_join_stream_v2_wraps_parts() -> None:
+    from langgraph_sdk._async.runs import RunsClient
+
+    raw_parts = [
+        StreamPart(event="metadata", data={"run_id": "r1"}),
+        StreamPart(event="values", data={"messages": [{"role": "user"}]}),
+        StreamPart(event="end", data=None),  # ty: ignore[invalid-argument-type]
+    ]
+    client = RunsClient(cast(HttpClient, _FakeAsyncHttp(raw_parts)))
+
+    parts = [part async for part in client.join_stream("t1", "r1", version="v2")]
+
+    # `end` carries no data and is dropped by the v2 conversion.
+    assert len(parts) == 2
+    for part in parts:
+        _assert_v2_shape(part)
+    assert parts[0] == {
+        "type": "metadata",
+        "ns": [],
+        "data": {"run_id": "r1"},
+        "interrupts": [],
+    }
+    assert parts[1] == {
+        "type": "values",
+        "ns": [],
+        "data": {"messages": [{"role": "user"}]},
+        "interrupts": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_join_stream_defaults_to_v1_raw_parts() -> None:
+    from langgraph_sdk._async.runs import RunsClient
+
+    raw_parts = [
+        StreamPart(event="values", data={"x": 1}),
+        StreamPart(event="end", data=None),  # ty: ignore[invalid-argument-type]
+    ]
+    client = RunsClient(cast(HttpClient, _FakeAsyncHttp(raw_parts)))
+
+    parts = [part async for part in client.join_stream("t1", "r1")]
+
+    assert parts == raw_parts
+
+
+def test_sync_join_stream_v2_wraps_parts() -> None:
+    from langgraph_sdk._sync.runs import SyncRunsClient
+
+    raw_parts = [
+        StreamPart(event="metadata", data={"run_id": "r1"}),
+        StreamPart(event="values", data={"state": "full"}),
+        StreamPart(event="end", data=None),  # ty: ignore[invalid-argument-type]
+    ]
+    client = SyncRunsClient(cast(SyncHttpClient, _FakeSyncHttp(raw_parts)))
+
+    parts = list(client.join_stream("t1", "r1", version="v2"))
+
+    assert len(parts) == 2
+    for part in parts:
+        _assert_v2_shape(part)
+    assert parts[0] == {
+        "type": "metadata",
+        "ns": [],
+        "data": {"run_id": "r1"},
+        "interrupts": [],
+    }
+    assert parts[1] == {
+        "type": "values",
+        "ns": [],
+        "data": {"state": "full"},
+        "interrupts": [],
+    }
+
+
+def test_sync_join_stream_defaults_to_v1_raw_parts() -> None:
+    from langgraph_sdk._sync.runs import SyncRunsClient
+
+    raw_parts = [
+        StreamPart(event="values", data={"x": 1}),
+        StreamPart(event="end", data=None),  # ty: ignore[invalid-argument-type]
+    ]
+    client = SyncRunsClient(cast(SyncHttpClient, _FakeSyncHttp(raw_parts)))
+
+    parts = list(client.join_stream("t1", "r1"))
+
+    assert parts == raw_parts
 
 
 # --- type narrowing compile-time checks ---
