@@ -71,9 +71,14 @@ class AsyncPostgresSaver(BasePostgresSaver):
     ) -> AsyncIterator[AsyncPostgresSaver]:
         """Create a new AsyncPostgresSaver instance from a connection string.
 
+        Warning:
+            Pipeline mode is not compatible with PgBouncer or other connection
+            poolers that use statement-level pooling. It also may not work with
+            SSL connections (e.g., Supabase). Use with direct database connections only.
+
         Args:
             conn_string: The Postgres connection info string.
-            pipeline: whether to use AsyncPipeline
+            pipeline: whether to use AsyncPipeline (incompatible with PgBouncer/SSL).
 
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
