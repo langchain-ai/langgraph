@@ -84,6 +84,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     ERROR,
+    FETCH_RESULT,
     INPUT,
     INTERRUPT,
     NS_END,
@@ -388,6 +389,34 @@ class NodeBuilder:
 # namespaces flow through scoped muxes. Forwarding either to the inner
 # ``stream(...)`` would silently break v3's invariants, so we raise instead.
 _V3_INVARIANT_KWARGS: tuple[str, ...] = ("stream_mode", "subgraphs")
+
+
+def _fulfillment(id: str, value: Any, source: str | None) -> Any:
+    """Build the Command(fetch=...) payload for a fulfillment: a raw value when no
+    provenance is given, else a FetchResult carrying the source origin."""
+    if source is None:
+        return value
+    return FetchResult(id=id, value=value, source=source)
+
+
+def _collect_fetch_results(
+    tuples: Iterable[CheckpointTuple],
+) -> list[FetchResult]:
+    """Collect resolved FetchResults (provenance records) across a thread's checkpoint
+    tuples, deduped by dependency id. Walking history (not just the latest checkpoint)
+    is required: once a graph completes, the FETCH_RESULT lives on the pre-completion
+    checkpoint, not the final one."""
+    out: dict[str, FetchResult] = {}
+    for tup in tuples:
+        if not tup.pending_writes:  # pending_writes is list | None
+            continue
+        for _tid, chan, val in tup.pending_writes:
+            if chan == FETCH_RESULT and isinstance(val, dict):
+                for fid, res in val.items():
+                    # first-seen wins; list() is newest-first, terminal results immutable
+                    if isinstance(res, FetchResult):
+                        out.setdefault(fid, res)
+    return list(out.values())
 
 
 def _reject_v3_invariant_kwargs(kwargs: dict[str, Any]) -> None:
@@ -1412,17 +1441,65 @@ class Pregel(
         state = await self.aget_state(config)
         return [f for task in state.tasks for f in task.fetches]
 
-    def fulfill(self, config: RunnableConfig, id: str, value: Any) -> Any:
+    def resolved_fetches(self, config: RunnableConfig) -> list[FetchResult]:
+        """Return the resolved data dependencies recorded at the checkpoint in `config`.
+
+        The provenance/audit trail complementing [`pending_fetches`][langgraph.pregel.Pregel.pending_fetches]:
+        each [`FetchResult`][langgraph.types.FetchResult] carries `status`,
+        `value_digest`, `resolved_at`, and `source` — enough to verify what a `fetch()`
+        resolved to, when, and from where (reproducibility / drift detection) without
+        holding the value. Pass a config with a specific `checkpoint_id` to inspect a
+        past point in the thread's history.
+        """
+        checkpointer = ensure_config(config)[CONF].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if not isinstance(checkpointer, BaseCheckpointSaver):
+            return []
+        cfg = merge_configs(self.config, config) if self.config else config
+        return _collect_fetch_results(checkpointer.list(cfg))
+
+    async def aresolved_fetches(self, config: RunnableConfig) -> list[FetchResult]:
+        """Async variant of [`resolved_fetches`][langgraph.pregel.Pregel.resolved_fetches]."""
+        checkpointer = ensure_config(config)[CONF].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if not isinstance(checkpointer, BaseCheckpointSaver):
+            return []
+        cfg = merge_configs(self.config, config) if self.config else config
+        return _collect_fetch_results([t async for t in checkpointer.alist(cfg)])
+
+    def fulfill(
+        self,
+        config: RunnableConfig,
+        id: str,
+        value: Any,
+        *,
+        source: str | None = None,
+    ) -> Any:
         """Fulfill a data dependency by content-addressed id and resume the graph.
 
         One value satisfies exactly one dependency. A fulfillment arriving past the
         request's deadline is rejected (the dependency resolves as `expired`).
-        """
-        return self.invoke(Command(fetch={id: value}), config)
 
-    async def afulfill(self, config: RunnableConfig, id: str, value: Any) -> Any:
+        Args:
+            source: Optional provenance — where the value actually resolved from (a
+                source URI or dataset version), recorded on the `FetchResult` for audit.
+        """
+        return self.invoke(Command(fetch={id: _fulfillment(id, value, source)}), config)
+
+    async def afulfill(
+        self,
+        config: RunnableConfig,
+        id: str,
+        value: Any,
+        *,
+        source: str | None = None,
+    ) -> Any:
         """Async variant of [`fulfill`][langgraph.pregel.Pregel.fulfill]."""
-        return await self.ainvoke(Command(fetch={id: value}), config)
+        return await self.ainvoke(
+            Command(fetch={id: _fulfillment(id, value, source)}), config
+        )
 
     def fail_fetch(
         self, config: RunnableConfig, id: str, error: str | None = None

@@ -658,6 +658,12 @@ class FetchResult:
     resolved_at: float | None = None
     """When the terminal outcome was recorded (epoch seconds)."""
 
+    source: str | None = None
+    """Where the value actually resolved from (e.g. a source URI or dataset version),
+    set by the serving layer when fulfilling. Distinct from `FetchRequest.owner`, which
+    is the *expected* fulfiller: `source` is the *actual* origin, recorded for audit and
+    reproducibility (a reviewer can ask "which version did it resolve against?")."""
+
 
 class PregelTask(NamedTuple):
     """A Pregel task."""

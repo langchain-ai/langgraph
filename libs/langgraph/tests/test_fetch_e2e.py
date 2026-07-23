@@ -293,4 +293,251 @@ async def test_e2e_async_multi_node(
     assert out["result"] == "hello Ada"
 
 
+# ── subgraph nesting: a fetch() inside a subgraph must bubble up to the parent ───
 
+
+def test_e2e_fetch_inside_subgraph(sync_checkpointer: BaseCheckpointSaver) -> None:
+    """A fetch() declared in a subgraph node surfaces at the parent and is
+    fulfilled by id through the parent — the content-id carries the subgraph ns."""
+
+    def inner(state):
+        return {"result": fetch({"resource": "inner-data"})}
+
+    sub = StateGraph(State)
+    sub.add_node("inner", inner)
+    sub.add_edge(START, "inner")
+    sub.add_edge("inner", END)
+    subgraph = sub.compile()
+
+    parent = StateGraph(State)
+    parent.add_node("sub", subgraph)
+    parent.add_edge(START, "sub")
+    parent.add_edge("sub", END)
+    graph = parent.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    graph.invoke({"result": ""}, config)
+    pending = graph.pending_fetches(config)
+    assert len(pending) == 1
+    assert pending[0].value == {"resource": "inner-data"}
+
+    out = graph.invoke(Command(fetch={pending[0].id: "SUBDATA"}), config)
+    assert out["result"] == "SUBDATA"
+    assert graph.pending_fetches(config) == []
+
+
+async def test_e2e_async_fetch_inside_subgraph(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    async def inner(state):
+        return {"result": fetch({"resource": "inner-data"})}
+
+    sub = StateGraph(State)
+    sub.add_node("inner", inner)
+    sub.add_edge(START, "inner")
+    sub.add_edge("inner", END)
+    subgraph = sub.compile()
+
+    parent = StateGraph(State)
+    parent.add_node("sub", subgraph)
+    parent.add_edge(START, "sub")
+    parent.add_edge("sub", END)
+    graph = parent.compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    await graph.ainvoke({"result": ""}, config)
+    pending = await graph.apending_fetches(config)
+    assert len(pending) == 1
+    assert pending[0].value == {"resource": "inner-data"}
+    out = await graph.afulfill(config, pending[0].id, "SUBDATA")
+    assert out["result"] == "SUBDATA"
+
+
+# ── ToolNode: fetch() inside an agent tool suspends and resumes (bubbles up) ─────
+
+
+def test_e2e_fetch_inside_tool_node(sync_checkpointer: BaseCheckpointSaver) -> None:
+    """A tool run by ToolNode may call fetch(); the GraphFetch bubbles up (ToolNode
+    re-raises GraphBubbleUp), suspends the graph, and resumes with the fetched data."""
+    from langchain_core.messages import AIMessage
+    from langchain_core.tools import tool
+    from langgraph.prebuilt import ToolNode
+
+    from langgraph.graph import MessagesState
+
+    @tool
+    def get_profile(user_id: str) -> str:
+        """Fetch a user's profile from the profile service."""
+        return fetch({"resource": "profile", "user_id": user_id})
+
+    def agent(state):
+        return {
+            "messages": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "get_profile",
+                            "args": {"user_id": "u1"},
+                            "id": "call_1",
+                        }
+                    ],
+                )
+            ]
+        }
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("agent", agent)
+    builder.add_node("tools", ToolNode([get_profile]))
+    builder.add_edge(START, "agent")
+    builder.add_edge("agent", "tools")
+    builder.add_edge("tools", END)
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    graph.invoke({"messages": []}, config)
+    pending = graph.pending_fetches(config)
+    assert len(pending) == 1
+    assert pending[0].value == {"resource": "profile", "user_id": "u1"}
+
+    out = graph.invoke(Command(fetch={pending[0].id: "Ada Lovelace"}), config)
+    last = out["messages"][-1]
+    assert "Ada Lovelace" in last.content
+
+
+async def test_e2e_async_fetch_inside_tool_node(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    from langchain_core.messages import AIMessage
+    from langchain_core.tools import tool
+    from langgraph.prebuilt import ToolNode
+
+    from langgraph.graph import MessagesState
+
+    @tool
+    async def get_profile(user_id: str) -> str:
+        """Fetch a user's profile from the profile service."""
+        return fetch({"resource": "profile", "user_id": user_id})
+
+    def agent(state):
+        return {
+            "messages": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "get_profile",
+                            "args": {"user_id": "u1"},
+                            "id": "call_1",
+                        }
+                    ],
+                )
+            ]
+        }
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("agent", agent)
+    builder.add_node("tools", ToolNode([get_profile]))
+    builder.add_edge(START, "agent")
+    builder.add_edge("agent", "tools")
+    builder.add_edge("tools", END)
+    graph = builder.compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    await graph.ainvoke({"messages": []}, config)
+    pending = await graph.apending_fetches(config)
+    assert len(pending) == 1
+    out = await graph.afulfill(config, pending[0].id, "Ada Lovelace")
+    assert "Ada Lovelace" in out["messages"][-1].content
+
+
+# ── provenance / audit: source, value_digest, resolved_at + resolved_fetches ─────
+
+
+def test_e2e_resolved_fetches_records_provenance(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """After fulfillment, resolved_fetches() surfaces the audit record: digest,
+    resolved_at, and the serving-layer-provided source."""
+    builder = StateGraph(State)
+    builder.add_node("n", lambda s: {"result": fetch({"clause": "penalty"})})
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    graph.invoke({"result": ""}, config)
+    req = graph.pending_fetches(config)[0]
+    # fulfill with provenance (where the value actually resolved from)
+    graph.fulfill(config, req.id, "5% of contract value", source="cms://contract/v7")
+
+    resolved = graph.resolved_fetches(config)
+    assert len(resolved) == 1
+    r = resolved[0]
+    assert r.id == req.id
+    assert r.status == "fulfilled"
+    assert r.source == "cms://contract/v7"
+    assert r.value_digest is not None  # content hash stamped
+    assert r.resolved_at is not None  # point-in-time bound
+
+
+def test_e2e_resolved_fetches_records_terminal_failure(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """A failed/expired dependency is also auditable via resolved_fetches()."""
+
+    def node(state):
+        try:
+            return {"result": fetch({"r": "x"})}
+        except FetchError as e:
+            return {"result": f"handled:{e.status}"}
+
+    builder = StateGraph(State)
+    builder.add_node("n", node)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    graph.invoke({"result": ""}, config)
+    req = graph.pending_fetches(config)[0]
+    graph.fail_fetch(config, req.id, "upstream 503")
+
+    resolved = graph.resolved_fetches(config)
+    assert len(resolved) == 1
+    assert resolved[0].status == "failed"
+    assert resolved[0].error == "upstream 503"
+    assert resolved[0].resolved_at is not None
+
+
+def test_e2e_value_digest_detects_drift(sync_checkpointer: BaseCheckpointSaver) -> None:
+    """Reproducibility: two different resolved values yield different digests."""
+    from langgraph.types import _value_digest
+
+    assert _value_digest("5% of contract value") == _value_digest(
+        "5% of contract value"
+    )
+    assert _value_digest("5% of contract value") != _value_digest(
+        "7% of contract value"
+    )
+
+
+async def test_e2e_async_resolved_fetches_records_provenance(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    builder = StateGraph(State)
+    builder.add_node("n", lambda s: {"result": fetch({"clause": "penalty"})})
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    await graph.ainvoke({"result": ""}, config)
+    req = (await graph.apending_fetches(config))[0]
+    await graph.afulfill(config, req.id, "settled", source="ledger://tx/42")
+
+    resolved = await graph.aresolved_fetches(config)
+    assert len(resolved) == 1
+    assert resolved[0].source == "ledger://tx/42"
+    assert resolved[0].value_digest is not None
+    assert resolved[0].resolved_at is not None
