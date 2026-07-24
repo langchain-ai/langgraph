@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.store.memory import InMemoryStore
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
@@ -85,8 +86,48 @@ def test_merge_runtime() -> None:
     runtime3 = Runtime(context=None)
 
     assert runtime1.merge(runtime2).context.api_key == "def"
-    # override only applies to non-falsy values
     assert runtime1.merge(runtime3).context.api_key == "abc"  # type: ignore
+
+
+def test_merge_runtime_preserves_explicit_falsy_values() -> None:
+    class FalsyStore(InMemoryStore):
+        def __bool__(self) -> bool:
+            return False
+
+    class FalsyExecutionInfo(ExecutionInfo):
+        def __bool__(self) -> bool:
+            return False
+
+    class FalsyServerInfo(ServerInfo):
+        def __bool__(self) -> bool:
+            return False
+
+    class FalsyControl(RunControl):
+        def __bool__(self) -> bool:
+            return False
+
+    parent = Runtime(
+        context={"parent": True},
+        store=InMemoryStore(),
+        execution_info=ExecutionInfo("parent", "parent", "parent"),
+        server_info=ServerInfo("parent", "parent"),
+        control=RunControl(),
+    )
+    falsy_values = {
+        "context": {},
+        "store": FalsyStore(),
+        "execution_info": FalsyExecutionInfo("child", "child", "child"),
+        "server_info": FalsyServerInfo("child", "child"),
+        "control": FalsyControl(),
+    }
+
+    for field, value in falsy_values.items():
+        merged = parent.merge(Runtime(**{field: value}))
+        assert getattr(merged, field) is value
+
+    merged = parent.merge(Runtime())
+    for field in falsy_values:
+        assert getattr(merged, field) is getattr(parent, field)
 
 
 def test_merge_runtime_preserves_run_control() -> None:
@@ -296,6 +337,38 @@ def test_runtime_propogated_to_subgraph() -> None:
     context = Context(username="Alice")
     result = graph.invoke({}, context=context)
     assert result == {"subgraph": "Alice!", "main": "Alice!"}
+
+
+def test_explicit_empty_context_propagated_to_subgraph() -> None:
+    class Context(TypedDict, total=False):
+        username: str
+
+    class State(TypedDict):
+        seen_username: str | None
+
+    def child_node(state: State, runtime: Runtime[Context]) -> State:
+        return {"seen_username": runtime.context.get("username")}
+
+    child_builder = StateGraph(State, context_schema=Context)
+    child_builder.add_node("child", child_node)
+    child_builder.add_edge(START, "child")
+    child_builder.add_edge("child", END)
+    child_graph = child_builder.compile()
+
+    def parent_node(state: State) -> State:
+        return child_graph.invoke(state, context={})
+
+    parent_builder = StateGraph(State, context_schema=Context)
+    parent_builder.add_node("parent", parent_node)
+    parent_builder.add_edge(START, "parent")
+    parent_builder.add_edge("parent", END)
+    parent_graph = parent_builder.compile()
+
+    result = parent_graph.invoke(
+        {"seen_username": "initial"},
+        context={"username": "Alice"},
+    )
+    assert result == {"seen_username": None}
 
 
 def test_context_coercion_dataclass() -> None:
