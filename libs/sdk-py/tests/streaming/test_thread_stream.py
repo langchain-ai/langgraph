@@ -1231,3 +1231,42 @@ async def test_interleave_projections_data_channel_scoped_to_root_namespace():
                     checkpoints.append(item)
     assert {"scope": "root"} in checkpoints
     assert {"scope": "child"} not in checkpoints
+@pytest.mark.asyncio
+async def test_close_unblocks_active_subscription():
+    class EndlessSSE(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            while True:
+                yield b": keepalive\n\n"
+                await asyncio.sleep(0.05)
+
+    async def serve_sse(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=EndlessSSE(),
+        )
+
+    async def consume(stream: AsyncThreadStream) -> None:
+        async for _ in stream.subscribe(["messages"]):
+            pass
+
+    transport = httpx.MockTransport(serve_sse)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+    ) as raw:
+        stream = AsyncThreadStream(
+            http=HttpClient(raw),
+            thread_id="thread-1",
+            assistant_id="agent",
+            explicit_thread_id=True,
+        )
+        async with stream:
+            consumer = asyncio.create_task(consume(stream))
+            # Wait only until consumer registers its subscription
+            while not stream._subscriptions:
+                await asyncio.sleep(0)
+            await asyncio.sleep(0.1)
+
+        # Context closed — active consumer iterator must terminate now without timing out
+        await asyncio.wait_for(consumer, timeout=0.25)

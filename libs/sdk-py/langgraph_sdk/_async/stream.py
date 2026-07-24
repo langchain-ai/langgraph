@@ -1618,51 +1618,58 @@ class AsyncThreadStream:
         """
         from langgraph_sdk.stream.subscription import matches_subscription
 
-        while not self._closed:
-            shared = self._shared_stream
-            if shared is None:
-                return
-            try:
-                async for event in self._dedup_iter(shared.events):
-                    if self._closed:
-                        break
-                    self._observe_event(event)
-                    for sub in list(self._subscriptions.values()):
-                        if matches_subscription(event, sub.params):
-                            sub.queue.put_nowait(event)
-                    # On root-terminal lifecycle, push the `None` sentinel
-                    # into all subscription queues so projection iterators
-                    # exit when the run ends naturally. Runs on the shared
-                    # SSE so the terminal is processed in seq order with
-                    # the projection events -- any in-flight values /
-                    # tools / messages events for this run are already
-                    # queued before None.
-                    if _is_root_terminal_lifecycle(event):
-                        self._signal_paused()
-            except Exception:
-                # Pump errored — fall through to error-handling/reconnect.
-                pass
-            if self._shared_stream is shared:
-                # No rotation happened; the stream genuinely ended. Check
-                # `shared.done` for a post-ready drop and, if so, attempt to
-                # reconnect with `since=<cursor>` so subscribers don't lose
-                # buffered events on a transient transport failure.
-                err = await shared.done
-                if (
-                    err is not None
-                    and not isinstance(err, asyncio.CancelledError)
-                    and not self._closed
-                ):
-                    with contextlib.suppress(Exception):
-                        await shared.close()
-                    if await self._reconnect_shared_stream():
-                        continue
-                break
-            # Rotation: loop again to pick up the new _shared_stream.
-
-        # Terminate consumers cleanly on shutdown / stream-end.
-        for sub in self._subscriptions.values():
-            sub.queue.put_nowait(None)
+        try:
+            while not self._closed:
+                shared = self._shared_stream
+                if shared is None:
+                    return
+                try:
+                    async for event in self._dedup_iter(shared.events):
+                        if self._closed:
+                            break
+                        self._observe_event(event)
+                        for sub in list(self._subscriptions.values()):
+                            if matches_subscription(event, sub.params):
+                                sub.queue.put_nowait(event)
+                        # On root-terminal lifecycle, push the `None` sentinel
+                        # into all subscription queues so projection iterators
+                        # exit when the run ends naturally. Runs on the shared
+                        # SSE so the terminal is processed in seq order with
+                        # the projection events -- any in-flight values /
+                        # tools / messages events for this run are already
+                        # queued before None.
+                        if _is_root_terminal_lifecycle(event):
+                            self._signal_paused()
+                except Exception:
+                    # Pump errored — fall through to error-handling/reconnect.
+                    pass
+                if self._shared_stream is shared:
+                    # No rotation happened; the stream genuinely ended. Check
+                    # `shared.done` for a post-ready drop and, if so, attempt to
+                    # reconnect with `since=<cursor>` so subscribers don't lose
+                    # buffered events on a transient transport failure.
+                    err = await shared.done
+                    if (
+                        err is not None
+                        and not isinstance(err, asyncio.CancelledError)
+                        and not self._closed
+                    ):
+                        with contextlib.suppress(Exception):
+                            await shared.close()
+                        if await self._reconnect_shared_stream():
+                            continue
+                    break
+                # Rotation: loop again to pick up the new _shared_stream.
+        finally:
+            for sub in list(self._subscriptions.values()):
+                try:
+                    sub.queue.put_nowait(None)
+                except asyncio.QueueFull:
+                    try:
+                        sub.queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+                    sub.queue.put_nowait(None)
 
     async def _reconnect_sleep(self, attempt: int) -> None:
         """Sleep with exponential backoff and jitter for reconnect attempt `attempt`."""
