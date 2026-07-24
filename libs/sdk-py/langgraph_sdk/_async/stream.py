@@ -1290,6 +1290,9 @@ class AsyncThreadStream:
         if self._closed:
             return
         self._closed = True
+        # Cancelling fanout skips its post-loop subscription sentinels.
+        for sub in self._subscriptions.values():
+            sub.queue.put_nowait(None)
         for handle in self._open_handles:
             await handle.close()
         # Cancel _run_done so thread.output doesn't wait forever on close.

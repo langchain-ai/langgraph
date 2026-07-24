@@ -134,6 +134,43 @@ async def test_two_concurrent_subscribes_share_one_stream():
     assert len(fake.stream_request_bodies) == 2
 
 
+async def test_thread_stream_close_unblocks_active_subscription():
+    """Exiting the public stream context terminates active subscribers."""
+
+    class EndlessSSE(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            while True:
+                yield b": keepalive\n\n"
+                await asyncio.sleep(0.01)
+
+    async def serve_sse(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=EndlessSSE(),
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(serve_sse),
+        base_url="http://test",
+    ) as raw:
+        threads = ThreadsClient(HttpClient(raw))
+        async with threads.stream(
+            thread_id="t-1",
+            assistant_id="agent",
+        ) as thread:
+
+            async def drain() -> None:
+                async for _ in thread.subscribe(["messages"]):
+                    pass
+
+            consumer = asyncio.create_task(drain())
+            while not thread._subscriptions:
+                await asyncio.sleep(0)
+
+        await asyncio.wait_for(consumer, timeout=0.1)
+
+
 async def test_subscribe_does_not_leak_when_iterator_unconsumed():
     """Subscriptions register lazily on first __anext__, not at subscribe() call time.
 
@@ -242,6 +279,46 @@ def _make_handle(
     return EventStreamHandle(
         events=_aiter(), ready=ready, done=done, close=_close
     ), queue
+
+
+async def test_controller_close_unblocks_active_subscription():
+    """Closing the controller terminates consumers even before the first event."""
+    from unittest.mock import MagicMock
+
+    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
+
+    loop = asyncio.get_running_loop()
+    ready: asyncio.Future[None] = loop.create_future()
+    done: asyncio.Future[BaseException | None] = loop.create_future()
+    ready.set_result(None)
+
+    async def _aiter():
+        await asyncio.Event().wait()
+        if False:
+            yield {}
+
+    async def _close() -> None:
+        if not done.done():
+            done.set_result(None)
+
+    handle = EventStreamHandle(
+        events=_aiter(),
+        ready=ready,
+        done=done,
+        close=_close,
+    )
+    transport = MagicMock(spec=ProtocolSseTransport)
+    transport.open_event_stream.return_value = handle
+
+    controller = StreamController(transport=transport)
+    sub = controller.register_subscription({"channels": ["values"]})
+    await controller.reconcile_stream({"channels": ["values"]})
+    controller.ensure_fanout_running()
+    await asyncio.sleep(0)
+
+    await controller.close()
+
+    assert await asyncio.wait_for(sub.queue.get(), timeout=0.1) is None
 
 
 async def test_shared_stream_reconnects_with_since_after_transport_drop():

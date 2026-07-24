@@ -166,6 +166,9 @@ class StreamController:
         if self._closed:
             return
         self._closed = True
+        # Cancelling fanout skips its post-loop subscription sentinels.
+        for sub in self._subscriptions.values():
+            sub.queue.put_nowait(None)
         if self._fanout_task is not None:
             self._fanout_task.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
