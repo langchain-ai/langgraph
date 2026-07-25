@@ -333,6 +333,23 @@ def test_serde_jsonplus_bytes() -> None:
     assert serde.loads_typed(dumped) == some_bytes
 
 
+def test_serde_jsonplus_fraction_and_complex() -> None:
+    import fractions
+
+    serde = JsonPlusSerializer()
+
+    values: list[object] = [
+        fractions.Fraction(3, 4),
+        fractions.Fraction(-7, 2),
+        complex(1, 2),
+        complex(-3.5, 0),
+    ]
+    for value in values:
+        revived = serde.loads_typed(serde.dumps_typed(value))
+        assert revived == value
+        assert type(revived) is type(value)
+
+
 def test_lc2_json_safe_type_revives_without_allowlist() -> None:
     """Old 'json' blobs with lc=2 for safe types must revive without an explicit allowlist.
 
