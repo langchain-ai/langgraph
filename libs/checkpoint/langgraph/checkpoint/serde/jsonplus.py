@@ -350,11 +350,20 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 ),
             ),
         )
-    elif isinstance(obj, pathlib.Path):
+    elif isinstance(obj, pathlib.PurePath):
+        # PurePath covers both the pure variants and the concrete Path subclasses;
+        # every one is rebuilt from its parts by its own constructor.
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, obj.parts),
+            ),
+        )
+    elif isinstance(obj, range):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_POS_ARGS,
+            _msgpack_enc(
+                ("builtins", "range", (obj.start, obj.stop, obj.step)),
             ),
         )
     elif isinstance(obj, re.Pattern):

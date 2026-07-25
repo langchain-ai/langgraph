@@ -333,6 +333,22 @@ def test_serde_jsonplus_bytes() -> None:
     assert serde.loads_typed(dumped) == some_bytes
 
 
+def test_serde_jsonplus_purepath_and_range() -> None:
+    serde = JsonPlusSerializer()
+
+    values: list[object] = [
+        pathlib.PurePosixPath("/foo/bar"),
+        pathlib.PureWindowsPath("C:/x/y"),
+        pathlib.Path("foo", "bar"),
+        range(0, 10, 2),
+        range(5),
+    ]
+    for value in values:
+        revived = serde.loads_typed(serde.dumps_typed(value))
+        assert revived == value
+        assert type(revived) is type(value)
+
+
 def test_lc2_json_safe_type_revives_without_allowlist() -> None:
     """Old 'json' blobs with lc=2 for safe types must revive without an explicit allowlist.
 
