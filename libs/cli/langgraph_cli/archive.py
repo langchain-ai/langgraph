@@ -9,7 +9,7 @@ from contextlib import contextmanager
 import click
 import pathspec
 
-from langgraph_cli._ignore import _build_ignore_spec
+from langgraph_cli._ignore import _build_dockerignore_negation_hints, _build_ignore_spec
 from langgraph_cli.config import Config, _assemble_local_deps
 
 _WARN_SIZE = 50 * 1024 * 1024  # 50 MB
@@ -35,16 +35,25 @@ def _add_directory(
 
     If arcname_prefix is None, files are added at the archive root.
     Paths matching ignore_spec are excluded.
+
+    A directory that matches ignore_spec is still walked if a `.dockerignore`
+    negation (`!pattern`) re-includes something underneath it, mirroring the
+    same directory-pruning override `uv_lock.py`'s Docker-context listing
+    uses (see `_NegatedDockerignoreHints`). Pruning by directory match alone
+    would stop `os.walk` before ever reaching the negated file below.
     """
+    negated_hints = _build_dockerignore_negation_hints(source_dir)
     for root, dirs, files in os.walk(source_dir):
         rel_root = os.path.relpath(root, source_dir).replace(os.sep, "/")
-        dirs[:] = [
-            d
-            for d in dirs
-            if not ignore_spec.match_file(
-                f"{rel_root}/{d}/" if rel_root != "." else f"{d}/"
-            )
-        ]
+        kept_dirs = []
+        for d in dirs:
+            rel_dir = f"{rel_root}/{d}" if rel_root != "." else d
+            excluded = ignore_spec.match_file(f"{rel_dir}/")
+            if not excluded or negated_hints.requires_dir_walk(
+                pathlib.PurePosixPath(rel_dir)
+            ):
+                kept_dirs.append(d)
+        dirs[:] = kept_dirs
         for f in files:
             full_path = os.path.join(root, f)
             rel = os.path.relpath(full_path, source_dir).replace(os.sep, "/")

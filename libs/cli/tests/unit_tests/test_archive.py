@@ -178,6 +178,36 @@ class TestAddDirectory:
         assert "main.py" in names
         assert "lib/util.py" not in names
 
+    def test_dockerignore_negation_inside_excluded_dir_is_included(self, tmp_path):
+        """A `!pattern` re-including a path under an otherwise-ignored directory
+        must still reach the archive, matching the same negation handling
+        `uv_lock.py`'s Docker-context listing applies. Naively pruning any
+        directory that matches an ignore pattern stops `os.walk` before it
+        ever reaches the negated file underneath.
+        """
+        project = tmp_path / "src"
+        project.mkdir()
+        (project / "app.py").write_text("print('hi')")
+        vendor = project / "vendor"
+        vendor.mkdir()
+        (vendor / "junk.txt").write_text("junk")
+        keep = vendor / "keep"
+        keep.mkdir()
+        (keep / "important.py").write_text("REQUIRED = True")
+        (project / ".dockerignore").write_text(
+            "vendor/\n!vendor/keep/\n!vendor/keep/**\n"
+        )
+        spec = _build_ignore_spec(project)
+
+        archive_path = tmp_path / "out.tar"
+        with tarfile.open(archive_path, "w") as tar:
+            _add_directory(tar, project, arcname_prefix=None, ignore_spec=spec)
+
+        with tarfile.open(archive_path, "r") as tar:
+            names = tar.getnames()
+        assert "vendor/keep/important.py" in names
+        assert "vendor/junk.txt" not in names
+
 
 # ---------------------------------------------------------------------------
 # create_archive (integration)
