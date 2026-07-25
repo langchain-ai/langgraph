@@ -1231,3 +1231,44 @@ async def test_interleave_projections_data_channel_scoped_to_root_namespace():
                     checkpoints.append(item)
     assert {"scope": "root"} in checkpoints
     assert {"scope": "child"} not in checkpoints
+
+
+async def test_close_unblocks_active_subscription_iterator():
+    """`close()` must terminate iterators waiting on an empty subscription queue.
+
+    Cancelling the fanout task raises inside `_fanout()`, so its own terminal
+    sentinel loop never runs; without an explicit sentinel the consumer stays
+    suspended on `await sub.queue.get()`.
+    """
+
+    class EndlessSSE(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            while True:
+                yield b": keepalive\n\n"
+                await asyncio.sleep(0.05)
+
+    async def serve_sse(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=EndlessSSE(),
+        )
+
+    async def consume(stream: AsyncThreadStream) -> None:
+        async for _ in stream.subscribe(["messages"]):
+            pass
+
+    transport = httpx.MockTransport(serve_sse)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
+        stream = AsyncThreadStream(
+            http=HttpClient(raw),
+            thread_id="thread-1",
+            assistant_id="agent",
+        )
+        async with stream:
+            consumer = asyncio.create_task(consume(stream))
+            while not stream._subscriptions:
+                await asyncio.sleep(0)
+            await asyncio.sleep(0.1)
+
+        await asyncio.wait_for(consumer, timeout=0.25)

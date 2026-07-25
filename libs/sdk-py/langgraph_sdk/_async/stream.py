@@ -1304,6 +1304,12 @@ class AsyncThreadStream:
             await self._lifecycle_watcher_handle.close()
         self._fail_active_message_streams(asyncio.CancelledError())
         self._fail_active_tool_calls(asyncio.CancelledError())
+        # Push the terminal sentinel into active subscriptions BEFORE cancelling
+        # the fanout task: cancellation raises inside `_fanout()`, so its own
+        # sentinel loop never runs and iterators awaiting an empty queue would
+        # stay blocked. `SyncThreadStream.close()` already closes its controller
+        # first for the same reason.
+        self._signal_paused()
         if self._fanout_task is not None:
             self._fanout_task.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
