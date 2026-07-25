@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from typing import Any, cast
 
 import httpx
+import pytest
 
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.stream import AsyncThreadStream
@@ -135,6 +136,31 @@ async def test_two_concurrent_subscribes_share_one_stream():
     assert len(fake.stream_request_bodies) == 2
 
 
+def _make_async_subscription_owner(
+    owner_kind: str,
+    raw: httpx.AsyncClient,
+    *,
+    max_queue_size: int,
+) -> Any:
+    if owner_kind == "thread":
+        return AsyncThreadStream(
+            http=HttpClient(raw),
+            thread_id="t-1",
+            assistant_id="agent",
+            explicit_thread_id=True,
+            max_queue_size=max_queue_size,
+        )
+
+    from unittest.mock import MagicMock
+
+    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
+
+    return StreamController(
+        transport=MagicMock(spec=ProtocolSseTransport),
+        max_queue_size=max_queue_size,
+    )
+
+
 async def test_thread_stream_close_unblocks_active_subscription():
     """Exiting the public stream context terminates active subscribers."""
 
@@ -172,30 +198,91 @@ async def test_thread_stream_close_unblocks_active_subscription():
         await asyncio.wait_for(consumer, timeout=0.1)
 
 
-async def test_thread_stream_close_handles_saturated_subscription_queue():
-    """Explicit close prioritizes termination when a subscriber queue is full."""
+@pytest.mark.parametrize("owner_kind", ("thread", "controller"))
+async def test_close_drains_saturated_subscription_queue(monkeypatch, owner_kind):
+    """Explicit close preserves buffered events for both async implementations."""
+    from unittest.mock import AsyncMock
+
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        owner = _make_async_subscription_owner(
+            owner_kind,
+            raw,
+            max_queue_size=2,
+        )
+        monkeypatch.setattr(owner, "_reconcile_stream", AsyncMock())
+        monkeypatch.setattr(owner, "_ensure_fanout_running", lambda: None)
+
+        iterator = owner._subscription_iter({"channels": ["values"]})
+        first_event = asyncio.create_task(iterator.__anext__())
+        while not owner._subscriptions:
+            await asyncio.sleep(0)
+        saturated = next(iter(owner._subscriptions.values()))
+        saturated.queue.put_nowait(values_event(seq=1))
+        assert (await first_event)["seq"] == 1
+
+        saturated.queue.put_nowait(values_event(seq=2))
+        saturated.queue.put_nowait(values_event(seq=3))
+
+        await owner.close()
+        remaining = [event async for event in iterator]
+
+    assert [event["seq"] for event in remaining] == [2, 3]
+
+
+@pytest.mark.parametrize("owner_kind", ("thread", "controller"))
+async def test_normal_eof_drains_saturated_subscription_queue(owner_kind):
+    """Natural EOF preserves buffered events for both async implementations."""
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        owner = _make_async_subscription_owner(
+            owner_kind,
+            raw,
+            max_queue_size=1,
+        )
+        sub = owner._register_subscription({"channels": ["values"]})
+        sub.queue.put_nowait(values_event(seq=1))
+        owner._shared_stream, _ = _make_handle([])
+
+        owner._ensure_fanout_running()
+        assert owner._fanout_task is not None
+        await asyncio.wait_for(owner._fanout_task, timeout=0.1)
+
+    assert sub.terminal_signaled
+    event = await sub.get()
+    assert event is not None
+    assert event["seq"] == 1
+    assert await sub.get() is None
+
+
+async def test_signal_paused_drains_saturated_values_projection(monkeypatch):
+    """Run pause preserves buffered values before terminating the projection."""
+    from unittest.mock import AsyncMock, MagicMock
+
     async with httpx.AsyncClient(base_url="http://test") as raw:
         thread = AsyncThreadStream(
             http=HttpClient(raw),
             thread_id="t-1",
             assistant_id="agent",
             explicit_thread_id=True,
-            max_queue_size=2,
+            max_queue_size=1,
         )
-        saturated = thread._register_subscription({"channels": ["values"]})
-        buffered = thread._register_subscription({"channels": ["messages"]})
-        empty = thread._register_subscription({"channels": ["updates"]})
-        saturated.queue.put_nowait(values_event(seq=1))
-        saturated.queue.put_nowait(values_event(seq=2))
-        buffered.queue.put_nowait(values_event(seq=3))
+        thread._transport = MagicMock()
+        monkeypatch.setattr(thread, "_reconcile_stream", AsyncMock())
+        monkeypatch.setattr(thread, "_ensure_fanout_running", lambda: None)
+        monkeypatch.setattr(
+            thread,
+            "_fetch_state",
+            AsyncMock(return_value={"values": {"counter": 0}}),
+        )
 
-        await thread.close()
+        iterator = thread.values.__aiter__()
+        assert await iterator.__anext__() == {"counter": 0}
+        sub = next(iter(thread._subscriptions.values()))
+        sub.queue.put_nowait(values_event(seq=1, counter=1))
 
-    assert saturated.queue.get_nowait()["seq"] == 2
-    assert saturated.queue.get_nowait() is None
-    assert buffered.queue.get_nowait()["seq"] == 3
-    assert buffered.queue.get_nowait() is None
-    assert empty.queue.get_nowait() is None
+        thread._signal_paused()
+        remaining = [value async for value in iterator]
+
+    assert remaining == [{"counter": 1}]
 
 
 async def test_subscribe_does_not_leak_when_iterator_unconsumed():
@@ -306,70 +393,6 @@ def _make_handle(
     return EventStreamHandle(
         events=_aiter(), ready=ready, done=done, close=_close
     ), queue
-
-
-async def test_controller_close_unblocks_active_subscription():
-    """Closing the controller terminates consumers even before the first event."""
-    from unittest.mock import MagicMock
-
-    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
-
-    loop = asyncio.get_running_loop()
-    ready: asyncio.Future[None] = loop.create_future()
-    done: asyncio.Future[BaseException | None] = loop.create_future()
-    ready.set_result(None)
-
-    async def _aiter():
-        await asyncio.Event().wait()
-        if False:
-            yield {}
-
-    async def _close() -> None:
-        if not done.done():
-            done.set_result(None)
-
-    handle = EventStreamHandle(
-        events=_aiter(),
-        ready=ready,
-        done=done,
-        close=_close,
-    )
-    transport = MagicMock(spec=ProtocolSseTransport)
-    transport.open_event_stream.return_value = handle
-
-    controller = StreamController(transport=transport)
-    sub = controller.register_subscription({"channels": ["values"]})
-    await controller.reconcile_stream({"channels": ["values"]})
-    controller.ensure_fanout_running()
-    await asyncio.sleep(0)
-
-    await controller.close()
-
-    assert await asyncio.wait_for(sub.queue.get(), timeout=0.1) is None
-
-
-async def test_controller_close_handles_saturated_subscription_queue():
-    """Controller close terminates every subscriber even if one queue is full."""
-    from unittest.mock import MagicMock
-
-    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
-
-    transport = MagicMock(spec=ProtocolSseTransport)
-    controller = StreamController(transport=transport, max_queue_size=2)
-    saturated = controller.register_subscription({"channels": ["values"]})
-    buffered = controller.register_subscription({"channels": ["messages"]})
-    empty = controller.register_subscription({"channels": ["updates"]})
-    saturated.queue.put_nowait(values_event(seq=1))
-    saturated.queue.put_nowait(values_event(seq=2))
-    buffered.queue.put_nowait(values_event(seq=3))
-
-    await controller.close()
-
-    assert saturated.queue.get_nowait()["seq"] == 2
-    assert saturated.queue.get_nowait() is None
-    assert buffered.queue.get_nowait()["seq"] == 3
-    assert buffered.queue.get_nowait() is None
-    assert empty.queue.get_nowait() is None
 
 
 async def test_shared_stream_reconnects_with_since_after_transport_drop():

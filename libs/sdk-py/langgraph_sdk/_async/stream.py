@@ -67,8 +67,23 @@ class _Subscription:
     id: int
     params: SubscribeParams
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
+    terminal_signaled: bool = False
     # Why: asyncio.Queue[Event | None] as a subscript in the field annotation
     # causes a type error with ty; bare asyncio.Queue is accepted.
+
+    def signal_terminal(self) -> None:
+        """Mark the subscription terminal without discarding buffered events."""
+        if self.terminal_signaled:
+            return
+        self.terminal_signaled = True
+        with contextlib.suppress(asyncio.QueueFull):
+            self.queue.put_nowait(None)
+
+    async def get(self) -> Event | None:
+        """Return the next event, or terminate after buffered events are drained."""
+        if self.terminal_signaled and self.queue.empty():
+            return None
+        return await self.queue.get()
 
 
 # All public protocol channels used by the raw `events`/`subscribe` surface.
@@ -365,7 +380,7 @@ class _ValuesProjection:
             state = await self._thread._fetch_state()
             yield state["values"]
             while True:
-                item = await sub.queue.get()
+                item = await sub.get()
                 if item is None:
                     return
                 for out in decoder.feed(item):
@@ -415,7 +430,7 @@ class _MessagesProjection:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
             while True:
-                item = await sub.queue.get()
+                item = await sub.get()
                 if item is None:
                     return
                 for stream in decoder.feed(item):
@@ -934,7 +949,7 @@ class _SubgraphsProjection:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
             while True:
-                item = await sub.queue.get()
+                item = await sub.get()
                 if item is None:
                     return
                 params_field = item.get("params") or {}
@@ -1065,7 +1080,7 @@ class _ToolCallsProjection:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
             while True:
-                item = await sub.queue.get()
+                item = await sub.get()
                 if item is None:
                     return
                 for handle in decoder.feed(item):
@@ -1145,7 +1160,7 @@ class _ExtensionProjection:
             await self._thread._reconcile_stream(params)
             self._thread._ensure_fanout_running()
             while True:
-                item = await sub.queue.get()
+                item = await sub.get()
                 if item is None:
                     return
                 for out in decoder.feed(item):
@@ -1316,14 +1331,9 @@ class AsyncThreadStream:
             await self._transport.close()
 
     def _signal_subscriptions_closed(self) -> None:
-        """Enqueue a terminal sentinel without blocking on a saturated queue."""
+        """Mark subscriptions terminal without discarding buffered events."""
         for sub in list(self._subscriptions.values()):
-            try:
-                sub.queue.put_nowait(None)
-            except asyncio.QueueFull:
-                # Shutdown must not block on an inactive subscriber.
-                sub.queue.get_nowait()
-                sub.queue.put_nowait(None)
+            sub.signal_terminal()
 
     def _register_subscription(self, params: SubscribeParams) -> _Subscription:
         """Allocate a subscription id and add it to the registry."""
@@ -1375,10 +1385,10 @@ class AsyncThreadStream:
     def _signal_paused(self) -> None:
         """Wake every active projection iterator on interrupt / run end.
 
-        Pushes the terminal sentinel (`None`) into every subscription
-        queue. Iterators see `None` and return; the shared SSE keeps
-        running so re-iteration after `run.respond(...)` registers a
-        fresh subscription and resumes.
+        Marks every subscription terminal and enqueues `None` when its queue
+        has capacity. A saturated queue drains its buffered events first, then
+        its terminal-aware reader returns; the shared SSE keeps running so
+        re-iteration after `run.respond(...)` registers a fresh subscription.
 
         `root_messages_inbox` is intentionally NOT signaled here: the
         subgraphs projection that populates it is responsible for
@@ -1387,11 +1397,7 @@ class AsyncThreadStream:
         sentinel. Signaling root_inbox here would race the redirection
         and could drop messages.
         """
-        # On a saturated queue the consumer is already behind; the iterator
-        # will still terminate when it drains to this point.
-        for sub in list(self._subscriptions.values()):
-            with contextlib.suppress(asyncio.QueueFull):
-                sub.queue.put_nowait(None)
+        self._signal_subscriptions_closed()
 
     def observe_applied_through_seq(self, seq: Any) -> None:
         """Advance the reconnect cursor from a command response meta sequence."""
@@ -1603,7 +1609,7 @@ class AsyncThreadStream:
             await self._reconcile_stream(params)
             self._ensure_fanout_running()
             while True:
-                item = await sub.queue.get()
+                item = await sub.get()
                 if item is None:
                     return
                 yield item
@@ -1640,15 +1646,14 @@ class AsyncThreadStream:
                         break
                     self._observe_event(event)
                     for sub in list(self._subscriptions.values()):
-                        if matches_subscription(event, sub.params):
+                        if not sub.terminal_signaled and matches_subscription(
+                            event, sub.params
+                        ):
                             sub.queue.put_nowait(event)
-                    # On root-terminal lifecycle, push the `None` sentinel
-                    # into all subscription queues so projection iterators
-                    # exit when the run ends naturally. Runs on the shared
-                    # SSE so the terminal is processed in seq order with
-                    # the projection events -- any in-flight values /
-                    # tools / messages events for this run are already
-                    # queued before None.
+                    # On root-terminal lifecycle, mark all subscriptions
+                    # terminal so projection iterators exit after buffered
+                    # events. Runs on the shared SSE so the terminal is
+                    # processed in seq order with the projection events.
                     if _is_root_terminal_lifecycle(event):
                         self._signal_paused()
             except Exception:
@@ -1673,8 +1678,7 @@ class AsyncThreadStream:
             # Rotation: loop again to pick up the new _shared_stream.
 
         # Terminate consumers cleanly on shutdown / stream-end.
-        for sub in self._subscriptions.values():
-            sub.queue.put_nowait(None)
+        self._signal_subscriptions_closed()
 
     async def _reconnect_sleep(self, attempt: int) -> None:
         """Sleep with exponential backoff and jitter for reconnect attempt `attempt`."""

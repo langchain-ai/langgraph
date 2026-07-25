@@ -68,8 +68,23 @@ class _Subscription:
     id: int
     params: SubscribeParams
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
+    terminal_signaled: bool = False
     # Why: asyncio.Queue[Event | None] as a subscript in the field annotation
     # causes a type error with ty; bare asyncio.Queue is accepted.
+
+    def signal_terminal(self) -> None:
+        """Mark the subscription terminal without discarding buffered events."""
+        if self.terminal_signaled:
+            return
+        self.terminal_signaled = True
+        with contextlib.suppress(asyncio.QueueFull):
+            self.queue.put_nowait(None)
+
+    async def get(self) -> Event | None:
+        """Return the next event, or terminate after buffered events are drained."""
+        if self.terminal_signaled and self.queue.empty():
+            return None
+        return await self.queue.get()
 
 
 # ---------------------------------------------------------------------------
@@ -178,14 +193,9 @@ class StreamController:
             await asyncio.gather(*self._rotation_close_tasks, return_exceptions=True)
 
     def _signal_subscriptions_closed(self) -> None:
-        """Enqueue a terminal sentinel without blocking on a saturated queue."""
+        """Mark subscriptions terminal without discarding buffered events."""
         for sub in list(self._subscriptions.values()):
-            try:
-                sub.queue.put_nowait(None)
-            except asyncio.QueueFull:
-                # Shutdown must not block on an inactive subscriber.
-                sub.queue.get_nowait()
-                sub.queue.put_nowait(None)
+            sub.signal_terminal()
 
     # ------------------------------------------------------------------
     # Subscription internals
@@ -220,7 +230,7 @@ class StreamController:
             await self._reconcile_stream(params)
             self._ensure_fanout_running()
             while True:
-                item = await sub.queue.get()
+                item = await sub.get()
                 if item is None:
                     return
                 yield item
@@ -261,7 +271,9 @@ class StreamController:
                     if self._closed:
                         break
                     for sub in list(self._subscriptions.values()):
-                        if matches_subscription(event, sub.params):
+                        if not sub.terminal_signaled and matches_subscription(
+                            event, sub.params
+                        ):
                             sub.queue.put_nowait(event)
             except Exception as drop_err:
                 _logger.debug("transport drop in fanout: %r", drop_err)
@@ -282,8 +294,7 @@ class StreamController:
             # Rotation: loop again to pick up the new _shared_stream.
 
         # Terminate consumers cleanly on shutdown / stream-end.
-        for sub in self._subscriptions.values():
-            sub.queue.put_nowait(None)
+        self._signal_subscriptions_closed()
 
     async def _reconnect_sleep(self, attempt: int) -> None:
         """Sleep with exponential backoff and jitter for reconnect attempt *attempt*."""
