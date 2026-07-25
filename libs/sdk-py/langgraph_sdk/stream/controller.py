@@ -167,8 +167,7 @@ class StreamController:
             return
         self._closed = True
         # Cancelling fanout skips its post-loop subscription sentinels.
-        for sub in self._subscriptions.values():
-            sub.queue.put_nowait(None)
+        self._signal_subscriptions_closed()
         if self._fanout_task is not None:
             self._fanout_task.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
@@ -177,6 +176,16 @@ class StreamController:
             await self._shared_stream.close()
         if self._rotation_close_tasks:
             await asyncio.gather(*self._rotation_close_tasks, return_exceptions=True)
+
+    def _signal_subscriptions_closed(self) -> None:
+        """Enqueue a terminal sentinel without blocking on a saturated queue."""
+        for sub in list(self._subscriptions.values()):
+            try:
+                sub.queue.put_nowait(None)
+            except asyncio.QueueFull:
+                # Shutdown must not block on an inactive subscriber.
+                sub.queue.get_nowait()
+                sub.queue.put_nowait(None)
 
     # ------------------------------------------------------------------
     # Subscription internals

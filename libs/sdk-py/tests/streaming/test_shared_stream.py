@@ -7,6 +7,7 @@ from typing import Any, cast
 import httpx
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._async.stream import AsyncThreadStream
 from langgraph_sdk._async.threads import ThreadsClient
 from langgraph_sdk.stream.controller import StreamController
 from langgraph_sdk.stream.transport.http import EventStreamHandle
@@ -171,6 +172,32 @@ async def test_thread_stream_close_unblocks_active_subscription():
         await asyncio.wait_for(consumer, timeout=0.1)
 
 
+async def test_thread_stream_close_handles_saturated_subscription_queue():
+    """Explicit close prioritizes termination when a subscriber queue is full."""
+    async with httpx.AsyncClient(base_url="http://test") as raw:
+        thread = AsyncThreadStream(
+            http=HttpClient(raw),
+            thread_id="t-1",
+            assistant_id="agent",
+            explicit_thread_id=True,
+            max_queue_size=2,
+        )
+        saturated = thread._register_subscription({"channels": ["values"]})
+        buffered = thread._register_subscription({"channels": ["messages"]})
+        empty = thread._register_subscription({"channels": ["updates"]})
+        saturated.queue.put_nowait(values_event(seq=1))
+        saturated.queue.put_nowait(values_event(seq=2))
+        buffered.queue.put_nowait(values_event(seq=3))
+
+        await thread.close()
+
+    assert saturated.queue.get_nowait()["seq"] == 2
+    assert saturated.queue.get_nowait() is None
+    assert buffered.queue.get_nowait()["seq"] == 3
+    assert buffered.queue.get_nowait() is None
+    assert empty.queue.get_nowait() is None
+
+
 async def test_subscribe_does_not_leak_when_iterator_unconsumed():
     """Subscriptions register lazily on first __anext__, not at subscribe() call time.
 
@@ -319,6 +346,30 @@ async def test_controller_close_unblocks_active_subscription():
     await controller.close()
 
     assert await asyncio.wait_for(sub.queue.get(), timeout=0.1) is None
+
+
+async def test_controller_close_handles_saturated_subscription_queue():
+    """Controller close terminates every subscriber even if one queue is full."""
+    from unittest.mock import MagicMock
+
+    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
+
+    transport = MagicMock(spec=ProtocolSseTransport)
+    controller = StreamController(transport=transport, max_queue_size=2)
+    saturated = controller.register_subscription({"channels": ["values"]})
+    buffered = controller.register_subscription({"channels": ["messages"]})
+    empty = controller.register_subscription({"channels": ["updates"]})
+    saturated.queue.put_nowait(values_event(seq=1))
+    saturated.queue.put_nowait(values_event(seq=2))
+    buffered.queue.put_nowait(values_event(seq=3))
+
+    await controller.close()
+
+    assert saturated.queue.get_nowait()["seq"] == 2
+    assert saturated.queue.get_nowait() is None
+    assert buffered.queue.get_nowait()["seq"] == 3
+    assert buffered.queue.get_nowait() is None
+    assert empty.queue.get_nowait() is None
 
 
 async def test_shared_stream_reconnects_with_since_after_transport_drop():

@@ -1291,8 +1291,7 @@ class AsyncThreadStream:
             return
         self._closed = True
         # Cancelling fanout skips its post-loop subscription sentinels.
-        for sub in self._subscriptions.values():
-            sub.queue.put_nowait(None)
+        self._signal_subscriptions_closed()
         for handle in self._open_handles:
             await handle.close()
         # Cancel _run_done so thread.output doesn't wait forever on close.
@@ -1315,6 +1314,16 @@ class AsyncThreadStream:
             await self._shared_stream.close()
         if self._transport is not None:
             await self._transport.close()
+
+    def _signal_subscriptions_closed(self) -> None:
+        """Enqueue a terminal sentinel without blocking on a saturated queue."""
+        for sub in list(self._subscriptions.values()):
+            try:
+                sub.queue.put_nowait(None)
+            except asyncio.QueueFull:
+                # Shutdown must not block on an inactive subscriber.
+                sub.queue.get_nowait()
+                sub.queue.put_nowait(None)
 
     def _register_subscription(self, params: SubscribeParams) -> _Subscription:
         """Allocate a subscription id and add it to the registry."""
