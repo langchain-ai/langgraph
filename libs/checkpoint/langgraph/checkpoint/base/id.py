@@ -12,7 +12,7 @@ import uuid
 _last_v6_timestamp = None
 
 
-class UUID(uuid.UUID):
+class UUIDv6(uuid.UUID):
     r"""UUID draft version objects"""
 
     __slots__ = ()
@@ -28,6 +28,29 @@ class UUID(uuid.UUID):
         *,
         is_safe: uuid.SafeUUID = uuid.SafeUUID.unknown,
     ) -> None:
+        r"""Create a UUID."""
+
+        if int is None or [hex, bytes, bytes_le, fields].count(None) != 4:
+            super().__init__(
+                hex=hex,
+                bytes=bytes,
+                bytes_le=bytes_le,
+                fields=fields,
+                int=int,
+                version=version,
+                is_safe=is_safe,
+            )
+            return
+        if not 0 <= int < 1 << 128:
+            raise ValueError("int is out of range (need a 128-bit value)")
+        if version is not None:
+            if not 6 <= version <= 8:
+                raise ValueError("illegal version number")
+            int &= ~(0xC000 << 48)
+            int |= 0x8000 << 48
+            int &= ~(0xF000 << 64)
+            int |= version << 76
+        super().__init__(int=int, is_safe=is_safe)
         r"""Create a UUID."""
 
         if int is None or [hex, bytes, bytes_le, fields].count(None) != 4:
