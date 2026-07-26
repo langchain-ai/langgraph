@@ -59,6 +59,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
         self.supports_pipeline = Capabilities().has_pipeline()
+        # When pipeline is enabled, the lock must be reentrant to avoid deadlocks
+        if pipe is not None:
+            self.lock = asyncio.Lock()  # still protected by pipeline's implicit synchronization
 
     @classmethod
     @asynccontextmanager
