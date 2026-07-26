@@ -415,3 +415,75 @@ async def test_delta_channel_chain_reconstruction(saver_name: str) -> None:
         assert msgs[1].content == "reply-1"
         assert msgs[2].content == "there"
         assert msgs[3].content == "reply-3"
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+async def test_delta_channel_history_across_pagination_pages(
+    monkeypatch, saver_name: str
+) -> None:
+    """Regression test: `get_delta_channel_history`'s stage-1 walk must find
+    a channel's seed even when the target checkpoint isn't loaded within the
+    first pagination page.
+
+    Previously, the walk cursor for a not-yet-loaded target was cached as
+    `None` (indistinguishable from "target has no parent") and never
+    revisited once the target's real row arrived on a later page, so the
+    channel silently hydrated as empty. Shrinking `_DELTA_PAGE_SIZE` to 1
+    forces multiple pagination pages without needing 1000+ real checkpoints.
+    """
+    pytest.importorskip(
+        "langgraph.channels.delta", reason="langgraph core not installed"
+    )
+
+    from typing import Annotated
+
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.channels.delta import DeltaChannel
+    from langgraph.graph import START, StateGraph
+    from langgraph.graph.message import _messages_delta_reducer
+    from typing_extensions import TypedDict
+
+    class State(TypedDict):
+        messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+    def respond(state: State) -> dict:
+        n = len(state["messages"])
+        return {"messages": [AIMessage(content=f"reply-{n}", id=f"ai-{n}")]}
+
+    builder = StateGraph(State)
+    builder.add_node("respond", respond)
+    builder.add_edge(START, "respond")
+
+    async with _saver(saver_name) as saver:
+        graph = builder.compile(checkpointer=saver)
+        config = {"configurable": {"thread_id": "diff-channel-pagination-test-1"}}
+
+        checkpoint_ids: list[str] = []
+        for i in range(6):
+            await graph.ainvoke(
+                {"messages": [HumanMessage(content=f"msg-{i}", id=f"h{i}")]}, config
+            )
+            state = await graph.aget_state(config)
+            checkpoint_ids.append(state.config["configurable"]["checkpoint_id"])
+
+        # Ground truth: hydrate every checkpoint with the real (large) page
+        # size, where the target row is always within the first page.
+        expected_by_id: dict[str, list[str]] = {}
+        for cid in checkpoint_ids:
+            s = await graph.aget_state(
+                {"configurable": {**config["configurable"], "checkpoint_id": cid}}
+            )
+            expected_by_id[cid] = [m.content for m in s.values["messages"]]
+
+        # Force multiple stage-1 pagination pages, then re-hydrate an older
+        # checkpoint that won't be present in the first (size-1) page.
+        monkeypatch.setattr("langgraph.checkpoint.postgres.aio._DELTA_PAGE_SIZE", 1)
+        old_cid = checkpoint_ids[1]
+        s = await graph.aget_state(
+            {"configurable": {**config["configurable"], "checkpoint_id": old_cid}}
+        )
+        actual = [m.content for m in s.values["messages"]]
+        assert actual == expected_by_id[old_cid], (
+            f"expected {expected_by_id[old_cid]}, got {actual}"
+        )
+        assert len(actual) > 0

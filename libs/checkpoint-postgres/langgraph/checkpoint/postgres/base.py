@@ -389,8 +389,15 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         for i, ch in enumerate(channels):
             if ch in seeded:
                 continue
-            # First-time entry: cursor starts at the target's parent.
+            # First-time entry: cursor starts at the target's parent. If
+            # `target_id` itself hasn't been paged in yet, `parent_of` can't
+            # tell us its real parent — leave this channel uninitialized
+            # (skip it this round) rather than caching a `None` cursor that
+            # would be indistinguishable from "target has no parent" and
+            # would never be revisited on a later page.
             if ch not in walk_cursor_by_ch:
+                if target_id not in parent_of:
+                    continue
                 walk_cursor_by_ch[ch] = parent_of.get(target_id)
             cur_cid = walk_cursor_by_ch[ch]
             ch_chain = chain_by_ch[ch]
