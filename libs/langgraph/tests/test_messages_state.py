@@ -340,6 +340,26 @@ def test_messages_state_format_openai_preserves_additional_kwargs():
     ]
 
 
+@pytest.mark.skipif(
+    condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
+    reason="Requires langchain_core>=0.3.11.",
+)
+def test_messages_state_format_openai_preserves_kwargs_without_id():
+    """Test that missing IDs are assigned before preserving additional_kwargs."""
+    message = AIMessage(
+        content="hello",
+        additional_kwargs={"widgets": [{"type": "carousel", "items": [1, 2, 3]}]},
+    )
+
+    result = add_messages([], [message], format="langchain-openai")
+
+    assert result[0].id is not None
+    assert UUID(result[0].id).version == 4
+    assert result[0].additional_kwargs == {
+        "widgets": [{"type": "carousel", "items": [1, 2, 3]}]
+    }
+
+
 def test_remove_all_messages():
     # simple removal
     left = [HumanMessage(content="Hello"), AIMessage(content="Hi there!")]
