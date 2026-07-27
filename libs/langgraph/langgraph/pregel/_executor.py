@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import time
+import weakref
 from collections.abc import Awaitable, Callable, Coroutine
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from contextvars import copy_context
 from types import TracebackType
 from typing import (
+    Any,
     Protocol,
     TypeVar,
     cast,
@@ -22,6 +24,10 @@ from langgraph.errors import GraphBubbleUp
 
 P = ParamSpec("P")
 T = TypeVar("T")
+
+SKIP_RERAISE_SET: weakref.WeakSet[
+    concurrent.futures.Future[Any] | asyncio.Future[Any]
+] = weakref.WeakSet()
 
 
 class Submit(Protocol[P, T]):
@@ -111,7 +117,7 @@ class BackgroundExecutor(AbstractContextManager):
         if exc_type is None:
             # re-raise the first exception that occurred in a task
             for task, (_, reraise) in tasks.items():
-                if not reraise:
+                if not reraise or task in SKIP_RERAISE_SET:
                     continue
                 try:
                     task.result()
@@ -202,7 +208,7 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
         if exc_type is None:
             # re-raise the first exception that occurred in a task
             for task, (_, reraise) in tasks.items():
-                if not reraise:
+                if not reraise or task in SKIP_RERAISE_SET:
                     continue
                 try:
                     if exc := task.exception():

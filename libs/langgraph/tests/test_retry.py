@@ -2194,6 +2194,33 @@ def test_graph_error_handler_error_context_survives_checkpoint_resume():
     assert isinstance(captured["from_node_error"], BaseException)
 
 
+def test_graph_error_handler_handles_failure_concurrent():
+    class State(TypedDict):
+        results: Annotated[list[str], operator.add]
+
+    def failing_node(state: State) -> State:
+        raise RuntimeError("boom")
+
+    def sibling_node(state: State) -> State:
+        return {"results": ["sibling"]}
+
+    def err_handler(state: State) -> State:
+        return {"results": ["handled"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("failing", failing_node, error_handler=err_handler)
+        .add_node("sibling", sibling_node)
+        .add_edge(START, "failing")
+        .add_edge(START, "sibling")
+        .compile()
+    )
+
+    result = graph.invoke({"results": []})
+
+    assert set(result["results"]) == {"handled", "sibling"}
+
+
 def test_graph_error_handler_does_not_swallow_interrupt_concurrent():
     """When a graph error handler is configured and a node calls interrupt()
     concurrently with other nodes, the interrupt must still be raised — not
