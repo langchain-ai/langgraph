@@ -273,6 +273,7 @@
   "/how-tos/persistence-functional": "https://docs.langchain.com/oss/python/langgraph/add-memory",
   "/how-tos/react-agent-from-scratch-functional": "https://docs.langchain.com/oss/python/langgraph/workflows-agents",
   "/reference": "https://reference.langchain.com/python/langgraph/",
+  "/reference/javascript/langchain-langgraph": "https://langchain-ai.github.io/langgraphjs/reference/index.html",
   "/troubleshooting/errors": "https://docs.langchain.com/oss/python/langgraph/common-errors",
   "/tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation": "https://docs.langchain.com/oss/python/langgraph/overview",
   "/tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation": "https://docs.langchain.com/oss/python/langgraph/overview",
