@@ -5128,6 +5128,35 @@ def test_command_pydantic_dataclass() -> None:
         assert graph.invoke(State(foo="")) == {"foo": "foobar"}
 
 
+
+def test_command_union_of_literals_draws_edges() -> None:
+    """A Command goto annotated as a Union of Literals should infer the same
+    edges as a single Literal with all the constants."""
+
+    class State(TypedDict):
+        foo: str
+
+    A = Literal["a"]
+    B = Literal["b"]
+
+    def router(state: State) -> Command[A | B]:
+        return Command(goto="a")
+
+    def a(state: State) -> None: ...
+
+    def b(state: State) -> None: ...
+
+    builder = StateGraph(State)
+    builder.add_edge(START, "router")
+    builder.add_node("router", router)
+    builder.add_node("a", a)
+    builder.add_node("b", b)
+    mermaid = builder.compile().get_graph().draw_mermaid()
+
+    assert "router -.-> a;" in mermaid
+    assert "router -.-> b;" in mermaid
+
+
 def test_command_with_static_breakpoints(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:

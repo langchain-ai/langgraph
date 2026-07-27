@@ -836,14 +836,25 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                                 rtn_origin = arg_origin
                                 break
 
-                    # Check if it's a Command type
-                    if (
-                        rtn_origin is Command
-                        and (rargs := get_args(rtn))
-                        and get_origin(rargs[0]) is Literal
-                        and (vals := get_args(rargs[0]))
-                    ):
-                        ends = vals
+                    # Check if it's a Command type. Its goto annotation may be a
+                    # Literal or a Union of Literals; both describe the same set
+                    # of destinations, e.g. Literal["a"] | Literal["b"] is
+                    # equivalent to Literal["a", "b"].
+                    if rtn_origin is Command and (rargs := get_args(rtn)):
+                        goto = rargs[0]
+                        goto_origin = get_origin(goto)
+                        if goto_origin is Literal:
+                            if vals := get_args(goto):
+                                ends = vals
+                        elif goto_origin is Union:
+                            vals = tuple(
+                                v
+                                for member in get_args(goto)
+                                if get_origin(member) is Literal
+                                for v in get_args(member)
+                            )
+                            if vals:
+                                ends = vals
         except (NameError, TypeError, StopIteration):
             pass
 
