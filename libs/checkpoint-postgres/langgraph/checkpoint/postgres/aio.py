@@ -96,6 +96,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """
         async with self._cursor() as cur:
             await cur.execute(self.MIGRATIONS[0])
+            # If using pipeline, sync to ensure results are available
+            if self.pipe:
+                await self.pipe.sync()
             results = await cur.execute(
                 "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
             )
