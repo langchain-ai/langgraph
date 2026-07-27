@@ -3512,7 +3512,7 @@ class Pregel(
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> GraphRunStream:
         """Internal v3 sync streaming implementation. Public entry: stream_events(version='v3').
 
         Extra keyword arguments are forwarded to the underlying ``stream(...)``
@@ -3568,7 +3568,7 @@ class Pregel(
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> AsyncGraphRunStream:
         """Internal v3 async streaming implementation. Public entry: astream_events(version='v3').
 
         Extra keyword arguments are forwarded to the underlying ``astream(...)``
@@ -3633,7 +3633,7 @@ class Pregel(
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **kwargs: Any,
-    ) -> Any: ...
+    ) -> GraphRunStream: ...
 
     def stream_events(
         self,
@@ -3738,7 +3738,7 @@ class Pregel(
         control: RunControl | None = None,
         transformers: Sequence[Callable[[tuple[str, ...]], Any]] | None = None,
         **kwargs: Any,
-    ) -> Awaitable[Any]: ...
+    ) -> Awaitable[AsyncGraphRunStream]: ...
 
     def astream_events(
         self,
