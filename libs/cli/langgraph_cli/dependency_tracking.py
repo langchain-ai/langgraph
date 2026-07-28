@@ -130,6 +130,16 @@ def find_tracked_packages(
         requirements_content = _read_text(base / "requirements.txt")
 
         for pkg in TRACKED_PACKAGES:
+            if pkg not in found:
+                version = _find_version_for(pkg, lock_content, pyproject_content, requirements_content)
+                if version is not None:
+                    found[pkg] = version
+
+    return [f"{pkg}:{found.get(pkg, 'unknown')}" for pkg in TRACKED_PACKAGES]tent = _read_text(base / "uv.lock")
+        pyproject_content = _read_text(base / "pyproject.toml")
+        requirements_content = _read_text(base / "requirements.txt")
+
+        for pkg in TRACKED_PACKAGES:
             if pkg in found:
                 continue
             version = _find_version_for(
