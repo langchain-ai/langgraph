@@ -1148,6 +1148,7 @@ class Pregel(
         saved: CheckpointTuple | None,
         recurse: BaseCheckpointSaver | None = None,
         apply_pending_writes: bool = False,
+        saver: BaseCheckpointSaver | None = None,
     ) -> StateSnapshot:
         if not saved:
             return StateSnapshot(
@@ -1169,7 +1170,14 @@ class Pregel(
         channels, managed = channels_from_checkpoint(
             self.channels,
             saved.checkpoint,
-            saver=self.checkpointer
+            # A subgraph from `get_subgraphs()` was compiled WITHOUT a
+            # checkpointer — the caller resolved one from
+            # `CONFIG_KEY_CHECKPOINTER` and passes it here. Without it,
+            # `DeltaChannel`s have no saver to replay their ancestor writes
+            # and hydrate EMPTY, silently.
+            saver=saver
+            if isinstance(saver, BaseCheckpointSaver)
+            else self.checkpointer
             if isinstance(self.checkpointer, BaseCheckpointSaver)
             else None,
             config=saved.config,
@@ -1271,6 +1279,7 @@ class Pregel(
         saved: CheckpointTuple | None,
         recurse: BaseCheckpointSaver | None = None,
         apply_pending_writes: bool = False,
+        saver: BaseCheckpointSaver | None = None,
     ) -> StateSnapshot:
         if not saved:
             return StateSnapshot(
@@ -1292,7 +1301,14 @@ class Pregel(
         channels, managed = await achannels_from_checkpoint(
             self.channels,
             saved.checkpoint,
-            saver=self.checkpointer
+            # A subgraph from `get_subgraphs()` was compiled WITHOUT a
+            # checkpointer — the caller resolved one from
+            # `CONFIG_KEY_CHECKPOINTER` and passes it here. Without it,
+            # `DeltaChannel`s have no saver to replay their ancestor writes
+            # and hydrate EMPTY, silently.
+            saver=saver
+            if isinstance(saver, BaseCheckpointSaver)
+            else self.checkpointer
             if isinstance(self.checkpointer, BaseCheckpointSaver)
             else None,
             config=saved.config,
@@ -1431,6 +1447,7 @@ class Pregel(
             saved,
             recurse=checkpointer if subgraphs else None,
             apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
+            saver=checkpointer,
         )
 
     async def aget_state(
@@ -1475,6 +1492,7 @@ class Pregel(
             saved,
             recurse=checkpointer if subgraphs else None,
             apply_pending_writes=CONFIG_KEY_CHECKPOINT_ID not in config[CONF],
+            saver=checkpointer,
         )
 
     def get_state_history(
@@ -1527,7 +1545,7 @@ class Pregel(
             checkpointer.list(config, before=before, limit=limit, filter=filter)
         ):
             yield self._prepare_state_snapshot(
-                checkpoint_tuple.config, checkpoint_tuple
+                checkpoint_tuple.config, checkpoint_tuple, saver=checkpointer
             )
 
     async def aget_state_history(
@@ -1584,7 +1602,7 @@ class Pregel(
             )
         ]:
             yield await self._aprepare_state_snapshot(
-                checkpoint_tuple.config, checkpoint_tuple
+                checkpoint_tuple.config, checkpoint_tuple, saver=checkpointer
             )
 
     def bulk_update_state(
