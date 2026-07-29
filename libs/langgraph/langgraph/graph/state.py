@@ -1439,10 +1439,22 @@ class CompiledStateGraph(
             output_keys = list(self.builder.channels) + [
                 k for k, v in self.builder.managed.items()
             ]
+        
 
         def _get_updates(
             input: None | dict | Any,
         ) -> Sequence[tuple[str, Any]] | None:
+            # check for undeclared key returned by node 
+            dropped = set(input) - set(output_keys)
+            if dropped:
+                warnings.warn(
+                    (
+                        f"Node '{key}' returned keys that are not present in the graph schema: "
+                        f"{sorted(dropped)}. "
+                        "These keys will be ignored."
+                    ),
+                    UserWarning)
+
             if input is None:
                 return None
             elif isinstance(input, dict):

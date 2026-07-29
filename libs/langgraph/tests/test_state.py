@@ -10,6 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import NotRequired, Required, TypedDict
 
+from langgraph.graph import START, END, StateGraph
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.graph.state import (
@@ -371,3 +372,59 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+def test_warn_on_undeclared_output_keys():
+    class State(TypedDict):
+        x: int
+
+    def node(state):
+        return {
+            "x": 1,
+            "undeclared_key": "hello",
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("n", node)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+
+    graph = builder.compile()
+    with pytest.warns(
+    UserWarning,
+    match=r"Node 'n'.*undeclared_key",
+    ):
+        result = graph.invoke({"x": 0})
+
+    assert result == {"x": 1}
+
+def test_output_schema_key_does_not_warn():
+    class State(TypedDict):
+        x: int
+
+    class Output(TypedDict):
+        x: int
+        undeclared_key: str
+
+    def node(state):
+        return {
+            "x": 1,
+            "undeclared_key": "hello",
+        }
+
+    builder = StateGraph(State, output_schema=Output)
+    builder.add_node("n", node)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+
+    graph = builder.compile()
+
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        result = graph.invoke({"x": 0})
+
+    assert len(record) == 0
+    assert result == {
+        "x": 1,
+        "undeclared_key": "hello",
+    }
