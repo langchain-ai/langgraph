@@ -666,6 +666,11 @@ def _smith_dashboard_base_url(host_url: str | None) -> str:
         return "https://smith.langchain.com"
     parsed = urlparse(host_url)
     hostname = parsed.hostname or ""
+    # Self-hosted: host_url is <scheme>://<host>/api-host — return just the root
+    path = parsed.path.rstrip("/")
+    if path == "/api-host" or path.endswith("/api-host"):
+        return f"{parsed.scheme}://{parsed.netloc}"
+
     if hostname in ("localhost", "127.0.0.1"):
         return host_url.rstrip("/")
 
@@ -675,11 +680,6 @@ def _smith_dashboard_base_url(host_url: str | None) -> str:
     if hostname.endswith(f".{api_host_suffix}"):
         prefix = hostname[: -(len(api_host_suffix) + 1)]
         return f"https://{prefix}.smith.langchain.com"
-
-    # Self-hosted: host_url is <scheme>://<host>/api-host — return just the root
-    path = parsed.path.rstrip("/")
-    if path == "/api-host" or path.endswith("/api-host"):
-        return f"{parsed.scheme}://{parsed.netloc}"
 
     return "https://smith.langchain.com"
 
@@ -1362,12 +1362,16 @@ def _create_host_backend_client(
     # fallback so self-hosted customers don't need to know about LANGGRAPH_HOST_URL.
     # Self-hosted control plane always lives at <langsmith_endpoint>/api-host.
     _cloud_default = "https://api.host.langchain.com"
+    _cloud_endpoints = {
+        "https://api.smith.langchain.com",
+        "https://api.langchain.com",
+    }
     resolved_host = host_url
     if not resolved_host or resolved_host == _cloud_default:
         langsmith_endpoint = env_vars.get("LANGSMITH_ENDPOINT") or os.environ.get(
             "LANGSMITH_ENDPOINT"
         )
-        if langsmith_endpoint:
+        if langsmith_endpoint and langsmith_endpoint.rstrip("/") not in _cloud_endpoints:
             from urllib.parse import urlparse as _urlparse
 
             _p = _urlparse(langsmith_endpoint)
@@ -1595,9 +1599,10 @@ def _deploy_base_options(
             click.option(
                 "--image-uri",
                 help=(
-                    "Pre-built image URI to push and deploy "
-                    "(e.g. us-docker.pkg.dev/project/repo/image:tag). "
-                    "Uses existing Docker credentials — no build step. "
+                    "Image URI to build, push, and deploy "
+                    "(e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/repo:tag). "
+                    "Builds the project, pushes using existing Docker credentials, "
+                    "and triggers a deployment revision. "
                     "Required for self-hosted deployments."
                 ),
             ),
@@ -1804,6 +1809,25 @@ def _deploy_cmd(
 
     if not deployment_id:
         raise click.ClickException("Failed to determine deployment ID")
+
+    # Validate that an existing deployment is compatible with --image-uri.
+    # update_deployment_external sends an external_docker revision; applying
+    # it to a deployment created with a different source mode may be rejected
+    # by the backend or silently produce an inconsistent revision.
+    if use_external_docker and not needs_creation:
+        existing = _call_host_backend_with_optional_tenant(
+            client, lambda c: c.get_deployment(deployment_id)
+        )
+        existing_source = (
+            existing.get("source") if isinstance(existing, dict) else None
+        )
+        if existing_source and existing_source != "external_docker":
+            raise click.UsageError(
+                f"Deployment {deployment_id} was created with source "
+                f"'{existing_source}' and cannot be updated with --image-uri "
+                f"(expected 'external_docker'). Create a new deployment or "
+                f"remove --image-uri to use the original build mode."
+            )
 
     # Scan local sources for tracked packages so the new revision carries
     # the same metadata GitHub-backed deploys produce. Failures must never
