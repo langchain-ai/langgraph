@@ -81,7 +81,10 @@ def get_updated_channels_from_tasks(
 def get_delta_channels_from_all_channels(
     channels: Mapping[str, BaseChannel],
 ) -> set[str]:
-    """DeltaChannels to snapshot on the first update_state of a fresh thread."""
+    """Every available DeltaChannel — the set to snapshot when no ancestor walk
+    can reconstruct them: the first update_state of a fresh thread (no
+    ancestors at all) and the first checkpoint of a fork (whose base holds the
+    abandoned branch's writes)."""
     return {
         k
         for k, ch in channels.items()
@@ -122,14 +125,24 @@ def create_checkpoint_plan_for_update_state_api(
     parents: dict[str, Any],
     saved_metadata: Mapping[str, Any] | None,
     is_fresh_thread: bool,
+    is_fork: bool = False,
 ) -> tuple[set[str], dict[str, Any]]:
-    """Return ``(channels_to_snapshot, metadata)`` for an update_state head."""
+    """Return `(channels_to_snapshot, metadata)` for an update_state head.
+
+    `is_fork` (the update was addressed at an explicit checkpoint) forces a
+    full snapshot for the same reason `is_fresh_thread` does: the ancestor
+    walk cannot reconstruct this head. The base a fork branches off keeps the
+    pending writes of the branch being abandoned, and nothing records which
+    child consumed which write, so the walk would replay them here too.
+    Snapshotting terminates it at this checkpoint. Every delta channel
+    snapshots, so no counters carry over.
+    """
     metadata: dict[str, Any] = {
         "source": "update",
         "step": step,
         "parents": parents,
     }
-    if is_fresh_thread:
+    if is_fresh_thread or is_fork:
         return get_delta_channels_from_all_channels(channels), metadata
 
     new_counters = create_metadata_for_update_state_api(
@@ -179,9 +192,11 @@ def create_checkpoint(
             ch = channels[k]
             if k in channels_to_snapshot:
                 # Callers force a full snapshot blob here: exit mode when a
-                # delta channel reaches its snapshot cadence, and update_state
-                # on a fresh thread (no ancestor to replay writes from). The
-                # manual version-bump below only applies to the exit-mode case.
+                # delta channel reaches its snapshot cadence, update_state on a
+                # fresh thread (no ancestor to replay writes from), and a fork
+                # (whose base holds writes belonging to the abandoned branch).
+                # The manual version-bump below only applies to the exit-mode
+                # case.
                 #
                 # In exit mode, the snapshot decision is deferred to exit
                 # time (intermediate steps have do_checkpoint=False). The

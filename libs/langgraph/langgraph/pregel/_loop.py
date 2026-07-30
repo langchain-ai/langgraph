@@ -222,10 +222,24 @@ class PregelLoop:
     # under the saver's `ORDER BY task_id, idx` sorting.
     _exit_delta_writes: list[tuple[int, str, str, Any]] | None = None
 
-    # Delta channels that saw an Overwrite since the last checkpoint. These
-    # channels must snapshot after live update applies overwrite semantics so
-    # sparse replay starts from the same post-overwrite value.
-    _delta_channels_with_overwrite: set[str]
+    # Delta channels that must snapshot at the next checkpoint, whatever their
+    # cadence counters say. Two sources:
+    # * an Overwrite arrived since the last checkpoint — snapshot after live
+    #   update applied overwrite semantics, so sparse replay starts from the
+    #   same post-overwrite value;
+    # * this run forked off an explicitly addressed checkpoint — see
+    #   `_delta_channels_awaiting_fork_snapshot`.
+    _delta_channels_forced_snapshot: set[str]
+
+    # Delta channels still owed a fork snapshot, when this run was launched
+    # against an explicitly addressed checkpoint (time travel / fork). That
+    # base keeps the pending writes of the branch the fork abandons, and
+    # nothing records which child consumed which write, so the ancestor walk
+    # would replay them into this branch as well. Snapshotting terminates the
+    # walk inside the fork instead of at the shared parent. Names drop out as
+    # they are snapshotted; a channel with no value yet has nothing to
+    # snapshot, so it waits for the superstep that gives it one.
+    _delta_channels_awaiting_fork_snapshot: set[str]
 
     # The checkpoint_config that points at the parent loaded at `__enter__`
     # (or the synthetic-empty checkpoint, on first run). We capture it
@@ -313,6 +327,14 @@ class PregelLoop:
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
         self.is_replaying = CONFIG_KEY_CHECKPOINT_ID in config[CONF]
+        # Checks the value, not just key presence like `is_replaying` above:
+        # subgraph task configs always carry an explicit `None` here, and only
+        # a real id means the caller addressed one specific checkpoint.
+        self._delta_channels_awaiting_fork_snapshot = (
+            {k for k, s in specs.items() if isinstance(s, DeltaChannel)}
+            if config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
+            else set()
+        )
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
@@ -683,7 +705,7 @@ class PregelLoop:
     def after_tick(self) -> None:
         # finish superstep
         writes = [w for t in self.tasks.values() for w in t.writes]
-        self._delta_channels_with_overwrite.update(
+        self._delta_channels_forced_snapshot.update(
             ch
             for ch, v in writes
             if isinstance(self.specs.get(ch), DeltaChannel) and _get_overwrite(v)[0]
@@ -991,7 +1013,7 @@ class PregelLoop:
                 manager=None,
                 updated_channels=updated_channels,
             )
-            self._delta_channels_with_overwrite.update(
+            self._delta_channels_forced_snapshot.update(
                 c
                 for c, v in input_writes
                 if isinstance(self.specs.get(c), DeltaChannel) and _get_overwrite(v)[0]
@@ -1133,10 +1155,21 @@ class PregelLoop:
         do_checkpoint = self._checkpointer_put_after_previous is not None and (
             exiting or self.durability != "exit"
         )
+        # fork: make this checkpoint self-contained, so the ancestor walk stops
+        # inside the fork instead of reaching the base this run forked off and
+        # collecting the abandoned branch's writes from it. Resolved here (not
+        # in `_first`) so channels that only got a value this superstep are
+        # covered too.
+        if self._delta_channels_awaiting_fork_snapshot:
+            self._delta_channels_forced_snapshot.update(
+                k
+                for k in self._delta_channels_awaiting_fork_snapshot
+                if (ch := self.channels.get(k)) is not None and ch.is_available()
+            )
         # create new checkpoint
         channels_to_snapshot = (
             delta_channels_to_snapshot(self.channels, new_counters)
-            | self._delta_channels_with_overwrite
+            | self._delta_channels_forced_snapshot
             if do_checkpoint
             else set()
         )
@@ -1154,7 +1187,13 @@ class PregelLoop:
         for k in channels_to_snapshot:
             new_counters[k] = (0, 0)
         if do_checkpoint:
-            self._delta_channels_with_overwrite.difference_update(channels_to_snapshot)
+            self._delta_channels_forced_snapshot.difference_update(channels_to_snapshot)
+            # `create_checkpoint` drops a requested snapshot for a channel with
+            # no version in this checkpoint yet (nothing was ever written to it
+            # on this branch), so keep asking until the blob really landed.
+            self._delta_channels_awaiting_fork_snapshot.difference_update(
+                self.checkpoint["channel_values"]
+            )
         non_zero = {k: v for k, v in new_counters.items() if v != (0, 0)}
         if non_zero:
             self.checkpoint_metadata["counters_since_delta_snapshot"] = non_zero
@@ -1239,7 +1278,7 @@ class PregelLoop:
         )
         channels_to_snapshot = (
             delta_channels_to_snapshot(self.channels, counters)
-            | self._delta_channels_with_overwrite
+            | self._delta_channels_forced_snapshot
         )
 
         pending = [
@@ -1684,7 +1723,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         )
         self._delta_write_futs = []
         self._error_handler_write_futs = []
-        self._delta_channels_with_overwrite = set()
+        self._delta_channels_forced_snapshot = set()
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
         )
@@ -1942,7 +1981,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         )
         self._delta_write_futs = []
         self._error_handler_write_futs = []
-        self._delta_channels_with_overwrite = set()
+        self._delta_channels_forced_snapshot = set()
         self._exit_delta_writes = (
             [] if self.durability == "exit" and self.checkpointer is not None else None
         )
