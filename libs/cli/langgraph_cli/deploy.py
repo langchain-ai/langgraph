@@ -676,6 +676,11 @@ def _smith_dashboard_base_url(host_url: str | None) -> str:
         prefix = hostname[: -(len(api_host_suffix) + 1)]
         return f"https://{prefix}.smith.langchain.com"
 
+    # Self-hosted: host_url is <scheme>://<host>/api-host — return just the root
+    path = parsed.path.rstrip("/")
+    if path == "/api-host" or path.endswith("/api-host"):
+        return f"{parsed.scheme}://{parsed.netloc}"
+
     return "https://smith.langchain.com"
 
 
@@ -1126,6 +1131,98 @@ def _run_local_build(
     )
 
 
+def _run_external_deploy(
+    *,
+    client: HostBackendClient,
+    deployment_id: str,
+    step: int,
+    config: pathlib.Path,
+    config_json: dict,
+    image_uri: str,
+    verbose: bool,
+    pull: bool,
+    api_version: str | None,
+    base_image: str | None,
+    install_command: str | None,
+    build_command: str | None,
+    docker_build_args: Sequence[str],
+    secrets: list[dict[str, str]],
+    tracked_packages: list[str] | None,
+) -> "BuildResult":
+    """Build image, push using existing Docker credentials, and update the deployment."""
+    needs_buildx = platform.machine() != "x86_64"
+
+    with Runner() as runner:
+        # -- Step: Build image tagged directly to the customer's registry URI --
+        _log_deploy_step(step, f"Building image {image_uri}")
+        if needs_buildx:
+            build_flags: list[str] = ["--platform", "linux/amd64", "--load"]
+            if not verbose:
+                build_flags.append("--progress=quiet")
+            with Progress(message="Building...", elapsed=not verbose):
+                build_docker_image(
+                    runner,
+                    lambda _msg: None,
+                    config,
+                    config_json,
+                    base_image,
+                    api_version,
+                    pull,
+                    image_uri,
+                    docker_build_args,
+                    install_command,
+                    build_command,
+                    docker_command=("docker", "buildx", "build"),
+                    extra_flags=build_flags,
+                    verbose=verbose,
+                )
+        else:
+            with Progress(message="Building...", elapsed=not verbose):
+                build_docker_image(
+                    runner,
+                    lambda _msg: None,
+                    config,
+                    config_json,
+                    base_image,
+                    api_version,
+                    pull,
+                    image_uri,
+                    docker_build_args,
+                    install_command,
+                    build_command,
+                    verbose=verbose,
+                )
+        step += 1
+
+        _log_deploy_step(step, f"Pushing image {image_uri}")
+        with Progress(message="Pushing...", elapsed=not verbose):
+            runner.run(subp_exec("docker", "push", image_uri, verbose=verbose))
+        step += 1
+
+        resolved_image = _resolve_pushed_image_digest(
+            runner,
+            remote_image=image_uri,
+            docker_config_dir=None,
+            verbose=verbose,
+        )
+
+        _log_deploy_step(step, f"Updating deployment {deployment_id}")
+        updated = client.update_deployment_external(
+            deployment_id,
+            resolved_image,
+            secrets=secrets,
+            tracked_packages=tracked_packages,
+        )
+
+    return BuildResult(
+        updated=updated if isinstance(updated, dict) else {},
+        progress_message="Deploying...",
+        timeout_seconds=300,
+        poll_interval_seconds=1,
+        no_result_message="Deployment updated",
+    )
+
+
 def _run_remote_build(
     *,
     client: HostBackendClient,
@@ -1261,7 +1358,23 @@ def _create_host_backend_client(
     tenant_id = env_vars.get("LANGSMITH_TENANT_ID") or os.environ.get(
         "LANGSMITH_TENANT_ID"
     )
-    return HostBackendClient(host_url, resolved_api_key, tenant_id=tenant_id)
+    # If no explicit host URL was provided, check LANGSMITH_ENDPOINT as a
+    # fallback so self-hosted customers don't need to know about LANGGRAPH_HOST_URL.
+    # Self-hosted control plane always lives at <langsmith_endpoint>/api-host.
+    _cloud_default = "https://api.host.langchain.com"
+    resolved_host = host_url
+    if not resolved_host or resolved_host == _cloud_default:
+        langsmith_endpoint = env_vars.get("LANGSMITH_ENDPOINT") or os.environ.get(
+            "LANGSMITH_ENDPOINT"
+        )
+        if langsmith_endpoint:
+            from urllib.parse import urlparse as _urlparse
+
+            _p = _urlparse(langsmith_endpoint)
+            resolved_host = f"{_p.scheme}://{_p.netloc}/api-host"
+        else:
+            resolved_host = _cloud_default
+    return HostBackendClient(resolved_host, resolved_api_key, tenant_id=tenant_id)
 
 
 def _call_host_backend_with_optional_tenant(
@@ -1480,6 +1593,15 @@ def _deploy_base_options(
                 ),
             ),
             click.option(
+                "--image-uri",
+                help=(
+                    "Pre-built image URI to push and deploy "
+                    "(e.g. us-docker.pkg.dev/project/repo/image:tag). "
+                    "Uses existing Docker credentials — no build step. "
+                    "Required for self-hosted deployments."
+                ),
+            ),
+            click.option(
                 "--config",
                 "-c",
                 default=DEFAULT_CONFIG,
@@ -1580,6 +1702,7 @@ def _deploy_cmd(
     name: str | None,
     image_name: str | None,
     image: str | None,
+    image_uri: str | None,
     tag: str,
     base_image: str | None,
     install_command: str | None,
@@ -1626,16 +1749,26 @@ def _deploy_cmd(
 
     secrets = _secrets_from_env(_env_without_deployment_name(env_vars))
 
-    if image and remote_build_flag is True:
-        raise click.UsageError("--image cannot be combined with --remote builds.")
+    if image_uri and remote_build_flag is True:
+        raise click.UsageError("--image-uri cannot be combined with --remote.")
+    if image_uri and image:
+        raise click.UsageError("--image-uri cannot be combined with --image.")
 
-    use_remote_build, local_build_error = _resolve_build_mode(
-        remote_build_flag, force_local=image is not None
-    )
-    if use_remote_build and remote_build_flag is None and local_build_error:
-        em.note(f"{local_build_error}\nUsing remote build instead.")
-        if not json_output:
-            click.echo()
+    use_external_docker = image_uri is not None
+
+    if use_external_docker:
+        use_remote_build = False
+        local_build_error = None
+    else:
+        if image and remote_build_flag is True:
+            raise click.UsageError("--image cannot be combined with --remote builds.")
+        use_remote_build, local_build_error = _resolve_build_mode(
+            remote_build_flag, force_local=image is not None
+        )
+        if use_remote_build and remote_build_flag is None and local_build_error:
+            em.note(f"{local_build_error}\nUsing remote build instead.")
+            if not json_output:
+                click.echo()
 
     # -- 2. Resolve / create deployment --
     client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
@@ -1648,18 +1781,24 @@ def _deploy_cmd(
         name,
         not_found_message=(
             "No deployment found. Will create."
-            if use_remote_build
+            if (use_remote_build or use_external_docker)
             else "No deployment found. Will create after build."
         ),
     )
 
     if needs_creation:
+        if use_external_docker:
+            source = "external_docker"
+        elif use_remote_build:
+            source = "internal_source"
+        else:
+            source = "internal_docker"
         deployment_id, step = _create_deployment(
             client,
             step,
             name=name,
             deployment_type=deployment_type,
-            source="internal_source" if use_remote_build else "internal_docker",
+            source=source,
             secrets=secrets,
         )
 
@@ -1676,7 +1815,25 @@ def _deploy_cmd(
         tracked_packages = None
 
     # -- 3. Build (divergent path) --
-    if use_remote_build:
+    if use_external_docker:
+        build_result = _run_external_deploy(
+            client=client,
+            deployment_id=deployment_id,
+            step=step,
+            config=config,
+            config_json=config_json,
+            image_uri=image_uri,
+            verbose=verbose,
+            pull=pull,
+            api_version=api_version,
+            base_image=base_image,
+            install_command=install_command,
+            build_command=build_command,
+            docker_build_args=docker_build_args,
+            secrets=secrets,
+            tracked_packages=tracked_packages,
+        )
+    elif use_remote_build:
         build_result = _run_remote_build(
             client=client,
             deployment_id=deployment_id,
@@ -1715,7 +1872,7 @@ def _deploy_cmd(
     dep_status_url = _emit_deployment_status_url(
         build_result.updated,
         deployment_id,
-        host_url,
+        client.base_url,
     )
 
     if no_wait:
