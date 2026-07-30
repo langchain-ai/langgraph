@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langgraph-serverless-workflow"
+dynamic = ["version"]
+description = "Compile CNCF Serverless Workflow DSL into LangGraph StateGraph objects."
+authors = []
+requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
+license-files = ['LICENSE']
+dependencies = [
+    "langgraph>=1.2.10",
+    "serverlessworkflow.sdk>=1.0.0",
+    "pyyaml>=6.0",
+]
+
+[tool.hatch.version]
+path = "langgraph_serverless_workflow/__init__.py"
+
+[project.urls]
+Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/serverless-workflow"
+Twitter = "https://x.com/langchain_oss"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
+
+[dependency-groups]
+test = [
+    "pytest",
+    "pytest-mock",
+    "pytest-watcher",
+]
+lint = [
+    "ruff",
+    "codespell",
+    "ty",
+]
+dev = [
+    { include-group = "test" },
+    { include-group = "lint" },
+    "langgraph",
+]
+
+[tool.hatch.build.targets.wheel]
+include = ["langgraph_serverless_workflow"]
+
+[tool.uv]
+default-groups = ['dev']
+
+[tool.uv.sources]
+langgraph = { path = "../langgraph", editable = true }
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --durations=5 -vv"
+
+[tool.ruff]
+exclude = ["venv", ".venv", "build", "dist"]
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "ARG",
+    "TID251",
+    "TID252",
+    "T20",
+    "UP",
+    "B",
+    "SIM",
+    "RUF",
+    "S101",
+]
+ignore = [
+    "E501",
+    "B006",
+    "B904",
+    "SIM102",
+]
+per-file-ignores = { "tests/**" = ["S101", "B017", "ARG001", "ARG002"] }
+
+[tool.ty.rules]
+no-matching-overload = "ignore"
+unresolved-import = "ignore"
+unresolved-attribute = "ignore"

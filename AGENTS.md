@@ -29,6 +29,7 @@ Below is a high-level overview:
 - **prebuilt** – high-level APIs for creating and running agents and tools.
 - **sdk-js** – JS/TS SDK for interacting with the LangGraph REST API.
 - **sdk-py** – Python SDK for the LangGraph Server API.
+- **serverless-workflow** – compile CNCF Serverless Workflow DSL into LangGraph StateGraph objects.
 
 ### Dependency map
 
@@ -43,6 +44,9 @@ checkpoint
 └── langgraph
 
 prebuilt
+└── langgraph
+
+serverless-workflow
 └── langgraph
 
 sdk-py
