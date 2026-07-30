@@ -1246,12 +1246,12 @@ def test_escape_glob_literal() -> None:
 
 
 def test_namespace_match_pattern() -> None:
-    assert _namespace_match_pattern(("foo",), "prefix") == r"^foo(\.|$)"
+    assert _namespace_match_pattern(("foo",), "prefix") == r"^foo(\.|\Z)"
     assert (
         _namespace_match_pattern(("uid", "*", "alice"), "prefix")
-        == r"^uid\.[^.]+\.alice(\.|$)"
+        == r"^uid\.[^.]+\.alice(\.|\Z)"
     )
-    assert _namespace_match_pattern(("alice",), "suffix") == r"(^|\.)alice$"
+    assert _namespace_match_pattern(("alice",), "suffix") == r"(^|\.)alice\Z"
 
 
 def test_search_namespace_segment_boundary(store: SqliteStore) -> None:
@@ -1363,4 +1363,21 @@ def test_search_empty_prefix_is_unconstrained(store: SqliteStore) -> None:
         ("a",),
         ("b", "c"),
         ("d", "e", "f"),
+    }
+
+
+def test_namespace_labels_with_trailing_newline(store: SqliteStore) -> None:
+    """Labels may contain newlines, and must not match a differently-named label.
+
+    Python's `$` also matches just before a trailing newline, so the patterns use
+    `\\Z` to anchor at the true end of the string.
+    """
+    store.put(("users", "alice"), "k", {"v": 1})
+    store.put(("users", "alice\n"), "k", {"v": 2})
+
+    assert set(store.list_namespaces(suffix=["alice"], limit=100)) == {
+        ("users", "alice"),
+    }
+    assert set(store.list_namespaces(prefix=["users", "alice"], limit=100)) == {
+        ("users", "alice"),
     }

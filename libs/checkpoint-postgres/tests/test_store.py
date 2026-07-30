@@ -339,13 +339,13 @@ def test_escape_like_literal() -> None:
 
 
 def test_namespace_match_pattern() -> None:
-    assert _namespace_match_pattern(("foo",), "prefix") == r"^foo(\.|$)"
-    assert _namespace_match_pattern(("uid", "users"), "prefix") == r"^uid\.users(\.|$)"
+    assert _namespace_match_pattern(("foo",), "prefix") == r"^foo(\.|\Z)"
+    assert _namespace_match_pattern(("uid", "users"), "prefix") == r"^uid\.users(\.|\Z)"
     assert (
         _namespace_match_pattern(("uid", "*", "alice"), "prefix")
-        == r"^uid\.[^.]+\.alice(\.|$)"
+        == r"^uid\.[^.]+\.alice(\.|\Z)"
     )
-    assert _namespace_match_pattern(("alice",), "suffix") == r"(^|\.)alice$"
+    assert _namespace_match_pattern(("alice",), "suffix") == r"(^|\.)alice\Z"
 
     # Regex metacharacters in a label are quoted, not interpreted.
     pattern = _namespace_match_pattern(("a.b+c",), "prefix")
@@ -1151,3 +1151,16 @@ def test_non_ascii(
         assert result3[0].key == "3"
         assert result4[0].key == "4"
         assert result5[0].key == "5"
+
+
+def test_namespace_labels_with_trailing_newline(store) -> None:
+    """Labels may contain newlines, and must not match a differently-named label."""
+    store.put(("users", "alice"), "k", {"v": 1})
+    store.put(("users", "alice\n"), "k", {"v": 2})
+
+    assert set(store.list_namespaces(suffix=["alice"], limit=100)) == {
+        ("users", "alice"),
+    }
+    assert set(store.list_namespaces(prefix=["users", "alice"], limit=100)) == {
+        ("users", "alice"),
+    }

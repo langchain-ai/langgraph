@@ -149,14 +149,14 @@ def _namespace_match_pattern(path: tuple[str, ...], match_type: str) -> str:
     on a separator; suffix matches anchor at the end and begin on one.
 
     Examples:
-        prefix ("uid", "*", "alice") -> ^uid\\.[^.]+\\.alice(\\.|$)
-        suffix ("alice",)            -> (^|\\.)alice$
+        prefix ("uid", "*", "alice") -> ^uid\\.[^.]+\\.alice(\\.|\\Z)
+        suffix ("alice",)            -> (^|\\.)alice\\Z
     """
     segments = ("[^.]+" if part == "*" else re.escape(part) for part in path)
     body = r"\.".join(segments)
     if match_type == "suffix":
-        return rf"(^|\.){body}$"
-    return rf"^{body}(\.|$)"
+        return rf"(^|\.){body}\Z"
+    return rf"^{body}(\.|\Z)"
 
 
 def _namespace_to_text(namespace: tuple[str, ...]) -> str:
