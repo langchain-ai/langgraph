@@ -19,6 +19,8 @@ from langgraph.store.base import (
 
 from langgraph.store.sqlite import SqliteStore
 from langgraph.store.sqlite.base import (
+    NS_MATCH_FUNCTION,
+    BaseSqliteStore,
     SqliteIndexConfig,
     _escape_glob_literal,
     _namespace_match_pattern,
@@ -1381,3 +1383,60 @@ def test_namespace_labels_with_trailing_newline(store: SqliteStore) -> None:
     assert set(store.list_namespaces(prefix=["users", "alice"], limit=100)) == {
         ("users", "alice"),
     }
+
+
+def test_list_namespaces_prefix_uses_indexable_condition() -> None:
+    """Plain prefixes must use the indexable condition, not the match function.
+
+    A user function is opaque to the query planner, so it scans every row and
+    calls back into Python for each one. Only suffix and wildcard paths, which
+    no SQLite operator can express, need it.
+    """
+    store = BaseSqliteStore()
+
+    def where(match_type: str, path: tuple[str, ...]) -> str:
+        op = ListNamespacesOp(
+            match_conditions=(MatchCondition(match_type=match_type, path=path),),
+            max_depth=None,
+            limit=10,
+            offset=0,
+        )
+        query, _ = store._get_batch_list_namespaces_queries([(0, op)])[0]
+        return " ".join(query.split())
+
+    assert "GLOB" in where("prefix", ("uid", "users"))
+    assert NS_MATCH_FUNCTION not in where("prefix", ("uid", "users"))
+    # A label that merely contains "*" is not the wildcard.
+    assert "GLOB" in where("prefix", ("star*",))
+    # Wildcard and suffix cannot be expressed by GLOB, so they keep the function.
+    assert NS_MATCH_FUNCTION in where("prefix", ("uid", "*", "alice"))
+    assert NS_MATCH_FUNCTION in where("suffix", ("alice",))
+
+
+def test_list_namespaces_metacharacter_labels(store: SqliteStore) -> None:
+    """Metacharacters in labels are literal on both matching paths.
+
+    Plain prefixes take the `= OR GLOB` condition and wildcard/suffix paths take
+    the regex function, so escaping has to hold in two different syntaxes.
+    """
+    pairs = [
+        ("star*", "starX"),
+        ("q?m", "qXm"),
+        ("br[ack]et", "brXacXket"),
+        ("user_1", "userX1"),
+        ("a%b", "axxb"),
+        ("plus+", "plusX"),
+    ]
+    for label, decoy in pairs:
+        store.put((label,), "k", {"v": 1})
+        store.put((decoy,), "k", {"v": 1})
+        store.put((label, "child"), "k", {"v": 1})
+
+    for label, decoy in pairs:
+        found = set(store.list_namespaces(prefix=[label], limit=100))
+        assert found == {(label,), (label, "child")}
+        # The decoy differs only where the metacharacter would have matched.
+        assert (decoy,) not in found
+        assert set(store.list_namespaces(prefix=[label, "child"], limit=100)) == {
+            (label, "child"),
+        }

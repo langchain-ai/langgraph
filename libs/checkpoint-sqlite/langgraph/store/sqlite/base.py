@@ -623,10 +623,22 @@ class BaseSqliteStore:
                             # no-op rather than emitting a pattern that matches no
                             # namespace at all.
                             continue
-                        where_clauses.append(f"{NS_MATCH_FUNCTION}(prefix, ?) = 1")
-                        params.append(
-                            _namespace_match_pattern(cond.path, cond.match_type)
-                        )
+                        if cond.match_type == "prefix" and "*" not in cond.path:
+                            # Equivalent to the anchored pattern, but SQLite can
+                            # satisfy `=` and a trailing-wildcard GLOB from
+                            # store_prefix_idx. The user function is opaque to the
+                            # planner, so it would scan every row and call back
+                            # into Python for each one.
+                            condition, args = _namespace_prefix_condition(
+                                tuple(cond.path)
+                            )
+                            where_clauses.append(condition)
+                            params.extend(args)
+                        else:
+                            where_clauses.append(f"{NS_MATCH_FUNCTION}(prefix, ?) = 1")
+                            params.append(
+                                _namespace_match_pattern(cond.path, cond.match_type)
+                            )
                     else:
                         logger.warning(
                             "Unknown match_type in list_namespaces: %s", cond.match_type
