@@ -716,3 +716,32 @@ async def test_search_items(
         for ns in test_namespaces:
             key = f"item_{ns[-1]}"
             await store.adelete(ns, key)
+
+
+async def test_async_namespace_segment_boundary(store: AsyncSqliteStore) -> None:
+    """Segment-aware scoping on the async path.
+
+    Also covers that the namespace-match SQLite function is registered on the
+    async connection -- aiosqlite's create_function is a coroutine, so it is
+    registered in setup() rather than __init__.
+    """
+    for namespace in [
+        ("foo",),
+        ("foo", "child"),
+        ("foobar",),
+        ("uid", "users", "alice"),
+        ("uid", "users", "malice"),
+        ("user_1",),
+        ("userX1",),
+    ]:
+        await store.aput(namespace, "k", {"v": 1})
+
+    found = {item.namespace for item in await store.asearch(("foo",), limit=100)}
+    assert found == {("foo",), ("foo", "child")}
+
+    found = {item.namespace for item in await store.asearch(("user_1",), limit=100)}
+    assert found == {("user_1",)}
+
+    assert set(await store.alist_namespaces(suffix=["alice"], limit=100)) == {
+        ("uid", "users", "alice"),
+    }

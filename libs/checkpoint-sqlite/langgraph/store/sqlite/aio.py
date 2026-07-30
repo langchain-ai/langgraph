@@ -24,11 +24,13 @@ from langgraph.store.base.batch import AsyncBatchedBaseStore
 
 from langgraph.store.sqlite.base import (
     _PLACEHOLDER,
+    NS_MATCH_FUNCTION,
     BaseSqliteStore,
     SqliteIndexConfig,
     _decode_ns_text,
     _ensure_index_config,
     _group_ops,
+    _namespace_match,
     _row_to_item,
     _row_to_search_item,
 )
@@ -149,6 +151,13 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         async with self.lock:
             if self.is_setup:
                 return
+
+            # list_namespaces needs segment-aware matching, which SQLite cannot
+            # express in LIKE or GLOB. Registered here rather than in __init__
+            # because aiosqlite's create_function is a coroutine.
+            await self.conn.create_function(
+                NS_MATCH_FUNCTION, 2, _namespace_match, deterministic=True
+            )
 
             # Create migrations table if it doesn't exist
             await self.conn.execute(
