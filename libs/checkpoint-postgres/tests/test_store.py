@@ -20,6 +20,10 @@ from langgraph.store.base import (
 from psycopg import Connection
 
 from langgraph.store.postgres import PostgresStore
+from langgraph.store.postgres.base import (
+    _escape_like_literal,
+    _namespace_match_pattern,
+)
 from tests.conftest import (
     DEFAULT_URI,
     VECTOR_TYPES,
@@ -324,6 +328,127 @@ def test_list_namespaces(store) -> None:
     # Cleanup
     for namespace in test_namespaces:
         store.delete(namespace, "dummy")
+
+
+def test_escape_like_literal() -> None:
+    assert _escape_like_literal("users.alice") == "users.alice"
+    assert _escape_like_literal("user_1") == r"user\_1"
+    assert _escape_like_literal("100%") == r"100\%"
+    assert _escape_like_literal("a\\b") == "a\\\\b"
+    assert _escape_like_literal("") == ""
+
+
+def test_namespace_match_pattern() -> None:
+    assert _namespace_match_pattern(("foo",), "prefix") == r"^foo(\.|\Z)"
+    assert _namespace_match_pattern(("uid", "users"), "prefix") == r"^uid\.users(\.|\Z)"
+    assert (
+        _namespace_match_pattern(("uid", "*", "alice"), "prefix")
+        == r"^uid\.[^.]+\.alice(\.|\Z)"
+    )
+    assert _namespace_match_pattern(("alice",), "suffix") == r"(^|\.)alice\Z"
+
+    # Regex metacharacters in a label are quoted, not interpreted.
+    pattern = _namespace_match_pattern(("a.b+c",), "prefix")
+    assert re.match(pattern, "a.b+c.child")
+    assert not re.match(pattern, "axbbbc")
+
+
+def test_search_namespace_segment_boundary(store) -> None:
+    """Prefix scoping must stop at namespace segment boundaries.
+
+    Namespaces are stored dot-joined, so matching the raw text also returns
+    siblings sharing leading characters. Callers isolate tenants by namespace,
+    so prefix-shaped ids (1 vs 12) would cross-read.
+    """
+    for namespace in [
+        ("foo",),
+        ("foo", "child"),
+        ("foo", "child", "deep"),
+        ("foobar",),
+        ("foobar", "baz"),
+        ("foo2",),
+    ]:
+        store.put(namespace, "k", {"v": 1})
+
+    def _namespaces(prefix: tuple[str, ...]) -> set[tuple[str, ...]]:
+        return {item.namespace for item in store.search(prefix, limit=100)}
+
+    assert _namespaces(("foo",)) == {
+        ("foo",),
+        ("foo", "child"),
+        ("foo", "child", "deep"),
+    }
+    # The sibling scope is independent, not merely narrower.
+    assert _namespaces(("foobar",)) == {("foobar",), ("foobar", "baz")}
+    assert _namespaces(("foo", "child")) == {("foo", "child"), ("foo", "child", "deep")}
+    assert _namespaces(("foo2",)) == {("foo2",)}
+    assert _namespaces(("fo",)) == set()
+
+
+def test_search_empty_prefix_is_unconstrained(store) -> None:
+    """An empty prefix constrains nothing and must return every namespace."""
+    for namespace in [("a",), ("b", "c"), ("d", "e", "f")]:
+        store.put(namespace, "k", {"v": 1})
+
+    assert {item.namespace for item in store.search((), limit=100)} == {
+        ("a",),
+        ("b", "c"),
+        ("d", "e", "f"),
+    }
+
+
+def test_search_namespace_like_metacharacters(store) -> None:
+    """`_` and `%` are legal namespace labels, not LIKE wildcards."""
+    for namespace in [
+        ("user_1",),
+        ("user_1", "child"),
+        ("userX1",),
+        ("a%b",),
+        ("axxb",),
+    ]:
+        store.put(namespace, "k", {"v": 1})
+
+    def _namespaces(prefix: tuple[str, ...]) -> set[tuple[str, ...]]:
+        return {item.namespace for item in store.search(prefix, limit=100)}
+
+    # Also asserts the namespace still matches itself, which catches escaping
+    # the equality arm by mistake.
+    assert _namespaces(("user_1",)) == {("user_1",), ("user_1", "child")}
+    assert _namespaces(("a%b",)) == {("a%b",)}
+
+
+def test_list_namespaces_segment_boundary(store) -> None:
+    for namespace in [
+        ("foo",),
+        ("foo", "child"),
+        ("foobar",),
+        ("foobar", "baz"),
+        ("uid", "users", "alice"),
+        ("uid", "users", "malice"),
+        ("uid", "a", "b", "alice"),
+    ]:
+        store.put(namespace, "k", {"v": 1})
+
+    assert set(store.list_namespaces(prefix=["foo"], limit=100)) == {
+        ("foo",),
+        ("foo", "child"),
+    }
+    # Suffix must align to a segment: "malice" does not end with the "alice"
+    # segment.
+    assert set(store.list_namespaces(suffix=["alice"], limit=100)) == {
+        ("uid", "users", "alice"),
+        ("uid", "a", "b", "alice"),
+    }
+    # "*" spans exactly one segment.
+    assert set(store.list_namespaces(prefix=["uid", "*", "alice"], limit=100)) == {
+        ("uid", "users", "alice"),
+    }
+    # Prefix matching stays open-ended across depth.
+    assert set(store.list_namespaces(prefix=["uid"], limit=100)) == {
+        ("uid", "users", "alice"),
+        ("uid", "users", "malice"),
+        ("uid", "a", "b", "alice"),
+    }
 
 
 def test_search(store) -> None:
@@ -1026,3 +1151,16 @@ def test_non_ascii(
         assert result3[0].key == "3"
         assert result4[0].key == "4"
         assert result5[0].key == "5"
+
+
+def test_namespace_labels_with_trailing_newline(store) -> None:
+    """Labels may contain newlines, and must not match a differently-named label."""
+    store.put(("users", "alice"), "k", {"v": 1})
+    store.put(("users", "alice\n"), "k", {"v": 2})
+
+    assert set(store.list_namespaces(suffix=["alice"], limit=100)) == {
+        ("users", "alice"),
+    }
+    assert set(store.list_namespaces(prefix=["users", "alice"], limit=100)) == {
+        ("users", "alice"),
+    }
