@@ -932,6 +932,59 @@ def _resolve_pushed_image_digest(
     return remote_image
 
 
+def _build_image_tagged(
+    runner,
+    config: pathlib.Path,
+    config_json: dict,
+    base_image: str | None,
+    api_version: str | None,
+    pull: bool,
+    tag: str,
+    docker_build_args: Sequence[str],
+    install_command: str | None,
+    build_command: str | None,
+    verbose: bool,
+) -> None:
+    """Build a Docker image to *tag*, using buildx on non-x86_64 hosts to target linux/amd64."""
+    if platform.machine() != "x86_64":
+        build_flags: list[str] = ["--platform", "linux/amd64", "--load"]
+        if not verbose:
+            build_flags.append("--progress=quiet")
+        with Progress(message="Building...", elapsed=not verbose):
+            build_docker_image(
+                runner,
+                lambda _msg: None,
+                config,
+                config_json,
+                base_image,
+                api_version,
+                pull,
+                tag,
+                docker_build_args,
+                install_command,
+                build_command,
+                docker_command=("docker", "buildx", "build"),
+                extra_flags=build_flags,
+                verbose=verbose,
+            )
+    else:
+        with Progress(message="Building...", elapsed=not verbose):
+            build_docker_image(
+                runner,
+                lambda _msg: None,
+                config,
+                config_json,
+                base_image,
+                api_version,
+                pull,
+                tag,
+                docker_build_args,
+                install_command,
+                build_command,
+                verbose=verbose,
+            )
+
+
 def _run_local_build(
     *,
     client: HostBackendClient,
@@ -954,9 +1007,6 @@ def _run_local_build(
     tracked_packages: list[str] | None,
 ) -> BuildResult:
     """Build locally with Docker, push to registry, update deployment."""
-    # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
-    # (e.g. Apple Silicon). On amd64 hosts, plain docker build is sufficient.
-    needs_buildx = platform.machine() != "x86_64"
     local_tag = f"langgraph-deploy-tmp:{int(time.time())}"
     image_to_push = prebuilt_image or local_tag
 
@@ -966,49 +1016,20 @@ def _run_local_build(
             _validate_prebuilt_image(runner, prebuilt_image, verbose=verbose)
             click.secho("   Image is available for linux/amd64", fg="green")
         else:
-            # -- Step: Build image --
             _log_deploy_step(step, "Building image")
-            if needs_buildx:
-                build_flags: list[str] = [
-                    "--platform",
-                    "linux/amd64",
-                    "--load",
-                ]
-                if not verbose:
-                    build_flags.append("--progress=quiet")
-                with Progress(message="Building...", elapsed=not verbose):
-                    build_docker_image(
-                        runner,
-                        lambda _msg: None,
-                        config,
-                        config_json,
-                        base_image,
-                        api_version,
-                        pull,
-                        local_tag,
-                        docker_build_args,
-                        install_command,
-                        build_command,
-                        docker_command=("docker", "buildx", "build"),
-                        extra_flags=build_flags,
-                        verbose=verbose,
-                    )
-            else:
-                with Progress(message="Building...", elapsed=not verbose):
-                    build_docker_image(
-                        runner,
-                        lambda _msg: None,
-                        config,
-                        config_json,
-                        base_image,
-                        api_version,
-                        pull,
-                        local_tag,
-                        docker_build_args,
-                        install_command,
-                        build_command,
-                        verbose=verbose,
-                    )
+            _build_image_tagged(
+                runner,
+                config,
+                config_json,
+                base_image,
+                api_version,
+                pull,
+                local_tag,
+                docker_build_args,
+                install_command,
+                build_command,
+                verbose=verbose,
+            )
         step += 1
 
         # -- Step: Get push token and authenticate --
@@ -1150,48 +1171,21 @@ def _run_external_deploy(
     tracked_packages: list[str] | None,
 ) -> "BuildResult":
     """Build image, push using existing Docker credentials, and update the deployment."""
-    needs_buildx = platform.machine() != "x86_64"
-
     with Runner() as runner:
-        # -- Step: Build image tagged directly to the customer's registry URI --
         _log_deploy_step(step, f"Building image {image_uri}")
-        if needs_buildx:
-            build_flags: list[str] = ["--platform", "linux/amd64", "--load"]
-            if not verbose:
-                build_flags.append("--progress=quiet")
-            with Progress(message="Building...", elapsed=not verbose):
-                build_docker_image(
-                    runner,
-                    lambda _msg: None,
-                    config,
-                    config_json,
-                    base_image,
-                    api_version,
-                    pull,
-                    image_uri,
-                    docker_build_args,
-                    install_command,
-                    build_command,
-                    docker_command=("docker", "buildx", "build"),
-                    extra_flags=build_flags,
-                    verbose=verbose,
-                )
-        else:
-            with Progress(message="Building...", elapsed=not verbose):
-                build_docker_image(
-                    runner,
-                    lambda _msg: None,
-                    config,
-                    config_json,
-                    base_image,
-                    api_version,
-                    pull,
-                    image_uri,
-                    docker_build_args,
-                    install_command,
-                    build_command,
-                    verbose=verbose,
-                )
+        _build_image_tagged(
+            runner,
+            config,
+            config_json,
+            base_image,
+            api_version,
+            pull,
+            image_uri,
+            docker_build_args,
+            install_command,
+            build_command,
+            verbose=verbose,
+        )
         step += 1
 
         _log_deploy_step(step, f"Pushing image {image_uri}")
@@ -1766,7 +1760,6 @@ def _deploy_cmd(
 
     if use_external_docker:
         use_remote_build = False
-        local_build_error = None
     else:
         if image and remote_build_flag is True:
             raise click.UsageError("--image cannot be combined with --remote builds.")
@@ -1824,10 +1817,10 @@ def _deploy_cmd(
         existing_source = existing.get("source") if isinstance(existing, dict) else None
         if existing_source and existing_source != "external_docker":
             raise click.UsageError(
-                f"Deployment {deployment_id} was created with source "
-                f"'{existing_source}' and cannot be updated with --image-uri "
-                f"(expected 'external_docker'). Create a new deployment or "
-                f"remove --image-uri to use the original build mode."
+                f"Deployment {deployment_id} uses a different build mode and "
+                f"cannot be updated with --image-uri. To use --image-uri, omit "
+                f"--deployment-id to create a new deployment, or remove "
+                f"--image-uri to continue using the current build mode."
             )
 
     # Scan local sources for tracked packages so the new revision carries
