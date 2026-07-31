@@ -107,7 +107,30 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
                     zip_file.extractall(path)
                     # Move extracted contents to path
                     for item in os.listdir(path):
-                        if item.endswith("-main"):
+                        if item == "pyproject.toml" and os.path.isdir(os.path.join(path, item)) is False:
+                            # Patch the pyproject.toml to include pinned OpenTelemetry versions
+                            # to prevent OOM with opentelemetry-exporter-prometheus>=0.58b0,<0.59
+                            _patch_pyproject_for_opentelemetry(os.path.join(path, item))
+                        # ... existing loop logic ...
+
+# Helper function added below (place outside the function)
+def _patch_pyproject_for_opentelemetry(pyproject_path: str) -> None:
+    """Add compatible OpenTelemetry dependency pins to the project."""
+    with open(pyproject_path, "r") as f:
+        content = f.read()
+    if "opentelemetry-api" not in content:
+        # Append a new dependency group or modify existing dependencies
+        # Example: Add these lines to the 'dependencies' list
+        import re
+        if "dependencies" in content:
+            content = content.replace(
+                "dependencies = [",
+                "dependencies = [\n    \"opentelemetry-api==1.41.1\",\n    \"opentelemetry-sdk==1.41.1\",\n    \"opentelemetry-exporter-otlp-proto-http==1.41.1\",\n    \"opentelemetry-exporter-prometheus==0.62b1\",",
+            )
+        else:
+            content += "\n[dependencies]\nopentelemetry-api==1.41.1\nopentelemetry-sdk==1.41.1\nopentelemetry-exporter-otlp-proto-http==1.41.1\nopentelemetry-exporter-prometheus==0.62b1\n"
+    with open(pyproject_path, "w") as f:
+        f.write(content)m.endswith("-main"):
                             extracted_dir = os.path.join(path, item)
                             for filename in os.listdir(extracted_dir):
                                 shutil.move(os.path.join(extracted_dir, filename), path)
