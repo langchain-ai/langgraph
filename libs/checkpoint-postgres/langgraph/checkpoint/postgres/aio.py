@@ -83,7 +83,10 @@ class AsyncPostgresSaver(BasePostgresSaver):
         ) as conn:
             if pipeline:
                 async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                    try:
+                        yield cls(conn=conn, pipe=pipe, serde=serde)
+                    finally:
+                        await pipe.sync()
             else:
                 yield cls(conn=conn, serde=serde)
 
