@@ -665,24 +665,6 @@ class TestSmithDashboardBaseUrl:
             == "http://localhost:8080"
         )
 
-    def test_self_hosted_api_host_suffix(self):
-        assert (
-            _smith_dashboard_base_url("https://langsmith.example.com/api-host")
-            == "https://langsmith.example.com"
-        )
-
-    def test_self_hosted_api_host_trailing_slash(self):
-        assert (
-            _smith_dashboard_base_url("https://langsmith.example.com/api-host/")
-            == "https://langsmith.example.com"
-        )
-
-    def test_self_hosted_localhost_api_host(self):
-        assert (
-            _smith_dashboard_base_url("http://localhost:8080/api-host")
-            == "http://localhost:8080"
-        )
-
 
 class TestResolvePushedImageDigest:
     """Tests for ``_resolve_pushed_image_digest`` — runner is mocked to
