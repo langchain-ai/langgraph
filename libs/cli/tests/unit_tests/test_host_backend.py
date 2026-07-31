@@ -25,7 +25,7 @@ def client(mock_transport):
 
 def test_constructor_strips_trailing_slash():
     c = HostBackendClient("https://api.example.com/", "key")
-    assert str(c._client.base_url) == "https://api.example.com"
+    assert c.base_url == "https://api.example.com"
 
 
 def test_constructor_empty_url_raises():

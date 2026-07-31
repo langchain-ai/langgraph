@@ -1371,7 +1371,10 @@ def _create_host_backend_client(
         langsmith_endpoint = env_vars.get("LANGSMITH_ENDPOINT") or os.environ.get(
             "LANGSMITH_ENDPOINT"
         )
-        if langsmith_endpoint and langsmith_endpoint.rstrip("/") not in _cloud_endpoints:
+        if (
+            langsmith_endpoint
+            and langsmith_endpoint.rstrip("/") not in _cloud_endpoints
+        ):
             from urllib.parse import urlparse as _urlparse
 
             _p = _urlparse(langsmith_endpoint)
@@ -1818,9 +1821,7 @@ def _deploy_cmd(
         existing = _call_host_backend_with_optional_tenant(
             client, lambda c: c.get_deployment(deployment_id)
         )
-        existing_source = (
-            existing.get("source") if isinstance(existing, dict) else None
-        )
+        existing_source = existing.get("source") if isinstance(existing, dict) else None
         if existing_source and existing_source != "external_docker":
             raise click.UsageError(
                 f"Deployment {deployment_id} was created with source "
