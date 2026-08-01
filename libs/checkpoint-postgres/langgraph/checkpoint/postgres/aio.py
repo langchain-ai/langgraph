@@ -78,13 +78,18 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
         """
-        async with await AsyncConnection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
-            if pipeline:
+        if pipeline:
+            # For pipeline mode, enter the pipeline context before the connection context.
+            # This ensures the pipeline is properly closed before the connection is closed.
+            async with await AsyncConnection.connect(
+                conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            ) as conn:
                 async with conn.pipeline() as pipe:
                     yield cls(conn=conn, pipe=pipe, serde=serde)
-            else:
+        else:
+            async with await AsyncConnection.connect(
+                conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            ) as conn:
                 yield cls(conn=conn, serde=serde)
 
     async def setup(self) -> None:
