@@ -36,7 +36,7 @@ test = [
     "pytest-watch",
 ]
 lint = [
-    "ruff==0.15.20",
+    "ruff==0.16.0",
     "codespell",
     "ty",
     "starlette",
