@@ -107,7 +107,38 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
                     zip_file.extractall(path)
                     # Move extracted contents to path
                     for item in os.listdir(path):
-                        if item.endswith("-main"):
+                        if item.startswith("__MACOSX"):
+                            shutil.rmtree(os.path.join(path, item))
+                            continue
+                        source = os.path.join(path, item)
+                        if os.path.isdir(source):
+                            # Move all files from the extracted root folder to path
+                            for f in os.listdir(source):
+                                os.rename(os.path.join(source, f), os.path.join(path, f))
+                            os.rmdir(source)
+                    # Patch pyproject.toml to avoid OOM-causing opentelemetry-exporter-prometheus version
+                    pyproject_path = os.path.join(path, "pyproject.toml")
+                    if os.path.exists(pyproject_path):
+                        with open(pyproject_path, "r") as f:
+                            content = f.read()
+                        if "opentelemetry-exporter-prometheus" not in content:
+                            # Add the dependency pin to the project's dependencies
+                            # This is a minimal workaround for https://github.com/langchain-ai/langgraph/issues/8409
+                            content = content.replace(
+                                'dependencies = [',
+                                'dependencies = [\n    "opentelemetry-exporter-prometheus==0.62b1",'
+                            )
+                            with open(pyproject_path, "w") as f:
+                                f.write(content)
+                    return
+            click.secho("❌ Download failed.", fg="red")
+            sys.exit(1)
+    except error.HTTPError as e:
+        click.secho(f"❌ HTTP error: {e.code} {e.reason}", fg="red")
+        sys.exit(1)
+    except error.URLError as e:
+        click.secho(f"❌ URL error: {e.reason}", fg="red")
+        sys.exit(1)m.endswith("-main"):
                             extracted_dir = os.path.join(path, item)
                             for filename in os.listdir(extracted_dir):
                                 shutil.move(os.path.join(extracted_dir, filename), path)
