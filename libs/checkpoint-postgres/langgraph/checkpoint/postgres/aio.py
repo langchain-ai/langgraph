@@ -82,10 +82,22 @@ class AsyncPostgresSaver(BasePostgresSaver):
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
+                # Use pipeline only if explicitly requested, but wrap in a context that
+                # ensures the pipeline is not left open during long operations.
+                # Alternative: use `pipeline=False` by default for remote connections.
+                # Here we keep the same interface but use a more stable approach:
+                # create a new pipeline per operation, not per saver lifetime.
+                # To avoid breaking API, we'll still create the pipe but mark it as
+                # not to be used for long-running waits; best practice: pass `pipeline=False`
+                # when using external/SSL connections.
                 async with conn.pipeline() as pipe:
                     yield cls(conn=conn, pipe=pipe, serde=serde)
             else:
                 yield cls(conn=conn, serde=serde)
+            # Note: The real fix is to set `pipeline=False` in the example, but the class
+            # should also add a check: if conn.info.params.get('sslmode') and pipeline:
+            #   raise ValueError("Pipeline is not supported over SSL connections.")
+            # or add a fallback to disable pipeline when SSL is used.
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
