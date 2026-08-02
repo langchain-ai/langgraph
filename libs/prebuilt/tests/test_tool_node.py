@@ -2143,6 +2143,52 @@ async def test_tool_runtime_forwards_execution_info_server_info_and_tools_async(
     ]
 
 
+class _PreExecutionInfoRuntime:
+    """Stand-in for a `Runtime` from a langgraph-core release older than the
+    one that added `execution_info`/`server_info` (see langgraph.runtime.Runtime).
+
+    Plain object with only the older attributes, so accessing a missing one
+    raises `AttributeError` instead of a Mock auto-vivifying it.
+    """
+
+    def __init__(self) -> None:
+        self.store = None
+        self.context = None
+        self.stream_writer = lambda *args, **kwargs: None
+
+
+def test_tool_runtime_tolerates_runtime_without_execution_info() -> None:
+    """ToolNode must not crash against a core langgraph old enough that
+    `Runtime` predates `execution_info`/`server_info` (GH #7404): the two
+    fields should degrade to `None` rather than raise `AttributeError`.
+    """
+    captured: dict = {}
+
+    @dec_tool
+    def info_tool(x: int, runtime: ToolRuntime) -> str:
+        """Tool that captures runtime info."""
+        captured["execution_info"] = runtime.execution_info
+        captured["server_info"] = runtime.server_info
+        return "ok"
+
+    node = ToolNode([info_tool])
+    tool_call = {
+        "name": "info_tool",
+        "args": {"x": 1},
+        "id": "call-1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    config: RunnableConfig = {
+        "configurable": {"__pregel_runtime": _PreExecutionInfoRuntime()}
+    }
+    result = node.invoke({"messages": [msg]}, config=config)
+
+    assert result["messages"][-1].content == "ok"
+    assert captured["execution_info"] is None
+    assert captured["server_info"] is None
+
+
 # --- InjectedToolArg security tests ---
 
 

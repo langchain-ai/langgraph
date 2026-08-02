@@ -87,11 +87,23 @@ from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.pregel._tools import _tool_call_writer
-from langgraph.runtime import ExecutionInfo, ServerInfo  # noqa: TC002
 from langgraph.store.base import BaseStore  # noqa: TC002
 from langgraph.types import Command, Send, StreamWriter
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypeVar, Unpack
+
+# langgraph-prebuilt intentionally declares no version-pinned dependency on
+# core langgraph (one would create a dependency cycle: langgraph depends on
+# langgraph-prebuilt). ExecutionInfo/ServerInfo are recent additions to
+# langgraph.runtime, so an older, otherwise-compatible core langgraph may not
+# have them yet. Fall back to `Any` rather than fail the whole module import
+# (GH #7404) -- ToolRuntime's fields still need a real type for Pydantic to
+# build tool args_schema, so `TYPE_CHECKING`-only import is not an option.
+try:
+    from langgraph.runtime import ExecutionInfo, ServerInfo
+except ImportError:
+    ExecutionInfo = Any  # type: ignore[assignment,misc]
+    ServerInfo = Any  # type: ignore[assignment,misc]
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -811,8 +823,13 @@ class ToolNode(RunnableCallable):
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
                 tools=list(self.tools_by_name.values()),
-                execution_info=runtime.execution_info,
-                server_info=runtime.server_info,
+                # getattr (not attribute access): langgraph-prebuilt intentionally
+                # has no hard version dependency on core langgraph (it would create
+                # a dependency cycle, since langgraph depends on langgraph-prebuilt).
+                # A `Runtime` from an older langgraph that predates these fields
+                # must degrade to None rather than raise AttributeError.
+                execution_info=getattr(runtime, "execution_info", None),
+                server_info=getattr(runtime, "server_info", None),
             )
             tool_runtimes.append(tool_runtime)
 
@@ -846,8 +863,13 @@ class ToolNode(RunnableCallable):
                 store=runtime.store,
                 stream_writer=runtime.stream_writer,
                 tools=list(self.tools_by_name.values()),
-                execution_info=runtime.execution_info,
-                server_info=runtime.server_info,
+                # getattr (not attribute access): langgraph-prebuilt intentionally
+                # has no hard version dependency on core langgraph (it would create
+                # a dependency cycle, since langgraph depends on langgraph-prebuilt).
+                # A `Runtime` from an older langgraph that predates these fields
+                # must degrade to None rather than raise AttributeError.
+                execution_info=getattr(runtime, "execution_info", None),
+                server_info=getattr(runtime, "server_info", None),
             )
             tool_runtimes.append(tool_runtime)
 
