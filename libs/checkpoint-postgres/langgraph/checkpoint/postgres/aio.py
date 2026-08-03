@@ -82,6 +82,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
+                # Pipeline requires a single connection; we still pass the single connection.
+                # The __init__ verification will catch if a pool is (incorrectly) passed.
                 async with conn.pipeline() as pipe:
                     yield cls(conn=conn, pipe=pipe, serde=serde)
             else:
