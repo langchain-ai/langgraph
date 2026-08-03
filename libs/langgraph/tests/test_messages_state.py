@@ -323,13 +323,14 @@ def test_messages_state_format_openai():
     condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
     reason="Requires langchain_core>=0.3.11.",
 )
-def test_messages_state_format_openai_preserves_additional_kwargs():
-    """Test that format='langchain-openai' preserves custom additional_kwargs."""
+def test_messages_state_format_openai_preserves_metadata():
+    """Test that format='langchain-openai' preserves message metadata."""
     left = [
         AIMessage(
             id="msg-1",
             content="hello",
             additional_kwargs={"widgets": [{"type": "carousel", "items": [1, 2, 3]}]},
+            response_metadata={"model": "test-model", "finish_reason": "stop"},
         )
     ]
     result = add_messages([], left, format="langchain-openai")
@@ -338,17 +339,22 @@ def test_messages_state_format_openai_preserves_additional_kwargs():
     assert result[0].additional_kwargs.get("widgets") == [
         {"type": "carousel", "items": [1, 2, 3]}
     ]
+    assert result[0].response_metadata == {
+        "model": "test-model",
+        "finish_reason": "stop",
+    }
 
 
 @pytest.mark.skipif(
     condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
     reason="Requires langchain_core>=0.3.11.",
 )
-def test_messages_state_format_openai_preserves_kwargs_without_id():
-    """Test that missing IDs are assigned before preserving additional_kwargs."""
+def test_messages_state_format_openai_preserves_metadata_without_id():
+    """Test that missing IDs are assigned before preserving message metadata."""
     message = AIMessage(
         content="hello",
         additional_kwargs={"widgets": [{"type": "carousel", "items": [1, 2, 3]}]},
+        response_metadata={"model": "test-model"},
     )
 
     result = add_messages([], [message], format="langchain-openai")
@@ -358,6 +364,7 @@ def test_messages_state_format_openai_preserves_kwargs_without_id():
     assert result[0].additional_kwargs == {
         "widgets": [{"type": "carousel", "items": [1, 2, 3]}]
     }
+    assert result[0].response_metadata == {"model": "test-model"}
 
 
 def test_remove_all_messages():
