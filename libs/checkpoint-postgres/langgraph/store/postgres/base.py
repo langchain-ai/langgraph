@@ -4,6 +4,7 @@ import asyncio
 import concurrent.futures
 import json
 import logging
+import re
 import threading
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Sequence
@@ -463,8 +464,9 @@ class BasePostgresStore(Generic[C]):
             ns_condition = "TRUE"
             ns_param: Sequence[str] | None = None
             if op.namespace_prefix:
-                ns_condition = "store.prefix LIKE %s"
-                ns_param = (f"{_namespace_to_text(op.namespace_prefix)}%",)
+                ns_condition, ns_param = _namespace_prefix_condition(
+                    op.namespace_prefix
+                )
             else:
                 ns_param = ()
 
@@ -617,15 +619,17 @@ class BasePostgresStore(Generic[C]):
                 conditions.append("(expires_at IS NULL OR expires_at > NOW())")
             if op.match_conditions:
                 for condition in op.match_conditions:
-                    if condition.match_type == "prefix":
-                        conditions.append("prefix LIKE %s")
+                    if condition.match_type in ("prefix", "suffix"):
+                        if not condition.path:
+                            # An empty path constrains nothing; skipping keeps it a
+                            # no-op rather than emitting a pattern that matches no
+                            # namespace at all.
+                            continue
+                        conditions.append("prefix ~ %s")
                         params.append(
-                            f"{_namespace_to_text(condition.path, handle_wildcards=True)}%"
-                        )
-                    elif condition.match_type == "suffix":
-                        conditions.append("prefix LIKE %s")
-                        params.append(
-                            f"%{_namespace_to_text(condition.path, handle_wildcards=True)}"
+                            _namespace_match_pattern(
+                                condition.path, condition.match_type
+                            )
                         )
                     else:
                         logger.warning(
@@ -1271,13 +1275,57 @@ def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
     return kind, sanitized
 
 
-def _namespace_to_text(
-    namespace: tuple[str, ...], handle_wildcards: bool = False
-) -> str:
+def _namespace_to_text(namespace: tuple[str, ...]) -> str:
     """Convert namespace tuple to text string."""
-    if handle_wildcards:
-        namespace = tuple("%" if val == "*" else val for val in namespace)
     return ".".join(namespace)
+
+
+def _escape_like_literal(text: str) -> str:
+    """Escape LIKE metacharacters so `text` is matched literally.
+
+    Namespace labels may contain `_` and `%`, which would otherwise act as
+    wildcards: `("user_1",)` would match `("userX1",)`. Backslash is escaped
+    first so it cannot escape the following character. Requires an explicit
+    `ESCAPE '\\'` clause on the pattern.
+    """
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _namespace_prefix_condition(namespace_prefix: tuple[str, ...]) -> tuple[str, tuple]:
+    """Build the SQL scoping a search to a namespace and its descendants.
+
+    Matches the namespace exactly or requires the `.` separator before any
+    remainder, so a prefix of `("foo",)` does not also match `("foobar",)`.
+
+    Both arms stay index-friendly: equality on the `(prefix, key)` primary key,
+    the anchored LIKE on the `prefix text_pattern_ops` index.
+
+    Only the LIKE arm is escaped -- equality does not interpret metacharacters,
+    so escaping it would stop `("user_1",)` from matching itself.
+    """
+    path = _namespace_to_text(namespace_prefix)
+    condition = r"(store.prefix = %s OR store.prefix LIKE %s ESCAPE '\')"
+    return condition, (path, f"{_escape_like_literal(path)}.%")
+
+
+def _namespace_match_pattern(path: tuple[str, ...], match_type: str) -> str:
+    """Build a POSIX regex matching the dot-joined prefix on whole segments.
+
+    Needed because `LIKE` cannot express "any character except the separator".
+    Matches how `InMemoryStore` compares namespaces element-wise.
+
+    `*` matches exactly one segment. Prefix matches stay open-ended but must end
+    on a separator; suffix matches anchor at the end and begin on one.
+
+    Examples:
+        prefix ("uid", "*", "alice") -> ^uid\\.[^.]+\\.alice(\\.|\\Z)
+        suffix ("alice",)            -> (^|\\.)alice\\Z
+    """
+    segments = ("[^.]+" if part == "*" else re.escape(part) for part in path)
+    body = r"\.".join(segments)
+    if match_type == "suffix":
+        return rf"(^|\.){body}\Z"
+    return rf"^{body}(\.|\Z)"
 
 
 def _row_to_item(
