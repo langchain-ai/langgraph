@@ -12,6 +12,8 @@ from langgraph.runtime import Runtime
 tools = [TavilySearchResults(max_results=1)]
 
 model_anth = ChatAnthropic(temperature=0, model_name="claude-3-sonnet-20240229")
+# ChatOpenAI accepts base_url for any OpenAI-compatible multi-model gateway, e.g. DaoXE:
+# model_oai = ChatOpenAI(temperature=0, base_url="https://api.daoxe.com/v1", api_key="...")
 model_oai = ChatOpenAI(temperature=0)
 
 model_anth = model_anth.bind_tools(tools)
