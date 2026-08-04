@@ -5,7 +5,7 @@ LangGraph documentation has moved to docs.langchain.com.
 ## Overview
 
 - [LangGraph Overview](https://docs.langchain.com/oss/python/langgraph/overview): Introduction to LangGraph, a library for building stateful, multi-actor applications with LLMs.
-- [Why LangGraph?](https://docs.langchain.com/oss/python/langgraph/why-langgraph): Motivation for LangGraph and its key features.
+- [Why LangGraph?](https://docs.langchain.com/oss/python/langgraph/overview): Motivation for LangGraph and its key features.
 
 ## Core Concepts
 
