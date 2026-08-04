@@ -208,6 +208,73 @@ async def test_history_migration_plain_value_as_seed(
     assert values == [2], f"Expected [2], got {values}"
 
 
+async def test_history_seed_ancestor_own_writes_are_replayed(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """Writes stored AT the seed ancestor must be included in `writes`.
+
+    A stored value is the state ENTERING its checkpoint; the writes stored
+    under that same checkpoint are what produced its child and are therefore
+    NOT subsumed by it. Only writes at ancestors OLDER than the seed are
+    subsumed, and the walk terminates before reaching them.
+
+    This holds for plain-value seeds (migration from a pre-delta channel type)
+    exactly as it does for `_DeltaSnapshot` seeds. Skipping the seed
+    ancestor's own writes silently drops the first post-migration write.
+    """
+    from langgraph.checkpoint.base import Checkpoint
+    from langgraph.checkpoint.base.id import uuid6
+
+    from langgraph.checkpoint.conformance.test_utils import generate_metadata
+
+    tid = str(uuid4())
+    configs: list = []
+    parent_cfg = None
+
+    # step 0: older pre-delta value; its write is subsumed by step 1's value.
+    # step 1: the seed — a plain value AND a pending write that produced step 2.
+    # step 2: delta-era, no stored value, one write.
+    # step 3: head — its own write is pending for the next step, excluded.
+    for step in range(4):
+        config = {"configurable": {"thread_id": tid, "checkpoint_ns": ""}}
+        if parent_cfg:
+            config["configurable"]["checkpoint_id"] = parent_cfg["configurable"][
+                "checkpoint_id"
+            ]
+        cv: dict = {}
+        cvs: dict = {}
+        if step == 0:
+            cv["ch"] = [10]
+            cvs["ch"] = step + 1
+        elif step == 1:
+            cv["ch"] = [10, 20]
+            cvs["ch"] = step + 1
+        cp = Checkpoint(
+            v=1,
+            id=str(uuid6(clock_seq=-1)),
+            ts="",
+            channel_values=cv,
+            channel_versions=cvs,
+            versions_seen={},
+            updated_channels=None,
+        )
+        parent_cfg = await saver.aput(config, cp, generate_metadata(step=step), cvs)
+        configs.append(parent_cfg)
+        await saver.aput_writes(parent_cfg, [("ch", step)], str(uuid4()))
+
+    head = configs[-1]
+    result = await saver.aget_delta_channel_history(config=head, channels=["ch"])
+
+    assert "seed" in result["ch"], "Expected seed from plain value at step 1"
+    assert result["ch"]["seed"] == [10, 20], (
+        f"Expected nearest plain value [10, 20], got {result['ch']['seed']}"
+    )
+    values = [w[2] for w in result["ch"]["writes"]]
+    # 1 = the seed ancestor's own write (not subsumed), 2 = delta-era write.
+    # 0 is older than the seed (subsumed); 3 is pending at the head.
+    assert values == [1, 2], f"Expected [1, 2], got {values}"
+
+
 ALL_DELTA_CHANNEL_HISTORY_TESTS = [
     test_history_returns_writes_oldest_first,
     test_history_seed_is_nearest_snapshot,
@@ -216,6 +283,7 @@ ALL_DELTA_CHANNEL_HISTORY_TESTS = [
     test_history_empty_channels_returns_empty,
     test_history_walk_to_root_no_seed,
     test_history_migration_plain_value_as_seed,
+    test_history_seed_ancestor_own_writes_are_replayed,
 ]
 
 
