@@ -4,23 +4,45 @@ import time
 
 import pytest
 import redis
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 
 from langgraph.cache.base import FullKey
 from langgraph.cache.redis import RedisCache
 
 
+@pytest.fixture(scope="session")
+def redis_available() -> bool:
+    """Probe once per session whether a local Redis is reachable.
+
+    The probe disables redis-py's retry policy, which otherwise reattempts a
+    failed connection ten times with backoff. On Windows a refused loopback
+    connection takes ~2s per address family (`::1` then `127.0.0.1`) rather
+    than returning immediately, so the default policy turns an unavailable
+    Redis into a ~49s wait — paid again for every test in the class.
+    """
+    client = redis.Redis(host="localhost", port=6379, retry=Retry(NoBackoff(), 0))
+    try:
+        client.ping()
+    except redis.RedisError:
+        # Both ConnectionError and TimeoutError mean "not usable here".
+        return False
+    else:
+        return True
+    finally:
+        client.close()
+
+
 class TestRedisCache:
     @pytest.fixture(autouse=True)
-    def setup(self) -> None:
+    def setup(self, redis_available: bool) -> None:
         """Set up test Redis client and cache."""
+        if not redis_available:
+            pytest.skip("Redis server not available")
+
         self.client = redis.Redis(
             host="localhost", port=6379, db=0, decode_responses=False
         )
-        try:
-            self.client.ping()
-        except redis.ConnectionError:
-            pytest.skip("Redis server not available")
-
         self.cache: RedisCache = RedisCache(self.client, prefix="test:cache:")
 
         # Clean up before each test
