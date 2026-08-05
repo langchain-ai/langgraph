@@ -168,7 +168,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -332,6 +332,33 @@ test = [
 ]
 
 [[package]]
+name = "langgraph-checkpoint-conformance"
+version = "0.0.2"
+source = { editable = "../checkpoint-conformance" }
+dependencies = [
+    { name = "langgraph-checkpoint" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "langgraph-checkpoint", editable = "../checkpoint" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+lint = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[[package]]
 name = "langgraph-checkpoint-sqlite"
 version = "3.1.1"
 source = { editable = "." }
@@ -345,6 +372,7 @@ dependencies = [
 dev = [
     { name = "codespell" },
     { name = "langgraph-checkpoint" },
+    { name = "langgraph-checkpoint-conformance" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -360,6 +388,7 @@ lint = [
 ]
 test = [
     { name = "langgraph-checkpoint" },
+    { name = "langgraph-checkpoint-conformance" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -378,6 +407,7 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -393,6 +423,7 @@ lint = [
 ]
 test = [
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },

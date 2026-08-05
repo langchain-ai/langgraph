@@ -30,6 +30,7 @@ test = [
   "pytest-mock",
   "pytest-watcher",
   "langgraph-checkpoint",
+  "langgraph-checkpoint-conformance",
   "pytest-retry>=1.7.0",
 ]
 lint = [
@@ -47,6 +48,7 @@ default-groups = ['dev']
 
 [tool.uv.sources]
 langgraph-checkpoint = { path = "../checkpoint", editable = true }
+langgraph-checkpoint-conformance = { path = "../checkpoint-conformance", editable = true }
 
 [tool.hatch.build.targets.wheel]
 include = ["langgraph"]
