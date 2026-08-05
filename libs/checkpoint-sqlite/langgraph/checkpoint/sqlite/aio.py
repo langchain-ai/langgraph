@@ -331,6 +331,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     checkpoint_ns TEXT NOT NULL DEFAULT '',
                     checkpoint_id TEXT NOT NULL,
                     task_id TEXT NOT NULL,
+                    task_path TEXT NOT NULL DEFAULT '',
                     idx INTEGER NOT NULL,
                     channel TEXT NOT NULL,
                     type TEXT,
@@ -340,6 +341,17 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                 """
             ):
                 await self.conn.commit()
+
+            # sqlite has no ADD COLUMN IF NOT EXISTS; this migrates databases
+            # created before `task_path` existed and is a no-op on the rest.
+            try:
+                await self.conn.execute(
+                    "ALTER TABLE writes ADD COLUMN task_path TEXT NOT NULL DEFAULT ''"
+                )
+                await self.conn.commit()
+            except aiosqlite.OperationalError as e:
+                if "duplicate column name" not in str(e):
+                    raise
 
             self.is_setup = True
 
@@ -576,9 +588,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             task_path: Path of the task creating the writes.
         """
         query = (
-            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
             if all(w[0] in WRITES_IDX_MAP for w in writes)
-            else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         await self.setup()
         async with self.lock, self.conn.cursor() as cur:
@@ -590,6 +602,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                         str(config["configurable"]["checkpoint_ns"]),
                         str(config["configurable"]["checkpoint_id"]),
                         task_id,
+                        task_path,
                         WRITES_IDX_MAP.get(channel, idx),
                         channel,
                         *self.serde.dumps_typed(value),
@@ -681,7 +694,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     )
                 await cur.execute(stage2_sql, stage2_params)
                 stage2_rows = cast(
-                    "list[tuple[str, str, str, int, str, bytes]]",
+                    "list[tuple[str, str, str, int, str, bytes, str]]",
                     await cur.fetchall(),
                 )
             else:
