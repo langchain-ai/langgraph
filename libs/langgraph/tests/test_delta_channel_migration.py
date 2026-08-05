@@ -727,4 +727,6 @@ def test_add_messages_migration_keeps_first_post_migration_message() -> None:
     delta_graph.invoke({"messages": [HumanMessage(content="second", id="h2")]}, config)
 
     ids = [m.id for m in delta_graph.get_state(config).values["messages"]]
-    assert "h2" in ids, f"first post-migration message dropped: {ids}"
+    # h1 is the pre-migration seed, h2 the write that was being dropped; both
+    # have to survive, and in order.
+    assert ids == ["h1", "h2"], f"expected ['h1', 'h2'], got {ids}"
