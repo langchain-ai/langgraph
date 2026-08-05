@@ -36,6 +36,7 @@ DISALLOWED_BUILD_COMMAND_CHARS = [
 # This blocks background execution (cmd &) while allowing command
 # chaining (cmd1 && cmd2) which is common in build commands.
 _SINGLE_AMPERSAND_RE = re.compile(r"(?<!&)&(?:&&)*(?!&)")
+_GIT_HTTP_AUTHORITY_RE = re.compile(r"git\+https?://(?P<authority>[^/\s]+)", re.I)
 _API_VERSION_PATTERN = re.compile(
     r"^(?P<major>\d+)"
     r"(?:\.(?P<minor>\d+))?"
@@ -76,6 +77,14 @@ def has_disallowed_build_command_content(command: str) -> bool:
     if _SINGLE_AMPERSAND_RE.search(command):
         return True
     return False
+
+
+def _has_git_http_url_userinfo(dependency: str) -> bool:
+    """Check whether a Git HTTP URL contains userinfo."""
+    return any(
+        "@" in match.group("authority")
+        for match in _GIT_HTTP_AUTHORITY_RE.finditer(dependency)
+    )
 
 
 MIN_PYTHON_VERSION = "3.11"
@@ -414,6 +423,18 @@ def validate_config(config: Config) -> Config:
                 "Consider using uv-based source management instead:\n\n"
                 '  "source": {"kind": "uv", "root": ".."}'
             )
+
+    if any(
+        isinstance(dependency, str) and _has_git_http_url_userinfo(dependency)
+        for dependency in config["dependencies"]
+    ):
+        raise click.UsageError(
+            "Git dependency URLs must not contain credentials or other URL "
+            "userinfo because generated Dockerfiles and image layers can retain "
+            "them. Use a credential-free Git URL and provide short-lived "
+            "credentials through your build environment's secret-backed Git "
+            "credential helper."
+        )
 
     source = config.get("source")
     source_kind = _get_source_kind(config)

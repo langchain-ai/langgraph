@@ -255,6 +255,50 @@ def test_validate_config():
         )
 
 
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        "git+https://user:secret-token@github.com/org/private.git@main",
+        "private-package @ git+http://token@github.com/org/private.git",
+        "git+HTTPS://user%40example.com:secret%2Ftoken@github.com/org/private.git",
+    ],
+)
+def test_validate_config_rejects_git_http_url_userinfo(dependency: str):
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": [dependency],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
+    assert "secret%2Ftoken" not in message
+
+
+@pytest.mark.parametrize(
+    "dependency",
+    [
+        "git+https://github.com/org/public.git@main",
+        "private-package @ git+https://github.com/org/private.git@main",
+        "git+ssh://git@github.com/org/private.git@main",
+    ],
+)
+def test_validate_config_allows_git_urls_without_http_userinfo(dependency: str):
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": [dependency],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+
+    assert config["dependencies"] == [dependency]
+
+
 def test_validate_config_image_distro():
     """Test validation of image_distro field."""
     # Valid image_distro values should work
