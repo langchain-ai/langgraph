@@ -1,15 +1,17 @@
 """Msgpack deserialization safety controls.
 
-Set ``LANGGRAPH_STRICT_MSGPACK=true`` to restrict checkpoint deserialization
-to the types listed in ``SAFE_MSGPACK_TYPES``.  Without this, any Python
-callable stored in checkpoint data will be imported and executed on load.
+``LANGGRAPH_STRICT_MSGPACK`` defaults to true, restricting checkpoint
+deserialization to the types listed in ``SAFE_MSGPACK_TYPES``.
+Set ``LANGGRAPH_STRICT_MSGPACK=false`` to opt out (permissive mode).
+When disabled, any Python callable stored in checkpoint data will be
+imported and executed on load.
 """
 
 import os
 from collections.abc import Iterable
 from typing import cast
 
-STRICT_MSGPACK_ENABLED = os.getenv("LANGGRAPH_STRICT_MSGPACK", "false").lower() in (
+STRICT_MSGPACK_ENABLED = os.getenv("LANGGRAPH_STRICT_MSGPACK", "true").lower() in (
     "1",
     "true",
     "yes",
