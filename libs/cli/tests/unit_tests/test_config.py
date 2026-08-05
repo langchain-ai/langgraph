@@ -299,6 +299,85 @@ def test_validate_config_allows_git_urls_without_http_userinfo(dependency: str):
     assert config["dependencies"] == [dependency]
 
 
+def test_config_to_docker_rejects_git_http_url_userinfo_in_requirements(
+    tmp_path: pathlib.Path,
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "agent.py").write_text("graph = object()\n")
+    (tmp_path / "requirements.txt").write_text(
+        "private @ git+https://secret-token@github.com/org/private.git\n"
+    )
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
+
+
+@pytest.mark.parametrize("manifest", ["pyproject.toml", "uv.lock"])
+def test_config_to_docker_rejects_git_http_url_userinfo_in_uv_files(
+    tmp_path: pathlib.Path, manifest: str
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "agent.py").write_text("graph = object()\n")
+    pyproject = textwrap.dedent(
+        """
+        [project]
+        name = "agent"
+        version = "0.1.0"
+        dependencies = ["private"]
+
+        [tool.uv.sources]
+        private = { git = "https://github.com/org/private.git" }
+        """
+    ).strip()
+    uv_lock = "# uv lock file\n"
+    if manifest == "pyproject.toml":
+        pyproject = pyproject.replace(
+            "https://github.com", "https://secret-token@github.com"
+        )
+    else:
+        uv_lock += (
+            'source = { git = "https://secret-token@github.com/org/private.git" }\n'
+        )
+    (tmp_path / "pyproject.toml").write_text(pyproject + "\n")
+    (tmp_path / "uv.lock").write_text(uv_lock)
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "graphs": {"agent": "./src/agent.py:graph"},
+            "source": {"kind": "uv"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraph-api:0.2.47",
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
+
+
 def test_validate_config_image_distro():
     """Test validation of image_distro field."""
     # Valid image_distro values should work

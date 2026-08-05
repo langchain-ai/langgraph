@@ -6,6 +6,7 @@ import re
 import shlex
 import textwrap
 from collections import Counter
+from collections.abc import Iterable
 from typing import Literal, NamedTuple
 
 import click
@@ -36,7 +37,10 @@ DISALLOWED_BUILD_COMMAND_CHARS = [
 # This blocks background execution (cmd &) while allowing command
 # chaining (cmd1 && cmd2) which is common in build commands.
 _SINGLE_AMPERSAND_RE = re.compile(r"(?<!&)&(?:&&)*(?!&)")
-_GIT_HTTP_AUTHORITY_RE = re.compile(r"git\+https?://(?P<authority>[^/\s]+)", re.I)
+_GIT_HTTP_AUTHORITY_RES = (
+    re.compile(r"git\+https?://(?P<authority>[^/\s\"']+)", re.I),
+    re.compile(r"\bgit\s*=\s*[\"']https?://(?P<authority>[^/\s\"']+)", re.I),
+)
 _API_VERSION_PATTERN = re.compile(
     r"^(?P<major>\d+)"
     r"(?:\.(?P<minor>\d+))?"
@@ -83,8 +87,51 @@ def _has_git_http_url_userinfo(dependency: str) -> bool:
     """Check whether a Git HTTP URL contains userinfo."""
     return any(
         "@" in match.group("authority")
-        for match in _GIT_HTTP_AUTHORITY_RE.finditer(dependency)
+        for pattern in _GIT_HTTP_AUTHORITY_RES
+        for match in pattern.finditer(dependency)
     )
+
+
+def _validate_git_http_url_userinfo(values: Iterable[str]) -> None:
+    """Reject credential-bearing Git HTTP URLs without echoing their values."""
+    if not any(_has_git_http_url_userinfo(value) for value in values):
+        return
+    raise click.UsageError(
+        "Git dependency URLs must not contain credentials or other URL "
+        "userinfo because generated Dockerfiles and image layers can retain "
+        "them. Use a credential-free Git URL and provide short-lived "
+        "credentials through your build environment's secret-backed Git "
+        "credential helper."
+    )
+
+
+def _validate_git_http_url_userinfo_files(paths: Iterable[pathlib.Path]) -> None:
+    """Reject credential-bearing Git HTTP URLs in dependency files."""
+    contents: list[str] = []
+    for path in paths:
+        if not path.is_file():
+            continue
+        try:
+            contents.append(path.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            raise click.UsageError(
+                f"Could not inspect dependency file for embedded credentials: {path}"
+            ) from None
+    _validate_git_http_url_userinfo(contents)
+
+
+def _validate_local_dependency_files(config_path: pathlib.Path, config: Config) -> None:
+    """Validate dependency files copied into a non-uv Python image."""
+    paths: list[pathlib.Path] = []
+    for dependency in config["dependencies"]:
+        if not isinstance(dependency, str) or not dependency.startswith("."):
+            continue
+        root = (config_path.parent / dependency).resolve()
+        paths.extend(
+            root / name
+            for name in ("requirements.txt", "pyproject.toml", "setup.py", "setup.cfg")
+        )
+    _validate_git_http_url_userinfo_files(paths)
 
 
 MIN_PYTHON_VERSION = "3.11"
@@ -424,17 +471,11 @@ def validate_config(config: Config) -> Config:
                 '  "source": {"kind": "uv", "root": ".."}'
             )
 
-    if any(
-        isinstance(dependency, str) and _has_git_http_url_userinfo(dependency)
+    _validate_git_http_url_userinfo(
+        dependency
         for dependency in config["dependencies"]
-    ):
-        raise click.UsageError(
-            "Git dependency URLs must not contain credentials or other URL "
-            "userinfo because generated Dockerfiles and image layers can retain "
-            "them. Use a credential-free Git URL and provide short-lived "
-            "credentials through your build environment's secret-backed Git "
-            "credential helper."
-        )
+        if isinstance(dependency, str)
+    )
 
     source = config.get("source")
     source_kind = _get_source_kind(config)
@@ -1301,6 +1342,7 @@ def python_config_to_docker(
             api_version=api_version,
             build_tools_to_uninstall=build_tools_to_uninstall,
         )
+    _validate_local_dependency_files(config_path, config)
     if pip_installer == "auto":
         if _image_supports_uv(base_image):
             pip_installer = "uv"
