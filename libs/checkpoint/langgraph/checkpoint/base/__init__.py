@@ -162,6 +162,13 @@ class DeltaChannelHistory(TypedDict):
       Always present; possibly empty. Already filtered to one channel.
       Writes stored at the target checkpoint itself are pending for the
       next super-step and are excluded.
+
+      Within a single checkpoint, writes are ordered by
+      `(task_path, task_id, idx)`: the order `apply_writes` applied them in
+      live. `task_id` is a hash of the path, so ordering by it permutes
+      parallel tasks writing one channel, and reducers need not be
+      order-invariant. Writes stored without a `task_path` (graph input, or
+      rows predating the column) sort first.
     * `seed` — the stored value at the nearest ancestor whose
       `channel_values[ch]` is populated. Omitted if the walk reached the
       root without finding any stored value (consumer treats absence as
@@ -610,6 +617,11 @@ class BaseCheckpointSaver(Generic[V]):
         channel. Savers with direct storage access (`InMemorySaver`,
         `PostgresSaver`) override for performance; the return contract is
         fixed here.
+
+        `PendingWrite` carries no `task_path`, so this default replays each
+        checkpoint's writes in `get_tuple`'s `pending_writes` order. Savers
+        that do not return `pending_writes` ordered by
+        `(task_path, task_id, idx)` must override it.
 
         Args:
             config: Configuration identifying the target checkpoint.
