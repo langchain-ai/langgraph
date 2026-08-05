@@ -489,7 +489,8 @@ class PostgresSaver(BasePostgresSaver):
             while True:
                 stage1_params: list[Any] = []
                 for ch in channels:
-                    stage1_params.extend([ch, ch])
+                    # ver_i lookup, blob channel, blob version lookup
+                    stage1_params.extend([ch, ch, ch])
                 stage1_params.extend(
                     [thread_id, checkpoint_ns, cursor, cursor, _DELTA_PAGE_SIZE]
                 )

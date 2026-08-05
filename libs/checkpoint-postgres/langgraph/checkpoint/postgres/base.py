@@ -199,27 +199,52 @@ class _DeltaStage2Row(TypedDict, total=False):
 
 
 def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
-    """Build stage 1 SQL with 2K parallel JSONB key lookups.
+    """Build stage 1 SQL with K parallel version lookups + seed probes.
 
     For channels=["messages", "files"] (with `paged=True`) the result is::
 
         SELECT checkpoint_id, parent_checkpoint_id,
                checkpoint -> 'channel_versions' ->> %s AS ver_0,
-               (checkpoint -> 'channel_values' -> %s) IS NOT NULL AS hs_0,
+               EXISTS (SELECT 1 FROM checkpoint_blobs b0
+                       WHERE b0.thread_id = checkpoints.thread_id
+                         AND b0.checkpoint_ns = checkpoints.checkpoint_ns
+                         AND b0.channel = %s
+                         AND b0.version = checkpoint -> 'channel_versions' ->> %s
+                         AND b0.type <> 'empty') AS hs_0,
                checkpoint -> 'channel_versions' ->> %s AS ver_1,
-               (checkpoint -> 'channel_values' -> %s) IS NOT NULL AS hs_1
+               EXISTS (...) AS hs_1
         FROM checkpoints
         WHERE thread_id = %s AND checkpoint_ns = %s
           AND (%s::text IS NULL OR checkpoint_id < %s)
         ORDER BY checkpoint_id DESC
         LIMIT %s
 
-    Channel names are passed as `%s` parameters (safe from SQL injection).
-    Only the column aliases `ver_i` / `hs_i` are interpolated into the
-    SQL string (i is bounded by len(channels) and uses safe identifiers).
+    `hs_i` ("has seed") asks whether a stored value exists for the channel at
+    this checkpoint. It probes `checkpoint_blobs` rather than testing for a key
+    in `checkpoint_values`, because `put` only leaves an inline marker there for
+    `_DeltaSnapshot` values — a plain value (what a thread migrated from a
+    pre-delta channel type leaves behind) is moved to the blobs table with no
+    marker, and was therefore invisible to the walk. The probe hits
+    `checkpoint_blobs`' primary key `(thread_id, checkpoint_ns, channel,
+    version)` exactly, so it is an index lookup per row per channel.
 
-    Caller must extend params with `[ch_0, ch_0, ch_1, ch_1, ...,
-    thread_id, ns, cursor, cursor, page_size]` when `paged=True`.
+    The `type <> 'empty'` predicate mirrors the check stage 2 already applies
+    when resolving the seed blob. `put` does not currently produce `empty` rows
+    on this path — `blob_versions` is filtered to keys present in
+    `channel_values`, so `_dump_blobs`' empty branch is unreachable from it —
+    but without the predicate the two stages could disagree: stage 1 would
+    terminate the walk on a row stage 2 then discards, yielding no seed *and* a
+    truncated write chain, which is the failure this function exists to avoid.
+
+    Channel names are passed as `%s` parameters (safe from SQL injection).
+    Only the column aliases `ver_i` / `hs_i` and the subquery alias `b{i}` are
+    interpolated into the SQL string (i is bounded by len(channels) and uses
+    safe identifiers).
+
+    Caller must extend params with `[ch_0, ch_0, ch_0, ch_1, ch_1, ch_1, ...,
+    thread_id, ns, cursor, cursor, page_size]` when `paged=True` — three per
+    channel: the version lookup, the blob's channel, and the version the blob
+    must match.
 
     When `paged=False`, the WHERE has no cursor predicate and there's no
     LIMIT/ORDER BY — kept as a non-public helper for tests/diagnostics.
@@ -228,7 +253,12 @@ def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
     for i in range(len(channels)):
         cols.append(
             f"checkpoint -> 'channel_versions' ->> %s AS ver_{i}, "
-            f"(checkpoint -> 'channel_values' -> %s) IS NOT NULL AS hs_{i}"
+            f"EXISTS (SELECT 1 FROM checkpoint_blobs b{i} "
+            f"WHERE b{i}.thread_id = checkpoints.thread_id "
+            f"AND b{i}.checkpoint_ns = checkpoints.checkpoint_ns "
+            f"AND b{i}.channel = %s "
+            f"AND b{i}.version = checkpoint -> 'channel_versions' ->> %s "
+            f"AND b{i}.type <> 'empty') AS hs_{i}"
         )
     sql = (
         "SELECT checkpoint_id, parent_checkpoint_id, "
