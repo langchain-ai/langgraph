@@ -1,9 +1,11 @@
 """Seed detection for `DeltaChannel` histories on Postgres.
 
-`put` only leaves an inline marker in `channel_values` for `_DeltaSnapshot`
-values. A plain value — what a thread migrated from a pre-delta channel type
-leaves behind — is moved to `checkpoint_blobs` with no marker, so the stage-1
-walk has to probe the blobs table to find it. See #8534.
+`put` splits stored values in two: primitives stay inline in the checkpoint's
+`channel_values`, everything else moves to `checkpoint_blobs`. Only
+`_DeltaSnapshot` leaves an inline marker behind when it moves, so the stage-1
+walk has to check both places — a blob probe alone misses inline primitives, and
+an inline-key check alone missed blob-stored plain values, which is what a thread
+migrated from a pre-delta channel type leaves behind. See #8534.
 """
 
 from __future__ import annotations
@@ -122,7 +124,7 @@ async def test_version_bump_without_a_value_does_not_hide_an_older_seed() -> Non
                 cp["channel_versions"][CHANNEL] = "v0"
                 new_versions[CHANNEL] = "v0"
             elif step == 1:
-                # Version bumped, value absent -> stored as an "empty" blob.
+                # Version bumped, value absent -> no blob row written.
                 cp["channel_versions"][CHANNEL] = "v1"
                 new_versions[CHANNEL] = "v1"
             else:
@@ -146,3 +148,57 @@ async def test_version_bump_without_a_value_does_not_hide_an_older_seed() -> Non
             f"value at step 0; got {entry.get('seed', '<missing>')}"
         )
         assert [w[2] for w in entry["writes"]] == ["w0", "w1", "w2"]
+
+
+@pytest.mark.asyncio
+async def test_inline_primitive_seed_is_found() -> None:
+    """`put` keeps `None`, `str`, `int`, `float` and `bool` in the checkpoint's
+    own `channel_values` with no blob row, so a blob probe alone cannot see
+    them. Stage 1 reads the inline value too and uses it when there is no blob.
+    """
+    async with AsyncPostgresSaver.from_conn_string(DEFAULT_URI) as saver:
+        await saver.setup()
+        for seed_value in (42, "x", 3.5, None):
+            _, head = await _build_chain(saver, seed_value)
+            entry = (
+                await saver.aget_delta_channel_history(config=head, channels=[CHANNEL])
+            )[CHANNEL]
+            if seed_value is None:
+                # A JSON null is indistinguishable from "no value stored", so
+                # the walk keeps going; replay from empty is the correct result.
+                assert "seed" not in entry
+            else:
+                assert entry.get("seed") == seed_value, (
+                    f"inline {type(seed_value).__name__} seed not found: "
+                    f"{entry.get('seed', '<missing>')!r}"
+                )
+                assert [w[2] for w in entry["writes"]] == ["w1", "w2"]
+
+
+@pytest.mark.asyncio
+async def test_inline_true_is_not_read_as_a_snapshot_marker() -> None:
+    """`put` inlines a literal `true` in `channel_values` as the marker for a
+    `_DeltaSnapshot`, which is also what a genuine `bool` channel holding
+    `True` looks like. A blob exists only in the snapshot case, so preferring
+    the blob keeps the two apart.
+    """
+    async with AsyncPostgresSaver.from_conn_string(DEFAULT_URI) as saver:
+        await saver.setup()
+
+        _, head = await _build_chain(saver, True)
+        entry = (
+            await saver.aget_delta_channel_history(config=head, channels=[CHANNEL])
+        )[CHANNEL]
+        assert entry.get("seed") is True, (
+            f"a real inline True must survive, got {entry.get('seed', '<missing>')!r}"
+        )
+
+        _, snap_head = await _build_chain(saver, _DeltaSnapshot(True))
+        snap_entry = (
+            await saver.aget_delta_channel_history(config=snap_head, channels=[CHANNEL])
+        )[CHANNEL]
+        seed = snap_entry.get("seed")
+        assert isinstance(seed, _DeltaSnapshot), (
+            f"the marker must resolve to the blob, not inline true; got {seed!r}"
+        )
+        assert seed.value is True
