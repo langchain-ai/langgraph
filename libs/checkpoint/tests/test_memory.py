@@ -681,7 +681,7 @@ class TestPreDeltaBlobTerminator:
         values = [v for _, _, v in result["writes"]]
         assert values == ["PRE-DELTA-WRITE", "B"]
 
-    def test_pre_delta_blob_terminates_walk_before_older_writes(self) -> None:
+    def test_seed_bounds_walk_without_dropping_its_own_writes(self) -> None:
         """The seed terminator bounds the walk: writes at ancestors OLDER than
         the seed are already folded into the seed value and must not be
         replayed. The seed ancestor's own write is not one of them — it
