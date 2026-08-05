@@ -1692,6 +1692,7 @@ dev = [
     { name = "anyio" },
     { name = "codespell" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "psycopg", extras = ["binary"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1708,6 +1709,7 @@ lint = [
 test = [
     { name = "anyio" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "psycopg", extras = ["binary"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1736,6 +1738,7 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -1751,6 +1754,7 @@ lint = [
 ]
 test = [
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
