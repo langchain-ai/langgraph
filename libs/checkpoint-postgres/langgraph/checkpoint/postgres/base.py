@@ -441,9 +441,12 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         for i, ch in enumerate(channels):
             if ch in seeded:
                 continue
-            # First-time entry: cursor starts at the target's parent.
+            # Pages start at the thread head, so the target may not have
+            # loaded yet; a `None` cursor would read as "target is a root".
             if ch not in walk_cursor_by_ch:
-                walk_cursor_by_ch[ch] = parent_of.get(target_id)
+                if target_id not in parent_of:
+                    continue
+                walk_cursor_by_ch[ch] = parent_of[target_id]
             cur_cid = walk_cursor_by_ch[ch]
             ch_chain = chain_by_ch[ch]
             hb_i = hb_by_i_by_cid[i]
