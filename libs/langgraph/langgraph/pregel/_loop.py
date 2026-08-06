@@ -1174,7 +1174,7 @@ class PregelLoop:
             self._delta_channels_forced_snapshot.update(
                 k
                 for k in self._delta_channels_awaiting_fork_snapshot
-                if (ch := self.channels.get(k)) is not None and ch.is_available()
+                if k in self.channels
             )
         # create new checkpoint
         channels_to_snapshot = (
