@@ -616,3 +616,46 @@ async def test_add_messages_to_delta_migration_preserves_message_history_async()
     assert [m.id for m in snap.values["messages"]] == ["h1", "a1"], (
         f"async tip hydration mismatch: got {[m.id for m in snap.values['messages']]}"
     )
+
+
+def test_post_migration_write_survives_reload_through_plain_seed() -> None:
+    """A write made on the first post-migration super-step must be preserved
+    when the checkpoint is reloaded (reconstructed via the plain seed)."""
+
+    checkpointer = InMemorySaver()
+    config = {"configurable": {"thread_id": "post-migration-reload"}}
+
+    binop = _binop_graph(checkpointer)
+    _drive(binop, config, "u", 3)
+
+    delta = _delta_graph(checkpointer)
+    live_result = delta.invoke({"items": ["POST"]}, config)
+    reloaded = delta.get_state(config)
+
+    assert list(live_result.get("items", [])) == ["u0", "u1", "u2", "POST"], (
+        f"sanity: live invoke should include POST, got {live_result.get('items')}"
+    )
+    assert list(reloaded.values.get("items", [])) == ["u0", "u1", "u2", "POST"], (
+        "post-migration write dropped on reload through plain seed: "
+        f"got {reloaded.values.get('items')}"
+    )
+
+
+def test_post_migration_reload_base_matches_optimized_override() -> None:
+    """The reference `BaseCheckpointSaver` path and the optimized
+    `InMemorySaver` override must agree once a post-migration write is
+    reconstructed through a plain seed (the scenario that triggers the
+    write-collection guard)."""
+
+    def _run(saver: Any) -> list:
+        config = {"configurable": {"thread_id": "parity"}}
+        _drive(_binop_graph(saver), config, "u", 2)
+        delta = _delta_graph(saver)
+        delta.invoke({"items": ["POST"]}, config)
+        return list(delta.get_state(config).values.get("items", []))
+
+    fast = _run(InMemorySaver())
+    slow = _run(_ThirdPartyStyleSaver())
+
+    assert fast == ["u0", "u1", "POST"], f"optimized override wrong: {fast}"
+    assert slow == fast, f"base fallback diverged from override: {slow} != {fast}"
