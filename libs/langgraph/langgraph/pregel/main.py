@@ -1159,7 +1159,7 @@ class Pregel(
             saver: Checkpointer to read with, as resolved by the caller from
                 `CONFIG_KEY_CHECKPOINTER` before falling back to `self.checkpointer`.
                 Required rather than defaulted because `self.checkpointer` is `None`
-                for a subgraph — it borrows the parent's saver through the config —
+                for a subgraph, which borrows the parent's saver through the config,
                 and a `DeltaChannel` silently hydrates empty without one.
             recurse: When set, resolve subgraph task states with this checkpointer
                 instead of returning a config that merely signals they exist.

@@ -2,7 +2,7 @@
 
 Regression suite for #8470.
 
-A subgraph is compiled without a checkpointer of its own — the parent lends it
+A subgraph is compiled without a checkpointer of its own. The parent lends it
 one through `CONFIG_KEY_CHECKPOINTER` at read time. `DeltaChannel` stores no
 value in `channel_values`, so hydrating it requires that saver to walk ancestors
 and replay their writes. Reading with `self.checkpointer` instead of the
@@ -286,3 +286,43 @@ def test_root_graph_update_state_preserves_delta_channel_history() -> None:
     app.update_state(config, {"msgs": ["manual"]})
 
     assert app.get_state(config).values == {"msgs": ["a1", "b1", "b2", "manual"]}
+
+
+def test_stateless_subgraph_persists_nothing() -> None:
+    """A `checkpointer=False` subgraph opts out of persistence entirely.
+
+    Its state is unavailable by design, and passing the caller's saver must not
+    start surfacing state for a subgraph that asked not to be checkpointed.
+    """
+    child = _child_builder(snapshot_frequency=1000).compile(checkpointer=False)
+    builder = StateGraph(child.builder.state_schema)
+    builder.add_node("child", child)
+    builder.add_edge(START, "child")
+    builder.add_edge("child", END)
+    app = builder.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "1"}}
+    app.invoke({}, config)
+
+    subgraph_namespaces = [
+        task.state["configurable"]["checkpoint_ns"]
+        for snapshot in app.get_state_history(config)
+        for task in snapshot.tasks
+        if task.name == "child" and isinstance(task.state, dict)
+    ]
+
+    assert subgraph_namespaces == []
+    assert app.get_state(config).values == {"msgs": ["a1", "b1", "b2"]}
+
+
+def test_completed_subgraph_exposes_no_task_state() -> None:
+    """`subgraphs=True` surfaces task state only while a task is pending.
+
+    Once the subgraph has finished there is no task to attach state to, for every
+    channel type alike. This is subgraph behaviour rather than delta replay, and
+    the fix leaves it untouched.
+    """
+    app = _build_nested_graph(InMemorySaver())
+    config = {"configurable": {"thread_id": "1"}}
+    app.invoke({}, config)
+
+    assert app.get_state(config, subgraphs=True).tasks == ()
