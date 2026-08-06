@@ -49,6 +49,33 @@ def test_trace_policy_transforms_recorded_inputs() -> None:
     assert seen["inputs"] == {"value": 1}
 
 
+def test_trace_policy_transforms_recorded_outputs() -> None:
+    seen: dict[str, Any] = {}
+
+    def process_outputs(out: Any) -> Any:
+        seen["outputs"] = out
+        return {"scrubbed_out": True}
+
+    graph = (
+        StateGraph(State)
+        .add_node("n", _incr, trace_policy=TracePolicy(process_outputs=process_outputs))
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile()
+    )
+
+    tracer = FakeTracer()
+    # the real graph output is unaffected by the trace policy
+    assert graph.invoke({"value": 1}, {"callbacks": [tracer]}) == {"value": 2}
+
+    run = _node_run(tracer, "n")
+    # the recorded output is transformed; the input is recorded as-is
+    assert run.inputs == {"value": 1}
+    assert run.outputs == {"scrubbed_out": True}
+    # process_outputs observed the real, untransformed output
+    assert seen["outputs"] == {"value": 2}
+
+
 def test_trace_policy_none_records_real_payloads() -> None:
     graph = (
         StateGraph(State)
