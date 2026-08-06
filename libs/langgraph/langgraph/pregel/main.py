@@ -1638,7 +1638,10 @@ class Pregel(
                 raise ValueError(f"Subgraph {recast} not found")
 
         def perform_superstep(
-            input_config: RunnableConfig, updates: Sequence[StateUpdate]
+            input_config: RunnableConfig,
+            updates: Sequence[StateUpdate],
+            *,
+            is_fork: bool,
         ) -> RunnableConfig:
             # get last checkpoint
             config = ensure_config(self.config, input_config)
@@ -1873,6 +1876,9 @@ class Pregel(
                     return perform_superstep(
                         patch_checkpoint_map(next_config, saved.metadata),
                         [item for lst in user_group_by.values() for item in lst],
+                        # The checkpoint just written clears tasks and carries
+                        # no delta snapshot, so a fork is still unsealed here.
+                        is_fork=is_fork,
                     )
 
                 return patch_checkpoint_map(next_config, saved.metadata)
@@ -2020,7 +2026,7 @@ class Pregel(
                     parents=saved.metadata.get("parents", {}) if saved else {},
                     saved_metadata=saved.metadata if saved else None,
                     is_fresh_thread=saved is None,
-                    is_fork=bool(config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)),
+                    is_fork=is_fork,
                 )
             )
             checkpoint = create_checkpoint(
@@ -2050,8 +2056,16 @@ class Pregel(
         current_config = patch_configurable(
             config, {CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID])}
         )
+        # Only the first superstep can fork. `perform_superstep` returns the
+        # config of the checkpoint it just wrote and the loop feeds that back
+        # in, so from the second superstep on the incoming config always names
+        # a checkpoint whether or not the caller addressed one.
+        is_fork = bool(config[CONF].get(CONFIG_KEY_CHECKPOINT_ID))
         for superstep in supersteps:
-            current_config = perform_superstep(current_config, superstep)
+            current_config = perform_superstep(
+                current_config, superstep, is_fork=is_fork
+            )
+            is_fork = False
         return current_config
 
     async def abulk_update_state(
@@ -2105,7 +2119,10 @@ class Pregel(
                 raise ValueError(f"Subgraph {recast} not found")
 
         async def aperform_superstep(
-            input_config: RunnableConfig, updates: Sequence[StateUpdate]
+            input_config: RunnableConfig,
+            updates: Sequence[StateUpdate],
+            *,
+            is_fork: bool,
         ) -> RunnableConfig:
             # get last checkpoint
             config = ensure_config(self.config, input_config)
@@ -2336,6 +2353,9 @@ class Pregel(
                     return await aperform_superstep(
                         patch_checkpoint_map(next_config, saved.metadata),
                         [item for lst in user_group_by.values() for item in lst],
+                        # The checkpoint just written clears tasks and carries
+                        # no delta snapshot, so a fork is still unsealed here.
+                        is_fork=is_fork,
                     )
 
                 return patch_checkpoint_map(
@@ -2481,7 +2501,7 @@ class Pregel(
                     parents=saved.metadata.get("parents", {}) if saved else {},
                     saved_metadata=saved.metadata if saved else None,
                     is_fresh_thread=saved is None,
-                    is_fork=bool(config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)),
+                    is_fork=is_fork,
                 )
             )
             checkpoint = create_checkpoint(
@@ -2510,8 +2530,16 @@ class Pregel(
         current_config = patch_configurable(
             config, {CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID])}
         )
+        # Only the first superstep can fork. `aperform_superstep` returns the
+        # config of the checkpoint it just wrote and the loop feeds that back
+        # in, so from the second superstep on the incoming config always names
+        # a checkpoint whether or not the caller addressed one.
+        is_fork = bool(config[CONF].get(CONFIG_KEY_CHECKPOINT_ID))
         for superstep in supersteps:
-            current_config = await aperform_superstep(current_config, superstep)
+            current_config = await aperform_superstep(
+                current_config, superstep, is_fork=is_fork
+            )
+            is_fork = False
         return current_config
 
     def update_state(
