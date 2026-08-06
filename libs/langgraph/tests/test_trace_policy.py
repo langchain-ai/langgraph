@@ -93,6 +93,40 @@ def test_trace_policy_none_records_real_payloads() -> None:
     assert run.outputs == {"value": 2}
 
 
+def test_trace_policy_processor_skipped_without_tracer() -> None:
+    def boom(_inp: Any) -> Any:
+        raise RuntimeError("processor must not run without a tracer")
+
+    graph = (
+        StateGraph(State)
+        .add_node("n", _incr, trace_policy=TracePolicy(process_inputs=boom))
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile()
+    )
+
+    # no tracer configured -> the trace-only processor never runs; execution is unaffected
+    assert graph.invoke({"value": 1}) == {"value": 2}
+
+
+def test_trace_policy_processor_error_does_not_break_execution() -> None:
+    def boom(_inp: Any) -> Any:
+        raise RuntimeError("processor failed")
+
+    graph = (
+        StateGraph(State)
+        .add_node("n", _incr, trace_policy=TracePolicy(process_inputs=boom))
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile()
+    )
+
+    tracer = FakeTracer()
+    # a raising processor must not abort the node; the untransformed input is recorded
+    assert graph.invoke({"value": 1}, {"callbacks": [tracer]}) == {"value": 2}
+    assert _node_run(tracer, "n").inputs == {"value": 1}
+
+
 @pytest.mark.anyio
 async def test_trace_policy_transforms_recorded_inputs_async() -> None:
     graph = (
