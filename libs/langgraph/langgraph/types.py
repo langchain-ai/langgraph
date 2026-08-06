@@ -533,12 +533,11 @@ class TracePolicy:
     """Configuration for how a node's run is traced.
 
     Scope: this only transforms what the node's *own* run records. Child runs created
-    by a traced `bound` runnable (e.g. a `RunnableLambda`, a chain, or a `prompt | model`)
-    and the root graph run are not affected. Plain function nodes are traced with
-    `trace=False`, so they have no such child runs.
+    by a traced `bound` runnable and the root graph run are not affected. Plain
+    function nodes are traced with `trace=False`, so they have no such child runs.
 
-    This is a trace-payload/latency tool, not a secret-redaction control. To redact
-    inputs/outputs across all runs (children included), use the LangSmith client's
+    Not intended to redact secrets. To redact inputs/outputs across all runs
+    (children included), use the LangSmith client's
     `hide_inputs`/`hide_outputs`/`anonymizer` instead.
     """
 
