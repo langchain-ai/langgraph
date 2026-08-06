@@ -2020,6 +2020,7 @@ class Pregel(
                     parents=saved.metadata.get("parents", {}) if saved else {},
                     saved_metadata=saved.metadata if saved else None,
                     is_fresh_thread=saved is None,
+                    is_fork=bool(config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)),
                 )
             )
             checkpoint = create_checkpoint(
@@ -2480,6 +2481,7 @@ class Pregel(
                     parents=saved.metadata.get("parents", {}) if saved else {},
                     saved_metadata=saved.metadata if saved else None,
                     is_fresh_thread=saved is None,
+                    is_fork=bool(config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)),
                 )
             )
             checkpoint = create_checkpoint(
