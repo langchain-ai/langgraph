@@ -71,6 +71,7 @@ __all__ = (
     "TimeoutPolicy",
     "CachePolicy",
     "TracePolicy",
+    "omit_payload",
     "Interrupt",
     "StateUpdate",
     "PregelTask",
@@ -552,6 +553,15 @@ class TracePolicy:
     node's trace run. Can be used to omit or summarize large payloads
     (e.g. message history). Not intended to affect the value returned by the node; avoid
     mutating arguments in place."""
+
+
+def omit_payload(_value: Any) -> dict[str, Any]:
+    """`TracePolicy` helper that records an empty payload, dropping the value entirely.
+
+    Use as `process_inputs` and/or `process_outputs` on a `TracePolicy` to keep a node's
+    span and its timing while omitting its inputs/outputs from the trace.
+    """
+    return {}
 
 
 _DEFAULT_INTERRUPT_ID = "placeholder-id"
