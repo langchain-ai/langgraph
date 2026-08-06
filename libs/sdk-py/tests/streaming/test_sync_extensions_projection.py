@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 
 from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.stream import SyncScopedStreamHandle
 from langgraph_sdk._sync.threads import SyncThreadsClient
 from streaming._events import custom_event, lifecycle_completed_event
 from streaming._sync_fake_server import SyncFakeServer
@@ -41,8 +42,6 @@ def test_sync_extension_projection_supports_namespace_scope_on_subgraph_handle()
         ]
     )
     with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
-        from langgraph_sdk._sync.stream import SyncScopedStreamHandle
-
         threads = SyncThreadsClient(SyncHttpClient(raw))
         with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             thread.run.start(input={})

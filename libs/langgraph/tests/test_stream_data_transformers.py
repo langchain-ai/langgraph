@@ -13,8 +13,10 @@ import operator
 import time
 from typing import Annotated, Any
 
+from langgraph.checkpoint.memory import InMemorySaver
 from typing_extensions import TypedDict
 
+from langgraph.config import get_stream_writer
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.stream._mux import StreamMux
@@ -488,7 +490,6 @@ class _State(TypedDict):
 
 
 def _my_node(state: _State) -> dict[str, Any]:
-    from langgraph.config import get_stream_writer
 
     writer = get_stream_writer()
     writer({"status": "working", "node": "my_node"})
@@ -606,7 +607,6 @@ def test_stream_events_v3_all_transformers_interleaved() -> None:
 
 def test_stream_events_v3_all_transformers_with_checkpointer() -> None:
     """All transformers with a checkpointer — run.checkpoints populated."""
-    from langgraph.checkpoint.memory import InMemorySaver
 
     builder = StateGraph(_State, input_schema=_State)
     builder.add_node("my_node", _my_node)
@@ -645,7 +645,6 @@ def test_stream_events_v3_all_transformers_with_checkpointer() -> None:
 
 def test_stream_events_v3_checkpoints_projection_opt_in() -> None:
     """run.checkpoints surfaces checkpoint data when opted in with a checkpointer."""
-    from langgraph.checkpoint.memory import InMemorySaver
 
     builder = StateGraph(_State, input_schema=_State)
     builder.add_node("my_node", _my_node)

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any
 
@@ -523,7 +524,6 @@ class TestBaseFallbackGetChannelWrites:
         `threading.local()` guard would let whichever task set it first
         short-circuit the other to `writes=[]`.
         """
-        import asyncio
 
         saver, thread_id, ns = self._build_saver_with_chain()
 

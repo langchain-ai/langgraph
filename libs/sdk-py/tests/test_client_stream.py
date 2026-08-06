@@ -8,7 +8,9 @@ import httpx
 import pytest
 from typing_extensions import assert_type
 
+from langgraph_sdk._async.runs import _wrap_stream_v2
 from langgraph_sdk._shared.utilities import _sse_to_v2_dict
+from langgraph_sdk._sync.runs import _wrap_stream_v2_sync
 from langgraph_sdk.client import HttpClient, SyncHttpClient
 from langgraph_sdk.schema import (
     CheckpointPayload,
@@ -380,7 +382,6 @@ def test_sse_to_v2_dict_values_with_interrupts() -> None:
 
 @pytest.mark.asyncio
 async def test_async_stream_v2_client_side_conversion() -> None:
-    from langgraph_sdk._async.runs import _wrap_stream_v2
 
     async def mock_stream() -> Any:
         yield StreamPart(event="metadata", data={"run_id": "r1"})
@@ -415,7 +416,6 @@ async def test_async_stream_v2_client_side_conversion() -> None:
 
 
 def test_sync_stream_v2_client_side_conversion() -> None:
-    from langgraph_sdk._sync.runs import _wrap_stream_v2_sync
 
     def mock_stream() -> Any:
         yield StreamPart(event="metadata", data={"run_id": "r1"})
