@@ -12,6 +12,10 @@ from dataclasses import dataclass
 from typing import Annotated, Any, TypeVar
 
 import pytest
+from langchain_core.language_models.chat_model_stream import (
+    AsyncChatModelStream,
+    ChatModelStream,
+)
 from langchain_core.messages import AIMessage, BaseMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel, ValidationError
@@ -24,6 +28,14 @@ from langgraph.func import entrypoint
 from langgraph.graph import StateGraph
 from langgraph.graph.message import MessagesState
 from langgraph.runtime import RunControl
+from langgraph.stream import (
+    AsyncGraphRunStream,
+    AsyncSubgraphRunStream,
+    GraphRunStream,
+    LifecyclePayload,
+    StreamChannel,
+    SubgraphRunStream,
+)
 from langgraph.types import (
     CheckpointPayload,
     CheckpointStreamPart,
@@ -1178,3 +1190,32 @@ def _check_type_narrowing(part: StreamPart[_StateT, _OutputT]) -> None:
         assert_type(part, DebugStreamPart[_StateT])
         assert_type(part["data"], DebugPayload[_StateT])
     assert_type(part["ns"], tuple[str, ...])
+
+
+# --- v3 stream_events return / projection typing checks ---
+# These functions are never called at runtime; `ty` validates the
+# assert_type calls. They pin the public typing surface of
+# stream_events(version="v3") / astream_events(version="v3"): the handle
+# type and the always-registered native projections.
+
+
+def _check_stream_events_v3_typing() -> None:
+    """Compile-time checks for sync v3 typing — never called at runtime."""
+    graph = _make_simple_graph().compile()
+    run = graph.stream_events(_SIMPLE_INPUT, version="v3")
+    assert_type(run, GraphRunStream)
+    assert_type(run.values, StreamChannel[dict[str, Any]])
+    assert_type(run.messages, StreamChannel[ChatModelStream])
+    assert_type(run.lifecycle, StreamChannel[LifecyclePayload])
+    assert_type(run.subgraphs, StreamChannel[SubgraphRunStream])
+
+
+async def _check_astream_events_v3_typing() -> None:
+    """Compile-time checks for async v3 typing — never called at runtime."""
+    graph = _make_simple_graph().compile()
+    run = await graph.astream_events(_SIMPLE_INPUT, version="v3")
+    assert_type(run, AsyncGraphRunStream)
+    assert_type(run.values, StreamChannel[dict[str, Any]])
+    assert_type(run.messages, StreamChannel[AsyncChatModelStream])
+    assert_type(run.lifecycle, StreamChannel[LifecyclePayload])
+    assert_type(run.subgraphs, StreamChannel[AsyncSubgraphRunStream])

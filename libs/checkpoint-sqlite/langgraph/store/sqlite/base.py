@@ -93,12 +93,74 @@ class SqliteIndexConfig(IndexConfig):
     pass
 
 
-def _namespace_to_text(
-    namespace: tuple[str, ...], handle_wildcards: bool = False
-) -> str:
+NS_MATCH_FUNCTION = "_langgraph_namespace_match"
+"""SQLite user function backing segment-aware namespace matching.
+
+Registered under a private name rather than overriding `REGEXP`, so a caller's
+own `REGEXP` is left untouched.
+"""
+
+
+def _namespace_match(prefix: str | None, pattern: str) -> int:
+    """Backing implementation of `NS_MATCH_FUNCTION`."""
+    if prefix is None:
+        return 0
+    return 1 if re.search(pattern, prefix) else 0
+
+
+def _escape_glob_literal(text: str) -> str:
+    """Escape GLOB metacharacters so `text` is matched literally.
+
+    GLOB has no `ESCAPE` clause, so metacharacters are wrapped in a character
+    class instead. `]` is literal outside a class and needs no escaping.
+    """
+    return text.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]")
+
+
+def _namespace_prefix_condition(
+    namespace_prefix: tuple[str, ...], column: str = "prefix"
+) -> tuple[str, tuple[str, ...]]:
+    """Build the SQL scoping a search to a namespace and its descendants.
+
+    Matches the namespace exactly or requires the `.` separator before any
+    remainder, so a prefix of `("foo",)` does not also match `("foobar",)`.
+
+    Uses GLOB rather than LIKE because SQLite's LIKE is case-insensitive for
+    ASCII, which would match `("FOO",)` for a prefix of `("foo",)` even though
+    `get`/`put`/`delete` compare with `=` and treat those as distinct.
+
+    An empty prefix is unconstrained and matches every namespace.
+    """
+    if not namespace_prefix:
+        return "TRUE", ()
+    path = _namespace_to_text(namespace_prefix)
+    condition = f"({column} = ? OR {column} GLOB ?)"
+    return condition, (path, f"{_escape_glob_literal(path)}.*")
+
+
+def _namespace_match_pattern(path: tuple[str, ...], match_type: str) -> str:
+    """Build a regex matching the dot-joined prefix on whole namespace segments.
+
+    Needed because neither LIKE nor GLOB can express "any character except the
+    separator": GLOB has character classes but no quantifier, so `[^.]*` still
+    crosses `.`. Matches how `InMemoryStore` compares namespaces element-wise.
+
+    `*` matches exactly one segment. Prefix matches stay open-ended but must end
+    on a separator; suffix matches anchor at the end and begin on one.
+
+    Examples:
+        prefix ("uid", "*", "alice") -> ^uid\\.[^.]+\\.alice(\\.|\\Z)
+        suffix ("alice",)            -> (^|\\.)alice\\Z
+    """
+    segments = ("[^.]+" if part == "*" else re.escape(part) for part in path)
+    body = r"\.".join(segments)
+    if match_type == "suffix":
+        return rf"(^|\.){body}\Z"
+    return rf"^{body}(\.|\Z)"
+
+
+def _namespace_to_text(namespace: tuple[str, ...]) -> str:
     """Convert namespace tuple to text string."""
-    if handle_wildcards:
-        namespace = tuple("%" if val == "*" else val for val in namespace)
     return ".".join(namespace)
 
 
@@ -461,8 +523,11 @@ class BaseSqliteStore:
                     else " AND " + " AND ".join(filter_conditions)
                 )
                 if op.namespace_prefix:
-                    prefix_filter_str = f"WHERE s.prefix LIKE ? {filter_str} "
-                    ns_args: Sequence = (f"{_namespace_to_text(op.namespace_prefix)}%",)
+                    ns_condition, ns_args_tuple = _namespace_prefix_condition(
+                        op.namespace_prefix, column="s.prefix"
+                    )
+                    prefix_filter_str = f"WHERE {ns_condition} {filter_str} "
+                    ns_args: Sequence = ns_args_tuple
                 else:
                     ns_args = ()
                     if filter_str:
@@ -503,12 +568,15 @@ class BaseSqliteStore:
                 ]
             # Regular search branch (no vector search)
             else:
-                base_query = """
+                ns_condition, ns_args_tuple = _namespace_prefix_condition(
+                    op.namespace_prefix
+                )
+                base_query = f"""
                     SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, NULL as score
                     FROM store
-                    WHERE prefix LIKE ?
+                    WHERE {ns_condition}
                 """
-                params = [f"{_namespace_to_text(op.namespace_prefix)}%"]
+                params = list(ns_args_tuple)
 
                 if filter_conditions:
                     params.extend(filter_params)
@@ -549,16 +617,28 @@ class BaseSqliteStore:
 
             if op.match_conditions:
                 for cond in op.match_conditions:
-                    if cond.match_type == "prefix":
-                        where_clauses.append("prefix LIKE ?")
-                        params.append(
-                            f"{_namespace_to_text(cond.path, handle_wildcards=True)}%"
-                        )
-                    elif cond.match_type == "suffix":
-                        where_clauses.append("prefix LIKE ?")
-                        params.append(
-                            f"%{_namespace_to_text(cond.path, handle_wildcards=True)}"
-                        )
+                    if cond.match_type in ("prefix", "suffix"):
+                        if not cond.path:
+                            # An empty path constrains nothing; skipping keeps it a
+                            # no-op rather than emitting a pattern that matches no
+                            # namespace at all.
+                            continue
+                        if cond.match_type == "prefix" and "*" not in cond.path:
+                            # Equivalent to the anchored pattern, but SQLite can
+                            # satisfy `=` and a trailing-wildcard GLOB from
+                            # store_prefix_idx. The user function is opaque to the
+                            # planner, so it would scan every row and call back
+                            # into Python for each one.
+                            condition, args = _namespace_prefix_condition(
+                                tuple(cond.path)
+                            )
+                            where_clauses.append(condition)
+                            params.extend(args)
+                        else:
+                            where_clauses.append(f"{NS_MATCH_FUNCTION}(prefix, ?) = 1")
+                            params.append(
+                                _namespace_match_pattern(cond.path, cond.match_type)
+                            )
                     else:
                         logger.warning(
                             "Unknown match_type in list_namespaces: %s", cond.match_type
@@ -785,6 +865,9 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         super().__init__()
         self._deserializer = deserializer
         self.conn = conn
+        # Registered here rather than in from_conn_string so a caller-supplied
+        # connection also gets it.
+        conn.create_function(NS_MATCH_FUNCTION, 2, _namespace_match, deterministic=True)
         self.lock = threading.Lock()
         self.is_setup = False
         self.index_config = index

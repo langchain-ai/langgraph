@@ -1,7 +1,11 @@
+import math
 import os
+import random
 import re
 import tempfile
+import time
 import uuid
+from collections import Counter, defaultdict
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from typing import Any, Literal, cast
@@ -18,7 +22,13 @@ from langgraph.store.base import (
 )
 
 from langgraph.store.sqlite import SqliteStore
-from langgraph.store.sqlite.base import SqliteIndexConfig
+from langgraph.store.sqlite.base import (
+    NS_MATCH_FUNCTION,
+    BaseSqliteStore,
+    SqliteIndexConfig,
+    _escape_glob_literal,
+    _namespace_match_pattern,
+)
 
 
 # Local embeddings implementation for testing vector search
@@ -27,10 +37,6 @@ class CharacterEmbeddings(Embeddings):
 
     def __init__(self, dims: int = 50, seed: int = 42):
         """Initialize with embedding dimensions and random seed."""
-        import math
-        import random
-        from collections import defaultdict
-
         self._rng = random.Random(seed)
         self.dims = dims
         # Create projection vector for each character lazily
@@ -42,9 +48,6 @@ class CharacterEmbeddings(Embeddings):
 
     def _embed_one(self, text: str) -> list[float]:
         """Embed a single text."""
-        import math
-        from collections import Counter
-
         counts = Counter(text)
         total = sum(counts.values())
 
@@ -332,8 +335,6 @@ class TestSqliteStore:
 
             # Test update
             # Small delay to ensure the updated timestamp is different
-            import time
-
             time.sleep(0.01)
 
             updated_value = {"title": "Updated Document", "content": "Hello, Updated!"}
@@ -1229,3 +1230,208 @@ def test_non_ascii(
         assert result3[0].key == "3"
         assert result4[0].key == "4"
         assert result5[0].key == "5"
+
+
+def test_escape_glob_literal() -> None:
+    assert _escape_glob_literal("users.alice") == "users.alice"
+    # "_" and "%" are LIKE wildcards but literal in GLOB, so they are left alone.
+    assert _escape_glob_literal("user_1") == "user_1"
+    assert _escape_glob_literal("100%") == "100%"
+    assert _escape_glob_literal("a*b") == "a[*]b"
+    assert _escape_glob_literal("a?b") == "a[?]b"
+    assert _escape_glob_literal("a[b") == "a[[]b"
+
+
+def test_namespace_match_pattern() -> None:
+    assert _namespace_match_pattern(("foo",), "prefix") == r"^foo(\.|\Z)"
+    assert (
+        _namespace_match_pattern(("uid", "*", "alice"), "prefix")
+        == r"^uid\.[^.]+\.alice(\.|\Z)"
+    )
+    assert _namespace_match_pattern(("alice",), "suffix") == r"(^|\.)alice\Z"
+
+
+def test_search_namespace_segment_boundary(store: SqliteStore) -> None:
+    """Prefix scoping must stop at namespace segment boundaries.
+
+    Namespaces are stored dot-joined, so matching the raw text also returns
+    siblings sharing leading characters.
+    """
+    for namespace in [
+        ("foo",),
+        ("foo", "child"),
+        ("foo", "child", "deep"),
+        ("foobar",),
+        ("foobar", "baz"),
+        ("foo2",),
+    ]:
+        store.put(namespace, "k", {"v": 1})
+
+    def _namespaces(prefix: tuple[str, ...]) -> set[tuple[str, ...]]:
+        return {item.namespace for item in store.search(prefix, limit=100)}
+
+    assert _namespaces(("foo",)) == {
+        ("foo",),
+        ("foo", "child"),
+        ("foo", "child", "deep"),
+    }
+    # The sibling scope is independent, not merely narrower.
+    assert _namespaces(("foobar",)) == {("foobar",), ("foobar", "baz")}
+    assert _namespaces(("foo2",)) == {("foo2",)}
+    assert _namespaces(("fo",)) == set()
+
+
+def test_search_namespace_wildcard_chars_are_literal(store: SqliteStore) -> None:
+    """LIKE and GLOB metacharacters in labels must be matched literally."""
+    for namespace in [
+        ("user_1",),
+        ("user_1", "child"),
+        ("userX1",),
+        ("a%b",),
+        ("axxb",),
+        ("star*",),
+        ("starX",),
+    ]:
+        store.put(namespace, "k", {"v": 1})
+
+    def _namespaces(prefix: tuple[str, ...]) -> set[tuple[str, ...]]:
+        return {item.namespace for item in store.search(prefix, limit=100)}
+
+    # Also asserts each namespace still matches itself, which catches escaping
+    # the equality arm by mistake.
+    assert _namespaces(("user_1",)) == {("user_1",), ("user_1", "child")}
+    assert _namespaces(("a%b",)) == {("a%b",)}
+    assert _namespaces(("star*",)) == {("star*",)}
+
+
+def test_search_namespace_is_case_sensitive(store: SqliteStore) -> None:
+    """Search must agree with get/put, which compare namespaces with `=`.
+
+    SQLite's LIKE is case-insensitive for ASCII, so matching with it conflated
+    namespaces that every other operation treats as distinct.
+    """
+    store.put(("Foo",), "k", {"v": "upper"})
+    store.put(("foo",), "k", {"v": "lower"})
+
+    assert {item.namespace for item in store.search(("foo",), limit=100)} == {("foo",)}
+    assert {item.namespace for item in store.search(("Foo",), limit=100)} == {("Foo",)}
+
+
+def test_list_namespaces_segment_boundary(store: SqliteStore) -> None:
+    for namespace in [
+        ("foo",),
+        ("foo", "child"),
+        ("foobar",),
+        ("foobar", "baz"),
+        ("uid", "users", "alice"),
+        ("uid", "users", "malice"),
+        ("uid", "a", "b", "alice"),
+    ]:
+        store.put(namespace, "k", {"v": 1})
+
+    assert set(store.list_namespaces(prefix=["foo"], limit=100)) == {
+        ("foo",),
+        ("foo", "child"),
+    }
+    # Suffix must align to a segment: "malice" does not end with the "alice"
+    # segment.
+    assert set(store.list_namespaces(suffix=["alice"], limit=100)) == {
+        ("uid", "users", "alice"),
+        ("uid", "a", "b", "alice"),
+    }
+    # "*" spans exactly one segment.
+    assert set(store.list_namespaces(prefix=["uid", "*", "alice"], limit=100)) == {
+        ("uid", "users", "alice"),
+    }
+    # Prefix matching stays open-ended across depth.
+    assert set(store.list_namespaces(prefix=["uid"], limit=100)) == {
+        ("uid", "users", "alice"),
+        ("uid", "users", "malice"),
+        ("uid", "a", "b", "alice"),
+    }
+
+
+def test_search_empty_prefix_is_unconstrained(store: SqliteStore) -> None:
+    """An empty prefix constrains nothing and must return every namespace."""
+    for namespace in [("a",), ("b", "c"), ("d", "e", "f")]:
+        store.put(namespace, "k", {"v": 1})
+
+    assert {item.namespace for item in store.search((), limit=100)} == {
+        ("a",),
+        ("b", "c"),
+        ("d", "e", "f"),
+    }
+
+
+def test_namespace_labels_with_trailing_newline(store: SqliteStore) -> None:
+    """Labels may contain newlines, and must not match a differently-named label.
+
+    Python's `$` also matches just before a trailing newline, so the patterns use
+    `\\Z` to anchor at the true end of the string.
+    """
+    store.put(("users", "alice"), "k", {"v": 1})
+    store.put(("users", "alice\n"), "k", {"v": 2})
+
+    assert set(store.list_namespaces(suffix=["alice"], limit=100)) == {
+        ("users", "alice"),
+    }
+    assert set(store.list_namespaces(prefix=["users", "alice"], limit=100)) == {
+        ("users", "alice"),
+    }
+
+
+def test_list_namespaces_prefix_uses_indexable_condition() -> None:
+    """Plain prefixes must use the indexable condition, not the match function.
+
+    A user function is opaque to the query planner, so it scans every row and
+    calls back into Python for each one. Only suffix and wildcard paths, which
+    no SQLite operator can express, need it.
+    """
+    store = BaseSqliteStore()
+
+    def where(match_type: str, path: tuple[str, ...]) -> str:
+        op = ListNamespacesOp(
+            match_conditions=(MatchCondition(match_type=match_type, path=path),),
+            max_depth=None,
+            limit=10,
+            offset=0,
+        )
+        query, _ = store._get_batch_list_namespaces_queries([(0, op)])[0]
+        return " ".join(query.split())
+
+    assert "GLOB" in where("prefix", ("uid", "users"))
+    assert NS_MATCH_FUNCTION not in where("prefix", ("uid", "users"))
+    # A label that merely contains "*" is not the wildcard.
+    assert "GLOB" in where("prefix", ("star*",))
+    # Wildcard and suffix cannot be expressed by GLOB, so they keep the function.
+    assert NS_MATCH_FUNCTION in where("prefix", ("uid", "*", "alice"))
+    assert NS_MATCH_FUNCTION in where("suffix", ("alice",))
+
+
+def test_list_namespaces_metacharacter_labels(store: SqliteStore) -> None:
+    """Metacharacters in labels are literal on both matching paths.
+
+    Plain prefixes take the `= OR GLOB` condition and wildcard/suffix paths take
+    the regex function, so escaping has to hold in two different syntaxes.
+    """
+    pairs = [
+        ("star*", "starX"),
+        ("q?m", "qXm"),
+        ("br[ack]et", "brXacXket"),
+        ("user_1", "userX1"),
+        ("a%b", "axxb"),
+        ("plus+", "plusX"),
+    ]
+    for label, decoy in pairs:
+        store.put((label,), "k", {"v": 1})
+        store.put((decoy,), "k", {"v": 1})
+        store.put((label, "child"), "k", {"v": 1})
+
+    for label, decoy in pairs:
+        found = set(store.list_namespaces(prefix=[label], limit=100))
+        assert found == {(label,), (label, "child")}
+        # The decoy differs only where the metacharacter would have matched.
+        assert (decoy,) not in found
+        assert set(store.list_namespaces(prefix=[label, "child"], limit=100)) == {
+            (label, "child"),
+        }

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-postgres"
-version = "3.1.0"
+version = "3.1.1"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 authors = []
 requires-python = ">=3.10"
@@ -64,6 +64,7 @@ lint.select = [
   "UP", # pyupgrade
   "B",  # flake8-bugbear
   "I",  # isort
+  "PLC0415",  # import-outside-top-level
   "UP", # pyupgrade
 ]
 lint.ignore = ["E501", "B008"]

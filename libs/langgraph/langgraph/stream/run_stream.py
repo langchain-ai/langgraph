@@ -12,7 +12,13 @@ from langgraph.stream._mux import StreamMux
 from langgraph.stream._types import ProtocolEvent
 
 if TYPE_CHECKING:
-    from langgraph.stream.transformers import SubgraphStatus
+    from langchain_core.language_models.chat_model_stream import (
+        AsyncChatModelStream,
+        ChatModelStream,
+    )
+
+    from langgraph.stream.stream_channel import StreamChannel
+    from langgraph.stream.transformers import LifecyclePayload, SubgraphStatus
 
 
 def _drive_until_done(pump: Callable[[], bool]) -> None:
@@ -47,6 +53,16 @@ class GraphRunStream:
         Returned by `Pregel.stream_events(version="v3")`, which is
         experimental and may change.
     """
+
+    # Native projections always registered by `stream_events(version="v3")`.
+    # Attached dynamically by the `setattr` loop in `__init__`; declared here
+    # so type checkers see them. Opt-in native projections (`updates`,
+    # `custom`, `checkpoints`, `debug`, `tasks`) are only present when their
+    # transformer is registered, so they are reached via `extensions[...]`.
+    values: StreamChannel[dict[str, Any]]
+    messages: StreamChannel[ChatModelStream]
+    lifecycle: StreamChannel[LifecyclePayload]
+    subgraphs: StreamChannel[SubgraphRunStream]
 
     def __init__(
         self,
@@ -328,6 +344,16 @@ class AsyncGraphRunStream:
         Awaited from `Pregel.astream_events(version="v3")`, which is
         experimental and may change.
     """
+
+    # Native projections always registered by `astream_events(version="v3")`.
+    # Attached dynamically by the `setattr` loop in `__init__`; declared here
+    # so type checkers see them. Opt-in native projections (`updates`,
+    # `custom`, `checkpoints`, `debug`, `tasks`) are only present when their
+    # transformer is registered, so they are reached via `extensions[...]`.
+    values: StreamChannel[dict[str, Any]]
+    messages: StreamChannel[AsyncChatModelStream]
+    lifecycle: StreamChannel[LifecyclePayload]
+    subgraphs: StreamChannel[AsyncSubgraphRunStream]
 
     def __init__(
         self,
