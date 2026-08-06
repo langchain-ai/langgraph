@@ -9391,7 +9391,7 @@ async def test_null_resume_disallowed_with_multiple_interrupts(
     }
     with pytest.raises(
         RuntimeError,
-        match="When there are multiple pending interrupts, you must specify the interrupt id when resuming.",
+        match="When there are multiple pending interrupts, you must specify the interrupt id when resuming.*interrupts#handling-multiple-interrupts",
     ):
         await graph.ainvoke(Command(resume="singular resume"), config=config)
 
