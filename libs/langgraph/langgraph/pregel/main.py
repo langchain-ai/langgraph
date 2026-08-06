@@ -724,6 +724,25 @@ class Pregel(
 
     input_channels: str | Sequence[str]
 
+    input_alias_map: dict[str, str] | None = None
+    """Mapping of alias -> field_name for Pydantic models with aliased fields.
+
+    Only the input boundary uses this — keys in `invoke({...})` /
+    `astream({...})` / `Command(update={...})` are translated alias →
+    field_name before they reach a channel.
+    """
+
+    output_alias_map: dict[str, str] | None = None
+    """Mapping of field_name -> alias for output serialization.
+
+    Populated only when the output schema is a Pydantic model with
+    `model_config = ConfigDict(serialize_by_alias=True)`. When set,
+    output sites (`stream` values/updates modes, `StateSnapshot.values`,
+    `invoke` return) emit keys using aliases rather than channel
+    (field) names, matching what Pydantic's own `.model_dump()` does
+    for the schema.
+    """
+
     step_timeout: float | None = None
     """Maximum time to wait for a step to complete, in seconds."""
 
@@ -768,6 +787,8 @@ class Pregel(
         interrupt_after_nodes: All | Sequence[str] = (),
         interrupt_before_nodes: All | Sequence[str] = (),
         input_channels: str | Sequence[str],
+        input_alias_map: dict[str, str] | None = None,
+        output_alias_map: dict[str, str] | None = None,
         step_timeout: float | None = None,
         debug: bool | None = None,
         checkpointer: Checkpointer = None,
@@ -814,6 +835,8 @@ class Pregel(
         self.interrupt_after_nodes = interrupt_after_nodes
         self.interrupt_before_nodes = interrupt_before_nodes
         self.input_channels = input_channels
+        self.input_alias_map = input_alias_map
+        self.output_alias_map = output_alias_map
         self.step_timeout = step_timeout
         self.debug = debug if debug is not None else get_debug()
         self.checkpointer = checkpointer
@@ -1142,6 +1165,20 @@ class Pregel(
                 checkpoint["channel_versions"].values()
             )
 
+    def _apply_output_aliases(self, values: Any) -> Any:
+        """Translate top-level channel keys to aliases for user-facing output.
+
+        Only applies when `self.output_alias_map` is set (i.e. the output
+        schema is a Pydantic model with `serialize_by_alias=True`). For
+        non-dict values (e.g. single-channel output where ``output_keys``
+        is a string), the value is returned unchanged. Nested values are
+        not touched — Pydantic's own model_dump handles deeper alias
+        propagation when consumers re-serialize.
+        """
+        if not self.output_alias_map or not isinstance(values, dict):
+            return values
+        return {self.output_alias_map.get(k, k): v for k, v in values.items()}
+
     def _prepare_state_snapshot(
         self,
         config: RunnableConfig,
@@ -1255,7 +1292,9 @@ class Pregel(
         )
         # assemble the state snapshot
         return StateSnapshot(
-            read_channels(channels, self.stream_channels_asis),
+            self._apply_output_aliases(
+                read_channels(channels, self.stream_channels_asis)
+            ),
             tuple(t.name for t in next_tasks.values() if not t.writes),
             patch_checkpoint_map(saved.config, saved.metadata),
             saved.metadata,
@@ -1379,7 +1418,9 @@ class Pregel(
         )
         # assemble the state snapshot
         return StateSnapshot(
-            read_channels(channels, self.stream_channels_asis),
+            self._apply_output_aliases(
+                read_channels(channels, self.stream_channels_asis)
+            ),
             tuple(t.name for t in next_tasks.values() if not t.writes),
             patch_checkpoint_map(saved.config, saved.metadata),
             saved.metadata,
@@ -1750,7 +1791,11 @@ class Pregel(
                         "Cannot apply multiple updates when updating as input"
                     )
 
-                if input_writes := deque(map_input(self.input_channels, values)):
+                if input_writes := deque(
+                    map_input(
+                        self.input_channels, values, alias_map=self.input_alias_map
+                    )
+                ):
                     apply_writes(
                         checkpoint,
                         channels,
@@ -2213,7 +2258,11 @@ class Pregel(
                         "Cannot apply multiple updates when updating as input"
                     )
 
-                if input_writes := deque(map_input(self.input_channels, values)):
+                if input_writes := deque(
+                    map_input(
+                        self.input_channels, values, alias_map=self.input_alias_map
+                    )
+                ):
                     apply_writes(
                         checkpoint,
                         channels,
@@ -2907,6 +2956,8 @@ class Pregel(
                 specs=self.channels,
                 output_keys=output_keys,
                 input_keys=self.input_channels,
+                input_alias_map=self.input_alias_map,
+                output_alias_map=self.output_alias_map,
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
@@ -3361,6 +3412,8 @@ class Pregel(
                 specs=self.channels,
                 output_keys=output_keys,
                 input_keys=self.input_channels,
+                input_alias_map=self.input_alias_map,
+                output_alias_map=self.output_alias_map,
                 stream_keys=self.stream_channels_asis,
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,

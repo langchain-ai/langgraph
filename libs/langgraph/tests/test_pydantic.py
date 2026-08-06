@@ -8,12 +8,15 @@ import uuid
 from enum import Enum
 from typing import Annotated, Literal, Optional
 
+import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import (
     BaseModel,
     ByteSize,
+    ConfigDict,
     Field,
     SecretStr,
+    alias_generators,
     confloat,
     conint,
     conlist,
@@ -360,3 +363,378 @@ def test_interrupt_functional_pydantic(sync_checkpointer: BaseCheckpointSaver) -
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar", "b": "bar"}
     assert called_count == 1
+
+
+def test_pydantic_aliased_fields():
+    """Test that Pydantic state with aliased fields works correctly.
+
+    When using Field(alias=...), the graph should accept input using either
+    the alias or the field name.
+
+    This addresses GitHub issue #2555.
+    """
+
+    class State(BaseModel):
+        foo: str = Field(alias="bar")
+        other: str = Field(default="default")
+
+    def node_fn(state: State) -> dict:
+        # The state should have the correct value
+        assert state.foo == "hello"
+        assert state.other == "default"
+        return {"other": "updated"}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias key
+    result = graph.invoke({"bar": "hello"})
+    assert result["foo"] == "hello"
+    assert result["other"] == "updated"
+
+
+def test_pydantic_multiple_aliased_fields():
+    """Test multiple aliased fields work correctly."""
+
+    class State(BaseModel):
+        first_name: str = Field(alias="firstName")
+        last_name: str = Field(alias="lastName")
+        age: int = Field(alias="userAge")
+
+    def node_fn(state: State) -> dict:
+        assert state.first_name == "John"
+        assert state.last_name == "Doe"
+        assert state.age == 30
+        return {"age": 31}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias keys (camelCase)
+    result = graph.invoke({"firstName": "John", "lastName": "Doe", "userAge": 30})
+    assert result["first_name"] == "John"
+    assert result["last_name"] == "Doe"
+    assert result["age"] == 31
+
+
+def test_pydantic_mixed_alias_and_fieldname():
+    """Test mixing aliased and non-aliased fields."""
+
+    class State(BaseModel):
+        aliased_field: str = Field(alias="aliasedField")
+        normal_field: str
+
+    def node_fn(state: State) -> dict:
+        assert state.aliased_field == "alias_value"
+        assert state.normal_field == "normal_value"
+        return {}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias for aliased field and field name for normal field
+    result = graph.invoke(
+        {"aliasedField": "alias_value", "normal_field": "normal_value"}
+    )
+    assert result["aliased_field"] == "alias_value"
+    assert result["normal_field"] == "normal_value"
+
+
+def test_pydantic_alias_with_reducer():
+    """Test aliased fields work with reducers."""
+
+    def concat_reducer(a: list[str], b: str | list[str]) -> list[str]:
+        if isinstance(b, list):
+            return a + b
+        return a + [b]
+
+    class State(BaseModel):
+        messages: Annotated[list[str], concat_reducer] = Field(
+            default_factory=list, alias="msgs"
+        )
+
+    def node_fn(state: State) -> dict:
+        return {"messages": "processed"}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias key and list initial value
+    result = graph.invoke({"msgs": ["hello"]})
+    assert result["messages"] == ["hello", "processed"]
+
+
+def test_pydantic_aliased_fields_multinode_with_checkpointer():
+    """Integration test: aliased fields with multiple nodes and checkpointing."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    class State(BaseModel):
+        user_name: str = Field(alias="userName")
+        step_count: int = Field(default=0, alias="stepCount")
+        processed_by: Annotated[list[str], lambda a, b: a + [b]] = Field(
+            default_factory=list, alias="processedBy"
+        )
+
+    def node_a(state: State) -> dict:
+        assert state.user_name == "Alice"
+        return {"step_count": state.step_count + 1, "processed_by": "node_a"}
+
+    def node_b(state: State) -> dict:
+        assert state.user_name == "Alice"
+        assert state.step_count == 1
+        assert "node_a" in state.processed_by
+        return {"step_count": state.step_count + 1, "processed_by": "node_b"}
+
+    def node_c(state: State) -> dict:
+        assert state.step_count == 2
+        assert state.processed_by == ["node_a", "node_b"]
+        return {"step_count": state.step_count + 1, "processed_by": "node_c"}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_node("node_c", node_c)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_b", "node_c")
+    builder.add_edge("node_c", END)
+
+    # Test without checkpointer - full run
+    graph = builder.compile()
+    result = graph.invoke({"userName": "Alice"})
+    assert result["user_name"] == "Alice"
+    assert result["step_count"] == 3
+    assert result["processed_by"] == ["node_a", "node_b", "node_c"]
+
+    # Test with checkpointer and interrupt
+    checkpointer = InMemorySaver()
+    graph_with_cp = builder.compile(
+        checkpointer=checkpointer, interrupt_after=["node_a"]
+    )
+
+    config = {"configurable": {"thread_id": "test-1"}}
+
+    # First invocation - should stop after node_a
+    result1 = graph_with_cp.invoke({"userName": "Alice"}, config)
+    assert result1["step_count"] == 1
+    assert result1["processed_by"] == ["node_a"]
+
+    # Check state
+    state = graph_with_cp.get_state(config)
+    assert state.next == ("node_b",)
+
+    # Resume - should complete
+    result2 = graph_with_cp.invoke(None, config)
+    assert result2["step_count"] == 3
+    assert result2["processed_by"] == ["node_a", "node_b", "node_c"]
+
+
+@pytest.mark.anyio
+async def test_pydantic_aliased_fields_async():
+    """Integration test: aliased fields with async graph."""
+
+    class State(BaseModel):
+        query: str = Field(alias="q")
+        result: str = Field(default="", alias="res")
+
+    async def process(state: State) -> dict:
+        assert state.query == "hello"
+        return {"result": f"processed: {state.query}"}
+
+    builder = StateGraph(State)
+    builder.add_node("process", process)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test async invoke with alias
+    result = await graph.ainvoke({"q": "hello"})
+    assert result["query"] == "hello"
+    assert result["result"] == "processed: hello"
+
+
+def test_pydantic_alias_generator_to_camel():
+    """alias_generator=to_camel is the canonical pattern for JSON APIs.
+
+    Without the fix for #2555, Pydantic rejects the camelCase input because
+    the state schema has snake_case field names. This confirms the most
+    common real-world use case works end-to-end.
+    """
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+        )
+        user_id: str
+        display_name: str
+        retry_count: int = 0
+
+    def node_fn(state: State) -> dict:
+        assert state.user_id == "u-1"
+        assert state.display_name == "Alice"
+        return {"retry_count": state.retry_count + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("n", node_fn)
+    builder.add_edge(START, "n")
+    builder.add_edge("n", END)
+    graph = builder.compile()
+
+    result = graph.invoke({"userId": "u-1", "displayName": "Alice"})
+    assert result["user_id"] == "u-1"
+    assert result["display_name"] == "Alice"
+    assert result["retry_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Output-side alias support (serialize_by_alias=True)
+# ---------------------------------------------------------------------------
+
+
+def test_output_keys_use_alias_when_serialize_by_alias_set():
+    """`invoke` return + `stream` chunks use alias keys when the output schema
+    sets ``model_config = ConfigDict(serialize_by_alias=True)``."""
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+            serialize_by_alias=True,
+        )
+        user_id: str
+        display_name: str
+
+    def node(state: State) -> dict:
+        return {"display_name": state.display_name + "!"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("n", node)
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile()
+    )
+
+    # invoke: top-level keys are aliases (camelCase), not field names.
+    result = graph.invoke({"userId": "u-1", "displayName": "Alice"})
+    assert "userId" in result and "displayName" in result
+    assert "user_id" not in result and "display_name" not in result
+    assert result["userId"] == "u-1"
+    assert result["displayName"] == "Alice!"
+
+    # stream(values): same keys on each yielded chunk.
+    chunks = list(
+        graph.stream({"userId": "u-1", "displayName": "Alice"}, stream_mode="values")
+    )
+    assert chunks, "expected at least one values chunk"
+    for chunk in chunks:
+        # Every dict-shaped chunk should use aliases.
+        if isinstance(chunk, dict) and chunk:
+            assert "userId" in chunk or "displayName" in chunk
+            assert "user_id" not in chunk
+            assert "display_name" not in chunk
+
+
+def test_output_keys_unchanged_without_serialize_by_alias():
+    """Without serialize_by_alias=True, output keys remain field names —
+    no behaviour change vs current main."""
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+            # serialize_by_alias intentionally absent
+        )
+        user_id: str
+
+    def node(state: State) -> dict:
+        return {"user_id": state.user_id + "-x"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("n", node)
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile()
+    )
+    result = graph.invoke({"userId": "u-1"})
+    # Output keyed by field name, not alias.
+    assert "user_id" in result
+    assert "userId" not in result
+    assert result["user_id"] == "u-1-x"
+
+
+def test_stream_updates_use_alias_when_serialize_by_alias_set():
+    """`stream_mode='updates'` chunks key channel updates by alias."""
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+            serialize_by_alias=True,
+        )
+        user_id: str
+        display_name: str = ""
+
+    def node(state: State) -> dict:
+        return {"display_name": "Bob"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("n", node)
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile()
+    )
+
+    update_chunks = list(graph.stream({"userId": "u-1"}, stream_mode="updates"))
+    # One update from node "n"; its dict should be keyed by alias.
+    payloads = [v for chunk in update_chunks for v in chunk.values()]
+    assert any(isinstance(p, dict) and "displayName" in p for p in payloads)
+    assert not any(isinstance(p, dict) and "display_name" in p for p in payloads)
+
+
+def test_get_state_snapshot_values_use_alias_when_serialize_by_alias_set():
+    """`StateSnapshot.values` uses alias keys when serialize_by_alias=True."""
+
+    class State(BaseModel):
+        model_config = ConfigDict(
+            alias_generator=alias_generators.to_camel,
+            populate_by_name=True,
+            serialize_by_alias=True,
+        )
+        user_id: str
+        display_name: str
+
+    def node(state: State) -> dict:
+        return {"display_name": state.display_name + "!"}
+
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    graph = (
+        StateGraph(State)
+        .add_node("n", node)
+        .add_edge(START, "n")
+        .add_edge("n", END)
+        .compile(checkpointer=InMemorySaver())
+    )
+
+    config = {"configurable": {"thread_id": "t-1"}}
+    graph.invoke({"userId": "u-1", "displayName": "Alice"}, config=config)
+    snap = graph.get_state(config)
+
+    assert "userId" in snap.values and "displayName" in snap.values
+    assert "user_id" not in snap.values and "display_name" not in snap.values
