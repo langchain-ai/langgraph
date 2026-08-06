@@ -545,12 +545,14 @@ class TracePolicy:
     process_inputs: Callable[[Any], Any] | None = None
     """Optional callable to transform the node's input before it is recorded on the
     node's trace run. Can be used to omit or summarize large payloads
-    (e.g. message history). Does not affect the value passed to the node."""
+    (e.g. message history). Not intended to affect the value passed to the node; avoid
+    mutating arguments in place."""
 
     process_outputs: Callable[[Any], Any] | None = None
     """Optional callable to transform the node's output before it is recorded on the
     node's trace run. Can be used to omit or summarize large payloads
-    (e.g. message history). Does not affect the value passed to the node."""
+    (e.g. message history). Not intended to affect the value returned by the node; avoid
+    mutating arguments in place."""
 
 
 _DEFAULT_INTERRUPT_ID = "placeholder-id"
