@@ -11,9 +11,10 @@ same values. ``full`` channels store complete ``channel_values`` and need no
 replay, so the plain channel is the oracle: after a fork the two must agree.
 
 Coverage: fork by ``invoke`` with new input (sync/async, all durabilities),
-fork off the checkpoint that predates the thread's first input, fork by
-``update_state`` / ``aupdate_state``, and a guard that an unaddressed run still
-follows the normal ``snapshot_frequency`` cadence.
+fork off the checkpoint that predates the thread's first input (sync/async),
+fork by ``update_state`` / ``aupdate_state``, and guards that neither an
+unaddressed run nor an unaddressed multi-superstep ``bulk_update_state``
+departs from the normal ``snapshot_frequency`` cadence.
 """
 
 from collections.abc import Sequence
@@ -28,7 +29,7 @@ from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import StateGraph
-from langgraph.types import Durability, StateSnapshot
+from langgraph.types import Durability, StateSnapshot, StateUpdate
 
 pytestmark = pytest.mark.anyio
 
@@ -80,6 +81,17 @@ def _at(config: RunnableConfig, snapshot: StateSnapshot) -> RunnableConfig:
 
 def _input(marker: str) -> dict:
     return {"log": [marker], "plain": [marker]}
+
+
+def _snapshotted_checkpoints(
+    checkpointer: BaseCheckpointSaver, config: RunnableConfig
+) -> list[str]:
+    """Ids of this thread's checkpoints carrying a ``log`` snapshot blob."""
+    return [
+        tuple_.config["configurable"]["checkpoint_id"]
+        for tuple_ in checkpointer.list(config)
+        if isinstance(tuple_.checkpoint["channel_values"].get("log"), _DeltaSnapshot)
+    ]
 
 
 def _assert_fork_is_clean(state: StateSnapshot, abandoned: str) -> None:
@@ -241,8 +253,27 @@ def test_unaddressed_run_keeps_snapshot_cadence(
     graph.invoke(_input("in-1"), config, durability=durability)
     graph.invoke(_input("in-2"), config, durability=durability)
 
-    assert not [
-        tuple_.config["configurable"]["checkpoint_id"]
-        for tuple_ in sync_checkpointer.list(config)
-        if isinstance(tuple_.checkpoint["channel_values"].get("log"), _DeltaSnapshot)
-    ]
+    assert not _snapshotted_checkpoints(sync_checkpointer, config)
+
+
+def test_unaddressed_bulk_update_keeps_snapshot_cadence(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """A multi-superstep ``bulk_update_state`` forks at most once, at the head.
+
+    ``perform_superstep`` returns the config of the checkpoint it just wrote
+    and the driver feeds that back in, so every superstep after the first
+    receives a config naming a checkpoint even when the caller addressed none.
+    Deriving the fork flag from that config snapshots the whole growing value
+    once per superstep.
+    """
+    config = _thread("t")
+    graph = _build(sync_checkpointer, "first")
+    graph.invoke(_input("in-1"), config)
+
+    graph.bulk_update_state(
+        config,
+        [[StateUpdate(_input(f"u{i}"), "n")] for i in range(4)],
+    )
+
+    assert not _snapshotted_checkpoints(sync_checkpointer, config)
