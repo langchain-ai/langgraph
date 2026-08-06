@@ -142,29 +142,6 @@ def check_capabilities(runner) -> DockerCapabilities:
     )
 
 
-def debugger_compose(*, port: int | None = None, base_url: str | None = None) -> dict:
-    if port is None:
-        return ""
-
-    config = {
-        "langgraph-debugger": {
-            "image": "langchain/langgraph-debugger",
-            "restart": "on-failure",
-            "depends_on": {
-                "langgraph-postgres": {"condition": "service_healthy"},
-            },
-            "ports": [f'"{port}:3968"'],
-        }
-    }
-
-    if base_url:
-        config["langgraph-debugger"]["environment"] = {
-            "VITE_STUDIO_LOCAL_GRAPH_URL": base_url
-        }
-
-    return config
-
-
 # Function to convert dictionary to YAML
 def dict_to_yaml(d: dict, *, indent: int = 0) -> str:
     """Convert a dictionary to a YAML string."""
@@ -191,8 +168,6 @@ def compose_as_dict(
     capabilities: DockerCapabilities,
     *,
     port: int,
-    debugger_port: int | None = None,
-    debugger_base_url: str | None = None,
     # postgres://user:password@host:port/database?option=value
     postgres_uri: str | None = None,
     # If you are running against an already-built image, you can pass it here
@@ -253,12 +228,6 @@ def compose_as_dict(
         else:
             services["langgraph-postgres"]["healthcheck"]["interval"] = "5s"
 
-    # Add optional debugger service if debugger_port is specified
-    if debugger_port:
-        services["langgraph-debugger"] = debugger_compose(
-            port=debugger_port, base_url=debugger_base_url
-        )["langgraph-debugger"]
-
     # Add langgraph-api service
     api_environment = {
         "REDIS_URI": "redis://langgraph-redis:6379",
@@ -305,8 +274,6 @@ def compose(
     capabilities: DockerCapabilities,
     *,
     port: int,
-    debugger_port: int | None = None,
-    debugger_base_url: str | None = None,
     # postgres://user:password@host:port/database?option=value
     postgres_uri: str | None = None,
     image: str | None = None,
@@ -318,8 +285,6 @@ def compose(
     compose_content = compose_as_dict(
         capabilities,
         port=port,
-        debugger_port=debugger_port,
-        debugger_base_url=debugger_base_url,
         postgres_uri=postgres_uri,
         image=image,
         base_image=base_image,

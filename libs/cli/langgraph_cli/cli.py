@@ -140,17 +140,6 @@ OPT_VERBOSE = click.option(
     help="Show more output from the server logs",
 )
 OPT_WATCH = click.option("--watch", is_flag=True, help="Restart on file changes")
-OPT_DEBUGGER_PORT = click.option(
-    "--debugger-port",
-    type=int,
-    help="Pull the debugger image locally and serve the UI on specified port",
-)
-OPT_DEBUGGER_BASE_URL = click.option(
-    "--debugger-base-url",
-    type=str,
-    help="URL used by the debugger to access LangGraph API. Defaults to http://127.0.0.1:[PORT]",
-)
-
 OPT_POSTGRES_URI = click.option(
     "--postgres-uri",
     help="Postgres URI to use for the database. Defaults to launching a local database",
@@ -248,8 +237,6 @@ cli.add_command(deploy)
 @OPT_DOCKER_COMPOSE
 @OPT_CONFIG
 @OPT_VERBOSE
-@OPT_DEBUGGER_PORT
-@OPT_DEBUGGER_BASE_URL
 @OPT_WATCH
 @OPT_POSTGRES_URI
 @OPT_API_VERSION
@@ -284,8 +271,6 @@ def up(
     watch: bool,
     wait: bool,
     verbose: bool,
-    debugger_port: int | None,
-    debugger_base_url: str | None,
     postgres_uri: str | None,
     api_version: str | None,
     engine_runtime_mode: str,
@@ -308,8 +293,6 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             pull=pull,
             watch=watch,
             verbose=verbose,
-            debugger_port=debugger_port,
-            debugger_base_url=debugger_base_url,
             postgres_uri=postgres_uri,
             api_version=api_version,
             engine_runtime_mode=engine_runtime_mode,
@@ -337,20 +320,12 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             if "unpacking to docker.io" in line:
                 set("Starting...")
             elif "Application startup complete" in line:
-                debugger_origin = (
-                    f"http://localhost:{debugger_port}"
-                    if debugger_port
-                    else "https://smith.langchain.com"
-                )
-                debugger_base_url_query = (
-                    debugger_base_url or f"http://127.0.0.1:{port}"
-                )
                 set("")
                 sys.stdout.write(
                     f"""Ready!
 - API: http://localhost:{port}
 - Docs: http://localhost:{port}/docs
-- LangGraph Studio: {debugger_origin}/studio/?baseUrl={debugger_base_url_query}
+- LangGraph Studio: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:{port}
 """
                 )
                 sys.stdout.flush()
@@ -935,8 +910,6 @@ def prepare_args_and_stdin(
     docker_compose: pathlib.Path | None,
     port: int,
     watch: bool,
-    debugger_port: int | None = None,
-    debugger_base_url: str | None = None,
     postgres_uri: str | None = None,
     api_version: str | None = None,
     engine_runtime_mode: str = "combined_queue_worker",
@@ -950,8 +923,6 @@ def prepare_args_and_stdin(
     stdin = langgraph_cli.docker.compose(
         capabilities,
         port=port,
-        debugger_port=debugger_port,
-        debugger_base_url=debugger_base_url,
         postgres_uri=postgres_uri,
         image=image,
         base_image=base_image,
@@ -989,8 +960,6 @@ def prepare(
     pull: bool,
     watch: bool,
     verbose: bool,
-    debugger_port: int | None = None,
-    debugger_base_url: str | None = None,
     postgres_uri: str | None = None,
     api_version: str | None = None,
     engine_runtime_mode: str = "combined_queue_worker",
@@ -1032,8 +1001,6 @@ def prepare(
         docker_compose=docker_compose,
         port=port,
         watch=watch,
-        debugger_port=debugger_port,
-        debugger_base_url=debugger_base_url or f"http://127.0.0.1:{port}",
         postgres_uri=postgres_uri,
         api_version=api_version,
         engine_runtime_mode=engine_runtime_mode,
