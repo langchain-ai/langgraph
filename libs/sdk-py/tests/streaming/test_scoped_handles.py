@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+from typing import cast
+from unittest.mock import MagicMock
+
 import httpx
+import pytest
+from langchain_protocol import Event
 
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.threads import ThreadsClient
@@ -445,6 +451,56 @@ def test_scoped_handle_inboxes_bounded_by_max_queue_size():
     assert handle._messages_inbox.maxsize == 16
     assert handle._tools_inbox.maxsize == 16
     assert handle._tasks_inbox.maxsize == 16
+
+
+def test_root_messages_inbox_bounded_by_max_queue_size():
+    """Root messages inbox must reserve one terminal sentinel slot."""
+    from langgraph_sdk._async.stream import AsyncThreadStream
+
+    thread = AsyncThreadStream(
+        http=MagicMock(),
+        thread_id="t-1",
+        assistant_id="agent",
+        max_queue_size=16,
+    )
+
+    inbox = thread._activate_root_messages_inbox()
+
+    assert inbox.maxsize == 17
+
+
+def test_subgraphs_root_message_overflow_raises_runtime_error():
+    """Overflowing the root messages inbox must fail explicitly."""
+    from langgraph_sdk._async.stream import _SubgraphsProjection
+
+    inbox: asyncio.Queue[Event | None] = asyncio.Queue(maxsize=2)
+    inbox.put_nowait(cast(Event, message_start_event(seq=1, message_id="msg-1")))
+
+    with pytest.raises(RuntimeError, match="Root messages inbox exceeded"):
+        _SubgraphsProjection._put_root_message(
+            inbox,
+            cast(
+                Event,
+                message_text_delta_event(seq=2, text="overflow", message_id="msg-1"),
+            ),
+        )
+
+
+def test_subgraphs_root_message_close_preserves_full_inbox():
+    """Closing a full root messages inbox must not evict buffered events."""
+    from langgraph_sdk._async.stream import _SubgraphsProjection
+
+    inbox: asyncio.Queue[Event | None] = asyncio.Queue(maxsize=3)
+    first = cast(Event, message_start_event(seq=1, message_id="msg-1"))
+    second = cast(Event, message_finish_event(seq=2, message_id="msg-1"))
+    inbox.put_nowait(first)
+    inbox.put_nowait(second)
+
+    _SubgraphsProjection._signal_root_inbox_closed(inbox)
+
+    assert inbox.get_nowait() is first
+    assert inbox.get_nowait() is second
+    assert inbox.get_nowait() is None
 
 
 async def test_child_handle_inherits_max_queue_size_from_parent():

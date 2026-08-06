@@ -954,6 +954,34 @@ class _SyncSubgraphsProjection:
     def __iter__(self) -> Iterator[SyncScopedStreamHandle]:
         return self._subgraphs_iter()
 
+    @staticmethod
+    def _put_root_message(root_inbox: queue.Queue[Event | None], item: Event) -> None:
+        if root_inbox.maxsize > 0 and root_inbox.qsize() >= root_inbox.maxsize - 1:
+            raise RuntimeError(
+                "Root messages inbox exceeded max_queue_size while buffering "
+                "root-scope messages. Iterate thread.messages concurrently "
+                "or increase max_queue_size."
+            )
+        try:
+            root_inbox.put_nowait(item)
+        except queue.Full as exc:
+            raise RuntimeError(
+                "Root messages inbox exceeded max_queue_size while buffering "
+                "root-scope messages. Iterate thread.messages concurrently "
+                "or increase max_queue_size."
+            ) from exc
+
+    @staticmethod
+    def _signal_root_inbox_closed(root_inbox: queue.Queue[Event | None]) -> None:
+        try:
+            root_inbox.put_nowait(None)
+        except queue.Full as exc:
+            raise RuntimeError(
+                "Root messages inbox exceeded max_queue_size while closing "
+                "root-scope messages. Iterate thread.messages concurrently "
+                "or increase max_queue_size."
+            ) from exc
+
     def _subgraphs_iter(self) -> Iterator[SyncScopedStreamHandle]:
         if self._thread._transport is None:
             raise RuntimeError("SyncThreadStream not entered — use `with`.")
@@ -986,7 +1014,7 @@ class _SyncSubgraphsProjection:
                     and item.get("method") == "messages"
                     and tuple(_event_namespace(params_field)) == self._scope
                 ):
-                    root_inbox.put_nowait(item)
+                    self._put_root_message(root_inbox, item)
                 for handle in decoder.feed(cast(dict[str, Any], item)):
                     yield handle
         finally:
@@ -1007,7 +1035,7 @@ class _SyncSubgraphsProjection:
                     handle._finish(terminal_status)
             self._thread._unregister_subscription(sub.id)
             if root_inbox is not None:
-                root_inbox.put_nowait(None)
+                self._signal_root_inbox_closed(root_inbox)
 
 
 class _SyncExtensionsProjection:
@@ -1222,7 +1250,7 @@ class SyncThreadStream:
 
     def _activate_root_messages_inbox(self) -> queue.Queue[Event | None]:
         if self._root_messages_inbox is None:
-            self._root_messages_inbox = queue.Queue()
+            self._root_messages_inbox = queue.Queue(maxsize=1025)
         return self._root_messages_inbox
 
     def _register_active_message_stream(self, stream: ChatModelStream) -> None:

@@ -911,6 +911,34 @@ class _SubgraphsProjection:
     def __aiter__(self) -> AsyncIterator[ScopedStreamHandle]:
         return self._subgraphs_iter()
 
+    @staticmethod
+    def _put_root_message(root_inbox: asyncio.Queue[Event | None], item: Event) -> None:
+        if root_inbox.maxsize > 0 and root_inbox.qsize() >= root_inbox.maxsize - 1:
+            raise RuntimeError(
+                "Root messages inbox exceeded max_queue_size while buffering "
+                "root-scope messages. Iterate thread.messages concurrently "
+                "or increase max_queue_size."
+            )
+        try:
+            root_inbox.put_nowait(item)
+        except asyncio.QueueFull as exc:
+            raise RuntimeError(
+                "Root messages inbox exceeded max_queue_size while buffering "
+                "root-scope messages. Iterate thread.messages concurrently "
+                "or increase max_queue_size."
+            ) from exc
+
+    @staticmethod
+    def _signal_root_inbox_closed(root_inbox: asyncio.Queue[Event | None]) -> None:
+        try:
+            root_inbox.put_nowait(None)
+        except asyncio.QueueFull as exc:
+            raise RuntimeError(
+                "Root messages inbox exceeded max_queue_size while closing "
+                "root-scope messages. Iterate thread.messages concurrently "
+                "or increase max_queue_size."
+            ) from exc
+
     async def _subgraphs_iter(self) -> AsyncGenerator[ScopedStreamHandle, None]:
         if self._thread._transport is None:
             raise RuntimeError("AsyncThreadStream not entered - use `async with`.")
@@ -943,7 +971,7 @@ class _SubgraphsProjection:
                     and item.get("method") == "messages"
                     and tuple(_event_namespace(params_field)) == self._scope
                 ):
-                    root_inbox.put_nowait(item)
+                    self._put_root_message(root_inbox, item)
                 for handle in decoder.feed(item):
                     yield handle
         finally:
@@ -961,7 +989,7 @@ class _SubgraphsProjection:
                     handle._finish(terminal_status)
             self._thread._unregister_subscription(sub.id)
             if root_inbox is not None:
-                root_inbox.put_nowait(None)
+                self._signal_root_inbox_closed(root_inbox)
 
 
 class ToolCallHandle:
@@ -1335,7 +1363,8 @@ class AsyncThreadStream:
         that arrive at namespace `[]` before `thread.messages` has subscribed.
         """
         if self._root_messages_inbox is None:
-            self._root_messages_inbox = asyncio.Queue()
+            maxsize = self._max_queue_size + 1 if self._max_queue_size > 0 else 0
+            self._root_messages_inbox = asyncio.Queue(maxsize=maxsize)
         return self._root_messages_inbox
 
     def _register_active_message_stream(self, stream: AsyncChatModelStream) -> None:
