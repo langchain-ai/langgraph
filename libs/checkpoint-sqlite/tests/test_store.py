@@ -1,7 +1,11 @@
+import math
 import os
+import random
 import re
 import tempfile
+import time
 import uuid
+from collections import Counter, defaultdict
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from typing import Any, Literal, cast
@@ -33,10 +37,6 @@ class CharacterEmbeddings(Embeddings):
 
     def __init__(self, dims: int = 50, seed: int = 42):
         """Initialize with embedding dimensions and random seed."""
-        import math
-        import random
-        from collections import defaultdict
-
         self._rng = random.Random(seed)
         self.dims = dims
         # Create projection vector for each character lazily
@@ -48,9 +48,6 @@ class CharacterEmbeddings(Embeddings):
 
     def _embed_one(self, text: str) -> list[float]:
         """Embed a single text."""
-        import math
-        from collections import Counter
-
         counts = Counter(text)
         total = sum(counts.values())
 
@@ -338,8 +335,6 @@ class TestSqliteStore:
 
             # Test update
             # Small delay to ensure the updated timestamp is different
-            import time
-
             time.sleep(0.01)
 
             updated_value = {"title": "Updated Document", "content": "Hello, Updated!"}
