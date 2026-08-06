@@ -27,8 +27,9 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import INPUT
 from langgraph.channels.delta import DeltaChannel
-from langgraph.graph import StateGraph
+from langgraph.graph import END, StateGraph
 from langgraph.types import Durability, StateSnapshot, StateUpdate
 
 pytestmark = pytest.mark.anyio
@@ -254,6 +255,48 @@ def test_unaddressed_run_keeps_snapshot_cadence(
     graph.invoke(_input("in-2"), config, durability=durability)
 
     assert not _snapshotted_checkpoints(sync_checkpointer, config)
+
+
+@pytest.mark.parametrize("first_as_node", [INPUT, END, "__copy__"])
+def test_fork_by_bulk_update_whose_first_superstep_skips_the_plan(
+    sync_checkpointer: BaseCheckpointSaver, first_as_node: str
+) -> None:
+    """The fork must be sealed by whichever checkpoint the fork writes first.
+
+    ``as_node`` of INPUT, END or ``__copy__`` writes a checkpoint and returns
+    before ``create_checkpoint_plan_for_update_state_api`` runs. If that
+    checkpoint carries no snapshot the branch is still unsealed, so the next
+    superstep reconstructs through the shared base, picks up the abandoned
+    writes, and bakes them into whatever it snapshots. Sealing later is too
+    late: by then the in-memory value is already wrong.
+    """
+    config = _thread("t")
+    _build(sync_checkpointer, "first").invoke(_input("in-1"), config)
+    graph = _build(sync_checkpointer, "second")
+    graph.invoke(_input("in-2"), config)
+
+    base = next(
+        snapshot
+        for snapshot in graph.get_state_history(config)
+        if "in-2" not in snapshot.values["log"]
+    )
+    first = (
+        StateUpdate(_input("first-step"), first_as_node)
+        if first_as_node == INPUT
+        else StateUpdate(None, first_as_node)
+    )
+    forked = graph.bulk_update_state(
+        _at(config, base),
+        [[first], [StateUpdate(_input("second-step"), "n")]],
+    )
+
+    state = graph.get_state(forked)
+    # END legitimately absorbs the base's already-run task writes, so "in-2"
+    # belongs there; the plain channel is the oracle for which is which.
+    assert state.values["log"] == state.values["plain"], (
+        f"delta channel diverged from the plain channel: "
+        f"{state.values['log']} != {state.values['plain']}"
+    )
 
 
 def test_unaddressed_bulk_update_keeps_snapshot_cadence(
