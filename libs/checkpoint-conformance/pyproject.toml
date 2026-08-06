@@ -58,6 +58,7 @@ lint.select = [
   "UP", # pyupgrade
   "B",  # flake8-bugbear
   "I",  # isort
+  "RUF100",  # unused noqa directive
 ]
 lint.ignore = ["E501", "B008"]
 target-version = "py310"

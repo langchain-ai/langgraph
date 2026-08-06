@@ -573,7 +573,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         while True:
             try:
                 yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_),  # type: ignore[arg-type]  # noqa: F821
+                    anext(aiter_),  # type: ignore[arg-type]
                     self.loop,
                 ).result()
             except StopAsyncIteration:
