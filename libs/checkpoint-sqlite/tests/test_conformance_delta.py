@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import pytest
-from langgraph.checkpoint.conformance import validate
-from langgraph.checkpoint.conformance.initializer import checkpointer_test
 
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+pytest.importorskip(
+    "langgraph.checkpoint.conformance",
+    reason="langgraph-checkpoint-conformance not installed",
+)
+pytest.importorskip("aiosqlite", reason="aiosqlite not installed")
+
+from langgraph.checkpoint.conformance import validate  # noqa: E402
+from langgraph.checkpoint.conformance.initializer import checkpointer_test  # noqa: E402
+
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver  # noqa: E402
 
 
 @pytest.mark.asyncio
