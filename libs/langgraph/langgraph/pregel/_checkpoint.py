@@ -162,6 +162,41 @@ def create_checkpoint_plan_for_update_state_api(
     return channels_to_snapshot, metadata
 
 
+def create_fork_checkpoint(
+    checkpoint: Checkpoint,
+    channels: Mapping[str, BaseChannel],
+    step: int,
+    *,
+    is_fork: bool,
+    get_next_version: GetNextVersion,
+) -> Checkpoint:
+    """``create_checkpoint`` for an update_state path that bypasses the plan.
+
+    The ``as_node`` INPUT and END paths write the fork's first checkpoint and
+    return before ``create_checkpoint_plan_for_update_state_api`` runs. Left
+    without a snapshot that checkpoint does not seal the fork, and the next
+    superstep reconstructs its delta channels by walking through the shared
+    base, picking up the abandoned branch's writes and then baking them into
+    whatever it snapshots. Sealing has to happen on the fork's *first*
+    checkpoint, which is this one.
+
+    ``get_next_version`` is required for the same reason exit mode needs it:
+    these paths apply writes to the input channel, not to the delta channel,
+    so nothing bumps the delta channel's version and ``put`` would drop the
+    blob as not-a-new-version. Callers must derive ``new_versions`` from the
+    returned checkpoint rather than the one they passed in.
+    """
+    if not is_fork:
+        return create_checkpoint(checkpoint, channels, step)
+    return create_checkpoint(
+        checkpoint,
+        channels,
+        step,
+        get_next_version=get_next_version,
+        channels_to_snapshot=get_delta_channels_from_all_channels(channels),
+    )
+
+
 def create_checkpoint(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel] | None,
