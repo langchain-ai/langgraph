@@ -86,11 +86,19 @@ class MemorySaverAssertImmutable(InMemorySaver):
                 )
                 == saved
             ), config["configurable"]["checkpoint_ns"]
-        self.storage_for_copies[thread_id][checkpoint_ns][checkpoint["id"]] = (
-            self.serde.dumps_typed(checkpoint)
-        )
         # call super to write checkpoint
-        return super().put(config, checkpoint, metadata, new_versions)
+        next_config = super().put(config, checkpoint, metadata, new_versions)
+        # Record the checkpoint as the saver reads it back, not the object it
+        # was handed. `channel_values` are stored per (channel, version), so a
+        # channel a step did not write is refilled from the blob its inherited
+        # version still points at. A `DeltaChannel` omits its value except at a
+        # snapshot, which makes the two representations differ for reasons that
+        # are not mutation. Comparing read-back against read-back still catches
+        # a checkpoint whose stored data actually changed.
+        self.storage_for_copies[thread_id][checkpoint_ns][checkpoint["id"]] = (
+            self.serde.dumps_typed(super().get(next_config))
+        )
+        return next_config
 
 
 class MemorySaverNoPending(InMemorySaver):
