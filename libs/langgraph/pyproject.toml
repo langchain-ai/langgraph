@@ -89,7 +89,7 @@ langgraph-sdk = { path = "../sdk-py", editable = true }
 langgraph-cli = { path = "../cli", editable = true }
 
 [tool.ruff]
-lint.select = [ "E", "F", "I", "TID251", "UP" ]
+lint.select = [ "E", "F", "I", "RUF100", "TID251", "UP" ]
 lint.ignore = [ "E501" ]
 line-length = 88
 indent-width = 4

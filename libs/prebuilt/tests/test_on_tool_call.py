@@ -1338,7 +1338,7 @@ def _config_with_channel_read(
 
     # Shape matches pregel's real partial:
     # functools.partial(local_read, scratchpad, channels, managed, task)
-    def _read(scratchpad, channels, managed, task, select, fresh):  # noqa: ARG001
+    def _read(scratchpad, channels, managed, task, select, fresh):
         if isinstance(select, str):
             return channel_values[select]
         return {k: channel_values[k] for k in select if k in channel_values}

@@ -72,6 +72,7 @@ lint.select = [
   "UP", # pyupgrade
   "B",  # flake8-bugbear
   "I",  # isort
+  "RUF100",  # unused noqa directive
   "UP", # pyupgrade
 ]
 lint.ignore = ["E501", "B008"]
