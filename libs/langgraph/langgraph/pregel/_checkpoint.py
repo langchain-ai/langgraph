@@ -80,6 +80,8 @@ def get_updated_channels_from_tasks(
 
 def get_delta_channels_from_all_channels(
     channels: Mapping[str, BaseChannel],
+    *,
+    include_unavailable: bool = False,
 ) -> set[str]:
     """Every available DeltaChannel.
 
@@ -91,7 +93,7 @@ def get_delta_channels_from_all_channels(
     return {
         k
         for k, ch in channels.items()
-        if isinstance(ch, DeltaChannel) and ch.is_available()
+        if isinstance(ch, DeltaChannel) and (include_unavailable or ch.is_available())
     }
 
 
@@ -146,7 +148,9 @@ def create_checkpoint_plan_for_update_state_api(
         "parents": parents,
     }
     if is_fresh_thread or is_fork:
-        return get_delta_channels_from_all_channels(channels), metadata
+        return get_delta_channels_from_all_channels(
+            channels, include_unavailable=is_fork
+        ), metadata
 
     new_counters = create_metadata_for_update_state_api(
         channels,
@@ -193,7 +197,9 @@ def create_fork_checkpoint(
         channels,
         step,
         get_next_version=get_next_version,
-        channels_to_snapshot=get_delta_channels_from_all_channels(channels),
+        channels_to_snapshot=get_delta_channels_from_all_channels(
+            channels, include_unavailable=True
+        ),
     )
 
 
@@ -225,9 +231,20 @@ def create_checkpoint(
         values = {}
         channel_versions = dict(checkpoint["channel_versions"])
         for k in channels:
-            if k not in channel_versions:
-                continue
             ch = channels[k]
+            if k not in channel_versions:
+                # Nothing was ever written to this channel on this branch, so
+                # it has no version and `put` would drop any blob stored for
+                # it. A *forced* snapshot still has to land: it is the only
+                # thing that stops the ancestor walk running past this
+                # checkpoint into a fork base that holds another branch's
+                # writes. Mint a first version so the blob survives.
+                if k in channels_to_snapshot and get_next_version is not None:
+                    channel_versions[k] = get_next_version(None, None)
+                    values[k] = _DeltaSnapshot(
+                        ch.get() if ch.is_available() else ch.typ()
+                    )
+                continue
             if k in channels_to_snapshot:
                 # Callers force a full snapshot blob here: exit mode when a
                 # delta channel reaches its snapshot cadence, update_state on
