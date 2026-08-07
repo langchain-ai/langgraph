@@ -7,9 +7,11 @@ import contextlib
 from typing import Any
 
 import httpx
+import pytest
 
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.threads import ThreadsClient
+from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
 from streaming._events import (
     input_requested_event,
     lifecycle_completed_event,
@@ -153,7 +155,6 @@ async def test_lifecycle_clean_eof_resolves_run_done_with_errored():
     """If the lifecycle SSE stream ends cleanly (server closes without a
     terminal `completed` or `errored` event), `_run_done` must resolve with
     an errored terminal so awaiters don't hang."""
-    import pytest
 
     fake = FakeServer()
     # Emit a non-terminal lifecycle event, then close cleanly without
@@ -179,7 +180,6 @@ async def test_lifecycle_mid_iteration_error_resolves_run_done_with_error(
     """If the transport reports an error via `handle.done` after iteration
     exits without a terminal lifecycle event, `_run_done` propagates the
     transport error rather than the generic clean-EOF message."""
-    from langgraph_sdk.stream.transport import EventStreamHandle, ProtocolSseTransport
 
     def synthetic_handle() -> EventStreamHandle:
         loop = asyncio.get_running_loop()

@@ -2,6 +2,7 @@ import functools
 import sys
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import (
     Annotated,
     Any,
@@ -17,7 +18,10 @@ import langsmith
 import pytest
 from langchain_core.callbacks import BaseCallbackHandler, CallbackManager
 from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.config import var_child_runnable_config
 from langchain_core.tracers import LangChainTracer
+from langsmith import get_current_run_tree  # type: ignore
+from pydantic import BaseModel, Field
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph._internal._config import (
@@ -118,7 +122,6 @@ def rt_graph() -> CompiledStateGraph:
         node_run_id: int
 
     def node(_: State):
-        from langsmith import get_current_run_tree  # type: ignore
 
         return {"node_run_id": get_current_run_tree().id}  # type: ignore
 
@@ -243,10 +246,6 @@ def test_is_required():
 
 
 def test_enhanced_type_hints() -> None:
-    from dataclasses import dataclass
-    from typing import Annotated
-
-    from pydantic import BaseModel, Field
 
     class MyTypedDict(TypedDict):
         val_1: str
@@ -510,7 +509,6 @@ def test_ensure_config_explicit_configurable_replaces_ambient() -> None:
     # An explicit checkpoint coordinate (here a new thread_id) starts a fresh
     # lineage and drops the ambient run context (e.g. a parent task's
     # checkpoint_ns), so a child graph does not inherit it.
-    from langchain_core.runnables.config import var_child_runnable_config
 
     token = var_child_runnable_config.set(
         {"configurable": {"checkpoint_ns": "p:parent-task", "checkpoint_id": "cid"}}
@@ -527,7 +525,6 @@ def test_ensure_config_explicit_configurable_replaces_ambient() -> None:
 def test_ensure_config_ambient_inherited_when_no_explicit_configurable() -> None:
     # With no explicit configurable, the ambient run context is inherited
     # unchanged (stateless subgraph / interrupt-resume pattern).
-    from langchain_core.runnables.config import var_child_runnable_config
 
     token = var_child_runnable_config.set(
         {"configurable": {"checkpoint_ns": "p:parent-task"}}
@@ -543,7 +540,6 @@ def test_ensure_config_explicit_configurables_still_merge_over_ambient() -> None
     # A new thread_id drops the ambient, but explicit configs still shallow-merge
     # among themselves, so a with_config(...) value (ls_agent_type) survives
     # alongside an invoke-time thread_id.
-    from langchain_core.runnables.config import var_child_runnable_config
 
     token = var_child_runnable_config.set(
         {"configurable": {"checkpoint_ns": "p:parent-task"}}
@@ -564,7 +560,6 @@ def test_ensure_config_non_coordinate_config_keeps_ambient_checkpoint_ns() -> No
     # A nested subagent is invoked with a non-coordinate configurable key
     # (ls_agent_type) and no thread_id; it must keep the inherited checkpoint_ns
     # so it stays a discoverable child of the parent run (deepagents `task` tool).
-    from langchain_core.runnables.config import var_child_runnable_config
 
     token = var_child_runnable_config.set(
         {"configurable": {"thread_id": "parent", "checkpoint_ns": "p:parent-task"}}
@@ -582,7 +577,6 @@ def test_ensure_config_same_thread_id_still_clears_ambient() -> None:
     # A child that reuses the parent's thread_id is still addressing its own root
     # namespace on that thread, so the parent task's checkpoint_ns must not leak
     # in; otherwise the child writes state that get_state cannot read back.
-    from langchain_core.runnables.config import var_child_runnable_config
 
     token = var_child_runnable_config.set(
         {"configurable": {"thread_id": "shared", "checkpoint_ns": "p:parent-task"}}

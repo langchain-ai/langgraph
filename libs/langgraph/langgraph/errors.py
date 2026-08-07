@@ -7,7 +7,7 @@ from typing import Any, Literal
 from warnings import warn
 
 # EmptyChannelError is re-exported from langgraph.channels.base
-from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
+from langgraph.checkpoint.base import EmptyChannelError
 from typing_extensions import deprecated
 
 from langgraph.types import Command, Interrupt

@@ -2,14 +2,16 @@ import operator
 from collections.abc import Sequence
 from typing import Annotated
 
+import orjson
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import NotRequired, TypedDict
 
+from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
-from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
@@ -194,10 +196,6 @@ def test_overwrite_dataclass_form_survives_json_roundtrip() -> None:
     ...}`) is indistinguishable from a literal channel value, and downstream
     reducers raise `MESSAGE_COERCION_FAILURE` (or similar) on read.
     """
-    import orjson
-
-    from langgraph._internal._constants import OVERWRITE
-    from langgraph.channels.binop import _get_overwrite
 
     ow = Overwrite(value=[HumanMessage(content="new", id="h2")])
     erased = orjson.loads(orjson.dumps(ow, default=lambda o: o.model_dump()))
@@ -213,8 +211,6 @@ def test_overwrite_sentinel_dict_still_recognised() -> None:
     """The pre-existing `{"__overwrite__": value}` dict form continues to be
     recognised. This is the canonical sentinel emitted by producers that do
     not have an `Overwrite` dataclass available."""
-    from langgraph._internal._constants import OVERWRITE
-    from langgraph.channels.binop import _get_overwrite
 
     is_overwrite, value = _get_overwrite({OVERWRITE: ["b"]})
     assert is_overwrite
@@ -224,7 +220,6 @@ def test_overwrite_sentinel_dict_still_recognised() -> None:
 def test_overwrite_non_matching_dict_not_recognised() -> None:
     """Dicts that resemble the erased shape but do not carry the
     `__overwrite__` discriminator must not be misclassified as overwrites."""
-    from langgraph.channels.binop import _get_overwrite
 
     assert _get_overwrite({"value": ["b"]}) == (False, None)
     assert _get_overwrite({"type": "human", "value": "hi"}) == (False, None)

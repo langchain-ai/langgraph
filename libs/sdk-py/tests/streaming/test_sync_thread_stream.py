@@ -2,20 +2,42 @@
 
 from __future__ import annotations
 
+import queue
 import re
 import threading
 import time
 import uuid
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 import httpx
+import orjson
 import pytest
 
+import langgraph_sdk.stream.sync_controller as _ctrl_mod
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk._sync.threads import SyncThreadsClient
+from langgraph_sdk.stream.sync_controller import SyncStreamController
 from langgraph_sdk.stream.transport.sync_http import (
     SyncEventStreamHandle,
     SyncProtocolSseTransport,
+)
+from streaming._events import (
+    checkpoints_event,
+    custom_event,
+    lifecycle_completed_event,
+    lifecycle_event,
+    lifecycle_started_event,
+    message_finish_event,
+    message_start_event,
+    message_text_delta_event,
+    message_text_finish_event,
+    tasks_start_event,
+    tool_finished_event,
+    tool_started_event,
+    updates_event,
+    values_event,
 )
 from streaming._sync_fake_server import SyncFakeServer, SyncStreamScript
 
@@ -71,13 +93,9 @@ def test_sync_subscribe_before_run_start_waits_on_gate():
 def test_sync_reconnect_uses_backoff_between_attempts(monkeypatch):
     """_reconnect_shared_stream sleeps between retry attempts with exp+jitter
     backoff, mirroring the async reconnect behavior."""
-    import langgraph_sdk.stream.sync_controller as _ctrl_mod
 
     sleeps: list[float] = []
     monkeypatch.setattr(_ctrl_mod.time, "sleep", lambda d: sleeps.append(d))
-
-    from langgraph_sdk.stream.sync_controller import SyncStreamController
-    from langgraph_sdk.stream.transport.sync_http import SyncProtocolSseTransport
 
     class _FailingTransport(SyncProtocolSseTransport):
         """Transport that always raises on open_event_stream."""
@@ -113,15 +131,6 @@ def test_sync_rotation_does_not_lose_buffered_events():
     """When the shared stream rotates, old-stream events already in the queue
     are not dropped.  _drain_and_close dispatches remaining events from the
     old handle to subscribers before closing it."""
-    import queue
-    from typing import Any
-
-    from langgraph_sdk.stream.sync_controller import SyncStreamController
-    from langgraph_sdk.stream.transport.sync_http import (
-        SyncEventStreamHandle,
-        SyncProtocolSseTransport,
-    )
-    from streaming._events import values_event
 
     event_a = values_event(seq=1, counter=1)
 
@@ -188,8 +197,6 @@ def test_sync_rotation_does_not_lose_buffered_events():
 
 def test_sync_concurrent_commands_do_not_share_command_id():
     """50 concurrent threads calling _send_command must each get a unique id."""
-    from concurrent.futures import ThreadPoolExecutor
-    from typing import Any
 
     captured_ids: list[int] = []
     ids_lock = threading.Lock()
@@ -246,7 +253,6 @@ def test_sync_events_returns_fresh_iterator_each_access():
     """Two accesses of `thread.events` yield independent subscriptions,
     mirroring the async semantics where each access opens a new subscriber."""
     fake = SyncFakeServer()
-    from streaming._events import values_event
 
     event_1 = values_event(seq=1, counter=1)
     fake.script_sequence(
@@ -280,7 +286,6 @@ def test_close_unblocks_active_subscription_before_lifecycle_join():
     """close() must send None to active subscriptions BEFORE joining the
     lifecycle watcher thread, so callers wake quickly even if the watcher
     thread blocks for up to 1s."""
-    import queue
 
     # Gate that keeps the lifecycle watcher thread alive for 0.4s.
     lifecycle_block = threading.Event()
@@ -293,8 +298,6 @@ def test_close_unblocks_active_subscription_before_lifecycle_join():
         def _handle(self, request: httpx.Request) -> httpx.Response:
             path = request.url.path
             if path.endswith("/stream/events"):
-                import orjson
-
                 body = orjson.loads(request.content)
                 channels = body.get("channels", [])
                 if "lifecycle" in channels:
@@ -417,7 +420,6 @@ def test_sync_threads_stream_mints_uuid4_when_thread_id_none():
 
 
 def test_sync_run_start_sends_command():
-    from streaming._events import lifecycle_completed_event
 
     fake = SyncFakeServer()
     fake.script([lifecycle_completed_event(seq=1)])
@@ -432,7 +434,6 @@ def test_sync_run_start_sends_command():
 
 
 def test_sync_events_iterates_raw_events():
-    from streaming._events import values_event
 
     fake = SyncFakeServer()
     fake.script([values_event(seq=1, counter=1)])
@@ -446,7 +447,6 @@ def test_sync_events_iterates_raw_events():
 
 
 def test_sync_lifecycle_watcher_reconnects_with_since_after_transport_drop():
-    from streaming._events import lifecycle_completed_event, lifecycle_event
 
     fake = SyncFakeServer()
     fake.set_state({"ok": True})
@@ -481,7 +481,6 @@ def test_sync_threads_stream_accepts_websocket_transport_option():
 
 
 def test_sync_threads_stream_rejects_unknown_transport_option():
-    import pytest
 
     with httpx.Client(base_url="http://test") as raw:
         threads = SyncThreadsClient(SyncHttpClient(raw))
@@ -494,17 +493,6 @@ def test_sync_threads_stream_rejects_unknown_transport_option():
 
 
 def test_v3_streaming_sync_surface_smoke():
-    from streaming._events import (
-        custom_event,
-        lifecycle_completed_event,
-        message_finish_event,
-        message_start_event,
-        message_text_delta_event,
-        message_text_finish_event,
-        tool_finished_event,
-        tool_started_event,
-        values_event,
-    )
 
     fake = SyncFakeServer()
     fake.set_state({"final": True})
@@ -610,11 +598,6 @@ def test_v3_streaming_sync_surface_smoke():
 
 
 def test_interleave_projections_single_channel_values():
-    from streaming._events import (
-        lifecycle_completed_event,
-        lifecycle_started_event,
-        values_event,
-    )
 
     fake = SyncFakeServer()
     fake.set_state({"counter": 0})
@@ -639,13 +622,6 @@ def test_interleave_projections_single_channel_values():
 
 
 def test_interleave_projections_values_and_messages_arrival_order():
-    from streaming._events import (
-        lifecycle_completed_event,
-        lifecycle_started_event,
-        message_finish_event,
-        message_start_event,
-        values_event,
-    )
 
     fake = SyncFakeServer()
     fake.set_state({"counter": 0})
@@ -672,12 +648,6 @@ def test_interleave_projections_values_and_messages_arrival_order():
 
 
 def test_interleave_projections_mixes_builtin_and_extension():
-    from streaming._events import (
-        custom_event,
-        lifecycle_completed_event,
-        lifecycle_started_event,
-        values_event,
-    )
 
     fake = SyncFakeServer()
     fake.set_state({"counter": 0})
@@ -701,12 +671,6 @@ def test_interleave_projections_mixes_builtin_and_extension():
 
 
 def test_interleave_projections_tool_calls_uses_public_name():
-    from streaming._events import (
-        lifecycle_completed_event,
-        lifecycle_started_event,
-        tool_finished_event,
-        tool_started_event,
-    )
 
     fake = SyncFakeServer()
     fake.set_state({})
@@ -735,10 +699,6 @@ def test_interleave_projections_tool_calls_uses_public_name():
 
 
 def test_interleave_projections_subgraphs_discovers_child():
-    from streaming._events import (
-        lifecycle_completed_event,
-        lifecycle_started_event,
-    )
 
     fake = SyncFakeServer()
     fake.set_state({})
@@ -761,11 +721,6 @@ def test_interleave_projections_subgraphs_discovers_child():
 
 def test_interleave_projections_inflight_tool_call_failed_on_break():
     """A tool handle held past an early break is failed in teardown, never left hanging."""
-    from streaming._events import (
-        lifecycle_completed_event,
-        lifecycle_started_event,
-        tool_started_event,
-    )
 
     fake = SyncFakeServer()
     fake.set_state({})
@@ -794,10 +749,6 @@ def test_interleave_projections_inflight_tool_call_failed_on_break():
 
 def test_interleave_projections_inflight_subgraph_finished_on_terminal():
     """A discovered subgraph child with no terminal tasks-result is force-completed."""
-    from streaming._events import (
-        lifecycle_completed_event,
-        lifecycle_started_event,
-    )
 
     fake = SyncFakeServer()
     fake.set_state({})
@@ -829,10 +780,6 @@ def test_interleave_projections_rejects_reserved_channel(channel):
     would subscribe to a channel that never matches and yield nothing. Fail
     closed. (`updates`/`checkpoints`/`tasks` are supported and tested below.)
     """
-    from streaming._events import (
-        lifecycle_completed_event,
-        lifecycle_started_event,
-    )
 
     fake = SyncFakeServer()
     fake.set_state({})
@@ -849,13 +796,6 @@ def test_interleave_projections_rejects_reserved_channel(channel):
 
 def test_interleave_projections_data_channels_yield_payloads():
     """`updates`/`checkpoints`/`tasks` yield their raw `params.data` payloads."""
-    from streaming._events import (
-        checkpoints_event,
-        lifecycle_completed_event,
-        lifecycle_started_event,
-        tasks_start_event,
-        updates_event,
-    )
 
     fake = SyncFakeServer()
     fake.set_state({})
@@ -882,11 +822,6 @@ def test_interleave_projections_data_channels_yield_payloads():
 
 def test_interleave_projections_data_channel_scoped_to_root_namespace():
     """A child-namespace checkpoint must not leak into a root interleave."""
-    from streaming._events import (
-        checkpoints_event,
-        lifecycle_completed_event,
-        lifecycle_started_event,
-    )
 
     fake = SyncFakeServer()
     fake.set_state({"counter": 0})

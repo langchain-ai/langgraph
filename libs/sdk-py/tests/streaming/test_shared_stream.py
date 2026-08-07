@@ -3,14 +3,15 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any, cast
+from unittest.mock import MagicMock
 
 import httpx
 
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.threads import ThreadsClient
 from langgraph_sdk.stream.controller import StreamController
-from langgraph_sdk.stream.transport.http import EventStreamHandle
-from streaming._events import lifecycle_event, values_event
+from langgraph_sdk.stream.transport.http import EventStreamHandle, ProtocolSseTransport
+from streaming._events import lifecycle_completed_event, lifecycle_event, values_event
 from streaming._fake_server import FakeServer, _StreamScript
 
 
@@ -165,7 +166,6 @@ async def test_values_projection_registers_via_delegation_not_controller_directl
     directly — the subscription count seen through the thread wrapper equals
     the count inside the controller at the moment the subscription is live.
     """
-    from streaming._events import lifecycle_completed_event
 
     fake = FakeServer()
     fake.script([lifecycle_completed_event(seq=0)])
@@ -255,10 +255,6 @@ async def test_shared_stream_reconnects_with_since_after_transport_drop():
     handle2, _ = _make_handle([values_event(seq=2, values={"counter": 2})])
     handles = [handle1, handle2]
 
-    from unittest.mock import MagicMock
-
-    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
-
     transport = MagicMock(spec=ProtocolSseTransport)
 
     def _open(params: dict[str, Any]) -> EventStreamHandle:
@@ -302,10 +298,6 @@ async def test_shared_stream_reconnect_dedupes_replayed_overlap():
         ]
     )
     handles = [handle1, handle2]
-
-    from unittest.mock import MagicMock
-
-    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
 
     transport = MagicMock(spec=ProtocolSseTransport)
     transport.open_event_stream.side_effect = lambda _params: handles.pop(0)
