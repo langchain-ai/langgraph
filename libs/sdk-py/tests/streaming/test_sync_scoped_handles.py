@@ -6,12 +6,14 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, wait
 
 import httpx
+from langchain_protocol import Event
 
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk._sync.stream import SyncScopedStreamHandle
 from langgraph_sdk._sync.threads import SyncThreadsClient
 from streaming._events import (
     lifecycle_completed_event,
+    lifecycle_errored_event,
     lifecycle_started_event,
     message_finish_event,
     message_start_event,
@@ -356,7 +358,6 @@ def test_sync_register_descendant_forwards_buffered_events_in_order():
     """_register_descendant must drain already-buffered events whose namespace
     matches the new grandchild, push them into the grandchild, and preserve
     the original arrival order in the parent inbox."""
-    from langchain_protocol import Event
 
     parent = SyncScopedStreamHandle(
         thread=None,  # ty: ignore[invalid-argument-type]
@@ -673,7 +674,6 @@ def test_sync_force_complete_uses_failed_when_run_errored():
     """If the lifecycle signals an errored run, scoped children that are still
     'started' when the subgraphs iterator's finally block runs must be
     force-finished as 'failed', not 'completed'."""
-    from streaming._events import lifecycle_errored_event
 
     fake = SyncFakeServer()
     fake.script(

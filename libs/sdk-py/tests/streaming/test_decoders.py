@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from langgraph_sdk.stream.decoders import (
     DataDecoder,
     ExtensionsDecoder,
@@ -454,7 +456,6 @@ def test_extensions_decoder_ignores_non_dict_data():
 
 
 def test_extensions_decoder_rejects_empty_name():
-    import pytest
 
     with pytest.raises(ValueError):
         ExtensionsDecoder(name="")

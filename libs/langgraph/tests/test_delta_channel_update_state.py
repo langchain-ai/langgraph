@@ -27,6 +27,7 @@ from typing_extensions import TypedDict
 from langgraph.channels.delta import DeltaChannel
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
+from langgraph.types import StateUpdate
 
 pytestmark = pytest.mark.anyio
 
@@ -277,7 +278,6 @@ def test_bulk_update_state_multi_task_per_superstep_delta_channel() -> None:
     different `StateUpdate`s targeting the same node — otherwise both share
     the deterministic interrupt-derived id and collide in the saver.
     """
-    from langgraph.types import StateUpdate
 
     saver = InMemorySaver()
     graph = _build_graph(saver)

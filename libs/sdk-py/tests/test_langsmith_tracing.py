@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from langgraph_sdk._async.runs import RunsClient
+from langgraph_sdk._sync.runs import SyncRunsClient
 from langgraph_sdk.schema import LangSmithTracing
 
 
@@ -24,7 +26,6 @@ class TestLangSmithTracingPayload:
     @pytest.mark.asyncio
     async def test_async_create_includes_langsmith_tracer(self, tracing_config):
         """Test that async create sends langsmith_tracer in payload."""
-        from langgraph_sdk._async.runs import RunsClient
 
         captured: dict[str, Any] = {}
 
@@ -50,7 +51,6 @@ class TestLangSmithTracingPayload:
 
     def test_sync_create_includes_langsmith_tracer(self, tracing_config):
         """Test that sync create sends langsmith_tracer in payload."""
-        from langgraph_sdk._sync.runs import SyncRunsClient
 
         captured: dict[str, Any] = {}
 
@@ -76,7 +76,6 @@ class TestLangSmithTracingPayload:
 
     def test_sync_wait_includes_langsmith_tracer(self, tracing_config):
         """Test that sync wait sends langsmith_tracer in payload."""
-        from langgraph_sdk._sync.runs import SyncRunsClient
 
         captured: dict[str, Any] = {}
 
@@ -102,7 +101,6 @@ class TestLangSmithTracingPayload:
 
     def test_create_without_langsmith_tracing_excludes_key(self):
         """Test that langsmith_tracer is not in payload when not provided."""
-        from langgraph_sdk._sync.runs import SyncRunsClient
 
         captured: dict[str, Any] = {}
 
@@ -123,7 +121,6 @@ class TestLangSmithTracingPayload:
 
     def test_langsmith_tracing_project_name_only(self):
         """Test that langsmith_tracing works with only project_name."""
-        from langgraph_sdk._sync.runs import SyncRunsClient
 
         captured: dict[str, Any] = {}
 

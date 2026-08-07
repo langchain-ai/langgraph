@@ -1,4 +1,4 @@
-"""Run delta-channel conformance capabilities against AsyncSqliteSaver."""
+"""Run delta-channel conformance capabilities against AsyncPostgresSaver."""
 
 from __future__ import annotations
 
@@ -6,18 +6,20 @@ import pytest
 from langgraph.checkpoint.conformance import validate
 from langgraph.checkpoint.conformance.initializer import checkpointer_test
 
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from tests.conftest import DEFAULT_URI
 
 
 @pytest.mark.asyncio
 async def test_delta_channel_conformance():
-    @checkpointer_test(name="AsyncSqliteSaver")
-    async def sqlite_saver():
-        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+    @checkpointer_test(name="AsyncPostgresSaver")
+    async def postgres_saver():
+        async with AsyncPostgresSaver.from_conn_string(DEFAULT_URI) as saver:
+            await saver.setup()
             yield saver
 
     report = await validate(
-        sqlite_saver,
+        postgres_saver,
         capabilities={
             "delta_channel_history",
         },

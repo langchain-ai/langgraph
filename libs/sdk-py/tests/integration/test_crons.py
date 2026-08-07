@@ -10,21 +10,22 @@ from __future__ import annotations
 
 import pytest
 
+from langgraph_sdk._async.cron import CronClient
+from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._sync.cron import SyncCronClient
+from langgraph_sdk._sync.http import SyncHttpClient
+
 from .conftest import ASSISTANT_ID
 
 pytestmark = pytest.mark.integration
 
 
 def _async_crons(raw):
-    from langgraph_sdk._async.cron import CronClient
-    from langgraph_sdk._async.http import HttpClient
 
     return CronClient(HttpClient(raw))
 
 
 def _sync_crons(raw):
-    from langgraph_sdk._sync.cron import SyncCronClient
-    from langgraph_sdk._sync.http import SyncHttpClient
 
     return SyncCronClient(SyncHttpClient(raw))
 

@@ -12,10 +12,14 @@ conformance = pytest.importorskip(
 
 @pytest.mark.asyncio
 async def test_delta_channel_conformance():
-    from langgraph.checkpoint.conformance import validate
-    from langgraph.checkpoint.conformance.initializer import checkpointer_test
+    # Imported inside the test: the module-level importorskip above is what
+    # makes these safe, so they cannot move to the top of the file.
+    from langgraph.checkpoint.conformance import validate  # noqa: PLC0415
+    from langgraph.checkpoint.conformance.initializer import (  # noqa: PLC0415
+        checkpointer_test,
+    )
 
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver  # noqa: PLC0415
 
     @checkpointer_test(name="InMemorySaver")
     async def mem_saver():

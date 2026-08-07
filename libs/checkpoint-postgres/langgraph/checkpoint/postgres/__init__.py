@@ -223,7 +223,7 @@ class PostgresSaver(BasePostgresSaver):
             >>> checkpoint_tuple = memory.get_tuple(config)
             >>> print(checkpoint_tuple)
             CheckpointTuple(...)
-        """  # noqa
+        """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -478,9 +478,11 @@ class PostgresSaver(BasePostgresSaver):
         stage1_sql = _build_delta_stage1_sql(channels, paged=True)
         parent_of: dict[str, str | None] = {}
         ver_by_i_by_cid: list[dict[str, str | None]] = [{} for _ in channels]
-        hs_by_i_by_cid: list[dict[str, bool]] = [{} for _ in channels]
+        hb_by_i_by_cid: list[dict[str, bool]] = [{} for _ in channels]
+        inline_by_i_by_cid: list[dict[str, Any]] = [{} for _ in channels]
         chain_by_ch: dict[str, list[str]] = {ch: [] for ch in channels}
         seed_ver_by_ch: dict[str, str | None] = {ch: None for ch in channels}
+        seed_inline_by_ch: dict[str, Any] = {}
         walk_cursor_by_ch: dict[str, str | None] = {}
         seeded: set[str] = set()
         cursor: str | None = None
@@ -489,7 +491,8 @@ class PostgresSaver(BasePostgresSaver):
             while True:
                 stage1_params: list[Any] = []
                 for ch in channels:
-                    stage1_params.extend([ch, ch])
+                    # ver_i, blob channel, blob version, inline_i
+                    stage1_params.extend([ch, ch, ch, ch])
                 stage1_params.extend(
                     [thread_id, checkpoint_ns, cursor, cursor, _DELTA_PAGE_SIZE]
                 )
@@ -502,16 +505,19 @@ class PostgresSaver(BasePostgresSaver):
                     channels,
                     parent_of,
                     ver_by_i_by_cid,
-                    hs_by_i_by_cid,
+                    hb_by_i_by_cid,
+                    inline_by_i_by_cid,
                 )
                 self._try_advance_walks(
                     checkpoint_id,
                     channels,
                     parent_of,
                     ver_by_i_by_cid,
-                    hs_by_i_by_cid,
+                    hb_by_i_by_cid,
+                    inline_by_i_by_cid,
                     chain_by_ch,
                     seed_ver_by_ch,
+                    seed_inline_by_ch,
                     walk_cursor_by_ch,
                     seeded,
                 )
@@ -546,6 +552,7 @@ class PostgresSaver(BasePostgresSaver):
             channels=channels,
             chain_by_ch=chain_by_ch,
             seed_ver_by_ch=seed_ver_by_ch,
+            seed_inline_by_ch=seed_inline_by_ch,
             stage2_rows=cast("list[_DeltaStage2Row]", stage2_rows),
         )
 
