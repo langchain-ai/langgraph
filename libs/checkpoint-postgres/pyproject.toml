@@ -48,7 +48,7 @@ dev = [
 default-groups = ['dev']
 
 [tool.uv.sources]
-langgraph-checkpoint = { path = "../checkpoint", editable = true }
+langgraph-checkpoint = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 include = ["langgraph"]
