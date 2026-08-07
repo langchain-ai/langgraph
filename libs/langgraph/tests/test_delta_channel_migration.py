@@ -616,3 +616,117 @@ async def test_add_messages_to_delta_migration_preserves_message_history_async()
     assert [m.id for m in snap.values["messages"]] == ["h1", "a1"], (
         f"async tip hydration mismatch: got {[m.id for m in snap.values['messages']]}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 8. First post-migration write, read back cold (regression for #8384)
+#
+# The migration boundary produces a checkpoint that carries BOTH a pre-delta
+# plain-value blob AND the pending write that produced its (delta-era) child.
+# That write is not subsumed by the blob — the blob is the value ENTERING that
+# checkpoint. A saver whose ancestor walk skips the seed checkpoint's own
+# writes silently drops the first post-migration write.
+#
+# The failure is invisible to the live `invoke` return value (computed
+# in-memory before persistence), so these tests must assert on a COLD read.
+# It is also invisible at `snapshot_frequency=1`, where every write is its own
+# snapshot boundary and the walk never terminates on a plain value — hence the
+# explicit default-frequency coverage.
+# ---------------------------------------------------------------------------
+
+
+def test_first_post_migration_write_survives_cold_read() -> None:
+    """One non-snapshotting write after migrating a thread to `DeltaChannel`
+    must still be present when the state is read back from the checkpointer.
+
+    Regression for #8384: `invoke` returned the correct value while
+    `get_state` dropped the write permanently.
+    """
+
+    checkpointer = InMemorySaver()
+    config = {"configurable": {"thread_id": "first-post-migration"}}
+
+    binop = _binop_graph(checkpointer)
+    binop.invoke({"items": ["a"]}, config)
+
+    delta = _delta_graph(checkpointer)
+    live = delta.invoke({"items": ["b"]}, config)
+    assert list(live["items"]) == ["a", "b"], "live invoke lost the write"
+
+    cold = delta.get_state(config)
+    assert list(cold.values["items"]) == ["a", "b"], (
+        "first post-migration write dropped on cold read: "
+        f"got {list(cold.values['items'])}"
+    )
+
+
+async def test_first_post_migration_write_survives_cold_read_async() -> None:
+    """Async variant of the #8384 regression."""
+
+    checkpointer = InMemorySaver()
+    config = {"configurable": {"thread_id": "first-post-migration-async"}}
+
+    binop = _binop_graph(checkpointer)
+    await binop.ainvoke({"items": ["a"]}, config)
+
+    delta = _delta_graph(checkpointer)
+    live = await delta.ainvoke({"items": ["b"]}, config)
+    assert list(live["items"]) == ["a", "b"], "live ainvoke lost the write"
+
+    cold = await delta.aget_state(config)
+    assert list(cold.values["items"]) == ["a", "b"], (
+        "first post-migration write dropped on cold read: "
+        f"got {list(cold.values['items'])}"
+    )
+
+
+def test_post_migration_writes_match_base_saver_fallback() -> None:
+    """Parity across the migration boundary WITH post-migration writes.
+
+    `test_base_saver_fallback_matches_optimized_override` only reads a
+    pre-migration chain, so the optimized override and the reference walk
+    never disagree there. Driving writes after the migration is what
+    separates them.
+    """
+
+    def _run(saver: Any, thread: str) -> list[tuple[Any, list]]:
+        config = {"configurable": {"thread_id": thread}}
+        _drive(_binop_graph(saver), config, "u", 2)
+        delta = _delta_graph(saver)
+        _drive(delta, config, "d", 3)
+        return [
+            (s.next, list(s.values.get("items", [])))
+            for s in delta.get_state_history(config)
+        ]
+
+    fast = _run(InMemorySaver(), "fast")
+    slow = _run(_ThirdPartyStyleSaver(), "slow")
+
+    assert fast == slow, (
+        "optimized override diverges from the base-saver fallback once "
+        f"post-migration writes exist; fast={fast}, slow={slow}"
+    )
+    # Guard the assertion above against both paths being wrong in the same way.
+    assert fast[0][1] == ["u0", "u1", "d0", "d1", "d2"], (
+        f"unexpected accumulated state: {fast[0][1]}"
+    )
+
+
+def test_add_messages_migration_keeps_first_post_migration_message() -> None:
+    """The `add_messages` -> `DeltaChannel` path is the one Deep Agents takes;
+    dropping the first post-migration write loses a real user message.
+    """
+
+    checkpointer = InMemorySaver()
+    config = {"configurable": {"thread_id": "add-messages-first-write"}}
+
+    pre_graph = _add_messages_graph(checkpointer)
+    pre_graph.invoke({"messages": [HumanMessage(content="hello", id="h1")]}, config)
+
+    delta_graph = _delta_messages_graph(checkpointer)
+    delta_graph.invoke({"messages": [HumanMessage(content="second", id="h2")]}, config)
+
+    ids = [m.id for m in delta_graph.get_state(config).values["messages"]]
+    # h1 is the pre-migration seed, h2 the write that was being dropped; both
+    # have to survive, and in order.
+    assert ids == ["h1", "h2"], f"expected ['h1', 'h2'], got {ids}"
