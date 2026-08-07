@@ -61,11 +61,13 @@ class ChannelRead(RunnableCallable):
         return super().get_name(suffix, name=name)
 
     def _read(self, _: Any, config: RunnableConfig) -> Any:
+        """Read from the channel."""
         return self.do_read(
             config, select=self.channel, fresh=self.fresh, mapper=self.mapper
         )
 
     async def _aread(self, _: Any, config: RunnableConfig) -> Any:
+        """Read from the channel asynchronously."""
         return self.do_read(
             config, select=self.channel, fresh=self.fresh, mapper=self.mapper
         )
@@ -250,6 +252,7 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Any:
+        """Invoke the node."""
         self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         return self.bound.invoke(
             input,
@@ -263,6 +266,7 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Any:
+        """Invoke the node asynchronously."""
         self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         return await self.bound.ainvoke(
             input,
@@ -276,6 +280,7 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Iterator[Any]:
+        """Stream output from the node."""
         self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         yield from self.bound.stream(
             input,
@@ -289,6 +294,7 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> AsyncIterator[Any]:
+        """Stream output from the node asynchronously."""
         self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         async for item in self.bound.astream(
             input,
