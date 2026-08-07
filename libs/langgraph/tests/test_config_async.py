@@ -24,7 +24,7 @@ class _TrackingCallback(BaseCallbackHandler):
     def __init__(self) -> None:
         self.called = False
 
-    def on_chain_start(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+    def on_chain_start(self, *args, **kwargs) -> None:
         self.called = True
 
 
@@ -55,7 +55,7 @@ async def test_with_config_configurable_preserved_on_invoke() -> None:
     builder = StateGraph(dict)
     captured: dict = {}
 
-    def node(state, config):  # noqa: ANN001
+    def node(state, config):
         captured.update(config.get("configurable") or {})
         return state
 
@@ -79,7 +79,7 @@ async def test_with_config_metadata_preserved_on_invoke() -> None:
     builder = StateGraph(dict)
     captured: dict = {}
 
-    def node(state, config):  # noqa: ANN001
+    def node(state, config):
         captured.update(config.get("metadata") or {})
         return state
 
@@ -104,7 +104,7 @@ async def test_with_config_tags_preserved_on_invoke() -> None:
     builder = StateGraph(dict)
     captured: list = []
 
-    def node(state, config):  # noqa: ANN001
+    def node(state, config):
         captured.extend(config.get("tags") or [])
         return state
 

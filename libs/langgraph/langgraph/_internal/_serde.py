@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from typing_extensions import NotRequired, Required, is_typeddict
 
 try:
-    from langgraph.checkpoint.serde._msgpack import (  # noqa: F401
+    from langgraph.checkpoint.serde._msgpack import (
         STRICT_MSGPACK_ENABLED,
     )
 except ImportError:
