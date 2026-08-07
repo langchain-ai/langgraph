@@ -26,16 +26,38 @@ from typing import Any
 
 from langgraph.checkpoint.base import DeltaChannelHistory, PendingWrite
 
-# Stage 1 streams ancestors of `target_cid` newest-first. The `<=`
-# predicate keeps target itself in the stream so we can read its
-# `parent_checkpoint_id` from the first row without a separate lookup;
-# the caller skips target's own writes/seed (matches the
-# `BaseCheckpointSaver` contract).
+# Stage 1 streams target followed by its ancestors, oldest step last, by
+# following `parent_checkpoint_id` in a recursive CTE. Target is the anchor
+# row, so the caller reads its `parent_checkpoint_id` without a separate
+# lookup and skips its own writes/seed (matches the `BaseCheckpointSaver`
+# contract).
+#
+# Ancestry is defined by `parent_checkpoint_id` alone. An earlier form
+# filtered `checkpoint_id <= target` and ordered by `checkpoint_id DESC`,
+# which additionally required every child's id to sort above its parent's.
+# Nothing in the contract promises that, and a parent sorting above its
+# child was dropped from the stream entirely, silently costing that
+# parent's seed and writes. See #8550.
+#
+# A parent chain can cycle: `put` writes with `INSERT OR REPLACE`, so
+# re-putting an existing checkpoint id under a descendant's config rewrites
+# its parent. The old id-range scan read a finite row set and could not
+# loop; this one can, so `step_walk_with_row` stops on a repeated
+# checkpoint_id. sqlite yields recursive rows lazily, so abandoning the
+# cursor ends the recursion rather than waiting on it.
 DELTA_STAGE1_SQL = (
+    "WITH RECURSIVE ancestors(checkpoint_id, parent_checkpoint_id, type, "
+    "checkpoint) AS ("
     "SELECT checkpoint_id, parent_checkpoint_id, type, checkpoint "
     "FROM checkpoints "
-    "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id <= ? "
-    "ORDER BY checkpoint_id DESC"
+    "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? "
+    "UNION ALL "
+    "SELECT c.checkpoint_id, c.parent_checkpoint_id, c.type, c.checkpoint "
+    "FROM checkpoints c JOIN ancestors a "
+    "ON c.checkpoint_id = a.parent_checkpoint_id "
+    "WHERE c.thread_id = ? AND c.checkpoint_ns = ?"
+    ") "
+    "SELECT checkpoint_id, parent_checkpoint_id, type, checkpoint FROM ancestors"
 )
 
 
@@ -95,14 +117,20 @@ def step_walk_with_row(
     Off-path rows (different branch on the same thread) advance the
     cursor without doing any work.
 
-    Returns True when every requested channel is seeded — the caller
-    can stop iterating and close the cursor.
+    Returns True when the caller can stop iterating and close the cursor,
+    either because every requested channel is seeded or because the parent
+    chain revisited a checkpoint it had already walked. `put` writes with
+    `INSERT OR REPLACE`, so re-putting an existing checkpoint id under a
+    descendant's config points it at its own descendant and makes the chain
+    a loop; without this check the recursive stage-1 query would feed rows
+    forever.
     """
     if "started" not in walk_state:
         if cid == target_id:
             walk_state["started"] = True
             walk_state["cur_cid"] = parent_cid
             walk_state["active"] = {ch for ch in channels if ch not in seeded}
+            walk_state["walked"] = {cid}
         # Not target yet (or target not present): keep streaming.
         return False
     active: set[str] = walk_state["active"]
@@ -111,6 +139,10 @@ def step_walk_with_row(
     if cid != walk_state["cur_cid"]:
         # Off-path row from a sibling branch — skip without deserializing.
         return False
+    walked: set[str] = walk_state["walked"]
+    if cid in walked:
+        return True
+    walked.add(cid)
     for ch in active:
         chain_by_ch[ch].append(cid)
     ckpt = serde.loads_typed((type_tag, blob))
