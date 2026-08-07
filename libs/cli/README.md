@@ -103,6 +103,8 @@ The CLI uses a `langgraph.json` configuration file with these key settings:
 }
 ```
 
+Git dependencies must use credential-free URLs. The CLI rejects HTTP Git URLs with userinfo because generated Dockerfiles and image layers can retain embedded usernames or tokens. For private dependencies, provide short-lived credentials through your build environment's secret-backed Git credential helper. Do not store credentials in `langgraph.json`, requirement or lock files, or a `pip_config_file` copied into the image.
+
 See the [full documentation](https://reference.langchain.com/python/langgraph-cli) for detailed configuration options.
 
 ## Development
