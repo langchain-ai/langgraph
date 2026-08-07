@@ -5,10 +5,11 @@ import logging
 import typing
 import warnings
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Hashable, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass, is_dataclass
 from datetime import timedelta
 from functools import partial
+from importlib import metadata
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
 from types import NoneType as NoneType
@@ -29,6 +30,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.store.base import BaseStore
+from packaging.version import Version
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
@@ -118,6 +120,27 @@ def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
         "Please provide a valid schema to ensure correct updates.\n"
         " See: https://langchain-ai.github.io/langgraph/reference/graphs/#stategraph"
     )
+
+
+def _check_delta_channel_api_support(channels: Mapping[str, Any]) -> None:
+    """Raise if a `DeltaChannel` graph runs under an API server too old to support it.
+
+    `DeltaChannel` reconstruction needs server-side support added in
+    `langgraph-api>=0.10.0`, so we raise at compile time when an older API
+    server is installed. Skipped when `langgraph-api` is absent (local
+    execution) or the graph has no delta channel.
+    """
+    if not any(isinstance(c, DeltaChannel) for c in channels.values()):
+        return
+    try:
+        api_version = metadata.version("langgraph-api")
+    except metadata.PackageNotFoundError:
+        return
+    if Version(api_version) < Version("0.10.0"):
+        raise RuntimeError(
+            f"`DeltaChannel` requires `langgraph-api>=0.10.0`, but {api_version} "
+            "is installed. Upgrade with `pip install -U langgraph-api`."
+        )
 
 
 def _get_node_name(node: StateNode[Any, ContextT]) -> str:
@@ -1216,6 +1239,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             CompiledStateGraph: The compiled `StateGraph`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
+        _check_delta_channel_api_support(self.channels)
 
         serde_allowlist: set[tuple[str, ...]] | None = None
         if _serde.STRICT_MSGPACK_ENABLED:
