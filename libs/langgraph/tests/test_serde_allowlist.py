@@ -79,7 +79,7 @@ class DummyChannel:
 
 def test_curated_core_allowlist_includes_messages() -> None:
     try:
-        from langchain_core.messages import BaseMessage
+        from langchain_core.messages import BaseMessage  # noqa: PLC0415
     except Exception:
         pytest.skip("langchain_core not available")
     allowlist = curated_core_allowlist()

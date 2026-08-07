@@ -334,7 +334,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
             >>> checkpoint_tuple = memory.get_tuple(config)
             >>> print(checkpoint_tuple)
             CheckpointTuple(...)
-        """  # noqa
+        """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         args = (thread_id, checkpoint_ns)
@@ -885,7 +885,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         while True:
             try:
                 yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_),  # type: ignore[arg-type]  # noqa: F821
+                    anext(aiter_),  # type: ignore[arg-type]
                     self.loop,
                 ).result()
             except StopAsyncIteration:

@@ -13,6 +13,7 @@ from langgraph.callbacks import (
     GraphCallbackHandler,
     GraphInterruptEvent,
     GraphResumeEvent,
+    _GraphCallbackManager,
 )
 from langgraph.graph import START, StateGraph
 from langgraph.types import Command, Interrupt, interrupt
@@ -286,7 +287,6 @@ def test_non_graph_handler_via_add_handler_does_not_crash() -> None:
     GraphCallbackHandler. They must be silently accepted — graph lifecycle
     events will simply not be dispatched to them.
     """
-    from langgraph.callbacks import _GraphCallbackManager
 
     manager = _GraphCallbackManager()
     plain_handler = _LangChainCustomEventHandler()

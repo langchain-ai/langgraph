@@ -220,7 +220,7 @@ def _checkpointers() -> list[tuple[str, Any]]:
     result: list[tuple[str, Any]] = [("InMemory", None)]
     if _POSTGRES_AVAILABLE:
         try:
-            import psycopg
+            import psycopg  # noqa: PLC0415
 
             psycopg.connect(_POSTGRES_URI).close()
             result.append(("Postgres", "postgres"))

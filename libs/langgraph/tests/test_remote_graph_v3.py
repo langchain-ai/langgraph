@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from langgraph.pregel import remote as remote_mod
 from langgraph.pregel._remote_run_stream import (
     _AsyncRemoteGraphRunStream,
     _ChannelProjection,
@@ -577,7 +578,6 @@ def test_stream_events_v3_strips_checkpoint_keys_from_configurable():
 def test_stream_events_v3_merges_tracing_headers_when_distributed_tracing(
     monkeypatch,
 ):
-    from langgraph.pregel import remote as remote_mod
 
     sync_client = MagicMock()
     sync_client.threads.stream.return_value = MagicMock()
