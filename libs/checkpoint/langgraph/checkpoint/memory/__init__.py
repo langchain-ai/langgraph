@@ -30,6 +30,23 @@ from langgraph.checkpoint.base import (
 logger = logging.getLogger(__name__)
 
 
+# How `InMemorySaver.writes[thread, ns, checkpoint]` keys and stores one write.
+_WriteKey = tuple[str, int]  # task ID, write idx
+_WriteValue = tuple[str, str, tuple[str, bytes], str]  # + channel, value, path
+_WriteEntry = tuple[_WriteKey, _WriteValue]  # one `dict.items()` pair
+
+
+def _delta_replay_sort_key(entry: _WriteEntry) -> tuple[str, str, int]:
+    """Order one checkpoint's writes as `apply_writes` applied them live.
+
+    Live order is `(task_path, task_id, idx)` — see `DeltaChannelHistory`. It
+    has to be assembled from both halves of the entry: `(task_id, idx)` is the
+    key, `task_path` is the last element of the value.
+    """
+    (task_id, idx), (_, _, _, task_path) = entry
+    return (task_path, task_id, idx)
+
+
 class InMemorySaver(
     BaseCheckpointSaver[str], AbstractContextManager, AbstractAsyncContextManager
 ):
@@ -71,10 +88,7 @@ class InMemorySaver(
         dict[str, dict[str, tuple[tuple[str, bytes], tuple[str, bytes], str | None]]],
     ]
     # (thread ID, checkpoint NS, checkpoint ID) -> (task ID, write idx)
-    writes: defaultdict[
-        tuple[str, str, str],
-        dict[tuple[str, int], tuple[str, str, tuple[str, bytes], str]],
-    ]
+    writes: defaultdict[tuple[str, str, str], dict[_WriteKey, _WriteValue]]
     blobs: dict[
         tuple[
             str, str, str, str | int | float
@@ -200,8 +214,10 @@ class InMemorySaver(
                     terminated_here.add(ch)
 
             step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
-            for (_task_id, _idx), (tid, ch, serialized, _) in sorted(
-                step_writes.items(), reverse=True
+            # Newest-first; the caller reverses to get the public oldest-first
+            # order.
+            for (task_id, _idx), (_, ch, serialized, _task_path) in sorted(
+                step_writes.items(), key=_delta_replay_sort_key, reverse=True
             ):
                 if ch not in remaining:
                     continue
@@ -211,7 +227,7 @@ class InMemorySaver(
                 ):
                     continue
                 collected_by_ch[ch].append(
-                    (tid, ch, self.serde.loads_typed(serialized))
+                    (task_id, ch, self.serde.loads_typed(serialized))
                 )
 
             for ch in terminated_here:

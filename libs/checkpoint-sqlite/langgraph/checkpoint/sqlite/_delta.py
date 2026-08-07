@@ -57,7 +57,7 @@ def build_delta_stage2_sql(*, chain_lens: Sequence[int]) -> str:
     for n in chain_lens:
         cid_placeholders = ",".join("?" * n)
         branches.append(
-            "SELECT checkpoint_id, channel, task_id, idx, type, value "
+            "SELECT checkpoint_id, channel, task_id, idx, type, value, task_path "
             "FROM writes "
             "WHERE thread_id = ? AND checkpoint_ns = ? AND channel = ? "
             f"AND checkpoint_id IN ({cid_placeholders})"
@@ -130,29 +130,33 @@ def build_delta_channels_writes_history(
     chain_by_ch: Mapping[str, list[str]],
     seed_val_by_ch: Mapping[str, Any],
     seeded: set[str],
-    stage2_rows: Sequence[tuple[str, str, str, int, str, bytes]],
+    stage2_rows: Sequence[tuple[str, str, str, int, str, bytes, str]],
     serde: Any,
 ) -> dict[str, DeltaChannelHistory]:
     """Demux stage-2 rows per channel; produce per-channel histories.
 
-    Stage-2 rows are `(checkpoint_id, channel, task_id, idx, type, value)`.
-    Final write order is oldest→newest globally and `(task_id, idx)` within
-    a checkpoint, matching the contract on `DeltaChannelHistory.writes`.
+    Stage-2 rows are
+    `(checkpoint_id, channel, task_id, idx, type, value, task_path)`.
+    Final write order is oldest→newest globally and
+    `(task_path, task_id, idx)` within a checkpoint, matching the contract
+    on `DeltaChannelHistory.writes` — that is the order `apply_writes`
+    applied them in live, which `(task_id, idx)` alone does not recover
+    for parallel tasks writing one channel in a single super-step.
 
     `seed` is omitted when the walk reached a true root with no snapshot
     found (channel never entered `seeded`); consumers treat absence as
     "start empty".
     """
-    writes_by_ch_by_cid: dict[str, dict[str, list[tuple[str, bytes, str, int]]]] = {
-        ch: {} for ch in channels
-    }
-    for cid, ch, task_id, idx, type_tag, value_blob in stage2_rows:
+    writes_by_ch_by_cid: dict[
+        str, dict[str, list[tuple[str, bytes, str, int, str]]]
+    ] = {ch: {} for ch in channels}
+    for cid, ch, task_id, idx, type_tag, value_blob, task_path in stage2_rows:
         writes_by_ch_by_cid.setdefault(ch, {}).setdefault(cid, []).append(
-            (type_tag, value_blob, task_id, idx)
+            (type_tag, value_blob, task_id, idx, task_path)
         )
     for cid_map in writes_by_ch_by_cid.values():
         for ws in cid_map.values():
-            ws.sort(key=lambda w: (w[2], w[3]))
+            ws.sort(key=lambda w: (w[4], w[2], w[3]))
 
     result: dict[str, DeltaChannelHistory] = {}
     for ch in channels:
@@ -161,7 +165,7 @@ def build_delta_channels_writes_history(
         collected: list[PendingWrite] = []
         # Chain is newest-first; iterate oldest-first for the public order.
         for cid in reversed(chain_cids):
-            for type_tag, value_blob, task_id, _idx in cid_writes.get(cid, []):
+            for type_tag, value_blob, task_id, _idx, _path in cid_writes.get(cid, []):
                 collected.append(
                     (task_id, ch, serde.loads_typed((type_tag, value_blob)))
                 )

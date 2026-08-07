@@ -168,6 +168,7 @@ class _DeltaStage2Row(TypedDict, total=False):
     type: str | None
     blob: bytes | None
     task_id: str | None  # "w" rows only
+    task_path: str | None  # "w" rows only
     idx: int | None  # "w" rows only
     version: str | None  # "b" rows only
 
@@ -319,7 +320,7 @@ def _build_delta_stage2_sql(
         branches.append(
             "SELECT 'w'::text AS _kind, "
             "checkpoint_id, channel, "
-            "type, blob, task_id, idx, NULL::text AS version "
+            "type, blob, task_id, task_path, idx, NULL::text AS version "
             "FROM checkpoint_writes "
             "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
             "AND checkpoint_id = ANY(%s)"
@@ -327,7 +328,8 @@ def _build_delta_stage2_sql(
     for _ in channels_with_seed:
         branches.append(
             "SELECT 'b'::text AS _kind, NULL::text AS checkpoint_id, channel, "
-            "type, blob, NULL::text AS task_id, NULL::int AS idx, version "
+            "type, blob, NULL::text AS task_id, NULL::text AS task_path, "
+            "NULL::int AS idx, version "
             "FROM checkpoint_blobs "
             "WHERE thread_id = %s AND checkpoint_ns = %s AND channel = %s "
             "AND version = %s"
@@ -492,10 +494,11 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         stored value, or when the seed blob is sentinel "empty" — in both cases
         the consumer treats absence as "start empty".
         """
-        # writes_by_ch_by_cid[channel][cid] = list of (type, blob, task_id, idx)
-        writes_by_ch_by_cid: dict[str, dict[str, list[tuple[str, bytes, str, int]]]] = {
-            ch: {} for ch in channels
-        }
+        # writes_by_ch_by_cid[channel][cid] = list of
+        # (type, blob, task_id, idx, task_path)
+        writes_by_ch_by_cid: dict[
+            str, dict[str, list[tuple[str, bytes, str, int, str]]]
+        ] = {ch: {} for ch in channels}
         # seed_blob_by_ver[(channel, version)] = (type, blob)
         seed_blob_by_ver: dict[tuple[str, str], tuple[str, bytes]] = {}
 
@@ -506,8 +509,17 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                 cid = cast(str, r["checkpoint_id"])
                 writes_by_ch_by_cid.setdefault(ch, {}).setdefault(cid, []).append(
                     cast(
-                        "tuple[str, bytes, str, int]",
-                        (r["type"], r["blob"], r["task_id"], r["idx"]),
+                        "tuple[str, bytes, str, int, str]",
+                        (
+                            r["type"],
+                            r["blob"],
+                            r["task_id"],
+                            r["idx"],
+                            # `task_path` is NOT NULL DEFAULT '' on "w" rows;
+                            # it is nullable on `_DeltaStage2Row` only because
+                            # the seed branch selects NULL for it.
+                            r["task_path"],
+                        ),
                     )
                 )
             else:  # kind == "b"
@@ -516,10 +528,12 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                     "tuple[str, bytes]", (r["type"], r["blob"])
                 )
 
-        # Sort writes per (channel, cid) newest-first by (task_id, idx)
+        # Sort writes per (channel, cid) newest-first by
+        # (task_path, task_id, idx) — the order `apply_writes` applied them
+        # in live, and the order documented on `DeltaChannelHistory`.
         for cid_map in writes_by_ch_by_cid.values():
             for ws in cid_map.values():
-                ws.sort(key=lambda w: (w[2], w[3]), reverse=True)
+                ws.sort(key=lambda w: (w[4], w[2], w[3]), reverse=True)
 
         result: dict[str, DeltaChannelHistory] = {}
         for ch in channels:
@@ -529,7 +543,9 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             collected: list[PendingWrite] = []
             cid_writes = writes_by_ch_by_cid.get(ch, {})
             for cid in chain_cids:
-                for type_tag, write_blob, task_id, _idx in cid_writes.get(cid, []):
+                for type_tag, write_blob, task_id, _idx, _path in cid_writes.get(
+                    cid, []
+                ):
                     val = self.serde.loads_typed((type_tag, write_blob))
                     collected.append((task_id, ch, val))
             collected.reverse()

@@ -161,6 +161,23 @@ class DeltaChannelHistory(TypedDict):
       Always present; possibly empty. Already filtered to one channel.
       Writes stored at the target checkpoint itself are pending for the
       next super-step and are excluded.
+
+      Within a single checkpoint, writes are ordered by
+      `(task_path, task_id, idx)`. This mirrors the order live execution
+      applied them in: `apply_writes` sorts a super-step's tasks by
+      `task_path_str(task.path[:3])` before handing their values to
+      `channel.update`, so a path-ordered replay reproduces the value
+      `invoke` returned. Ordering by `(task_id, idx)` alone does not —
+      `task_id` is a hash of the path, so for two or more tasks writing
+      the same channel in one super-step it permutes the values against
+      the order the reducer originally saw them in. Reducers are only
+      required to be batching-invariant, not order-invariant, so that
+      permutation changes the reconstructed value.
+
+      Writes persisted without a `task_path` (a task-less write such as
+      graph input, or a row written before the saver recorded the column)
+      sort first within their checkpoint, since `""` precedes every
+      `task_path_str` output — `task_path_str` prefixes tuples with `~`.
     * `seed` — the stored value at the nearest ancestor whose
       `channel_values[ch]` is populated. Omitted if the walk reached the
       root without finding any stored value (consumer treats absence as
@@ -609,6 +626,14 @@ class BaseCheckpointSaver(Generic[V]):
         channel. Savers with direct storage access (`InMemorySaver`,
         `PostgresSaver`) override for performance; the return contract is
         fixed here.
+
+        `PendingWrite` carries no `task_path`, so the default takes each
+        ancestor's write order straight from `get_tuple`. Savers relying
+        on it must therefore return `pending_writes` ordered by
+        `(task_path, task_id, idx)` to satisfy the intra-checkpoint order
+        documented on `DeltaChannelHistory`; savers that order
+        `pending_writes` by `(task_id, idx)` alone need to override this
+        method (as the in-tree savers do) rather than inherit it.
 
         Args:
             config: Configuration identifying the target checkpoint.
