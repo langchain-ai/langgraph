@@ -4,10 +4,14 @@ import asyncio
 import contextlib
 import re
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
+from langchain_protocol import Event
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._async.stream import AsyncThreadStream
@@ -24,6 +28,8 @@ from streaming._events import (
     lifecycle_started_event,
     message_finish_event,
     message_start_event,
+    message_text_delta_event,
+    message_text_finish_event,
     tasks_start_event,
     tool_finished_event,
     tool_started_event,
@@ -225,9 +231,6 @@ async def test_aenter_constructs_transport_with_thread_id():
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
-        from langgraph_sdk._async.http import HttpClient
-        from langgraph_sdk._async.threads import ThreadsClient
-
         threads = ThreadsClient(HttpClient(raw))
         stream = threads.stream(thread_id="t-1", assistant_id="agent")
         async with stream:
@@ -237,9 +240,6 @@ async def test_aenter_constructs_transport_with_thread_id():
 
 async def test_aenter_selects_websocket_transport():
     async with httpx.AsyncClient(base_url="http://test") as raw:
-        from langgraph_sdk._async.http import HttpClient
-        from langgraph_sdk._async.threads import ThreadsClient
-
         threads = ThreadsClient(HttpClient(raw))
         stream = threads.stream(
             thread_id="t-1", assistant_id="agent", transport="websocket"
@@ -252,9 +252,6 @@ async def test_aexit_closes_transport():
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
-        from langgraph_sdk._async.http import HttpClient
-        from langgraph_sdk._async.threads import ThreadsClient
-
         threads = ThreadsClient(HttpClient(raw))
         stream = threads.stream(thread_id="t-1", assistant_id="agent")
         async with stream:
@@ -268,9 +265,6 @@ async def test_run_start_sends_command_with_assistant_id():
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
-        from langgraph_sdk._async.http import HttpClient
-        from langgraph_sdk._async.threads import ThreadsClient
-
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             result = await thread.run.start(input={"x": 1})
@@ -286,9 +280,6 @@ async def test_command_ids_are_monotonic():
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
-        from langgraph_sdk._async.http import HttpClient
-        from langgraph_sdk._async.threads import ThreadsClient
-
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             await thread.run.start(input={"x": 1})
@@ -300,9 +291,6 @@ async def test_run_start_forwards_config_and_metadata():
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
-        from langgraph_sdk._async.http import HttpClient
-        from langgraph_sdk._async.threads import ThreadsClient
-
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             await thread.run.start(
@@ -316,7 +304,6 @@ async def test_run_start_forwards_config_and_metadata():
 
 
 async def test_run_start_raises_outside_context_manager():
-    import pytest
 
     async with httpx.AsyncClient(base_url="http://test") as raw:
         stream = AsyncThreadStream(
@@ -327,9 +314,6 @@ async def test_run_start_raises_outside_context_manager():
 
 
 async def test_run_start_raises_on_error_envelope():
-    from starlette.applications import Starlette
-    from starlette.responses import JSONResponse
-    from starlette.routing import Route
 
     async def commands(_request):
         return JSONResponse(
@@ -346,11 +330,6 @@ async def test_run_start_raises_on_error_envelope():
     )
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
-        import pytest
-
-        from langgraph_sdk._async.http import HttpClient
-        from langgraph_sdk._async.threads import ThreadsClient
-
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             with pytest.raises(RuntimeError, match="invalid_argument"):
@@ -367,9 +346,6 @@ async def test_events_yields_raw_events_after_run_start():
     )
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
-        from langgraph_sdk._async.http import HttpClient
-        from langgraph_sdk._async.threads import ThreadsClient
-
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             await thread.run.start(input={})
@@ -383,9 +359,6 @@ async def test_events_subscribes_to_all_channels():
     fake.script([])
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
-        from langgraph_sdk._async.http import HttpClient
-        from langgraph_sdk._async.threads import ThreadsClient
-
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             await thread.run.start(input={})
@@ -405,17 +378,11 @@ async def test_events_subscribes_to_all_channels():
 
 
 async def test_events_terminates_on_aexit():
-    import asyncio
-
-    import pytest
 
     fake = FakeServer()
     fake.script([lifecycle_event(seq=i) for i in range(5)])
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
-        from langgraph_sdk._async.http import HttpClient
-        from langgraph_sdk._async.threads import ThreadsClient
-
         threads = ThreadsClient(HttpClient(raw))
         stream = threads.stream(thread_id="t-1", assistant_id="agent")
         async with stream as thread:
@@ -462,9 +429,6 @@ async def test_events_property_returns_fresh_iterator_each_access():
     fake.script([])
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
-        from langgraph_sdk._async.http import HttpClient
-        from langgraph_sdk._async.threads import ThreadsClient
-
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             first_iter = thread.events
@@ -549,7 +513,6 @@ async def test_unregister_subscription_removes_from_registry():
 async def test_await_run_start_gate_honors_timeout():
     """Gate must raise asyncio.TimeoutError if run.start never completes
     within the configured timeout."""
-    import asyncio
 
     async with httpx.AsyncClient(base_url="http://test") as raw:
         threads = ThreadsClient(HttpClient(raw))
@@ -568,7 +531,6 @@ async def test_await_run_start_gate_honors_timeout():
 async def test_await_run_start_gate_returns_when_gate_resolves_in_time():
     """With a generous timeout and a gate that resolves promptly, the
     gate returns without raising."""
-    import asyncio
 
     async with httpx.AsyncClient(base_url="http://test") as raw:
         threads = ThreadsClient(HttpClient(raw))
@@ -583,7 +545,6 @@ async def test_await_run_start_gate_returns_when_gate_resolves_in_time():
 async def test_run_start_timeout_constructor_kwarg_forwarded_to_gate():
     """`run_start_timeout` constructor kwarg is stored and consulted by
     `_reconcile_stream` via `_await_run_start_gate`."""
-    import asyncio
 
     async with httpx.AsyncClient(base_url="http://test") as raw:
         stream = AsyncThreadStream(
@@ -608,7 +569,6 @@ async def test_subscribe_waits_for_run_start_to_commit():
     their SSE. Without it, a fast subscribe would 404 against a thread the
     server hasn't created yet.
     """
-    import asyncio
 
     fake = FakeServer()
     fake.script([])
@@ -699,7 +659,6 @@ async def test_run_respond_snapshots_interrupts_under_lock():
     `respond()` blocks until the lock is released — proving it serializes
     with the terminal-clear path that takes the same lock.
     """
-    import asyncio
 
     fake = FakeServer()
     asgi = httpx.ASGITransport(app=fake.app)
@@ -737,7 +696,6 @@ async def test_terminal_lifecycle_clear_acquires_interrupts_lock():
     """Terminal lifecycle event clears `interrupts` under the same lock
     that `respond()` uses, preventing TOCTOU between snapshot and
     dispatch."""
-    import asyncio
 
     fake = FakeServer()
     # No scripted events; we exercise `_apply_lifecycle_event` directly.
@@ -754,10 +712,6 @@ async def test_terminal_lifecycle_clear_acquires_interrupts_lock():
             # clearing interrupts.
             await thread._interrupts_lock.acquire()
             try:
-                from typing import cast
-
-                from langchain_protocol import Event
-
                 terminal_event = cast(
                     Event,
                     {
@@ -909,19 +863,6 @@ async def test_threads_stream_rejects_unknown_transport_option():
 
 
 async def test_v3_streaming_async_surface_smoke():
-    import asyncio
-
-    from streaming._events import (
-        custom_event,
-        lifecycle_completed_event,
-        message_finish_event,
-        message_start_event,
-        message_text_delta_event,
-        message_text_finish_event,
-        tool_finished_event,
-        tool_started_event,
-        values_event,
-    )
 
     fake = FakeServer()
     fake.set_state({"final": True})

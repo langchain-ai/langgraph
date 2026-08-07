@@ -11,6 +11,7 @@ from langgraph_cli.archive import (
     _tar_filter,
     create_archive,
 )
+from langgraph_cli.config import LocalDeps
 
 # ---------------------------------------------------------------------------
 # _tar_filter
@@ -198,7 +199,6 @@ class TestCreateArchive:
 
     @patch("langgraph_cli.archive._assemble_local_deps")
     def test_yields_archive_with_config(self, mock_deps, tmp_path):
-        from langgraph_cli.config import LocalDeps
 
         config_file = self._make_project(tmp_path)
         mock_deps.return_value = LocalDeps(
@@ -218,7 +218,6 @@ class TestCreateArchive:
 
     @patch("langgraph_cli.archive._assemble_local_deps")
     def test_excludes_pycache(self, mock_deps, tmp_path):
-        from langgraph_cli.config import LocalDeps
 
         config_file = self._make_project(tmp_path)
         mock_deps.return_value = LocalDeps(
@@ -232,7 +231,6 @@ class TestCreateArchive:
 
     @patch("langgraph_cli.archive._assemble_local_deps")
     def test_cleans_up_tmp_dir_on_normal_exit(self, mock_deps, tmp_path):
-        from langgraph_cli.config import LocalDeps
 
         config_file = self._make_project(tmp_path)
         mock_deps.return_value = LocalDeps(
@@ -247,7 +245,6 @@ class TestCreateArchive:
 
     @patch("langgraph_cli.archive._assemble_local_deps")
     def test_cleans_up_tmp_dir_on_exception(self, mock_deps, tmp_path):
-        from langgraph_cli.config import LocalDeps
 
         config_file = self._make_project(tmp_path)
         mock_deps.return_value = LocalDeps(
@@ -264,7 +261,6 @@ class TestCreateArchive:
     @patch("langgraph_cli.archive._assemble_local_deps")
     @patch("langgraph_cli.archive._MAX_SIZE", 10)
     def test_raises_on_oversized_archive(self, mock_deps, tmp_path):
-        from langgraph_cli.config import LocalDeps
 
         config_file = self._make_project(tmp_path)
         mock_deps.return_value = LocalDeps(
@@ -278,7 +274,6 @@ class TestCreateArchive:
     @patch("langgraph_cli.archive._assemble_local_deps")
     def test_handles_extra_contexts(self, mock_deps, tmp_path):
         """Monorepo case: project + sibling dependency directory."""
-        from langgraph_cli.config import LocalDeps
 
         project = tmp_path / "myproject"
         project.mkdir()

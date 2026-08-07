@@ -4,10 +4,13 @@ import ipaddress
 import pathlib
 import re
 import sys
+import typing
 import uuid
 from enum import Enum
 from typing import Annotated, Literal, Optional
 
+import pydantic
+import typing_extensions
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import (
     BaseModel,
@@ -32,10 +35,6 @@ from tests.any_str import AnyStr
 
 def test_is_supported_by_pydantic() -> None:
     """Test if types are supported by pydantic."""
-    import typing
-
-    import pydantic
-    import typing_extensions
 
     class TypedDictExtensions(typing_extensions.TypedDict):
         x: int

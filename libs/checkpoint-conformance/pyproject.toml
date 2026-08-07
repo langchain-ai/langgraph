@@ -58,8 +58,14 @@ lint.select = [
   "UP", # pyupgrade
   "B",  # flake8-bugbear
   "I",  # isort
+  "PLC0415",  # import-outside-top-level
+  "RUF100",  # unused noqa directive
 ]
 lint.ignore = ["E501", "B008"]
+# PLC0415 (import-outside-top-level) is enforced in tests only. Library code
+# still has deferred imports that have not been reviewed, so it stays exempt
+# for now.
+lint.per-file-ignores = { "langgraph/**" = ["PLC0415"] }
 target-version = "py310"
 
 [tool.uv.sources]

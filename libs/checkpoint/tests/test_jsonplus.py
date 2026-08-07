@@ -1,9 +1,12 @@
 import dataclasses
 import json
 import logging
+import os
 import pathlib
+import pickle
 import re
 import sys
+import tempfile
 import uuid
 from collections import deque
 from datetime import date, datetime, time, timezone
@@ -18,7 +21,7 @@ import ormsgpack
 import pandas as pd
 import pytest
 from langchain_core.documents.base import Document
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
@@ -341,7 +344,6 @@ def test_lc2_json_safe_type_revives_without_allowlist() -> None:
     constructor dicts. Resuming those threads must reconstruct proper BaseMessage objects
     rather than returning raw dicts that cause MESSAGE_COERCION_FAILURE in add_messages.
     """
-    from langchain_core.messages import AIMessage
 
     serde = JsonPlusSerializer()  # default: _allowed_json_modules=None
 
@@ -410,7 +412,6 @@ def test_lc2_json_method_field_is_ignored() -> None:
     to that method: the result is whatever ``AIMessage(*args, **kwargs)`` would
     produce, which proves the default constructor ran instead of ``parse_raw``.
     """
-    from langchain_core.messages import AIMessage
 
     serde = JsonPlusSerializer()
     load = {
@@ -436,7 +437,6 @@ def test_lc2_json_method_field_is_ignored_for_allowlisted_types() -> None:
     method dispatch as a side effect. Revival is restricted to the default
     constructor regardless of how the class reached the revival path.
     """
-    from langchain_core.messages import AIMessage
 
     serde = JsonPlusSerializer(
         allowed_json_modules=[("langchain_core.messages.ai", "AIMessage")]
@@ -455,7 +455,6 @@ def test_lc2_json_method_field_is_ignored_for_allowlisted_types() -> None:
 
 def test_lc2_json_safe_type_init_still_works() -> None:
     """SAFE-type lc=2 revival without a `method` field still constructs the class."""
-    from langchain_core.messages import AIMessage
 
     serde = JsonPlusSerializer()
     load = {
@@ -479,7 +478,6 @@ def test_lc2_json_legacy_pydantic_method_list_falls_back_to_default() -> None:
     this shape continue to revive correctly as long as the default constructor
     accepts the serialized kwargs.
     """
-    from langchain_core.messages import AIMessage
 
     serde = JsonPlusSerializer()
     load = {
@@ -551,9 +549,6 @@ def test_lc2_json_safe_type_pickle_payload_does_not_execute() -> None:
     With method dispatch removed from `_revive_lc2`, the gadget bytes are never
     passed to `parse_raw` and therefore never reach `pickle.loads`.
     """
-    import os
-    import pickle
-    import tempfile
 
     marker = tempfile.NamedTemporaryFile(
         prefix="lc2_block_proof_", suffix=".out", delete=False

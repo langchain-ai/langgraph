@@ -6,8 +6,17 @@ import contextlib
 import httpx
 import orjson
 import pytest
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Route
 
-from langgraph_sdk.stream.transport.http import EventStreamHandle, ProtocolSseTransport
+from langgraph_sdk.stream.transport.http import (
+    EventStreamHandle,
+    ProtocolSseTransport,
+    _build_event_stream_body,
+)
+from streaming._events import lifecycle_event, values_event
+from streaming._fake_server import FakeServer
 
 
 async def test_event_stream_handle_constructs_with_open_state():
@@ -35,7 +44,6 @@ async def test_event_stream_handle_constructs_with_open_state():
 
 
 async def test_send_command_posts_json_and_returns_response():
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
@@ -53,9 +61,6 @@ async def test_send_command_posts_json_and_returns_response():
 
 
 async def test_send_command_returns_none_on_202():
-    from starlette.applications import Starlette
-    from starlette.responses import Response
-    from starlette.routing import Route
 
     received: list[dict] = []
 
@@ -75,7 +80,6 @@ async def test_send_command_returns_none_on_202():
 
 
 async def test_send_command_raises_when_closed():
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
@@ -87,9 +91,6 @@ async def test_send_command_raises_when_closed():
 
 
 async def test_send_command_raises_http_error_on_4xx():
-    from starlette.applications import Starlette
-    from starlette.responses import JSONResponse
-    from starlette.routing import Route
 
     async def commands(_request):
         return JSONResponse({"error": "bad request"}, status_code=400)
@@ -105,8 +106,6 @@ async def test_send_command_raises_http_error_on_4xx():
 
 
 async def test_open_event_stream_yields_scripted_events():
-    from streaming._events import lifecycle_event, values_event
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     fake.script(
@@ -129,7 +128,6 @@ async def test_open_event_stream_yields_scripted_events():
 
 
 async def test_open_event_stream_passes_since_in_body():
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     fake.script([])
@@ -145,8 +143,6 @@ async def test_open_event_stream_passes_since_in_body():
 
 
 async def test_open_event_stream_close_cancels_in_flight_iteration():
-    from streaming._events import lifecycle_event
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     fake.script(
@@ -219,9 +215,6 @@ async def test_mid_stream_error_after_ready_surfaces_on_done():
     """If the SSE response body iteration raises after headers/ready, the
     error must be exposed on handle.done so callers can distinguish a clean
     end from a transport failure."""
-    import httpx
-
-    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
 
     def handler(_request: httpx.Request) -> httpx.Response:
         async def body():
@@ -250,9 +243,6 @@ async def test_mid_stream_error_after_ready_surfaces_on_done():
 @pytest.mark.anyio
 async def test_clean_stream_end_done_resolves_with_none():
     """A stream that ends without error must resolve `done` with None."""
-    import httpx
-
-    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
 
     def handler(_request: httpx.Request) -> httpx.Response:
         async def body():
@@ -280,9 +270,6 @@ async def test_clean_stream_end_done_resolves_with_none():
 async def test_send_command_empty_200_body_raises_runtime_error_not_decoder_error():
     """A 200 response with empty body must raise RuntimeError matching the
     'did not return a valid response' contract, not orjson.JSONDecodeError."""
-    import httpx
-
-    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
 
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=b"")
@@ -305,9 +292,6 @@ async def test_send_command_empty_200_body_raises_runtime_error_not_decoder_erro
 async def test_cancel_event_prevents_post_cancel_flush():
     """When the consumer cancels the handle mid-stream, the pump's decoder
     flush MUST NOT emit additional events after the cancel point."""
-    import httpx
-
-    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
 
     received: list = []
 
@@ -342,9 +326,6 @@ async def test_cancel_event_prevents_post_cancel_flush():
 
 @pytest.mark.anyio
 async def test_open_event_stream_ready_rejects_on_5xx():
-    from starlette.applications import Starlette
-    from starlette.responses import JSONResponse
-    from starlette.routing import Route
 
     async def stream_events(_request):
         return JSONResponse({"error": "boom"}, status_code=500)
@@ -371,14 +352,12 @@ async def test_open_event_stream_ready_rejects_on_5xx():
 
 
 def test_build_event_stream_body_minimal_channels_only():
-    from langgraph_sdk.stream.transport.http import _build_event_stream_body
 
     body = _build_event_stream_body({"channels": ["values"]})
     assert body == {"channels": ["values"]}
 
 
 def test_build_event_stream_body_includes_all_optional_fields():
-    from langgraph_sdk.stream.transport.http import _build_event_stream_body
 
     body = _build_event_stream_body(
         {
@@ -397,14 +376,12 @@ def test_build_event_stream_body_includes_all_optional_fields():
 
 
 def test_build_event_stream_body_omits_since_when_not_int():
-    from langgraph_sdk.stream.transport.http import _build_event_stream_body
 
     body = _build_event_stream_body({"channels": ["values"], "since": None})
     assert "since" not in body
 
 
 async def test_open_event_stream_raises_when_closed():
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
@@ -416,8 +393,6 @@ async def test_open_event_stream_raises_when_closed():
 
 
 async def test_transport_close_cancels_open_event_streams():
-    from streaming._events import lifecycle_event
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     fake.script([lifecycle_event(seq=i) for i in range(5)], delay=0.05)
@@ -439,7 +414,6 @@ async def test_transport_close_cancels_open_event_streams():
 
 async def test_default_headers_forwarded_to_send_command():
     """Headers passed at construction are sent on every command request."""
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
@@ -457,7 +431,6 @@ async def test_default_headers_forwarded_to_send_command():
 
 async def test_default_headers_forwarded_to_open_event_stream():
     """Headers passed at construction are sent on every SSE stream request."""
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     fake.script([])
@@ -479,7 +452,6 @@ async def test_default_headers_forwarded_to_open_event_stream():
 
 async def test_default_headers_cannot_override_sse_fixed_headers():
     """Caller-supplied default headers must not override content-type or accept."""
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     fake.script([])
@@ -506,7 +478,6 @@ async def test_default_headers_cannot_override_sse_fixed_headers():
 
 async def test_fake_server_state_endpoint():
     """State endpoint returns the set state and increments the counter."""
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     fake.set_state({"foo": "bar"}, next=["node_a"])
@@ -527,7 +498,6 @@ async def test_fake_server_state_endpoint():
 
 def test_values_event_builder_shape():
     """values_event produces the expected shape with params.data as the snapshot."""
-    from streaming._events import values_event
 
     evt = values_event(seq=1, values={"foo": 1})
     assert evt["event_id"] == "evt-1"
@@ -537,13 +507,11 @@ def test_values_event_builder_shape():
 
 
 async def test_open_event_stream_done_records_post_ready_error():
-    from streaming._events import values_event
 
     event_data = values_event(seq=1)
 
     class _FailAfterOneStream(httpx.AsyncByteStream):
         async def __aiter__(self):
-            import orjson
 
             payload = orjson.dumps(event_data).decode()
             yield f"id: {event_data.get('event_id', '')}\n".encode()

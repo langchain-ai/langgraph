@@ -7,7 +7,7 @@ import operator
 import random
 import sys
 import uuid
-from collections import Counter, deque
+from collections import Counter, defaultdict, deque
 from dataclasses import replace
 from time import perf_counter
 from typing import (
@@ -21,8 +21,20 @@ from uuid import UUID
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
-from langchain_core.messages import HumanMessage
+from langchain_core.language_models.fake_chat_models import (
+    FakeMessagesListChatModel,
+)
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    HumanMessage,
+    ToolCall,
+    ToolMessage,
+)
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
+from langchain_core.tools import tool
 from langchain_core.utils.aiter import aclosing
 from langchain_core.version import VERSION as LANGCHAIN_CORE_VERSION
 from langgraph.cache.base import BaseCache
@@ -45,6 +57,7 @@ from typing_extensions import NotRequired, TypedDict
 from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph._internal._queue import AsyncQueue
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.errors import (
@@ -55,10 +68,11 @@ from langgraph.errors import (
 )
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import MessagesState, add_messages
+from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
 from langgraph.pregel import NodeBuilder, Pregel
-from langgraph.pregel._loop import AsyncPregelLoop
+from langgraph.pregel._loop import AsyncPregelLoop, PregelLoop
 from langgraph.pregel._runner import PregelRunner
+from langgraph.runtime import RunControl
 from langgraph.types import (
     CachePolicy,
     Command,
@@ -222,7 +236,6 @@ async def test_checkpoint_errors() -> None:
 async def test_request_drain_allows_inflight_acall_scheduling(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from langgraph.runtime import RunControl
 
     @task
     async def child(x: int) -> int:
@@ -2868,7 +2881,6 @@ async def test_send_dedupe_on_resume(
 
 
 async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> None:
-    from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
     ai_message = AIMessage(
         "",
@@ -3259,7 +3271,6 @@ async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> 
 async def test_send_react_interrupt_control(
     async_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
 ) -> None:
-    from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
     ai_message = AIMessage(
         "",
@@ -5538,12 +5549,6 @@ async def test_checkpoint_metadata(async_checkpointer: BaseCheckpointSaver) -> N
     previous checkpoint config for each step in the run.
     """
     # set up test
-    from langchain_core.language_models.fake_chat_models import (
-        FakeMessagesListChatModel,
-    )
-    from langchain_core.messages import AIMessage, AnyMessage
-    from langchain_core.prompts import ChatPromptTemplate
-    from langchain_core.tools import tool
 
     # graph state
     class BaseState(TypedDict):
@@ -5944,7 +5949,6 @@ async def test_debug_subgraphs(
 async def test_debug_nested_subgraphs(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
-    from collections import defaultdict
 
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
@@ -6061,8 +6065,6 @@ async def test_debug_nested_subgraphs(
 async def test_parent_command(
     async_checkpointer: BaseCheckpointSaver, subgraph_persist: bool
 ) -> None:
-    from langchain_core.messages import BaseMessage
-    from langchain_core.tools import tool
 
     @tool(return_direct=True)
     def get_user_name() -> Command:
@@ -6130,10 +6132,6 @@ async def test_parent_command(
 
 async def test_delta_channel_durability_exit_stores_snapshot_async() -> None:
     """DeltaChannel must reload from an async durability='exit' checkpoint."""
-    from langchain_core.messages import AIMessage
-
-    from langgraph.channels.delta import DeltaChannel
-    from langgraph.graph.message import _messages_delta_reducer
 
     class State(TypedDict):
         messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
@@ -6420,7 +6418,6 @@ async def test_command_with_static_breakpoints(
 
 
 async def test_multistep_plan(async_checkpointer: BaseCheckpointSaver) -> None:
-    from langchain_core.messages import AnyMessage
 
     class State(TypedDict, total=False):
         plan: list[str | list[str]]
@@ -6758,7 +6755,6 @@ async def test_multiple_interrupts_functional(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Test multiple interrupts with functional API."""
-    from langgraph.func import entrypoint, task
 
     counter = 0
 
@@ -7674,7 +7670,6 @@ async def test_configurable_propagates_to_stream_metadata() -> None:
 
 
 async def test_stream_mode_messages_command() -> None:
-    from langchain_core.messages import HumanMessage
 
     async def my_node(state):
         return {"messages": HumanMessage(content="foo")}
@@ -7723,7 +7718,6 @@ async def test_stream_mode_messages_command() -> None:
 
 
 async def test_stream_messages_dedupe_inputs() -> None:
-    from langchain_core.messages import AIMessage
 
     async def call_model(state):
         return {"messages": AIMessage("hi", id="1")}
@@ -7763,7 +7757,6 @@ async def test_stream_messages_dedupe_inputs() -> None:
 async def test_stream_messages_dedupe_state(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from langchain_core.messages import AIMessage
 
     to_emit = [AIMessage("bye", id="1"), AIMessage("bye again", id="2")]
 
@@ -8142,9 +8135,6 @@ async def test_no_redundant_put_writes_for_cached_task(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Cached @tasks on resume must not trigger redundant put_writes."""
-    from unittest.mock import patch
-
-    from langgraph.pregel._loop import PregelLoop
 
     @task
     async def setup(x: int) -> int:
@@ -8646,7 +8636,6 @@ async def test_batch_update_as_input(
 
 
 async def test_draw_invalid():
-    from langchain_core.messages import BaseMessage
 
     class AgentState(TypedDict):
         messages: Annotated[list[BaseMessage], add_messages]

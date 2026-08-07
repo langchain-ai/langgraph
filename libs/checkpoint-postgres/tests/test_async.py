@@ -380,13 +380,15 @@ async def test_delta_channel_chain_reconstruction(saver_name: str) -> None:
         "langgraph.channels.delta", reason="langgraph core not installed"
     )
 
-    from typing import Annotated
+    # Deferred on purpose: langgraph core is not a test dependency of this
+    # package, so these must stay behind the importorskip above.
+    from typing import Annotated  # noqa: PLC0415
 
-    from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.channels.delta import DeltaChannel
-    from langgraph.graph import START, StateGraph
-    from langgraph.graph.message import _messages_delta_reducer
-    from typing_extensions import TypedDict
+    from langchain_core.messages import AIMessage, HumanMessage  # noqa: PLC0415
+    from langgraph.channels.delta import DeltaChannel  # noqa: PLC0415
+    from langgraph.graph import START, StateGraph  # noqa: PLC0415
+    from langgraph.graph.message import _messages_delta_reducer  # noqa: PLC0415
+    from typing_extensions import TypedDict  # noqa: PLC0415
 
     class State(TypedDict):
         messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]

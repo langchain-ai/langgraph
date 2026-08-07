@@ -10,6 +10,11 @@ from typing import Any
 
 import pytest
 
+from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._async.runs import RunsClient
+from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.runs import SyncRunsClient
+
 from .conftest import ASSISTANT_ID
 
 pytestmark = pytest.mark.integration
@@ -29,8 +34,6 @@ async def _cancel_after_first_event(
 
 
 async def test_cancel_async(async_threads) -> None:
-    from langgraph_sdk._async.http import HttpClient
-    from langgraph_sdk._async.runs import RunsClient
 
     threads, raw = async_threads
     runs_client = RunsClient(HttpClient(raw))
@@ -88,8 +91,6 @@ def _cancel_after_first_event_sync(
 
 
 def test_cancel_sync(sync_threads) -> None:
-    from langgraph_sdk._sync.http import SyncHttpClient
-    from langgraph_sdk._sync.runs import SyncRunsClient
 
     threads, raw = sync_threads
     runs_client = SyncRunsClient(SyncHttpClient(raw))

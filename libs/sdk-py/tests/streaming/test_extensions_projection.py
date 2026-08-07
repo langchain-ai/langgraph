@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._async.stream import ScopedStreamHandle
 from langgraph_sdk._async.threads import ThreadsClient
 from streaming._events import custom_event, lifecycle_completed_event
 from streaming._fake_server import FakeServer
@@ -46,8 +47,6 @@ async def test_extension_projection_supports_namespace_scope_on_subgraph_handle(
     )
     transport = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as raw:
-        from langgraph_sdk._async.stream import ScopedStreamHandle
-
         threads = ThreadsClient(HttpClient(raw))
         async with threads.stream(thread_id="t-1", assistant_id="agent") as thread:
             await thread.run.start(input={})
