@@ -463,6 +463,11 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             self.conn.execute(query, params) as cur,
             self.conn.cursor() as wcur,
         ):
+            # Materialize all matching checkpoints while holding the lock, so
+            # the lock is released before yielding to the caller. Holding the
+            # lock across a yield lets a paused consumer block aput() and any
+            # other lock-guarded operation (langgraph-ai/langgraph#8558).
+            results: list[CheckpointTuple] = []
             async for (
                 thread_id,
                 checkpoint_ns,
@@ -476,35 +481,41 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
                     (thread_id, checkpoint_ns, checkpoint_id),
                 )
-                yield CheckpointTuple(
-                    {
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": checkpoint_id,
-                        }
-                    },
-                    self.serde.loads_typed((type, checkpoint)),
-                    cast(
-                        CheckpointMetadata,
-                        (json.loads(metadata) if metadata is not None else {}),
-                    ),
-                    (
+                results.append(
+                    CheckpointTuple(
                         {
                             "configurable": {
                                 "thread_id": thread_id,
                                 "checkpoint_ns": checkpoint_ns,
-                                "checkpoint_id": parent_checkpoint_id,
+                                "checkpoint_id": checkpoint_id,
                             }
-                        }
-                        if parent_checkpoint_id
-                        else None
-                    ),
-                    [
-                        (task_id, channel, self.serde.loads_typed((type, value)))
-                        async for task_id, channel, type, value in wcur
-                    ],
+                        },
+                        self.serde.loads_typed((type, checkpoint)),
+                        cast(
+                            CheckpointMetadata,
+                            (json.loads(metadata) if metadata is not None else {}),
+                        ),
+                        (
+                            {
+                                "configurable": {
+                                    "thread_id": thread_id,
+                                    "checkpoint_ns": checkpoint_ns,
+                                    "checkpoint_id": parent_checkpoint_id,
+                                }
+                            }
+                            if parent_checkpoint_id
+                            else None
+                        ),
+                        [
+                            (task_id, channel, self.serde.loads_typed((type, value)))
+                            async for task_id, channel, type, value in wcur
+                        ],
+                    )
                 )
+        # Yield only after the lock has been released, so a paused consumer
+        # does not block other saver operations.
+        for result in results:
+            yield result
 
     async def aput(
         self,

@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 import pytest
@@ -188,3 +189,32 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_alist_paused_consumer_does_not_block_aput(self) -> None:
+        """A paused ``alist`` consumer must not block checkpoint writes.
+
+        Regression test for https://github.com/langchain-ai/langgraph/issues/8558:
+        ``alist`` held ``self.lock`` across the async generator ``yield``,
+        so a consumer that paused after receiving a checkpoint blocked
+        ``aput`` (and any other lock-guarded operation) until it resumed.
+        """
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            await saver.aput(self.config_1, self.chkpnt_1, self.metadata_1, {})
+            await saver.aput(self.config_2, self.chkpnt_2, self.metadata_2, {})
+
+            iterator = saver.alist(None)
+            # Consume exactly one checkpoint, then pause the consumer. The
+            # lock must already be released before control returns here.
+            first = await anext(iterator)
+            assert first is not None
+
+            # If the lock were still held, this write would hang forever;
+            # bound it so a regression reports as a failure, not a deadlock.
+            await asyncio.wait_for(
+                saver.aput(self.config_3, self.chkpnt_3, self.metadata_3, {}),
+                timeout=10,
+            )
+            await iterator.aclose()
+
+            stored = await saver.aget_tuple(self.config_3)
+            assert stored is not None
