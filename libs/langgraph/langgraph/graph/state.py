@@ -98,6 +98,15 @@ _CHANNEL_BRANCH_TO = "branch:to:{}"
 _DEFAULT_ERROR_HANDLER_NODE = "__default_error_handler__"
 
 
+class _CachePolicyUnset:
+    """Sentinel: `cache_policy` was omitted on `add_node` (inherit defaults)."""
+
+    __slots__ = ()
+
+
+_CACHE_POLICY_UNSET = _CachePolicyUnset()
+
+
 @dataclass(slots=True)
 class _NodeDefaults:
     """Default node policies applied to every node at compile time."""
@@ -263,6 +272,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         self.context_schema = context_schema
 
         self._node_defaults: _NodeDefaults = _NodeDefaults()
+        self._cache_policy_opt_out: set[str] = set()
 
         self._add_schema(self.state_schema)
         self._add_schema(self.input_schema, allow_managed=False)
@@ -292,7 +302,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 their own via `add_node(..., retry_policy=...)`. Also applies
                 to error-handler nodes.
             cache_policy: Default cache policy for nodes that don't specify
-                their own via `add_node(..., cache_policy=...)`. Does **not**
+                their own via `add_node(..., cache_policy=...)`. Per-node
+                `cache_policy=None` opts out of this default. Does **not**
                 apply to error-handler nodes.
             error_handler: Default error handler invoked when any regular node
                 raises and does not have its own `error_handler` set via
@@ -668,7 +679,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         metadata: dict[str, Any] | None = None,
         input_schema: type[NodeInputT] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
+        cache_policy: CachePolicy | None | _CachePolicyUnset = _CACHE_POLICY_UNSET,
         error_handler: StateNode[Any, ContextT] | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         timeout: float | timedelta | TimeoutPolicy | None = None,
@@ -689,7 +700,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             retry_policy: The retry policy for the node.
 
                 If a sequence is provided, the first matching policy will be applied.
-            cache_policy: The cache policy for the node.
+            cache_policy: The cache policy for the node. Pass `None` explicitly to
+                disable caching for this node, including when graph defaults from
+                `set_node_defaults` would otherwise enable it. Omit the argument to
+                inherit graph defaults.
             error_handler: Optional node-level error handler callable for this node.
             destinations: Destinations that indicate where a node can route to.
 
@@ -765,6 +779,15 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 input_schema = cast(type[NodeInputT] | None, input_)
         timeout = coerce_timeout_policy(timeout)
 
+        explicit_cache_opt_out = False
+        if isinstance(cache_policy, _CachePolicyUnset):
+            resolved_cache_policy: CachePolicy | None = None
+        elif isinstance(cache_policy, CachePolicy):
+            resolved_cache_policy = cache_policy
+        else:
+            explicit_cache_opt_out = True
+            resolved_cache_policy = None
+
         if not isinstance(node, str):
             action = node
             if isinstance(action, Runnable):
@@ -789,6 +812,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 )
         if action is None:
             raise RuntimeError
+        if explicit_cache_opt_out:
+            self._cache_policy_opt_out.add(node)
+        else:
+            self._cache_policy_opt_out.discard(node)
         if node in self.nodes:
             raise ValueError(f"Node `{node}` already present.")
         if node == END or node == START:
@@ -875,7 +902,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 metadata,
                 input_schema=input_schema,
                 retry_policy=retry_policy,
-                cache_policy=cache_policy,
+                cache_policy=resolved_cache_policy,
                 error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
@@ -887,7 +914,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 metadata,
                 input_schema=inferred_input_schema,
                 retry_policy=retry_policy,
-                cache_policy=cache_policy,
+                cache_policy=resolved_cache_policy,
                 error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
@@ -899,7 +926,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 metadata,
                 input_schema=self.state_schema,
                 retry_policy=retry_policy,
-                cache_policy=cache_policy,
+                cache_policy=resolved_cache_policy,
                 error_handler_node=handler_node_name,
                 ends=ends,
                 defer=defer,
@@ -1297,7 +1324,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
 
         # Apply builder defaults to node specs. Per-node values always win.
-        for spec in self.nodes.values():
+        for node_name, spec in self.nodes.items():
             # error_handler: regular nodes only — handlers must never
             # catch themselves or other handlers.
             if (
@@ -1317,6 +1344,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 not spec.is_error_handler
                 and defaults.cache_policy is not None
                 and spec.cache_policy is None
+                and node_name not in self._cache_policy_opt_out
             ):
                 spec.cache_policy = defaults.cache_policy
             # timeout: all nodes — a stuck handler should be cancelled the
