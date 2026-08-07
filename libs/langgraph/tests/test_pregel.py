@@ -4,25 +4,39 @@ import gc
 import json
 import logging
 import operator
+import random
 import threading
 import time
 import uuid
-from collections import Counter, deque
+from collections import Counter, defaultdict, deque
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from random import randrange
 from typing import Annotated, Any, Literal, get_type_hints
+from unittest.mock import patch
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage
+from langchain_core.language_models.fake import FakeStreamingListLLM
+from langchain_core.language_models.fake_chat_models import (
+    FakeMessagesListChatModel,
+)
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    HumanMessage,
+    RemoveMessage,
+)
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
     RunnablePassthrough,
 )
 from langchain_core.runnables.graph import Edge
+from langchain_core.tools import tool
 from langchain_core.version import VERSION as LANGCHAIN_CORE_VERSION
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
@@ -56,8 +70,9 @@ from langgraph.pregel import (
     NodeBuilder,
     Pregel,
 )
-from langgraph.pregel._loop import SyncPregelLoop
+from langgraph.pregel._loop import PregelLoop, SyncPregelLoop
 from langgraph.pregel._runner import PregelRunner
+from langgraph.runtime import RunControl
 from langgraph.types import (
     CachePolicy,
     Command,
@@ -125,7 +140,6 @@ def test_graph_validation() -> None:
 def test_request_drain_allows_inflight_call_scheduling(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from langgraph.runtime import RunControl
 
     @task
     def child(x: int) -> int:
@@ -1769,9 +1783,6 @@ def test_conditional_state_graph_with_list_edge_inputs(snapshot: SnapshotAsserti
 
 
 def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) -> None:
-    from langchain_core.language_models.fake import FakeStreamingListLLM
-    from langchain_core.prompts import PromptTemplate
-    from langchain_core.tools import tool
 
     class BaseState(TypedDict):
         input: str
@@ -3769,12 +3780,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
     previous checkpoint config for each step in the run.
     """
     # set up test
-    from langchain_core.language_models.fake_chat_models import (
-        FakeMessagesListChatModel,
-    )
-    from langchain_core.messages import AIMessage, AnyMessage
-    from langchain_core.prompts import ChatPromptTemplate
-    from langchain_core.tools import tool
 
     # graph state
     class BaseState(TypedDict):
@@ -3940,7 +3945,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 def test_remove_message_via_state_update(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
     workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
     workflow.add_node(
@@ -3973,7 +3977,6 @@ def test_remove_message_via_state_update(
 
 
 def test_remove_message_from_node():
-    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
     workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
     workflow.add_node(
@@ -3999,7 +4002,6 @@ def test_remove_message_from_node():
 
 
 def test_xray_lance(snapshot: SnapshotAssertion):
-    from langchain_core.messages import AnyMessage, HumanMessage
 
     class Analyst(BaseModel):
         affiliation: str = Field(
@@ -4483,7 +4485,6 @@ def test_debug_subgraphs(
 def test_debug_nested_subgraphs(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ):
-    from collections import defaultdict
 
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
@@ -4743,8 +4744,6 @@ def test_runnable_passthrough_node_graph() -> None:
 def test_parent_command(
     sync_checkpointer: BaseCheckpointSaver, subgraph_persist: bool
 ) -> None:
-    from langchain_core.messages import BaseMessage
-    from langchain_core.tools import tool
 
     @tool(return_direct=True)
     def get_user_name() -> Command:
@@ -5164,7 +5163,6 @@ def test_command_with_static_breakpoints(
 
 
 def test_multistep_plan(sync_checkpointer: BaseCheckpointSaver):
-    from langchain_core.messages import AnyMessage
 
     class State(TypedDict, total=False):
         plan: list[str | list[str]]
@@ -5910,9 +5908,6 @@ def test_no_redundant_put_writes_for_cached_task(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Cached @tasks on resume must not trigger redundant put_writes."""
-    from unittest.mock import patch
-
-    from langgraph.pregel._loop import PregelLoop
 
     @task
     def setup(x: int) -> int:
@@ -6975,7 +6970,6 @@ def test_configurable_propagates_to_stream_metadata() -> None:
 
 
 def test_stream_mode_messages_command() -> None:
-    from langchain_core.messages import HumanMessage
 
     def my_node(state):
         return {"messages": HumanMessage(content="foo")}
@@ -7243,7 +7237,6 @@ def test_get_stream_writer() -> None:
 
 
 def test_stream_messages_dedupe_inputs() -> None:
-    from langchain_core.messages import AIMessage
 
     def call_model(state):
         return {"messages": AIMessage("hi", id="1")}
@@ -7281,7 +7274,6 @@ def test_stream_messages_dedupe_inputs() -> None:
 
 
 def test_stream_messages_dedupe_state(sync_checkpointer: BaseCheckpointSaver) -> None:
-    from langchain_core.messages import AIMessage
 
     to_emit = [AIMessage("bye", id="1"), AIMessage("bye again", id="2")]
 
@@ -8253,7 +8245,6 @@ def test_get_graph_loop(snapshot: SnapshotAssertion) -> None:
 
 
 def test_get_graph_self_loop(snapshot: SnapshotAssertion) -> None:
-    import random
 
     subgraph_builder = StateGraph(MessagesState)
     subgraph_builder.add_node("agent", lambda x: x)

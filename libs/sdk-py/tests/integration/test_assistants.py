@@ -9,21 +9,22 @@ from __future__ import annotations
 
 import pytest
 
+from langgraph_sdk._async.assistants import AssistantsClient
+from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._sync.assistants import SyncAssistantsClient
+from langgraph_sdk._sync.http import SyncHttpClient
+
 from .conftest import ASSISTANT_ID
 
 pytestmark = pytest.mark.integration
 
 
 def _async_assistants(raw):
-    from langgraph_sdk._async.assistants import AssistantsClient
-    from langgraph_sdk._async.http import HttpClient
 
     return AssistantsClient(HttpClient(raw))
 
 
 def _sync_assistants(raw):
-    from langgraph_sdk._sync.assistants import SyncAssistantsClient
-    from langgraph_sdk._sync.http import SyncHttpClient
 
     return SyncAssistantsClient(SyncHttpClient(raw))
 

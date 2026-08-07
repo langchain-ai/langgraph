@@ -6,9 +6,11 @@ from typing import Any
 
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.store.memory import InMemoryStore
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import CONFIG_KEY_RUNTIME
 from langgraph.errors import GraphDrained
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import (
@@ -1177,9 +1179,6 @@ def test_foreign_object_in_runtime_slot_is_coerced() -> None:
     `merge` when no per-run `context` is provided. `store` is resolved
     separately, so it is not read off the foreign object in the coercion.
     """
-    from langgraph.store.memory import InMemoryStore
-
-    from langgraph._internal._constants import CONFIG_KEY_RUNTIME
 
     store = InMemoryStore()
     graph_level_context = {"source": "graph-level"}

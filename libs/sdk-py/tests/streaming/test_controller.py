@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import asyncio as _asyncio
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
-from langgraph_sdk.stream.controller import StreamController, _SeenEventIds
-from langgraph_sdk.stream.transport.http import EventStreamHandle
+from langgraph_sdk.stream.controller import (
+    StreamController,
+    _close_after,
+    _SeenEventIds,
+)
+from langgraph_sdk.stream.transport.http import EventStreamHandle, ProtocolSseTransport
 
 # ---------------------------------------------------------------------------
 # Task 3.1: bounded subscription queues
@@ -20,9 +27,6 @@ from langgraph_sdk.stream.transport.http import EventStreamHandle
 @pytest.mark.asyncio
 async def test_subscription_queue_bounded_by_max_queue_size():
     """`StreamController` must create per-subscription queues bounded by `max_queue_size`."""
-    import httpx
-
-    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
 
     transport = ProtocolSseTransport(
         client=httpx.AsyncClient(base_url="http://test"),
@@ -36,9 +40,6 @@ async def test_subscription_queue_bounded_by_max_queue_size():
 @pytest.mark.asyncio
 async def test_subscription_queue_default_max_queue_size_is_1024():
     """`StreamController` default `max_queue_size` is 1024."""
-    import httpx
-
-    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
 
     transport = ProtocolSseTransport(
         client=httpx.AsyncClient(base_url="http://test"),
@@ -114,12 +115,6 @@ def test_seen_event_ids_iter_returns_keys():
 async def test_close_awaits_pending_rotation_closes():
     """When a rotation is mid-flight, controller.close() must await the old
     stream close before returning."""
-    import asyncio as _asyncio
-
-    import httpx
-
-    from langgraph_sdk.stream.controller import _close_after
-    from langgraph_sdk.stream.transport.http import ProtocolSseTransport
 
     rotation_close_done = _asyncio.Event()
 
@@ -269,7 +264,6 @@ async def test_reconnect_accepts_backoff_kwargs():
 @pytest.mark.anyio
 async def test_transport_drop_exception_logged_with_type(monkeypatch, caplog):
     """Bare `pass` discarded exception types; the drop should at least log."""
-    import logging
 
     monkeypatch.setattr("asyncio.sleep", AsyncMock())
 
