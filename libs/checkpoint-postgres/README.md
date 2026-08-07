@@ -67,24 +67,12 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
         "v": 4,
         "ts": "2024-07-31T20:14:19.804150+00:00",
         "id": "1ef4f797-8335-6428-8001-8a1503f9b875",
-        "channel_values": {
-            "my_key": "meow",
-            "node": "node"
-        },
-        "channel_versions": {
-            "__start__": 2,
-            "my_key": 3,
-            "start:node": 3,
-            "node": 3
-        },
+        "channel_values": {"my_key": "meow", "node": "node"},
+        "channel_versions": {"__start__": 2, "my_key": 3, "start:node": 3, "node": 3},
         "versions_seen": {
             "__input__": {},
-            "__start__": {
-            "__start__": 1
-            },
-            "node": {
-            "start:node": 2
-            }
+            "__start__": {"__start__": 1},
+            "node": {"start:node": 2},
         },
     }
 
@@ -108,24 +96,12 @@ async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
         "v": 4,
         "ts": "2024-07-31T20:14:19.804150+00:00",
         "id": "1ef4f797-8335-6428-8001-8a1503f9b875",
-        "channel_values": {
-            "my_key": "meow",
-            "node": "node"
-        },
-        "channel_versions": {
-            "__start__": 2,
-            "my_key": 3,
-            "start:node": 3,
-            "node": 3
-        },
+        "channel_values": {"my_key": "meow", "node": "node"},
+        "channel_versions": {"__start__": 2, "my_key": 3, "start:node": 3, "node": 3},
         "versions_seen": {
             "__input__": {},
-            "__start__": {
-            "__start__": 1
-            },
-            "node": {
-            "start:node": 2
-            }
+            "__start__": {"__start__": 1},
+            "node": {"start:node": 2},
         },
     }
 
