@@ -963,7 +963,7 @@ class _BaseModelLike(Protocol):
     ) -> dict[str, Any]: ...
 
 
-_JSONLike: TypeAlias = None | str | int | float | bool
+_JSONLike: TypeAlias = str | int | float | bool | None
 _JSONMap: TypeAlias = Mapping[
     str, Union[_JSONLike, list[_JSONLike], "_JSONMap", list["_JSONMap"]]
 ]
