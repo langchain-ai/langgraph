@@ -608,6 +608,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         Returns:
             None
         """
+        await self.setup()
         async with self.lock, self.conn.cursor() as cur:
             await cur.execute(
                 "DELETE FROM checkpoints WHERE thread_id = ?",

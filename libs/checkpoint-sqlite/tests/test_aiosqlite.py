@@ -188,3 +188,24 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_adelete_thread_on_uninitialized_database(self) -> None:
+        """adelete_thread() should be a no-op on a fresh, unset-up database.
+
+        Regression test for a bug where adelete_thread() accessed the
+        checkpoints/writes tables directly without first calling setup(),
+        unlike every other async method on AsyncSqliteSaver. Calling it as
+        the very first operation on a brand-new database raised
+        sqlite3.OperationalError: no such table: checkpoints.
+        """
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            # Should not raise even though no table has been created yet.
+            await saver.adelete_thread("missing-thread")
+
+            # Sanity check: the saver is now fully usable.
+            config: RunnableConfig = {
+                "configurable": {"thread_id": "thread-1", "checkpoint_ns": ""}
+            }
+            await saver.aput(config, self.chkpnt_1, self.metadata_1, {})
+            checkpoint = await saver.aget_tuple(config)
+            assert checkpoint is not None
