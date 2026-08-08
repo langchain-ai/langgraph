@@ -159,3 +159,40 @@ def test_add_node_with_explicit_input_schema() -> None:
     # because it violates the principles of contravariance
     workflow.add_node("a_narrow", a, input_schema=ANarrow)  # type: ignore[arg-type]
     workflow.add_node("b_narrow", b, input_schema=BNarrow)  # type: ignore[arg-type]
+
+
+@pytest.mark.skip("Purely for type checking")
+def test_add_conditional_edges_dict_str_path_map() -> None:
+    """dict[str, str] path_map must be accepted without a type-ignore comment.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6540.
+    dict is invariant in its key type, so dict[str, str] was previously
+    rejected when the signature used dict[Hashable, str].  The fix introduces
+    a bound TypeVar so the checker infers the exact key type from the argument.
+    """
+    from typing_extensions import TypedDict
+
+    from langgraph.graph import END, StateGraph
+
+    class State(TypedDict):
+        approved: bool
+
+    def check_approval(state: State) -> str:
+        return "yes" if state["approved"] else "no"
+
+    def approved_node(state: State) -> State:
+        return state
+
+    def rejected_node(state: State) -> State:
+        return state
+
+    graph = StateGraph(State)
+    graph.add_node("approved", approved_node)
+    graph.add_node("rejected", rejected_node)
+
+    # This must type-check without any type: ignore — that is the bug being fixed.
+    path_map: dict[str, str] = {"yes": "approved", "no": "rejected"}
+    graph.add_conditional_edges("__start__", check_approval, path_map)
+    graph.add_edge("approved", END)
+    graph.add_edge("rejected", END)
+    graph.compile()
