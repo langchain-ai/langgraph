@@ -87,7 +87,9 @@ async with client.threads.stream(assistant_id="agent") as thread:
 
 ```python
 async with client.threads.stream(assistant_id="agent") as thread:
-    await thread.run.start(input={"messages": [{"role": "user", "content": "book a flight"}]})
+    await thread.run.start(
+        input={"messages": [{"role": "user", "content": "book a flight"}]}
+    )
 
     # Wait for the run to pause at an interrupt node.
     # thread.interrupted becomes True when input.requested arrives.
