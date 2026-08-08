@@ -1,0 +1,62 @@
+[
+  {
+    "name": "failed",
+    "raw_output": "[{\"name\":\"lint\",\"state\":\"FAILURE\",\"bucket\":\"fail\"},{\"name\":\"test\",\"state\":\"SUCCESS\",\"bucket\":\"pass\"}]",
+    "expected_state": "failed",
+    "expected": {
+      "checks_total": 2,
+      "failed_count": 1,
+      "pending_count": 0,
+      "passing_count": 1,
+      "skipped_count": 0,
+      "cancelled_count": 0,
+      "unknown_count": 0,
+      "no_checks_reported": false
+    }
+  },
+  {
+    "name": "pending",
+    "raw_output": "[{\"name\":\"lint\",\"state\":\"IN_PROGRESS\",\"bucket\":\"pending\"}]",
+    "expected_state": "pending",
+    "expected": {
+      "checks_total": 1,
+      "failed_count": 0,
+      "pending_count": 1,
+      "passing_count": 0,
+      "skipped_count": 0,
+      "cancelled_count": 0,
+      "unknown_count": 0,
+      "no_checks_reported": false
+    }
+  },
+  {
+    "name": "no_checks",
+    "raw_output": "no checks reported on the 'main' branch",
+    "expected_state": "no_checks",
+    "expected": {
+      "checks_total": 0,
+      "failed_count": 0,
+      "pending_count": 0,
+      "passing_count": 0,
+      "skipped_count": 0,
+      "cancelled_count": 0,
+      "unknown_count": 0,
+      "no_checks_reported": true
+    }
+  },
+  {
+    "name": "policy_blocked",
+    "raw_output": "[{\"name\":\"lint\",\"state\":\"SUCCESS\",\"bucket\":\"pass\"},{\"name\":\"slow-optional\",\"state\":\"SKIPPED\",\"bucket\":\"skipping\"}]",
+    "expected_state": "policy_blocked",
+    "expected": {
+      "checks_total": 2,
+      "failed_count": 0,
+      "pending_count": 0,
+      "passing_count": 1,
+      "skipped_count": 1,
+      "cancelled_count": 0,
+      "unknown_count": 0,
+      "no_checks_reported": false
+    }
+  }
+]
