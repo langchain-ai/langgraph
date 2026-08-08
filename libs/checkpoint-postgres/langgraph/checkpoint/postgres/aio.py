@@ -82,8 +82,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
-                async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                # Pipeline mode is risky for long-running operations because
+                # the connection can be closed by the server while idle.
+                # Use a health check or disable pipeline to avoid
+                # 'SSL connection has been closed unexpectedly' errors.
+                # Fall back to non-pipeline for safety.
+                yield cls(conn=conn, serde=serde)
             else:
                 yield cls(conn=conn, serde=serde)
 
