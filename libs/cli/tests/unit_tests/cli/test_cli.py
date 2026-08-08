@@ -56,8 +56,6 @@ def test_prepare_args_and_stdin() -> None:
         Config(dependencies=[".", "../../.."], graphs={"agent": "agent.py:graph"})
     )
     port = 8000
-    debugger_port = 8001
-    debugger_graph_url = f"http://127.0.0.1:{port}"
 
     actual_args, actual_stdin = prepare_args_and_stdin(
         capabilities=DEFAULT_DOCKER_CAPABILITIES,
@@ -65,8 +63,6 @@ def test_prepare_args_and_stdin() -> None:
         config=config,
         docker_compose=pathlib.Path("custom-docker-compose.yml"),
         port=port,
-        debugger_port=debugger_port,
-        debugger_base_url=debugger_graph_url,
         watch=True,
     )
 
@@ -110,16 +106,6 @@ services:
             retries: 5
             interval: 60s
             start_interval: 1s
-    langgraph-debugger:
-        image: langchain/langgraph-debugger
-        restart: on-failure
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
-        ports:
-            - "{debugger_port}:3968"
-        environment:
-            VITE_STUDIO_LOCAL_GRAPH_URL: {debugger_graph_url}
     langgraph-api:
         ports:
             - "8000:8000"
@@ -178,8 +164,6 @@ def test_prepare_args_and_stdin_with_image() -> None:
         Config(dependencies=[".", "../../.."], graphs={"agent": "agent.py:graph"})
     )
     port = 8000
-    debugger_port = 8001
-    debugger_graph_url = f"http://127.0.0.1:{port}"
 
     actual_args, actual_stdin = prepare_args_and_stdin(
         capabilities=DEFAULT_DOCKER_CAPABILITIES,
@@ -187,8 +171,6 @@ def test_prepare_args_and_stdin_with_image() -> None:
         config=config,
         docker_compose=pathlib.Path("custom-docker-compose.yml"),
         port=port,
-        debugger_port=debugger_port,
-        debugger_base_url=debugger_graph_url,
         watch=True,
         image="my-cool-image",
     )
@@ -233,16 +215,6 @@ services:
             retries: 5
             interval: 60s
             start_interval: 1s
-    langgraph-debugger:
-        image: langchain/langgraph-debugger
-        restart: on-failure
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
-        ports:
-            - "{debugger_port}:3968"
-        environment:
-            VITE_STUDIO_LOCAL_GRAPH_URL: {debugger_graph_url}
     langgraph-api:
         ports:
             - "8000:8000"
