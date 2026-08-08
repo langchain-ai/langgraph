@@ -209,19 +209,29 @@ class ShallowPostgresSaver(BasePostgresSaver):
     @classmethod
     @contextmanager
     def from_conn_string(
-        cls, conn_string: str, *, pipeline: bool = False
+        cls,
+        conn_string: str,
+        *,
+        pipeline: bool = False,
+        prepare_threshold: int | None = 0,
     ) -> Iterator["ShallowPostgresSaver"]:
         """Create a new ShallowPostgresSaver instance from a connection string.
 
         Args:
             conn_string: The Postgres connection info string.
             pipeline: whether to use Pipeline
+            prepare_threshold: Threshold for prepared statements. Set to None to disable
+                prepared statements (required for external connection poolers like PgBouncer
+                in transaction mode or Google Cloud SQL connection pooler). Defaults to 0.
 
         Returns:
             ShallowPostgresSaver: A new ShallowPostgresSaver instance.
         """
         with Connection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            conn_string,
+            autocommit=True,
+            prepare_threshold=prepare_threshold,
+            row_factory=dict_row,
         ) as conn:
             if pipeline:
                 with conn.pipeline() as pipe:
@@ -573,6 +583,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         conn_string: str,
         *,
         pipeline: bool = False,
+        prepare_threshold: int | None = 0,
         serde: SerializerProtocol | None = None,
     ) -> AsyncIterator["AsyncShallowPostgresSaver"]:
         """Create a new AsyncShallowPostgresSaver instance from a connection string.
@@ -580,12 +591,19 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         Args:
             conn_string: The Postgres connection info string.
             pipeline: whether to use AsyncPipeline
+            prepare_threshold: Threshold for prepared statements. Set to None to disable
+                prepared statements (required for external connection poolers like PgBouncer
+                in transaction mode or Google Cloud SQL connection pooler). Defaults to 0.
+            serde: Custom serializer for checkpoint data.
 
         Returns:
             AsyncShallowPostgresSaver: A new AsyncShallowPostgresSaver instance.
         """
         async with await AsyncConnection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            conn_string,
+            autocommit=True,
+            prepare_threshold=prepare_threshold,
+            row_factory=dict_row,
         ) as conn:
             if pipeline:
                 async with conn.pipeline() as pipe:
