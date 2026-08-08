@@ -107,7 +107,38 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
                     zip_file.extractall(path)
                     # Move extracted contents to path
                     for item in os.listdir(path):
-                        if item.endswith("-main"):
+                        source = os.path.join(path, item)
+                        target = path
+                        if item != os.path.basename(path) and os.path.isdir(source):
+                            target = os.path.join(path, item)
+                        shutil.move(source, target)
+                    # Patch pyproject.toml to pin known-good OpenTelemetry versions
+                    pyproject_path = os.path.join(path, 'pyproject.toml')
+                    if os.path.exists(pyproject_path):
+                        with open(pyproject_path) as f:
+                            content = f.read()
+                        # Replace problematic dependency constraint
+                        content = content.replace(
+                            'opentelemetry-exporter-prometheus>=0.58b0,<0.59',
+                            'opentelemetry-exporter-prometheus==0.62b1'
+                        )
+                        # Ensure other pins are present (add if missing)
+                        for pin in [
+                            'langsmith==0.10.9',
+                            'opentelemetry-api==1.41.1',
+                            'opentelemetry-sdk==1.41.1',
+                            'opentelemetry-exporter-otlp-proto-http==1.41.1'
+                        ]:
+                            if pin not in content:
+                                # Add to the appropriate dependency section (simplified)
+                                if '[tool.poetry.dependencies]' in content:
+                                    content = content.replace(
+                                        '[tool.poetry.dependencies]',
+                                        f'[tool.poetry.dependencies]\n    {pin}',
+                                        1
+                                    )
+                        with open(pyproject_path, 'w') as f:
+                            f.write(content)m.endswith("-main"):
                             extracted_dir = os.path.join(path, item)
                             for filename in os.listdir(extracted_dir):
                                 shutil.move(os.path.join(extracted_dir, filename), path)
