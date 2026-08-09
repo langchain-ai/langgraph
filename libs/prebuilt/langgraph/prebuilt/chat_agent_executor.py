@@ -49,6 +49,8 @@ from langgraph.prebuilt.tool_node import ToolCallWithContext, ToolNode
 StructuredResponse = dict | BaseModel
 StructuredResponseSchema = dict | type[BaseModel]
 
+_THINKING_BLOCK_TYPES = frozenset({"thinking"})
+
 
 @deprecated(
     "AgentState has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentState`.",
@@ -238,6 +240,31 @@ def _get_model(model: LanguageModelLike) -> BaseChatModel:
         )
 
     return model
+
+
+def _filter_thinking_blocks(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
+    """Return a copy of the messages with model-internal `thinking` content blocks removed.
+
+    Only the view handed back to the model is sanitized; the original messages (and any
+    reasoning content they carry) are preserved in state. This prevents providers that
+    reject reasoning content in input (e.g. DeepSeek thinking mode via OpenAI-compatible
+    endpoints) from failing on subsequent calls.
+    """
+    filtered: list[BaseMessage] = []
+    for msg in messages:
+        if isinstance(msg, AIMessage) and isinstance(msg.content, list):
+            content = [
+                block
+                for block in msg.content
+                if not (
+                    isinstance(block, dict)
+                    and block.get("type") in _THINKING_BLOCK_TYPES
+                )
+            ]
+            if len(content) != len(msg.content):
+                msg = msg.model_copy(update={"content": content})
+        filtered.append(msg)
+    return filtered
 
 
 def _validate_chat_history(
@@ -649,6 +676,7 @@ def create_react_agent(
             raise ValueError(error_msg)
 
         _validate_chat_history(messages)
+        messages = _filter_thinking_blocks(messages)
         # we're passing messages under `messages` key, as this is expected by the prompt
         if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
             state.messages = messages  # type: ignore
@@ -763,7 +791,9 @@ def create_react_agent(
         ).with_structured_output(
             cast(StructuredResponseSchema, structured_response_schema)
         )
-        response = model_with_structured_output.invoke(messages, config)
+        response = model_with_structured_output.invoke(
+            _filter_thinking_blocks(messages), config
+        )
         return {"structured_response": response}
 
     async def agenerate_structured_response(
@@ -781,7 +811,9 @@ def create_react_agent(
         ).with_structured_output(
             cast(StructuredResponseSchema, structured_response_schema)
         )
-        response = await model_with_structured_output.ainvoke(messages, config)
+        response = await model_with_structured_output.ainvoke(
+            _filter_thinking_blocks(messages), config
+        )
         return {"structured_response": response}
 
     if not tool_calling_enabled:
