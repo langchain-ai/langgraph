@@ -188,3 +188,38 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_adelete_thread_without_prior_setup(self) -> None:
+        """Test that adelete_thread calls setup() internally.
+
+        Regression test for https://github.com/langchain-ai/langgraph/issues/8549.
+        Previously, adelete_thread did not call await self.setup() before executing
+        SQL, causing a crash if the database tables had not been created yet.
+        """
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            # Call adelete_thread without calling setup() first.
+            # This should NOT raise an error (previously would fail with
+            # "no such table: checkpoints").
+            await saver.adelete_thread("nonexistent-thread")
+
+            # Verify the tables were created and the call succeeded
+            # by inserting and then deleting a checkpoint
+            config: RunnableConfig = {
+                "configurable": {
+                    "thread_id": "test-thread",
+                    "checkpoint_ns": "",
+                }
+            }
+            checkpoint = empty_checkpoint()
+            await saver.aput(config, checkpoint, {}, {})
+
+            # Verify checkpoint exists
+            result = await saver.aget_tuple(config)
+            assert result is not None
+
+            # Delete the thread
+            await saver.adelete_thread("test-thread")
+
+            # Verify checkpoint was deleted
+            result = await saver.aget_tuple(config)
+            assert result is None
