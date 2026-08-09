@@ -9390,6 +9390,52 @@ async def test_null_resume_disallowed_with_multiple_interrupts(
     }
 
 
+async def test_null_resume_disallowed_with_multiple_interrupts_in_subgraph() -> None:
+    class State(TypedDict):
+        answers: Annotated[list[str], operator.add]
+
+    async def ask_left(state: State) -> State:
+        return {"answers": [f"left={interrupt('left')}"]}
+
+    async def ask_right(state: State) -> State:
+        return {"answers": [f"right={interrupt('right')}"]}
+
+    child = (
+        StateGraph(State)
+        .add_node("ask_left", ask_left)
+        .add_node("ask_right", ask_right)
+        .add_edge(START, "ask_left")
+        .add_edge(START, "ask_right")
+        .compile()
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("child", child)
+        .add_edge(START, "child")
+        .compile(checkpointer=InMemorySaver())
+    )
+
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    first = await graph.ainvoke({"answers": []}, config)
+    assert len(first["__interrupt__"]) == 2
+
+    with pytest.raises(
+        RuntimeError,
+        match="When there are multiple pending interrupts, you must specify the interrupt id when resuming.",
+    ):
+        await graph.ainvoke(Command(resume="ambiguous"), config)
+
+    resume_map = {
+        i.id: f"resume for {i.value}"
+        for i in (await graph.aget_state(config)).interrupts
+    }
+    assert (await graph.ainvoke(Command(resume=resume_map), config))["answers"] == [
+        "left=resume for left",
+        "right=resume for right",
+    ]
+
+
 async def test_astream_waiter_cleanup_on_cancel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
