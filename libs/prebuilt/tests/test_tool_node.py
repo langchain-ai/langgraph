@@ -2,6 +2,7 @@ import contextlib
 import dataclasses
 import json
 import sys
+import warnings
 from functools import partial
 from typing import (
     Annotated,
@@ -23,10 +24,12 @@ from langchain_core.messages import (
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import BaseTool, InjectedToolArg, ToolException
 from langchain_core.tools import tool as dec_tool
+from langchain_core.tools.base import InjectedToolCallId
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
+from langgraph.runtime import ExecutionInfo, ServerInfo
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Send
@@ -41,6 +44,7 @@ from langgraph.prebuilt import (
 )
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
+    ToolCallRequest,
     ToolInvocationError,
     ToolRuntime,
     tools_condition,
@@ -59,7 +63,6 @@ def _create_mock_runtime(store: BaseStore | None = None) -> Mock:
     which is injected by RunnableCallable from config["configurable"]["__pregel_runtime"].
     When testing ToolNode directly (outside a graph), we need to provide this manually.
     """
-    from langgraph.runtime import ExecutionInfo
 
     mock_runtime = Mock()
     mock_runtime.store = store
@@ -625,7 +628,6 @@ def test_tool_node_node_interrupt() -> None:
 
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
 async def test_tool_node_command(input_type: str) -> None:
-    from langchain_core.tools.base import InjectedToolCallId
 
     @dec_tool
     def transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -934,7 +936,6 @@ async def test_tool_node_command(input_type: str) -> None:
 
 
 async def test_tool_node_command_list_input() -> None:
-    from langchain_core.tools.base import InjectedToolCallId
 
     @dec_tool
     def transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -1194,7 +1195,6 @@ async def test_tool_node_command_list_input() -> None:
 
 
 def test_tool_node_parent_command_with_send() -> None:
-    from langchain_core.tools.base import InjectedToolCallId
 
     @dec_tool
     def transfer_to_alice(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -1282,7 +1282,6 @@ def test_tool_node_parent_command_with_send() -> None:
 
 
 async def test_tool_node_command_remove_all_messages() -> None:
-    from langchain_core.tools.base import InjectedToolCallId
 
     @dec_tool
     def remove_all_messages_tool(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -1621,9 +1620,6 @@ def test_tool_node_stream_writer() -> None:
 
 def test_tool_call_request_setattr_deprecation_warning():
     """Test that ToolCallRequest raises a deprecation warning on direct attribute modification."""
-    import warnings
-
-    from langgraph.prebuilt.tool_node import ToolCallRequest
 
     # Create a mock ToolCall
     tool_call = {"name": "test", "args": {"a": 1}, "id": "call_1", "type": "tool_call"}
@@ -2031,7 +2027,6 @@ def test_tool_runtime_defaults_tools_to_empty_list() -> None:
 
 def test_tool_runtime_forwards_execution_info_server_info_and_tools() -> None:
     """Test that execution_info, server_info, and tools are forwarded from Runtime to ToolRuntime."""
-    from langgraph.runtime import ExecutionInfo, ServerInfo
 
     exec_info = ExecutionInfo(
         thread_id="t-1",
@@ -2088,7 +2083,6 @@ async def test_tool_runtime_forwards_execution_info_server_info_and_tools_async(
     None
 ):
     """Test that execution_info, server_info, and tools are forwarded in async path."""
-    from langgraph.runtime import ExecutionInfo, ServerInfo
 
     exec_info = ExecutionInfo(
         thread_id="t-2",
@@ -2428,3 +2422,91 @@ def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     tool_call_ids = {m.tool_call_id for m in all_msgs}
     assert list_tool_id in tool_call_ids
     assert regular_tool_id in tool_call_ids
+
+
+async def test_tool_node_max_concurrency_async() -> None:
+    """Test that ToolNode respects max_concurrency in async execution.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/8517
+    """
+    import asyncio
+
+    max_concurrent = 0
+    current_concurrent = 0
+    lock = asyncio.Lock()
+
+    @dec_tool
+    async def slow_tool(x: int) -> str:
+        """A slow tool for testing concurrency."""
+        nonlocal max_concurrent, current_concurrent
+        async with lock:
+            current_concurrent += 1
+            if current_concurrent > max_concurrent:
+                max_concurrent = current_concurrent
+        await asyncio.sleep(0.1)
+        async with lock:
+            current_concurrent -= 1
+        return f"result: {x}"
+
+    # Create multiple tool calls
+    tool_calls = [
+        {"name": "slow_tool", "args": {"x": i}, "id": f"call_{i}", "type": "tool_call"}
+        for i in range(6)
+    ]
+
+    node = ToolNode([slow_tool])
+
+    # Test with max_concurrency=2
+    # Reset counters
+    max_concurrent = 0
+    current_concurrent = 0
+
+    config = _create_config_with_runtime()
+    config["max_concurrency"] = 2
+
+    result = await node.ainvoke(
+        {"messages": [AIMessage("", tool_calls=tool_calls)]},
+        config=config,
+    )
+
+    # Verify all tools executed
+    assert len(result["messages"]) == 6
+
+    # Verify max_concurrency was respected
+    assert max_concurrent <= 2, (
+        f"Expected max 2 concurrent executions, but got {max_concurrent}"
+    )
+
+    # Test with max_concurrency=1 (sequential execution)
+    max_concurrent = 0
+    current_concurrent = 0
+
+    config_sequential = _create_config_with_runtime()
+    config_sequential["max_concurrency"] = 1
+
+    result = await node.ainvoke(
+        {"messages": [AIMessage("", tool_calls=tool_calls)]},
+        config=config_sequential,
+    )
+
+    assert len(result["messages"]) == 6
+    assert max_concurrent <= 1, (
+        f"Expected max 1 concurrent execution, but got {max_concurrent}"
+    )
+
+    # Test without max_concurrency (should run all concurrently)
+    max_concurrent = 0
+    current_concurrent = 0
+
+    config_unlimited = _create_config_with_runtime()
+
+    result = await node.ainvoke(
+        {"messages": [AIMessage("", tool_calls=tool_calls)]},
+        config=config_unlimited,
+    )
+
+    assert len(result["messages"]) == 6
+    # Without max_concurrency, all 6 should run concurrently
+    assert max_concurrent == 6, (
+        f"Expected 6 concurrent executions without limit, but got {max_concurrent}"
+    )
