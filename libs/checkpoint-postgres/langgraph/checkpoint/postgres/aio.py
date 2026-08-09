@@ -82,8 +82,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
-                async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                # Pipeline mode can cause stale connections when idle (e.g., during LLM calls).
+                # Validate pipeline support and disable on connection poolers that close idle connections.
+                if 'pooler.supabase.com' in conn_string:
+                    yield cls(conn=conn, serde=serde)
+                else:
+                    async with conn.pipeline() as pipe:
+                        yield cls(conn=conn, pipe=pipe, serde=serde)
             else:
                 yield cls(conn=conn, serde=serde)
 
