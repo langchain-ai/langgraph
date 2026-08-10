@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint"
-version = "4.1.1"
+version = "4.2.0"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
 requires-python = ">=3.10"
@@ -59,10 +59,15 @@ lint.select = [
   "UP", # pyupgrade
   "B",  # flake8-bugbear
   "I",  # isort
+  "PLC0415",  # import-outside-top-level
   "RUF100",  # unused noqa directive
   "UP", # pyupgrade
 ]
 lint.ignore = ["E501", "B008"]
+# PLC0415 (import-outside-top-level) is enforced in tests only. Library code
+# still has deferred imports that have not been reviewed, so it stays exempt
+# for now.
+lint.per-file-ignores = { "langgraph/**" = ["PLC0415"] }
 target-version = "py310"
 
 [tool.ty.rules]

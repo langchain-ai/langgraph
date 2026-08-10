@@ -369,7 +369,7 @@ test = [
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "4.1.1"
+version = "4.2.0"
 source = { editable = "../checkpoint" }
 dependencies = [
     { name = "langchain-core" },
@@ -417,7 +417,7 @@ test = [
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "3.1.1"
+version = "3.1.2"
 source = { editable = "../checkpoint-postgres" }
 dependencies = [
     { name = "langgraph-checkpoint" },
@@ -439,6 +439,7 @@ dev = [
     { name = "anyio" },
     { name = "codespell" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "psycopg", extras = ["binary"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -455,6 +456,7 @@ lint = [
 test = [
     { name = "anyio" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "psycopg", extras = ["binary"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -483,6 +485,7 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -498,6 +501,7 @@ lint = [
 ]
 test = [
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -621,13 +625,13 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watch" },
-    { name = "ruff", specifier = "==0.15.20" },
+    { name = "ruff", specifier = "==0.16.1" },
     { name = "starlette" },
     { name = "ty" },
 ]
 lint = [
     { name = "codespell" },
-    { name = "ruff", specifier = "==0.15.20" },
+    { name = "ruff", specifier = "==0.16.1" },
     { name = "starlette" },
     { name = "ty" },
 ]

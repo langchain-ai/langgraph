@@ -10,8 +10,10 @@ import pytest
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 from websockets.frames import Close
 
+from langgraph_sdk.stream.controller import StreamController
 from langgraph_sdk.stream.transport.ws import ProtocolWebSocketTransport
 from streaming._events import values_event
+from streaming._fake_server import FakeServer
 
 
 class _FakeAsyncWebSocket:
@@ -334,7 +336,6 @@ async def test_websocket_done_records_post_ready_error():
 
 
 async def test_websocket_send_command_uses_http_commands_endpoint():
-    from streaming._fake_server import FakeServer
 
     fake = FakeServer()
     transport = httpx.ASGITransport(app=fake.app)
@@ -357,7 +358,6 @@ async def test_websocket_open_event_stream_raises_when_closed():
 
 
 async def test_websocket_transport_feeds_async_stream_controller():
-    from langgraph_sdk.stream.controller import StreamController
 
     socket = _FakeAsyncWebSocket(
         [
@@ -418,7 +418,6 @@ async def test_ws_transport_default_max_queue_size_is_1024():
 
 
 async def test_websocket_controller_reconnects_with_since_after_drop():
-    from langgraph_sdk.stream.controller import StreamController
 
     first_socket = _FakeAsyncWebSocket(
         [values_event(seq=1, values={"counter": 1})],
@@ -465,7 +464,6 @@ async def test_websocket_controller_reconnects_with_since_after_drop():
 
 async def test_async_close_sends_normal_close_frame():
     """`handle.close()` sends a WebSocket close frame with code 1000 explicitly."""
-    import asyncio
 
     # Use an event to distinguish an explicit close(code=1000) call from
     # the implicit one in __aexit__ when the task is cancelled.

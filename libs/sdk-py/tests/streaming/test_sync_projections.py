@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Generator
 from typing import Any, cast
 
 import httpx
@@ -10,6 +12,7 @@ from langchain_core.language_models.chat_model_stream import ChatModelStream
 from langchain_protocol import Event
 
 from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.stream import SyncToolCallHandle
 from langgraph_sdk._sync.threads import SyncThreadsClient
 from streaming._events import (
     lifecycle_completed_event,
@@ -459,11 +462,6 @@ def test_sync_tool_calls_explicit_close_does_not_block_1s():
             tool_started_event(seq=1, tool_call_id="call-1"),
         ]
     )
-    import time
-    from collections.abc import Generator
-    from typing import cast
-
-    from langgraph_sdk._sync.stream import SyncToolCallHandle
 
     with httpx.Client(transport=fake.transport, base_url="http://test") as raw:
         threads = SyncThreadsClient(SyncHttpClient(raw))
@@ -528,7 +526,6 @@ def test_sync_tool_call_handle_deltas_queue_is_bounded():
     Unbounded queues allow producers to enqueue indefinitely, causing memory
     growth when consumers are slow.
     """
-    from langgraph_sdk._sync.stream import SyncToolCallHandle
 
     handle_default = SyncToolCallHandle(tool_call_id="tc1", name="foo")
     assert handle_default._deltas.maxsize > 0, (
@@ -552,7 +549,6 @@ def test_sync_tool_call_handle_deltas_single_consumer_guard():
     The property must raise before returning the iterator so the caller
     sees the error even without iterating.
     """
-    from langgraph_sdk._sync.stream import SyncToolCallHandle
 
     handle = SyncToolCallHandle(tool_call_id="tc1", name="foo")
 

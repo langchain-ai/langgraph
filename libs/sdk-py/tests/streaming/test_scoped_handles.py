@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import httpx
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._async.stream import ScopedStreamHandle
 from langgraph_sdk._async.threads import ThreadsClient
 from streaming._events import (
     lifecycle_completed_event,
+    lifecycle_errored_event,
     lifecycle_started_event,
     message_finish_event,
     message_start_event,
@@ -430,9 +434,6 @@ async def test_grandchild_events_dispatched_to_correct_sibling_not_first_match()
 
 def test_scoped_handle_inboxes_bounded_by_max_queue_size():
     """ScopedStreamHandle with max_queue_size=N creates queues with maxsize=N."""
-    from unittest.mock import MagicMock
-
-    from langgraph_sdk._async.stream import ScopedStreamHandle
 
     fake_thread = MagicMock()
     handle = ScopedStreamHandle(
@@ -484,7 +485,6 @@ async def test_force_complete_uses_failed_when_run_errored():
     """If the lifecycle signals an errored run, scoped children that are still
     'started' when the subgraphs projection's finally block runs must be
     force-finished as 'failed', not 'completed'."""
-    from streaming._events import lifecycle_errored_event
 
     fake = FakeServer()
     fake.script(
@@ -538,9 +538,6 @@ async def test_force_complete_uses_completed_when_run_completed():
 
 def test_close_inboxes_does_not_enqueue_on_uniterated_inboxes():
     """_close_inboxes must not push a sentinel on inboxes that had no consumer."""
-    from unittest.mock import MagicMock
-
-    from langgraph_sdk._async.stream import ScopedStreamHandle
 
     fake_thread = MagicMock()
     handle = ScopedStreamHandle(
@@ -559,9 +556,6 @@ def test_close_inboxes_does_not_enqueue_on_uniterated_inboxes():
 def test_close_inboxes_enqueues_sentinel_on_iterated_inboxes():
     """_close_inboxes must push a None sentinel only on inboxes that had a consumer,
     so projection iterators see the EOF signal."""
-    from unittest.mock import MagicMock
-
-    from langgraph_sdk._async.stream import ScopedStreamHandle
 
     fake_thread = MagicMock()
     handle = ScopedStreamHandle(

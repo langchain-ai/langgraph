@@ -347,7 +347,6 @@ class TestCallHostBackendWithOptionalTenant:
 
     def test_workspace_prompt_blocked_by_no_input(self, monkeypatch):
         """With _no_input=True, 403 requiring workspace should raise ClickException."""
-        import langgraph_cli.deploy as deploy_mod
 
         monkeypatch.setattr(deploy_mod, "_no_input", True)
 
@@ -515,7 +514,6 @@ class TestEmitterTextMode:
 
 class TestCreateHostBackendClientNoInput:
     def test_raises_when_no_api_key_and_no_input(self, monkeypatch, tmp_path):
-        import langgraph_cli.deploy as deploy_mod
 
         monkeypatch.setattr(deploy_mod, "_no_input", True)
         monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
@@ -530,7 +528,6 @@ class TestCreateHostBackendClientNoInput:
             )
 
     def test_succeeds_with_api_key_in_env(self, monkeypatch, tmp_path):
-        import langgraph_cli.deploy as deploy_mod
 
         monkeypatch.setattr(deploy_mod, "_no_input", True)
         monkeypatch.setenv("LANGSMITH_API_KEY", "lsv2_test")

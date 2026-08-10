@@ -10,19 +10,20 @@ import uuid
 
 import pytest
 
+from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._async.store import StoreClient
+from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.store import SyncStoreClient
+
 pytestmark = pytest.mark.integration
 
 
 def _async_store(raw):
-    from langgraph_sdk._async.http import HttpClient
-    from langgraph_sdk._async.store import StoreClient
 
     return StoreClient(HttpClient(raw))
 
 
 def _sync_store(raw):
-    from langgraph_sdk._sync.http import SyncHttpClient
-    from langgraph_sdk._sync.store import SyncStoreClient
 
     return SyncStoreClient(SyncHttpClient(raw))
 

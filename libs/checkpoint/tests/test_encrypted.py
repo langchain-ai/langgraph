@@ -307,8 +307,6 @@ class TestWithMsgpackAllowlistEncrypted:
             def loads_typed(self, data: tuple[str, bytes]) -> None:
                 return None
 
-        from langgraph.checkpoint.serde.base import CipherProtocol
-
         class DummyCipher(CipherProtocol):
             def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
                 return "dummy", plaintext

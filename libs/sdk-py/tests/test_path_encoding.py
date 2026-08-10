@@ -8,6 +8,8 @@ URL paths.
 
 from __future__ import annotations
 
+import uuid
+
 import httpx
 import pytest
 
@@ -60,7 +62,6 @@ class TestQuotePathParam:
         assert "/" not in encoded
 
     def test_non_string_values_are_coerced_to_str(self) -> None:
-        import uuid
 
         uid = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
         assert _quote_path_param(uid) == str(uid)

@@ -9,16 +9,19 @@ handle missing fields by injecting None instead of raising KeyError.
 
 import sys
 from typing import Annotated
+from unittest.mock import Mock
 
 import pytest
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
 from langgraph.graph.message import add_messages
+from langgraph.runtime import Runtime
 from pydantic import BaseModel, Field
 from typing_extensions import NotRequired
 
 from langgraph.prebuilt import InjectedState, ToolNode, create_react_agent
 from langgraph.prebuilt.chat_agent_executor import AgentState
+from langgraph.prebuilt.tool_node import ToolRuntime
 
 from .model import FakeToolCallingModel
 
@@ -50,9 +53,6 @@ def _create_mock_runtime(
     store=None,
 ):
     """Create a mock Runtime for testing ToolNode directly."""
-    from unittest.mock import Mock
-
-    from langgraph.runtime import Runtime
 
     mock_runtime = Mock(spec=Runtime)
     mock_runtime.context = {}
@@ -61,7 +61,6 @@ def _create_mock_runtime(
 
 def _create_config_with_runtime(store=None, state=None):
     """Create a RunnableConfig with mocked runtime for direct ToolNode testing."""
-    from langgraph.prebuilt.tool_node import ToolRuntime
 
     tool_runtime = ToolRuntime(
         state=state or {},
