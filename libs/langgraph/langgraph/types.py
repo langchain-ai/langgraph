@@ -540,6 +540,9 @@ class TracePolicy:
     Not intended to redact secrets. To redact inputs/outputs across all runs
     (children included), use the LangSmith client's
     `hide_inputs`/`hide_outputs`/`anonymizer` instead.
+
+    Each processor receives the node's raw input/output value (not a normalized
+    kwargs dict) and returns the value to record.
     """
 
     process_inputs: Callable[[Any], Any] | None = None
