@@ -26,6 +26,7 @@ from typing import (
     cast,
 )
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.runnables.base import (
     Runnable,
     RunnableConfig,
@@ -69,17 +70,19 @@ logger = logging.getLogger(__name__)
 
 
 def _trace_payload(
-    manager: Any, value: Any, transform: Callable[[Any], Any] | None
+    handlers: Sequence[BaseCallbackHandler],
+    value: Any,
+    transform: Callable[[Any], Any] | None,
 ) -> Any:
     """Return the payload to record on a run for `value`.
 
-    A `TracePolicy` processor (`transform`) runs only when a tracer is attached, so a
-    graph invoked without tracing pays nothing, and it never affects execution: if the
-    processor raises, the untransformed value is recorded instead.
+    A `TracePolicy` processor (`transform`) runs only when a tracer is among `handlers`,
+    so a graph invoked without tracing pays nothing, and it never affects execution: if
+    the processor raises, the untransformed value is recorded instead.
     """
     if transform is None:
         return value
-    if not any(isinstance(h, BaseTracer) for h in manager.handlers):
+    if not any(isinstance(h, BaseTracer) for h in handlers):
         return value
     try:
         return transform(value)
@@ -686,7 +689,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = callback_manager.on_chain_start(
             None,
-            _trace_payload(callback_manager, input, self.trace_inputs),
+            _trace_payload(callback_manager.handlers, input, self.trace_inputs),
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -718,7 +721,7 @@ class RunnableSeq(Runnable):
             raise
         else:
             run_manager.on_chain_end(
-                _trace_payload(run_manager, input, self.trace_outputs)
+                _trace_payload(run_manager.handlers, input, self.trace_outputs)
             )
             return input
 
@@ -735,7 +738,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = await callback_manager.on_chain_start(
             None,
-            _trace_payload(callback_manager, input, self.trace_inputs),
+            _trace_payload(callback_manager.handlers, input, self.trace_inputs),
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -773,7 +776,7 @@ class RunnableSeq(Runnable):
             raise
         else:
             await run_manager.on_chain_end(
-                _trace_payload(run_manager, input, self.trace_outputs)
+                _trace_payload(run_manager.handlers, input, self.trace_outputs)
             )
             return input
 
@@ -790,7 +793,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = callback_manager.on_chain_start(
             None,
-            _trace_payload(callback_manager, input, self.trace_inputs),
+            _trace_payload(callback_manager.handlers, input, self.trace_inputs),
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -836,7 +839,7 @@ class RunnableSeq(Runnable):
                 raise
             else:
                 run_manager.on_chain_end(
-                    _trace_payload(run_manager, output, self.trace_outputs)
+                    _trace_payload(run_manager.handlers, output, self.trace_outputs)
                 )
 
     async def astream(
@@ -852,7 +855,7 @@ class RunnableSeq(Runnable):
         # start the root run
         run_manager = await callback_manager.on_chain_start(
             None,
-            _trace_payload(callback_manager, input, self.trace_inputs),
+            _trace_payload(callback_manager.handlers, input, self.trace_inputs),
             name=config.get("run_name") or self.get_name(),
             run_id=config.pop("run_id", None),
         )
@@ -908,7 +911,7 @@ class RunnableSeq(Runnable):
                     raise
                 else:
                     await run_manager.on_chain_end(
-                        _trace_payload(run_manager, output, self.trace_outputs)
+                        _trace_payload(run_manager.handlers, output, self.trace_outputs)
                     )
         else:
             try:
@@ -940,7 +943,7 @@ class RunnableSeq(Runnable):
                 raise
             else:
                 await run_manager.on_chain_end(
-                    _trace_payload(run_manager, output, self.trace_outputs)
+                    _trace_payload(run_manager.handlers, output, self.trace_outputs)
                 )
 
 
