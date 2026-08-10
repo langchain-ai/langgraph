@@ -53,6 +53,17 @@ For full documentation, see the [API reference](https://reference.langchain.com/
 >     # TypeError: tuple indices must be integers or slices, not str
 > ```
 
+> [!IMPORTANT]
+> `psycopg` and `asyncpg` use different query parameter names for TLS. If your connection string was built for `asyncpg` (for example, reused from an existing SQLAlchemy async engine URL), it uses `ssl` (e.g. `ssl=require`); `psycopg`, which `PostgresSaver` and `AsyncPostgresSaver` are built on, expects `sslmode` instead (e.g. `sslmode=require`). Passing the `asyncpg`-style parameter raises `psycopg.ProgrammingError: invalid URI query parameter: "ssl"` rather than connecting.
+>
+> ```python
+> # ❌ asyncpg-style query parameter — psycopg rejects this
+> DB_URI = "postgresql://user:pass@host:5432/db?ssl=require"
+>
+> # ✅ psycopg-style query parameter
+> DB_URI = "postgresql://user:pass@host:5432/db?sslmode=require"
+> ```
+
 ```python
 from langgraph.checkpoint.postgres import PostgresSaver
 
