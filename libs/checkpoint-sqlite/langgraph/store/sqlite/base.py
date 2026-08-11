@@ -1052,9 +1052,14 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             cur = self.conn.cursor()
             try:
                 yield cur
-            finally:
+            except BaseException:
+                if transaction:
+                    self.conn.execute("ROLLBACK")
+                raise
+            else:
                 if transaction:
                     self.conn.execute("COMMIT")
+            finally:
                 cur.close()
 
     def setup(self) -> None:
