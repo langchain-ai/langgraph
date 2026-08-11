@@ -712,9 +712,7 @@ class RunnableSeq(Runnable):
             run_manager.on_chain_error(e)
             raise
         else:
-            run_manager.on_chain_end(
-                _trace_payload(input, self.trace_outputs)
-            )
+            run_manager.on_chain_end(_trace_payload(input, self.trace_outputs))
             return input
 
     async def ainvoke(
@@ -767,9 +765,7 @@ class RunnableSeq(Runnable):
             await run_manager.on_chain_error(e)
             raise
         else:
-            await run_manager.on_chain_end(
-                _trace_payload(input, self.trace_outputs)
-            )
+            await run_manager.on_chain_end(_trace_payload(input, self.trace_outputs))
             return input
 
     def stream(
@@ -830,9 +826,7 @@ class RunnableSeq(Runnable):
                 run_manager.on_chain_error(e)
                 raise
             else:
-                run_manager.on_chain_end(
-                    _trace_payload(output, self.trace_outputs)
-                )
+                run_manager.on_chain_end(_trace_payload(output, self.trace_outputs))
 
     async def astream(
         self,
