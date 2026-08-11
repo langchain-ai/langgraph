@@ -261,6 +261,7 @@ def test_validate_config():
         "git+https://user:secret-token@github.com/org/private.git@main",
         "private-package @ git+http://token@github.com/org/private.git",
         "git+HTTPS://user%40example.com:secret%2Ftoken@github.com/org/private.git",
+        "git+https://${GIT_TOKEN}@github.com/org/private.git",
     ],
 )
 def test_validate_config_rejects_git_http_url_userinfo(dependency: str):
@@ -277,6 +278,96 @@ def test_validate_config_rejects_git_http_url_userinfo(dependency: str):
     assert "must not contain credentials or other URL userinfo" in message
     assert "secret-token" not in message
     assert "secret%2Ftoken" not in message
+
+
+@pytest.mark.parametrize(
+    "manifest", ["package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"]
+)
+def test_config_to_docker_rejects_git_http_url_userinfo_in_node_files(
+    tmp_path: pathlib.Path, manifest: str
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "agent.js").write_text("export const graph = {};\n")
+    (tmp_path / "package.json").write_text('{"name":"agent"}\n')
+    (tmp_path / manifest).write_text(
+        '"priv": "git+https://user:secret-token@github.com/org/private.git"\n'
+    )
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraphjs-api",
+        )
+
+    message = str(exc_info.value)
+    assert "must not contain credentials or other URL userinfo" in message
+    assert "secret-token" not in message
+    assert f"Found in: {(tmp_path / manifest).resolve()}" in message
+
+
+def test_config_to_docker_allows_node_git_urls_without_http_userinfo(
+    tmp_path: pathlib.Path,
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text("{}\n")
+    (tmp_path / "agent.js").write_text("export const graph = {};\n")
+    (tmp_path / "package.json").write_text(
+        '{"dependencies":{"public":"git+https://github.com/org/public.git"}}\n'
+    )
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+
+    docker, _ = config_to_docker(
+        config_path,
+        config,
+        base_image="langchain/langgraphjs-api",
+    )
+
+    assert f"ADD . /deps/{tmp_path.name}" in docker
+
+
+def test_config_to_docker_rejects_git_http_url_userinfo_in_node_workspace(
+    tmp_path: pathlib.Path,
+):
+    config_root = tmp_path / "apps" / "agent"
+    config_root.mkdir(parents=True)
+    config_path = config_root / "langgraph.json"
+    config_path.write_text("{}\n")
+    (config_root / "agent.js").write_text("export const graph = {};\n")
+    (config_root / "package.json").write_text(
+        '{"dependencies":{"priv":"git+https://secret-token@github.com/org/private.git"}}\n'
+    )
+    (tmp_path / "package.json").write_text('{"name":"workspace"}\n')
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        config_to_docker(
+            config_path,
+            config,
+            base_image="langchain/langgraphjs-api",
+            build_context=str(tmp_path),
+        )
+
+    message = str(exc_info.value)
+    assert "secret-token" not in message
+    assert f"Found in: {(config_root / 'package.json').resolve()}" in message
 
 
 @pytest.mark.parametrize(
@@ -326,6 +417,7 @@ def test_config_to_docker_rejects_git_http_url_userinfo_in_requirements(
     message = str(exc_info.value)
     assert "must not contain credentials or other URL userinfo" in message
     assert "secret-token" not in message
+    assert f"Found in: {(tmp_path / 'requirements.txt').resolve()}" in message
 
 
 @pytest.mark.parametrize("manifest", ["pyproject.toml", "uv.lock"])

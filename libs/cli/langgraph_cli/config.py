@@ -92,32 +92,37 @@ def _has_git_http_url_userinfo(dependency: str) -> bool:
     )
 
 
-def _validate_git_http_url_userinfo(values: Iterable[str]) -> None:
+def _validate_git_http_url_userinfo(
+    values: Iterable[str], *, source: pathlib.Path | None = None
+) -> None:
     """Reject credential-bearing Git HTTP URLs without echoing their values."""
     if not any(_has_git_http_url_userinfo(value) for value in values):
         return
-    raise click.UsageError(
+    message = (
         "Git dependency URLs must not contain credentials or other URL "
         "userinfo because generated Dockerfiles and image layers can retain "
         "them. Use a credential-free Git URL and provide short-lived "
         "credentials through your build environment's secret-backed Git "
         "credential helper."
     )
+    if source is not None:
+        message += f" Found in: {source}"
+    raise click.UsageError(message)
 
 
 def _validate_git_http_url_userinfo_files(paths: Iterable[pathlib.Path]) -> None:
     """Reject credential-bearing Git HTTP URLs in dependency files."""
-    contents: list[str] = []
     for path in paths:
+        path = path.resolve()
         if not path.is_file():
             continue
         try:
-            contents.append(path.read_text(encoding="utf-8", errors="replace"))
+            contents = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             raise click.UsageError(
                 f"Could not inspect dependency file for embedded credentials: {path}"
             ) from None
-    _validate_git_http_url_userinfo(contents)
+        _validate_git_http_url_userinfo([contents], source=path)
 
 
 def _validate_local_dependency_files(config_path: pathlib.Path, config: Config) -> None:
@@ -1553,7 +1558,18 @@ def node_config_to_docker(
 ) -> tuple[str, dict[str, str]]:
     # Calculate paths for monorepo support
     install_root = (
-        pathlib.Path(build_context).resolve() if build_context else config_path.parent
+        pathlib.Path(build_context).resolve()
+        if build_context
+        else config_path.parent.resolve()
+    )
+    config_root = config_path.parent.resolve()
+    dependency_roots = (
+        (install_root, config_root) if install_root != config_root else (install_root,)
+    )
+    _validate_git_http_url_userinfo_files(
+        root / name
+        for root in dependency_roots
+        for name in ("package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml")
     )
     install_cmd = install_command or _get_node_pm_install_cmd(install_root)
     if build_context:

@@ -650,7 +650,8 @@ class Config(TypedDict, total=False):
 
     pip_config_file: str | None
     """Optional. Path to a pip config file (e.g., "/etc/pip.conf" or "pip.ini") for controlling
-    package installation (custom indices, credentials, etc.).
+    package installation (custom indices, timeouts, etc.). The file is copied into the
+    generated image, so it must not contain credentials or other secrets.
 
     Only relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.
     """
