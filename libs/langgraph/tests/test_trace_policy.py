@@ -93,9 +93,9 @@ def test_trace_policy_none_records_real_payloads() -> None:
     assert run.outputs == {"value": 2}
 
 
-def test_trace_policy_processor_skipped_without_tracer() -> None:
+def test_trace_policy_processor_error_safe_without_callbacks() -> None:
     def boom(_inp: Any) -> Any:
-        raise RuntimeError("processor must not run without a tracer")
+        raise RuntimeError("processor failed")
 
     graph = (
         StateGraph(State)
@@ -105,7 +105,7 @@ def test_trace_policy_processor_skipped_without_tracer() -> None:
         .compile()
     )
 
-    # no tracer configured -> the trace-only processor never runs; execution is unaffected
+    # no callbacks: the processor still runs but is fail-open, so execution is unaffected
     assert graph.invoke({"value": 1}) == {"value": 2}
 
 
