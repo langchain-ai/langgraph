@@ -36,7 +36,7 @@ from langgraph.checkpoint.base import (
 from langgraph.store.base import BaseStore
 from typing_extensions import ParamSpec, Self
 
-from langgraph._internal._config import patch_configurable
+from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
@@ -356,6 +356,30 @@ class PregelLoop:
                     ][self.config[CONF][CONFIG_KEY_CHECKPOINT_NS]]
                 },
             )
+        elif CONFIG_KEY_CHECKPOINT_MAP in self.config[CONF] and (
+            checkpoint_ns := self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ):
+            # Time-travel to a subgraph checkpoint: the eager parent fork
+            # (#7498) gave the parent a new checkpoint id, which derived a new
+            # subgraph task id and thus a brand-new, empty namespace. The
+            # checkpoint the caller asked for is still keyed under the
+            # pre-fork namespace in the checkpoint_map — resolve it via the
+            # stable (task-id-free) namespace so the subgraph resumes at the
+            # requested node instead of silently re-running from __start__.
+            checkpoint_map = self.config[CONF][CONFIG_KEY_CHECKPOINT_MAP]
+            stable_ns = recast_checkpoint_ns(checkpoint_ns)
+            for ns, checkpoint_id in checkpoint_map.items():
+                if recast_checkpoint_ns(ns) == stable_ns:
+                    self.checkpoint_config = patch_configurable(
+                        self.config,
+                        {
+                            CONFIG_KEY_CHECKPOINT_NS: ns,
+                            CONFIG_KEY_CHECKPOINT_ID: checkpoint_id,
+                        },
+                    )
+                    break
+            else:
+                self.checkpoint_config = self.config
         else:
             self.checkpoint_config = self.config
         if thread_id := self.checkpoint_config[CONF].get(CONFIG_KEY_THREAD_ID):
