@@ -70,6 +70,8 @@ __all__ = (
     "RetryPolicy",
     "TimeoutPolicy",
     "CachePolicy",
+    "TracePolicy",
+    "omit_payload",
     "Interrupt",
     "StateUpdate",
     "PregelTask",
@@ -525,6 +527,44 @@ class CachePolicy(Generic[KeyFuncT]):
 
     ttl: int | None = None
     """Time to live for the cache entry in seconds. If `None`, the entry never expires."""
+
+
+@dataclass(**_DC_KWARGS)
+class TracePolicy:
+    """Configuration for how a node's run is traced.
+
+    Scope: this only transforms what the node's *own* run records. Child runs created
+    by a traced `bound` runnable and the root graph run are not affected. Plain
+    function nodes are traced with `trace=False`, so they have no such child runs.
+
+    Not intended to redact secrets. To redact inputs/outputs across all runs
+    (children included), use the LangSmith client's
+    `hide_inputs`/`hide_outputs`/`anonymizer` instead.
+
+    Each processor receives the node's raw input/output value (not a normalized
+    kwargs dict) and returns the value to record.
+    """
+
+    process_inputs: Callable[[Any], Any] | None = None
+    """Optional callable to transform the node's input before it is recorded on the
+    node's trace run. Can be used to omit or summarize large payloads
+    (e.g. message history). Not intended to affect the value passed to the node; avoid
+    mutating arguments in place."""
+
+    process_outputs: Callable[[Any], Any] | None = None
+    """Optional callable to transform the node's output before it is recorded on the
+    node's trace run. Can be used to omit or summarize large payloads
+    (e.g. message history). Not intended to affect the value returned by the node; avoid
+    mutating arguments in place."""
+
+
+def omit_payload(_value: Any) -> dict[str, Any]:
+    """`TracePolicy` helper that records an empty payload, dropping the value entirely.
+
+    Use as `process_inputs` and/or `process_outputs` on a `TracePolicy` to keep a node's
+    span and its timing while omitting its inputs/outputs from the trace.
+    """
+    return {}
 
 
 _DEFAULT_INTERRUPT_ID = "placeholder-id"
