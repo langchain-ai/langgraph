@@ -140,7 +140,14 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             An AsyncSqliteStore instance wrapped in an async context manager.
         """
         async with aiosqlite.connect(conn_string, isolation_level=None) as conn:
-            yield cls(conn, index=index, ttl=ttl)
+            store = cls(conn, index=index, ttl=ttl)
+            try:
+                yield store
+            finally:
+                # The sweeper task holds a reference to the store and may wake up
+                # to sweep against `conn`. Stop it before the connection is closed
+                # so no background worker outlives the context that owns it.
+                await store.stop_ttl_sweeper()
 
     async def setup(self) -> None:
         """Set up the store database.
@@ -351,12 +358,10 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        # Ensure the TTL sweeper task is stopped when exiting the context
-        if hasattr(self, "_ttl_sweeper_task") and self._ttl_sweeper_task is not None:
-            # Set the event to signal the task to stop
-            self._ttl_stop_event.set()
-            # We don't wait for the task to complete here to avoid blocking
-            # The task will clean up itself gracefully
+        # Ensure the TTL sweeper task is stopped when exiting the context.
+        # stop_ttl_sweeper() signals the task and awaits its completion so no
+        # background worker outlives the context that owns the connection.
+        await self.stop_ttl_sweeper()
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute a batch of operations asynchronously.

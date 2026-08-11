@@ -1032,7 +1032,14 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             isolation_level=None,  # autocommit mode
         )
         try:
-            yield cls(conn, index=index, ttl=ttl)
+            store = cls(conn, index=index, ttl=ttl)
+            try:
+                yield store
+            finally:
+                # The sweeper thread closes over `store` and may wake up to sweep
+                # against `conn`. Stop it before the connection is closed so no
+                # background worker outlives the context that owns the connection.
+                store.stop_ttl_sweeper()
         finally:
             conn.close()
 

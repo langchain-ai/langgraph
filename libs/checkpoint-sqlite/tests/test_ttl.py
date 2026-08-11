@@ -427,3 +427,40 @@ async def test_async_asearch_refresh_ttl(temp_db_file: str) -> None:
         assert item1_final_check is None, (
             "Item1 should be gone after its refreshed TTL expired"
         )
+
+
+def test_ttl_sweeper_stops_on_context_exit(temp_db_file: str) -> None:
+    """The TTL sweeper thread must not outlive the from_conn_string context."""
+    ttl_config: TTLConfig = {
+        "default_ttl": 60,  # minutes; long enough to never fire during the test
+        "sweep_interval_minutes": 60,
+    }
+    with SqliteStore.from_conn_string(temp_db_file, ttl=ttl_config) as store:
+        store.setup()
+        future = store.start_ttl_sweeper()
+        thread = store._ttl_sweeper_thread
+        assert thread is not None and thread.is_alive()
+        assert not future.done()
+
+    # The connection-owning context has exited: its worker must be stopped.
+    assert thread is not None
+    assert not thread.is_alive()
+    assert future.done()
+
+
+@pytest.mark.asyncio
+async def test_async_ttl_sweeper_stops_on_context_exit(temp_db_file: str) -> None:
+    """The TTL sweeper task must not outlive the from_conn_string context."""
+    ttl_config: TTLConfig = {
+        "default_ttl": 60,  # minutes; long enough to never fire during the test
+        "sweep_interval_minutes": 60,
+    }
+    async with AsyncSqliteStore.from_conn_string(
+        temp_db_file, ttl=ttl_config
+    ) as store:
+        await store.setup()
+        task = await store.start_ttl_sweeper()
+        assert not task.done()
+
+    # The connection-owning context has exited: its worker must be finished.
+    assert task.done()
