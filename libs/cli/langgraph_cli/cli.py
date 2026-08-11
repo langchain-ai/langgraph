@@ -5,6 +5,7 @@ import pathlib
 import shutil
 import sys
 from collections.abc import Sequence
+from urllib.parse import SplitResult, urlencode, urlsplit, urlunsplit
 
 import click
 import click.exceptions
@@ -231,6 +232,66 @@ cli.add_command(deploy)
 # ---------------------------------------------------------------------------
 
 
+def _validated_http_url(value: str, option_name: str) -> SplitResult:
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        _ = parsed.port
+    except ValueError as exc:
+        raise click.UsageError(
+            f"{option_name} must be a valid HTTP(S) URL without credentials."
+        ) from exc
+
+    if (
+        value != value.strip()
+        or parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise click.UsageError(
+            f"{option_name} must be a valid HTTP(S) URL without credentials."
+        )
+    return parsed
+
+
+def _studio_link(
+    *,
+    port: int,
+    studio_url: str | None,
+    api_url: str | None,
+    debugger_base_url: str | None,
+) -> str:
+    if debugger_base_url is not None:
+        if api_url is not None and api_url != debugger_base_url:
+            raise click.UsageError(
+                "--api-url and --debugger-base-url cannot specify different URLs."
+            )
+        click.echo(
+            "Warning: --debugger-base-url is deprecated; use --api-url instead.",
+            err=True,
+        )
+        api_url = debugger_base_url
+
+    studio_url = "https://smith.langchain.com" if studio_url is None else studio_url
+    api_url = f"http://127.0.0.1:{port}" if api_url is None else api_url
+    studio_parts = _validated_http_url(studio_url, "--studio-url")
+    _validated_http_url(api_url, "--api-url")
+    if studio_parts.query or studio_parts.fragment:
+        raise click.UsageError(
+            "--studio-url must not include a query string or fragment."
+        )
+
+    studio_path = f"{studio_parts.path.rstrip('/')}/studio/"
+    return urlunsplit(
+        studio_parts._replace(
+            path=studio_path,
+            query=urlencode({"baseUrl": api_url}),
+        )
+    )
+
+
 @OPT_RECREATE
 @OPT_PULL
 @OPT_PORT
@@ -241,6 +302,24 @@ cli.add_command(deploy)
 @OPT_POSTGRES_URI
 @OPT_API_VERSION
 @OPT_ENGINE_RUNTIME_MODE
+@click.option(
+    "--studio-url",
+    type=str,
+    default=None,
+    help="URL of the LangGraph Studio instance. Defaults to https://smith.langchain.com",
+)
+@click.option(
+    "--api-url",
+    type=str,
+    default=None,
+    help="URL that LangGraph Studio uses to access the API. Defaults to http://127.0.0.1:[PORT]",
+)
+@click.option(
+    "--debugger-base-url",
+    type=str,
+    default=None,
+    hidden=True,
+)
 @click.option(
     "--image",
     type=str,
@@ -274,9 +353,18 @@ def up(
     postgres_uri: str | None,
     api_version: str | None,
     engine_runtime_mode: str,
+    studio_url: str | None,
+    api_url: str | None,
+    debugger_base_url: str | None,
     image: str | None,
     base_image: str | None,
 ):
+    studio_link = _studio_link(
+        port=port,
+        studio_url=studio_url,
+        api_url=api_url,
+        debugger_base_url=debugger_base_url,
+    )
     click.secho("Starting LangGraph API server...", fg="green")
     click.secho(
         """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Deployment.
@@ -325,7 +413,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
                     f"""Ready!
 - API: http://localhost:{port}
 - Docs: http://localhost:{port}/docs
-- LangGraph Studio: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:{port}
+- LangGraph Studio: {studio_link}
 """
                 )
                 sys.stdout.flush()
