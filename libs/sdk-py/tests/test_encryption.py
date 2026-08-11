@@ -1,6 +1,15 @@
 import pytest
 
+from langgraph_sdk import DecryptResult
 from langgraph_sdk.encryption import DuplicateHandlerError, Encryption
+
+
+def test_decrypt_result():
+    result = DecryptResult(plaintext=b"plain", replacement=b"rotated")
+
+    assert result.plaintext == b"plain"
+    assert result.replacement == b"rotated"
+    assert DecryptResult(plaintext={"plain": True}).replacement is None
 
 
 class TestHandlerValidation:

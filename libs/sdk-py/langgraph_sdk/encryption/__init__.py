@@ -149,7 +149,9 @@ class _DecryptDecorators:
         Example:
             ```python
             @encryption.decrypt.blob
-            async def decrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
+            async def decrypt_blob(
+                ctx: EncryptionContext, blob: bytes
+            ) -> bytes | DecryptResult[bytes]:
                 # Decrypt the blob using your encryption service
                 return decrypted_blob
             ```
@@ -176,7 +178,9 @@ class _DecryptDecorators:
         Example:
             ```python
             @encryption.decrypt.json
-            async def decrypt_json(ctx: EncryptionContext, data: dict) -> dict:
+            async def decrypt_json(
+                ctx: EncryptionContext, data: dict
+            ) -> dict | DecryptResult[dict]:
                 # Decrypt the data
                 return decrypt_data(data)
             ```
@@ -369,7 +373,7 @@ class Encryption:
     """Reference to encryption type definitions.
 
     Provides access to all type definitions used in the encryption system,
-    including EncryptionContext, BlobEncryptor, BlobDecryptor,
+    including EncryptionContext, DecryptResult, BlobEncryptor, BlobDecryptor,
     JsonEncryptor, and JsonDecryptor.
     """
 
