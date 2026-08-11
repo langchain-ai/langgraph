@@ -18,6 +18,9 @@ import warnings
 
 from langgraph_sdk.encryption import types
 
+_BlobDecryptorT = typing.TypeVar("_BlobDecryptorT", bound=types.BlobDecryptor)
+_JsonDecryptorT = typing.TypeVar("_JsonDecryptorT", bound=types.JsonDecryptor)
+
 
 class LangGraphBetaWarning(UserWarning):
     """Warning for beta features in LangGraph SDK."""
@@ -141,7 +144,7 @@ class _DecryptDecorators:
     def __init__(self, parent: Encryption):
         self._parent = parent
 
-    def blob(self, fn: types.BlobDecryptor) -> types.BlobDecryptor:
+    def blob(self, fn: _BlobDecryptorT) -> _BlobDecryptorT:
         """Register a blob decryption handler.
 
         The handler will be called to decrypt opaque data like checkpoint blobs.
@@ -172,7 +175,7 @@ class _DecryptDecorators:
         self._parent._blob_decryptor = fn
         return fn
 
-    def json(self, fn: types.JsonDecryptor) -> types.JsonDecryptor:
+    def json(self, fn: _JsonDecryptorT) -> _JsonDecryptorT:
         """Register the JSON decryption handler.
 
         Example:

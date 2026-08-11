@@ -1,6 +1,8 @@
+from collections.abc import Awaitable, Callable
+
 import pytest
 
-from langgraph_sdk import DecryptResult
+from langgraph_sdk import DecryptResult, EncryptionContext
 from langgraph_sdk.encryption import DuplicateHandlerError, Encryption
 
 
@@ -10,6 +12,27 @@ def test_decrypt_result():
     assert result.plaintext == b"plain"
     assert result.replacement == b"rotated"
     assert DecryptResult(plaintext={"plain": True}).replacement is None
+
+
+def test_decrypt_decorators_preserve_return_types():
+    encryption = Encryption()
+
+    @encryption.decrypt.blob
+    async def blob_dec(_ctx: EncryptionContext, data: bytes) -> bytes:
+        return data
+
+    @encryption.decrypt.json
+    async def json_dec(
+        _ctx: EncryptionContext, data: dict[str, object]
+    ) -> dict[str, object]:
+        return data
+
+    blob_handler: Callable[[EncryptionContext, bytes], Awaitable[bytes]] = blob_dec
+    json_handler: Callable[
+        [EncryptionContext, dict[str, object]], Awaitable[dict[str, object]]
+    ] = json_dec
+    assert blob_handler is blob_dec
+    assert json_handler is json_dec
 
 
 class TestHandlerValidation:
