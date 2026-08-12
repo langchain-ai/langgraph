@@ -4,7 +4,6 @@ import os
 import pathlib
 import platform
 import threading
-import urllib.error
 import urllib.request
 from typing import Any, TypedDict
 
@@ -15,6 +14,10 @@ from langgraph_cli.constants import (
     SUPABASE_URL,
 )
 from langgraph_cli.version import __version__
+
+# Telemetry is best-effort: bound the network request so a stalled endpoint can
+# never block a CLI command (see langchain-ai/langgraph#8074).
+ANALYTICS_URLOPEN_TIMEOUT = 3
 
 
 class LogData(TypedDict):
@@ -78,12 +81,22 @@ def log_data(data: LogData) -> None:
     )
 
     try:
-        urllib.request.urlopen(req)
-    except urllib.error.URLError:
+        urllib.request.urlopen(req, timeout=ANALYTICS_URLOPEN_TIMEOUT)
+    except Exception:
+        # Best-effort telemetry: never surface errors to the user and never let
+        # a failed request crash the background thread.
         pass
 
 
 def log_command(func):
+    """Log anonymous telemetry for a CLI command on a background daemon thread.
+
+    Telemetry is strictly best-effort: the worker thread is a daemon and the
+    HTTP request is time-bounded, so it can never delay or block CLI exit (see
+    langchain-ai/langgraph#8074). Set ``LANGGRAPH_CLI_NO_ANALYTICS=1`` to opt
+    out entirely.
+    """
+
     @functools.wraps(func)
     def decorator(*args, **kwargs):
         if os.getenv("LANGGRAPH_CLI_NO_ANALYTICS") == "1":
@@ -98,7 +111,7 @@ def log_command(func):
             "params": get_anonymized_params(kwargs, cli_command=func.__name__),
         }
 
-        background_thread = threading.Thread(target=log_data, args=(data,))
+        background_thread = threading.Thread(target=log_data, args=(data,), daemon=True)
         background_thread.start()
         return func(*args, **kwargs)
 
