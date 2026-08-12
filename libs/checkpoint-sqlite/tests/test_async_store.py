@@ -745,3 +745,94 @@ async def test_async_namespace_segment_boundary(store: AsyncSqliteStore) -> None
     assert set(await store.alist_namespaces(suffix=["alice"], limit=100)) == {
         ("uid", "users", "alice"),
     }
+
+
+async def test_abatch_rollback_on_error() -> None:
+    """A failed abatch must not partially commit earlier mutations.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/8590.
+    A GetOp that refreshes the TTL, followed by a PutOp whose value cannot be
+    serialized, must not persist the TTL refresh when the batch raises.
+    """
+    original_expiration = "2000-01-01 00:00:00"
+
+    async with AsyncSqliteStore.from_conn_string(
+        ":memory:",
+        ttl={"default_ttl": 10, "refresh_on_read": True},
+    ) as store:
+        await store.setup()
+        await store.aput(("test",), "key", {"value": "original"})
+        await store.conn.execute(
+            "UPDATE store SET expires_at = ? WHERE prefix = ? AND key = ?",
+            (original_expiration, "test", "key"),
+        )
+
+        with pytest.raises(TypeError):
+            await store.abatch(
+                [
+                    GetOp(("test",), "key", refresh_ttl=True),
+                    PutOp(("test",), "invalid", {"value": object()}),
+                ]
+            )
+
+        expires_at = (
+            await (
+                await store.conn.execute(
+                    "SELECT expires_at FROM store WHERE prefix = ? AND key = ?",
+                    ("test", "key"),
+                )
+            ).fetchone()
+        )[0]
+
+        assert expires_at == original_expiration
+
+
+async def test_cursor_rollback_on_cancellation() -> None:
+    """Cancelling a store operation mid-transaction must roll back.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/8590.
+    CancelledError is a BaseException, so the async store's cursor context
+    manager must roll back instead of committing partial work when a task is
+    cancelled while inside the transaction.
+    """
+    original_expiration = "2000-01-01 00:00:00"
+
+    async with AsyncSqliteStore.from_conn_string(
+        ":memory:",
+        ttl={"default_ttl": 10, "refresh_on_read": True},
+    ) as store:
+        await store.setup()
+        await store.aput(("test",), "key", {"value": "original"})
+        await store.conn.execute(
+            "UPDATE store SET expires_at = ? WHERE prefix = ? AND key = ?",
+            (original_expiration, "test", "key"),
+        )
+
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        async def mutate_then_wait_for_cancel() -> None:
+            async with store._cursor() as cur:
+                await cur.execute(
+                    "UPDATE store SET expires_at = ? WHERE prefix = ? AND key = ?",
+                    ("2099-01-01 00:00:00", "test", "key"),
+                )
+                entered.set()
+                await release.wait()
+
+        task = asyncio.create_task(mutate_then_wait_for_cancel())
+        await entered.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        expires_at = (
+            await (
+                await store.conn.execute(
+                    "SELECT expires_at FROM store WHERE prefix = ? AND key = ?",
+                    ("test", "key"),
+                )
+            ).fetchone()
+        )[0]
+
+        assert expires_at == original_expiration

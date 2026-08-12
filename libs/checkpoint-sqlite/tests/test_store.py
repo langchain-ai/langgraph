@@ -1435,3 +1435,39 @@ def test_list_namespaces_metacharacter_labels(store: SqliteStore) -> None:
         assert set(store.list_namespaces(prefix=[label, "child"], limit=100)) == {
             (label, "child"),
         }
+
+
+def test_batch_rollback_on_error() -> None:
+    """A failed batch must not partially commit earlier mutations.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/8590.
+    A GetOp that refreshes the TTL, followed by a PutOp whose value cannot be
+    serialized, must not persist the TTL refresh when the batch raises.
+    """
+    original_expiration = "2000-01-01 00:00:00"
+
+    with SqliteStore.from_conn_string(
+        ":memory:",
+        ttl={"default_ttl": 10, "refresh_on_read": True},
+    ) as store:
+        store.setup()
+        store.put(("test",), "key", {"value": "original"})
+        store.conn.execute(
+            "UPDATE store SET expires_at = ? WHERE prefix = ? AND key = ?",
+            (original_expiration, "test", "key"),
+        )
+
+        with pytest.raises(TypeError):
+            store.batch(
+                [
+                    GetOp(("test",), "key", refresh_ttl=True),
+                    PutOp(("test",), "invalid", {"value": object()}),
+                ]
+            )
+
+        expires_at = store.conn.execute(
+            "SELECT expires_at FROM store WHERE prefix = ? AND key = ?",
+            ("test", "key"),
+        ).fetchone()[0]
+
+        assert expires_at == original_expiration
