@@ -241,7 +241,11 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             async with self.conn.cursor() as cur:
                 try:
                     yield cur
-                finally:
+                except BaseException:
+                    if transaction:
+                        await self.conn.execute("ROLLBACK")
+                    raise
+                else:
                     if transaction:
                         await self.conn.execute("COMMIT")
 
