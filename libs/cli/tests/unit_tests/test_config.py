@@ -3531,7 +3531,16 @@ class TestNodeDependencyLayerOrdering:
         )
 
     @pytest.mark.parametrize(
-        "hook", ["preinstall", "install", "postinstall", "prepare"]
+        "hook",
+        [
+            "preinstall",
+            "install",
+            "postinstall",
+            "prepublish",
+            "preprepare",
+            "prepare",
+            "postprepare",
+        ],
     )
     def test_install_hook_keeps_source_first(
         self, tmp_path: pathlib.Path, hook: str

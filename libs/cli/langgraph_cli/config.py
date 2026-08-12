@@ -1162,8 +1162,16 @@ def _build_runtime_env_vars(config: Config) -> list[str]:
     return env_vars
 
 
-# These run as part of the install step, before the source would be copied.
-_NODE_INSTALL_HOOKS = ("preinstall", "install", "postinstall", "prepare")
+# npm runs all of these as part of an install, before the source would be copied.
+_NODE_INSTALL_HOOKS = (
+    "preinstall",
+    "install",
+    "postinstall",
+    "prepublish",
+    "preprepare",
+    "prepare",
+    "postprepare",
+)
 
 
 def _splittable_node_manifests(
