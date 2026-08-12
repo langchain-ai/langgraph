@@ -1162,7 +1162,39 @@ def _build_runtime_env_vars(config: Config) -> list[str]:
     return env_vars
 
 
-def _get_node_pm_install_cmd(project_dir: pathlib.Path) -> str:
+# These run as part of the install step, before the source would be copied.
+_NODE_INSTALL_HOOKS = ("preinstall", "install", "postinstall", "prepare")
+
+
+def _splittable_node_manifests(
+    project_dir: pathlib.Path, lockfile: str | None
+) -> list[str] | None:
+    """Return manifests to copy before installing, or None if unsafe to split.
+
+    A lockfile is required: without one the install resolves versions at build
+    time, so a cached layer could pin an older resolution than a clean build.
+    """
+    if lockfile is None:
+        return None
+    manifest = project_dir / "package.json"
+    try:
+        if not manifest.is_file():
+            return None
+        with open(manifest) as f:
+            package_json = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(package_json, dict):
+        return None
+    scripts = package_json.get("scripts") or {}
+    if any(hook in scripts for hook in _NODE_INSTALL_HOOKS):
+        return None
+    return ["package.json", lockfile]
+
+
+def _get_node_pm_install_cmd(project_dir: pathlib.Path) -> tuple[str, str | None]:
+    """Return the install command and the lockfile it was chosen from."""
+
     def test_file(file_name):
         full_path = project_dir / file_name
         try:
@@ -1201,13 +1233,19 @@ def _get_node_pm_install_cmd(project_dir: pathlib.Path) -> str:
 
     if yarn:
         install_cmd = "yarn install --frozen-lockfile"
+        lockfile = "yarn.lock"
     elif pnpm:
         install_cmd = "pnpm i --frozen-lockfile"
+        lockfile = "pnpm-lock.yaml"
     elif npm:
         install_cmd = "npm ci"
+        lockfile = "package-lock.json"
     elif bun:
         install_cmd = "bun i"
+        lockfile = "bun.lockb"
     else:
+        # No lockfile, so the install resolves versions at build time.
+        lockfile = None
         pkg_manager_name = get_pkg_manager_name()
 
         if pkg_manager_name == "yarn":
@@ -1219,7 +1257,7 @@ def _get_node_pm_install_cmd(project_dir: pathlib.Path) -> str:
         else:
             install_cmd = "npm i"
 
-    return install_cmd
+    return install_cmd, lockfile
 
 
 semver_pattern = re.compile(r":(\d+(?:\.\d+)?(?:\.\d+)?)(?:-|$)")
@@ -1423,7 +1461,7 @@ ADD {relpath} /deps/{name}
                 "# -- Installing JS dependencies --",
                 f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
                 f"WORKDIR {local_deps.working_dir}",
-                f"RUN {_get_node_pm_install_cmd(config_path.parent)} && tsx /api/langgraph_api/js/build.mts",
+                f"RUN {_get_node_pm_install_cmd(config_path.parent)[0]} && tsx /api/langgraph_api/js/build.mts",
                 "# -- End of JS dependencies install --",
             ]
         )
@@ -1492,7 +1530,9 @@ def node_config_to_docker(
     install_root = (
         pathlib.Path(build_context).resolve() if build_context else config_path.parent
     )
-    install_cmd = install_command or _get_node_pm_install_cmd(install_root)
+    detected_cmd, detected_lockfile = _get_node_pm_install_cmd(install_root)
+    install_cmd = install_command or detected_cmd
+    relative_workdir = ""
     if build_context:
         relative_workdir = _calculate_relative_workdir(config_path, build_context)
         container_name = pathlib.Path(build_context).name
@@ -1530,16 +1570,41 @@ def node_config_to_docker(
     else:
         build_workdir = faux_path
 
+    source_root = faux_path if not build_context else container_root
+
+    # Excluded: a custom install command may read files we have not copied yet,
+    # and a nested config means workspace manifests the root copy would miss.
+    manifests = (
+        _splittable_node_manifests(install_root, detected_lockfile)
+        if install_command is None and not relative_workdir
+        else None
+    )
+
+    if manifests:
+        add_steps = [
+            *(f"ADD {name} {source_root}/{name}" for name in manifests),
+            "",
+            f"WORKDIR {install_workdir}",
+            "",
+            install_step,
+            "",
+            f"ADD . {source_root}",
+        ]
+    else:
+        add_steps = [
+            f"ADD . {source_root}",
+            "",
+            f"WORKDIR {install_workdir}",
+            "",
+            install_step,
+        ]
+
     docker_file_contents = [
         f"FROM {image_str}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
-        f"ADD . {faux_path if not build_context else container_root}",
-        "",
-        f"WORKDIR {install_workdir}",
-        "",
-        install_step,
+        *add_steps,
         "",
         os.linesep.join(env_vars),
         "",

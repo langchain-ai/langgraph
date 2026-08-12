@@ -3424,3 +3424,134 @@ class TestHasDisallowedBuildCommandContent:
     )
     def test_valid_commands_allowed(self, cmd: str) -> None:
         assert not has_disallowed_build_command_content(cmd)
+
+
+class TestNodeDependencyLayerOrdering:
+    """Dependency manifests are copied before source so the install layer caches.
+
+    Without this the first source change invalidates the install, and a JS
+    deployment reinstalls every dependency on every push.
+    """
+
+    def _project(
+        self,
+        tmp_path: pathlib.Path,
+        *,
+        lockfile: str | None,
+        scripts: dict[str, str] | None = None,
+    ) -> pathlib.Path:
+        package_json: dict = {"name": "agent"}
+        if scripts:
+            package_json["scripts"] = scripts
+        (tmp_path / "package.json").write_text(json.dumps(package_json))
+        if lockfile:
+            (tmp_path / lockfile).write_text("")
+        (tmp_path / "graphs").mkdir()
+        (tmp_path / "graphs" / "agent.js").write_text("")
+        config_path = tmp_path / "langgraph.json"
+        config_path.write_text("{}")
+        return config_path
+
+    def _dockerfile(self, config_path: pathlib.Path, **kwargs) -> str:
+        actual, _ = config_to_docker(
+            config_path,
+            validate_config(
+                {"node_version": "20", "graphs": {"agent": "./graphs/agent.js:graph"}}
+            ),
+            base_image="langchain/langgraphjs-api",
+            **kwargs,
+        )
+        return clean_empty_lines(actual)
+
+    def test_manifests_copied_before_install(self, tmp_path: pathlib.Path) -> None:
+        config_path = self._project(tmp_path, lockfile="package-lock.json")
+        lines = self._dockerfile(config_path).splitlines()
+
+        add_manifest = lines.index(
+            f"ADD package.json /deps/{tmp_path.name}/package.json"
+        )
+        add_lock = lines.index(
+            f"ADD package-lock.json /deps/{tmp_path.name}/package-lock.json"
+        )
+        install = lines.index("RUN npm ci")
+        add_source = lines.index(f"ADD . /deps/{tmp_path.name}")
+
+        assert add_manifest < install
+        assert add_lock < install
+        assert install < add_source
+
+    def test_lockfile_choice_follows_package_manager(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        config_path = self._project(tmp_path, lockfile="pnpm-lock.yaml")
+        dockerfile = self._dockerfile(config_path)
+
+        assert f"ADD pnpm-lock.yaml /deps/{tmp_path.name}/pnpm-lock.yaml" in dockerfile
+        assert "package-lock.json" not in dockerfile
+
+    def test_no_lockfile_keeps_source_first(self, tmp_path: pathlib.Path) -> None:
+        # No lockfile means the install resolves at build time, so caching it is wrong.
+        config_path = self._project(tmp_path, lockfile=None)
+        lines = self._dockerfile(config_path).splitlines()
+
+        assert lines.index(f"ADD . /deps/{tmp_path.name}") < lines.index("RUN npm i")
+        assert not any(line.startswith("ADD package.json") for line in lines)
+
+    def test_nested_config_keeps_source_first(self, tmp_path: pathlib.Path) -> None:
+        # A workspace keeps manifests in subdirectories the root copy would miss.
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / "package.json").write_text(json.dumps({"name": "root"}))
+        (root / "package-lock.json").write_text("")
+        pkg = root / "packages" / "agent"
+        pkg.mkdir(parents=True)
+        (pkg / "graphs").mkdir()
+        (pkg / "graphs" / "agent.js").write_text("")
+        config_path = pkg / "langgraph.json"
+        config_path.write_text("{}")
+
+        lines = self._dockerfile(config_path, build_context=str(root)).splitlines()
+
+        assert lines.index("ADD . /deps/repo") < lines.index("RUN npm ci")
+        assert not any(line.startswith("ADD package.json") for line in lines)
+
+    def test_custom_install_command_keeps_source_first(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        # A custom command may read files the manifest copy would not include.
+        config_path = self._project(tmp_path, lockfile="package-lock.json")
+        lines = self._dockerfile(
+            config_path,
+            install_command="npm run bootstrap",
+            build_context=str(tmp_path),
+        ).splitlines()
+
+        assert lines.index(f"ADD . /deps/{tmp_path.name}") < lines.index(
+            "RUN npm run bootstrap"
+        )
+
+    @pytest.mark.parametrize(
+        "hook", ["preinstall", "install", "postinstall", "prepare"]
+    )
+    def test_install_hook_keeps_source_first(
+        self, tmp_path: pathlib.Path, hook: str
+    ) -> None:
+        # A hook referencing a project file would hit ENOENT: source is not copied yet.
+        config_path = self._project(
+            tmp_path,
+            lockfile="package-lock.json",
+            scripts={hook: "node scripts/setup.js"},
+        )
+        lines = self._dockerfile(config_path).splitlines()
+
+        assert lines.index(f"ADD . /deps/{tmp_path.name}") < lines.index("RUN npm ci")
+        assert not any(line.startswith("ADD package.json") for line in lines)
+
+    def test_only_the_chosen_lockfile_is_copied(self, tmp_path: pathlib.Path) -> None:
+        # Install picks yarn, so copying the npm lockfile would bust the cache for nothing.
+        config_path = self._project(tmp_path, lockfile="yarn.lock")
+        (tmp_path / "package-lock.json").write_text("")
+        dockerfile = self._dockerfile(config_path)
+
+        assert f"ADD yarn.lock /deps/{tmp_path.name}/yarn.lock" in dockerfile
+        assert "ADD package-lock.json" not in dockerfile
