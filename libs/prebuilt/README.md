@@ -85,6 +85,48 @@ ai_message = AIMessage(content="", tool_calls=tool_calls)
 tool_node.invoke({"messages": [ai_message]})
 ```
 
+### TaskMarket requester tools
+
+`langgraph-prebuilt` can expose TaskMarket as an explicit delegation option for
+agents that need to discover work or ask external workers to complete a task.
+The read tools use the public API. Task creation is a separate tool and
+requires all of the following:
+
+- an unchanged token from `taskmarket_preview_task`;
+- `confirm=True`; and
+- an application-provided approval callback that can ask a human to review the
+  exact description, reward, deadline, Base network, and maximum spend.
+
+The callback is intentionally required. LangGraph does not receive wallet keys,
+seed phrases, cookies, or bearer tokens, and the integration never accepts or
+rejects worker submissions automatically.
+
+```bash
+npm install -g @lucid-agents/taskmarket
+taskmarket init
+```
+
+```python
+from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt import create_taskmarket_tools
+
+
+def approve_task(preview: dict) -> bool:
+    # Connect this to the application's human-in-the-loop UI.
+    print(preview)
+    return input("Create this TaskMarket task? [y/N] ").lower() == "y"
+
+
+tools = create_taskmarket_tools(approval=approve_task)
+agent = create_react_agent(model, tools)
+```
+
+The requester workflow is: discover tasks, preview a request, obtain approval,
+verify the first-party wallet is configured for Base USDC and has enough for
+the reward plus platform/relay fees, then invoke the CLI once. If the CLI
+times out or returns no task ID, the tool reports an unknown outcome and does
+not retry; inspect live TaskMarket status before deciding what to do next.
+
 ### ValidationNode
 
 `langgraph-prebuilt` provides an [implementation](https://reference.langchain.com/python/langgraph.prebuilt/tool_validator/ValidationNode) of a node that validates tool calls against a pydantic schema - `ValidationNode`:
