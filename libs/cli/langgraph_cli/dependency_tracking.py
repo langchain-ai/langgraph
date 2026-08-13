@@ -69,12 +69,20 @@ def _find_version_for(
     for content in (pyproject_content, requirements_content):
         if content is None:
             continue
-        for m in _DEPS_RE.finditer(content):
-            if m.group(1) == pkg:
-                return m.group(2).strip().rstrip(",")
-        for m in _BARE_RE.finditer(content):
-            if m.group(1) == pkg:
-                return "unknown"
+        # Only match package names at the start of a dependency line, not inside URLs or extras
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # Match dependency specifiers like "google-adk>=1.2.0" or "google-adk==1.2.0"
+            for m in _DEPS_RE.finditer(line):
+                if m.start() == 0 or line[m.start()-1] in '\n\t ,;':
+                    if m.group(1) == pkg:
+                        return m.group(2).strip().rstrip(",")
+            # Match bare references (must be whole line or followed by comma/whitespace)
+            for m in _BARE_RE.finditer(line):
+                if m.group(1) == pkg and (m.end() == len(line) or line[m.end()-1] in ',; '):
+                    return "unknown"
         if _appears_in_extras(content, pkg):
             return "unknown"
     return None
