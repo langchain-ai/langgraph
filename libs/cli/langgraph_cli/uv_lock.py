@@ -970,6 +970,19 @@ def python_config_to_docker_uv_lock(
             f"{uv_export_project_dir}/uv.lock",
         )
     )
+    # `uv export --package` resolves a member by reading that member's own
+    # manifest, so the root manifest names it but is not enough to find it. Only
+    # the manifests are copied; member sources arrive later, per member.
+    for member_root in sorted(plan.all_workspace_roots - {plan.project_root}):
+        member_relative = pathlib.PurePosixPath(
+            member_root.relative_to(plan.project_root).as_posix()
+        )
+        docker_plan.add_raw(
+            copy_from_project_root(
+                member_relative / "pyproject.toml",
+                f"{uv_export_project_dir}/{member_relative}/pyproject.toml",
+            )
+        )
     docker_plan.add_instruction("WORKDIR", uv_export_project_dir)
     docker_plan.add_instruction(
         "RUN",
