@@ -1942,7 +1942,7 @@ class AsyncThreadStream:
             if isinstance(interrupt_id, str):
                 payload: InterruptPayload = {
                     "interrupt_id": interrupt_id,
-                    "value": data.get("value") if isinstance(data, dict) else None,
+                    "value": data.get("payload") if isinstance(data, dict) else None,
                     "namespace": params.get("namespace") or []
                     if isinstance(params, dict)
                     else [],
