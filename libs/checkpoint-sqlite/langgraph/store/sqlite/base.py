@@ -7,7 +7,7 @@ import re
 import sqlite3
 import threading
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, Literal, NamedTuple, cast
 
@@ -387,7 +387,7 @@ class BaseSqliteStore:
                     [
                         _namespace_to_text(op.namespace),
                         op.key,
-                        orjson.dumps(cast(dict, op.value)),
+                        orjson.dumps(dict(cast(Mapping[str, Any], op.value))),
                         expires_at,
                         op.ttl,
                     ]
