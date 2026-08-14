@@ -504,3 +504,18 @@ async def test_shallow_pool_saver_does_not_use_instance_lock(test_data) -> None:
         )
         checkpoint = await saver.aget_tuple(config)
         assert checkpoint is not None
+
+
+async def test_shallow_base_saver_uses_instance_lock(test_data) -> None:
+    async with _shallow_saver() as saver:
+        tracking_lock = _TrackingAsyncLock()
+        saver.lock = tracking_lock  # type: ignore[assignment]
+        config = await saver.aput(
+            test_data["configs"][0],
+            test_data["checkpoints"][0],
+            test_data["metadata"][0],
+            {},
+        )
+        checkpoint = await saver.aget_tuple(config)
+        assert checkpoint is not None
+        assert tracking_lock.enter_count >= 2

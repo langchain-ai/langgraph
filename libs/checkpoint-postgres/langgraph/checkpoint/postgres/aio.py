@@ -387,15 +387,15 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
                 # used at a time
-                try:
-                    async with (
-                        lock_cm,
-                        conn.cursor(binary=True, row_factory=dict_row) as cur,
-                    ):
-                        yield cur
-                finally:
-                    if pipeline:
-                        await self.pipe.sync()
+                async with lock_cm:
+                    try:
+                        async with conn.cursor(
+                            binary=True, row_factory=dict_row
+                        ) as cur:
+                            yield cur
+                    finally:
+                        if pipeline:
+                            await self.pipe.sync()
             elif pipeline:
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
