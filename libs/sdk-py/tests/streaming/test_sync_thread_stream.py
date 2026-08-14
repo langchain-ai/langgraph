@@ -10,6 +10,7 @@ import uuid
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+from unittest.mock import MagicMock
 
 import httpx
 import orjson
@@ -17,6 +18,7 @@ import pytest
 
 import langgraph_sdk.stream.sync_controller as _ctrl_mod
 from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.stream import SyncThreadStream
 from langgraph_sdk._sync.threads import SyncThreadsClient
 from langgraph_sdk.stream.sync_controller import SyncStreamController
 from langgraph_sdk.stream.transport.sync_http import (
@@ -40,6 +42,34 @@ from streaming._events import (
     values_event,
 )
 from streaming._sync_fake_server import SyncFakeServer, SyncStreamScript
+
+
+def test_sync_input_requested_preserves_protocol_v2_payload():
+    """Protocol v2 payload reaches the public interrupt value."""
+    expected_payload = {
+        "question": "Approve deployment?",
+        "context": {"environment": "staging", "run_id": "run-42"},
+    }
+    thread = SyncThreadStream(http=MagicMock(), thread_id="t-1", assistant_id="agent")
+
+    thread._apply_lifecycle_event(
+        {
+            "method": "input.requested",
+            "params": {
+                "namespace": ["agent"],
+                "data": {"interrupt_id": "i-1", "payload": expected_payload},
+            },
+        }
+    )
+
+    assert thread.interrupts == [
+        {
+            "interrupt_id": "i-1",
+            "value": expected_payload,
+            "namespace": ["agent"],
+        }
+    ]
+
 
 # ---------------------------------------------------------------------------
 # Task 9.1 — run_start_gate
