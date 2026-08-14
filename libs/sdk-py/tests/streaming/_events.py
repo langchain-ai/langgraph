@@ -95,9 +95,15 @@ def custom_event(
 
 
 def input_requested_event(
-    seq: int = 0, namespace: list[str] | None = None
+    seq: int = 0,
+    namespace: list[str] | None = None,
+    *,
+    payload: Any = None,
 ) -> dict[str, Any]:
-    return _base(seq, "input.requested", namespace or [], {"interrupt_id": "i-1"})
+    data: dict[str, Any] = {"interrupt_id": "i-1"}
+    if payload is not None:
+        data["payload"] = payload
+    return _base(seq, "input.requested", namespace or [], data)
 
 
 def message_start_event(
