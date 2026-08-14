@@ -973,7 +973,11 @@ def python_config_to_docker_uv_lock(
     # `uv export --package` resolves a member by reading that member's own
     # manifest, so the root manifest names it but is not enough to find it. Only
     # the manifests are copied; member sources arrive later, per member.
-    for member_root in sorted(plan.all_workspace_roots - {plan.project_root}):
+    #
+    # Restricted to the closure rather than every member. Members outside it are
+    # not needed for the export, and copying them would reach for paths that
+    # `.dockerignore` may have removed from the build context.
+    for member_root in sorted(set(plan.container_roots) - {plan.project_root}):
         member_relative = pathlib.PurePosixPath(
             member_root.relative_to(plan.project_root).as_posix()
         )
