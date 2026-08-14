@@ -29,8 +29,12 @@ async def test_interrupted_starts_false():
 
 
 async def test_interrupts_populated_from_input_requested_event():
+    expected_payload = {
+        "question": "Approve deployment?",
+        "context": {"environment": "staging", "run_id": "run-42"},
+    }
     fake = FakeServer()
-    fake.script([input_requested_event(seq=0)])
+    fake.script([input_requested_event(seq=0, payload=expected_payload)])
     asgi = httpx.ASGITransport(app=fake.app)
     async with httpx.AsyncClient(transport=asgi, base_url="http://test") as raw:
         threads = ThreadsClient(HttpClient(raw))
@@ -44,6 +48,7 @@ async def test_interrupts_populated_from_input_requested_event():
     assert thread.interrupted is True
     assert len(thread.interrupts) == 1
     assert thread.interrupts[0]["interrupt_id"] == "i-1"
+    assert thread.interrupts[0]["value"] == expected_payload
 
 
 async def test_aenter_starts_lifecycle_watcher():
