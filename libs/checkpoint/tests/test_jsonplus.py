@@ -36,6 +36,7 @@ from langgraph.checkpoint.serde.jsonplus import (
     EXT_METHOD_SINGLE_ARG,
     InvalidModuleError,
     JsonPlusSerializer,
+    _find_unsupported_path,
     _msgpack_enc,
     _msgpack_ext_hook_to_json,
     _warned_blocked_types,
@@ -1230,3 +1231,73 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+# Regression for #8606.
+# When msgpack fails to encode the state, the resulting TypeError used
+# to name only the offending type. It now also includes the JSONPath-style
+# state path so the user can locate the failing value without manually
+# walking the state graph.
+class _UnserializableLeaf:
+    pass
+
+
+def test_unsupported_error_includes_top_level_path() -> None:
+    serde = JsonPlusSerializer()
+    obj = _UnserializableLeaf()
+
+    with pytest.raises(TypeError, match=r"\(at \$\)"):
+        serde.dumps_typed(obj)
+
+
+def test_unsupported_error_includes_dict_key_path() -> None:
+    serde = JsonPlusSerializer()
+    obj = {"ok": "value", "bad": _UnserializableLeaf()}
+
+    with pytest.raises(TypeError, match=r'\(at \$\["bad"\]\)'):
+        serde.dumps_typed(obj)
+
+
+def test_unsupported_error_includes_list_index_path() -> None:
+    serde = JsonPlusSerializer()
+    obj = ["ok", _UnserializableLeaf(), "also_ok"]
+
+    with pytest.raises(TypeError, match=r"\(at \$\[1\]\)"):
+        serde.dumps_typed(obj)
+
+
+def test_unsupported_error_includes_nested_path() -> None:
+    serde = JsonPlusSerializer()
+    obj = {
+        "outer": {
+            "level1": [
+                {"ok": 1},
+                {"level2": {"bad": _UnserializableLeaf()}},
+            ],
+        },
+    }
+
+    with pytest.raises(TypeError, match=r'\(at \$\["outer"\]\["level1"\]\[1\]\["level2"\]\["bad"\]\)'):
+        serde.dumps_typed(obj)
+
+
+def test_unsupported_error_includes_pydantic_field_path() -> None:
+    class _State(BaseModel):
+        model_config = {"arbitrary_types_allowed": True}
+
+        ok: str = "value"
+        bad: _UnserializableLeaf | None = None
+
+    serde = JsonPlusSerializer()
+    obj = _State(bad=_UnserializableLeaf())
+
+    with pytest.raises(TypeError, match=r"\(at \$\.bad\)"):
+        serde.dumps_typed(obj)
+
+
+def test_find_unsupported_path_primitive_passes() -> None:
+    # Primitives should encode cleanly and return an empty path.
+    assert _find_unsupported_path("hello") == ""
+    assert _find_unsupported_path(42) == ""
+    assert _find_unsupported_path(None) == ""
+    assert _find_unsupported_path({"a": 1, "b": [2, 3]}) == ""

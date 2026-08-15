@@ -268,6 +268,14 @@ class JsonPlusSerializer(SerializerProtocol):
             except ormsgpack.MsgpackEncodeError as exc:
                 if self.pickle_fallback:
                     return "pickle", pickle.dumps(obj)
+                # Re-raise with a JSONPath-style location so the user can
+                # find the offending value in deeply nested state without
+                # manual inspection. Regression for #8606.
+                path = _find_unsupported_path(obj)
+                if path:
+                    raise TypeError(
+                        f"{exc} (at {path})"
+                    ) from exc
                 raise exc
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
@@ -858,6 +866,74 @@ _option = (
 
 def _msgpack_enc(data: Any) -> bytes:
     return ormsgpack.packb(data, default=_msgpack_default, option=_option)
+
+
+def _find_unsupported_path(
+    obj: Any,
+    *,
+    _path: str = "$",
+) -> str:
+    """Return a JSONPath-ish string pointing at the first value that
+    ormsgpack can't encode under the existing default/reviver hooks.
+
+    Walks dicts/lists/tuples/sets and dives into Pydantic v2 / dataclass
+    models to surface the path. Stops at the first leaf that raises, so
+    the error message stays actionable even on deeply nested state.
+
+    Returns the path string for the first leaf that the encoder can't
+    handle. Returns an empty string when no specific path can be pinned
+    down (e.g. the unsupported value lives behind a non-iterable opaque
+    container), so the caller can fall back to a generic message.
+    """
+    # ormsgpack's default hook handles the types it understands; everything
+    # else triggers MsgpackEncodeError. Try encoding this subtree; if it
+    # raises, recurse into the children until we find the leaf that
+    # actually trips the encoder.
+    try:
+        ormsgpack.packb(obj, default=_msgpack_default, option=_option)
+        return ""
+    except ormsgpack.MsgpackEncodeError:
+        pass
+
+    # Pydantic v2 model
+    if hasattr(type(obj), "model_fields"):
+        for name in type(obj).model_fields:
+            child = getattr(obj, name, None)
+            child_path = _find_unsupported_path(child, _path=f"{_path}.{name}")
+            if child_path:
+                return child_path
+        return ""
+
+    # dataclass
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        for field in dataclasses.fields(obj):
+            child = getattr(obj, field.name, None)
+            child_path = _find_unsupported_path(
+                child, _path=f"{_path}.{field.name}"
+            )
+            if child_path:
+                return child_path
+        return ""
+
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            key = (
+                str(k) if not isinstance(k, str) else k
+            )
+            child_path = _find_unsupported_path(v, _path=f'{_path}["{key}"]')
+            if child_path:
+                return child_path
+        return ""
+
+    if isinstance(obj, (list, tuple, set, frozenset)):
+        for i, item in enumerate(obj):
+            child_path = _find_unsupported_path(item, _path=f"{_path}[{i}]")
+            if child_path:
+                return child_path
+        return ""
+
+    # Leaf — this is the unsupported value.
+    return _path
 
 
 def _normalize_allowlist(
