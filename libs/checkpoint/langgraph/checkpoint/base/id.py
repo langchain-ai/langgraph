@@ -6,10 +6,12 @@ Bundled in to avoid install issues with uuid6 package
 from __future__ import annotations
 
 import random
+import threading
 import time
 import uuid
 
 _last_v6_timestamp = None
+_lock = threading.Lock()
 
 
 class UUID(uuid.UUID):
