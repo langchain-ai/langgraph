@@ -2347,6 +2347,30 @@ def test_set_node_defaults_error_handler_catches_all_nodes():
     assert "fail_b" in captured["nodes"]
 
 
+def test_set_node_defaults_error_handler_can_compile_builder_twice():
+    class State(TypedDict):
+        foo: str
+
+    def fail(state: State) -> State:
+        raise RuntimeError("boom")
+
+    def recover(state: State, error: NodeError) -> State:
+        return {"foo": f"handled: {error.error}"}
+
+    builder = (
+        StateGraph(State)
+        .set_node_defaults(error_handler=recover)
+        .add_node("fail", fail)
+        .add_edge(START, "fail")
+    )
+
+    first = builder.compile()
+    second = builder.compile()
+
+    assert first.invoke({"foo": "start"}) == {"foo": "handled: boom"}
+    assert second.invoke({"foo": "start"}) == {"foo": "handled: boom"}
+
+
 def test_set_node_defaults_error_handler_overridden_by_node_handler():
     class State(TypedDict):
         route: str

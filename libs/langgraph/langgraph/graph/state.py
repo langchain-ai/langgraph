@@ -1288,15 +1288,16 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         # Error-handler routing and cache_policy are only assigned to regular
         # nodes. Retry and timeout defaults also apply to error-handler nodes.
         defaults = self._node_defaults
+        nodes = dict(self.nodes)
         default_handler_name: str | None = None
         if defaults.error_handler is not None:
-            if _DEFAULT_ERROR_HANDLER_NODE in self.nodes:
+            if _DEFAULT_ERROR_HANDLER_NODE in nodes:
                 raise ValueError(
                     f"Auto-generated default error handler node "
                     f"`{_DEFAULT_ERROR_HANDLER_NODE}` already exists."
                 )
             default_handler_name = _DEFAULT_ERROR_HANDLER_NODE
-            self.nodes[default_handler_name] = StateNodeSpec[Any, ContextT](
+            nodes[default_handler_name] = StateNodeSpec[Any, ContextT](
                 coerce_to_runnable(
                     defaults.error_handler,  # type: ignore[arg-type]
                     name=default_handler_name,
@@ -1310,7 +1311,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
 
         # Apply builder defaults to node specs. Per-node values always win.
-        for spec in self.nodes.values():
+        for spec in nodes.values():
             # error_handler: regular nodes only — handlers must never
             # catch themselves or other handlers.
             if (
@@ -1339,7 +1340,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         node_error_handler_map = {
             node_name: spec.error_handler_node
-            for node_name, spec in self.nodes.items()
+            for node_name, spec in nodes.items()
             if not spec.is_error_handler and spec.error_handler_node is not None
         }
 
@@ -1371,7 +1372,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         compiled._serde_allowlist = serde_allowlist
 
         compiled.attach_node(START, None)
-        for key, node in self.nodes.items():
+        for key, node in nodes.items():
             compiled.attach_node(key, node)
 
         # Record output/state mappers for v2 stream coercion (pydantic/dataclass only)
