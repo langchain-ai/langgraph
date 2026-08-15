@@ -951,6 +951,20 @@ def interrupt(value: Any) -> Any:
     # track interrupt index
     scratchpad = conf[CONFIG_KEY_SCRATCHPAD]
     idx = scratchpad.interrupt_counter()
+    frame = sys._getframe(1)
+    interrupt_site = (frame.f_code.co_filename, frame.f_lineno)
+    del frame
+    interrupt_site_count = scratchpad.interrupt_site_counts.get(interrupt_site, 0)
+    scratchpad.interrupt_site_counts[interrupt_site] = interrupt_site_count + 1
+    if interrupt_site_count:
+        warn(
+            "interrupt() was called more than once from the same source line during "
+            "one node execution. LangGraph re-executes nodes from the start on "
+            "resume and matches resume values by call order, so an interrupt inside "
+            "a loop can replay prior values and duplicate side effects. Move loop "
+            "control to graph edges or separate nodes.",
+            stacklevel=2,
+        )
     # find previous resume values
     if scratchpad.resume:
         if idx < len(scratchpad.resume):

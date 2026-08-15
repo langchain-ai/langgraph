@@ -8,6 +8,7 @@ import random
 import threading
 import time
 import uuid
+import warnings
 from collections import Counter, defaultdict, deque
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -99,6 +100,7 @@ from tests.messages import (
 pytestmark = pytest.mark.anyio
 
 logger = logging.getLogger(__name__)
+REPEATED_INTERRUPT_SITE_WARNING = "interrupt\\(\\) was called more than once"
 
 
 def test_graph_validation() -> None:
@@ -4906,6 +4908,7 @@ def test_interrupt_multiple(
     ]
 
 
+@pytest.mark.filterwarnings(f"ignore:{REPEATED_INTERRUPT_SITE_WARNING}")
 def test_interrupt_loop(sync_checkpointer: BaseCheckpointSaver):
     class State(TypedDict):
         age: int
@@ -5707,6 +5710,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
     ]
 
 
+@pytest.mark.filterwarnings(f"ignore:{REPEATED_INTERRUPT_SITE_WARNING}")
 def test_multiple_interrupts_functional(sync_checkpointer: BaseCheckpointSaver):
     """Test multiple interrupts with functional API."""
 
@@ -5742,6 +5746,7 @@ def test_multiple_interrupts_functional(sync_checkpointer: BaseCheckpointSaver):
     assert counter == 3
 
 
+@pytest.mark.filterwarnings(f"ignore:{REPEATED_INTERRUPT_SITE_WARNING}")
 def test_multiple_interrupts_functional_cache(
     sync_checkpointer: BaseCheckpointSaver, cache: BaseCache
 ):
@@ -5987,13 +5992,15 @@ def test_node_before_interrupt_resume_graph_api(
     assert result["__interrupt__"][0].value == "Whats the answer for topic 1?"
 
     # Resume with answer for topic 1 - should get second interrupt
-    result = graph.invoke(Command(resume="answer1"), config=config)
+    with pytest.warns(UserWarning, match=REPEATED_INTERRUPT_SITE_WARNING):
+        result = graph.invoke(Command(resume="answer1"), config=config)
     assert "__interrupt__" in result, f"Expected interrupt for topic 2, got: {result}"
     assert len(result["__interrupt__"]) == 1
     assert result["__interrupt__"][0].value == "Whats the answer for topic 2?"
 
     # Resume with answer for topic 2 - should complete
-    result = graph.invoke(Command(resume="answer2"), config=config)
+    with pytest.warns(UserWarning, match=REPEATED_INTERRUPT_SITE_WARNING):
+        result = graph.invoke(Command(resume="answer2"), config=config)
     assert result == {
         "topics": ["topic 1", "topic 2"],
         "answers": ["answer1", "answer2"],
@@ -6088,6 +6095,73 @@ def test_node_before_multiple_interrupt_cycles_graph_api(
     # Resume second interrupt - completes
     result = graph.invoke(Command(resume="second_answer"), config=config)
     assert result == {"count": 10, "data": "first_answer,second_answer"}
+
+
+def test_repeated_interrupt_site_in_loop_warns(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        age: int | None
+        prompt: str
+
+    def collect_age(state: State) -> dict:
+        prompt = state["prompt"]
+        while True:
+            answer = interrupt(prompt)
+            if isinstance(answer, int) and answer > 0:
+                return {"age": answer}
+            prompt = f"{answer!r} is not a valid age."
+
+    graph = (
+        StateGraph(State)
+        .add_node("collect_age", collect_age)
+        .add_edge(START, "collect_age")
+        .add_edge("collect_age", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"age": None, "prompt": "What is your age?"}, config=config)
+    assert result["__interrupt__"][0].value == "What is your age?"
+
+    with pytest.warns(UserWarning, match=REPEATED_INTERRUPT_SITE_WARNING):
+        result = graph.invoke(Command(resume=-1), config=config)
+
+    assert result["__interrupt__"][0].value == "-1 is not a valid age."
+
+
+def test_sequential_interrupt_sites_do_not_warn(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        answer: str
+
+    def ask(_state: State) -> dict:
+        first = interrupt("First question?")
+        second = interrupt("Second question?")
+        return {"answer": f"{first},{second}"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask", ask)
+        .add_edge(START, "ask")
+        .add_edge("ask", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"answer": ""}, config=config)
+    assert result["__interrupt__"][0].value == "First question?"
+
+    with warnings.catch_warnings(record=True) as records:
+        warnings.simplefilter("always")
+        result = graph.invoke(Command(resume="first_answer"), config=config)
+
+    assert result["__interrupt__"][0].value == "Second question?"
+    assert not any(
+        "interrupt() was called more than once" in str(record.message)
+        for record in records
+    )
 
 
 def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> None:

@@ -97,6 +97,7 @@ from tests.messages import (
 )
 
 logger = logging.getLogger(__name__)
+REPEATED_INTERRUPT_SITE_WARNING = "interrupt\\(\\) was called more than once"
 
 pytestmark = pytest.mark.anyio
 
@@ -6246,6 +6247,7 @@ async def test_interrupt_multiple(async_checkpointer: BaseCheckpointSaver):
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.filterwarnings(f"ignore:{REPEATED_INTERRUPT_SITE_WARNING}")
 async def test_interrupt_loop(async_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):
         age: int
@@ -6751,6 +6753,7 @@ async def test_falsy_return_from_task(async_checkpointer: BaseCheckpointSaver) -
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.filterwarnings(f"ignore:{REPEATED_INTERRUPT_SITE_WARNING}")
 async def test_multiple_interrupts_functional(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -6789,6 +6792,7 @@ async def test_multiple_interrupts_functional(
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.filterwarnings(f"ignore:{REPEATED_INTERRUPT_SITE_WARNING}")
 async def test_multiple_interrupts_functional_cache(
     async_checkpointer: BaseCheckpointSaver, cache: BaseCache
 ):
@@ -8175,6 +8179,7 @@ async def test_no_redundant_put_writes_for_cached_task(
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.filterwarnings(f"ignore:{REPEATED_INTERRUPT_SITE_WARNING}")
 async def test_node_before_interrupt_resume_graph_api(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:

@@ -15,5 +15,6 @@ class PregelScratchpad:
     interrupt_counter: Callable[[], int]
     get_null_resume: Callable[[bool], Any]
     resume: list[Any]
+    interrupt_site_counts: dict[tuple[str, int], int]
     # subgraph
     subgraph_counter: Callable[[], int]

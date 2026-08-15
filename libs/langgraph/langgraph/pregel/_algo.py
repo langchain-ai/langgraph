@@ -1340,6 +1340,7 @@ def _scratchpad(
         interrupt_counter=LazyAtomicCounter(),
         resume=task_resume_write,
         get_null_resume=get_null_resume,
+        interrupt_site_counts={},
         # subgraph
         subgraph_counter=LazyAtomicCounter(),
     )
