@@ -1,30 +1,31 @@
+"""Asynchronous Postgres checkpoint saver for LangGraph."""
+
 from __future__ import annotations
 
 import asyncio
-from collections import defaultdict
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
+    BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
     DeltaChannelHistory,
+    _DeltaSnapshot,
     get_checkpoint_id,
-    get_serializable_checkpoint_metadata,
 )
-from langgraph.checkpoint.serde.base import SerializerProtocol
-from langgraph.checkpoint.serde.types import _DeltaSnapshot
-from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
+from langgraph.checkpoint.serde.types import TASKS
+from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
-from psycopg_pool import AsyncConnectionPool
+from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
-from langgraph.checkpoint.postgres import _ainternal
+from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import (
     _DELTA_PAGE_SIZE,
     BasePostgresSaver,
@@ -34,24 +35,27 @@ from langgraph.checkpoint.postgres.base import (
 )
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 
-Conn = _ainternal.Conn  # For backward compatibility
+from langgraph.checkpoint.postgres import _internal
+
+Conn = _internal.Conn  # For backward compatibility
+
+
+__all__ = ["AsyncPostgresSaver", "AsyncShallowPostgresSaver", "Conn"]
 
 
 class AsyncPostgresSaver(BasePostgresSaver):
     """Asynchronous checkpointer that stores checkpoints in a Postgres database."""
 
-    lock: asyncio.Lock
-
     def __init__(
         self,
-        conn: _ainternal.Conn,
-        pipe: AsyncPipeline | None = None,
+        conn: _internal.Conn,
+        pipe: Pipeline | None = None,
         serde: SerializerProtocol | None = None,
     ) -> None:
         super().__init__(serde=serde)
-        if isinstance(conn, AsyncConnectionPool) and pipe is not None:
+        if isinstance(conn, ConnectionPool) and pipe is not None:
             raise ValueError(
-                "Pipeline should be used only with a single AsyncConnection, not AsyncConnectionPool."
+                "Pipeline should be used only with a single Connection, not ConnectionPool."
             )
 
         self.conn = conn
@@ -63,29 +67,25 @@ class AsyncPostgresSaver(BasePostgresSaver):
     @classmethod
     @asynccontextmanager
     async def from_conn_string(
-        cls,
-        conn_string: str,
-        *,
-        pipeline: bool = False,
-        serde: SerializerProtocol | None = None,
+        cls, conn_string: str, *, pipeline: bool = False
     ) -> AsyncIterator[AsyncPostgresSaver]:
         """Create a new AsyncPostgresSaver instance from a connection string.
 
         Args:
             conn_string: The Postgres connection info string.
-            pipeline: whether to use AsyncPipeline
+            pipeline: whether to use Pipeline
 
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
         """
-        async with await AsyncConnection.connect(
+        async with Connection.connect(
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
                 async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                    yield cls(conn, pipe)
             else:
-                yield cls(conn=conn, serde=serde)
+                yield cls(conn)
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -104,130 +104,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 version = -1
             else:
                 version = row["v"]
-            for v, migration in zip(
-                range(version + 1, len(self.MIGRATIONS)),
-                self.MIGRATIONS[version + 1 :],
-                strict=False,
-            ):
-                await cur.execute(migration)
-                await cur.execute(
-                    "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
-                )
-        if self.pipe:
-            await self.pipe.sync()
-
-    async def alist(
-        self,
-        config: RunnableConfig | None,
-        *,
-        filter: dict[str, Any] | None = None,
-        before: RunnableConfig | None = None,
-        limit: int | None = None,
-    ) -> AsyncIterator[CheckpointTuple]:
-        """List checkpoints from the database asynchronously.
-
-        This method retrieves a list of checkpoint tuples from the Postgres database based
-        on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
-
-        Args:
-            config: Base configuration for filtering checkpoints.
-            filter: Additional filtering criteria for metadata.
-            before: If provided, only checkpoints before the specified checkpoint ID are returned.
-            limit: Maximum number of checkpoints to return.
-
-        Yields:
-            An asynchronous iterator of matching checkpoint tuples.
-        """
-        where, args = self._search_where(config, filter, before)
-        query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
-        params = list(args)
-        if limit is not None:
-            query += " LIMIT %s"
-            params.append(int(limit))
-        # if we change this to use .stream() we need to make sure to close the cursor
-        async with self._cursor() as cur:
-            await cur.execute(query, params, binary=True)
-            values = await cur.fetchall()
-            if not values:
-                return
-            # migrate pending sends if necessary
-            if to_migrate := [
-                v
-                for v in values
-                if v["checkpoint"]["v"] < 4 and v["parent_checkpoint_id"]
-            ]:
-                await cur.execute(
-                    self.SELECT_PENDING_SENDS_SQL,
-                    (
-                        values[0]["thread_id"],
-                        [v["parent_checkpoint_id"] for v in to_migrate],
-                    ),
-                )
-                grouped_by_parent = defaultdict(list)
-                for value in to_migrate:
-                    grouped_by_parent[value["parent_checkpoint_id"]].append(value)
-                async for sends in cur:
-                    for value in grouped_by_parent[sends["checkpoint_id"]]:
-                        if value["channel_values"] is None:
-                            value["channel_values"] = []
-                        self._migrate_pending_sends(
-                            sends["sends"],
-                            value["checkpoint"],
-                            value["channel_values"],
-                        )
-            for value in values:
-                yield await self._load_checkpoint_tuple(value)
-
-    async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
-        """Get a checkpoint tuple from the database asynchronously.
-
-        This method retrieves a checkpoint tuple from the Postgres database based on the
-        provided config. If the config contains a `checkpoint_id` key, the checkpoint with
-        the matching thread ID and "checkpoint_id" is retrieved. Otherwise, the latest checkpoint
-        for the given thread ID is retrieved.
-
-        Args:
-            config: The config to use for retrieving the checkpoint.
-
-        Returns:
-            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
-        """
-        thread_id = config["configurable"]["thread_id"]
-        checkpoint_id = get_checkpoint_id(config)
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        if checkpoint_id:
-            args: tuple[Any, ...] = (thread_id, checkpoint_ns, checkpoint_id)
-            where = "WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s"
-        else:
-            args = (thread_id, checkpoint_ns)
-            where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
-
-        async with self._cursor() as cur:
-            await cur.execute(
-                self.SELECT_SQL + where,
-                args,
-                binary=True,
-            )
-            value = await cur.fetchone()
-            if value is None:
-                return None
-
-            # migrate pending sends if necessary
-            if value["checkpoint"]["v"] < 4 and value["parent_checkpoint_id"]:
-                await cur.execute(
-                    self.SELECT_PENDING_SENDS_SQL,
-                    (thread_id, [value["parent_checkpoint_id"]]),
-                )
-                if sends := await cur.fetchone():
-                    if value["channel_values"] is None:
-                        value["channel_values"] = []
-                    self._migrate_pending_sends(
-                        sends["sends"],
-                        value["checkpoint"],
-                        value["channel_values"],
-                    )
-
-            return await self._load_checkpoint_tuple(value)
+            for i in range(version + 1, len(self.MIGRATIONS)):
+                await cur.execute(self.MIGRATIONS[i])
 
     async def aput(
         self,
@@ -297,11 +175,14 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     checkpoint["id"],
-                    checkpoint_id,
-                    Jsonb(copy),
-                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
+                    Jsonb(checkpoint),
+                    Jsonb(metadata),
+                    Jsonb(new_versions),
                 ),
             )
+            if self.pipe:
+                await self.pipe.sync()
+
         return next_config
 
     async def aput_writes(
@@ -311,245 +192,97 @@ class AsyncPostgresSaver(BasePostgresSaver):
         task_id: str,
         task_path: str = "",
     ) -> None:
-        """Store intermediate writes linked to a checkpoint asynchronously.
-
-        This method saves intermediate writes associated with a checkpoint to the database.
+        """Save intermediate writes associated with a checkpoint to the Postgres database.
 
         Args:
             config: Configuration of the related checkpoint.
-            writes: List of writes to store, each as (channel, value) pair.
+            writes: List of writes to store.
             task_id: Identifier for the task creating the writes.
+            task_path: Path of the task creating the writes.
         """
         query = (
             self.UPSERT_CHECKPOINT_WRITES_SQL
             if all(w[0] in WRITES_IDX_MAP for w in writes)
             else self.INSERT_CHECKPOINT_WRITES_SQL
         )
-        params = await asyncio.to_thread(
-            self._dump_writes,
-            config["configurable"]["thread_id"],
-            config["configurable"]["checkpoint_ns"],
-            config["configurable"]["checkpoint_id"],
-            task_id,
-            task_path,
-            writes,
-        )
         async with self._cursor(pipeline=True) as cur:
-            await cur.executemany(query, params)
+            await cur.executemany(
+                query,
+                await asyncio.to_thread(
+                    self._dump_writes,
+                    config["configurable"]["thread_id"],
+                    config["configurable"]["checkpoint_ns"],
+                    config["configurable"]["checkpoint_id"],
+                    task_id,
+                    task_path,
+                    writes,
+                ),
+            )
 
-    async def adelete_thread(self, thread_id: str) -> None:
-        """Delete all checkpoints and writes associated with a thread ID.
+    async def aget_tuple(
+        self,
+        config: RunnableConfig,
+    ) -> CheckpointTuple | None:
+        """Get a checkpoint tuple from the database.
+
+        This method retrieves a checkpoint tuple from the Postgres database based on the
+        provided config. If the config contains a `checkpoint_id` key, the checkpoint with
+        the matching thread ID and "checkpoint_id" is retrieved. Otherwise, the latest checkpoint
+        for the given thread ID is retrieved.
 
         Args:
-            thread_id: The thread ID to delete.
+            config: The config to use for retrieving the checkpoint.
 
         Returns:
-            None
+            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
-        async with self._cursor(pipeline=True) as cur:
-            await cur.execute(
-                "DELETE FROM checkpoints WHERE thread_id = %s",
-                (str(thread_id),),
-            )
-            await cur.execute(
-                "DELETE FROM checkpoint_blobs WHERE thread_id = %s",
-                (str(thread_id),),
-            )
-            await cur.execute(
-                "DELETE FROM checkpoint_writes WHERE thread_id = %s",
-                (str(thread_id),),
-            )
+        configurable = config["configurable"].copy()
+        thread_id = configurable.pop("thread_id")
+        checkpoint_ns = configurable.pop("checkpoint_ns", "")
+        checkpoint_id = configurable.pop("checkpoint_id", None)
 
-    @asynccontextmanager
-    async def _cursor(
-        self, *, pipeline: bool = False
-    ) -> AsyncIterator[AsyncCursor[DictRow]]:
-        """Create a database cursor as a context manager.
-
-        Args:
-            pipeline: whether to use pipeline for the DB operations inside the context manager.
-                Will be applied regardless of whether the AsyncPostgresSaver instance was initialized with a pipeline.
-                If pipeline mode is not supported, will fall back to using transaction context manager.
-        """
-        async with self.lock, _ainternal.get_connection(self.conn) as conn:
-            if self.pipe:
-                # a connection in pipeline mode can be used concurrently
-                # in multiple threads/coroutines, but only one cursor can be
-                # used at a time
-                try:
-                    async with conn.cursor(binary=True, row_factory=dict_row) as cur:
-                        yield cur
-                finally:
-                    if pipeline:
-                        await self.pipe.sync()
-            elif pipeline:
-                # a connection not in pipeline mode can only be used by one
-                # thread/coroutine at a time, so we acquire a lock
-                if self.supports_pipeline:
-                    async with (
-                        conn.pipeline(),
-                        conn.cursor(binary=True, row_factory=dict_row) as cur,
-                    ):
-                        yield cur
-                else:
-                    # Use connection's transaction context manager when pipeline mode not supported
-                    async with (
-                        conn.transaction(),
-                        conn.cursor(binary=True, row_factory=dict_row) as cur,
-                    ):
-                        yield cur
-            else:
-                async with conn.cursor(binary=True, row_factory=dict_row) as cur:
-                    yield cur
-
-    async def aget_delta_channel_history(
-        self, *, config: RunnableConfig, channels: Sequence[str]
-    ) -> Mapping[str, DeltaChannelHistory]:
-        """Fast-path override of `BaseCheckpointSaver.aget_delta_channel_history`.
-
-        See `PostgresSaver.get_delta_channel_history` for design notes; this is
-        the async equivalent with internal stage-1 paging and per-channel
-        UNION ALL stage-2.
-        """
-        if not channels:
-            return {}
-        channels = list(channels)
-        thread_id = config["configurable"]["thread_id"]
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_id = get_checkpoint_id(config)
-        if checkpoint_id is None:
-            target = await self.aget_tuple(config)
-            if target is None:
-                return {ch: {"writes": []} for ch in channels}
-            checkpoint_id = target.config["configurable"]["checkpoint_id"]
-
-        stage1_sql = _build_delta_stage1_sql(channels, paged=True)
-        parent_of: dict[str, str | None] = {}
-        ver_by_i_by_cid: list[dict[str, str | None]] = [{} for _ in channels]
-        hb_by_i_by_cid: list[dict[str, bool]] = [{} for _ in channels]
-        inline_by_i_by_cid: list[dict[str, Any]] = [{} for _ in channels]
-        chain_by_ch: dict[str, list[str]] = {ch: [] for ch in channels}
-        seed_ver_by_ch: dict[str, str | None] = {ch: None for ch in channels}
-        seed_inline_by_ch: dict[str, Any] = {}
-        walk_cursor_by_ch: dict[str, str | None] = {}
-        seeded: set[str] = set()
-        cursor: str | None = None
+        if checkpoint_id:
+            args = (thread_id, checkpoint_ns, checkpoint_id)
+            where = "WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s"
+        else:
+            args = (thread_id, checkpoint_ns)
+            where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
 
         async with self._cursor() as cur:
-            while True:
-                stage1_params: list[Any] = []
-                for ch in channels:
-                    # ver_i, blob channel, blob version, inline_i
-                    stage1_params.extend([ch, ch, ch, ch])
-                stage1_params.extend(
-                    [thread_id, checkpoint_ns, cursor, cursor, _DELTA_PAGE_SIZE]
+            await cur.execute(
+                self.SELECT_SQL + where,
+                args,
+                binary=True,
+            )
+            value = await cur.fetchone()
+            if value is None:
+                return None
+
+            # migrate pending sends if necessary
+            if value["checkpoint"]["v"] < 4 and value["parent_checkpoint_id"]:
+                await cur.execute(
+                    self.SELECT_PENDING_SENDS_SQL,
+                    (thread_id, [value["parent_checkpoint_id"]]),
                 )
-                await cur.execute(stage1_sql, stage1_params)
-                page = await cur.fetchall()
-                if not page:
-                    break
-                oldest = self._ingest_stage1_page(
-                    cast("list[Mapping[str, Any]]", page),
-                    channels,
-                    parent_of,
-                    ver_by_i_by_cid,
-                    hb_by_i_by_cid,
-                    inline_by_i_by_cid,
-                )
-                self._try_advance_walks(
-                    checkpoint_id,
-                    channels,
-                    parent_of,
-                    ver_by_i_by_cid,
-                    hb_by_i_by_cid,
-                    inline_by_i_by_cid,
-                    chain_by_ch,
-                    seed_ver_by_ch,
-                    seed_inline_by_ch,
-                    walk_cursor_by_ch,
-                    seeded,
-                )
-                if len(seeded) == len(channels) or len(page) < _DELTA_PAGE_SIZE:
-                    break
-                cursor = oldest
+                if sends := await cur.fetchone():
+                    if value["channel_values"] is None:
+                        value["channel_values"] = []
+                    self._migrate_pending_sends(
+                        sends["sends"],
+                        value["checkpoint"],
+                        value["channel_values"],
+                    )
 
-        channels_with_chain = [ch for ch in channels if chain_by_ch[ch]]
-        channels_with_seed = [ch for ch in channels if seed_ver_by_ch[ch] is not None]
-        stage2_sql = _build_delta_stage2_sql(
-            channels_with_chain=channels_with_chain,
-            channels_with_seed=channels_with_seed,
-        )
+            return await self._load_checkpoint_tuple(value)
 
-        if stage2_sql:
-            stage2_params: list[Any] = []
-            for ch in channels_with_chain:
-                stage2_params.extend([thread_id, checkpoint_ns, ch, chain_by_ch[ch]])
-            for ch in channels_with_seed:
-                stage2_params.extend([thread_id, checkpoint_ns, ch, seed_ver_by_ch[ch]])
-            async with self._cursor() as cur:
-                await cur.execute(stage2_sql, stage2_params)
-                stage2_rows = await cur.fetchall()
-        else:
-            stage2_rows = []
-
-        return self._build_delta_channels_writes_history(
-            channels=channels,
-            chain_by_ch=chain_by_ch,
-            seed_ver_by_ch=seed_ver_by_ch,
-            seed_inline_by_ch=seed_inline_by_ch,
-            stage2_rows=cast("list[_DeltaStage2Row]", stage2_rows),
-        )
-
-    async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
-        """
-        Convert a database row into a CheckpointTuple object.
-
-        Args:
-            value: A row from the database containing checkpoint data.
-
-        Returns:
-            CheckpointTuple: A structured representation of the checkpoint,
-            including its configuration, metadata, parent checkpoint (if any),
-            and pending writes.
-        """
-        return CheckpointTuple(
-            {
-                "configurable": {
-                    "thread_id": value["thread_id"],
-                    "checkpoint_ns": value["checkpoint_ns"],
-                    "checkpoint_id": value["checkpoint_id"],
-                }
-            },
-            {
-                **value["checkpoint"],
-                "channel_values": {
-                    **(value["checkpoint"].get("channel_values") or {}),
-                    **self._load_blobs(value["channel_values"]),
-                },
-            },
-            value["metadata"],
-            (
-                {
-                    "configurable": {
-                        "thread_id": value["thread_id"],
-                        "checkpoint_ns": value["checkpoint_ns"],
-                        "checkpoint_id": value["parent_checkpoint_id"],
-                    }
-                }
-                if value["parent_checkpoint_id"]
-                else None
-            ),
-            await asyncio.to_thread(self._load_writes, value["pending_writes"]),
-        )
-
-    def list(
+    async def alist(
         self,
         config: RunnableConfig | None,
         *,
         filter: dict[str, Any] | None = None,
         before: RunnableConfig | None = None,
         limit: int | None = None,
-    ) -> Iterator[CheckpointTuple]:
+    ) -> AsyncIterator[CheckpointTuple]:
         """List checkpoints from the database.
 
         This method retrieves a list of checkpoint tuples from the Postgres database based
@@ -562,7 +295,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             limit: Maximum number of checkpoints to return.
 
         Yields:
-            An iterator of matching checkpoint tuples.
+            An async iterator of matching checkpoint tuples.
         """
         try:
             # check if we are in the main thread, only bg threads can block
@@ -571,7 +304,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 raise asyncio.InvalidStateError(
                     "Synchronous calls to AsyncPostgresSaver are only allowed from a "
                     "different thread. From the main thread, use the async interface. "
-                    "For example, use `checkpointer.alist(...)` or `await "
+                    "For example, use `await checkpointer.alist(...)` or `await "
                     "graph.ainvoke(...)`."
                 )
         except RuntimeError:
@@ -579,15 +312,15 @@ class AsyncPostgresSaver(BasePostgresSaver):
         aiter_ = self.alist(config, filter=filter, before=before, limit=limit)
         while True:
             try:
-                yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_),  # type: ignore[arg-type]
-                    self.loop,
-                ).result()
+                yield await anext(aiter_)
             except StopAsyncIteration:
                 break
 
-    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
-        """Get a checkpoint tuple from the database.
+    async def aget_tuple(
+        self,
+        config: RunnableConfig,
+    ) -> CheckpointTuple | None:
+        """Get a checkpoint tuple from the database asynchronously.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the
         provided config. If the config contains a `checkpoint_id` key, the checkpoint with
@@ -612,18 +345,16 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 )
         except RuntimeError:
             pass
-        return asyncio.run_coroutine_threadsafe(
-            self.aget_tuple(config), self.loop
-        ).result()
+        return await self.aget_tuple(config)
 
-    def put(
+    async def aput(
         self,
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        """Save a checkpoint to the database.
+        """Save a checkpoint to the database asynchronously.
 
         This method saves a checkpoint to the Postgres database. The checkpoint is associated
         with the provided config and its parent config (if any).
@@ -637,30 +368,24 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
         """
-        return asyncio.run_coroutine_threadsafe(
-            self.aput(config, checkpoint, metadata, new_versions), self.loop
-        ).result()
+        return await self.aput(config, checkpoint, metadata, new_versions)
 
-    def put_writes(
+    async def aput_writes(
         self,
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
         task_path: str = "",
     ) -> None:
-        """Store intermediate writes linked to a checkpoint.
-
-        This method saves intermediate writes associated with a checkpoint to the database.
+        """Save intermediate writes associated with a checkpoint to the Postgres database.
 
         Args:
             config: Configuration of the related checkpoint.
-            writes: List of writes to store, each as (channel, value) pair.
+            writes: List of writes to store.
             task_id: Identifier for the task creating the writes.
             task_path: Path of the task creating the writes.
         """
-        return asyncio.run_coroutine_threadsafe(
-            self.aput_writes(config, writes, task_id, task_path), self.loop
-        ).result()
+        return await self.aput_writes(config, writes, task_id, task_path)
 
     def delete_thread(self, thread_id: str) -> None:
         """Delete all checkpoints and writes associated with a thread ID.
@@ -687,5 +412,153 @@ class AsyncPostgresSaver(BasePostgresSaver):
             self.adelete_thread(thread_id), self.loop
         ).result()
 
+    async def adelete_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes associated with a thread ID.
+
+        Args:
+            thread_id: The thread ID to delete.
+
+        Returns:
+            None
+        """
+        try:
+            # check if we are in the main thread, only bg threads can block
+            # we don't check in other methods to avoid the overhead
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncPostgresSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface. "
+                    "For example, use `await checkpointer.aget_tuple(...)` or `await "
+                    "graph.ainvoke(...)`."
+                )
+        except RuntimeError:
+            pass
+        async with self._cursor(pipeline=True) as cur:
+            await cur.execute(
+                "DELETE FROM checkpoints WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+            await cur.execute(
+                "DELETE FROM checkpoint_blobs WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+            await cur.execute(
+                "DELETE FROM checkpoint_writes WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+
+    async def aprune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Prune checkpoints for given threads.
+
+        Args:
+            thread_ids: The thread IDs to prune.
+            strategy: "keep_latest" keeps only the latest checkpoint per
+                thread+namespace. "delete" removes everything.
+
+        !!! warning "DeltaChannel"
+            Threads using DeltaChannel are not pruned to avoid corrupting
+            delta channel history. If any requested thread contains DeltaChannel
+            state, the operation aborts and raises an error.
+
+        Raises:
+            ValueError: If an invalid strategy is provided.
+            RuntimeError: If any thread contains DeltaChannel state and strategy
+                is "keep_latest" (which cannot safely preserve DeltaChannel history).
+        """
+        if not thread_ids:
+            return
+
+        if strategy not in ("delete", "keep_latest"):
+            raise ValueError(f"Invalid pruning strategy: {strategy}")
+
+        # First, check for DeltaChannel state in any of the threads
+        # if using keep_latest strategy
+        if strategy == "keep_latest":
+            async with self._cursor() as cur:
+                for thread_id in thread_ids:
+                    await cur.execute(
+                        """
+                        SELECT 1 FROM checkpoints
+                        WHERE thread_id = %s
+                        AND checkpoint_id IN (
+                            SELECT checkpoint_id FROM checkpoints
+                            WHERE thread_id = %s
+                            AND channel_values @> '{"_delta_snapshot": true}'
+                        )
+                        LIMIT 1
+                        """,
+                        (str(thread_id), str(thread_id)),
+                    )
+                    if await cur.fetchone():
+                        raise RuntimeError(
+                            f"Thread {thread_id} contains DeltaChannel state. "
+                            "keep_latest pruning is not supported for DeltaChannel threads. "
+                            "Use 'delete' strategy or implement DeltaChannel-aware pruning."
+                        )
+
+        async with self._cursor(pipeline=True) as cur:
+            if strategy == "delete":
+                # Delete all checkpoints, writes, and blobs for the threads
+                await cur.execute(
+                    "DELETE FROM checkpoints WHERE thread_id = ANY(%s)",
+                    (list(thread_ids),),
+                )
+                await cur.execute(
+                    "DELETE FROM checkpoint_blobs WHERE thread_id = ANY(%s)",
+                    (list(thread_ids),),
+                )
+                await cur.execute(
+                    "DELETE FROM checkpoint_writes WHERE thread_id = ANY(%s)",
+                    (list(thread_ids),),
+                )
+            elif strategy == "keep_latest":
+                # Delete non-latest checkpoints, preserving writes and blobs for latest
+                for thread_id in thread_ids:
+                    # Get the latest checkpoint_id for each namespace
+                    await cur.execute(
+                        """
+                        DELETE FROM checkpoints
+                        WHERE thread_id = %s
+                        AND (thread_id, checkpoint_ns, checkpoint_id) NOT IN (
+                            SELECT DISTINCT ON (thread_id, checkpoint_ns)
+                                thread_id, checkpoint_ns, checkpoint_id
+                            FROM checkpoints
+                            WHERE thread_id = %s
+                            ORDER BY thread_id, checkpoint_ns, checkpoint_id DESC
+                        )
+                        """,
+                        (str(thread_id), str(thread_id)),
+                    )
+                    # Delete writes for removed checkpoints
+                    await cur.execute(
+                        """
+                        DELETE FROM checkpoint_writes
+                        WHERE thread_id = %s
+                        AND (thread_id, checkpoint_ns, checkpoint_id) NOT IN (
+                            SELECT thread_id, checkpoint_ns, checkpoint_id
+                            FROM checkpoints
+                            WHERE thread_id = %s
+                        )
+                        """,
+                        (str(thread_id), str(thread_id)),
+                    )
+                    # Clean up orphaned blobs
+                    await cur.execute(
+                        """
+                        DELETE FROM checkpoint_blobs
+                        WHERE thread_id = %s
+                        AND NOT EXISTS (
+                            SELECT 1 FROM checkpoints c
+                            WHERE c.thread_id = checkpoint_blobs.thread_id
+                            AND c.checkpoint_ns = checkpoint_blobs.checkpoint_ns
+                        )
+                        """,
+                        (str(thread_id),),
+                    )
 
 __all__ = ["AsyncPostgresSaver", "AsyncShallowPostgresSaver", "Conn"]
