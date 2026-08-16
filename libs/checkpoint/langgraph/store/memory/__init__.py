@@ -109,7 +109,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from importlib import util
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.embeddings import Embeddings
 
@@ -408,7 +408,7 @@ class InMemoryStore(BaseStore):
                 self._vectors[namespace].pop(key, None)
             else:
                 self._data[namespace][key] = Item(
-                    value=op.value,
+                    value=cast(dict, op.value),
                     key=key,
                     namespace=namespace,
                     created_at=datetime.now(timezone.utc),

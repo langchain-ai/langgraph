@@ -2,7 +2,7 @@ import asyncio
 import json
 from collections.abc import Iterable
 from datetime import datetime
-from typing import Any
+from typing import Any, TypedDict
 
 import pytest
 from pytest_mock import MockerFixture
@@ -473,6 +473,7 @@ async def test_cannot_put_empty_namespace() -> None:
     assert (await store.asearch(("langgraph", "foo")))[0].value == doc
     await store.adelete(("langgraph", "foo"), "bar")
     assert (await store.aget(("langgraph", "foo"), "bar")) is None
+
     store.batch([PutOp(("langgraph", "foo"), "bar", doc)])
     assert store.get(("langgraph", "foo"), "bar").value == doc  # type: ignore[union-attr]
     assert store.search(("langgraph", "foo"))[0].value == doc
@@ -512,6 +513,30 @@ async def test_cannot_put_empty_namespace() -> None:
     assert (await async_store.asearch(("valid", "namespace")))[0].value == doc
     await async_store.adelete(("valid", "namespace"), "key")
     assert (await async_store.aget(("valid", "namespace"), "key")) is None
+
+
+class _Prefs(TypedDict):
+    theme: str
+
+
+async def test_put_accepts_typed_dict() -> None:
+    """A TypedDict is a Mapping[str, Any] but not a dict[str, Any] under a type
+    checker (it lacks arbitrary key add/remove), so `put`/`aput` must accept
+    `Mapping[str, Any]` rather than `dict[str, Any]` for this to type-check.
+    Runtime behavior was never broken -- this guards the type surface and the
+    resulting stored/retrieved value."""
+    store = InMemoryStore()
+    value: _Prefs = {"theme": "dark"}
+
+    store.put(("users", "123"), "prefs", value)
+    item = store.get(("users", "123"), "prefs")
+    assert item is not None
+    assert item.value == {"theme": "dark"}
+
+    await store.aput(("users", "456"), "prefs", value)
+    item = await store.aget(("users", "456"), "prefs")
+    assert item is not None
+    assert item.value == {"theme": "dark"}
 
 
 async def test_async_batch_store_deduplication(mocker: MockerFixture) -> None:

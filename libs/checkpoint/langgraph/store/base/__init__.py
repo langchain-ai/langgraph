@@ -12,7 +12,7 @@ Core types:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import (
     Any,
@@ -473,7 +473,7 @@ class PutOp(NamedTuple):
         the full path would effectively be `"documents/user123/report1"`
     """
 
-    value: dict[str, Any] | None
+    value: Mapping[str, Any] | None
     """The data to store, or `None` to mark the item for deletion.
 
     The value must be a dictionary with string keys and JSON-serializable values.
@@ -857,7 +857,7 @@ class BaseStore(ABC):
         self,
         namespace: tuple[str, ...],
         key: str,
-        value: dict[str, Any],
+        value: Mapping[str, Any],
         index: Literal[False] | list[str] | None = None,
         *,
         ttl: float | None | NotProvided = NOT_PROVIDED,
@@ -1110,7 +1110,7 @@ class BaseStore(ABC):
         self,
         namespace: tuple[str, ...],
         key: str,
-        value: dict[str, Any],
+        value: Mapping[str, Any],
         index: Literal[False] | list[str] | None = None,
         *,
         ttl: float | None | NotProvided = NOT_PROVIDED,
