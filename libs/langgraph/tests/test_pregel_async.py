@@ -552,6 +552,67 @@ async def test_node_cancellation_on_external_cancel() -> None:
     assert inner_task_cancelled
 
 
+@pytest.mark.parametrize("durability", ["exit", "async", "sync"])
+async def test_cancellation_recorded_for_all_durability_modes(
+    durability: Durability,
+) -> None:
+    """Cancelling mid-superstep must durably record the cancellation of the task
+    that was still running, while preserving the writes of the task that
+    finished.
+
+    Regression test: with durability="exit" the cancelled task's ``commit()``
+    runs from a done-callback that fires *after* ``_suppress_interrupt`` has
+    already flushed pending writes, so the ERROR write was dropped and
+    ``get_state().tasks[...].error`` was None, unlike "async"/"sync".
+    """
+
+    class State(TypedDict):
+        steps: Annotated[list[str], operator.add]
+
+    async def fast(state: State) -> Any:
+        return {"steps": ["fast"]}
+
+    async def slow(state: State) -> Any:
+        await asyncio.sleep(5)
+        return {"steps": ["slow"]}
+
+    builder = StateGraph(State)
+    builder.add_node("fast", fast)
+    builder.add_node("slow", slow)
+    builder.add_edge(START, "fast")
+    builder.add_edge(START, "slow")
+    graph = builder.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": f"cancel-{durability}"}}
+
+    async def consume() -> None:
+        async for _ in graph.astream(
+            {"steps": []}, config, stream_mode="values", durability=durability
+        ):
+            pass
+
+    task = asyncio.create_task(consume())
+    # let `fast` finish and commit while `slow` is still sleeping
+    await asyncio.sleep(0.5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    # allow the cancelled task's done-callback to run
+    await asyncio.sleep(0.5)
+
+    state = await graph.aget_state(config)
+    errors = {t.name: t.error for t in state.tasks}
+
+    # the cancellation of the in-flight task is durably recorded
+    assert errors.get("slow") is not None, (
+        f"cancellation not persisted for durability={durability!r}; tasks={errors}"
+    )
+    assert "CancelledError" in str(errors["slow"])
+    # the task that completed is not misreported as cancelled
+    assert errors.get("fast") is None
+    # and its committed work survives
+    assert state.values["steps"] == ["fast"]
+
+
 async def test_node_cancellation_on_other_node_exception() -> None:
     inner_task_cancelled = False
 

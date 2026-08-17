@@ -1314,6 +1314,30 @@ class PregelLoop:
             if self._delta_write_futs is not None:
                 self._delta_write_futs.append(fut)
 
+    def _stage_cancelled_task_writes(self, exc_value: BaseException | None) -> None:
+        """Record cancellation for tasks that were cancelled mid-flight.
+
+        With durability "async"/"sync" the runner's `commit()` persists an ERROR
+        write for a cancelled task, so `get_state().tasks[...].error` reports the
+        cancellation. With durability "exit" that same `commit()` runs from a
+        done-callback that fires *after* this exit hook, by which point
+        `_put_pending_writes()` has already flushed; the write lands in
+        `checkpoint_pending_writes` too late and is never persisted.
+
+        Staging it here makes the three durability modes agree. Tasks that
+        already produced writes are skipped: they completed normally, and only
+        the still-running ones were actually cancelled.
+        """
+        if not isinstance(exc_value, asyncio.CancelledError):
+            return
+        if not hasattr(self, "tasks"):
+            return
+        written = {task_id for task_id, _, _ in self.checkpoint_pending_writes}
+        for task_id, task in self.tasks.items():
+            if task.writes or task_id in written:
+                continue
+            self.put_writes(task_id, [(ERROR, exc_value)])
+
     def _suppress_interrupt(
         self,
         exc_type: type[BaseException] | None,
@@ -1329,6 +1353,12 @@ class PregelLoop:
             # or a nested graph with checkpointer=True
             or all(NS_END not in part for part in self.checkpoint_ns)
         ):
+            # Stage the cancellation record before flushing: the cancelled
+            # task's own commit() runs from a done-callback that fires after
+            # this hook, so it would otherwise land in
+            # checkpoint_pending_writes after _put_pending_writes() has run
+            # and would never be persisted.
+            self._stage_cancelled_task_writes(exc_value)
             self._put_exit_delta_writes()
             self._put_checkpoint(self.checkpoint_metadata)
             self._put_pending_writes()
