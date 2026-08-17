@@ -11,6 +11,13 @@ from langgraph.prebuilt.tool_node import (
 )
 from langgraph.prebuilt.tool_validator import ValidationNode
 
+from langgraph.prebuilt.action_gate import (
+    ActionBoundary,
+    ActionGate,
+    ActionLedger,
+    GateDecision,
+)
+
 __all__ = [
     "create_react_agent",
     "ToolNode",
@@ -20,4 +27,8 @@ __all__ = [
     "InjectedState",
     "InjectedStore",
     "ToolRuntime",
+    "ActionGate",
+    "ActionBoundary",
+    "ActionLedger",
+    "GateDecision",
 ]
