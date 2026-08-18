@@ -863,6 +863,115 @@ def dev(
 
 
 # ---------------------------------------------------------------------------
+# lint command
+# ---------------------------------------------------------------------------
+
+
+@OPT_CONFIG
+@click.option(
+    "--fail-on",
+    type=click.Choice(["critical", "warning", "info", "never"]),
+    default="critical",
+    help="Minimum finding severity that causes a non-zero exit code. "
+    "Use 'never' to always exit 0 (report only).",
+)
+@cli.command(
+    help="🩺 Statically analyze configured graphs for production-debt anti-patterns "
+    "(unreachable nodes, unbounded cycles, missing checkpointers on cyclic graphs, "
+    "unresolvable conditional edges)."
+)
+@log_command
+def lint(config: str, fail_on: str):
+    """CLI entrypoint for structural graph linting."""
+    try:
+        from langgraph.graph.analysis import Severity, analyze, production_debt_score
+    except ImportError:
+        raise click.UsageError(
+            "The 'lint' command requires the 'langgraph' package to be installed "
+            "in this environment (it imports and statically inspects your graph "
+            "objects). Install it with:\n\n"
+            "    pip install -U langgraph"
+        ) from None
+
+    from langgraph_cli.lint import prepare_import_path, resolve_graph
+
+    config_path = pathlib.Path(config)
+    config_json = langgraph_cli.config.validate_config_file(config_path)
+    graphs = config_json["graphs"]  # validate_config_file guarantees non-empty
+
+    base_dir = config_path.resolve().parent
+    prepare_import_path(base_dir, config_json.get("dependencies", []))
+
+    severity_rank = {
+        Severity.CRITICAL: 0,
+        Severity.WARNING: 1,
+        Severity.INFO: 2,
+    }
+    fail_threshold = {
+        "critical": 0,
+        "warning": 1,
+        "info": 2,
+        "never": None,
+    }[fail_on]
+
+    def note_severity(current: int | None, severity: Severity) -> int:
+        rank = severity_rank[severity]
+        return rank if current is None else min(current, rank)
+
+    worst_seen: int | None = None
+    for graph_id, graph_def in graphs.items():
+        spec = graph_def["path"] if isinstance(graph_def, dict) else graph_def
+        result = resolve_graph(graph_id, spec, base_dir)
+
+        if result.error:
+            click.secho(f"\n{graph_id} ({spec}): failed to load", fg="red")
+            click.echo(f"  {result.error}")
+            worst_seen = note_severity(worst_seen, Severity.CRITICAL)
+            continue
+
+        if result.skipped_reason:
+            click.secho(f"\n{graph_id} ({spec}): skipped", fg="yellow")
+            click.echo(f"  {result.skipped_reason}")
+            continue
+
+        findings = analyze(result.builder, checkpointer=result.checkpointer)
+        score = production_debt_score(findings)
+
+        if not findings:
+            click.secho(
+                f"\n{graph_id} ({spec}): clean (production debt score 0)", fg="green"
+            )
+            continue
+
+        color = (
+            "red"
+            if any(f.severity == Severity.CRITICAL for f in findings)
+            else "yellow"
+        )
+        click.secho(
+            f"\n{graph_id} ({spec}): {len(findings)} finding(s), "
+            f"production debt score {score}",
+            fg=color,
+        )
+        if not result.checkpointer_known:
+            click.echo(
+                "  (graph was loaded uncompiled -- checkpointer-related checks "
+                "were skipped; lint a compiled graph object to include them)"
+            )
+        for f in findings:
+            worst_seen = note_severity(worst_seen, f.severity)
+            location = f" [{f.node}]" if f.node else ""
+            click.echo(f"  {f.severity.value:<8} {f.rule}{location}: {f.message}")
+
+    if (
+        fail_threshold is not None
+        and worst_seen is not None
+        and worst_seen <= fail_threshold
+    ):
+        raise SystemExit(1)
+
+
+# ---------------------------------------------------------------------------
 # validate command
 # ---------------------------------------------------------------------------
 

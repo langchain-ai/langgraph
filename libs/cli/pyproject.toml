@@ -43,6 +43,7 @@ test = [
     "pytest-mock",
     "pytest-watch",
     "msgspec",
+    "langgraph",
 ]
 lint = [
     "ruff",
@@ -57,6 +58,9 @@ dev = [
 
 [tool.uv]
 default-groups = ['dev']
+
+[tool.uv.sources]
+langgraph = { path = "../langgraph", editable = true }
 
 [tool.hatch.build.targets.wheel]
 include = ["langgraph_cli"]
