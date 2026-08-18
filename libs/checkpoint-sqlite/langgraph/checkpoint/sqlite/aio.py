@@ -212,7 +212,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         while True:
             try:
                 yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_),  # type: ignore[arg-type]  # noqa: F821
+                    anext(aiter_),  # type: ignore[arg-type]
                     self.loop,
                 ).result()
             except StopAsyncIteration:
@@ -608,6 +608,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         Returns:
             None
         """
+        await self.setup()
         async with self.lock, self.conn.cursor() as cur:
             await cur.execute(
                 "DELETE FROM checkpoints WHERE thread_id = ?",
