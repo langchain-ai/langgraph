@@ -66,6 +66,7 @@ from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentComm
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.pregel import (
     NodeBuilder,
     Pregel,
@@ -2359,6 +2360,41 @@ def test_in_one_fan_out_state_graph_defer_node(
     assert [c for c in app_w_interrupt.stream(None, config, debug=1)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4,doc5"}},
     ]
+
+
+def test_resume_after_flipping_defer_on_fan_in_node(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Regression test for #8618.
+
+    Toggling `defer` on a fan-in node between runs produces a checkpoint whose
+    barrier channel has a different shape than the graph used to resume the
+    thread expects, silently corrupting the barrier so the fan-in node never
+    fires again on that thread (or raising a ValueError on restore).
+    """
+
+    class State(TypedDict):
+        messages: Annotated[list[str], operator.add]
+
+    def build(defer: bool) -> CompiledStateGraph:
+        builder = StateGraph(State)
+        builder.add_node("a1", lambda state: {"messages": ["a1"]})
+        builder.add_node("a2", lambda state: {"messages": ["a2"]})
+        builder.add_node("c", lambda state: {"messages": ["c"]}, defer=defer)
+        builder.add_edge(START, "a1")
+        builder.add_edge(START, "a2")
+        builder.add_edge(["a1", "a2"], "c")
+        return builder.compile(checkpointer=sync_checkpointer, interrupt_before=["c"])
+
+    # pause with defer=False, resume with defer=True
+    config = {"configurable": {"thread_id": "1"}}
+    build(False).invoke({"messages": []}, config)
+    assert build(True).invoke(None, config) == {"messages": ["a1", "a2", "c"]}
+
+    # pause with defer=True, resume with defer=False
+    config = {"configurable": {"thread_id": "2"}}
+    build(True).invoke({"messages": []}, config)
+    assert build(False).invoke(None, config) == {"messages": ["a1", "a2", "c"]}
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_via_branch(

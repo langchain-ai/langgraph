@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Generic
+from typing import Any, Generic
 
 from typing_extensions import Self
 
@@ -46,11 +46,23 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
     def checkpoint(self) -> set[Value]:
         return self.seen
 
-    def from_checkpoint(self, checkpoint: set[Value]) -> Self:
+    def from_checkpoint(
+        self, checkpoint: set[Value] | tuple[set[Value], bool] | Any
+    ) -> Self:
         empty = self.__class__(self.typ, self.names)
         empty.key = self.key
         if checkpoint is not MISSING:
-            empty.seen = checkpoint
+            # a thread checkpointed while the target had defer=True hands us
+            # the NamedBarrierValueAfterFinish (seen, finished) pair; serde
+            # round-trips tuples as lists, so accept both shapes
+            if (
+                isinstance(checkpoint, (tuple, list))
+                and len(checkpoint) == 2
+                and isinstance(checkpoint[1], bool)
+            ):
+                empty.seen = checkpoint[0]
+            else:
+                empty.seen = checkpoint
         return empty
 
     def update(self, values: Sequence[Value]) -> bool:
@@ -124,11 +136,24 @@ class NamedBarrierValueAfterFinish(
     def checkpoint(self) -> tuple[set[Value], bool]:
         return (self.seen, self.finished)
 
-    def from_checkpoint(self, checkpoint: tuple[set[Value], bool]) -> Self:
+    def from_checkpoint(
+        self, checkpoint: tuple[set[Value], bool] | set[Value] | Any
+    ) -> Self:
         empty = self.__class__(self.typ, self.names)
         empty.key = self.key
         if checkpoint is not MISSING:
-            empty.seen, empty.finished = checkpoint
+            if (
+                isinstance(checkpoint, (tuple, list))
+                and len(checkpoint) == 2
+                and isinstance(checkpoint[1], bool)
+            ):
+                empty.seen, empty.finished = checkpoint
+            else:
+                # a thread checkpointed while the target had no defer hands us
+                # the bare seen set; the barrier was already satisfied in that
+                # run, so mark it finished to fire the fan-in node on resume
+                empty.seen = checkpoint
+                empty.finished = True
         return empty
 
     def update(self, values: Sequence[Value]) -> bool:
