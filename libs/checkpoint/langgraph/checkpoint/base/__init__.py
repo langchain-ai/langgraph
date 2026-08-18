@@ -796,6 +796,9 @@ WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3, RESUME: -4}
 
 EXCLUDED_METADATA_KEYS = {
     "thread_id",
+    # `thread_ts` was used by older checkpoint implementations and should
+    # remain configuration-only rather than leaking into checkpoint metadata.
+    "thread_ts",
     "checkpoint_id",
     "checkpoint_ns",
     "checkpoint_map",

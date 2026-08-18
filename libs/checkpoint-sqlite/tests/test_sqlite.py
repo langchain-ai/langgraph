@@ -63,6 +63,9 @@ class TestSqliteSaver:
             config: RunnableConfig = {
                 "configurable": {
                     "thread_id": "thread-2",
+                    # Legacy checkpoint configuration keys must not be copied
+                    # into the persisted metadata.
+                    "thread_ts": "legacy-timestamp",
                     "checkpoint_ns": "",
                     "__super_private_key": "super_private_value",
                 },
