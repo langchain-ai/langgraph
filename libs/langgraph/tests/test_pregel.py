@@ -66,6 +66,7 @@ from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentComm
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, _messages_delta_reducer, add_messages
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.pregel import (
     NodeBuilder,
     Pregel,
@@ -2359,6 +2360,38 @@ def test_in_one_fan_out_state_graph_defer_node(
     assert [c for c in app_w_interrupt.stream(None, config, debug=1)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4,doc5"}},
     ]
+
+
+def test_resume_after_flipping_defer_on_single_predecessor(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Regression test for #8629.
+
+    Toggling `defer` on a single-predecessor node between runs produces a
+    checkpoint whose branch channel has a different shape than the graph used to
+    resume the thread expects, crashing the resumed run with a TypeError.
+    """
+
+    class State(TypedDict):
+        messages: Annotated[list[str], operator.add]
+
+    def build(defer: bool) -> CompiledStateGraph:
+        builder = StateGraph(State)
+        builder.add_node("a", lambda state: {"messages": ["a"]})
+        builder.add_node("b", lambda state: {"messages": ["b"]}, defer=defer)
+        builder.add_edge(START, "a")
+        builder.add_edge("a", "b")
+        return builder.compile(checkpointer=sync_checkpointer, interrupt_before=["b"])
+
+    # pause with defer=False, resume with defer=True
+    config = {"configurable": {"thread_id": "1"}}
+    build(False).invoke({"messages": []}, config)
+    assert build(True).invoke(None, config) == {"messages": ["a", "b"]}
+
+    # pause with defer=True, resume with defer=False
+    config = {"configurable": {"thread_id": "2"}}
+    build(True).invoke({"messages": []}, config)
+    assert build(False).invoke(None, config) == {"messages": ["a", "b"]}
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_via_branch(

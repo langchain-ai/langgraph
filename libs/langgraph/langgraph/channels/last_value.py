@@ -116,7 +116,19 @@ class LastValueAfterFinish(
         empty = self.__class__(self.typ)
         empty.key = self.key
         if checkpoint is not MISSING:
-            empty.value, empty.finished = checkpoint
+            if (
+                isinstance(checkpoint, (tuple, list))
+                and len(checkpoint) == 2
+                and isinstance(checkpoint[1], bool)
+            ):
+                empty.value, empty.finished = checkpoint
+            else:
+                # Tolerate a bare value checkpoint (e.g. written by a non-deferred
+                # channel such as EphemeralValue before the node's defer flag was
+                # flipped). Treat it as already finished so the pending node can
+                # still run when the thread resumes.
+                empty.value = checkpoint
+                empty.finished = True
         return empty
 
     def update(self, values: Sequence[Value | Any]) -> bool:
