@@ -188,3 +188,19 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_adelete_thread_on_uninitialized_db(self) -> None:
+        """adelete_thread must call setup() so it works on a fresh database.
+
+        Regression test for: calling adelete_thread() as the very first
+        operation raised sqlite3.OperationalError ('no such table: checkpoints')
+        because setup() was never called.  The fix adds `await self.setup()`
+        before the lock/cursor block, matching every other async method.
+        """
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            # Deleting a nonexistent thread on a fresh (never set-up) DB
+            # must be a no-op, not raise OperationalError.
+            await saver.adelete_thread("nonexistent-thread")
+            # Verify the tables now exist and are empty (setup ran implicitly).
+            results = [c async for c in saver.alist(None)]
+            assert results == []
