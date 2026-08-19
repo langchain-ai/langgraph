@@ -25,6 +25,7 @@ from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from typing_extensions import TypedDict
 
 from langgraph.channels.delta import DeltaChannel
+from langgraph.constants import CONFIG_KEY_CHECKPOINTER
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import _messages_delta_reducer
 from langgraph.types import StateUpdate
@@ -338,3 +339,99 @@ def test_state_history_chain_after_fresh_update_state_delta_channel() -> None:
     assert update_snapshot.metadata["step"] == 0
     assert update_snapshot.parent_config is None
     assert [m.content for m in update_snapshot.values["messages"]] == ["hello"]
+
+
+# ---------------------------------------------------------------------------
+# Config-injected checkpointer (the LangGraph Platform shape): state reads and
+# update_state must hydrate DeltaChannels with the config-resolved saver, not
+# the graph's own (absent) checkpointer.
+# ---------------------------------------------------------------------------
+
+
+def _build_detached_graph(*, snapshot_frequency: int = 1000) -> Any:
+    """Same graph as `_build_graph`, compiled WITHOUT a checkpointer.
+
+    Mirrors a platform-hosted graph, where the checkpointer is injected
+    per-request via ``config[CONF][CONFIG_KEY_CHECKPOINTER]``.
+    """
+    channel = DeltaChannel(
+        _messages_delta_reducer, snapshot_frequency=snapshot_frequency
+    )
+    State = TypedDict("State", {"messages": Annotated[list, channel]})  # type: ignore[call-overload]  # noqa: UP013
+
+    def model(state: dict) -> dict:
+        return {}
+
+    builder = StateGraph(State)
+    builder.add_node("model", model)
+    builder.add_edge(START, "model")
+    builder.set_finish_point("model")
+    return builder.compile()
+
+
+def _injected(saver: InMemorySaver, thread_id: str) -> dict:
+    return {"configurable": {"thread_id": thread_id, CONFIG_KEY_CHECKPOINTER: saver}}
+
+
+def test_get_state_with_config_injected_checkpointer_delta_channel() -> None:
+    saver = InMemorySaver()
+    graph = _build_detached_graph()
+    config = _injected(saver, "injected-read-sync")
+    messages = [HumanMessage(content="hello", id="m1"), HumanMessage(content="again", id="m2")]
+
+    graph.invoke({"messages": messages}, config)
+
+    # The head blob is a delta sentinel (frequency not reached), so hydration
+    # must replay through the config-resolved saver.
+    snapshot = graph.get_state(config)
+    assert [m.id for m in snapshot.values["messages"]] == ["m1", "m2"]
+    history = list(graph.get_state_history(config))
+    assert [m.id for m in history[0].values["messages"]] == ["m1", "m2"]
+
+
+async def test_aget_state_with_config_injected_checkpointer_delta_channel() -> None:
+    saver = InMemorySaver()
+    graph = _build_detached_graph()
+    config = _injected(saver, "injected-read-async")
+    messages = [HumanMessage(content="hello", id="m1"), HumanMessage(content="again", id="m2")]
+
+    await graph.ainvoke({"messages": messages}, config)
+
+    snapshot = await graph.aget_state(config)
+    assert [m.id for m in snapshot.values["messages"]] == ["m1", "m2"]
+    history = [s async for s in graph.aget_state_history(config)]
+    assert [m.id for m in history[0].values["messages"]] == ["m1", "m2"]
+
+
+def test_update_state_with_config_injected_checkpointer_delta_channel() -> None:
+    saver = InMemorySaver()
+    graph = _build_detached_graph()
+    config = _injected(saver, "injected-update-sync")
+
+    graph.invoke({"messages": [HumanMessage(content="hello", id="m1")]}, config)
+    graph.update_state(
+        config, {"messages": [HumanMessage(content="appended", id="m2")]}, as_node="model"
+    )
+
+    # The update must fold against the replayed value, not an empty channel —
+    # checked through a fully-attached graph so the read path is not under test.
+    attached = _build_graph(saver)
+    snapshot = attached.get_state({"configurable": {"thread_id": "injected-update-sync"}})
+    assert [m.id for m in snapshot.values["messages"]] == ["m1", "m2"]
+    assert graph.get_state(config).values["messages"] == snapshot.values["messages"]
+
+
+async def test_aupdate_state_with_config_injected_checkpointer_delta_channel() -> None:
+    saver = InMemorySaver()
+    graph = _build_detached_graph()
+    config = _injected(saver, "injected-update-async")
+
+    await graph.ainvoke({"messages": [HumanMessage(content="hello", id="m1")]}, config)
+    await graph.aupdate_state(
+        config, {"messages": [HumanMessage(content="appended", id="m2")]}, as_node="model"
+    )
+
+    attached = _build_graph(saver)
+    snapshot = await attached.aget_state({"configurable": {"thread_id": "injected-update-async"}})
+    assert [m.id for m in snapshot.values["messages"]] == ["m1", "m2"]
+    assert (await graph.aget_state(config)).values["messages"] == snapshot.values["messages"]
