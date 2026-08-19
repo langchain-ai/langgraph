@@ -626,6 +626,161 @@ def test_tool_node_node_interrupt() -> None:
             assert exc_info.value == "foo"
 
 
+def _interrupt_tool_call_payload(name: str = "tool_interrupt") -> dict:
+    return {
+        "messages": [
+            AIMessage(
+                "hi?",
+                tool_calls=[
+                    {
+                        "name": name,
+                        "args": {"some_val": 0},
+                        "id": "some 0",
+                    }
+                ],
+            )
+        ]
+    }
+
+
+def test_wrap_tool_call_reraises_graph_bubble_up() -> None:
+    """Transparent wrap_tool_call must not convert GraphInterrupt into a ToolMessage.
+
+    Regression for https://github.com/langchain-ai/langgraph/issues/8217.
+    """
+
+    def tool_interrupt(some_val: int) -> None:
+        """Tool docstring."""
+        raise GraphInterrupt(())
+
+    def wrap_tool_call(request, execute):
+        return execute(request)
+
+    def handle_errors(e: Exception) -> str:
+        return f"Tool call failed ({type(e).__name__}): {e}"
+
+    node = ToolNode(
+        [tool_interrupt],
+        wrap_tool_call=wrap_tool_call,
+        handle_tool_errors=handle_errors,
+    )
+    with pytest.raises(GraphBubbleUp):
+        node.invoke(
+            _interrupt_tool_call_payload(),
+            config=_create_config_with_runtime(),
+        )
+
+
+async def test_awrap_tool_call_reraises_graph_bubble_up() -> None:
+    """Transparent awrap_tool_call must not convert GraphInterrupt into a ToolMessage.
+
+    Regression for https://github.com/langchain-ai/langgraph/issues/8217.
+    """
+
+    def tool_interrupt(some_val: int) -> None:
+        """Tool docstring."""
+        raise GraphInterrupt(())
+
+    async def awrap_tool_call(request, execute):
+        return await execute(request)
+
+    def handle_errors(e: Exception) -> str:
+        return f"Tool call failed ({type(e).__name__}): {e}"
+
+    node = ToolNode(
+        [tool_interrupt],
+        awrap_tool_call=awrap_tool_call,
+        handle_tool_errors=handle_errors,
+    )
+    with pytest.raises(GraphBubbleUp):
+        await node.ainvoke(
+            _interrupt_tool_call_payload(),
+            config=_create_config_with_runtime(),
+        )
+
+
+def test_wrap_tool_call_still_handles_ordinary_tool_errors() -> None:
+    """handle_tool_errors must still convert ordinary exceptions with wrap_tool_call."""
+
+    def tool_fail(some_val: int) -> None:
+        """Tool docstring."""
+        raise ValueError("boom")
+
+    def wrap_tool_call(request, execute):
+        return execute(request)
+
+    def handle_errors(e: Exception) -> str:
+        return f"Tool call failed ({type(e).__name__}): {e}"
+
+    node = ToolNode(
+        [tool_fail],
+        wrap_tool_call=wrap_tool_call,
+        handle_tool_errors=handle_errors,
+    )
+    result = node.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool_fail",
+                            "args": {"some_val": 0},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.status == "error"
+    assert "ValueError" in tool_message.content
+    assert "boom" in tool_message.content
+
+
+async def test_awrap_tool_call_still_handles_ordinary_tool_errors() -> None:
+    """handle_tool_errors must still convert ordinary exceptions with awrap_tool_call."""
+
+    def tool_fail(some_val: int) -> None:
+        """Tool docstring."""
+        raise ValueError("boom")
+
+    async def awrap_tool_call(request, execute):
+        return await execute(request)
+
+    def handle_errors(e: Exception) -> str:
+        return f"Tool call failed ({type(e).__name__}): {e}"
+
+    node = ToolNode(
+        [tool_fail],
+        awrap_tool_call=awrap_tool_call,
+        handle_tool_errors=handle_errors,
+    )
+    result = await node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool_fail",
+                            "args": {"some_val": 0},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.status == "error"
+    assert "ValueError" in tool_message.content
+    assert "boom" in tool_message.content
+
+
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
 async def test_tool_node_command(input_type: str) -> None:
 

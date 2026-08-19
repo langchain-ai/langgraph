@@ -1053,6 +1053,10 @@ class ToolNode(RunnableCallable):
         # Call wrapper with request and execute callable
         try:
             return self._wrap_tool_call(tool_request, execute)
+        except GraphBubbleUp:
+            # GraphInterrupt / ParentCommand are control-flow, not tool errors.
+            # The direct path already re-raises these; wrap_tool_call must too.
+            raise
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
@@ -1208,6 +1212,10 @@ class ToolNode(RunnableCallable):
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
             return self._wrap_tool_call(tool_request, _sync_execute)
+        except GraphBubbleUp:
+            # GraphInterrupt / ParentCommand are control-flow, not tool errors.
+            # The direct path already re-raises these; awrap_tool_call must too.
+            raise
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
