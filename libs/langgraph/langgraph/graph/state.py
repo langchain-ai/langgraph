@@ -847,13 +847,17 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                                 break
 
                     # Check if it's a Command type
-                    if (
-                        rtn_origin is Command
-                        and (rargs := get_args(rtn))
-                        and get_origin(rargs[0]) is Literal
-                        and (vals := get_args(rargs[0]))
-                    ):
-                        ends = vals
+                    if rtn_origin is Command and (rargs := get_args(rtn)):
+                        command_destinations = rargs[0]
+                        if get_origin(command_destinations) is Literal:
+                            ends = get_args(command_destinations)
+                        elif get_origin(command_destinations) is Union:
+                            ends = tuple(
+                                value
+                                for arg in get_args(command_destinations)
+                                if get_origin(arg) is Literal
+                                for value in get_args(arg)
+                            )
         except (NameError, TypeError, StopIteration):
             pass
 

@@ -5127,6 +5127,45 @@ def test_command_pydantic_dataclass() -> None:
         assert graph.invoke(State(foo="")) == {"foo": "foobar"}
 
 
+def test_command_union_of_literals() -> None:
+    class State(TypedDict):
+        response: str
+
+    BillingAgent = Literal["billing_agent"]
+    TechSupportAgent = Literal["tech_support_agents"]
+
+    def router(state: State) -> Command[BillingAgent | TechSupportAgent]:
+        return Command(
+            goto="billing_agent",
+            update={"response": "billing"},
+        )
+
+    def billing_agent(state: State):
+        return {"response": state["response"] + " done"}
+
+    def tech_support_agent(state: State):
+        return {"response": state["response"] + " done"}
+
+    builder = StateGraph(State)
+    builder.add_node("router", router)
+    builder.add_node("billing_agent", billing_agent)
+    builder.add_node("tech_support_agents", tech_support_agent)
+
+    builder.add_edge(START, "router")
+    builder.add_edge("billing_agent", END)
+    builder.add_edge("tech_support_agents", END)
+
+    graph = builder.compile()
+
+    graph_definition = graph.get_graph()
+
+    assert ("router", "billing_agent") in [
+        (edge.source, edge.target) for edge in graph_definition.edges
+    ]
+    assert ("router", "tech_support_agents") in [
+        (edge.source, edge.target) for edge in graph_definition.edges
+    ]
+
 def test_command_with_static_breakpoints(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
