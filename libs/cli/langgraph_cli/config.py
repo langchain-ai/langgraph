@@ -381,7 +381,9 @@ def _get_source_kind(config: Config) -> str | None:
     return kind if isinstance(kind, str) else None
 
 
-def validate_config(config: Config) -> Config:
+def validate_config(
+    config: Config, *, source_path: pathlib.Path | None = None
+) -> Config:
     """Validate a configuration dictionary."""
 
     graphs = config.get("graphs", {})
@@ -477,9 +479,12 @@ def validate_config(config: Config) -> Config:
             )
 
     _validate_git_http_url_userinfo(
-        dependency
-        for dependency in config["dependencies"]
-        if isinstance(dependency, str)
+        (
+            dependency
+            for dependency in config["dependencies"]
+            if isinstance(dependency, str)
+        ),
+        source=source_path,
     )
 
     source = config.get("source")
@@ -676,7 +681,7 @@ def validate_config_file(config_path: pathlib.Path) -> Config:
     """Load and validate a configuration file."""
     with open(config_path) as f:
         config = json.load(f)
-    validated = validate_config(config)
+    validated = validate_config(config, source_path=config_path.resolve())
     # Enforce the package.json doesn't enforce an
     # incompatible Node.js version
     if validated.get("node_version"):

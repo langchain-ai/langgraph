@@ -280,6 +280,28 @@ def test_validate_config_rejects_git_http_url_userinfo(dependency: str):
     assert "secret%2Ftoken" not in message
 
 
+def test_validate_config_file_reports_source_for_git_http_url_userinfo(
+    tmp_path: pathlib.Path,
+):
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "python_version": "3.11",
+                "dependencies": ["git+https://secret-token@github.com/org/private.git"],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        )
+    )
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config_file(config_path)
+
+    message = str(exc_info.value)
+    assert "secret-token" not in message
+    assert f"Found in: {config_path.resolve()}" in message
+
+
 @pytest.mark.parametrize(
     "manifest", ["package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"]
 )
