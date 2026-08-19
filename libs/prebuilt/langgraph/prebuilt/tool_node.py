@@ -365,7 +365,7 @@ class ToolInvocationError(ToolException):
             for error in filtered_errors:
                 loc_str = ".".join(str(loc) for loc in error.get("loc", ()))
                 msg = error.get("msg", "Unknown error")
-                error_str_parts.append(f"{loc_str}: {msg}")
+                error_str_parts.append(f"{loc_str}: {msg}" if loc_str else msg)
             error_display_str = "\n".join(error_str_parts)
         else:
             error_display_str = str(source)
@@ -545,7 +545,7 @@ def _filter_validation_errors(
     for error in validation_error.errors():
         # Check if error location contains any injected argument
         # error['loc'] is a tuple like ('field_name',) or ('field_name', 'nested_field')
-        if error["loc"] and error["loc"][0] not in injected_arg_names:
+        if not error["loc"] or error["loc"][0] not in injected_arg_names:
             # Create a copy of the error dict to avoid mutating the original
             error_copy: dict[str, Any] = {**error}
 
