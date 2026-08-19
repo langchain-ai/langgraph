@@ -86,6 +86,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     yield cls(conn=conn, pipe=pipe, serde=serde)
             else:
                 yield cls(conn=conn, serde=serde)
+        # Note: AsyncPipeline is only safe for exclusive, non-concurrent use of the connection.
+        # If the connection is shared (e.g., with an LLM call), do not enable pipeline.
+        # See https://github.com/langchain-ai/langgraph/issues/5675
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
