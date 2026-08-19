@@ -12,6 +12,7 @@ TEMPLATES: dict[str, dict[str, str]] = {
         "description": "An opinionated deployment template for a Deep Agent.",
         "python": "https://github.com/langchain-ai/deep-agent-template/archive/refs/heads/main.zip",
         "js": "https://github.com/langchain-ai/deep-agent-template-js/archive/refs/heads/main.zip",
+        "pin_dependencies": True,  # Add dependency pinning to avoid OOM
     },
     "Agent": {
         "description": "A simple agent that can be flexibly extended to many tools.",
