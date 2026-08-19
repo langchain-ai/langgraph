@@ -5166,6 +5166,7 @@ def test_command_union_of_literals() -> None:
         (edge.source, edge.target) for edge in graph_definition.edges
     ]
 
+
 def test_command_with_static_breakpoints(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
