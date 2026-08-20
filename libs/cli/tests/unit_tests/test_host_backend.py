@@ -25,7 +25,7 @@ def client(mock_transport):
 
 def test_constructor_strips_trailing_slash():
     c = HostBackendClient("https://api.example.com/", "key")
-    assert str(c._client.base_url) == "https://api.example.com"
+    assert c.base_url == "https://api.example.com"
 
 
 def test_constructor_empty_url_raises():
@@ -175,6 +175,59 @@ def test_update_deployment(client):
 
 def test_update_deployment_no_secrets(client):
     result = client.update_deployment("dep-123", "image:latest")
+    assert result == {"ok": True}
+
+
+def test_update_deployment_external():
+    captured: dict = {}
+    c = _capturing_client(captured)
+    result = c.update_deployment_external(
+        "dep-123", "registry.example.com/app@sha256:abc123"
+    )
+    assert result == {"ok": True}
+    body = json.loads(captured["body"])
+    assert "revision_source" not in body
+    assert body["source_revision_config"]["image_uri"] == (
+        "registry.example.com/app@sha256:abc123"
+    )
+
+
+def test_update_deployment_external_forwards_tracked_packages():
+    captured: dict = {}
+    c = _capturing_client(captured)
+    c.update_deployment_external(
+        "dep-123",
+        "registry.example.com/app:latest",
+        tracked_packages=["google-adk:1.0.0"],
+    )
+    body = json.loads(captured["body"])
+    assert body["tracked_packages"] == ["google-adk:1.0.0"]
+    assert "revision_source" not in body
+
+
+def test_update_deployment_external_omits_tracked_packages_when_absent():
+    captured: dict = {}
+    c = _capturing_client(captured)
+    c.update_deployment_external("dep-123", "registry.example.com/app:latest")
+    body = json.loads(captured["body"])
+    assert "tracked_packages" not in body
+    assert "revision_source" not in body
+
+
+def test_request_builds_full_url_with_path_prefix():
+    """base_url with a path prefix (/api-host) must not be dropped when paths start with /."""
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert str(req.url) == "https://smith.example.com/api-host/v2/deployments"
+        return httpx.Response(200, json={"ok": True})
+
+    c = HostBackendClient("https://smith.example.com/api-host", "key")
+    c._client = httpx.Client(
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "key", "Accept": "application/json"},
+        timeout=30,
+    )
+    result = c._request("GET", "/v2/deployments")
     assert result == {"ok": True}
 
 
