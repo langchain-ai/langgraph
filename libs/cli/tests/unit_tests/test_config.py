@@ -1403,6 +1403,19 @@ def test_config_to_docker_uv_lock():
             "COPY --from=uv-workspace-root uv.lock /tmp/uv_export/project/uv.lock"
             in docker
         )
+        workspace_pyprojects = [
+            "apps/agent/pyproject.toml",
+            "libs/extra/pyproject.toml",
+            "libs/shared/pyproject.toml",
+        ]
+        export_instruction = "RUN uv export --package agent"
+        for pyproject_path in workspace_pyprojects:
+            copy_instruction = (
+                "COPY --from=uv-workspace-root "
+                f"{pyproject_path} /tmp/uv_export/project/{pyproject_path}"
+            )
+            assert copy_instruction in docker
+            assert docker.index(copy_instruction) < docker.index(export_instruction)
         assert additional_contexts == {"uv-workspace-root": str(project_root.resolve())}
 
         assert (

@@ -970,6 +970,22 @@ def python_config_to_docker_uv_lock(
             f"{uv_export_project_dir}/uv.lock",
         )
     )
+    for package_root in sorted(
+        plan.all_workspace_roots,
+        key=lambda root: root.as_posix(),
+    ):
+        if package_root == plan.project_root:
+            continue
+        package_relative_path = pathlib.PurePosixPath(
+            package_root.relative_to(plan.project_root).as_posix()
+        )
+        package_pyproject_path = package_relative_path / "pyproject.toml"
+        docker_plan.add_raw(
+            copy_from_project_root(
+                package_pyproject_path,
+                f"{uv_export_project_dir}/{package_pyproject_path.as_posix()}",
+            )
+        )
     docker_plan.add_instruction("WORKDIR", uv_export_project_dir)
     docker_plan.add_instruction(
         "RUN",
