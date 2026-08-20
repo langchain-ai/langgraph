@@ -115,12 +115,35 @@ async def test_delete_thread_nonexistent_noop(
     await saver.adelete_thread(str(uuid4()))
 
 
+async def test_delete_thread_blocks_late_writes(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """Late checkpoint and write inserts must not recreate a deleted thread."""
+    tid = str(uuid4())
+    config = generate_config(tid)
+    checkpoint = generate_checkpoint()
+    stored = await saver.aput(config, checkpoint, generate_metadata(), {})
+
+    await saver.adelete_thread(tid)
+
+    await saver.aput(stored, generate_checkpoint(), generate_metadata(step=99), {})
+    await saver.aput_writes(stored, [("ch", "late-write")], str(uuid4()))
+
+    assert await saver.aget_tuple(generate_config(tid)) is None
+
+    results = []
+    async for item in saver.alist(generate_config(tid)):
+        results.append(item)
+    assert results == []
+
+
 ALL_DELETE_THREAD_TESTS = [
     test_delete_thread_removes_checkpoints,
     test_delete_thread_removes_writes,
     test_delete_thread_removes_all_namespaces,
     test_delete_thread_preserves_other_threads,
     test_delete_thread_nonexistent_noop,
+    test_delete_thread_blocks_late_writes,
 ]
 
 
