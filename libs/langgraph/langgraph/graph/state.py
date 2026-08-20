@@ -1823,8 +1823,25 @@ def _get_channels(
         )
 
     type_hints = get_type_hints(schema, include_extras=True)
+    
+    defaults = {}
+    if isclass(schema) and (issubclass(schema, BaseModel) or is_dataclass(schema)):
+        if issubclass(schema, BaseModel):
+            for name, field in schema.model_fields.items():
+                if field.default_factory is not None:
+                    defaults[name] = field.default_factory
+                elif field.default is not getattr(field, "default_factory", None) and field.default.__class__.__name__ != "PydanticUndefinedType":
+                    defaults[name] = lambda v=field.default: v
+        else:
+            import dataclasses
+            for field in dataclasses.fields(schema):
+                if field.default_factory is not dataclasses.MISSING:
+                    defaults[field.name] = field.default_factory
+                elif field.default is not dataclasses.MISSING:
+                    defaults[field.name] = lambda v=field.default: v
+
     all_keys = {
-        name: _get_channel(name, typ)
+        name: _get_channel(name, typ, default_factory=defaults.get(name))
         for name, typ in type_hints.items()
         if name != "__slots__"
     }
@@ -1837,18 +1854,18 @@ def _get_channels(
 
 @overload
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: Literal[False]
+    name: str, annotation: Any, *, allow_managed: Literal[False], default_factory: Callable[[], Any] | None = None
 ) -> BaseChannel: ...
 
 
 @overload
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: Literal[True] = True
+    name: str, annotation: Any, *, allow_managed: Literal[True] = True, default_factory: Callable[[], Any] | None = None
 ) -> BaseChannel | ManagedValueSpec: ...
 
 
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: bool = True
+    name: str, annotation: Any, *, allow_managed: bool = True, default_factory: Callable[[], Any] | None = None
 ) -> BaseChannel | ManagedValueSpec:
     # Strip out Required and NotRequired wrappers
     if hasattr(annotation, "__origin__") and annotation.__origin__ in (
@@ -1864,7 +1881,7 @@ def _get_channel(
     elif channel := _is_field_channel(annotation):
         channel.key = name
         return channel
-    elif channel := _is_field_binop(annotation):
+    elif channel := _is_field_binop(annotation, default_factory=default_factory):
         channel.key = name
         return channel
 
@@ -1901,7 +1918,7 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
     return None
 
 
-def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
+def _is_field_binop(typ: type[Any], default_factory: Callable[[], Any] | None = None) -> BinaryOperatorAggregate | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and callable(meta[-1]):
@@ -1914,7 +1931,7 @@ def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
                 )
                 == 2
             ):
-                return BinaryOperatorAggregate(typ, meta[-1])
+                return BinaryOperatorAggregate(typ, meta[-1], default_factory=default_factory)
             else:
                 raise ValueError(
                     f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"
