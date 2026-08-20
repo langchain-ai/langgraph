@@ -86,6 +86,10 @@ class AsyncBatchedBaseStore(BaseStore):
         *,
         refresh_ttl: bool | None = None,
     ) -> Item | None:
+        """Asynchronously retrieve a single item.
+
+        See `BaseStore.aget` for the full description of arguments and behavior.
+        """
         self._ensure_task()
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
@@ -111,6 +115,10 @@ class AsyncBatchedBaseStore(BaseStore):
         offset: int = 0,
         refresh_ttl: bool | None = None,
     ) -> list[SearchItem]:
+        """Asynchronously search for items within a namespace prefix.
+
+        See `BaseStore.asearch` for the full description of arguments and behavior.
+        """
         self._ensure_task()
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
@@ -137,6 +145,12 @@ class AsyncBatchedBaseStore(BaseStore):
         *,
         ttl: float | None | NotProvided = NOT_PROVIDED,
     ) -> None:
+        """Asynchronously store or update an item.
+
+        `value` must be a `dict`; a top-level `None` is reserved as the delete
+        signal (prefer `adelete`). See `BaseStore.aput` for the full description
+        of arguments and behavior.
+        """
         self._ensure_task()
         _validate_namespace(namespace)
         fut = self._loop.create_future()
@@ -155,6 +169,10 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
     ) -> None:
+        """Asynchronously delete an item.
+
+        See `BaseStore.adelete` for the full description of arguments and behavior.
+        """
         self._ensure_task()
         fut = self._loop.create_future()
         self._aqueue.put_nowait((fut, PutOp(namespace, key, None)))
@@ -169,6 +187,11 @@ class AsyncBatchedBaseStore(BaseStore):
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[str, ...]]:
+        """Asynchronously list and filter namespaces in the store.
+
+        Namespace matching is case-sensitive. See `BaseStore.alist_namespaces`
+        for the full description of arguments and behavior.
+        """
         self._ensure_task()
         fut = self._loop.create_future()
         match_conditions = []
@@ -188,6 +211,10 @@ class AsyncBatchedBaseStore(BaseStore):
 
     @_check_loop
     def batch(self, ops: Iterable[Op]) -> list[Result]:
+        """Execute multiple operations synchronously in a single batch.
+
+        See `BaseStore.batch` for the full description of arguments and behavior.
+        """
         return asyncio.run_coroutine_threadsafe(self.abatch(ops), self._loop).result()
 
     @_check_loop
@@ -198,6 +225,10 @@ class AsyncBatchedBaseStore(BaseStore):
         *,
         refresh_ttl: bool | None = None,
     ) -> Item | None:
+        """Retrieve a single item.
+
+        See `BaseStore.get` for the full description of arguments and behavior.
+        """
         return asyncio.run_coroutine_threadsafe(
             self.aget(namespace, key=key, refresh_ttl=refresh_ttl), self._loop
         ).result()
@@ -214,6 +245,10 @@ class AsyncBatchedBaseStore(BaseStore):
         offset: int = 0,
         refresh_ttl: bool | None = None,
     ) -> list[SearchItem]:
+        """Search for items within a namespace prefix.
+
+        See `BaseStore.search` for the full description of arguments and behavior.
+        """
         return asyncio.run_coroutine_threadsafe(
             self.asearch(
                 namespace_prefix,
@@ -236,6 +271,12 @@ class AsyncBatchedBaseStore(BaseStore):
         *,
         ttl: float | None | NotProvided = NOT_PROVIDED,
     ) -> None:
+        """Store or update an item.
+
+        `value` must be a `dict`; a top-level `None` is reserved as the delete
+        signal (prefer `delete`). See `BaseStore.put` for the full description of
+        arguments and behavior.
+        """
         _validate_namespace(namespace)
         asyncio.run_coroutine_threadsafe(
             self.aput(

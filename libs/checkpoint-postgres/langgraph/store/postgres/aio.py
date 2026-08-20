@@ -115,6 +115,20 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         If you provide a TTL configuration, you must explicitly call `start_ttl_sweeper()` to begin
         the background task that removes expired items. Call `stop_ttl_sweeper()` to properly
         clean up resources when you're done with the store.
+
+    Note:
+        The core data operations -- `put`/`aput`, `get`/`aget`, `search`/`asearch`,
+        `delete`/`adelete`, and `list_namespaces`/`alist_namespaces` -- are inherited
+        from `langgraph.store.base.BaseStore`, which is the canonical reference for
+        their arguments and behavior. (This is LangGraph's `BaseStore`, distinct from
+        `langchain_core.stores.BaseStore`.) Key semantics:
+
+        - `put`/`aput` `value` must be a `dict` of JSON-serializable data. `None` is
+            not a valid stored value: a top-level `None` is reserved as the delete
+            signal (prefer `delete`/`adelete`). To store a marker or "empty" entry,
+            use an empty dict (`{}`), not `None`.
+        - `list_namespaces`/`alist_namespaces` match `prefix`/`suffix` exactly and
+            case-sensitively; there is no case-insensitive matching option.
     """
 
     __slots__ = (
