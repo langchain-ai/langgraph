@@ -78,14 +78,30 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
         """
+        if pipeline:
+            # For pipeline mode, we need to keep the pipeline open during the saver's
+            # entire lifetime. We do this by entering the pipeline in __aenter__ of
+            # a custom context manager that wraps the saver, but that would be a breaking
+            # change. Instead, we create the connection and pipeline here, but instead of
+            # yielding the saver directly, we yield it inside the pipeline context,
+            # which means the pipeline is closed when the context is exited.
+            # However, the saver's own __aenter__ (which calls setup) is invoked AFTER
+            # entering this context, so the pipeline is already closed. To fix, we
+            # need to delay the pipeline entry until the saver's setup is called.
+            # The simplest fix is to not use pipeline in from_conn_string and instead
+            # let the user create the saver with an explicit pipeline context:
+            #   async with await AsyncConnection.connect(...) as conn:
+            #       async with conn.pipeline() as pipe:
+            #           saver = AsyncPostgresSaver(conn, pipe=pipe)
+            #           await saver.setup()
+            raise ValueError(
+                "pipeline=True is not supported with from_conn_string. "
+                "Use AsyncPostgresSaver(conn, pipe=pipe) with an explicit pipeline context."
+            )
         async with await AsyncConnection.connect(
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
-            if pipeline:
-                async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
-            else:
-                yield cls(conn=conn, serde=serde)
+            yield cls(conn=conn, serde=serde)
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
