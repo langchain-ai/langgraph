@@ -217,9 +217,20 @@ def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
                checkpoint -> 'channel_values' -> %s AS inline_1
         FROM checkpoints
         WHERE thread_id = %s AND checkpoint_ns = %s
+          AND checkpoint_id <= %s
           AND (%s::text IS NULL OR checkpoint_id < %s)
         ORDER BY checkpoint_id DESC
         LIMIT %s
+
+    The `checkpoint_id <= %s` bound is the walk's target. The walk follows
+    parent links from the target down to the nearest seed, so rows newer
+    than the target can never contribute — without the bound, a walk
+    targeting an old checkpoint first pages through the entire newer prefix
+    of the chain. Worse, when the target was not in the first page the walk
+    initialized its cursor to `None` ("target is the root") and silently
+    returned an empty history, so any target deeper than one page produced
+    a full-chain scan and a wrong (empty) result. The bound puts the target
+    on the first page by construction.
 
     A stored value for a channel lives in one of two places, because `put`
     splits them:
@@ -258,9 +269,9 @@ def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
     and uses safe identifiers).
 
     Caller must extend params with `[ch_0 x4, ch_1 x4, ..., thread_id, ns,
-    cursor, cursor, page_size]` when `paged=True` — four per channel: the
-    version lookup, the blob's channel, the version the blob must match, and the
-    inline lookup.
+    target_checkpoint_id, cursor, cursor, page_size]` when `paged=True` — four
+    per channel: the version lookup, the blob's channel, the version the blob
+    must match, and the inline lookup.
 
     When `paged=False`, the WHERE has no cursor predicate and there's no
     LIMIT/ORDER BY — kept as a non-public helper for tests/diagnostics.
@@ -284,6 +295,7 @@ def _build_delta_stage1_sql(channels: Sequence[str], *, paged: bool) -> str:
     )
     if paged:
         sql += (
+            " AND checkpoint_id <= %s"
             " AND (%s::text IS NULL OR checkpoint_id < %s)"
             " ORDER BY checkpoint_id DESC LIMIT %s"
         )

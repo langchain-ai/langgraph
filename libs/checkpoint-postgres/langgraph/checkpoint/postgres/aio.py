@@ -442,7 +442,14 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     # ver_i, blob channel, blob version, inline_i
                     stage1_params.extend([ch, ch, ch, ch])
                 stage1_params.extend(
-                    [thread_id, checkpoint_ns, cursor, cursor, _DELTA_PAGE_SIZE]
+                    [
+                        thread_id,
+                        checkpoint_ns,
+                        checkpoint_id,
+                        cursor,
+                        cursor,
+                        _DELTA_PAGE_SIZE,
+                    ]
                 )
                 await cur.execute(stage1_sql, stage1_params)
                 page = await cur.fetchall()
