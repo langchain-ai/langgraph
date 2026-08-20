@@ -1088,6 +1088,82 @@ def test_dockerfile_command_with_api_version_nodejs() -> None:
             assert "FROM langchain/langgraphjs-api:0.2.74-node20" in dockerfile
 
 
+def test_dockerfile_command_nodejs_monorepo_commands() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        root = pathlib.Path.cwd()
+        config_dir = root / "apps" / "agent"
+        graph_path = config_dir / "src" / "agent.ts"
+        graph_path.parent.mkdir(parents=True)
+        graph_path.touch()
+        (root / "package.json").write_text(
+            json.dumps({"packageManager": "pnpm@10.0.0"})
+        )
+        (root / "pnpm-lock.yaml").touch()
+        (root / "pnpm-workspace.yaml").write_text('packages:\n  - "apps/*"\n')
+        config_path = config_dir / "langgraph.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "node_version": "20",
+                    "graphs": {"agent": "src/agent.ts:graph"},
+                    "image_distro": "wolfi",
+                }
+            )
+        )
+        save_path = root / "Dockerfile"
+
+        result = runner.invoke(
+            cli,
+            [
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(config_path),
+                "--install-command",
+                "pnpm install --frozen-lockfile",
+                "--build-command",
+                "pnpm run build",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert save_path.exists()
+        dockerfile = save_path.read_text()
+        container_root = f"/deps/{root.name}"
+        assert f"ADD . {container_root}" in dockerfile
+        assert f"WORKDIR {container_root}" in dockerfile
+        assert "RUN pnpm install --frozen-lockfile" in dockerfile
+        assert f"WORKDIR {container_root}/apps/agent" in dockerfile
+        assert "RUN pnpm run build" in dockerfile
+
+
+def test_dockerfile_command_rejects_disallowed_nodejs_commands() -> None:
+    runner = CliRunner()
+    config_content = {
+        "node_version": "20",
+        "graphs": {"agent": "agent.js:graph"},
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        (temp_dir / "agent.js").touch()
+        for option in ("--install-command", "--build-command"):
+            result = runner.invoke(
+                cli,
+                [
+                    "dockerfile",
+                    str(temp_dir / "Dockerfile"),
+                    "--config",
+                    str(temp_dir / "config.json"),
+                    option,
+                    "npm install; echo bad",
+                ],
+            )
+            assert result.exit_code != 0
+            assert "contains disallowed characters or patterns" in result.output
+
+
 def test_build_command_with_api_version() -> None:
     """Test the 'build' command with --api-version flag."""
     runner = CliRunner()
