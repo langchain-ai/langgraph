@@ -650,7 +650,10 @@ def _create_msgpack_ext_hook(
                 # module, name, arg
                 return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
             except Exception:
-                return None
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
             try:
                 tup = ormsgpack.unpackb(
@@ -663,7 +666,10 @@ def _create_msgpack_ext_hook(
                 # module, name, args
                 return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
             except Exception:
-                return None
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
             try:
                 tup = ormsgpack.unpackb(
@@ -674,7 +680,10 @@ def _create_msgpack_ext_hook(
                 # module, name, kwargs
                 return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
             except Exception:
-                return None
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_METHOD_SINGLE_ARG:
             try:
                 tup = ormsgpack.unpackb(
@@ -687,7 +696,10 @@ def _create_msgpack_ext_hook(
                     getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
                 )(tup[2])
             except Exception:
-                return None
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_PYDANTIC_V1:
             try:
                 tup = ormsgpack.unpackb(
