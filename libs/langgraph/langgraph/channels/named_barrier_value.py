@@ -26,6 +26,9 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
     def __eq__(self, value: object) -> bool:
         return isinstance(value, NamedBarrierValue) and value.names == self.names
 
+    def __repr__(self) -> str:
+        return f"NamedBarrierValue(key={self.key!r}, names={self.names!r}, seen={self.seen!r})"
+
     @property
     def ValueType(self) -> type[Value]:
         """The type of the value stored in the channel."""
@@ -102,6 +105,9 @@ class NamedBarrierValueAfterFinish(
             isinstance(value, NamedBarrierValueAfterFinish)
             and value.names == self.names
         )
+
+    def __repr__(self) -> str:
+        return f"NamedBarrierValueAfterFinish(key={self.key!r}, names={self.names!r}, seen={self.seen!r}, finished={self.finished})"
 
     @property
     def ValueType(self) -> type[Value]:
