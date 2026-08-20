@@ -716,6 +716,43 @@ async def test_search_sorting(
         assert results[0].score > results[1].score
 
 
+async def test_no_pending_tasks_after_context_exit() -> None:
+    """Regression test for https://github.com/langchain-ai/langgraph/issues/6367.
+
+    AsyncPostgresStore.__aexit__ must cancel the background batch task so that
+    asyncio does not emit 'Task was destroyed but it is pending!' warnings.
+    """
+    from tests.conftest import DEFAULT_URI
+
+    database = f"test_{uuid.uuid4().hex[:16]}"
+    uri_parts = DEFAULT_URI.split("/")
+    uri_base = "/".join(uri_parts[:-1])
+    query_params = ""
+    if "?" in uri_parts[-1]:
+        db_name, query_params = uri_parts[-1].split("?", 1)
+        query_params = "?" + query_params
+    conn_string = f"{uri_base}/{database}{query_params}"
+
+    async with await AsyncConnection.connect(DEFAULT_URI, autocommit=True) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresStore.from_conn_string(conn_string) as store:
+            await store.setup()
+            await store.aput(("ns",), "k", {"v": 1})
+            _ = await store.aget(("ns",), "k")
+            batch_task = store._task
+
+        # After exiting the context manager the background task must be done
+        assert batch_task is not None
+        assert batch_task.done(), (
+            "Background batch task is still pending after __aexit__ — "
+            "this would cause 'Task was destroyed but it is pending!' warnings"
+        )
+    finally:
+        async with await AsyncConnection.connect(DEFAULT_URI, autocommit=True) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
 async def test_store_ttl(store):
     # Assumes a TTL of 1 minute = 60 seconds
     ns = ("foo",)
