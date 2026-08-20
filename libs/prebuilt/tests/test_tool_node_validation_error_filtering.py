@@ -468,3 +468,59 @@ async def test_sync_tool_validation_error_filtering() -> None:
     assert tool_message.status == "error"
     assert "value" in tool_message.content
     assert "state" not in tool_message.content.lower()
+
+
+async def test_filter_custom_injected_tool_arg_subclass_validation_errors() -> None:
+    """Test that validation errors for custom InjectedToolArg subclasses are filtered.
+
+    Custom subclasses of InjectedToolArg (e.g., InjectedAuth) are system-injected
+    and not controlled by the LLM. Validation errors for these parameters should
+    be excluded from error messages, just like built-in injected args.
+    """
+    from langchain_core.tools import InjectedToolArg
+
+    class InjectedAuth(InjectedToolArg):
+        pass
+
+    @dec_tool
+    def my_tool(
+        value: int,
+        auth: Annotated[dict, InjectedAuth()],
+    ) -> str:
+        """Tool with custom injected auth.
+
+        Args:
+            value: An integer value.
+            auth: Auth context (injected).
+        """
+        return f"value={value}, role={auth.get('role')}"
+
+    tool_node = ToolNode([my_tool])
+
+    # Call with invalid 'value' argument
+    result = await tool_node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "my_tool",
+                            "args": {"value": "not_an_int"},
+                            "id": "call_1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][0]
+    assert tool_message.status == "error"
+    assert tool_message.tool_call_id == "call_1"
+
+    # Error should mention 'value' but NOT 'auth' (custom injected arg)
+    assert "value" in tool_message.content
+    assert "auth" not in tool_message.content.lower()
