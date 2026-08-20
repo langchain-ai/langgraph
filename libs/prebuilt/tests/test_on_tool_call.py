@@ -1,5 +1,6 @@
 """Unit tests for tool call interceptor in ToolNode."""
 
+import functools
 from collections.abc import Callable
 from unittest.mock import Mock
 
@@ -1331,14 +1332,13 @@ def _config_with_channel_read(
     learn channel names. The stub matches the shape: partial whose second and
     third positional args are `channels` and `managed` mappings.
     """
-    import functools
 
     channels_stub = {k: None for k in channel_values}
     managed_stub: dict[str, object] = {}
 
     # Shape matches pregel's real partial:
     # functools.partial(local_read, scratchpad, channels, managed, task)
-    def _read(scratchpad, channels, managed, task, select, fresh):  # noqa: ARG001
+    def _read(scratchpad, channels, managed, task, select, fresh):
         if isinstance(select, str):
             return channel_values[select]
         return {k: channel_values[k] for k in select if k in channel_values}

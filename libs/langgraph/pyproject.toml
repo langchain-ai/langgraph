@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "1.2.10"
+version = "1.2.11"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.10"
@@ -89,8 +89,12 @@ langgraph-sdk = { path = "../sdk-py", editable = true }
 langgraph-cli = { path = "../cli", editable = true }
 
 [tool.ruff]
-lint.select = [ "E", "F", "I", "TID251", "UP" ]
+lint.select = [ "E", "F", "I", "PLC0415", "RUF100", "TID251", "UP" ]
 lint.ignore = [ "E501" ]
+# PLC0415 (import-outside-top-level) is enforced in tests only. Library code
+# still has deferred imports that have not been reviewed, so it stays exempt
+# for now.
+lint.per-file-ignores = { "langgraph/**" = ["PLC0415"] }
 line-length = 88
 indent-width = 4
 extend-include = ["*.ipynb"]

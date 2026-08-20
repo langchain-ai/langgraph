@@ -3,8 +3,10 @@ legacy v1 chunk filtering, and end-to-end via stream_events(version="v3") / astr
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
@@ -13,11 +15,13 @@ from langchain_core.language_models.chat_model_stream import (
     ChatModelStream,
 )
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import TypedDict
 
 from langgraph.constants import END, START
 from langgraph.graph import MessagesState, StateGraph
+from langgraph.pregel._messages import StreamMessagesHandlerV2
 from langgraph.stream._mux import StreamMux
 from langgraph.stream.run_stream import GraphRunStream
 from langgraph.stream.stream_channel import StreamChannel
@@ -607,7 +611,6 @@ class TestEndToEnd:
     @pytest.mark.anyio
     async def test_nested_async_iteration_yields_text_deltas(self) -> None:
         """Inner stream.text drives the shared graph pump via the async pump binding."""
-        import asyncio
 
         model = GenericFakeChatModel(messages=iter(["hello world"]))
 
@@ -870,11 +873,6 @@ class TestDirectMessagesModeStaysV1:
 class TestStreamMessagesHandlerV2Unit:
     def test_on_llm_new_token_is_noop(self) -> None:
         """v2 handler must not emit v1 chunks even when on_llm_new_token fires."""
-        from uuid import uuid4
-
-        from langchain_core.outputs import ChatGenerationChunk
-
-        from langgraph.pregel._messages import StreamMessagesHandlerV2
 
         emitted: list[Any] = []
         handler = StreamMessagesHandlerV2(emitted.append, subgraphs=False)
@@ -890,9 +888,6 @@ class TestStreamMessagesHandlerV2Unit:
         assert emitted == []
 
     def test_on_chain_end_does_not_emit_tool_messages(self) -> None:
-        from uuid import uuid4
-
-        from langgraph.pregel._messages import StreamMessagesHandlerV2
 
         emitted: list[Any] = []
         handler = StreamMessagesHandlerV2(emitted.append, subgraphs=False)
@@ -909,11 +904,6 @@ class TestStreamMessagesHandlerV2Unit:
     def test_on_llm_end_dedupes_when_final_message_id_differs(self) -> None:
         """A streamed v2 message should not be emitted again from the final
         AIMessage fallback when its final id does not match `message-start`."""
-        from uuid import uuid4
-
-        from langchain_core.outputs import ChatGeneration, LLMResult
-
-        from langgraph.pregel._messages import StreamMessagesHandlerV2
 
         emitted: list[Any] = []
         handler = StreamMessagesHandlerV2(emitted.append, subgraphs=False)

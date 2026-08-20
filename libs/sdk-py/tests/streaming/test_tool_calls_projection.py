@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
+from collections.abc import AsyncGenerator
 
 import httpx
 import pytest
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._async.stream import ToolCallHandle
 from langgraph_sdk._async.threads import ThreadsClient
 from streaming._events import (
     lifecycle_completed_event,
@@ -214,7 +217,6 @@ async def test_tool_calls_explicit_aclose_does_not_block_1s():
             await thread.run.start(input={})
             # _tool_calls_iter() is an AsyncGenerator; cast so the type checker
             # knows aclose() is available without a bare AsyncIterator protocol.
-            from collections.abc import AsyncGenerator
 
             gen: AsyncGenerator = thread.tool_calls._tool_calls_iter()
             _call = await gen.__anext__()  # receive the one tool-started handle
@@ -230,11 +232,9 @@ def test_tool_call_handle_deltas_queue_is_bounded():
     Unbounded queues allow producers to enqueue indefinitely, causing memory
     growth when consumers are slow.
     """
-    import asyncio
 
     # We need a running loop to create the Future inside ToolCallHandle.__init__.
     async def _make() -> None:
-        from langgraph_sdk._async.stream import ToolCallHandle
 
         handle_default = ToolCallHandle(tool_call_id="tc1", name="foo")
         assert handle_default._deltas.maxsize > 0, (
@@ -255,10 +255,8 @@ def test_tool_call_handle_deltas_single_consumer_guard():
     The property must raise before returning the iterator so the caller
     sees the error even without iterating.
     """
-    import asyncio
 
     async def _run() -> None:
-        from langgraph_sdk._async.stream import ToolCallHandle
 
         handle = ToolCallHandle(tool_call_id="tc1", name="foo")
 

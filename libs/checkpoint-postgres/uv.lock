@@ -159,7 +159,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -276,7 +276,7 @@ wheels = [
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "4.1.1"
+version = "4.2.0"
 source = { editable = "../checkpoint" }
 dependencies = [
     { name = "langchain-core" },
@@ -323,8 +323,35 @@ test = [
 ]
 
 [[package]]
+name = "langgraph-checkpoint-conformance"
+version = "0.0.2"
+source = { editable = "../checkpoint-conformance" }
+dependencies = [
+    { name = "langgraph-checkpoint" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "langgraph-checkpoint", editable = "../checkpoint" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+lint = [
+    { name = "ruff" },
+    { name = "ty" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[[package]]
 name = "langgraph-checkpoint-postgres"
-version = "3.1.1"
+version = "3.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "langgraph-checkpoint" },
@@ -338,6 +365,7 @@ dev = [
     { name = "anyio" },
     { name = "codespell" },
     { name = "langgraph-checkpoint" },
+    { name = "langgraph-checkpoint-conformance" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -354,6 +382,7 @@ lint = [
 test = [
     { name = "anyio" },
     { name = "langgraph-checkpoint" },
+    { name = "langgraph-checkpoint-conformance" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -374,6 +403,7 @@ dev = [
     { name = "anyio" },
     { name = "codespell" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "psycopg", extras = ["binary"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -390,6 +420,7 @@ lint = [
 test = [
     { name = "anyio" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "psycopg", extras = ["binary"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },

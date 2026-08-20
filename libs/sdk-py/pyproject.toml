@@ -36,7 +36,7 @@ test = [
     "pytest-watch",
 ]
 lint = [
-    "ruff==0.15.20",
+    "ruff==0.16.1",
     "codespell",
     "ty",
     "starlette",
@@ -80,6 +80,7 @@ select = [
   "SIM",    # flake8-simplify (code simplification)
   "RUF",    # ruff-specific rules
   "S101",   # flake8-bandit: use of assert
+  "PLC0415", # import-outside-top-level
 ]
 ignore = [
   "E501",   # line too long (handled by formatter)
@@ -87,7 +88,10 @@ ignore = [
   "B904",   # raise without from inside except (sometimes intentional)
   "SIM102", # nested if statements (sometimes clearer)
 ]
-per-file-ignores = { "tests/**" = ["S101", "B017"], "integration/**" = ["S101", "T20", "B017", "ARG001", "ARG002"] }
+# PLC0415 (import-outside-top-level) is enforced in tests only. Library code
+# still has deferred imports that have not been reviewed, so it stays exempt
+# for now.
+per-file-ignores = { "tests/**" = ["S101", "B017"], "integration/**" = ["S101", "T20", "B017", "ARG001", "ARG002", "PLC0415"], "langgraph_sdk/**" = ["PLC0415"] }
 
 [tool.ty.src]
 # The `integration/` graphs run inside the docker image (with `deepagents`

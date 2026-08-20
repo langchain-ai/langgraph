@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-postgres"
-version = "3.1.1"
+version = "3.1.2"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 authors = []
 requires-python = ">=3.10"
@@ -32,6 +32,7 @@ test = [
   "pytest-mock",
   "psycopg[binary]",
   "langgraph-checkpoint",
+  "langgraph-checkpoint-conformance",
   "pytest-watcher",
 ]
 lint = [
@@ -49,6 +50,7 @@ default-groups = ['dev']
 
 [tool.uv.sources]
 langgraph-checkpoint = { path = "../checkpoint", editable = true }
+langgraph-checkpoint-conformance = { path = "../checkpoint-conformance", editable = true }
 
 [tool.hatch.build.targets.wheel]
 include = ["langgraph"]
@@ -64,6 +66,8 @@ lint.select = [
   "UP", # pyupgrade
   "B",  # flake8-bugbear
   "I",  # isort
+  "PLC0415",  # import-outside-top-level
+  "RUF100",  # unused noqa directive
   "UP", # pyupgrade
 ]
 lint.ignore = ["E501", "B008"]
