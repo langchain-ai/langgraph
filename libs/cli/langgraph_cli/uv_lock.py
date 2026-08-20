@@ -880,6 +880,7 @@ def python_config_to_docker_uv_lock(
         _get_node_pm_install_cmd,
         _get_pip_cleanup_lines,
         _image_supports_uv,
+        _validate_git_http_url_userinfo_files,
         docker_tag,
     )
 
@@ -890,11 +891,20 @@ def python_config_to_docker_uv_lock(
         )
 
     config_root = config_path.parent.resolve()
+    source_root = config["source"].get("root", ".")
+    project_root = (config_root / source_root).resolve()
+    _validate_git_http_url_userinfo_files(
+        [project_root / "pyproject.toml", project_root / "uv.lock"]
+    )
+
     install_cmd = "uv pip install --system"
     _, global_reqs_pip_install, pip_config_file_str = _build_python_install_commands(
         config, install_cmd
     )
     plan = _plan_uv_lock_workspace(config_path, config)
+    _validate_git_http_url_userinfo_files(
+        package.pyproject_path for package in plan.install_order
+    )
 
     _update_uv_lock_graph_paths(config_path, config, plan)
     for section, key in [

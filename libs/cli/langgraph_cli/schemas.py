@@ -650,7 +650,8 @@ class Config(TypedDict, total=False):
 
     pip_config_file: str | None
     """Optional. Path to a pip config file (e.g., "/etc/pip.conf" or "pip.ini") for controlling
-    package installation (custom indices, credentials, etc.).
+    package installation (custom indices, timeouts, etc.). The file is copied into the
+    generated image, so it must not contain credentials or other secrets.
 
     Only relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.
     """
@@ -689,6 +690,9 @@ class Config(TypedDict, total=False):
       - "." or "./src" if you have a local Python package
       - str (aka "anthropic") for a PyPI package
       - "git+https://github.com/org/repo.git@main" for a Git-based package
+    Git HTTP URLs must not contain userinfo such as a username or token. For private
+    dependencies, provide short-lived credentials through the build environment's
+    secret-backed Git credential helper.
     Defaults to an empty list, meaning no additional packages installed beyond your base environment.
 
     This field is not supported when `source.kind` is `uv`.
