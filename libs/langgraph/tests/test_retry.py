@@ -11,7 +11,9 @@ from typing import Annotated, Any
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
+import requests
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, BaseCallbackHandler
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage
@@ -63,6 +65,7 @@ from langgraph.types import (
     RetryPolicy,
     Send,
     TimeoutPolicy,
+    interrupt,
 )
 
 NEEDS_CONTEXTVARS = pytest.mark.skipif(
@@ -171,8 +174,6 @@ def test_checkpoint_ns_for_parent_command() -> None:
 
 def test_should_retry_default_retry_on():
     """Test the default retry_on function."""
-    import httpx
-    import requests
 
     # Create a RetryPolicy with default_retry_on
     policy = RetryPolicy()
@@ -2198,7 +2199,6 @@ def test_graph_error_handler_does_not_swallow_interrupt_concurrent():
     """When a graph error handler is configured and a node calls interrupt()
     concurrently with other nodes, the interrupt must still be raised — not
     silently swallowed."""
-    from langgraph.types import interrupt
 
     class State(TypedDict):
         foo: str
@@ -2586,8 +2586,6 @@ async def test_set_node_defaults_timeout():
         .add_edge(START, "slow")
         .compile()
     )
-
-    from langgraph.errors import NodeTimeoutError
 
     with pytest.raises(NodeTimeoutError):
         await graph.ainvoke({"foo": ""})

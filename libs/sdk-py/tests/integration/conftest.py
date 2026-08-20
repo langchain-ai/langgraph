@@ -18,6 +18,11 @@ from collections.abc import AsyncIterator, Iterator
 import httpx
 import pytest
 
+from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._async.threads import ThreadsClient
+from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.threads import SyncThreadsClient
+
 BASE_URL = os.environ.get("LANGGRAPH_INTEGRATION_URL", "http://localhost:2024")
 ASSISTANT_ID = "agent"
 TOOLS_ASSISTANT_ID = "tools_agent"
@@ -47,8 +52,6 @@ def _require_running_api() -> None:
 @pytest.fixture
 async def async_threads() -> AsyncIterator[tuple[object, httpx.AsyncClient]]:
     """Build an async ThreadsClient. Yields `(threads, raw_httpx)` so tests can close raw."""
-    from langgraph_sdk._async.http import HttpClient
-    from langgraph_sdk._async.threads import ThreadsClient
 
     raw = httpx.AsyncClient(base_url=BASE_URL, timeout=30.0)
     try:
@@ -60,8 +63,6 @@ async def async_threads() -> AsyncIterator[tuple[object, httpx.AsyncClient]]:
 @pytest.fixture
 def sync_threads() -> Iterator[tuple[object, httpx.Client]]:
     """Build a sync ThreadsClient. Yields `(threads, raw_httpx)` so tests can close raw."""
-    from langgraph_sdk._sync.http import SyncHttpClient
-    from langgraph_sdk._sync.threads import SyncThreadsClient
 
     raw = httpx.Client(base_url=BASE_URL, timeout=30.0)
     try:

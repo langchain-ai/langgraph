@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any
 
@@ -523,7 +524,6 @@ class TestBaseFallbackGetChannelWrites:
         `threading.local()` guard would let whichever task set it first
         short-circuit the other to `writes=[]`.
         """
-        import asyncio
 
         saver, thread_id, ns = self._build_saver_with_chain()
 
@@ -577,9 +577,19 @@ class TestPreDeltaBlobTerminator:
     """
 
     def _build_mixed_thread(self) -> tuple[InMemorySaver, str, str, str, str]:
-        """Three-checkpoint chain: cp1 (pre-delta, blob=[A]), cp2 (delta,
-        write=B), cp3 (delta, write=C). Reconstructing at cp3 must yield
-        seed=[A] + writes=[B, C].
+        """Four-checkpoint chain spanning the migration boundary:
+
+        * `cp0` — pre-delta ancestor OLDER than the seed. Its write
+          (`OLDER-WRITE`) is already folded into `cp1`'s stored value, so the
+          walk must terminate at `cp1` and never reach it.
+        * `cp1` — pre-delta, blob `["A"]`. That value is the state ENTERING
+          `cp1`; the write stored under `cp1` (`PRE-DELTA-WRITE`) is what
+          produced `cp2` and is NOT subsumed by the blob.
+        * `cp2` — delta-era, no stored value, write `B`.
+        * `cp3` — target, delta-era, write `PENDING-AT-TARGET`.
+
+        Reconstructing at `cp3` must yield seed `["A"]` plus writes
+        `["PRE-DELTA-WRITE", "B"]`.
 
         Returns `(saver, thread_id, ns, channel, cp3_id)`.
         """
@@ -587,16 +597,21 @@ class TestPreDeltaBlobTerminator:
         serde = JsonPlusSerializer()
         thread_id, ns, channel = "t1", "", "messages"
 
+        v0 = "00000000000000000000000000000000.0"
         v1 = "00000000000000000000000000000001.0"
         v2 = "00000000000000000000000000000002.0"
         v3 = "00000000000000000000000000000003.0"
 
-        # Pre-delta: cp1 stored a real blob for the channel.
+        # Pre-delta: cp0 and cp1 stored real blobs for the channel.
+        saver.blobs[(thread_id, ns, channel, v0)] = serde.dumps_typed([])
         saver.blobs[(thread_id, ns, channel, v1)] = serde.dumps_typed(["A"])
         # Delta-era: cp2 and cp3 store "empty"; real writes in checkpoint_writes.
         saver.blobs[(thread_id, ns, channel, v2)] = ("empty", b"")
         saver.blobs[(thread_id, ns, channel, v3)] = ("empty", b"")
 
+        cp0 = empty_checkpoint()
+        cp0["id"] = "cp0"
+        cp0["channel_versions"][channel] = v0
         cp1 = empty_checkpoint()
         cp1["id"] = "cp1"
         cp1["channel_versions"][channel] = v1
@@ -608,15 +623,23 @@ class TestPreDeltaBlobTerminator:
         cp3["channel_versions"][channel] = v3
 
         saver.storage[thread_id][ns] = {
-            "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), None),
+            "cp0": (serde.dumps_typed(cp0), serde.dumps_typed({}), None),
+            "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), "cp0"),
             "cp2": (serde.dumps_typed(cp2), serde.dumps_typed({}), "cp1"),
             "cp3": (serde.dumps_typed(cp3), serde.dumps_typed({}), "cp2"),
         }
-        # Write under cp1 would be from the pre-delta era and MUST be ignored
-        # (the blob already captures it). We add one and assert it is not
-        # folded into the reconstructed result.
-        saver.writes[(thread_id, ns, "cp1")][("task0", 0)] = (
+        # Write under cp0 is older than the seed — cp1's blob already folded
+        # it in, and the terminator must stop before reaching it.
+        saver.writes[(thread_id, ns, "cp0")][("task0", 0)] = (
             "task0",
+            channel,
+            serde.dumps_typed("OLDER-WRITE"),
+            "",
+        )
+        # Write under cp1 postdates cp1's blob (it is what produced cp2, which
+        # stores no value of its own) and MUST be replayed.
+        saver.writes[(thread_id, ns, "cp1")][("task1", 0)] = (
+            "task1",
             channel,
             serde.dumps_typed("PRE-DELTA-WRITE"),
             "",
@@ -651,15 +674,19 @@ class TestPreDeltaBlobTerminator:
 
         # Seed came from the pre-delta blob at cp1.
         assert result["seed"] == ["A"]
-        # Delta-era writes from cp2 replay through the reducer on top of seed.
-        # cp3 is the target — its own write is pending for the NEXT step and
-        # must be excluded.
+        # The seed ancestor's own write and the delta-era write from cp2 both
+        # replay through the reducer on top of the seed, oldest first. cp3 is
+        # the target — its own write is pending for the NEXT step and must be
+        # excluded.
         values = [v for _, _, v in result["writes"]]
-        assert values == ["B"]
+        assert values == ["PRE-DELTA-WRITE", "B"]
 
-    def test_pre_delta_blob_terminates_walk_before_older_writes(self) -> None:
-        """Writes stored at the pre-delta ancestor itself must not be replayed
-        (the blob subsumes them)."""
+    def test_seed_bounds_walk_without_dropping_its_own_writes(self) -> None:
+        """The seed terminator bounds the walk: writes at ancestors OLDER than
+        the seed are already folded into the seed value and must not be
+        replayed. The seed ancestor's own write is not one of them — it
+        postdates the stored value and produced the next checkpoint.
+        """
         saver, thread_id, ns, channel, target = self._build_mixed_thread()
         config: RunnableConfig = {
             "configurable": {
@@ -674,7 +701,9 @@ class TestPreDeltaBlobTerminator:
         ]
 
         values = [v for _, _, v in result["writes"]]
-        # The pre-delta write under cp1 must not appear (the blob subsumes it).
-        assert "PRE-DELTA-WRITE" not in values
+        # Older than the seed — subsumed by cp1's blob, so the walk stops first.
+        assert "OLDER-WRITE" not in values
+        # Stored AT the seed ancestor — not subsumed, so it must be replayed.
+        assert "PRE-DELTA-WRITE" in values
         # And the pending write at the target is never folded in.
         assert "PENDING-AT-TARGET" not in values

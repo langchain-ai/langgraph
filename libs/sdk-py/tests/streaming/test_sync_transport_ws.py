@@ -6,8 +6,10 @@ import httpx
 import orjson
 import pytest
 
+from langgraph_sdk.stream.sync_controller import SyncStreamController
 from langgraph_sdk.stream.transport.sync_ws import SyncProtocolWebSocketTransport
 from streaming._events import values_event
+from streaming._sync_fake_server import SyncFakeServer
 
 
 class _FakeSyncWebSocket:
@@ -102,7 +104,6 @@ def test_sync_websocket_records_post_ready_error():
 
 
 def test_sync_websocket_send_command_uses_http_commands_endpoint():
-    from streaming._sync_fake_server import SyncFakeServer
 
     fake = SyncFakeServer()
     with httpx.Client(transport=fake.transport, base_url="http://test") as client:
@@ -124,7 +125,6 @@ def test_sync_websocket_open_event_stream_raises_when_closed():
 
 
 def test_sync_websocket_transport_feeds_sync_stream_controller():
-    from langgraph_sdk.stream.sync_controller import SyncStreamController
 
     socket = _FakeSyncWebSocket(
         [
@@ -164,7 +164,6 @@ def test_sync_websocket_transport_feeds_sync_stream_controller():
 
 
 def test_sync_websocket_controller_reconnects_with_since_after_drop():
-    from langgraph_sdk.stream.sync_controller import SyncStreamController
 
     first_socket = _FakeSyncWebSocket(
         [values_event(seq=1, values={"counter": 1})],

@@ -77,7 +77,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         >>> result = graph.invoke(3, config)
         >>> graph.get_state(config)
         StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '0c62ca34-ac19-445d-bbb0-5b4984975b2a'}}, parent_config=None)
-    """  # noqa
+    """
 
     conn: sqlite3.Connection
     is_setup: bool
@@ -222,7 +222,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             >>> checkpoint_tuple = memory.get_tuple(config)
             >>> print(checkpoint_tuple)
             CheckpointTuple(...)
-        """  # noqa
+        """
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         with self.cursor(transaction=False) as cur:
             # find the latest checkpoint for the thread_id

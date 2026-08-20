@@ -11,21 +11,22 @@ from __future__ import annotations
 
 import pytest
 
+from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._async.runs import RunsClient
+from langgraph_sdk._sync.http import SyncHttpClient
+from langgraph_sdk._sync.runs import SyncRunsClient
+
 from .conftest import ASSISTANT_ID
 
 pytestmark = pytest.mark.integration
 
 
 def _async_runs(raw):
-    from langgraph_sdk._async.http import HttpClient
-    from langgraph_sdk._async.runs import RunsClient
 
     return RunsClient(HttpClient(raw))
 
 
 def _sync_runs(raw):
-    from langgraph_sdk._sync.http import SyncHttpClient
-    from langgraph_sdk._sync.runs import SyncRunsClient
 
     return SyncRunsClient(SyncHttpClient(raw))
 

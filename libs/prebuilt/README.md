@@ -37,6 +37,7 @@ uv add langchain-anthropic
 from langchain_anthropic import ChatAnthropic
 from langgraph.prebuilt import create_react_agent
 
+
 # Define the tools for the agent to use
 def search(query: str):
     """Call to surf the web."""
@@ -44,6 +45,7 @@ def search(query: str):
     if "sf" in query.lower() or "san francisco" in query.lower():
         return "It's 60 degrees and foggy."
     return "It's 90 degrees and sunny."
+
 
 tools = [search]
 model = ChatAnthropic(model="claude-3-7-sonnet-latest")
@@ -65,6 +67,7 @@ app.invoke(
 from langgraph.prebuilt import ToolNode
 from langchain_core.messages import AIMessage
 
+
 def search(query: str):
     """Call to surf the web."""
     # This is a placeholder, but don't tell the LLM that...
@@ -72,8 +75,11 @@ def search(query: str):
         return "It's 60 degrees and foggy."
     return "It's 90 degrees and sunny."
 
+
 tool_node = ToolNode([search])
-tool_calls = [{"name": "search", "args": {"query": "what is the weather in sf"}, "id": "1"}]
+tool_calls = [
+    {"name": "search", "args": {"query": "what is the weather in sf"}, "id": "1"}
+]
 ai_message = AIMessage(content="", tool_calls=tool_calls)
 # execute tool call
 tool_node.invoke({"messages": [ai_message]})
@@ -98,10 +104,17 @@ class SelectNumber(BaseModel):
             raise ValueError("Only 37 is allowed")
         return v
 
+
 validation_node = ValidationNode([SelectNumber])
-validation_node.invoke({
-    "messages": [AIMessage("", tool_calls=[{"name": "SelectNumber", "args": {"a": 42}, "id": "1"}])]
-})
+validation_node.invoke(
+    {
+        "messages": [
+            AIMessage(
+                "", tool_calls=[{"name": "SelectNumber", "args": {"a": 42}, "id": "1"}]
+            )
+        ]
+    }
+)
 ```
 
 ## Agent Inbox
