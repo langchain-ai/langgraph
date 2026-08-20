@@ -71,7 +71,7 @@ def test_compose_with_custom_db_and_healthcheck():
             test: python /api/healthcheck.py
             interval: 60s
             start_interval: 1s
-            start_period: 10s"""
+            start_period: 60s"""
     assert clean_empty_lines(actual_compose_str) == expected_compose_str
 
 

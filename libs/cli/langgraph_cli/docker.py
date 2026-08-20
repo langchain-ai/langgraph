@@ -258,7 +258,7 @@ def compose_as_dict(
             "test": "python /api/healthcheck.py",
             "interval": "60s",
             "start_interval": "1s",
-            "start_period": "10s",
+            "start_period": "60s",
         }
 
     # Final compose dictionary with volumes included if needed

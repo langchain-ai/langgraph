@@ -122,7 +122,7 @@ services:
             test: python /api/healthcheck.py
             interval: 60s
             start_interval: 1s
-            start_period: 10s
+            start_period: 60s
         
         pull_policy: build
         build:
@@ -232,7 +232,7 @@ services:
             test: python /api/healthcheck.py
             interval: 60s
             start_interval: 1s
-            start_period: 10s
+            start_period: 60s
         
         
         develop:
