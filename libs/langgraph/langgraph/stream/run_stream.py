@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from types import MappingProxyType, TracebackType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from langchain_core._api import beta
 
@@ -33,6 +33,21 @@ async def _adrive_until_done(pump: Callable[[], Awaitable[bool]]) -> None:
         pass
 
 
+def _missing_projection(run: object, name: str) -> NoReturn:
+    """Raise for a projection name that was never registered.
+
+    Reads the mux out of `__dict__` because `__getattr__` also fires before
+    `__init__` assigns `_mux` and for dunder probes, where `run._mux` would
+    recurse until the stack is exhausted.
+    """
+    mux = run.__dict__.get("_mux")
+    registered = sorted(mux.native_keys) if mux is not None else []
+    raise AttributeError(
+        f"{type(run).__name__!r} object has no attribute {name!r} "
+        f"(registered projections: {', '.join(registered) or 'none'})"
+    )
+
+
 @beta(message="The v3 streaming protocol on Pregel is experimental.")
 class GraphRunStream:
     """Sync run stream with caller-driven pumping.
@@ -54,15 +69,32 @@ class GraphRunStream:
         experimental and may change.
     """
 
-    # Native projections always registered by `stream_events(version="v3")`.
-    # Attached dynamically by the `setattr` loop in `__init__`; declared here
-    # so type checkers see them. Opt-in native projections (`updates`,
-    # `custom`, `checkpoints`, `debug`, `tasks`) are only present when their
-    # transformer is registered, so they are reached via `extensions[...]`.
+    # Native projections, attached dynamically by the `setattr` loop in
+    # `__init__` and declared here so type checkers see them.
+    #
+    # Always registered by `stream_events(version="v3")`:
     values: StreamChannel[dict[str, Any]]
     messages: StreamChannel[ChatModelStream]
     lifecycle: StreamChannel[LifecyclePayload]
     subgraphs: StreamChannel[SubgraphRunStream]
+    # Registered on demand via `compile(transformers=...)` or
+    # `stream_events(transformers=...)`; reading one whose transformer was not
+    # registered raises AttributeError. Projections contributed by transformers
+    # outside this package are covered by `__getattr__` instead.
+    updates: StreamChannel[dict[str, Any]]
+    custom: StreamChannel[Any]
+    checkpoints: StreamChannel[dict[str, Any]]
+    debug: StreamChannel[dict[str, Any]]
+    tasks: StreamChannel[dict[str, Any]]
+
+    def __getattr__(self, name: str) -> StreamChannel[Any]:
+        """Type the projections of transformers declared outside this package.
+
+        Projection names come from a registry, so no annotation here can name
+        them all. The cost is that a misspelling type-checks too, and fails at
+        runtime instead.
+        """
+        _missing_projection(self, name)
 
     def __init__(
         self,
@@ -345,15 +377,24 @@ class AsyncGraphRunStream:
         experimental and may change.
     """
 
-    # Native projections always registered by `astream_events(version="v3")`.
-    # Attached dynamically by the `setattr` loop in `__init__`; declared here
-    # so type checkers see them. Opt-in native projections (`updates`,
-    # `custom`, `checkpoints`, `debug`, `tasks`) are only present when their
-    # transformer is registered, so they are reached via `extensions[...]`.
+    # Native projections, attached dynamically by the `setattr` loop in
+    # `__init__` and declared here so type checkers see them.
+    #
+    # Always registered by `astream_events(version="v3")`:
     values: StreamChannel[dict[str, Any]]
     messages: StreamChannel[AsyncChatModelStream]
     lifecycle: StreamChannel[LifecyclePayload]
     subgraphs: StreamChannel[AsyncSubgraphRunStream]
+    # Registered on demand; see `GraphRunStream`.
+    updates: StreamChannel[dict[str, Any]]
+    custom: StreamChannel[Any]
+    checkpoints: StreamChannel[dict[str, Any]]
+    debug: StreamChannel[dict[str, Any]]
+    tasks: StreamChannel[dict[str, Any]]
+
+    def __getattr__(self, name: str) -> StreamChannel[Any]:
+        """Type projections declared elsewhere. See `GraphRunStream`."""
+        _missing_projection(self, name)
 
     def __init__(
         self,
