@@ -30,6 +30,7 @@ from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
+from pydantic_core import PydanticUndefined
 from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
 from langgraph._internal import _serde
@@ -44,7 +45,7 @@ from langgraph._internal._fields import (
     get_field_default,
     get_update_as_tuples,
 )
-from langgraph._internal._pydantic import create_model
+from langgraph._internal._pydantic import create_model, get_fields
 from langgraph._internal._runnable import coerce_to_runnable
 from langgraph._internal._timeout import coerce_timeout_policy
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
@@ -1743,6 +1744,18 @@ _S = TypeVar("_S")
 
 
 def _coerce_state(schema: type[_S], input: dict[str, Any]) -> _S:
+    if isclass(schema) and issubclass(schema, BaseModel):
+        # `input` is keyed by field (attribute) name -- that's what channels
+        # use internally, regardless of any `Field(alias=...)` on the model.
+        # Pydantic's constructor only accepts field names in place of an
+        # alias when `populate_by_name=True` is set, so remap to aliases
+        # here rather than requiring every state model to opt into that.
+        fields = schema.model_fields
+        input = {
+            (info.alias or name): input[name]
+            for name, info in fields.items()
+            if name in input
+        }
     return schema(**input)
 
 
@@ -1823,8 +1836,19 @@ def _get_channels(
         )
 
     type_hints = get_type_hints(schema, include_extras=True)
+    # A reducer channel (BinaryOperatorAggregate) seeds its own initial value
+    # from bare `typ()` -- e.g. `[]` for `list[str]` -- since `type_hints`
+    # carries no Field default/default_factory. That silently shadows a
+    # pydantic model's `Field(default_factory=...)` on an Annotated-reducer
+    # field: the channel's placeholder is a real, present value, not a
+    # missing one, so the model constructor never gets the chance to apply
+    # its own default. Look defaults up here, when available, so the
+    # channel can be seeded correctly instead.
+    field_infos = (
+        get_fields(schema) if isclass(schema) and issubclass(schema, BaseModel) else {}
+    )
     all_keys = {
-        name: _get_channel(name, typ)
+        name: _get_channel(name, typ, default=_field_default(field_infos.get(name)))
         for name, typ in type_hints.items()
         if name != "__slots__"
     }
@@ -1835,20 +1859,41 @@ def _get_channels(
     )
 
 
+def _field_default(info: Any) -> Any:
+    """Resolve a pydantic FieldInfo's default/default_factory, or MISSING."""
+    if info is None:
+        return MISSING
+    if info.default_factory is not None:
+        try:
+            # Pydantic 2.x supports a single-arg default_factory that
+            # receives already-validated data; we have none at channel
+            # construction time, so only call the more common no-arg form.
+            return info.default_factory()
+        except TypeError:
+            return MISSING
+    if info.default is not PydanticUndefined:
+        return info.default
+    return MISSING
+
+
 @overload
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: Literal[False]
+    name: str, annotation: Any, *, allow_managed: Literal[False], default: Any = MISSING
 ) -> BaseChannel: ...
 
 
 @overload
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: Literal[True] = True
+    name: str,
+    annotation: Any,
+    *,
+    allow_managed: Literal[True] = True,
+    default: Any = MISSING,
 ) -> BaseChannel | ManagedValueSpec: ...
 
 
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: bool = True
+    name: str, annotation: Any, *, allow_managed: bool = True, default: Any = MISSING
 ) -> BaseChannel | ManagedValueSpec:
     # Strip out Required and NotRequired wrappers
     if hasattr(annotation, "__origin__") and annotation.__origin__ in (
@@ -1864,7 +1909,7 @@ def _get_channel(
     elif channel := _is_field_channel(annotation):
         channel.key = name
         return channel
-    elif channel := _is_field_binop(annotation):
+    elif channel := _is_field_binop(annotation, default=default):
         channel.key = name
         return channel
 
@@ -1901,7 +1946,9 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
     return None
 
 
-def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
+def _is_field_binop(
+    typ: type[Any], *, default: Any = MISSING
+) -> BinaryOperatorAggregate | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and callable(meta[-1]):
@@ -1914,7 +1961,7 @@ def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
                 )
                 == 2
             ):
-                return BinaryOperatorAggregate(typ, meta[-1])
+                return BinaryOperatorAggregate(typ, meta[-1], default)
             else:
                 raise ValueError(
                     f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"

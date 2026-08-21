@@ -4,6 +4,8 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Literal
 
+from pydantic import BaseModel
+
 from langgraph._internal._constants import (
     ERROR,
     INTERRUPT,
@@ -18,6 +20,34 @@ from langgraph.constants import START, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel._log import logger
 from langgraph.types import Command, PregelExecutableTask, Send
+
+
+def normalize_input_aliases(input_schema: Any, chunk: Any) -> Any:
+    """Remap pydantic field aliases to field names in a dict input.
+
+    `map_input` below matches dict keys against channel names, which are
+    always the schema's field (attribute) names -- never aliases. A state
+    model declared with `Field(alias=...)` therefore silently drops any
+    input keyed by the alias (the natural way to call it, since pydantic
+    itself accepts aliases in its constructor): `map_input` logs a warning
+    and skips the key, the channel is never written, and the graph proceeds
+    with that field unset. Remapping alias keys to field names here, before
+    the input reaches `map_input`, keeps `map_input` itself schema-agnostic.
+    """
+    if (
+        not isinstance(chunk, dict)
+        or not isinstance(input_schema, type)
+        or not issubclass(input_schema, BaseModel)
+    ):
+        return chunk
+    alias_to_name = {
+        info.alias: name
+        for name, info in input_schema.model_fields.items()
+        if info.alias and info.alias != name
+    }
+    if not alias_to_name or not (alias_to_name.keys() & chunk.keys()):
+        return chunk
+    return {alias_to_name.get(k, k): v for k, v in chunk.items()}
 
 
 def read_channel(

@@ -72,11 +72,26 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     ```
     """
 
-    __slots__ = ("value", "operator")
+    __slots__ = ("value", "operator", "initial_value")
 
-    def __init__(self, typ: type[Value], operator: Callable[[Value, Value], Value]):
+    def __init__(
+        self,
+        typ: type[Value],
+        operator: Callable[[Value, Value], Value],
+        initial_value: Value = MISSING,
+    ):
         super().__init__(typ)
         self.operator = operator
+        # Remembered so `copy`/`from_checkpoint` can rebuild an equivalent
+        # channel without losing a caller-supplied seed value (e.g. a
+        # pydantic `Field(default_factory=...)` on the Annotated-reducer
+        # field this channel backs) -- they only know `typ`/`operator`
+        # otherwise, and re-deriving `typ()` from scratch would silently
+        # drop it on every fresh run.
+        self.initial_value = initial_value
+        if initial_value is not MISSING:
+            self.value = initial_value
+            return
         # special forms from typing or collections.abc are not instantiable
         # so we need to replace them with their concrete counterparts
         typ = _strip_extras(typ)
@@ -108,13 +123,13 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def copy(self) -> Self:
         """Return a copy of the channel."""
-        empty = self.__class__(self.typ, self.operator)
+        empty = self.__class__(self.typ, self.operator, self.initial_value)
         empty.key = self.key
         empty.value = self.value
         return empty
 
     def from_checkpoint(self, checkpoint: Value) -> Self:
-        empty = self.__class__(self.typ, self.operator)
+        empty = self.__class__(self.typ, self.operator, self.initial_value)
         empty.key = self.key
         if checkpoint is not MISSING:
             empty.value = checkpoint

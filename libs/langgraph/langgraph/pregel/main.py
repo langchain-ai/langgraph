@@ -137,7 +137,7 @@ from langgraph.pregel._checkpoint import (
     get_updated_channels_from_tasks,
 )
 from langgraph.pregel._draw import draw_graph
-from langgraph.pregel._io import map_input, read_channels
+from langgraph.pregel._io import map_input, normalize_input_aliases, read_channels
 from langgraph.pregel._loop import (
     AsyncPregelLoop,
     SyncPregelLoop,
@@ -2897,7 +2897,7 @@ class Pregel(
                         )
 
             with SyncPregelLoop(
-                input,
+                normalize_input_aliases(getattr(self, "input_schema", None), input),
                 stream=StreamProtocol(stream.put, stream_modes),
                 config=config,
                 store=store,
@@ -3351,7 +3351,7 @@ class Pregel(
                         )
 
             async with AsyncPregelLoop(
-                input,
+                normalize_input_aliases(getattr(self, "input_schema", None), input),
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
                 config=config,
                 store=store,
