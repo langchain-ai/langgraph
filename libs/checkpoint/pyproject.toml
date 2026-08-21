@@ -12,7 +12,17 @@ readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
-    "langchain-core>=0.2.38",
+    # NOTE: keep in sync with the actual minimum required by the code, not
+    # just "whatever version we happened to develop against". This is
+    # enforced by the min-versions CI job (see .github/workflows/ci.yml),
+    # which installs the package pinned to these floors and runs the test
+    # suite against them.
+    #
+    # langchain-core: Reviver(allowed_objects=...) in jsonplus.py requires
+    # the `allowed_objects` kwarg, added in langchain-core 0.3.81. The
+    # previous floor of 0.2.38 was stale and raised a TypeError at import
+    # time when actually installed.
+    "langchain-core>=0.3.81",
     "ormsgpack>=1.12.0",
 ]
 

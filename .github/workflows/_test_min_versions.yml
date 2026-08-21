@@ -1,0 +1,52 @@
+name: test-min-versions
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+        description: "From which folder this pipeline executes"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: "min-versions #${{ inputs.working-directory }}"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Use the lowest Python version the package claims to support, so
+      # this job exercises the "oldest everything" combination rather than
+      # just the oldest dependency versions on a recent interpreter.
+      - name: Set up Python
+        uses: ./.github/actions/uv_setup
+        with:
+          python-version: "3.10"
+          cache-suffix: min-versions-${{ inputs.working-directory }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Generate min-versions constraints
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          python "$GITHUB_WORKSPACE/.github/scripts/get_min_versions.py" pyproject.toml \
+            | tee /tmp/min-versions-constraints.txt
+
+      - name: Install package pinned to its declared minimum versions
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          uv venv .venv-min
+          uv pip install -p .venv-min \
+            -c /tmp/min-versions-constraints.txt \
+            -e . --group test
+
+      - name: Run tests against minimum versions
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          source .venv-min/bin/activate
+          python -m pytest
