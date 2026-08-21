@@ -1,3 +1,4 @@
+import builtins
 import copy
 import json
 import os
@@ -9,6 +10,7 @@ from unittest.mock import patch
 import click
 import pytest
 
+import langgraph_cli.config as config_module
 from langgraph_cli.config import (
     _BUILD_TOOLS,
     _get_pip_cleanup_lines,
@@ -599,6 +601,61 @@ def test_validate_config_file():
                 else:
                     f.write(package_content)
             validate_config_file(config_path)
+
+
+def _force_ascii_text_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simulate a non-UTF-8 locale (e.g. Windows GBK) for text-mode open()."""
+    real_open = builtins.open
+
+    def ascii_open(file, mode="r", *args, encoding=None, **kwargs):
+        if encoding is None and "b" not in str(mode):
+            encoding = "ascii"
+        return real_open(file, mode, *args, encoding=encoding, **kwargs)
+
+    monkeypatch.setattr(config_module, "open", ascii_open, raising=False)
+
+
+def test_validate_config_file_reads_utf8_when_locale_is_not_utf8(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / "langgraph.json"
+    config = {
+        "python_version": "3.11",
+        "dependencies": ["."],
+        "graphs": {"代理": "./agent.py:graph"},
+        "env": {"APP_NAME": "测试"},
+    }
+    config_path.write_bytes(json.dumps(config, ensure_ascii=False).encode("utf-8"))
+
+    _force_ascii_text_open(monkeypatch)
+    validated = validate_config_file(config_path)
+    assert "代理" in validated["graphs"]
+    assert validated["env"]["APP_NAME"] == "测试"
+
+
+def test_validate_config_file_reads_utf8_package_json_when_locale_is_not_utf8(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_bytes(
+        json.dumps(
+            {"node_version": "20", "graphs": {"agent": "./agent.js:graph"}}
+        ).encode("utf-8")
+    )
+    (tmp_path / "package.json").write_bytes(
+        json.dumps(
+            {
+                "name": "test",
+                "description": "中文描述",
+                "engines": {"node": "20"},
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+    )
+
+    _force_ascii_text_open(monkeypatch)
+    validated = validate_config_file(config_path)
+    assert validated["node_version"] == "20"
 
 
 def test_validate_config_multiplatform():

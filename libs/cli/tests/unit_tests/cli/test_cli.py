@@ -1,3 +1,4 @@
+import builtins
 import json
 import pathlib
 import re
@@ -8,8 +9,11 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import click
+import pytest
 from click.testing import CliRunner
 
+import langgraph_cli.cli as cli_module
+import langgraph_cli.config as config_module
 import langgraph_cli.deploy as deploy_module
 from langgraph_cli.cli import cli, prepare_args_and_stdin
 from langgraph_cli.config import Config, _get_pip_cleanup_lines, validate_config
@@ -273,6 +277,35 @@ services:
 """
     assert actual_args == expected_args
     assert clean_empty_lines(actual_stdin) == expected_stdin
+
+
+def test_validate_reads_utf8_config_when_locale_is_not_utf8(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / "langgraph.json"
+    config_path.write_bytes(
+        json.dumps(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": {"代理": "./agent.py:graph"},
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+    )
+
+    real_open = builtins.open
+
+    def ascii_open(file, mode="r", *args, encoding=None, **kwargs):
+        if encoding is None and "b" not in str(mode):
+            encoding = "ascii"
+        return real_open(file, mode, *args, encoding=encoding, **kwargs)
+
+    monkeypatch.setattr(cli_module, "open", ascii_open, raising=False)
+    monkeypatch.setattr(config_module, "open", ascii_open, raising=False)
+    result = CliRunner().invoke(cli, ["validate", "-c", str(config_path)])
+    assert result.exit_code == 0, result.output
+    assert "is valid" in result.output
 
 
 def test_version_option() -> None:
