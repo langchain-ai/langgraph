@@ -40,8 +40,21 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         run: |
           uv venv .venv-min
+
+          # Only bypass `[tool.uv.sources]` workspace overrides for the
+          # packages we're intentionally pinning to their published floor
+          # (i.e. exactly the ones in min-versions-constraints.txt). Other
+          # workspace-local dependencies, e.g. test-only sibling packages
+          # like langgraph-checkpoint-conformance, keep resolving from
+          # their local path as usual -- pinning those to an old PyPI
+          # release makes no sense, since they're test infrastructure that
+          # tracks the current code, not a versioned floor a user depends on.
+          no_sources_args=$(awk -F'==' '{print "--no-sources-package", $1}' \
+            /tmp/min-versions-constraints.txt | tr '\n' ' ')
+
           uv pip install -p .venv-min \
             -c /tmp/min-versions-constraints.txt \
+            $no_sources_args \
             -e . --group test
 
       - name: Run tests against minimum versions

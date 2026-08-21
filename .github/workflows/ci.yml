@@ -104,8 +104,9 @@ jobs:
   # pyproject.toml that have drifted out of sync with what the code
   # actually requires.
   #
-  # Starting with just libs/checkpoint since it has no docker/db
-  # dependency; other libs can be added to this matrix as follow-ups.
+  # Starting with libs/checkpoint and libs/checkpoint-sqlite since neither
+  # needs a docker/db service; other libs can be added to this matrix as
+  # follow-ups.
   test-min-versions:
     needs: changes
     name: cd ${{ matrix.working-directory }}
@@ -114,6 +115,7 @@ jobs:
         working-directory:
           [
             "libs/checkpoint",
+            "libs/checkpoint-sqlite",
           ]
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
     uses: ./.github/workflows/_test_min_versions.yml
