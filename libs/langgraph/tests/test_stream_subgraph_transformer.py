@@ -398,6 +398,37 @@ class _AsyncProbeTransformer(StreamTransformer):
         self.failed = err
 
 
+class _FatalFailTransformer(StreamTransformer):
+    supports_sync = True
+
+    def init(self) -> dict[str, Any]:
+        return {}
+
+    def process(self, event: ProtocolEvent) -> bool:
+        return True
+
+    def fail(self, err: BaseException) -> None:
+        raise KeyboardInterrupt
+
+    async def afail(self, err: BaseException) -> None:
+        raise KeyboardInterrupt
+
+
+def test_fail_propagates_base_exception_from_transformer() -> None:
+    mux = StreamMux([_FatalFailTransformer()], is_async=False)
+
+    with pytest.raises(KeyboardInterrupt):
+        mux.fail(RuntimeError("run failed"))
+
+
+@pytest.mark.anyio
+async def test_afail_propagates_base_exception_from_transformer() -> None:
+    mux = StreamMux([_FatalFailTransformer()], is_async=True)
+
+    with pytest.raises(KeyboardInterrupt):
+        await mux.afail(RuntimeError("run failed"))
+
+
 @pytest.mark.anyio
 async def test_async_child_mini_mux_uses_async_lane() -> None:
     mux = StreamMux(

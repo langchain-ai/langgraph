@@ -10,7 +10,7 @@ import time
 import uuid
 from collections import Counter, defaultdict, deque
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from random import randrange
 from typing import Annotated, Any, Literal, get_type_hints
@@ -70,6 +70,7 @@ from langgraph.pregel import (
     NodeBuilder,
     Pregel,
 )
+from langgraph.pregel._executor import BackgroundExecutor
 from langgraph.pregel._loop import PregelLoop, SyncPregelLoop
 from langgraph.pregel._runner import PregelRunner
 from langgraph.runtime import RunControl
@@ -99,6 +100,16 @@ from tests.messages import (
 pytestmark = pytest.mark.anyio
 
 logger = logging.getLogger(__name__)
+
+
+def test_background_executor_done_propagates_base_exception() -> None:
+    task = Future()
+    task.set_exception(KeyboardInterrupt())
+    executor = object.__new__(BackgroundExecutor)
+    executor.tasks = {task: (False, True)}
+
+    with pytest.raises(KeyboardInterrupt):
+        executor.done(task)
 
 
 def test_graph_validation() -> None:

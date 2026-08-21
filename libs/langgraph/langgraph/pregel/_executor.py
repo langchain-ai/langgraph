@@ -82,7 +82,7 @@ class BackgroundExecutor(AbstractContextManager):
             # This exception is an interruption signal, not an error
             # so we don't want to re-raise it on exit
             self.tasks.pop(task)
-        except BaseException:
+        except Exception:
             pass
         else:
             self.tasks.pop(task)
