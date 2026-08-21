@@ -4,8 +4,10 @@
 # TESTING AND COVERAGE
 ######################
 
+POSTGRES_VERSION ?= 16
+
 start-postgres:
-	POSTGRES_VERSION=${POSTGRES_VERSION:-16} docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait || ( \
+	POSTGRES_VERSION=$(POSTGRES_VERSION) docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait || ( \
 		echo "Failed to start PostgreSQL, printing logs..."; \
 		docker compose -f tests/compose-postgres.yml logs; \
 		exit 1 \
@@ -35,7 +37,7 @@ test:
 
 TEST ?= .
 test_watch:
-	POSTGRES_VERSION=${POSTGRES_VERSION:-16} make start-postgres; \
+	POSTGRES_VERSION=$(POSTGRES_VERSION) make start-postgres; \
 	uv run ptw $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
