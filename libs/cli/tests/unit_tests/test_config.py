@@ -601,6 +601,26 @@ def test_validate_config_file():
             validate_config_file(config_path)
 
 
+def test_validate_config_file_reads_utf8_config():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        config_path = tmpdir_path / "langgraph.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "python_version": "3.11",
+                    "dependencies": ["."],
+                    "graphs": {"agént": "./agent.py:graph"},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        validated = validate_config_file(config_path)
+        assert validated["graphs"] == {"agént": "./agent.py:graph"}
+
+
 def test_validate_config_multiplatform():
     # default node
     config = validate_config(

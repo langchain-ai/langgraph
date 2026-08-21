@@ -607,7 +607,7 @@ def get_unknown_keys(raw_config: dict) -> list[str]:
 
 def validate_config_file(config_path: pathlib.Path) -> Config:
     """Load and validate a configuration file."""
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config = json.load(f)
     validated = validate_config(config)
     # Enforce the package.json doesn't enforce an
