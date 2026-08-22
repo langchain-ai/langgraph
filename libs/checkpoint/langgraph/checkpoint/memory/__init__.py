@@ -374,9 +374,9 @@ class InMemorySaver(
                         continue
 
                     # limit search results
-                    if limit is not None and limit <= 0:
+                    if limit is not None and limit == 0:
                         break
-                    elif limit is not None:
+                    elif limit is not None and limit > 0:
                         limit -= 1
 
                     writes = self.writes[

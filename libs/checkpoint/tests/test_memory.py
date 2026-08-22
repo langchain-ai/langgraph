@@ -152,7 +152,12 @@ class TestMemorySaver:
             search_results_5[1].config["configurable"]["checkpoint_ns"],
         } == {"", "inner"}
 
-        # TODO: test before and limit params
+        # test limit and before params
+        assert len(list(self.memory_saver.list(None, limit=1))) == 1
+        assert len(list(self.memory_saver.list(None, limit=2))) == 2
+        assert len(list(self.memory_saver.list(None, limit=0))) == 0
+        assert len(list(self.memory_saver.list(None, limit=-1))) == 3
+        assert len(list(self.memory_saver.list(None, limit=None))) == 3
 
     async def test_asearch(self) -> None:
         # set up test
