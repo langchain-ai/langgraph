@@ -612,6 +612,31 @@ def test_serde_jsonplus_numpy_array(arr: np.ndarray) -> None:
 @pytest.mark.parametrize(
     "arr",
     [
+        # C-contiguous datetime64/timedelta64 arrays do not expose a buffer, so
+        # the memoryview fast path used to raise and the whole value failed to
+        # serialize. They must round-trip like any other numpy array.
+        np.array(["2020-01-01", "2020-02-01", "2020-03-01"], dtype="datetime64[D]"),
+        np.array([1, 2, 3], dtype="datetime64[ns]"),
+        np.array([1, 2, 3], dtype="timedelta64[s]"),
+        np.array(["2020-01-01", "2020-02-01"], dtype="datetime64[D]").reshape(2, 1),
+    ],
+)
+def test_serde_jsonplus_numpy_datetime_array(arr: np.ndarray) -> None:
+    assert arr.flags.c_contiguous  # exercises the previously-broken fast path
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(arr)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == arr.dtype
+    assert result.shape == arr.shape
+    assert np.array_equal(result, arr)
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
         np.arange(6, dtype=np.float32).reshape(2, 3),
         np.asfortranarray(np.arange(4, dtype=np.complex128).reshape(2, 2)),
     ],
