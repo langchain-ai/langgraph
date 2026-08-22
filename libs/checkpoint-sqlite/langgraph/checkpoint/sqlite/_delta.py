@@ -26,16 +26,23 @@ from typing import Any
 
 from langgraph.checkpoint.base import DeltaChannelHistory, PendingWrite
 
-# Stage 1 streams ancestors of `target_cid` newest-first. The `<=`
-# predicate keeps target itself in the stream so we can read its
-# `parent_checkpoint_id` from the first row without a separate lookup;
-# the caller skips target's own writes/seed (matches the
-# `BaseCheckpointSaver` contract).
+# Stage 1 walks the parent chain of `target_cid` newest-first using a
+# recursive CTE that follows `parent_checkpoint_id` links. This is
+# robust to non-monotonic checkpoint IDs (e.g. a child whose ID is
+# lexicographically smaller than its parent's) — a plain `<=` range
+# scan would silently drop ancestors with "larger" IDs.
 DELTA_STAGE1_SQL = (
-    "SELECT checkpoint_id, parent_checkpoint_id, type, checkpoint "
-    "FROM checkpoints "
-    "WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id <= ? "
-    "ORDER BY checkpoint_id DESC"
+    "WITH RECURSIVE chain AS ("
+    "  SELECT checkpoint_id, parent_checkpoint_id, type, checkpoint "
+    "  FROM checkpoints "
+    "  WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? "
+    "  UNION ALL "
+    "  SELECT c.checkpoint_id, c.parent_checkpoint_id, c.type, c.checkpoint "
+    "  FROM checkpoints c "
+    "  INNER JOIN chain ON c.checkpoint_id = chain.parent_checkpoint_id "
+    "  WHERE chain.parent_checkpoint_id IS NOT NULL"
+    ")"
+    "SELECT checkpoint_id, parent_checkpoint_id, type, checkpoint FROM chain"
 )
 
 

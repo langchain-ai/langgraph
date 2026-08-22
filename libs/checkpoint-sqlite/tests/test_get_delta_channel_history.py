@@ -33,6 +33,7 @@ pytest.importorskip("langgraph.channels.delta", reason="langgraph core not insta
 pytest.importorskip("langgraph.graph", reason="langgraph core not installed")
 
 from langgraph.channels.delta import DeltaChannel  # type: ignore[import-untyped]  # noqa: I001
+from langgraph.checkpoint.base import empty_checkpoint
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 from langgraph.graph import END, START, StateGraph  # type: ignore[import-untyped]
 from typing_extensions import TypedDict
@@ -253,19 +254,119 @@ async def test_writes_history_oldest_to_newest_async() -> None:
 
 
 async def test_seed_omitted_when_walk_reaches_root_async() -> None:
-    """Async equivalent of the root-walk seed-absence check."""
+        """Async equivalent of the root-walk seed-absence check."""
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            config: RunnableConfig = {"configurable": {"thread_id": "root-async"}}
+            graph = _delta_graph(saver)
+            await _adrive(graph, config, 1)
+
+            history = [tup async for tup in saver.alist(config)]
+            root_tup = history[-1]
+            assert root_tup.parent_config is None
+
+            result = await saver.aget_delta_channel_history(
+                config=root_tup.config, channels=["items"]
+            )
+            entry = result["items"]
+            assert "seed" not in entry, f"root-walk should have no seed, got {entry}"
+            assert entry["writes"] == []
+
+
+# ---------------------------------------------------------------------------
+# Non-monotonic checkpoint IDs — regression for issue #8550
+# ---------------------------------------------------------------------------
+# When a parent checkpoint has an ID that is lexicographically *larger*
+# than its child's, the old `DELTA_STAGE1_SQL` range scan (`checkpoint_id
+# <= ?`) would silently drop the parent. The recursive CTE must walk
+# the parent chain via `parent_checkpoint_id` regardless of ID ordering.
+
+
+def _mk_ckpt(ckpt_id: str, values: dict[str, Any]) -> dict[str, Any]:
+    """Build a minimal checkpoint with a given ID and channel_values."""
+    cp = empty_checkpoint()
+    cp["id"] = ckpt_id
+    cp["channel_values"] = values
+    return cp
+
+
+def test_non_monotonic_ids_delta_history_sync() -> None:
+    """Regression for #8550: parent ID > child ID lexicographically.
+
+    Create two checkpoints on the same thread where the parent has a
+    larger checkpoint_id than its child. Verify that
+    `get_delta_channel_history` returns writes from *both* checkpoints
+    (the parent's writes must not be silently dropped by the SQL walk).
+    """
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        config: RunnableConfig = {"configurable": {"thread_id": "t", "checkpoint_ns": ""}}
+
+        root = saver.put(
+            config,
+            _mk_ckpt("z-older", {"ch": "seed"}),
+            {},
+            {},
+        )
+        saver.put_writes(root, [("ch", "write-root")], "task")
+
+        child = saver.put(
+            root,
+            _mk_ckpt("a-younger", {"ch": "seed-wchild"}),
+            {},
+            {},
+        )
+        writes_cfg = child.copy()
+        writes_cfg["configurable"]["task_id"] = "task"
+        saver.put_writes(writes_cfg, [("ch", "write-child")], "task")
+
+        history = list(saver.list(config))
+        ids = {t.config["configurable"]["checkpoint_id"] for t in history}
+        assert "z-older" in ids, "parent checkpoint 'z-older' must appear in list()"
+        assert "a-younger" in ids, "child checkpoint 'a-younger' must appear in list()"
+
+        result = saver.get_delta_channel_history(config=child, channels=["ch"])
+        entry = result["ch"]
+        write_values: list[Any] = []
+        for _task_id, channel, value in entry["writes"]:
+            assert channel == "ch"
+            write_values.extend(value if isinstance(value, list) else [value])
+
+        assert "write-root" in write_values
+        assert "write-child" in write_values
+
+
+async def test_non_monotonic_ids_delta_history_async() -> None:
+    """Async equivalent: non-monotonic checkpoint IDs must not break the walk."""
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
-        config: RunnableConfig = {"configurable": {"thread_id": "root-async"}}
-        graph = _delta_graph(saver)
-        await _adrive(graph, config, 1)
+        config: RunnableConfig = {"configurable": {"thread_id": "t-async", "checkpoint_ns": ""}}
+
+        root = await saver.aput(
+            config,
+            _mk_ckpt("z-older", {"ch": "seed"}),
+            {},
+            {},
+        )
+        await saver.aput_writes(root, [("ch", "write-root")], "task")
+
+        child = await saver.aput(
+            root,
+            _mk_ckpt("a-younger", {"ch": "seed-wchild"}),
+            {},
+            {},
+        )
+        writes_cfg = child.copy()
+        writes_cfg["configurable"]["task_id"] = "task"
+        await saver.aput_writes(writes_cfg, [("ch", "write-child")], "task")
 
         history = [tup async for tup in saver.alist(config)]
-        root_tup = history[-1]
-        assert root_tup.parent_config is None
+        ids = {t.config["configurable"]["checkpoint_id"] for t in history}
+        assert "z-older" in ids
+        assert "a-younger" in ids
 
-        result = await saver.aget_delta_channel_history(
-            config=root_tup.config, channels=["items"]
-        )
-        entry = result["items"]
-        assert "seed" not in entry, f"root-walk should have no seed, got {entry}"
-        assert entry["writes"] == []
+        result = await saver.aget_delta_channel_history(config=child, channels=["ch"])
+        entry = result["ch"]
+        write_values: list[Any] = []
+        for _task_id, channel, value in entry["writes"]:
+            write_values.extend(value if isinstance(value, list) else [value])
+
+        assert "write-root" in write_values
+        assert "write-child" in write_values
