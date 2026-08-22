@@ -1764,6 +1764,35 @@ def test_conditional_entrypoint_to_multiple_state_graph(
     }
 
 
+@pytest.mark.parametrize("noop_result", [None, {}])
+def test_stream_values_emits_noop_steps(noop_result: Any) -> None:
+    class State(TypedDict):
+        value: int
+
+    def increment(state: State) -> State:
+        return {"value": state["value"] + 1}
+
+    def noop(state: State) -> Any:
+        return noop_result
+
+    builder = StateGraph(State)
+    builder.add_node("increment", increment)
+    builder.add_node("noop", noop)
+    builder.add_node("finish", increment)
+    builder.add_edge(START, "increment")
+    builder.add_edge("increment", "noop")
+    builder.add_edge("noop", "finish")
+    builder.add_edge("finish", END)
+    graph = builder.compile()
+
+    assert list(graph.stream({"value": 0}, stream_mode="values")) == [
+        {"value": 0},
+        {"value": 1},
+        {"value": 1},
+        {"value": 2},
+    ]
+
+
 def test_conditional_state_graph_with_list_edge_inputs(snapshot: SnapshotAssertion):
     class State(TypedDict):
         foo: Annotated[list[str], operator.add]
