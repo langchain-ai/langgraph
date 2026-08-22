@@ -78,11 +78,21 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
         """
-        async with await AsyncConnection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
+        # Add keepalives to prevent idle timeout that closes SSL connection
+        connect_kwargs = {
+            "autocommit": True,
+            "prepare_threshold": 0,
+            "row_factory": dict_row,
+            "keepalives": 1,
+            "keepalives_idle": 30,
+            "keepalives_interval": 15,
+            "keepalives_count": 5,
+        }
+        async with await AsyncConnection.connect(conn_string, **connect_kwargs) as conn:
             if pipeline:
                 async with conn.pipeline() as pipe:
+                    # Sync the pipeline before yielding to ensure no stale state
+                    await pipe.sync()
                     yield cls(conn=conn, pipe=pipe, serde=serde)
             else:
                 yield cls(conn=conn, serde=serde)
