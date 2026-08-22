@@ -855,7 +855,21 @@ class ToolNode(RunnableCallable):
         coros = []
         for call, tool_runtime in zip(tool_calls, tool_runtimes, strict=False):
             coros.append(self._arun_one(call, input_type, tool_runtime))  # type: ignore[arg-type]
-        outputs = await asyncio.gather(*coros)
+
+        # Respect max_concurrency from config (async path)
+        max_concurrency = config.get("max_concurrency") if config else None
+        if max_concurrency:
+            semaphore = asyncio.Semaphore(max_concurrency)
+        else:
+            semaphore = None
+
+        if semaphore:
+            async def _gated(coro):
+                async with semaphore:
+                    return await coro
+            outputs = await asyncio.gather(*[_gated(c) for c in coros])
+        else:
+            outputs = await asyncio.gather(*coros)
 
         return self._combine_tool_outputs(outputs, input_type)
 

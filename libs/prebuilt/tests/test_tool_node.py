@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import dataclasses
 import json
@@ -2422,3 +2423,46 @@ def test_tool_node_list_return_mixed_with_regular_tool() -> None:
     tool_call_ids = {m.tool_call_id for m in all_msgs}
     assert list_tool_id in tool_call_ids
     assert regular_tool_id in tool_call_ids
+
+async def test_async_max_concurrency():
+    """ToolNode _afunc respects config max_concurrency."""
+    max_concurrency = 2
+    tool_count = 5
+    semaphore = asyncio.Semaphore(max_concurrency)
+    max_concurrent = [0]
+    current_concurrent = [0]
+    current_lock = asyncio.Lock()
+
+    @tool
+    async def _tracking_tool(x: int) -> str:
+        async with semaphore:
+            async with current_lock:
+                current_concurrent[0] += 1
+                if current_concurrent[0] > max_concurrent[0]:
+                    max_concurrent[0] = current_concurrent[0]
+            await asyncio.sleep(0.01)
+            async with current_lock:
+                current_concurrent[0] -= 1
+        return f"tool-{x}-done"
+
+    node = ToolNode([_tracking_tool])
+
+    tool_calls = [
+        {"name": "_tracking_tool", "args": {"x": i}, "id": f"call-{i}", "type": "tool_call"}
+        for i in range(tool_count)
+    ]
+
+    config = {
+        **_create_config_with_runtime(),
+        "max_concurrency": max_concurrency,
+    }
+
+    await node.ainvoke(
+        {"messages": [AIMessage("", tool_calls=tool_calls)]},
+        config=config,
+    )
+
+    assert max_concurrent[0] <= max_concurrency, (
+        f"Max concurrency was {max_concurrent[0]}, expected <= {max_concurrency}"
+    )
+
