@@ -300,6 +300,7 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
+EXT_BIG_INT = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -476,6 +477,8 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 (obj.__class__.__module__, obj.__class__.__name__, obj.value),
             ),
         )
+    elif isinstance(obj, int):
+        return ormsgpack.Ext(EXT_BIG_INT, str(obj).encode())
     elif isinstance(obj, SendProtocol):
         args: tuple[Any, ...] = (obj.node, obj.arg)
         if (timeout := getattr(obj, "timeout", None)) is not None:
@@ -739,6 +742,8 @@ def _create_msgpack_ext_hook(
                 return arr.reshape(shape, order=order)
             except Exception:
                 return None
+        elif code == EXT_BIG_INT:
+            return int(data)
         return None
 
     return ext_hook
@@ -837,6 +842,8 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             return arr.reshape(shape, order=order).tolist()
         except Exception:
             return
+    elif code == EXT_BIG_INT:
+        return int(data)
 
 
 class InvalidModuleError(Exception):
@@ -850,6 +857,7 @@ _option = (
     ormsgpack.OPT_NON_STR_KEYS
     | ormsgpack.OPT_PASSTHROUGH_DATACLASS
     | ormsgpack.OPT_PASSTHROUGH_DATETIME
+    | ormsgpack.OPT_PASSTHROUGH_BIG_INT
     | ormsgpack.OPT_PASSTHROUGH_ENUM
     | ormsgpack.OPT_PASSTHROUGH_UUID
     | ormsgpack.OPT_REPLACE_SURROGATES

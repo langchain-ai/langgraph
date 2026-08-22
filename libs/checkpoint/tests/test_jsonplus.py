@@ -1,4 +1,5 @@
 import dataclasses
+import hashlib
 import json
 import logging
 import os
@@ -324,6 +325,29 @@ def test_serde_jsonplus_json_mode() -> None:
         expected_result["my_secret_str_v1"] = "meow"
 
     assert result == expected_result
+
+
+def test_serde_jsonplus_round_trips_big_integers() -> None:
+    """Round-trip integers outside msgpack's signed and unsigned 64-bit range."""
+    digest_int = int.from_bytes(hashlib.sha256(b"dedup-key").digest(), byteorder="big")
+    value = {
+        "positive_boundary": 2**64,
+        "negative_boundary": -(2**63) - 1,
+        "dedup_key": digest_int,
+        "nested": [2**256, {"negative": -(2**256)}],
+    }
+
+    serde = JsonPlusSerializer()
+
+    assert serde.loads_typed(serde.dumps_typed(value)) == value
+
+
+def test_serde_jsonplus_json_mode_round_trips_big_integers() -> None:
+    """The JSON-compatible msgpack hook preserves large integer values."""
+    value = {"big": 2**256, "small": 1}
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+
+    assert serde.loads_typed(serde.dumps_typed(value)) == value
 
 
 def test_serde_jsonplus_bytes() -> None:
