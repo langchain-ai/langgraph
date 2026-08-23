@@ -104,6 +104,17 @@ class Person:
     name: str
 
 
+class UnserializableValue:
+    pass
+
+
+class StateWithUnserializableValue(BaseModel):
+    text: str
+    error_var: object | None = None
+
+    model_config = {"arbitrary_types_allowed": True}
+
+
 def test_serde_jsonplus() -> None:
     uid = uuid.UUID(int=1)
     deque_instance = deque([1, 2, 3])
@@ -334,6 +345,33 @@ def test_serde_jsonplus_bytes() -> None:
 
     assert dumped == ("bytes", some_bytes)
     assert serde.loads_typed(dumped) == some_bytes
+
+
+def test_msgpack_encode_error_includes_pydantic_state_path() -> None:
+    serde = JsonPlusSerializer()
+    state = StateWithUnserializableValue(
+        text="Hello, world!", error_var=UnserializableValue()
+    )
+
+    with pytest.raises(TypeError) as exc_info:
+        serde.dumps_typed(state)
+
+    message = str(exc_info.value)
+    assert "Type is not msgpack serializable: StateWithUnserializableValue" in message
+    assert "state path: $.error_var" in message
+    assert "offending type: UnserializableValue" in message
+
+
+def test_msgpack_encode_error_includes_nested_key_path() -> None:
+    serde = JsonPlusSerializer()
+    obj = {"state": [1, {"bad": UnserializableValue()}]}
+
+    with pytest.raises(TypeError) as exc_info:
+        serde.dumps_typed(obj)
+
+    message = str(exc_info.value)
+    assert "Type is not msgpack serializable: UnserializableValue" in message
+    assert "state path: $.state[1].bad" in message
 
 
 def test_lc2_json_safe_type_revives_without_allowlist() -> None:

@@ -268,7 +268,10 @@ class JsonPlusSerializer(SerializerProtocol):
             except ormsgpack.MsgpackEncodeError as exc:
                 if self.pickle_fallback:
                     return "pickle", pickle.dumps(obj)
-                raise exc
+                message = _format_msgpack_encode_error(obj, exc)
+                if message == str(exc):
+                    raise exc
+                raise exc.__class__(message) from exc
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
         type_, data_ = data
@@ -858,6 +861,94 @@ _option = (
 
 def _msgpack_enc(data: Any) -> bytes:
     return ormsgpack.packb(data, default=_msgpack_default, option=_option)
+
+
+def _format_msgpack_encode_error(obj: Any, exc: Exception) -> str:
+    message = str(exc)
+    context = _find_msgpack_error_context(obj)
+    if context is None:
+        return message
+
+    path, type_name = context
+    details = [f"state path: {path}"]
+    if type_name != message.rsplit(": ", 1)[-1]:
+        details.append(f"offending type: {type_name}")
+    return f"{message} ({', '.join(details)})"
+
+
+def _find_msgpack_error_context(
+    obj: Any,
+    *,
+    path: str = "$",
+    seen: set[int] | None = None,
+) -> tuple[str, str] | None:
+    try:
+        _msgpack_enc(obj)
+        return None
+    except ormsgpack.MsgpackEncodeError:
+        pass
+
+    if seen is None:
+        seen = set()
+
+    if not isinstance(obj, (str, bytes, bytearray, int, float, bool, type(None))):
+        obj_id = id(obj)
+        if obj_id in seen:
+            return path, obj.__class__.__name__
+        seen.add(obj_id)
+
+    if isinstance(obj, _DeltaSnapshot):
+        return _find_msgpack_error_context(obj.value, path=path, seen=seen)
+    elif hasattr(obj, "model_dump") and callable(obj.model_dump):
+        return _find_msgpack_error_context(obj.model_dump(), path=path, seen=seen)
+    elif hasattr(obj, "get_secret_value") and callable(obj.get_secret_value):
+        return _find_msgpack_error_context(
+            obj.get_secret_value(), path=path, seen=seen
+        )
+    elif hasattr(obj, "dict") and callable(obj.dict):
+        return _find_msgpack_error_context(obj.dict(), path=path, seen=seen)
+    elif hasattr(obj, "_asdict") and callable(obj._asdict):
+        return _find_msgpack_error_context(obj._asdict(), path=path, seen=seen)
+    elif dataclasses.is_dataclass(obj):
+        for field in dataclasses.fields(obj):
+            context = _find_msgpack_error_context(
+                getattr(obj, field.name),
+                path=f"{path}.{field.name}",
+                seen=seen,
+            )
+            if context is not None:
+                return context
+    elif isinstance(obj, dict):
+        for key, value in obj.items():
+            context = _find_msgpack_error_context(
+                value,
+                path=f"{path}{_format_msgpack_path_segment(key)}",
+                seen=seen,
+            )
+            if context is not None:
+                return context
+    elif isinstance(obj, (list, tuple, deque)):
+        for index, value in enumerate(obj):
+            context = _find_msgpack_error_context(
+                value, path=f"{path}[{index}]", seen=seen
+            )
+            if context is not None:
+                return context
+    elif isinstance(obj, (set, frozenset)):
+        for index, value in enumerate(obj):
+            context = _find_msgpack_error_context(
+                value, path=f"{path}[{index}]", seen=seen
+            )
+            if context is not None:
+                return context
+
+    return path, obj.__class__.__name__
+
+
+def _format_msgpack_path_segment(key: Any) -> str:
+    if isinstance(key, str) and key.isidentifier():
+        return f".{key}"
+    return f"[{key!r}]"
 
 
 def _normalize_allowlist(
