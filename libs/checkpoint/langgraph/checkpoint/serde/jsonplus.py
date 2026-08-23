@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import dataclasses
 import decimal
+import fractions
 import importlib
 import json
 import logging
@@ -10,7 +11,7 @@ import pathlib
 import pickle
 import re
 import sys
-from collections import deque
+from collections import Counter, OrderedDict, defaultdict, deque
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
@@ -378,6 +379,64 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
             ),
         )
+    elif isinstance(obj, fractions.Fraction):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_POS_ARGS,
+            _msgpack_enc(
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__name__,
+                    (obj.numerator, obj.denominator),
+                ),
+            ),
+        )
+    elif isinstance(obj, complex):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_POS_ARGS,
+            _msgpack_enc(
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__name__,
+                    (obj.real, obj.imag),
+                ),
+            ),
+        )
+    elif isinstance(obj, Counter):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc(
+                (obj.__class__.__module__, obj.__class__.__name__, dict(obj)),
+            ),
+        )
+    elif isinstance(obj, OrderedDict):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc(
+                (obj.__class__.__module__, obj.__class__.__name__, list(obj.items())),
+            ),
+        )
+    elif isinstance(obj, defaultdict):
+        try:
+            factory_ref = _encode_default_factory(obj.default_factory)
+        except ValueError:
+            _warn_once(
+                _warned_unregistered_types,
+                ("collections", "defaultdict"),
+                "Cannot serialize defaultdict default_factory %r; "
+                "checkpoint will store a plain dict instead.",
+                obj.default_factory,
+            )
+            return dict(obj)
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_POS_ARGS,
+            _msgpack_enc(
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__name__,
+                    (factory_ref, dict(obj)),
+                ),
+            ),
+        )
     elif isinstance(obj, (set, frozenset, deque)):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
@@ -530,6 +589,39 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
 
     elif isinstance(obj, BaseException):
         return repr(obj)
+    elif (np_mod := sys.modules.get("numpy")) is not None and isinstance(
+        obj, np_mod.generic
+    ):
+        return obj.item()
+    elif isinstance(obj, str) and type(obj) is not str:
+        return str(obj)
+    elif isinstance(obj, bool):
+        return obj
+    elif isinstance(obj, int) and type(obj) is not int:
+        return int(obj)
+    elif isinstance(obj, float) and type(obj) is not float:
+        return float(obj)
+    elif isinstance(obj, bytes) and type(obj) is not bytes:
+        return bytes(obj)
+    elif isinstance(obj, bytearray) and type(obj) is not bytearray:
+        return bytearray(obj)
+    elif isinstance(obj, list) and type(obj) is not list:
+        return list(obj)
+    elif isinstance(obj, tuple) and type(obj) is not tuple:
+        return tuple(obj)
+    elif isinstance(obj, dict) and type(obj) is not dict:
+        _warn_once(
+            _warned_unregistered_types,
+            (obj.__class__.__module__, obj.__class__.__name__),
+            "Serializing dict subclass %s.%s as a plain dict.",
+            obj.__class__.__module__,
+            obj.__class__.__name__,
+        )
+        return dict(obj)
+    elif isinstance(obj, set) and type(obj) is not set:
+        return set(obj)
+    elif isinstance(obj, frozenset) and type(obj) is not frozenset:
+        return frozenset(obj)
     else:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
 
@@ -660,6 +752,11 @@ def _create_msgpack_ext_hook(
                     return tup[2]
                 if tup[0] == "langgraph.types" and tup[1] == "Send":
                     return _send_from_args(tup[2])
+                if tup[0] == "collections" and tup[1] == "defaultdict":
+                    factory_ref, items = tup[2]
+                    result = defaultdict(_decode_default_factory(factory_ref))
+                    result.update(items)
+                    return result
                 # module, name, args
                 return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
             except Exception:
@@ -851,9 +948,42 @@ _option = (
     | ormsgpack.OPT_PASSTHROUGH_DATACLASS
     | ormsgpack.OPT_PASSTHROUGH_DATETIME
     | ormsgpack.OPT_PASSTHROUGH_ENUM
+    | ormsgpack.OPT_PASSTHROUGH_SUBCLASS
     | ormsgpack.OPT_PASSTHROUGH_UUID
     | ormsgpack.OPT_REPLACE_SURROGATES
 )
+
+
+_BUILTIN_DEFAULT_FACTORIES: dict[type[Any] | None, tuple[str, str] | None] = {
+    None: None,
+    list: ("builtins", "list"),
+    int: ("builtins", "int"),
+    set: ("builtins", "set"),
+    dict: ("builtins", "dict"),
+    float: ("builtins", "float"),
+    str: ("builtins", "str"),
+    bool: ("builtins", "bool"),
+}
+
+
+def _encode_default_factory(
+    factory: Callable[[], Any] | None,
+) -> tuple[str, str] | None:
+    if factory in _BUILTIN_DEFAULT_FACTORIES:
+        return _BUILTIN_DEFAULT_FACTORIES[factory]
+    mod = getattr(factory, "__module__", None)
+    name = getattr(factory, "__name__", None)
+    if mod == "builtins" and name:
+        return (mod, name)
+    msg = f"Cannot serialize defaultdict default_factory: {factory!r}"
+    raise ValueError(msg)
+
+
+def _decode_default_factory(ref: tuple[str, str] | None) -> Callable[[], Any] | None:
+    if ref is None:
+        return None
+    mod, name = ref
+    return getattr(importlib.import_module(mod), name)
 
 
 def _msgpack_enc(data: Any) -> bytes:

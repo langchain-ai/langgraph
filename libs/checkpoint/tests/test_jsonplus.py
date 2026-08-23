@@ -8,10 +8,11 @@ import re
 import sys
 import tempfile
 import uuid
-from collections import deque
+from collections import Counter, OrderedDict, defaultdict, deque
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum
+from fractions import Fraction
 from ipaddress import IPv4Address
 from zoneinfo import ZoneInfo
 
@@ -1230,3 +1231,101 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_serde_fraction_and_complex_roundtrip() -> None:
+    """Regression for #8185: Fraction and complex must round-trip like Decimal."""
+    serde = JsonPlusSerializer()
+    fraction = Fraction(1, 3)
+    value = complex(1, 2)
+
+    assert serde.loads_typed(serde.dumps_typed(fraction)) == fraction
+    assert serde.loads_typed(serde.dumps_typed(value)) == value
+    assert serde.loads_typed(serde.dumps_typed(Decimal("1.5"))) == Decimal("1.5")
+
+
+def test_serde_fraction_and_complex_strict_mode(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+
+    for obj in (Fraction(2, 5), complex(-3.5, 4.25)):
+        caplog.clear()
+        restored = serde.loads_typed(serde.dumps_typed(obj))
+        assert restored == obj
+        assert "blocked" not in caplog.text.lower()
+
+
+@pytest.mark.parametrize(
+    ("factory", "payload"),
+    [
+        (list, {"a": [1]}),
+        (int, {"x": 1}),
+    ],
+)
+def test_serde_defaultdict_preserves_default_factory(
+    factory: type,
+    payload: dict[str, object],
+) -> None:
+    """Regression for #8184: defaultdict must not downcast to plain dict."""
+    serde = JsonPlusSerializer()
+    original: defaultdict = defaultdict(factory, payload)
+
+    restored = serde.loads_typed(serde.dumps_typed(original))
+
+    assert isinstance(restored, defaultdict)
+    assert restored.default_factory is factory
+    assert dict(restored) == payload
+    if factory is list:
+        restored["new"].append(0)
+        assert restored["new"] == [0]
+    else:
+        assert restored["missing"] == 0
+        restored["missing"] += 2
+        assert restored["missing"] == 2
+
+
+def test_serde_counter_and_ordered_dict_roundtrip() -> None:
+    """Regression for #8184: Counter and OrderedDict must preserve type semantics."""
+    serde = JsonPlusSerializer()
+
+    counter = Counter({"b": 3, "a": 1})
+    restored_counter = serde.loads_typed(serde.dumps_typed(counter))
+    assert isinstance(restored_counter, Counter)
+    assert restored_counter.most_common(1) == [("b", 3)]
+    assert dict(restored_counter) == dict(counter)
+
+    ordered = OrderedDict([("first", 1), ("second", 2)])
+    ordered.move_to_end("first")
+    restored_ordered = serde.loads_typed(serde.dumps_typed(ordered))
+    assert isinstance(restored_ordered, OrderedDict)
+    assert list(restored_ordered.keys()) == list(ordered.keys())
+    restored_ordered.move_to_end("second")
+    assert list(restored_ordered.keys()) == ["first", "second"]
+
+
+def test_serde_defaultdict_unencodable_factory_downcasts_with_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    serde = JsonPlusSerializer()
+    original = defaultdict(lambda: [])
+    original["a"].append(1)
+
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+    restored = serde.loads_typed(serde.dumps_typed(original))
+
+    assert isinstance(restored, dict)
+    assert not isinstance(restored, defaultdict)
+    assert restored == {"a": [1]}
+    assert "default_factory" in caplog.text
+
+
+def test_serde_numpy_scalar_in_dict_roundtrip() -> None:
+    serde = JsonPlusSerializer()
+    payload = {"count": np.int64(7), "ratio": np.float64(1.25)}
+
+    restored = serde.loads_typed(serde.dumps_typed(payload))
+
+    assert restored == {"count": 7, "ratio": 1.25}
+    assert type(restored["count"]) is int
+    assert type(restored["ratio"]) is float
