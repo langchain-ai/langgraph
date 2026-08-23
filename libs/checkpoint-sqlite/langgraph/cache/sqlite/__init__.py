@@ -51,8 +51,11 @@ class SqliteCache(BaseCache[ValueT]):
                 return {}
             placeholders = ",".join("(?, ?)" for _ in keys)
             params: list[str] = []
+            key_map = {}
             for ns_tuple, key in keys:
-                params.extend((",".join(ns_tuple), key))
+                ns_str = ",".join(ns_tuple)
+                params.extend((ns_str, key))
+                key_map[(ns_str, key)] = (ns_tuple, key)
             cursor = self._conn.execute(
                 f"SELECT ns, key, expiry, encoding, val FROM cache WHERE (ns, key) IN ({placeholders})",
                 tuple(params),
@@ -66,9 +69,11 @@ class SqliteCache(BaseCache[ValueT]):
                         "DELETE FROM cache WHERE (ns, key) = (?, ?)", (ns, key)
                     )
                     continue
-                values[(tuple(ns.split(",")), key)] = self.serde.loads_typed(
-                    (encoding, raw)
-                )
+                full_key = key_map.get((ns, key))
+                if full_key is not None:
+                    values[full_key] = self.serde.loads_typed(
+                        (encoding, raw)
+                    )
             return values
 
     async def aget(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
