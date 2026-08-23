@@ -595,9 +595,13 @@ class BaseCheckpointSaver(Generic[V]):
         For each requested channel, walks ancestors of the checkpoint
         identified by `config` (following `parent_config`) and accumulates
         `pending_writes` for that channel. The walk terminates per-channel
-        at the nearest ancestor whose `channel_values[ch]` is populated;
-        that value is returned as `seed`. If the walk reaches the root
-        without finding a stored value, `seed` is omitted from that
+        at the nearest ancestor whose `channel_values[ch]` is populated
+        with a non-`None` value; that value is returned as `seed`. A
+        `None` entry is treated as "nothing stored" — it shows up at a
+        migration boundary where a thread moved from a regular channel to
+        `DeltaChannel` with a reducer that had cleared the value to
+        `None` — so the walk keeps going past it. If the walk reaches the
+        root without finding a stored value, `seed` is omitted from that
         channel's entry — the consumer treats the absence as "start
         empty."
 
@@ -637,8 +641,10 @@ class BaseCheckpointSaver(Generic[V]):
                         collected_by_ch[ch].append(write)
             for ch in list(remaining):
                 if ch in tup.checkpoint["channel_values"]:
-                    seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]
-                    remaining.discard(ch)
+                    value = tup.checkpoint["channel_values"][ch]
+                    if value is not None:
+                        seed_by_ch[ch] = value
+                        remaining.discard(ch)
             cursor_config = tup.parent_config
         result: dict[str, DeltaChannelHistory] = {}
         for ch in channels:
@@ -678,8 +684,10 @@ class BaseCheckpointSaver(Generic[V]):
                         collected_by_ch[ch].append(write)
             for ch in list(remaining):
                 if ch in tup.checkpoint["channel_values"]:
-                    seed_by_ch[ch] = tup.checkpoint["channel_values"][ch]
-                    remaining.discard(ch)
+                    value = tup.checkpoint["channel_values"][ch]
+                    if value is not None:
+                        seed_by_ch[ch] = value
+                        remaining.discard(ch)
             cursor_config = tup.parent_config
         result: dict[str, DeltaChannelHistory] = {}
         for ch in channels:

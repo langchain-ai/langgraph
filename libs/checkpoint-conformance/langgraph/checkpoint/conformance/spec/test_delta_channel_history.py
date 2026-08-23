@@ -267,6 +267,69 @@ async def test_history_seed_ancestor_own_writes_are_replayed(
     )
 
 
+async def test_history_none_plain_value_is_not_a_seed(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """A `None` value in `channel_values` is not a valid seed — the walk must
+    keep going past it rather than terminating there.
+
+    `None` shows up at a migration boundary where a thread moved from a
+    regular channel (e.g. `BinaryOperatorAggregate`) to `DeltaChannel` with a
+    reducer that had cleared the accumulated value to `None`. Treating it as
+    a seed stops the walk early and hands a `None` base to the reducer on
+    replay, which crashes for any reducer that doesn't special-case `None`.
+
+    Step 1 stores `None` (the boundary checkpoint); nothing else in the
+    chain ever populates `channel_values`. The walk must pass through step
+    1 without stopping and reach the root — so `seed` is absent from the
+    result, AND step 0's write (older than step 1) must still be collected,
+    which only happens if the walk actually continued past step 1 instead
+    of wrongly terminating there.
+    """
+    tid = str(uuid4())
+    configs: list = []
+    parent_cfg = None
+
+    for step in range(4):
+        config = {"configurable": {"thread_id": tid, "checkpoint_ns": ""}}
+        if parent_cfg:
+            config["configurable"]["checkpoint_id"] = parent_cfg["configurable"][
+                "checkpoint_id"
+            ]
+        cv: dict = {}
+        cvs: dict = {}
+        # Step 1: migration-boundary checkpoint — value cleared to None.
+        if step == 1:
+            cv["ch"] = None
+            cvs["ch"] = step + 1
+        cp = Checkpoint(
+            v=1,
+            id=str(uuid6(clock_seq=-1)),
+            ts="",
+            channel_values=cv,
+            channel_versions=cvs,
+            versions_seen={},
+            updated_channels=None,
+        )
+        parent_cfg = await saver.aput(config, cp, generate_metadata(step=step), cvs)
+        configs.append(parent_cfg)
+        if step != 1:
+            await saver.aput_writes(parent_cfg, [("ch", step)], str(uuid4()))
+
+    head = configs[-1]
+    result = await saver.aget_delta_channel_history(config=head, channels=["ch"])
+    entry = result["ch"]
+
+    assert "seed" not in entry, (
+        f"a None channel value must not be treated as a seed, got {entry}"
+    )
+    values = [w[2] for w in entry["writes"]]
+    assert values == [0, 2], (
+        "expected the walk to continue past the None at step 1 and collect "
+        f"step 0's write too, got {values}"
+    )
+
+
 ALL_DELTA_CHANNEL_HISTORY_TESTS = [
     test_history_returns_writes_oldest_first,
     test_history_seed_is_nearest_snapshot,
@@ -276,6 +339,7 @@ ALL_DELTA_CHANNEL_HISTORY_TESTS = [
     test_history_walk_to_root_no_seed,
     test_history_migration_plain_value_as_seed,
     test_history_seed_ancestor_own_writes_are_replayed,
+    test_history_none_plain_value_is_not_a_seed,
 ]
 
 

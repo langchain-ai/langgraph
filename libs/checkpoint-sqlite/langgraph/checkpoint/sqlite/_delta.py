@@ -89,8 +89,13 @@ def step_walk_with_row(
     For each subsequent row, if `cid` matches the walk's current
     position, we deserialize the blob, append the cid to every
     not-yet-seeded channel's chain, and check `channel_values` for
-    seeds. The deserialized checkpoint is dropped before advancing — no
-    cross-row cache, so peak in-flight is one deserialized checkpoint.
+    seeds. A `None` value is treated as "nothing stored" rather than a
+    seed — it shows up at a migration boundary where a thread moved from
+    a regular channel to `DeltaChannel` with a reducer that had cleared
+    the value to `None` — so the walk keeps going past it instead of
+    terminating there. The deserialized checkpoint is dropped before
+    advancing — no cross-row cache, so peak in-flight is one deserialized
+    checkpoint.
 
     Off-path rows (different branch on the same thread) advance the
     cursor without doing any work.
@@ -115,7 +120,9 @@ def step_walk_with_row(
         chain_by_ch[ch].append(cid)
     ckpt = serde.loads_typed((type_tag, blob))
     channel_values: Mapping[str, Any] = ckpt.get("channel_values") or {}
-    for ch in [ch for ch in active if ch in channel_values]:
+    for ch in [
+        ch for ch in active if ch in channel_values and channel_values[ch] is not None
+    ]:
         seed_val_by_ch[ch] = channel_values[ch]
         seeded.add(ch)
         active.discard(ch)

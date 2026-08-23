@@ -707,3 +707,102 @@ class TestPreDeltaBlobTerminator:
         assert "PRE-DELTA-WRITE" in values
         # And the pending write at the target is never folded in.
         assert "PENDING-AT-TARGET" not in values
+
+
+class TestNoneBlobIsNotASeed:
+    """A `None` blob must not terminate the ancestor walk.
+
+    `None` shows up at a migration boundary where a thread moved from a
+    regular channel to `DeltaChannel` with a reducer that had cleared the
+    accumulated value to `None`. Treating it as a seed stops the walk early
+    and hands a `None` base to the reducer on replay, which crashes for any
+    reducer that doesn't special-case `None`.
+    """
+
+    def test_walk_skips_none_blob_to_find_real_seed(self) -> None:
+        """cp1's blob is a real (serialized) `None` — nearer than cp0's real
+        blob `["A"]`. The walk must not stop at cp1; it must keep going and
+        seed from cp0 instead, replaying every write in between.
+        """
+        saver = InMemorySaver()
+        serde = JsonPlusSerializer()
+        thread_id, ns, channel = "t1", "", "messages"
+
+        v0 = "00000000000000000000000000000000.0"
+        v1 = "00000000000000000000000000000001.0"
+        v2 = "00000000000000000000000000000002.0"
+        v3 = "00000000000000000000000000000003.0"
+
+        saver.blobs[(thread_id, ns, channel, v0)] = serde.dumps_typed(["A"])
+        # Real None, not the "empty" sentinel — must not be read as a seed.
+        saver.blobs[(thread_id, ns, channel, v1)] = serde.dumps_typed(None)
+        saver.blobs[(thread_id, ns, channel, v2)] = ("empty", b"")
+        saver.blobs[(thread_id, ns, channel, v3)] = ("empty", b"")
+
+        cp0 = empty_checkpoint()
+        cp0["id"] = "cp0"
+        cp0["channel_versions"][channel] = v0
+        cp1 = empty_checkpoint()
+        cp1["id"] = "cp1"
+        cp1["channel_versions"][channel] = v1
+        cp2 = empty_checkpoint()
+        cp2["id"] = "cp2"
+        cp2["channel_versions"][channel] = v2
+        cp3 = empty_checkpoint()
+        cp3["id"] = "cp3"
+        cp3["channel_versions"][channel] = v3
+
+        saver.storage[thread_id][ns] = {
+            "cp0": (serde.dumps_typed(cp0), serde.dumps_typed({}), None),
+            "cp1": (serde.dumps_typed(cp1), serde.dumps_typed({}), "cp0"),
+            "cp2": (serde.dumps_typed(cp2), serde.dumps_typed({}), "cp1"),
+            "cp3": (serde.dumps_typed(cp3), serde.dumps_typed({}), "cp2"),
+        }
+        # Stored AT the seed ancestor (cp0) — not subsumed, must be replayed.
+        saver.writes[(thread_id, ns, "cp0")][("task0", 0)] = (
+            "task0",
+            channel,
+            serde.dumps_typed("AT-SEED-WRITE"),
+            "",
+        )
+        # Stored AT the None checkpoint (cp1) — the walk must pass through
+        # cp1 to reach cp0, so this write must be replayed too.
+        saver.writes[(thread_id, ns, "cp1")][("task1", 0)] = (
+            "task1",
+            channel,
+            serde.dumps_typed("PAST-NONE-WRITE"),
+            "",
+        )
+        saver.writes[(thread_id, ns, "cp2")][("task2", 0)] = (
+            "task2",
+            channel,
+            serde.dumps_typed("B"),
+            "",
+        )
+        saver.writes[(thread_id, ns, "cp3")][("task3", 0)] = (
+            "task3",
+            channel,
+            serde.dumps_typed("PENDING-AT-TARGET"),
+            "",
+        )
+
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": ns,
+                "checkpoint_id": "cp3",
+            }
+        }
+        result = saver.get_delta_channel_history(config=config, channels=[channel])[
+            channel
+        ]
+
+        assert result["seed"] == ["A"], (
+            f"expected the walk to skip the None blob at cp1 and seed from "
+            f"cp0, got {result.get('seed', '<missing>')!r}"
+        )
+        values = [v for _, _, v in result["writes"]]
+        assert values == ["AT-SEED-WRITE", "PAST-NONE-WRITE", "B"], (
+            f"expected writes from cp0 through cp2 to be replayed in order, "
+            f"got {values}"
+        )

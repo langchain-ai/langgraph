@@ -193,6 +193,51 @@ def test_seed_present_when_snapshot_in_ancestor_sync() -> None:
         assert seed.value == snapshot_value
 
 
+def test_none_channel_value_is_not_a_seed_sync() -> None:
+    """A `None` value in `channel_values` must not terminate the walk.
+
+    `None` shows up at a migration boundary where a thread moved from a
+    regular channel to `DeltaChannel` with a reducer that had cleared the
+    value to `None`. Treating it as a seed stops the walk early and hands a
+    `None` base to the reducer on replay.
+    """
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        config: RunnableConfig = {"configurable": {"thread_id": "none-seed-sync"}}
+        graph = _delta_graph(saver)
+        _drive(graph, config, 2)
+
+        history = list(saver.list(config))
+        assert len(history) >= 2
+        leaf_tup = history[0]
+        ancestor_tup = next(
+            (tup for tup in history if tup.parent_config is not None), None
+        )
+        assert ancestor_tup is not None
+        parent_cfg = ancestor_tup.parent_config
+        assert parent_cfg is not None
+        parent_tup = saver.get_tuple(parent_cfg)
+        assert parent_tup is not None
+
+        # Overwrite the ancestor's channel value with a real None — not the
+        # absence of a key — mirroring a cleared-to-None migration boundary.
+        parent_tup.checkpoint["channel_values"]["items"] = None
+        parent_tup.checkpoint["channel_versions"].setdefault("items", 1)
+        saver.put(
+            parent_tup.parent_config or {"configurable": parent_cfg["configurable"]},
+            parent_tup.checkpoint,
+            parent_tup.metadata,
+            {},
+        )
+
+        result = saver.get_delta_channel_history(
+            config=leaf_tup.config, channels=["items"]
+        )
+        entry = result["items"]
+        assert "seed" not in entry, (
+            f"a None channel value must not be treated as a seed, got {entry}"
+        )
+
+
 def test_seed_omitted_when_walk_reaches_root_sync() -> None:
     """`get_delta_channel_history` on the root checkpoint → no `seed` key, no writes."""
     with SqliteSaver.from_conn_string(":memory:") as saver:

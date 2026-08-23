@@ -145,8 +145,13 @@ class InMemorySaver(
         """Override: walk the parent chain ONCE for all requested channels.
 
         Each channel terminates independently at the nearest ancestor
-        whose stored blob is non-empty. Other channels keep walking until
-        they find their own terminator or hit the root.
+        whose stored blob is non-empty and deserializes to a non-`None`
+        value. A `None` blob is treated as "nothing stored" — it shows up
+        at a migration boundary where a thread moved from a regular
+        channel to `DeltaChannel` with a reducer that had cleared the
+        value to `None` — so that channel keeps walking past it. Other
+        channels keep walking until they find their own terminator or hit
+        the root.
 
         A blob is the value AT its ancestor, prior to the writes stored
         under that same ancestor (those writes produce its child, which
@@ -195,7 +200,10 @@ class InMemorySaver(
                     blob_entry = self.blobs.get((thread_id, checkpoint_ns, ch, ver))
                     if blob_entry is None or blob_entry[0] == "empty":
                         continue
-                    blob_value_by_ch[ch] = self.serde.loads_typed(blob_entry)
+                    value = self.serde.loads_typed(blob_entry)
+                    if value is None:
+                        continue
+                    blob_value_by_ch[ch] = value
                     terminated_here.add(ch)
 
             step_writes = self.writes.get((thread_id, checkpoint_ns, cp_id), {})
