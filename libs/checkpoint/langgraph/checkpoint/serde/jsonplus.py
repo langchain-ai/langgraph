@@ -300,6 +300,7 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
+EXT_NUMPY_SCALAR = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -527,6 +528,12 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             buf = obj.tobytes(order="A")
             meta = (obj.dtype.str, obj.shape, order, buf)
             return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
+    elif (np_mod := sys.modules.get("numpy")) is not None and isinstance(
+        obj, np_mod.generic
+    ):
+        buf = obj.tobytes()
+        meta = (obj.dtype.str, buf)
+        return ormsgpack.Ext(EXT_NUMPY_SCALAR, _msgpack_enc(meta))
 
     elif isinstance(obj, BaseException):
         return repr(obj)
@@ -739,6 +746,17 @@ def _create_msgpack_ext_hook(
                 return arr.reshape(shape, order=order)
             except Exception:
                 return None
+        elif code == EXT_NUMPY_SCALAR:
+            try:
+                import numpy as _np
+
+                dtype_str, buf = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
+                return arr[0]
+            except Exception:
+                return None
         return None
 
     return ext_hook
@@ -835,6 +853,19 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
             return arr.reshape(shape, order=order).tolist()
+        except Exception:
+            return
+    elif code == EXT_NUMPY_SCALAR:
+        try:
+            import numpy as _np
+
+            dtype_str, buf = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
+            return arr[0].item()
         except Exception:
             return
 

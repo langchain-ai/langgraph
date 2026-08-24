@@ -626,6 +626,54 @@ def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
 
 
 @pytest.mark.parametrize(
+    "val",
+    [
+        np.float64(3.14159),
+        np.float32(1.5),
+        np.int64(42),
+        np.int32(100),
+        np.int16(-5),
+        np.int8(12),
+        np.uint8(255),
+        np.bool_(True),
+        np.bool_(False),
+        np.complex128(1 + 2j),
+        np.datetime64("2024-01-01T00:00:00"),
+        np.timedelta64(5, "D"),
+    ],
+)
+def test_serde_jsonplus_numpy_scalar(val: np.generic) -> None:
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(val)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, type(val))
+    assert result.dtype == val.dtype
+    assert result == val
+
+
+@pytest.mark.parametrize(
+    "val",
+    [
+        np.float64(3.14159),
+        np.float32(1.5),
+        np.int64(42),
+        np.int32(100),
+        np.bool_(True),
+        np.bool_(False),
+    ],
+)
+def test_serde_jsonplus_numpy_scalar_json_hook(val: np.generic) -> None:
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    dumped = serde.dumps_typed(val)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert type(result) is type(val.item())
+    assert result == val.item()
+
+
+@pytest.mark.parametrize(
     "df",
     [
         pd.DataFrame(),
