@@ -284,3 +284,20 @@ updates:
           - "*"
         update-types:
           - "major"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/libs/sdk-py/integration"
+    schedule:
+      interval: "monthly"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
