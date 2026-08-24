@@ -516,7 +516,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         obj, np_mod.ndarray
     ):
         order = "F" if obj.flags.f_contiguous and not obj.flags.c_contiguous else "C"
-        if obj.flags.c_contiguous:
+        if obj.flags.c_contiguous and obj.dtype.kind not in "Mm":
             mv = memoryview(obj)
             try:
                 meta = (obj.dtype.str, obj.shape, order, mv)

@@ -596,6 +596,10 @@ def test_serde_jsonplus_bytearray() -> None:
         np.arange(9, dtype=np.int32).reshape(3, 3),
         np.asfortranarray(np.arange(9, dtype=np.float64).reshape(3, 3)),
         np.arange(12, dtype=np.int16)[::2].reshape(3, 2),
+        np.array(["2020-01-01", "2020-02-01"], dtype="datetime64[D]"),
+        np.array(["2024-01-01T12:00:00", "2024-01-02T12:00:00"], dtype="datetime64[s]"),
+        np.array([1, 2, 3], dtype="timedelta64[D]"),
+        np.array([100, 200, 300], dtype="timedelta64[ms]"),
     ],
 )
 def test_serde_jsonplus_numpy_array(arr: np.ndarray) -> None:
@@ -614,6 +618,8 @@ def test_serde_jsonplus_numpy_array(arr: np.ndarray) -> None:
     [
         np.arange(6, dtype=np.float32).reshape(2, 3),
         np.asfortranarray(np.arange(4, dtype=np.complex128).reshape(2, 2)),
+        np.array(["2020-01-01", "2020-02-01"], dtype="datetime64[D]"),
+        np.array([1, 2, 3], dtype="timedelta64[D]"),
     ],
 )
 def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
