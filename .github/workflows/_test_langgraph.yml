@@ -46,7 +46,7 @@ jobs:
         run: make test_parallel
 
       - name: Run strict msgpack pregel tests
-        if: ${{ matrix.python-version == '3.13' }}
+        if: ${{ matrix.python-version == '3.14' }}
         shell: bash
         env:
           LANGGRAPH_STRICT_MSGPACK: "true"

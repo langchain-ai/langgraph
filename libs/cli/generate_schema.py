@@ -202,12 +202,14 @@ def generate_schema():
             "3.11",
             "3.12",
             "3.13",
+            "3.14",
         ]
     if "python_version" in uv_source_python_schema["properties"]:
         uv_source_python_schema["properties"]["python_version"]["enum"] = [
             "3.11",
             "3.12",
             "3.13",
+            "3.14",
         ]
 
     # Create Node.js schema with node_version
