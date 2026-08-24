@@ -266,3 +266,21 @@ updates:
           - "*"
         update-types:
           - "major"
+
+  # CI builds this maintained integration image and Compose stack.
+  - package-ecosystem: "docker"
+    directory: "/libs/sdk-py/integration"
+    schedule:
+      interval: "monthly"
+    groups:
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
