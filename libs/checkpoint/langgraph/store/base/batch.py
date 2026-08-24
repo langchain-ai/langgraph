@@ -25,6 +25,7 @@ from langgraph.store.base import (
     _ensure_refresh,
     _ensure_ttl,
     _validate_namespace,
+    _validate_pagination,
 )
 
 F = TypeVar("F", bound=Callable)
@@ -111,6 +112,7 @@ class AsyncBatchedBaseStore(BaseStore):
         offset: int = 0,
         refresh_ttl: bool | None = None,
     ) -> list[SearchItem]:
+        _validate_pagination(limit, offset)
         self._ensure_task()
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
@@ -169,6 +171,7 @@ class AsyncBatchedBaseStore(BaseStore):
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[str, ...]]:
+        _validate_pagination(limit, offset)
         self._ensure_task()
         fut = self._loop.create_future()
         match_conditions = []

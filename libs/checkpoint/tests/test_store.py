@@ -316,6 +316,33 @@ def test_list_namespaces_basic() -> None:
     assert result == expected
 
 
+@pytest.mark.parametrize("method", ["search", "list_namespaces"])
+@pytest.mark.parametrize("parameter", ["limit", "offset"])
+def test_negative_pagination_is_rejected(method: str, parameter: str) -> None:
+    store = InMemoryStore()
+
+    with pytest.raises(ValueError, match=f"^{parameter} must be non-negative$"):
+        if method == "search":
+            store.search(("test",), **{parameter: -1})
+        else:
+            store.list_namespaces(**{parameter: -1})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["asearch", "alist_namespaces"])
+@pytest.mark.parametrize("parameter", ["limit", "offset"])
+async def test_negative_async_pagination_is_rejected(
+    method: str, parameter: str
+) -> None:
+    store = MockAsyncBatchedStore()
+
+    with pytest.raises(ValueError, match=f"^{parameter} must be non-negative$"):
+        if method == "asearch":
+            await store.asearch(("test",), **{parameter: -1})
+        else:
+            await store.alist_namespaces(**{parameter: -1})
+
+
 def test_list_namespaces_with_wildcards() -> None:
     store = InMemoryStore()
 
