@@ -17,6 +17,7 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import tool as dec_tool
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
+from pydantic import BaseModel, model_validator
 
 from langgraph.prebuilt import InjectedState, InjectedStore, ToolNode, ToolRuntime
 from langgraph.prebuilt.tool_node import ToolInvocationError
@@ -260,6 +261,56 @@ async def test_filter_multiple_injected_args() -> None:
     assert "state" not in tool_message.content.lower()
     assert "store" not in tool_message.content.lower()
     assert "runtime" not in tool_message.content.lower()
+
+
+async def test_filter_model_level_validation_errors() -> None:
+    """Test that model-level validation errors are preserved.
+
+    Pydantic model validators report errors with an empty location tuple. Those
+    errors are still LLM-actionable and should be included in the tool error
+    message so the model can correct its arguments.
+    """
+
+    class RangeArgs(BaseModel):
+        low: int
+        high: int
+
+        @model_validator(mode="after")
+        def check_bounds(self) -> "RangeArgs":
+            if self.low > self.high:
+                raise ValueError("low must be less than or equal to high")
+            return self
+
+    @dec_tool(args_schema=RangeArgs)
+    def my_tool(low: int, high: int) -> str:
+        """Tool with cross-field validation."""
+        return f"{low}-{high}"
+
+    tool_node = ToolNode([my_tool])
+
+    result = await tool_node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "my_tool",
+                            "args": {"low": 5, "high": 1},
+                            "id": "call_1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][0]
+    assert tool_message.status == "error"
+    assert "low must be less than or equal to high" in tool_message.content
+    assert "\n \n" not in tool_message.content
 
 
 async def test_no_filtering_when_all_errors_are_model_args() -> None:
