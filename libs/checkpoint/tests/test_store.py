@@ -17,7 +17,7 @@ from langgraph.store.base import (
     get_text_at_path,
 )
 from langgraph.store.base.batch import AsyncBatchedBaseStore
-from langgraph.store.memory import InMemoryStore
+from langgraph.store.memory import InMemoryStore, _cosine_similarity
 from tests.embed_test_utils import CharacterEmbeddings
 
 
@@ -1044,3 +1044,19 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+@pytest.mark.parametrize("use_numpy", [True, False])
+def test_cosine_similarity_zero_norm(
+    use_numpy: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A zero-norm vector on either side scores 0.0 rather than nan."""
+    if not use_numpy:
+        monkeypatch.setattr("langgraph.store.memory._check_numpy", lambda: False)
+
+    # Zero-norm query against non-zero candidates.
+    assert _cosine_similarity([0.0, 0.0], [[1.0, 2.0], [3.0, 4.0]]) == [0.0, 0.0]
+    # Zero-norm candidate against a non-zero query.
+    assert _cosine_similarity([1.0, 0.0], [[0.0, 0.0], [1.0, 0.0]]) == [0.0, 1.0]
+    # Zero-norm on both sides.
+    assert _cosine_similarity([0.0, 0.0], [[0.0, 0.0]]) == [0.0]
