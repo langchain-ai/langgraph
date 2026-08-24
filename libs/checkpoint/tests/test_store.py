@@ -1044,3 +1044,42 @@ def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
     assert result3[0].key == "3"
     assert result4[0].key == "4"
     assert result5[0].key == "5"
+
+
+def test_put_preserves_created_at() -> None:
+    """Upserting an existing key keeps `created_at` and advances `updated_at`."""
+    store = InMemoryStore()
+    store.put(("ns",), "key", {"count": 1})
+    original = store.get(("ns",), "key")
+    assert original is not None
+
+    store.put(("ns",), "key", {"count": 2})
+    updated = store.get(("ns",), "key")
+    assert updated is not None
+
+    assert updated.value == {"count": 2}
+    assert updated.created_at == original.created_at
+    assert updated.updated_at >= original.updated_at
+
+    # Deleting drops the item, so a later put creates it afresh.
+    store.delete(("ns",), "key")
+    store.put(("ns",), "key", {"count": 3})
+    recreated = store.get(("ns",), "key")
+    assert recreated is not None
+    assert recreated.created_at > original.created_at
+
+
+async def test_aput_preserves_created_at() -> None:
+    """The async batch path preserves `created_at` on upsert too."""
+    store = InMemoryStore()
+    await store.aput(("ns",), "key", {"count": 1})
+    original = await store.aget(("ns",), "key")
+    assert original is not None
+
+    await store.aput(("ns",), "key", {"count": 2})
+    updated = await store.aget(("ns",), "key")
+    assert updated is not None
+
+    assert updated.value == {"count": 2}
+    assert updated.created_at == original.created_at
+    assert updated.updated_at >= original.updated_at

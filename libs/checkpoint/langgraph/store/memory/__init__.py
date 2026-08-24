@@ -407,12 +407,17 @@ class InMemoryStore(BaseStore):
                 self._data[namespace].pop(key, None)
                 self._vectors[namespace].pop(key, None)
             else:
+                now = datetime.now(timezone.utc)
+                existing = self._data[namespace].get(key)
                 self._data[namespace][key] = Item(
                     value=op.value,
                     key=key,
                     namespace=namespace,
-                    created_at=datetime.now(timezone.utc),
-                    updated_at=datetime.now(timezone.utc),
+                    # An upsert keeps the original creation timestamp, matching
+                    # PostgresStore, whose ON CONFLICT clause updates only
+                    # `updated_at`.
+                    created_at=existing.created_at if existing else now,
+                    updated_at=now,
                 )
 
     def _extract_texts(
