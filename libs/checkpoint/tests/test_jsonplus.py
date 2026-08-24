@@ -626,6 +626,26 @@ def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
 
 
 @pytest.mark.parametrize(
+    "arr",
+    [
+        np.array(["2020-01-01", "2020-02-01"], dtype="datetime64[D]"),
+        np.array([1, 2, 3], dtype="timedelta64[D]"),
+        np.array(["2020-01-01", "2020-02-01", "2020-03-01"], dtype="datetime64[D]")[::2],
+    ],
+)
+def test_serde_jsonplus_datetime64_timedelta64_arrays(arr: np.ndarray) -> None:
+    """Test that datetime64 and timedelta64 arrays (C-contiguous and non-contiguous) serialize and round-trip correctly."""
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(arr)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == arr.dtype
+    assert np.array_equal(result, arr)
+
+
+@pytest.mark.parametrize(
     "df",
     [
         pd.DataFrame(),

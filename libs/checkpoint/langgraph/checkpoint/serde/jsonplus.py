@@ -516,7 +516,10 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         obj, np_mod.ndarray
     ):
         order = "F" if obj.flags.f_contiguous and not obj.flags.c_contiguous else "C"
-        if obj.flags.c_contiguous:
+        # datetime64 (dtype.kind 'M') and timedelta64 (dtype.kind 'm') arrays
+        # are C-contiguous but do not support the buffer protocol, so memoryview()
+        # raises ValueError. Route them through the tobytes() path instead.
+        if obj.flags.c_contiguous and obj.dtype.kind not in "Mm":
             mv = memoryview(obj)
             try:
                 meta = (obj.dtype.str, obj.shape, order, mv)
