@@ -125,7 +125,18 @@ def find_tracked_packages(
         if base is None or not base.is_dir():
             continue
 
-        lock_content = _read_text(base / "uv.lock")
+        lock_con
+        pyproject_con = _read_text(base / "pyproject.toml")
+        reqs_con = _read_text(base / "requirements.txt")
+        lock = _read_text(base / "uv.lock")
+
+        for pkg in TRACKED_PACKAGES:
+            if pkg not in found:
+                version = _find_version_for(pkg, lock, pyproject_con, reqs_con)
+                if version:
+                    found[pkg] = f"{pkg}:{version}"
+
+    return [f"{pkg}:{found[pkg]}" for pkg in TRACKED_PACKAGES if pkg in found]tent = _read_text(base / "uv.lock")
         pyproject_content = _read_text(base / "pyproject.toml")
         requirements_content = _read_text(base / "requirements.txt")
 
