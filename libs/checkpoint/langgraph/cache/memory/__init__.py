@@ -35,11 +35,11 @@ class InMemoryCache(BaseCache[ValueT]):
         """Asynchronously get the cached values for the given keys."""
         return self.get(keys)
 
-    def set(self, keys: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
-        """Set the cached values for the given keys."""
+    def set(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+        """Set the cached values for the given keys and TTLs."""
         with self._lock:
             now = datetime.datetime.now(datetime.timezone.utc)
-            for (ns, key), (value, ttl) in keys.items():
+            for (ns, key), (value, ttl) in pairs.items():
                 if ttl is not None:
                     delta = datetime.timedelta(seconds=ttl)
                     expiry: float | None = (now + delta).timestamp()
@@ -52,9 +52,9 @@ class InMemoryCache(BaseCache[ValueT]):
                     expiry,
                 )
 
-    async def aset(self, keys: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
-        """Asynchronously set the cached values for the given keys."""
-        self.set(keys)
+    async def aset(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+        """Asynchronously set the cached values for the given keys and TTLs."""
+        self.set(pairs)
 
     def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
         """Delete the cached values for the given namespaces.

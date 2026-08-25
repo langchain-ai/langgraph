@@ -81,15 +81,15 @@ class RedisCache(BaseCache[ValueT]):
         """Asynchronously get the cached values for the given keys."""
         return self.get(keys)
 
-    def set(self, mapping: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+    def set(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Set the cached values for the given keys and TTLs."""
-        if not mapping:
+        if not pairs:
             return
 
         # Use pipeline for efficient batch operations
         pipe = self.redis.pipeline()
 
-        for (ns, key), (value, ttl) in mapping.items():
+        for (ns, key), (value, ttl) in pairs.items():
             redis_key = self._make_key(ns, key)
             encoding, data = self.serde.dumps_typed(value)
 
@@ -107,9 +107,9 @@ class RedisCache(BaseCache[ValueT]):
             # Silently fail if Redis is unavailable
             pass
 
-    async def aset(self, mapping: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+    async def aset(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Asynchronously set the cached values for the given keys and TTLs."""
-        self.set(mapping)
+        self.set(pairs)
 
     def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
         """Delete the cached values for the given namespaces.

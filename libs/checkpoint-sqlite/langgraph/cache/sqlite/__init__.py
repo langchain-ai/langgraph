@@ -75,11 +75,11 @@ class SqliteCache(BaseCache[ValueT]):
         """Asynchronously get the cached values for the given keys."""
         return await asyncio.to_thread(self.get, keys)
 
-    def set(self, mapping: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+    def set(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Set the cached values for the given keys and TTLs."""
         with self._lock, self._conn:
             now = datetime.datetime.now(datetime.timezone.utc)
-            for key, (value, ttl) in mapping.items():
+            for key, (value, ttl) in pairs.items():
                 if ttl is not None:
                     delta = datetime.timedelta(seconds=ttl)
                     expiry: float | None = (now + delta).timestamp()
@@ -91,9 +91,9 @@ class SqliteCache(BaseCache[ValueT]):
                     (",".join(key[0]), key[1], expiry, encoding, raw),
                 )
 
-    async def aset(self, mapping: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+    async def aset(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Asynchronously set the cached values for the given keys and TTLs."""
-        await asyncio.to_thread(self.set, mapping)
+        await asyncio.to_thread(self.set, pairs)
 
     def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
         """Delete the cached values for the given namespaces.
