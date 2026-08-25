@@ -123,6 +123,32 @@ async def test_put_preserves_metadata(saver: BaseCheckpointSaver) -> None:
     assert tup.metadata.get("custom_key") == "custom_value"
 
 
+async def test_put_preserves_nested_metadata(saver: BaseCheckpointSaver) -> None:
+    """Deeply nested, JSON-compatible metadata round-trips unchanged."""
+    nested = {
+        "profile": {
+            "name": "alice",
+            "tags": ["admin", "rag"],
+            "prefs": {"theme": "dark", "n": 3, "flag": True},
+            "empty_dict": {},
+            "empty_list": [],
+        },
+        "metrics": [{"step": 1, "score": 0.95}, {"step": 2, "score": 0.99}],
+    }
+    md = generate_metadata(source="input", step=1, user=nested)
+    config = generate_config()
+    cp = generate_checkpoint()
+
+    stored = await saver.aput(config, cp, md, {})
+    tup = await saver.aget_tuple(stored)
+    assert tup is not None
+    # Flat fields are still preserved alongside nested structure.
+    assert tup.metadata["source"] == "input"
+    assert tup.metadata["step"] == 1
+    # Deep equality on the nested JSON-compatible structure.
+    assert tup.metadata["user"] == nested
+
+
 async def test_put_root_namespace(saver: BaseCheckpointSaver) -> None:
     """checkpoint_ns='' works."""
     config = generate_config(checkpoint_ns="")
@@ -374,6 +400,7 @@ ALL_PUT_TESTS = [
     test_put_preserves_channel_versions,
     test_put_preserves_versions_seen,
     test_put_preserves_metadata,
+    test_put_preserves_nested_metadata,
     test_put_root_namespace,
     test_put_child_namespace,
     test_put_default_namespace,
