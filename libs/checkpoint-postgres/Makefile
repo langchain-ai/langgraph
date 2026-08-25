@@ -4,8 +4,16 @@
 # TESTING AND COVERAGE
 ######################
 
+# `${POSTGRES_VERSION:-16}` is a shell parameter expansion, but Make expands
+# `${...}` before invoking the shell, and `POSTGRES_VERSION:-16` is not a Make
+# variable — so it collapsed to the empty string, ignoring both an explicit
+# override and the intended default. Use a Make `?=` default instead so the
+# variable participates in Make's normal precedence rules (command line >
+# environment > Makefile default).
+POSTGRES_VERSION ?= 16
+
 start-postgres:
-	POSTGRES_VERSION=${POSTGRES_VERSION:-16} docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait || ( \
+	POSTGRES_VERSION=$(POSTGRES_VERSION) docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait || ( \
 		echo "Failed to start PostgreSQL, printing logs..."; \
 		docker compose -f tests/compose-postgres.yml logs; \
 		exit 1 \
@@ -35,7 +43,7 @@ test:
 
 TEST ?= .
 test_watch:
-	POSTGRES_VERSION=${POSTGRES_VERSION:-16} make start-postgres; \
+	POSTGRES_VERSION=$(POSTGRES_VERSION) make start-postgres; \
 	uv run ptw $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
