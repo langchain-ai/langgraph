@@ -269,6 +269,42 @@ async def test_tool_node_tool_call_input() -> None:
     ]
 
 
+def test_tool_node_accepts_raw_content_blocks_from_tool_invoke() -> None:
+    class RawContentBlockTool(BaseTool):
+        name: str = "raw_content_blocks"
+        description: str = "Return raw message content blocks."
+
+        def invoke(
+            self, input: Any, config: RunnableConfig | None = None, **kwargs: Any
+        ):
+            return [{"type": "text", "text": "raw content"}]
+
+        def _run(self, *args: Any, **kwargs: Any) -> NoReturn:
+            raise AssertionError("invoke returns before _run")
+
+    result = ToolNode([RawContentBlockTool()]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {
+                            "name": "raw_content_blocks",
+                            "args": {},
+                            "id": "raw-call",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == [{"type": "text", "text": "raw content"}]
+    assert tool_message.tool_call_id == "raw-call"
+
+
 def test_tool_node_error_handling_default_invocation() -> None:
     tn = ToolNode([tool1])
     result = tn.invoke(
