@@ -107,7 +107,46 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
                     zip_file.extractall(path)
                     # Move extracted contents to path
                     for item in os.listdir(path):
-                        if item.endswith("-main"):
+                        if ite == '__MACOSX__':
+                            shutil.rmtree(os.path.join(path, item))
+                        else:
+                            # Patch dependencies to prevent OOM (see issue #8409)
+                            _patch_dependencies(os.path.join(path, item))
+    except error.HTTPError as e:
+        if e.code == 302:
+            # Handle redirects
+            _download_repo_with_requests(e.headers['Location'], path)
+        else:
+            raise
+def _patch_dependencies(repo_root: str) -> None:
+    """Patch the template's pyproject.toml to fix incompatible dependencies."""
+    pyproject_path = os.path.join(repo_root, 'pyproject.toml')
+    if not os.path.exists(pyproject_path):
+        return
+    with open(pyproject_path, 'r') as f:
+        content = f.read()
+    # Add compatible version pins (fixes OOM from opentelemetry conflict)
+    replacements = [
+        ("opentelemetry-exporter-prometheus=", "opentelemetry-exporter-prometheus==0.62b1"),
+        ("opentelemetry-exporter-prometheus >= ", "opentelemetry-exporter-prometheus==0.62b1"),
+        ("opentelemetry-exporter-prometheus~=", "opentelemetry-exporter-prometheus==0.62b1"),
+    ]
+    for old, new in replacements:
+        if old in content:
+            content = content.replace(old, new)
+            break
+    # Ensure opentelemetry-api, sdk, otlp are pinned to 1.41.1
+    for package in ["opentelemetry-api", "opentelemetry-sdk", "opentelemetry-exporter-otlp-proto-http"]:
+        # Add explicit pins if not present
+        if package + "=" not in content and package + " >= " not in content and package + "==" not in content:
+            content = content.replace(
+                f"{package}=", f"{package}==1.41.1"
+            )
+    # Pin langsmith to 0.10.9
+    if "langsmith=" in content or "langsmith >= " in content or "langsmith~=" in content:
+        content = content.replace("langsmith=", "langsmith==0.10.9").replace("langsmith >= ", "langsmith==0.10.9").replace("langsmith~=", "langsmith==0.10.9")
+    with open(pyproject_path, 'w') as f:
+        f.write(content)m.endswith("-main"):
                             extracted_dir = os.path.join(path, item)
                             for filename in os.listdir(extracted_dir):
                                 shutil.move(os.path.join(extracted_dir, filename), path)
