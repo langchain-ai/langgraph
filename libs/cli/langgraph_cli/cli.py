@@ -411,6 +411,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
 @click.option(
     "--single-user-layer",
     is_flag=True,
+    envvar="LANGGRAPH_CLI_SINGLE_USER_LAYER",
     help="Combine generated Python build steps into one image layer when supported.",
 )
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
