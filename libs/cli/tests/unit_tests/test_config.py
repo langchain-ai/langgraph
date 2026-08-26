@@ -723,6 +723,23 @@ WORKDIR /deps/outer-unit_tests/unit_tests\
     }
 
 
+def test_config_to_docker_single_user_layer():
+    dockerfile, additional_contexts = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {"dependencies": ["."], "graphs": {"agent": "./agent.py:graph"}}
+        ),
+        base_image="langchain/langgraph-api",
+        single_user_layer=True,
+    )
+
+    assert additional_contexts == {}
+    assert dockerfile.count("\nRUN ") == 1
+    assert "--mount=type=bind" in dockerfile
+    assert "cp -a /__build_context/. /deps/outer-unit_tests/unit_tests/" in dockerfile
+    assert dockerfile.endswith("WORKDIR /deps/outer-unit_tests/unit_tests")
+
+
 def test_config_to_docker_outside_path():
     graphs = {"agent": "./agent.py:graph"}
     actual_docker_stdin, additional_contexts = config_to_docker(

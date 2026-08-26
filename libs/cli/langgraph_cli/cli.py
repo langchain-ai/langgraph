@@ -408,6 +408,11 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
     "--build-command",
     help="Custom build command to run from the langgraph.json directory. If not provided, uses default build process.",
 )
+@click.option(
+    "--single-user-layer",
+    is_flag=True,
+    help="Combine generated Python build steps into one image layer when supported.",
+)
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(
     help="📦 Build LangGraph API server Docker image.",
@@ -426,6 +431,7 @@ def build(
     tag: str,
     install_command: str | None,
     build_command: str | None,
+    single_user_layer: bool,
 ):
     if install_command and langgraph_cli.config.has_disallowed_build_command_content(
         install_command
@@ -461,6 +467,7 @@ def build(
             docker_build_args,
             install_command,
             build_command,
+            single_user_layer=single_user_layer,
         )
 
 

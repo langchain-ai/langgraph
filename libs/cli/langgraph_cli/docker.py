@@ -345,6 +345,7 @@ def build_docker_image(
     docker_command: Sequence[str] | None = None,
     extra_flags: Sequence[str] = (),
     verbose: bool = True,
+    single_user_layer: bool = False,
 ):
     """Build a Docker image from a LangGraph config."""
     # pull latest images
@@ -387,6 +388,7 @@ def build_docker_image(
         install_command=install_command,
         build_command=build_command,
         build_context=build_context,
+        single_user_layer=single_user_layer,
     )
     # add additional_contexts
     if additional_contexts:
