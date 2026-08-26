@@ -385,7 +385,8 @@ class StreamMux:
         then auto-closes channels and the main event log.
 
         If any scheduled task raised under `on_error="raise"`, or any
-        transformer's `afinalize` raises, the exception propagates.
+        transformer's `afinalize` raises, the exception propagates after
+        all transformers, channels, and the main event log are cleaned up.
         The caller (the pump) handles it by routing into `afail`.
 
         Raises:
@@ -393,9 +394,10 @@ class StreamMux:
                 error, re-raised after cleanup.
         """
         pending = self._collect_scheduled_tasks()
+        first_task_error: BaseException | None = None
         if pending:
             results = await asyncio.gather(*pending, return_exceptions=True)
-            first_err = next(
+            first_task_error = next(
                 (
                     r
                     for r in results
@@ -404,22 +406,26 @@ class StreamMux:
                 ),
                 None,
             )
-            if first_err is not None:
-                raise first_err
 
-        first_error: BaseException | None = None
-        for transformer in self._transformers:
-            try:
-                await transformer.afinalize()
-            except BaseException as e:
-                if first_error is None:
-                    first_error = e
-        for ch in self._channels:
-            if not ch._closed:
-                ch.close()
-        self._events.close()
-        if first_error is not None:
-            raise first_error
+        first_finalize_error: BaseException | None = None
+        try:
+            for transformer in self._transformers:
+                try:
+                    await transformer.afinalize()
+                except BaseException as e:
+                    if first_finalize_error is None:
+                        first_finalize_error = e
+            for ch in self._channels:
+                if not ch._closed:
+                    ch.close()
+            self._events.close()
+        finally:
+            self._clear_scheduled_tasks()
+
+        if first_task_error is not None:
+            raise first_task_error
+        if first_finalize_error is not None:
+            raise first_finalize_error
 
     async def afail(self, err: BaseException) -> None:
         """Fail on the async lane.
@@ -432,30 +438,39 @@ class StreamMux:
             err: The exception that ended the run.
         """
         pending = self._collect_scheduled_tasks()
-        for task in pending:
-            task.cancel()
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+        try:
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
 
-        for transformer in self._transformers:
-            try:
-                await transformer.afail(err)
-            except BaseException:
-                pass
-        for ch in self._channels:
-            if not ch._closed:
-                ch.fail(err)
-        if not self._events._closed:
-            self._events.fail(err)
+            for transformer in self._transformers:
+                try:
+                    await transformer.afail(err)
+                except BaseException:
+                    pass
+            for ch in self._channels:
+                if not ch._closed:
+                    ch.fail(err)
+            if not self._events._closed:
+                self._events.fail(err)
+        finally:
+            self._clear_scheduled_tasks()
 
     def _collect_scheduled_tasks(self) -> list[asyncio.Task[Any]]:
-        """Return a snapshot of in-flight tasks scheduled via transformers."""
+        """Return scheduled tasks awaiting lifecycle cleanup."""
         return [
             task
             for transformer in self._transformers
             for task in getattr(transformer, "_stream_scheduled_tasks", ())
-            if not task.done()
         ]
+
+    def _clear_scheduled_tasks(self) -> None:
+        """Release scheduled-task references after lifecycle cleanup."""
+        for transformer in self._transformers:
+            tasks = getattr(transformer, "_stream_scheduled_tasks", None)
+            if tasks is not None:
+                tasks.clear()
 
     # ------------------------------------------------------------------
     # Binding and StreamChannel auto-wiring

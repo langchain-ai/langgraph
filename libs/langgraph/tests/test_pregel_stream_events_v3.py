@@ -1564,8 +1564,44 @@ class TestAsyncTransformerLane:
 
         mux = StreamMux([Strict()], is_async=True)
         await mux.apush(_event("values", {}))
+        # Let the task finish before close; completed errors must still be
+        # retained for the mux to propagate.
+        await asyncio.sleep(0.01)
         with pytest.raises(ValueError, match="strict boom"):
             await mux.aclose()
+
+    async def test_schedule_on_error_raise_cleans_up_before_reraising(self) -> None:
+        finalized = False
+
+        class Strict(StreamTransformer):
+            requires_async = True
+
+            def __init__(self) -> None:
+                self._log: StreamChannel[str] = StreamChannel()
+
+            def init(self) -> dict[str, Any]:
+                return {"out": self._log}
+
+            def process(self, event: ProtocolEvent) -> bool:
+                async def work() -> None:
+                    raise ValueError("strict boom")
+
+                self.schedule(work(), on_error="raise")
+                return True
+
+            async def afinalize(self) -> None:
+                nonlocal finalized
+                finalized = True
+
+        t = Strict()
+        mux = StreamMux([t], is_async=True)
+        await mux.apush(_event("values", {}))
+        await asyncio.sleep(0.01)
+        with pytest.raises(ValueError, match="strict boom"):
+            await mux.aclose()
+        assert finalized
+        assert t._log._closed
+        assert mux._events._closed
 
     async def test_afail_cancels_pending_scheduled_tasks(self) -> None:
         cancelled = asyncio.Event()

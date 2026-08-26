@@ -240,8 +240,10 @@ class StreamTransformer(ABC):
 
         The mux holds the task reference, awaits all scheduled tasks
         during `aclose()` before calling `afinalize()`, and cancels
-        them on `afail()`. Authors don't need to track tasks or
-        implement the last-task-closes-the-log dance.
+        them on `afail()`. Failed tasks scheduled with
+        `on_error="raise"` stay available until lifecycle cleanup so
+        their errors can be propagated reliably. Authors don't need to
+        track tasks or implement the last-task-closes-the-log dance.
 
         Requires a running event loop — call only under `astream()`.
         Set `requires_async = True` on the class so registration under
@@ -253,8 +255,7 @@ class StreamTransformer(ABC):
             on_error: `"log"` (default) catches and logs any exception
                 the coroutine raises, so a single failure doesn't tear
                 down the run. `"raise"` lets the exception propagate
-                when the mux joins pendings, converting the close path
-                into the fail path.
+                when the mux closes, after the normal cleanup hooks run.
 
         Returns:
             The asyncio Task. Authors rarely need to await it directly
@@ -279,7 +280,10 @@ class StreamTransformer(ABC):
         task = asyncio.create_task(wrapped)
         tasks = self._scheduled_task_set()
         tasks.add(task)
-        task.add_done_callback(tasks.discard)
+        if on_error == "log":
+            task.add_done_callback(tasks.discard)
+        else:
+            task.add_done_callback(self._retain_scheduled_error)
         return task
 
     @staticmethod
@@ -303,6 +307,19 @@ class StreamTransformer(ABC):
             tasks = set()
             self._stream_scheduled_tasks = tasks
         return tasks
+
+    def _retain_scheduled_error(self, task: asyncio.Task[Any]) -> None:
+        """Keep failed raise-mode tasks until the mux cleans them up.
+
+        Successful and cancelled tasks can be released as soon as they
+        finish. Retrieving the exception here also prevents asyncio from
+        reporting it as an unhandled task exception before `aclose()` joins
+        the task.
+        """
+        tasks = self._scheduled_task_set()
+        tasks.discard(task)
+        if not task.cancelled() and task.exception() is not None:
+            tasks.add(task)
 
 
 def transformer_requires_async(transformer: StreamTransformer) -> bool:
