@@ -1999,10 +1999,6 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
         if _is_injected_arg_type(type_):
             all_injected_keys.add(name)
 
-        # Check for runtime (special case: parameter named "runtime")
-        if name == "runtime":
-            runtime_arg = name
-
         # Check for InjectedState
         if state_inj := _get_injection_from_type(type_, InjectedState):
             if isinstance(state_inj, InjectedState) and state_inj.field:
@@ -2017,7 +2013,11 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
         if _get_injection_from_type(type_, InjectedStore):
             store_arg = name
 
-        # Check for ToolRuntime
+        # Check for ToolRuntime. Detection is annotation-driven: a parameter is
+        # injected only when it is typed as ToolRuntime (regardless of its
+        # name, per the ToolRuntime contract). Matching on the name "runtime"
+        # alone would hijack regular model-controlled parameters that happen
+        # to be called "runtime".
         if _get_injection_from_type(type_, ToolRuntime):
             runtime_arg = name
 

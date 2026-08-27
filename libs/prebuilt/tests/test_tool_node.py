@@ -2012,6 +2012,68 @@ async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() 
     assert tool_message.tool_call_id == "call_dynamic_2"
 
 
+def test_tool_node_regular_param_named_runtime_not_injected() -> None:
+    """Test that a regular parameter named "runtime" is not hijacked by injection.
+
+    ToolRuntime injection is annotation-driven: only parameters typed as
+    `ToolRuntime` are injected. A regular model-controlled parameter that
+    happens to be named "runtime" (e.g. `runtime: str`) must receive the
+    value provided by the model instead of a `ToolRuntime` instance.
+    """
+
+    @dec_tool
+    def schedule_task(task: str, runtime: str) -> str:
+        """Schedule a task for a time of day."""
+        return f"Scheduled {task} at {runtime}"
+
+    tool_node = ToolNode([schedule_task], handle_tool_errors=True)
+
+    tool_call = {
+        "name": "schedule_task",
+        "args": {"task": "backup", "runtime": "morning"},
+        "id": "call_runtime_1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = tool_node.invoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.status == "success"
+    assert tool_message.content == "Scheduled backup at morning"
+    assert tool_message.tool_call_id == "call_runtime_1"
+
+
+async def test_tool_node_regular_param_named_runtime_not_injected_async() -> None:
+    """Async version of test_tool_node_regular_param_named_runtime_not_injected."""
+
+    @dec_tool
+    async def schedule_task(task: str, runtime: str) -> str:
+        """Schedule a task for a time of day."""
+        return f"Scheduled {task} at {runtime}"
+
+    tool_node = ToolNode([schedule_task], handle_tool_errors=True)
+
+    tool_call = {
+        "name": "schedule_task",
+        "args": {"task": "backup", "runtime": "morning"},
+        "id": "call_runtime_2",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = await tool_node.ainvoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.status == "success"
+    assert tool_message.content == "Scheduled backup at morning"
+    assert tool_message.tool_call_id == "call_runtime_2"
+
+
 def test_tool_runtime_defaults_tools_to_empty_list() -> None:
     runtime = ToolRuntime(
         state={},
