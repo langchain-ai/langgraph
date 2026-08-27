@@ -39,6 +39,14 @@
 - `client.threads.stream()` now accepts `transport="sse"` (default) or
   `transport="websocket"` in place of the previous transport-agnostic default.
 
+### Fixed
+
+- Resource-scoped auth decorators now honor `actions=` and reject empty or
+  invalid action lists. Because unmatched custom-auth paths remain allowed,
+  deployments using action-scoped handlers should configure a global
+  default-deny handler; `langgraph-api` 0.10+ warns about uncovered paths at
+  startup.
+
 ### Notes
 
 - The v3 streaming surface (`AsyncThreadStream`, `SyncThreadStream`, and all
