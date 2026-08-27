@@ -1,0 +1,23 @@
+libs/sdk-py/CHANGELOG.md
+  s_993c3eb647e0df::t_3f90d9a2285d2b 42-49
+libs/sdk-py/tests/test_auth.py
+  s_993c3eb647e0df::t_3f90d9a2285d2b 9-13,19-23,27,29,33-82
+libs/sdk-py/langgraph_sdk/auth/__init__.py
+  s_993c3eb647e0df::t_3f90d9a2285d2b 344,346-347,349-352,401,415,434-436,438-439,441-462,477,501,537
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "2d833389c162f23c83e78fcf298015f3f10963b8",
+  "prompts": {},
+  "sessions": {
+    "s_993c3eb647e0df": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a043bb-e191-7b33-a49a-8e240a4102d4",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "syachamaneni-lc <sreekara.yachamaneni@langchain.dev>"
+    }
+  }
+}
