@@ -2372,7 +2372,11 @@ class Pregel(
                 # find last node that updated the state, if not provided
                 if as_node is None and len(self.nodes) == 1:
                     as_node = tuple(self.nodes)[0]
-                elif as_node is None and not saved:
+                elif as_node is None and not any(
+                    v
+                    for vv in checkpoint["versions_seen"].values()
+                    for v in vv.values()
+                ):
                     if (
                         isinstance(self.input_channels, str)
                         and self.input_channels in self.nodes

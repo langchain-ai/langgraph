@@ -8467,6 +8467,27 @@ async def test_bulk_state_updates(async_checkpointer: BaseCheckpointSaver) -> No
         )
 
 
+async def test_aupdate_state_infers_input_node_after_initial_update() -> None:
+    class State(TypedDict):
+        items: Annotated[list[str], operator.add]
+
+    graph = (
+        StateGraph(State)
+        .add_node("a", lambda state: {"items": ["a"]})
+        .add_node("b", lambda state: {"items": ["b"]})
+        .add_edge(START, "a")
+        .add_edge("a", "b")
+        .add_edge("b", END)
+        .compile(checkpointer=InMemorySaver())
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    await graph.aupdate_state(config, {"items": ["first"]}, as_node=START)
+    await graph.aupdate_state(config, {"items": ["second"]})
+
+    assert (await graph.aget_state(config)).values == {"items": ["first", "second"]}
+
+
 async def test_update_as_input(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
