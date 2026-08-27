@@ -99,6 +99,7 @@ class CapabilityResult:
     tests_failed: int = 0
     tests_skipped: int = 0
     failures: list[str] = field(default_factory=list)
+    skip_reason: str | None = None
 
 
 @dataclass
@@ -107,6 +108,7 @@ class CapabilityReport:
 
     checkpointer_name: str
     results: dict[str, CapabilityResult] = field(default_factory=dict)
+    skip_reason: str | None = None
 
     def passed_all_base(self) -> bool:
         """Whether all base capability tests passed."""
@@ -118,6 +120,8 @@ class CapabilityReport:
 
     def passed_all(self) -> bool:
         """Whether every detected capability's tests passed."""
+        if self.skip_reason is not None:
+            return False
         for result in self.results.values():
             if result.detected and result.passed is not True:
                 return False
@@ -125,6 +129,8 @@ class CapabilityReport:
 
     def conformance_level(self) -> str:
         """Return a human-readable conformance level string."""
+        if self.skip_reason is not None:
+            return "SKIPPED"
         if self.passed_all():
             return "FULL"
         if self.passed_all_base():
@@ -153,6 +159,9 @@ class CapabilityReport:
                 if result is None:
                     icon = "  "
                     suffix = "(no tests)"
+                elif result.skip_reason is not None:
+                    icon = "--"
+                    suffix = f"({result.skip_reason})"
                 elif not result.detected:
                     icon = "⊘ "
                     suffix = "(not implemented)"
@@ -176,7 +185,10 @@ class CapabilityReport:
             1 for r in self.results.values() if r.detected and r.passed is True
         )
         level = self.conformance_level()
-        print(f"{'':>2}  Result: {level} ({passed}/{total})")
+        if self.skip_reason is not None:
+            print(f"{'':>2}  Result: {level} ({self.skip_reason})")
+        else:
+            print(f"{'':>2}  Result: {level} ({passed}/{total})")
         print(f"{'':>2}{border}\n")
 
     def to_dict(self) -> dict[str, Any]:
@@ -184,6 +196,7 @@ class CapabilityReport:
         return {
             "checkpointer_name": self.checkpointer_name,
             "conformance_level": self.conformance_level(),
+            "skip_reason": self.skip_reason,
             "results": {
                 name: {
                     "detected": r.detected,
@@ -192,6 +205,7 @@ class CapabilityReport:
                     "tests_failed": r.tests_failed,
                     "tests_skipped": r.tests_skipped,
                     "failures": r.failures,
+                    "skip_reason": r.skip_reason,
                 }
                 for name, r in self.results.items()
             },

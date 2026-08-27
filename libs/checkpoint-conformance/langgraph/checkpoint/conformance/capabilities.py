@@ -49,8 +49,8 @@ EXTENDED_CAPABILITIES = frozenset(
 
 ALL_CAPABILITIES = BASE_CAPABILITIES | EXTENDED_CAPABILITIES
 
-# Maps capability to the async method name on BaseCheckpointSaver (or subclass).
-_CAPABILITY_METHOD_MAP: dict[Capability, str] = {
+# Maps capabilities to their async and sync method names on BaseCheckpointSaver.
+_ASYNC_CAPABILITY_METHOD_MAP: dict[Capability, str] = {
     Capability.PUT: "aput",
     Capability.PUT_WRITES: "aput_writes",
     Capability.GET_TUPLE: "aget_tuple",
@@ -62,6 +62,18 @@ _CAPABILITY_METHOD_MAP: dict[Capability, str] = {
     Capability.DELTA_CHANNEL_HISTORY: "aget_delta_channel_history",
 }
 
+_SYNC_CAPABILITY_METHOD_MAP: dict[Capability, str] = {
+    Capability.PUT: "put",
+    Capability.PUT_WRITES: "put_writes",
+    Capability.GET_TUPLE: "get_tuple",
+    Capability.LIST: "list",
+    Capability.DELETE_THREAD: "delete_thread",
+    Capability.DELETE_FOR_RUNS: "delete_for_runs",
+    Capability.COPY_THREAD: "copy_thread",
+    Capability.PRUNE: "prune",
+    Capability.DELTA_CHANNEL_HISTORY: "get_delta_channel_history",
+}
+
 
 @dataclass(frozen=True)
 class DetectedCapabilities:
@@ -69,21 +81,30 @@ class DetectedCapabilities:
 
     detected: frozenset[Capability]
     missing: frozenset[Capability]
+    sync_only: bool = False
 
     @classmethod
     def from_instance(cls, saver: BaseCheckpointSaver) -> DetectedCapabilities:
         """Detect capabilities from a checkpointer instance."""
         inner_type = type(saver)
         detected: set[Capability] = set()
+        sync_detected: set[Capability] = set()
 
-        for cap, method_name in _CAPABILITY_METHOD_MAP.items():
+        for cap, method_name in _ASYNC_CAPABILITY_METHOD_MAP.items():
             if _is_overridden(inner_type, method_name):
                 detected.add(cap)
+
+        for cap, method_name in _SYNC_CAPABILITY_METHOD_MAP.items():
+            if _is_overridden(inner_type, method_name):
+                sync_detected.add(cap)
 
         detected_fs = frozenset(detected)
         return cls(
             detected=detected_fs,
             missing=ALL_CAPABILITIES - detected_fs,
+            sync_only=(
+                BASE_CAPABILITIES <= sync_detected and not BASE_CAPABILITIES <= detected
+            ),
         )
 
 

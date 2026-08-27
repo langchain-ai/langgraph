@@ -72,6 +72,23 @@ async def validate(
         caps_to_test = set(Capability)
 
     async with registered.enter_lifespan():
+        # The conformance specs exercise the async API. Detect sync-only savers
+        # once up front so async signpost methods that raise NotImplementedError
+        # are not mistaken for implementations and reported as test failures.
+        async with registered.create() as saver:
+            detected = DetectedCapabilities.from_instance(saver)
+
+        if detected.sync_only:
+            report.skip_reason = "sync-only saver"
+            for cap in Capability:
+                report.results[cap.value] = CapabilityResult(
+                    detected=False,
+                    passed=None,
+                    tests_skipped=1,
+                    skip_reason=report.skip_reason,
+                )
+            return report
+
         for cap in Capability:
             if cap in caps_to_test and cap.value not in registered.skip_capabilities:
                 # Create a fresh checkpointer for each capability suite.
