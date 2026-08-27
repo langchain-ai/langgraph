@@ -84,6 +84,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
             if pipeline:
                 async with conn.pipeline() as pipe:
                     yield cls(conn=conn, pipe=pipe, serde=serde)
+                    # Ensure all buffered data is written and the server has processed it
+                    # before the connection is closed to avoid SSL/connection errors
+                    await pipe.sync()
             else:
                 yield cls(conn=conn, serde=serde)
 
