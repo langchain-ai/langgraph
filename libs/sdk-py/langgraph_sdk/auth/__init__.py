@@ -392,7 +392,7 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
     def __call__(
         self,
         *,
-        resources: str | Sequence[str],
+        resources: str | Sequence[str] | None = None,
         actions: str | Sequence[str] | None = None,
     ) -> Callable[
         [_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]],
@@ -416,25 +416,38 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
             _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
         ]
     ):
-        if fn is not None:
-            _validate_handler(fn)
-            return typing.cast(
-                "_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]",
-                _register_handler(self.auth, self.resource, "*", fn),
-            )
-
-        def decorator(
+        def register(
             handler: _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
         ) -> _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]:
             _validate_handler(handler)
-            return typing.cast(
-                "_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]",
-                _register_handler(self.auth, self.resource, "*", handler),
-            )
+            if isinstance(resources, str):
+                resource_list = [resources]
+            else:
+                resource_list = (
+                    list(resources) if resources is not None else [self.resource]
+                )
+            if resource_list != [self.resource]:
+                raise ValueError(
+                    f"Resource-specific decorator for {self.resource!r} cannot "
+                    f"register handlers for {resource_list!r}. Use @auth.on(...) "
+                    "for multiple resources."
+                )
+            if isinstance(actions, str):
+                action_list = [actions]
+            else:
+                action_list = list(actions) if actions is not None else ["*"]
+            for action in action_list:
+                _register_handler(self.auth, self.resource, action, handler)
+            return handler
 
-        # Accept keyword-only parameters for future filtering behavior; referenced to satisfy linters.
-        _ = resources, actions
-        return decorator
+        if fn is not None:
+            return register(
+                typing.cast(
+                    "_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]",
+                    fn,
+                )
+            )
+        return register
 
 
 class _AssistantsOn(
