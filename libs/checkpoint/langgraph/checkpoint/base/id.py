@@ -93,9 +93,10 @@ def uuid6(node: int | None = None, clock_seq: int | None = None) -> UUID:
     # 0x01b21dd213814000 is the number of 100-ns intervals between the
     # UUID epoch 1582-10-15 00:00:00 and the Unix epoch 1970-01-01 00:00:00.
     timestamp = nanoseconds // 100 + 0x01B21DD213814000
-    if _last_v6_timestamp is not None and timestamp <= _last_v6_timestamp:
-        timestamp = _last_v6_timestamp + 1
-    _last_v6_timestamp = timestamp
+    with _uuid_lock:
+        if _last_v6_timestamp is not None and timestamp <= _last_v6_timestamp:
+            timestamp = _last_v6_timestamp + 1
+        _last_v6_timestamp = timestamp
     if clock_seq is None:
         clock_seq = random.getrandbits(14)  # instead of stable storage
     if node is None:
