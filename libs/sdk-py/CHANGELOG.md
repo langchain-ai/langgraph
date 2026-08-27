@@ -45,7 +45,8 @@
   invalid action lists. Because unmatched custom-auth paths remain allowed,
   deployments using action-scoped handlers should configure a global
   default-deny handler; `langgraph-api` 0.10+ warns about uncovered paths at
-  startup.
+  startup. Fixed-resource decorators no longer accept `resources=` and raise
+  `TypeError` instead of silently ignoring it.
 
 ### Notes
 
