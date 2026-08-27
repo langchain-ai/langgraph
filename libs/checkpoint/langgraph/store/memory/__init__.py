@@ -259,7 +259,9 @@ class InMemoryStore(BaseStore):
 
             for key, item in self._data[namespace].items():
                 if filter_func(item):
-                    if op.query and (embeddings := self._vectors[namespace].get(key)):
+                    if op.query and (
+                        embeddings := self._vectors.get(namespace, {}).get(key)
+                    ):
                         filtered.append((item, list(embeddings.values())))
                     else:
                         filtered.append((item, []))
@@ -386,7 +388,9 @@ class InMemoryStore(BaseStore):
         ] = {}
         for i, op in enumerate(ops):
             if isinstance(op, GetOp):
-                item = self._data[op.namespace].get(op.key)
+                # Read through `.get` so that looking up an unknown namespace
+                # does not insert an empty one into the backing defaultdict.
+                item = self._data.get(op.namespace, {}).get(op.key)
                 results.append(item)
             elif isinstance(op, SearchOp):
                 search_ops[i] = (op, self._filter_items(op))
@@ -404,8 +408,17 @@ class InMemoryStore(BaseStore):
     def _apply_put_ops(self, put_ops: dict[tuple[tuple[str, ...], str], PutOp]) -> None:
         for (namespace, key), op in put_ops.items():
             if op.value is None:
-                self._data[namespace].pop(key, None)
-                self._vectors[namespace].pop(key, None)
+                # Deleting must not create the namespace, and a namespace that
+                # loses its last item stops existing, so that `list_namespaces`
+                # only ever reports namespaces that hold at least one item.
+                if (items := self._data.get(namespace)) is not None:
+                    items.pop(key, None)
+                    if not items:
+                        del self._data[namespace]
+                if (vectors := self._vectors.get(namespace)) is not None:
+                    vectors.pop(key, None)
+                    if not vectors:
+                        del self._vectors[namespace]
             else:
                 self._data[namespace][key] = Item(
                     value=op.value,
