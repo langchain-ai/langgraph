@@ -432,8 +432,11 @@ class _ResourceOn(
         ) -> _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]:
             _validate_handler(handler)
             if actions is None:
-                action_list = ["*"]
-            elif isinstance(actions, str):
+                return typing.cast(
+                    "_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]",
+                    _register_handler(self.auth, self.resource, "*", handler),
+                )
+            if isinstance(actions, str):
                 action_list = [actions]
             elif isinstance(actions, Sequence):
                 action_list = list(actions)

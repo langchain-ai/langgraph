@@ -43,6 +43,17 @@ def test_resource_handler_preserves_wildcard() -> None:
     assert auth._handlers == {("threads", "*"): [handler]}
 
 
+def test_resource_handler_preserves_wildcard_with_parentheses() -> None:
+    auth = Auth()
+
+    @auth.on.threads()
+    async def handler(ctx, value):
+        del ctx, value
+        return None
+
+    assert auth._handlers == {("threads", "*"): [handler]}
+
+
 @pytest.mark.parametrize(
     ("resource", "actions", "error"),
     [
