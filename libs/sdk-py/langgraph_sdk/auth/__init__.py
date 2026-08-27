@@ -392,7 +392,6 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
     def __call__(
         self,
         *,
-        resources: str | Sequence[str],
         actions: str | Sequence[str] | None = None,
     ) -> Callable[
         [_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]],
@@ -407,7 +406,6 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
             | None
         ) = None,
         *,
-        resources: str | Sequence[str] | None = None,
         actions: str | Sequence[str] | None = None,
     ) -> (
         _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]
@@ -427,13 +425,14 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
             handler: _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
         ) -> _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]:
             _validate_handler(handler)
-            return typing.cast(
-                "_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]",
-                _register_handler(self.auth, self.resource, "*", handler),
-            )
+            if isinstance(actions, str):
+                action_list = [actions]
+            else:
+                action_list = list(actions) if actions is not None else ["*"]
+            for action in action_list:
+                _register_handler(self.auth, self.resource, action, handler)
+            return handler
 
-        # Accept keyword-only parameters for future filtering behavior; referenced to satisfy linters.
-        _ = resources, actions
         return decorator
 
 
