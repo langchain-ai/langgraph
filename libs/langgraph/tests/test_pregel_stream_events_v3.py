@@ -1768,6 +1768,18 @@ class TestDrainOnConsume:
         assert list(a) == [0, 1, 2]
         assert list(b) == [0, 1, 2]
 
+    def test_tee_propagates_source_error_to_every_branch(self) -> None:
+        log: StreamChannel[int] = StreamChannel()
+        log._bind(is_async=False)
+        a, b = log.tee(2)
+        log.push(1)
+        log.push(2)
+        log.fail(ValueError("boom"))
+
+        for branch in (a, b):
+            with pytest.raises(ValueError, match="boom"):
+                list(branch)
+
     @pytest.mark.anyio
     async def test_atee_fans_out(self) -> None:
         log: StreamChannel[int] = StreamChannel()

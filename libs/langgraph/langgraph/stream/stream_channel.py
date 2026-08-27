@@ -266,6 +266,7 @@ class StreamChannel(Generic[T]):
         source = self.__iter__()
         buffers: list[deque[T]] = [deque() for _ in range(n)]
         exhausted = [False]
+        error: list[BaseException | None] = [None]
 
         def branch(i: int) -> Iterator[T]:
             buf = buffers[i]
@@ -273,13 +274,19 @@ class StreamChannel(Generic[T]):
                 if buf:
                     yield buf.popleft()
                 elif exhausted[0]:
+                    if error[0] is not None:
+                        raise error[0]
                     return
                 else:
                     try:
                         item = next(source)
                     except StopIteration:
                         exhausted[0] = True
-                        return
+                    except Exception as e:
+                        error[0] = e
+                        exhausted[0] = True
+                    if exhausted[0]:
+                        continue
                     for b in buffers:
                         b.append(item)
 
