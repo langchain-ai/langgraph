@@ -14,6 +14,10 @@ from langgraph._internal._typing import MISSING
 from langgraph.channels.binop import BinaryOperatorAggregate, _get_overwrite
 from langgraph.channels.delta import DeltaChannel
 from langgraph.channels.last_value import LastValue
+from langgraph.channels.named_barrier_value import (
+    NamedBarrierValue,
+    NamedBarrierValueAfterFinish,
+)
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -89,6 +93,110 @@ def test_topic_accumulate() -> None:
     assert channel.get() == ["a", "b", "b", "c", "d", "d"]
     assert channel.update(["e"])
     assert channel.get() == ["a", "b", "b", "c", "d", "d", "e"]
+
+
+def test_topic_checkpoint_is_not_aliased() -> None:
+    """`checkpoint()` must not hand out the list `update()` extends in place."""
+    channel = Topic(str, accumulate=True).from_checkpoint(MISSING)
+    channel.update(["a", "b"])
+
+    checkpoint = channel.checkpoint()
+    channel.update(["c"])
+
+    assert checkpoint == ["a", "b"]
+
+
+def test_topic_from_checkpoint_is_not_aliased() -> None:
+    """Channels restored from one checkpoint must be independent of each other."""
+    source = Topic(str, accumulate=True).from_checkpoint(MISSING)
+    source.update(["a", "b"])
+    checkpoint = source.checkpoint()
+
+    one = Topic(str, accumulate=True).from_checkpoint(checkpoint)
+    two = Topic(str, accumulate=True).from_checkpoint(checkpoint)
+    one.update(["c"])
+
+    assert one.get() == ["a", "b", "c"]
+    assert two.get() == ["a", "b"]
+    assert checkpoint == ["a", "b"]
+
+
+def test_topic_from_checkpoint_tuple_is_not_aliased() -> None:
+    """The backwards-compatible tuple form must copy too."""
+    checkpoint = (None, ["a"])
+    channel = Topic(str, accumulate=True).from_checkpoint(checkpoint)
+    channel.update(["b"])
+
+    assert channel.get() == ["a", "b"]
+    assert checkpoint[1] == ["a"]
+
+
+@pytest.mark.parametrize("cls", [NamedBarrierValue, NamedBarrierValueAfterFinish])
+def test_named_barrier_value_checkpoint_is_not_aliased(cls: type) -> None:
+    channel = cls(str, {"a", "b"}).from_checkpoint(MISSING)
+    channel.update(["a"])
+
+    checkpoint = channel.checkpoint()
+    channel.update(["b"])
+
+    seen = checkpoint[0] if isinstance(checkpoint, tuple) else checkpoint
+    assert seen == {"a"}
+
+
+@pytest.mark.parametrize("cls", [NamedBarrierValue, NamedBarrierValueAfterFinish])
+def test_named_barrier_value_from_checkpoint_is_not_aliased(cls: type) -> None:
+    source = cls(str, {"a", "b"}).from_checkpoint(MISSING)
+    source.update(["a"])
+    checkpoint = source.checkpoint()
+
+    restored = cls(str, {"a", "b"}).from_checkpoint(checkpoint)
+    restored.update(["b"])
+
+    # The source never saw "b", so its barrier must still be closed.
+    assert not source.is_available()
+    seen = checkpoint[0] if isinstance(checkpoint, tuple) else checkpoint
+    assert seen == {"a"}
+
+
+@pytest.mark.parametrize("durability", ["sync", "async", "exit"])
+def test_topic_accumulate_checkpoint_history_matches_durability(
+    durability: str,
+) -> None:
+    """A taken checkpoint must not absorb writes from later supersteps.
+
+    `create_checkpoint` stores whatever `checkpoint()` returns. When that was
+    the channel's live list, a later superstep extended it in place, so under
+    `durability="async"` (serialized after the fact) the persisted history for
+    an earlier step showed values that step never had.
+    """
+
+    class State(TypedDict):
+        logs: Annotated[list, Topic(str, accumulate=True)]
+
+    builder = StateGraph(State)
+    for name in ("a", "b", "c"):
+        builder.add_node(name, (lambda n: lambda state: {"logs": n})(name))
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    builder.add_edge("b", "c")
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert graph.invoke({"logs": []}, config, durability=durability)["logs"] == [
+        "a",
+        "b",
+        "c",
+    ]
+
+    history = {
+        state.metadata["step"]: state.values["logs"]
+        for state in graph.get_state_history(config)
+        if state.values.get("logs") is not None
+    }
+    if durability != "exit":
+        assert history[1] == ["a"]
+        assert history[2] == ["a", "b"]
+    assert history[3] == ["a", "b", "c"]
 
 
 def test_binop() -> None:

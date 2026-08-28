@@ -61,7 +61,9 @@ class Topic(
         return empty
 
     def checkpoint(self) -> list[Value]:
-        return self.values
+        # Copy: `update()` extends this list in place, so handing out the live
+        # object would let a later superstep mutate an already-taken checkpoint.
+        return self.values.copy()
 
     def from_checkpoint(self, checkpoint: list[Value]) -> Self:
         empty = self.__class__(self.typ, self.accumulate)
@@ -69,9 +71,9 @@ class Topic(
         if checkpoint is not MISSING:
             if isinstance(checkpoint, tuple):
                 # backwards compatibility
-                empty.values = checkpoint[1]
+                empty.values = checkpoint[1].copy()
             else:
-                empty.values = checkpoint
+                empty.values = checkpoint.copy()
         return empty
 
     def update(self, values: Sequence[Value | list[Value]]) -> bool:
