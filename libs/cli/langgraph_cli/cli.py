@@ -410,7 +410,6 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
 )
 @click.option(
     "--flat",
-    "single_user_layer",
     is_flag=True,
     envvar="LANGGRAPH_CLI_FLAT_IMAGES",
     help="Flatten generated Python build steps into one image layer when supported.",
@@ -433,7 +432,7 @@ def build(
     tag: str,
     install_command: str | None,
     build_command: str | None,
-    single_user_layer: bool,
+    flat: bool,
 ):
     if install_command and langgraph_cli.config.has_disallowed_build_command_content(
         install_command
@@ -469,7 +468,7 @@ def build(
             docker_build_args,
             install_command,
             build_command,
-            single_user_layer=single_user_layer,
+            flat=flat,
         )
 
 

@@ -723,14 +723,14 @@ WORKDIR /deps/outer-unit_tests/unit_tests\
     }
 
 
-def test_config_to_docker_single_user_layer():
+def test_config_to_docker_flat():
     dockerfile, additional_contexts = config_to_docker(
         PATH_TO_CONFIG,
         validate_config(
             {"dependencies": ["."], "graphs": {"agent": "./agent.py:graph"}}
         ),
         base_image="langchain/langgraph-api",
-        single_user_layer=True,
+        flat=True,
     )
 
     assert additional_contexts == {}

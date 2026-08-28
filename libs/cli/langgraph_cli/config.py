@@ -1162,9 +1162,7 @@ def _build_runtime_env_vars(config: Config) -> list[str]:
     return env_vars
 
 
-def _supports_single_user_layer(
-    config: Config, local_deps: LocalDeps, escape_variables: bool
-) -> bool:
+def _can_flatten(config: Config, local_deps: LocalDeps, escape_variables: bool) -> bool:
     return not (
         config["dockerfile_lines"]
         or local_deps.additional_contexts
@@ -1188,7 +1186,7 @@ build-backend = "setuptools.build_meta"
 PYPROJECT"""
 
 
-def _build_single_user_layer_dockerfile(
+def _build_flat_dockerfile(
     config_path: pathlib.Path,
     config: Config,
     local_deps: LocalDeps,
@@ -1211,12 +1209,8 @@ def _build_single_user_layer_dockerfile(
     for reqpath, destination in local_deps.pip_reqs:
         source = context / reqpath.relative_to(config_path.parent)
         destination_parent = pathlib.PurePosixPath(destination).parent
-        commands.extend(
-            [
-                f"mkdir -p {shlex.quote(str(destination_parent))}",
-                f"cp {shlex.quote(str(source))} {shlex.quote(destination)}",
-            ]
-        )
+        commands.append(f"""mkdir -p {shlex.quote(str(destination_parent))}
+cp {shlex.quote(str(source))} {shlex.quote(destination)}""")
     if local_deps.pip_reqs:
         requirements = " ".join(
             f"-r {destination}" for _, destination in local_deps.pip_reqs
@@ -1226,22 +1220,15 @@ def _build_single_user_layer_dockerfile(
     for _, (relative_path, name) in local_deps.real_pkgs.items():
         source = f"{context / relative_path}/."
         destination = f"/deps/{name}"
-        commands.extend(
-            [
-                f"mkdir -p {shlex.quote(destination)}",
-                f"cp -a {shlex.quote(source)} {shlex.quote(destination)}/",
-            ]
-        )
+        commands.append(f"""mkdir -p {shlex.quote(destination)}
+cp -a {shlex.quote(source)} {shlex.quote(destination)}/""")
 
     for full_path, (relative_path, destination) in local_deps.faux_pkgs.items():
         source = f"{context / relative_path}/."
-        commands.extend(
-            [
-                f"mkdir -p {shlex.quote(destination)}",
-                f"cp -a {shlex.quote(source)} {shlex.quote(destination)}/",
-                _faux_package_pyproject_command(full_path.name),
-            ]
-        )
+        pyproject = _faux_package_pyproject_command(full_path.name)
+        commands.append(f"""mkdir -p {shlex.quote(destination)}
+cp -a {shlex.quote(source)} {shlex.quote(destination)}/
+{pyproject}""")
 
     commands.append(local_deps_install_command)
     commands.extend(
@@ -1368,7 +1355,7 @@ def python_config_to_docker(
     api_version: str | None = None,
     *,
     escape_variables: bool = False,
-    single_user_layer: bool = False,
+    flat: bool = False,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     source_kind = _get_source_kind(config)
@@ -1544,11 +1531,9 @@ ADD {relpath} /deps/{name}
         pip_installer=pip_installer,
     )
 
-    if single_user_layer and _supports_single_user_layer(
-        config, local_deps, escape_variables
-    ):
+    if flat and _can_flatten(config, local_deps, escape_variables):
         return (
-            _build_single_user_layer_dockerfile(
+            _build_flat_dockerfile(
                 config_path=config_path,
                 config=config,
                 local_deps=local_deps,
@@ -1746,7 +1731,7 @@ def config_to_docker(
     build_command: str | None = None,
     build_context: str | None = None,
     escape_variables: bool = False,
-    single_user_layer: bool = False,
+    flat: bool = False,
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or default_base_image(config)
 
@@ -1767,7 +1752,7 @@ def config_to_docker(
         base_image=base_image,
         api_version=api_version,
         escape_variables=escape_variables,
-        single_user_layer=single_user_layer,
+        flat=flat,
     )
 
 
