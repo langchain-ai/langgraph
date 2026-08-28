@@ -1178,6 +1178,10 @@ PYPROJECT"""
 
 _FLAT_BUILD_CONTEXT = pathlib.PurePosixPath("/__build_context")
 _FLAT_ADDITIONAL_CONTEXTS = pathlib.PurePosixPath("/__additional_contexts")
+_DEFAULT_NODE_BUILD_COMMAND = (
+    '(test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, '
+    'skipping") || tsx /api/langgraph_api/js/build.mts'
+)
 
 
 def _render_flat_dockerfile(
@@ -1222,6 +1226,11 @@ def _flat_context_source(
     return str(_FLAT_BUILD_CONTEXT / relative_path)
 
 
+def _copy_directory_command(source: str, destination: str) -> str:
+    return f"""mkdir -p {shlex.quote(destination)}
+cp -a {shlex.quote(f"{source}/.")} {shlex.quote(destination)}/"""
+
+
 def _flat_local_dependency_commands(
     *,
     config_path: pathlib.Path,
@@ -1248,17 +1257,17 @@ cp {shlex.quote(source)} {shlex.quote(destination)}""")
         commands.append(f"{local_reqs_pip_install} {requirements}")
 
     for full_path, (relative_path, name) in local_deps.real_pkgs.items():
-        source = f"{_flat_context_source(full_path, relative_path, additional_context_names)}/."
-        destination = f"/deps/{name}"
-        commands.append(f"""mkdir -p {shlex.quote(destination)}
-cp -a {shlex.quote(source)} {shlex.quote(destination)}/""")
+        source = _flat_context_source(
+            full_path, relative_path, additional_context_names
+        )
+        commands.append(_copy_directory_command(source, f"/deps/{name}"))
 
     for full_path, (relative_path, destination) in local_deps.faux_pkgs.items():
-        source = f"{_flat_context_source(full_path, relative_path, additional_context_names)}/."
+        source = _flat_context_source(
+            full_path, relative_path, additional_context_names
+        )
         pyproject = _faux_package_pyproject_command(full_path.name)
-        commands.append(f"""mkdir -p {shlex.quote(destination)}
-cp -a {shlex.quote(source)} {shlex.quote(destination)}/
-{pyproject}""")
+        commands.append(f"{_copy_directory_command(source, destination)}\n{pyproject}")
 
     return commands
 
@@ -1696,7 +1705,6 @@ def _build_flat_node_dockerfile(
     config: Config,
     image: str,
     env_vars: list[str],
-    destination: str,
     install_workdir: str,
     build_workdir: str,
     install_command: str,
@@ -1704,9 +1712,7 @@ def _build_flat_node_dockerfile(
 ) -> str:
     commands = [
         "set -eu",
-        f"mkdir -p {shlex.quote(destination)}\n"
-        f"cp -a {shlex.quote(f'{_FLAT_BUILD_CONTEXT}/.')} "
-        f"{shlex.quote(destination)}/",
+        _copy_directory_command(str(_FLAT_BUILD_CONTEXT), install_workdir),
         f"cd {shlex.quote(install_workdir)}\n{install_command}",
         f"cd {shlex.quote(build_workdir)}\n{build_command}",
     ]
@@ -1737,42 +1743,32 @@ def node_config_to_docker(
     if build_context:
         relative_workdir = _calculate_relative_workdir(config_path, build_context)
         container_name = pathlib.Path(build_context).name
-        if relative_workdir:
-            faux_path = f"/deps/{container_name}/{relative_workdir}"
-        else:
-            faux_path = f"/deps/{container_name}"
+        install_workdir = f"/deps/{container_name}"
+        build_workdir = (
+            f"{install_workdir}/{relative_workdir}"
+            if relative_workdir
+            else install_workdir
+        )
     else:
         # Backward compatibility: use the original behavior
-        faux_path = f"/deps/{config_path.parent.name}"
+        install_workdir = build_workdir = f"/deps/{config_path.parent.name}"
 
     image_str = docker_tag(config, base_image, api_version)
 
     env_vars = _build_runtime_env_vars(config)
 
-    # For monorepo support, we need to handle install and build commands differently
-    if build_context:
-        # Monorepo case: install from root, build from config directory
-        container_root = f"/deps/{pathlib.Path(build_context).name}"
-        install_workdir = container_root
-    else:
-        # Original behavior: everything happens in the same directory
-        install_workdir = faux_path
-
-    build_workdir = faux_path
     build_cmd = (
         build_command
         if build_context and build_command
-        else '(test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
+        else _DEFAULT_NODE_BUILD_COMMAND
     )
 
     if flat:
-        destination = container_root if build_context else faux_path
         return (
             _build_flat_node_dockerfile(
                 config=config,
                 image=image_str,
                 env_vars=env_vars,
-                destination=destination,
                 install_workdir=install_workdir,
                 build_workdir=build_workdir,
                 install_command=install_cmd,
@@ -1786,7 +1782,7 @@ def node_config_to_docker(
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
-        f"ADD . {faux_path if not build_context else container_root}",
+        f"ADD . {install_workdir}",
         "",
         f"WORKDIR {install_workdir}",
         "",
