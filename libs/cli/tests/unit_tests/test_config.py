@@ -737,6 +737,8 @@ def test_config_to_docker_single_user_layer():
     assert dockerfile.count("\nRUN ") == 1
     assert "--mount=type=bind" in dockerfile
     assert "cp -a /__build_context/. /deps/outer-unit_tests/unit_tests/" in dockerfile
+    assert "cat > /deps/outer-unit_tests/pyproject.toml <<'PYPROJECT'" in dockerfile
+    assert '[tool.setuptools.package-data]\n"*" = ["**/*"]' in dockerfile
     assert dockerfile.endswith("WORKDIR /deps/outer-unit_tests/unit_tests")
 
 

@@ -1162,6 +1162,107 @@ def _build_runtime_env_vars(config: Config) -> list[str]:
     return env_vars
 
 
+def _supports_single_user_layer(
+    config: Config, local_deps: LocalDeps, escape_variables: bool
+) -> bool:
+    return not (
+        config["dockerfile_lines"]
+        or local_deps.additional_contexts
+        or config.get("ui")
+        or config.get("node_version")
+        or escape_variables
+    )
+
+
+def _faux_package_pyproject_command(package_name: str) -> str:
+    pyproject_path = shlex.quote(f"/deps/outer-{package_name}/pyproject.toml")
+    return f"""cat > {pyproject_path} <<'PYPROJECT'
+[project]
+name = {json.dumps(package_name)}
+version = "0.1"
+[tool.setuptools.package-data]
+"*" = ["**/*"]
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+PYPROJECT"""
+
+
+def _build_single_user_layer_dockerfile(
+    config_path: pathlib.Path,
+    config: Config,
+    local_deps: LocalDeps,
+    pypi_deps: list[str],
+    local_reqs_pip_install: str,
+    local_deps_install_command: str,
+    pip_cleanup: str,
+    image: str,
+    env_vars: list[str],
+) -> str:
+    context = pathlib.PurePosixPath("/__build_context")
+    commands = ["set -eu"]
+
+    if pip_config_file := config.get("pip_config_file"):
+        source = shlex.quote(str(context / pip_config_file))
+        commands.append(f"cp {source} /pipconfig.txt")
+    if pypi_deps:
+        commands.append(f"{local_reqs_pip_install} {' '.join(pypi_deps)}")
+
+    for reqpath, destination in local_deps.pip_reqs:
+        source = context / reqpath.relative_to(config_path.parent)
+        destination_parent = pathlib.PurePosixPath(destination).parent
+        commands.extend(
+            [
+                f"mkdir -p {shlex.quote(str(destination_parent))}",
+                f"cp {shlex.quote(str(source))} {shlex.quote(destination)}",
+            ]
+        )
+    if local_deps.pip_reqs:
+        requirements = " ".join(
+            f"-r {destination}" for _, destination in local_deps.pip_reqs
+        )
+        commands.append(f"{local_reqs_pip_install} {requirements}")
+
+    for _, (relative_path, name) in local_deps.real_pkgs.items():
+        source = f"{context / relative_path}/."
+        destination = f"/deps/{name}"
+        commands.extend(
+            [
+                f"mkdir -p {shlex.quote(destination)}",
+                f"cp -a {shlex.quote(source)} {shlex.quote(destination)}/",
+            ]
+        )
+
+    for full_path, (relative_path, destination) in local_deps.faux_pkgs.items():
+        source = f"{context / relative_path}/."
+        commands.extend(
+            [
+                f"mkdir -p {shlex.quote(destination)}",
+                f"cp -a {shlex.quote(source)} {shlex.quote(destination)}/",
+                _faux_package_pyproject_command(full_path.name),
+            ]
+        )
+
+    commands.append(local_deps_install_command)
+    commands.extend(
+        line.removeprefix("RUN ")
+        for line in pip_cleanup.splitlines()
+        if line and not line.startswith("#")
+    )
+
+    return os.linesep.join(
+        [
+            "# syntax=docker/dockerfile:1.7",
+            f"FROM {image}",
+            "RUN --mount=type=bind,target=/__build_context,readonly <<'USER_LAYER'",
+            *commands,
+            "USER_LAYER",
+            *env_vars,
+            f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
+        ]
+    )
+
+
 def _get_node_pm_install_cmd(project_dir: pathlib.Path) -> str:
     def test_file(file_name):
         full_path = project_dir / file_name
@@ -1430,90 +1531,36 @@ ADD {relpath} /deps/{name}
         )
     image_str = docker_tag(config, base_image, api_version)
     dep_vname = "$$dep" if escape_variables else "$dep"
-    local_deps_install_str = f"""RUN for dep in /deps/*; do \
+    local_deps_install_command = f"""for dep in /deps/*; do \
             echo "Installing {dep_vname}"; \
             if [ -d "{dep_vname}" ]; then \
                 echo "Installing {dep_vname}"; \
                 (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
             fi; \
         done"""
+    pip_cleanup = _get_pip_cleanup_lines(
+        install_cmd=install_cmd,
+        to_uninstall=build_tools_to_uninstall,
+        pip_installer=pip_installer,
+    )
 
-    if (
-        single_user_layer
-        and not config["dockerfile_lines"]
-        and not local_deps.additional_contexts
-        and not config.get("ui")
-        and not config.get("node_version")
-        and not escape_variables
+    if single_user_layer and _supports_single_user_layer(
+        config, local_deps, escape_variables
     ):
-        commands = ["set -eu"]
-        context = pathlib.PurePosixPath("/__build_context")
-        if pip_config_file := config.get("pip_config_file"):
-            commands.append(
-                f"cp {shlex.quote(str(context / pip_config_file))} /pipconfig.txt"
-            )
-        if pypi_deps:
-            commands.append(f"{local_reqs_pip_install} {' '.join(pypi_deps)}")
-        for reqpath, destpath in local_deps.pip_reqs:
-            source = context / reqpath.relative_to(config_path.parent)
-            commands.extend(
-                [
-                    f"mkdir -p {shlex.quote(str(pathlib.PurePosixPath(destpath).parent))}",
-                    f"cp {shlex.quote(str(source))} {shlex.quote(destpath)}",
-                ]
-            )
-        if local_deps.pip_reqs:
-            commands.append(
-                f"{local_reqs_pip_install} "
-                + " ".join(f"-r {path}" for _, path in local_deps.pip_reqs)
-            )
-        for _, (relpath, name) in local_deps.real_pkgs.items():
-            destination = f"/deps/{name}"
-            source = f"{context / relpath}/."
-            commands.extend(
-                [
-                    f"mkdir -p {shlex.quote(destination)}",
-                    f"cp -a {shlex.quote(source)} {shlex.quote(destination)}/",
-                ]
-            )
-        for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items():
-            source = f"{context / relpath}/."
-            pyproject = shlex.quote(f"/deps/outer-{fullpath.name}/pyproject.toml")
-            commands.extend(
-                [
-                    f"mkdir -p {shlex.quote(destpath)}",
-                    f"cp -a {shlex.quote(source)} {shlex.quote(destpath)}/",
-                    "for line in '[project]' "
-                    f"'name = \"{fullpath.name}\"' "
-                    "'version = \"0.1\"' "
-                    "'[tool.setuptools.package-data]' "
-                    '\'"*" = ["**/*"]\' '
-                    "'[build-system]' "
-                    "'requires = [\"setuptools>=61\"]' "
-                    "'build-backend = \"setuptools.build_meta\"'; do "
-                    f'echo "$line" >> {pyproject}; done',
-                ]
-            )
-        commands.append(local_deps_install_str.removeprefix("RUN "))
-        commands.extend(
-            line.removeprefix("RUN ")
-            for line in _get_pip_cleanup_lines(
-                install_cmd=install_cmd,
-                to_uninstall=build_tools_to_uninstall,
-                pip_installer=pip_installer,
-            ).splitlines()
-            if line and not line.startswith("#")
+        return (
+            _build_single_user_layer_dockerfile(
+                config_path=config_path,
+                config=config,
+                local_deps=local_deps,
+                pypi_deps=pypi_deps,
+                local_reqs_pip_install=local_reqs_pip_install,
+                local_deps_install_command=local_deps_install_command,
+                pip_cleanup=pip_cleanup,
+                image=image_str,
+                env_vars=env_vars,
+            ),
+            additional_contexts,
         )
-        docker_file_contents = [
-            "# syntax=docker/dockerfile:1.7",
-            f"FROM {image_str}",
-            "RUN --mount=type=bind,target=/__build_context,readonly <<'USER_LAYER'",
-            *commands,
-            "USER_LAYER",
-            *env_vars,
-            f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
-        ]
-        return os.linesep.join(docker_file_contents), additional_contexts
 
     # Prepare docker file contents
     docker_file_contents = []
@@ -1537,18 +1584,14 @@ ADD {relpath} /deps/{name}
             installs,
             "",
             "# -- Installing all local dependencies --",
-            local_deps_install_str,
+            f"RUN {local_deps_install_command}",
             "# -- End of local dependencies install --",
             os.linesep.join(env_vars),
             "",
             js_inst_str,
             "",
             # Add pip cleanup after all installations are complete
-            _get_pip_cleanup_lines(
-                install_cmd=install_cmd,
-                to_uninstall=build_tools_to_uninstall,
-                pip_installer=pip_installer,
-            ),
+            pip_cleanup,
             "",
             f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
         ]

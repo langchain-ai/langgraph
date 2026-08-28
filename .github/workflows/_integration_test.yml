@@ -58,7 +58,7 @@ jobs:
         if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
         working-directory: ${{ matrix.example.workdir }}
         run: |
-          langgraph build -t ${{ matrix.example.tag }}
+          langgraph build --single-user-layer -t ${{ matrix.example.tag }}
       - name: Test service ${{ matrix.example.name }}
         if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&env.HAS_LANGSMITH_API_KEY == 'true' }}
         working-directory: ${{ matrix.example.workdir }}
