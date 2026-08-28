@@ -5,22 +5,42 @@ from typing import Any
 
 
 def _freeze(obj: Any, depth: int = 10) -> Hashable:
-    if isinstance(obj, Hashable) or depth <= 0:
-        # already hashable, no need to freeze
+    if depth <= 0:
         return obj
-    elif isinstance(obj, Mapping):
+    # Plain tuples are Hashable even when they contain unhashable values
+    # (`isinstance` is type-based). Walk them so positional args and keyword
+    # values take the same path.
+    if type(obj) is tuple:
+        return tuple(_freeze(x, depth - 1) for x in obj)
+    if isinstance(obj, Hashable):
+        return obj
+    if isinstance(obj, Mapping):
         # sort keys so {"a":1,"b":2} == {"b":2,"a":1}
         return tuple(sorted((k, _freeze(v, depth - 1)) for k, v in obj.items()))
-    elif isinstance(obj, Sequence):
+    if isinstance(obj, Sequence):
         return tuple(_freeze(x, depth - 1) for x in obj)
-    # numpy / pandas etc. can provide their own .tobytes()
-    elif hasattr(obj, "tobytes"):
-        return (
+    # numpy / pandas / PIL etc. can provide their own .tobytes()
+    if hasattr(obj, "tobytes"):
+        dtype = getattr(obj, "dtype", None)
+        key: tuple[Any, ...] = (
             type(obj).__name__,
             obj.tobytes(),
-            obj.shape if hasattr(obj, "shape") else None,
+            getattr(obj, "shape", None),
+            str(dtype) if dtype is not None else None,
+            getattr(obj, "strides", None),
         )
-    return obj  # strings, ints, dataclasses with frozen=True, etc.
+        # PIL Image: mode is a str like "P" / "RGB". ndarray.size is an int.
+        mode = getattr(obj, "mode", None)
+        if isinstance(mode, str):
+            palette = None
+            getpalette = getattr(obj, "getpalette", None)
+            if callable(getpalette):
+                raw = getpalette()
+                if raw is not None:
+                    palette = tuple(raw)
+            key += (mode, getattr(obj, "size", None), palette)
+        return key
+    return obj
 
 
 def default_cache_key(*args: Any, **kwargs: Any) -> str | bytes:
