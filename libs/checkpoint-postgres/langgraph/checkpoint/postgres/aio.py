@@ -66,14 +66,14 @@ class AsyncPostgresSaver(BasePostgresSaver):
         cls,
         conn_string: str,
         *,
-        pipeline: bool = False,
+        pipeline: bool = False,  # Default to False to avoid issues with connection poolers/PgBouncer
         serde: SerializerProtocol | None = None,
     ) -> AsyncIterator[AsyncPostgresSaver]:
         """Create a new AsyncPostgresSaver instance from a connection string.
 
         Args:
             conn_string: The Postgres connection info string.
-            pipeline: whether to use AsyncPipeline
+            pipeline: whether to use AsyncPipeline (not compatible with PgBouncer/Poolers)
 
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
@@ -82,8 +82,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
             if pipeline:
-                async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                # Try pipeline but fall back gracefully if it fails (e.g., with poolers)
+                try:
+                    async with conn.pipeline() as pipe:
+                        yield cls(conn=conn, pipe=pipe, serde=serde)
+                except (psycopg.OperationalError, asyncio.exceptions.CancelledError):
+                    # If pipeline fails, fall back to non-pipeline mode
+                    yield cls(conn=conn, serde=serde)
             else:
                 yield cls(conn=conn, serde=serde)
 
