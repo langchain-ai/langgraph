@@ -123,6 +123,43 @@ async def test_put_preserves_metadata(saver: BaseCheckpointSaver) -> None:
     assert tup.metadata.get("custom_key") == "custom_value"
 
 
+async def test_put_preserves_nested_metadata(saver: BaseCheckpointSaver) -> None:
+    """Deeply nested JSON-compatible metadata round-trips without flattening.
+
+    Covers nested dicts, lists, empty containers, and non-string scalars —
+    structures a saver could silently flatten or drop while passing the
+    flat-metadata checks.
+    """
+    nested_metadata: dict[str, Any] = {
+        "nested": {
+            "config": {"model": "gpt-4o", "temperature": 0.5, "retries": 3},
+            "tags": ["alpha", "beta", ["gamma", "delta"]],
+            "metrics": [
+                {"name": "tokens", "value": 42},
+                {"name": "latency_ms", "value": 0.3},
+            ],
+            "deep": {"a": {"b": {"c": {"d": "deep"}}}},
+        },
+        "empty_dict": {},
+        "empty_list": [],
+        "null_value": None,
+        "flag_value": True,
+    }
+    md = generate_metadata(source="loop", step=2, **nested_metadata)
+    config = generate_config()
+    cp = generate_checkpoint()
+
+    stored = await saver.aput(config, cp, md, {})
+    tup = await saver.aget_tuple(stored)
+    assert tup is not None
+    missing = object()  # sentinel: distinguishes an absent key from an explicit None
+    for key, expected in nested_metadata.items():
+        actual = tup.metadata.get(key, missing)
+        assert actual == expected, (
+            f"metadata[{key}]: expected {expected!r}, got {actual!r}"
+        )
+
+
 async def test_put_root_namespace(saver: BaseCheckpointSaver) -> None:
     """checkpoint_ns='' works."""
     config = generate_config(checkpoint_ns="")
@@ -374,6 +411,7 @@ ALL_PUT_TESTS = [
     test_put_preserves_channel_versions,
     test_put_preserves_versions_seen,
     test_put_preserves_metadata,
+    test_put_preserves_nested_metadata,
     test_put_root_namespace,
     test_put_child_namespace,
     test_put_default_namespace,
