@@ -300,6 +300,7 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 EXT_DELTA_SNAPSHOT = 7
+EXT_NUMPY_SCALAR = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -528,6 +529,15 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             meta = (obj.dtype.str, obj.shape, order, buf)
             return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
 
+    elif (np_mod := sys.modules.get("numpy")) is not None and isinstance(
+        obj, np_mod.generic
+    ):
+        # numpy scalars (np.float64, np.int64, np.bool_, ...) are what indexing
+        # or reducing an array returns. Unlike 0-d arrays they don't match the
+        # ndarray branch above and aren't natively msgpack serializable.
+        meta = (obj.dtype.str, obj.tobytes())
+        return ormsgpack.Ext(EXT_NUMPY_SCALAR, _msgpack_enc(meta))
+
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:
@@ -739,6 +749,16 @@ def _create_msgpack_ext_hook(
                 return arr.reshape(shape, order=order)
             except Exception:
                 return None
+        elif code == EXT_NUMPY_SCALAR:
+            try:
+                import numpy as _np
+
+                dtype_str, buf = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                return _np.frombuffer(buf, dtype=_np.dtype(dtype_str))[0]
+            except Exception:
+                return None
         return None
 
     return ext_hook
@@ -835,6 +855,18 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
             return arr.reshape(shape, order=order).tolist()
+        except Exception:
+            return
+    elif code == EXT_NUMPY_SCALAR:
+        try:
+            import numpy as _np
+
+            dtype_str, buf = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            return _np.frombuffer(buf, dtype=_np.dtype(dtype_str))[0].item()
         except Exception:
             return
 

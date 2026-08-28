@@ -626,6 +626,59 @@ def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
 
 
 @pytest.mark.parametrize(
+    "scalar",
+    [
+        np.float64(1.5),
+        np.float32(1.5),
+        np.int64(7),
+        np.int32(-7),
+        np.uint8(255),
+        np.bool_(True),
+        np.complex128(1 + 2j),
+    ],
+)
+def test_serde_jsonplus_numpy_scalar(scalar: np.generic) -> None:
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(scalar)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, np.generic)
+    assert result.dtype == scalar.dtype
+    assert result == scalar
+
+
+def test_serde_jsonplus_numpy_scalar_from_array() -> None:
+    """A scalar obtained by indexing/reducing an array round-trips like the array."""
+    serde = JsonPlusSerializer()
+    arr = np.array([1.0, 2.0])
+
+    for scalar in (arr[0], arr.mean(), arr.sum()):
+        result = serde.loads_typed(serde.dumps_typed(scalar))
+        assert isinstance(result, np.generic)
+        assert result == scalar
+
+
+@pytest.mark.parametrize(
+    ("scalar", "expected"),
+    [
+        (np.float64(1.5), 1.5),
+        (np.int64(7), 7),
+        (np.bool_(True), True),
+    ],
+)
+def test_serde_jsonplus_numpy_scalar_json_hook(
+    scalar: np.generic, expected: object
+) -> None:
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    dumped = serde.dumps_typed(scalar)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert type(result) is type(expected)
+    assert result == expected
+
+
+@pytest.mark.parametrize(
     "df",
     [
         pd.DataFrame(),
