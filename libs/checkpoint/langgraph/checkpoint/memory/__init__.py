@@ -331,6 +331,13 @@ class InMemorySaver(
         Yields:
             An iterator of matching checkpoint tuples.
         """
+        # A negative limit means "no limit", to match the SQLite/Postgres
+        # savers (which forward the value to SQL `LIMIT`, where a negative
+        # argument means no upper bound). Without this normalization the
+        # `limit <= 0` guard below would stop before the first result and
+        # return nothing, diverging from the other savers (see issue #8656).
+        if limit is not None and limit < 0:
+            limit = None
         thread_ids = (config["configurable"]["thread_id"],) if config else self.storage
         config_checkpoint_ns = (
             config["configurable"].get("checkpoint_ns") if config else None

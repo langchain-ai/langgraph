@@ -180,6 +180,23 @@ async def test_list_limit(saver: BaseCheckpointSaver) -> None:
     assert len(results) == 2
 
 
+async def test_list_negative_limit(saver: BaseCheckpointSaver) -> None:
+    """A negative limit means "no limit" and returns all checkpoints.
+
+    Savers previously disagreed: InMemorySaver returned nothing while the
+    SQLite savers returned everything (see issue #8656). All savers must now
+    agree that a negative limit is treated as "no upper bound".
+    """
+    data = await _setup_list_data(saver)
+
+    results = []
+    async for tup in saver.alist(generate_config(data["thread_id"]), limit=-1):
+        results.append(tup)
+    assert len(results) == 4, (
+        f"Expected all 4 checkpoints for limit=-1, got {len(results)}"
+    )
+
+
 async def test_list_limit_plus_before(saver: BaseCheckpointSaver) -> None:
     """Pagination with limit."""
     data = await _setup_list_data(saver)
@@ -353,6 +370,7 @@ ALL_LIST_TESTS = [
     test_list_metadata_custom_keys,
     test_list_before,
     test_list_limit,
+    test_list_negative_limit,
     test_list_limit_plus_before,
     test_list_combined_thread_and_filter,
     test_list_empty_result,
